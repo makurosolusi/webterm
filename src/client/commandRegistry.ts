@@ -71,7 +71,8 @@ export function normalizeChord(chord: string): string {
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
 
-const BRACKETS: Record<string, string> = { BracketLeft: '[', BracketRight: ']' } // Shift turns `key` into { }
+// Shift turns `key` into { } and |, so these are read by physical code.
+const BRACKETS: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Backslash: '\\' }
 
 /** Chord of a keydown, platform resolved (`Mod` = ⌘ on macOS, Ctrl elsewhere); '' for a bare modifier. */
 export function eventChord(e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, isMac: boolean): string {

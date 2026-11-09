@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest'
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
 /** Panel dipecah: pohon JSX ada di `SessionsPanel.tree.tsx`; invarian dibaca dari gabungannya. */
 const panelSrc = () => src('SessionsPanel.tsx') + src('SessionsPanel.tree.tsx')
-/** Hitungan panel harus `rowCount` (per tab) — bukan `total`, yang selalu menghitung sesi. */
-const titleFollowsTab = (s: string) => /sessions-sidebar__count">\{rowCount\}/.test(s)
+/** Hitungan seksi Sessions harus `rowCount` (per tab) — bukan `total`, yang selalu menghitung sesi. */
+const titleFollowsTab = (s: string) => /title="Sessions"\s+count=\{rowCount\}/.test(s)
 
 /** Blok render tab Status: dari gerbang `empty === 'none'` sampai pemetaan section-nya. */
 const statusGate = (s: string) => s.split("empty === 'none'")[1]?.split('.map((s) =>')[0] ?? ''
@@ -59,12 +59,26 @@ describe('seksi status kosong', () => {
 })
 
 describe('tab Nodes dihapus', () => {
-  it('tidak ada lagi cabang Nodes; daftar node pindah ke strip tab di atas canvas', () => {
+  it('tidak ada lagi cabang Nodes; daftar node pindah ke seksi Layers di side bar', () => {
     const panel = panelSrc() + src('SessionsGroupingTabs.tsx')
     expect(panel).not.toContain("'nodes'")
     expect(panel).not.toContain('nodeGroups')
     expect(panel).not.toContain('lucide-react')
     expect(src('SessionRow.tsx')).not.toContain('lucide-react')
+  })
+})
+
+describe('strip tab node di atas canvas dihapus', () => {
+  // Policy: daftar node board hanya hidup di seksi Layers side bar; strip kedua di atas canvas tak boleh kembali.
+  it('BoardHost tidak merender `.node-tabs` dan modul strip-nya sudah tiada', () => {
+    const host = src('BoardHost.tsx')
+    expect(host).not.toContain('node-tabs')
+    expect(host).not.toContain('canvasStrip')
+    for (const f of ['tabLayout.canvasStrip.tsx', 'nodeTabs.visible.ts']) {
+      expect(existsSync(fileURLToPath(new URL(`./${f}`, import.meta.url)))).toBe(false)
+    }
+    expect(src('tab-layout.css') + src('cleanView.css')).not.toContain('.node-tabs')
+    expect(src('WorkspaceBar.tsx')).not.toContain('Show Node Tabs')
   })
 })
 

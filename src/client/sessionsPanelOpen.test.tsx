@@ -36,7 +36,7 @@ const props: SessionsPanelProps = {
 
 afterEach(cleanup)
 
-const panel = () => screen.queryByLabelText('Sessions')
+const panel = () => screen.queryByLabelText('Side Bar')
 
 describe('SessionsPanel terkontrol', () => {
   it('tertutup berarti tidak merender apa pun, pelontar sendiri sekalipun', () => {
@@ -56,11 +56,11 @@ describe('SessionsPanel terkontrol', () => {
     let closed = 0
     render(<SessionsPanel {...props} onClose={() => (closed += 1)} />)
 
-    expect(tipOf(screen.getByLabelText('Hide sessions panel'))).toBe('Hide sessions panel')
+    expect(tipOf(screen.getByLabelText('Hide Side Bar'))).toBe('Hide Side Bar')
     expect(tipOf(screen.getByLabelText('Collapse all'))).toBe('Collapse all groups')
     fireEvent.change(screen.getByLabelText('Filter sessions'), { target: { value: 'x' } })
     expect(tipOf(screen.getByLabelText('Clear filter'))).toBe('Clear filter Esc')
-    fireEvent.click(screen.getByLabelText('Hide sessions panel'))
+    fireEvent.click(screen.getByLabelText('Hide Side Bar'))
 
     expect(closed).toBe(1)
     // Masih terbuka: propsnya belum berubah. Panel yang menutup dirinya sendiri di sini akan

@@ -60,6 +60,6 @@ describe('pintasan Settings di activity bar', () => {
     const btn = screen.getByLabelText('Settings')
     expect(btn.hasAttribute('aria-current')).toBe(false)
     expect(btn.hasAttribute('data-active')).toBe(false)
-    expect(screen.getByLabelText('Toggle sessions panel').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByLabelText('Toggle Side Bar').getAttribute('aria-current')).toBe('page')
   })
 })

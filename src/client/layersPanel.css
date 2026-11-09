@@ -1,0 +1,157 @@
+/* Layers panel body: VS Code tree rows (22px, 16px indent, codicons), tokens shared with
+   sessions-panel.css so both side bar views read as one surface in light and dark. */
+.layers-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--vscode-foreground, var(--text));
+  font-size: 13px;
+}
+
+.layers-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 12px;
+}
+
+.layers-toolbar__filter {
+  flex: 1;
+}
+
+.layers-tree {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  outline: none;
+}
+
+.layers-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: var(--ss-row-h, 22px);
+  padding-right: 8px;
+  line-height: var(--ss-row-h, 22px);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.layers-row:hover {
+  background: var(--vscode-list-hoverBackground, var(--raised));
+}
+
+.layers-row--selected,
+.layers-row--selected:hover {
+  background: var(--vscode-list-inactiveSelectionBackground, var(--raised));
+}
+
+.layers-tree:focus-within .layers-row--selected {
+  background: var(--vscode-list-activeSelectionBackground, var(--raised));
+  color: var(--vscode-list-activeSelectionForeground, inherit);
+}
+
+.layers-row:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+.layers-row__twisty,
+.layers-row__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--vscode-icon-foreground, var(--text));
+}
+
+.layers-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layers-row__edit {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+}
+
+.layers-row__count {
+  flex: none;
+  box-sizing: border-box;
+  min-width: var(--ss-badge-h, 17px);
+  height: var(--ss-badge-h, 17px);
+  padding: 0 4px;
+  border-radius: 2px;
+  background: var(--vscode-badge-background, var(--raised));
+  color: var(--vscode-badge-foreground, var(--text));
+  font-size: 11px;
+  line-height: var(--ss-badge-h, 17px);
+  text-align: center;
+}
+
+.layers-row__status { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.layers-row__status--working { background: var(--state-working); }
+.layers-row__status--attention { background: var(--state-attention); }
+.layers-row__status--done,
+.layers-row__status--idle { background: var(--state-success); }
+.layers-row__status--unread { background: var(--accent); }
+
+.layers-row__hint {
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-style: italic;
+  text-overflow: ellipsis;
+}
+
+/* Drop markers: a line above the row it lands before, a box around the group it goes into. */
+.layers-row[data-drop='before'] {
+  box-shadow: inset 0 2px 0 var(--vscode-focusBorder, var(--accent));
+}
+
+.layers-row[data-drop='into'] {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+.layers-tree__tail {
+  flex: 1 0 24px;
+}
+
+.layers-tree__tail[data-drop='end'] {
+  box-shadow: inset 0 2px 0 var(--vscode-focusBorder, var(--accent));
+}
+
+.layers-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 20px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+}
+
+.layers-empty p {
+  margin: 0;
+}
+
+.layers-empty__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The canvas node under the hovered row (set by the panel, cleared on leave/unmount). */
+.react-flow__node[data-layer-hover] {
+  outline: 2px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: 2px;
+}

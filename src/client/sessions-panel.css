@@ -10,7 +10,8 @@
    tema gelap/terang ikut tanpa palet kedua.
 */
 :root {
-  /* Tidak dirujuk CSS lain; dipertahankan karena `dockSessions.test.tsx` menjaganya sebagai kontrak lebar. */
+  /* Default lebar side bar; `.app-shell--sidebar` memakai `var(--ss-w, 300px)` sebagai kolom grid, dan
+     `sessionsPanel.width.ts` menimpanya di <html> begitu user men-drag sash (min 220, maks 40%). */
   --ss-w: 300px;
   /* View title VS Code: 35px, teks 11px uppercase. */
   --ss-title-h: 35px;
@@ -77,17 +78,10 @@
   color: var(--vscode-badge-foreground, var(--text));
 }
 
-/* Aksi view: tersembunyi sampai view di-hover atau berisi fokus, seperti toolbar judul VS Code. */
-.sessions-sidebar__head-actions {
+/* Tombol Hide Side Bar: selalu terlihat (bukan hover-reveal), di ujung kanan baris judul. */
+.ss-action--hide {
   margin-left: auto;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-}
-
-.sessions-sidebar:hover .sessions-sidebar__head-actions,
-.sessions-sidebar:focus-within .sessions-sidebar__head-actions {
-  opacity: 1;
+  flex: none;
 }
 
 .ss-action,

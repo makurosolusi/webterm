@@ -72,11 +72,6 @@
 .tabs-tab__close { flex: none; opacity: 0; }
 .tabs-tab:hover .tabs-tab__close, .tabs-tab:focus-within .tabs-tab__close, .tabs-tab--active .tabs-tab__close { opacity: 1; }
 
-/* ---- Node tab strip above the canvas (canvas mode); the board starts below it. ---- */
-.node-tabs { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
-.node-tabs .tabs-strip { height: 32px; }
-.node-tabs + .board-host { top: 32px; }
-
 /* ---- Files panel ---- */
 .tabs-files {
   flex: none; position: relative; display: flex; flex-direction: column; min-width: 0;

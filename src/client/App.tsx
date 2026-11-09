@@ -40,6 +40,8 @@ import { useCanvasUndo } from './canvasUndo'
 import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardHost from './BoardHost'
+import LayersPanel from './layersPanel'
+import { useLayersCommands } from './layers.commands'
 import { useAppTabs } from './App.tabs'
 import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
@@ -87,6 +89,7 @@ export default function App() {
   const viewportRef = useRef<Viewport>(DEFAULT_VIEWPORT)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rf = useRef<ReactFlowInstance | null>(null)
+  useLayersCommands(rf) // Group / Ungroup (Mod+G / Mod+Shift+G) for the Layers side bar
 
   useStatusSubscription(setStatuses)
   useAppTheme(settings)
@@ -257,6 +260,8 @@ export default function App() {
             onSelectWorkspace={(id) => void onSelect(id)}
             closedSessions={closedSessions}
             onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
+            layerCount={flowNodes.length}
+            layers={activeWs ? <LayersPanel nodes={tabsProps.nodes} statuses={statuses} rf={rf} onCloseNode={tabsProps.onCloseNode} onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} /> : undefined}
           />
           <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel

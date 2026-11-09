@@ -13,6 +13,9 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { MENU_LABELS } from './canvasMenu.model'
+// The Layers side bar's empty state offers the same "New Terminal" / "New Agent" buttons as the
+// canvas menu; these queries mean the menu row, so the side bar is left out.
+const OUTSIDE_SIDE_BAR = { ignore: 'script, style, .sessions-sidebar *' }
 import type { WsNode } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 
@@ -100,7 +103,7 @@ describe('menu konteks canvas', () => {
     fireEvent.contextMenu(pane(), CLICK)
     await waitFor(() => expect(menu()).not.toBeNull())
 
-    fireEvent.click(await screen.findByText(MENU_LABELS.terminal))
+    fireEvent.click(await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR))
 
     await waitFor(() => expect(nodePositions('terminal')).toHaveLength(1))
     expect(nodePositions('terminal')[0]).toEqual(AT_CLICK)
@@ -118,7 +121,7 @@ describe('menu konteks canvas', () => {
     fireEvent.contextMenu(pane(), CLICK)
     await waitFor(() => expect(menu()).not.toBeNull())
 
-    fireEvent.click(await screen.findByText(MENU_LABELS.terminal))
+    fireEvent.click(await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR))
     await waitFor(() => expect(menu()).toBeNull())
   })
 
@@ -177,7 +180,7 @@ describe('menu konteks canvas', () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.contextMenu(pane(), CLICK)
 
-    pointerClick(await screen.findByText(MENU_LABELS.terminal))
+    pointerClick(await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR))
 
     await waitFor(() => expect(nodePositions('terminal')).toHaveLength(1))
     await waitFor(() => expect(menu()).toBeNull())
@@ -187,7 +190,7 @@ describe('menu konteks canvas', () => {
     await mountCanvas({ nodes: [], dirs: {} })
     fireEvent.contextMenu(pane(), CLICK)
 
-    fireEvent.pointerDown(await screen.findByText(MENU_LABELS.terminal))
+    fireEvent.pointerDown(await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR))
 
     expect(menu()).not.toBeNull()
   })
@@ -197,7 +200,7 @@ describe('menu konteks canvas', () => {
   it('baris di dalam flyout submenu tetap bisa dipilih', async () => {
     await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
-    fireEvent.pointerEnter(await screen.findByText(MENU_LABELS.agentGroup))
+    fireEvent.pointerEnter(await screen.findByText(MENU_LABELS.agentGroup, OUTSIDE_SIDE_BAR))
 
     const subRow = await waitFor(() => {
       const el = document.querySelector('[aria-label="Canvas actions submenu"] button')
@@ -256,12 +259,12 @@ describe('menu konteks canvas — fidelity VS Code', () => {
   it('memakai VscodeMenu: baris menuitem 22px-class, ikon codicon, caret submenu, tooltip alasan', async () => {
     await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
-    await screen.findByText(MENU_LABELS.terminal)
+    await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR)
 
     const rows = Array.from(document.querySelectorAll('[data-slot="vscode-menu-row"]'))
     expect(rows.map((r) => r.textContent)).toContain(MENU_LABELS.terminal)
     expect(document.querySelector('.vscode-menu__icon .codicon-terminal')).not.toBeNull()
-    const group = screen.getByText(MENU_LABELS.agentGroup).closest('button')
+    const group = screen.getByText(MENU_LABELS.agentGroup, OUTSIDE_SIDE_BAR).closest('button')
     expect(group?.getAttribute('aria-haspopup')).toBe('menu')
     expect(group?.querySelector('.codicon-chevron-right')).not.toBeNull()
     // Alasan baris mati sampai ke pengguna lewat tooltip, bukan hanya redup.
@@ -271,7 +274,7 @@ describe('menu konteks canvas — fidelity VS Code', () => {
   it('ArrowRight membuka submenu dan ArrowLeft menutupnya tanpa menutup menu induk', async () => {
     await mountCanvas({ nodes: [], dirs: {}, ...WITH_CUSTOM })
     fireEvent.contextMenu(pane(), CLICK)
-    const group = (await screen.findByText(MENU_LABELS.agentGroup)).closest('button') as HTMLElement
+    const group = (await screen.findByText(MENU_LABELS.agentGroup, OUTSIDE_SIDE_BAR)).closest('button') as HTMLElement
     fireEvent.pointerEnter(group)
     const sub = () => document.querySelector('[aria-label="Canvas actions submenu"]')
     await waitFor(() => expect(sub()).not.toBeNull())

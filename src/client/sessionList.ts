@@ -415,12 +415,16 @@ export function sidebarFilterKeyAction(key: string, filter: string): SidebarFilt
 }
 
 /** Kalimat mana (kalau ada) yang harus ditampilkan daftar kosong. */
-export type SidebarEmptyState = 'none' | 'no-sessions' | 'no-matches'
+export type SidebarEmptyState = 'none' | 'no-sessions' | 'no-matches' | 'only-active'
+
+/** Project view of the side bar: the open workspace is left out, the Layers section lists it. */
+export const otherWorkspaceGroups = (groups: SessionGroup[]): SessionGroup[] => groups.filter((g) => !g.isActive)
 
 /** "Tidak ada apa-apa di sini" dan "tidak ada yang cocok" adalah dua fakta berbeda, dan hanya
  *  yang kedua punya undo. Filter bertahan selama bekerja, jadi daftar yang kosong karena filter
  *  lama harus mengatakannya — bukan terbaca seperti sidebar yang rusak. */
-export function sidebarEmptyState(noRows: boolean, filter: string): SidebarEmptyState {
+export function sidebarEmptyState(noRows: boolean, filter: string, onlyActive = false): SidebarEmptyState {
   if (!noRows) return 'none'
-  return filter.trim() !== '' ? 'no-matches' : 'no-sessions'
+  if (filter.trim() !== '') return 'no-matches'
+  return onlyActive ? 'only-active' : 'no-sessions'
 }

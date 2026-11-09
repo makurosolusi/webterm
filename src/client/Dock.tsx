@@ -138,7 +138,7 @@ export default function Dock(props: DockProps) {
   // One door to Central (like Copilot in VS Code): opens the side bar on Chat; its Control tab is one click
   // further. The tooltip shows ⌥⌘B through `commandId` (the side bar toggle), so a rebinding never drifts.
   const items: VscodeActivityBarItem[] = [
-    { id: 'sessions', label: 'Toggle sessions panel', icon: codicon('layout-sidebar-left'), commandId: 'view.sessions' },
+    { id: 'sessions', label: 'Toggle Side Bar', icon: codicon('layout-sidebar-left'), commandId: 'view.sessions' },
     ...(props.onToggleChat
       ? [{
           id: 'chat', label: 'Central', icon: codicon('comment-discussion'), commandId: 'view.secondarySideBar',

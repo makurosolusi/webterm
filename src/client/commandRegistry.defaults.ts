@@ -36,6 +36,12 @@ export const FIXED_COMMANDS: Command[] = [
 // even where App is not mounted (and an App unmount cannot drop them).
 registerCommands(FIXED_COMMANDS)
 
+/** Figma's ⇧⌘\ (show/hide UI) for the left side bar (Layers + Sessions). */
+export const SIDE_BAR_KEY = 'Mod+Shift+\\'
+/** Figma's group / ungroup chords, used by the Layers commands (`layers.commands.ts`). */
+export const LAYERS_GROUP_KEY = 'Mod+G'
+export const LAYERS_UNGROUP_KEY = 'Mod+Shift+G'
+
 export interface AppCommandDeps {
   openOmnibox: () => void
   openQuickOpen: () => void
@@ -70,7 +76,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
-    { id: 'view.sessions', label: 'View: Toggle Sessions', run: d.toggleSessions },
+    { id: 'view.sessions', label: 'View: Toggle Side Bar', defaultKey: SIDE_BAR_KEY, run: d.toggleSessions },
     { id: 'view.chat', label: 'View: Toggle Chat', run: d.toggleChat },
     { id: 'view.secondarySideBar', label: 'View: Toggle Secondary Side Bar (Central: Chat, Control)', defaultKey: 'Mod+Alt+B', run: d.toggleSecondarySideBar },
     { id: 'view.board', label: 'View: Toggle Board', run: d.toggleBoard },
