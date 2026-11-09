@@ -1,10 +1,12 @@
 // Section Canvas di Settings: grid, ukuran node baru, dan mesin pencari node browser.
-import type { Settings } from '../shared/settings'
+import { QUICK_DRAG_PRESETS, type Settings } from '../shared/settings'
 import { SEARCH_ENGINES, type SearchEngine } from '../shared/browser.omnibox'
 import { SelectField, ToggleField } from './SettingsFields'
 import { NumberSelectField } from './SettingsPickerFields'
 import { GRID_SIZE_OPTIONS, NODE_HEIGHT_OPTIONS, NODE_WIDTH_OPTIONS } from './settingsPresets'
 import { NotificationRows } from './osNotify.settings'
+import { quickDragLabel } from './quickDrag/quickDrag.modifier'
+import { isMacPlatform } from './terminalKeys'
 
 interface P {
   settings: Settings
@@ -18,6 +20,10 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         onChange={(v) => onChange({ gridSize: v })} />
       <ToggleField setting="snapToGrid" id="st-snapToGrid" label="Snap to grid" value={s.snapToGrid}
         hint="While on, dragging a node rounds its position to the grid." onChange={(v) => onChange({ snapToGrid: v })} />
+      <SelectField setting="quickDrag" id="st-quickDrag" label="Quick move & resize" value={s.quickDrag}
+        hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it. Right-drag resizes from the nearest corner."
+        options={QUICK_DRAG_PRESETS.map((p) => ({ value: p, label: quickDragLabel(p, isMacPlatform()) }))}
+        onChange={(v) => onChange({ quickDrag: v })} />
       <ToggleField setting="canvasDots" id="st-canvasDots" label="Grid dots" value={s.canvasDots}
         hint="Visual only — snapping is unchanged." onChange={(v) => onChange({ canvasDots: v })} />
       <NumberSelectField setting="defaultNodeWidth" id="st-nodeW" label="New node width" value={s.defaultNodeWidth} options={NODE_WIDTH_OPTIONS}

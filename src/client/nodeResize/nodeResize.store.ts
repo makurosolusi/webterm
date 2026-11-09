@@ -54,3 +54,11 @@ export function toggleFocusedNodeResize(selectedIds: readonly string[]): void {
 }
 
 export const RESIZE_COMMAND_ID = 'node.resizeFocused'
+
+/** Min size and collapse of a node, exactly as its NodeLayoutResizer was given them. */
+export interface NodeResizeLimits { minWidth: number; minHeight: number; collapsed: boolean }
+const limits = new Map<string, NodeResizeLimits>()
+/** Written by NodeLayoutResizer while mounted, so other resize paths (quick drag) use the same mins. */
+export const setNodeResizeLimits = (id: string, l: NodeResizeLimits | null): void => { if (l) limits.set(id, l); else limits.delete(id) }
+/** Limits of node `id`; undefined = the node has no resizer, so it cannot be resized. */
+export const getNodeResizeLimits = (id: string): NodeResizeLimits | undefined => limits.get(id)

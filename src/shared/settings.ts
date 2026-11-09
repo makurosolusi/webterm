@@ -37,6 +37,10 @@ export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings
 // kapabilitas harness builtin lewat `capabilityAgentId` (tanpa itu hanya spawn + judul terminal).
 export type { CustomAgent, CustomAgentLaunch } from './customAgent.schema'
 
+/** Quick move & resize modifier: `cmdCtrl` = ⌘⌃ (Ctrl+Alt off macOS), `cmdShift` = ⌘⇧ (Ctrl+Shift). */
+export const QUICK_DRAG_PRESETS = ['cmdCtrl', 'cmdShift', 'off'] as const
+export type QuickDragPreset = (typeof QUICK_DRAG_PRESETS)[number]
+
 /** Full settings shape: terminal + agent slices (own files) plus the canvas/app keys below. */
 export interface Settings extends TerminalSettings, AgentSettings {
   // --- Canvas ----------------------------------------------------------------------------------
@@ -50,6 +54,8 @@ export interface Settings extends TerminalSettings, AgentSettings {
   defaultNodeHeight: number
   /** Gambar grid titik di canvas. Tampilan saja — snapping tidak berubah. */
   canvasDots: boolean
+  /** Modifier held for "Quick move & resize" (drag anywhere on a node). Normalized on load. */
+  quickDrag: QuickDragPreset
   /** Tampilan chrome APP (panel, header node, menu). `auto` (default) mengambilnya dari tema warna
    *  terminal, sehingga memilih tema terminal terang tidak menyisakan rangka hitam; `dark`/`light`
    *  memakunya. */
@@ -134,6 +140,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultNodeWidth: 640,
   defaultNodeHeight: 440,
   canvasDots: true,
+  quickDrag: 'cmdCtrl',
   appTheme: 'auto',
   canvasBackground: DEFAULT_CANVAS_BACKGROUND,
   canvasBackgroundByWorkspace: {},
@@ -200,6 +207,8 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
   out.projectModels = normalizeProjectModels(src.projectModels)
   out.inputHistory = normalizeInputHistory(src.inputHistory)
+  // Enum: shape matching lets any string through, so an unknown preset falls back to the default.
+  if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

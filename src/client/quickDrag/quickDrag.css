@@ -1,0 +1,16 @@
+/* Quick move & resize grab mode (useQuickDrag.ts): outline, plus a cursor per zone that wins over
+   the content's own cursor (xterm text, links) while the keys are held. */
+.react-flow__node[data-quick-grab] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  --quick-cursor: move;
+}
+.react-flow__node[data-quick-zone='n'], .react-flow__node[data-quick-zone='s'] { --quick-cursor: ns-resize; }
+.react-flow__node[data-quick-zone='e'], .react-flow__node[data-quick-zone='w'] { --quick-cursor: ew-resize; }
+.react-flow__node[data-quick-zone='nw'], .react-flow__node[data-quick-zone='se'] { --quick-cursor: nwse-resize; }
+.react-flow__node[data-quick-zone='ne'], .react-flow__node[data-quick-zone='sw'] { --quick-cursor: nesw-resize; }
+.react-flow__node[data-quick-grab],
+.react-flow__node[data-quick-grab] * {
+  cursor: var(--quick-cursor) !important;
+  user-select: none !important;
+}
