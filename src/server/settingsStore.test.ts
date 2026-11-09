@@ -149,6 +149,27 @@ describe('nextSettingsDocument: the raw stored document is the source of truth',
     expect(Array.isArray(doc.claudeLaunchProfiles)).toBe(true)
     expect((doc.claudeLaunchProfiles as unknown[]).length).toBe(1)
   })
+
+  it('removing the profile the default / Central point at moves them to Default / follow-default', () => {
+    const stored = JSON.stringify({ claudeLaunchProfiles: [{ id: 'a', name: 'A', command: 'claude' }, { id: 'b', name: 'B', command: 'claude' }], defaultClaudeProfileId: 'a', centralClaudeProfileId: 'a' })
+    const { doc, settings } = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'b', name: 'B', command: 'claude' }] })
+    expect([doc.defaultClaudeProfileId, doc.centralClaudeProfileId]).toEqual(['default', ''])
+    expect([settings.defaultClaudeProfileId, settings.centralClaudeProfileId]).toEqual(['default', ''])
+    // Removing another profile leaves the pointers alone.
+    const kept = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', name: 'A', command: 'claude' }] }).doc
+    expect([kept.defaultClaudeProfileId, kept.centralClaudeProfileId]).toEqual(['a', 'a'])
+  })
+
+  it('deleting the seeded "custom" default resets it too', () => {
+    const { doc, settings } = nextSettingsDocument('{"agentLaunchCommands":{"claude":"wrap claude"}}', { claudeLaunchProfiles: [] })
+    expect(settings.defaultClaudeProfileId).toBe('default')
+    expect(parseStored(JSON.stringify(doc)).defaultClaudeProfileId).toBe('default')
+  })
+
+  it('an already-dangling default (old data) is left as stored by unrelated writes', () => {
+    const { doc } = nextSettingsDocument('{"claudeLaunchProfiles":[],"defaultClaudeProfileId":"custom"}', { fontSize: 14 })
+    expect(doc.defaultClaudeProfileId).toBe('custom')
+  })
 })
 
 describe('nextSettingsDocument: a corrupt stored row', () => {

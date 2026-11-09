@@ -6,7 +6,7 @@ import type { CanUseTool, SpawnedProcess, SpawnOptions } from '@anthropic-ai/cla
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { PassThrough } from 'node:stream'
-import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
+import { applyNodeClaudeProfile, registerClaudeLaunchSettings, registerDefaultProfileOverride } from '../claudeLauncher/claudeLauncher'
 import type { SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
 import { AGENT_CHAT_SETTING_SOURCES, agentChatPermissionMode, buildAgentChatOptions, createStderrTail } from './agentChat.options'
 
@@ -19,7 +19,10 @@ function build(over: Partial<Parameters<typeof buildAgentChatOptions>[0]> = {}) 
   return buildAgentChatOptions({ nodeId: 'n-1', port: 8701, cwd: '/tmp/proj', mode: 'manual', canUseTool: allow, abort: new AbortController(), parentEnv, ...over })
 }
 
-afterEach(() => registerClaudeLaunchSettings(() => DEFAULT_SETTINGS))
+afterEach(() => {
+  registerClaudeLaunchSettings(() => DEFAULT_SETTINGS)
+  registerDefaultProfileOverride(() => undefined)
+})
 
 describe('agentChatPermissionMode', () => {
   test('manual maps to default, the rest pass through', () => {
@@ -103,6 +106,21 @@ describe('buildAgentChatOptions', () => {
     const { notice } = build({ profileId: 'gone' })
     expect(notice).toContain('Default')
     expect(notice?.startsWith('\r\n')).toBe(false)
+  })
+
+  test('a stale stored default id launches exactly like a terminal node carrying it: live profile, no notice', () => {
+    registerClaudeLaunchSettings(() => ({ ...DEFAULT_SETTINGS, claudeLaunchProfiles: [ENVMAN], defaultClaudeProfileId: 'custom' }))
+    registerDefaultProfileOverride(() => 'em')
+    const calls: Parameters<SpawnImpl>[] = []
+    const spawn: SpawnImpl = (...a) => { calls.push(a); return {} as SpawnedProcess } // test-only recorder
+    const { options, notice } = build({ profileId: 'custom', spawn })
+    expect(notice).toBe(undefined)
+    options.spawnClaudeCodeProcess?.({ command: 'x', args: ['--verbose'], env: {}, signal: new AbortController().signal })
+    expect(calls[0]?.[0]).toBe('envman')
+    expect(calls[0]?.[1]).toEqual(['-e', 'claude:work', '--', 'claude', '--verbose'])
+    const terminal = applyNodeClaudeProfile({ agentId: 'claude', cmd: 'claude', claudeProfileId: 'custom' })
+    expect(terminal.msg.cmd).toBe('envman -e claude:work -- claude')
+    expect(terminal.notice).toBe(undefined)
   })
 
   test('the hook drains child stderr to the caller (the SDK never reads it from a custom spawn)', async () => {

@@ -35,11 +35,16 @@ function liveOverride(s: ClaudeLaunchSettings): string | undefined {
   return id && claudeProfiles(s).some((p) => p.id === id) ? id : undefined
 }
 
-/** Stored settings with the command-mode profile (if it still exists) as the default; '' Central follows it. */
+/**
+ * Stored settings with the command-mode profile (if it still exists) as the default; '' Central follows it.
+ * A stored default whose profile is gone (old data) reads as Default, where it launches anyway, so the
+ * default itself never reports a missing profile. Only an explicit id can be missing.
+ */
 function effective(): ClaudeLaunchSettings {
   const s = read()
-  const id = liveOverride(s)
-  return id ? { ...s, defaultClaudeProfileId: id } : s
+  const stored = claudeProfiles(s).some((p) => p.id === s.defaultClaudeProfileId) ? s.defaultClaudeProfileId : DEFAULT_CLAUDE_PROFILE.id
+  const id = liveOverride(s) ?? stored
+  return id === s.defaultClaudeProfileId ? s : { ...s, defaultClaudeProfileId: id }
 }
 
 /** Profile `profileId` (absent = the default for new agents) as argv; unknown ids fall back to Default. */
@@ -70,17 +75,24 @@ export const missingProfileNotice = (fallback: string): string =>
   `\r\n[webterm] This node's Claude launch profile no longer exists — launching with "${fallback}". Pick another in Settings › Agent › Claude launch profiles.\r\n`
 
 /**
+ * The launch of a node (terminal or Agent Chat) that recorded `profileId`. The client records the settings
+ * default as the node's profile at creation, so an id equal to the STORED default (even one whose profile is
+ * gone) is "no conscious pick" and resolves like the default: command mode, else the stored default, else
+ * Default, never missing. Ceiling: a node deliberately set to that same profile is indistinguishable and
+ * follows it too. Any other id is explicit: it keeps its profile, or is `missingId` once deleted.
+ */
+export function nodeClaudeLaunch(profileId?: string): ResolvedClaudeLaunch {
+  return resolveClaudeLaunch(profileId === read().defaultClaudeProfileId ? undefined : profileId)
+}
+
+/**
  * Builtin claude node with a recorded `claudeProfileId`: its launch command comes from the profile
- * (the client's `cmd` is ignored), so profile edits reach the next launch and cold restore. An
- * unknown id falls back to Default with a visible notice (a deleted node profile keeps that notice). Other nodes pass through untouched.
+ * (the client's `cmd` is ignored), so profile edits reach the next launch and cold restore. A deleted
+ * explicit profile falls back to Default with a visible notice (`nodeClaudeLaunch`). Other nodes pass through untouched.
  */
 export function applyNodeClaudeProfile<M extends { agentId?: string; cmd?: string; claudeProfileId?: string }>(msg: M): { msg: M; notice?: string } {
   const id = msg.claudeProfileId
   if (msg.agentId !== 'claude' || typeof id !== 'string' || id === '' || id.length > MAX_PROFILE_ID) return { msg }
-  // The client records the settings default as the node's profile at creation, so an id equal to the stored
-  // default is "no conscious pick" and follows command mode. Ceiling: a node deliberately set to that same
-  // profile is indistinguishable and follows it too. Any other id is explicit and keeps its profile.
-  const s = read()
-  const r = resolveClaudeLaunch(id === s.defaultClaudeProfileId ? liveOverride(s) ?? id : id)
+  const r = nodeClaudeLaunch(id)
   return { msg: { ...msg, cmd: claudeLaunchLine(r) }, ...(r.missingId ? { notice: missingProfileNotice(r.profile.name) } : {}) }
 }
