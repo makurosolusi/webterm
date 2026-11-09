@@ -86,16 +86,21 @@ export function resolveProjectPath(cwd: string, path: string, wantDir: boolean):
   return { ok: true, path: abs }
 }
 
-/** Node ids (of `ids`) that are live Central-managed agent PTYs: those close through `agent.close`. */
-function agentNodeIds(db: Database, projectId: string, ids: string[]): string[] {
+/** Live Central-managed agent PTYs shown as one of `ids` (by node_id or `c-<agentId>`), node id -> agent id.
+ *  Those nodes are driven through the agent.* tools, never canvas.close / canvas.type. */
+export function liveAgentNodes(db: Database, projectId: string, ids: string[]): Map<string, string> {
   const marks = ids.map(() => '?').join(',')
   const ended = AGENT_TERMINAL_STATES.map(() => '?').join(',')
   const rows = allRows(db,
     `SELECT id, node_id FROM central_agents WHERE project_id = ? AND runner = 'pty' AND state NOT IN (${ended})
        AND (node_id IN (${marks}) OR ('c-' || id) IN (${marks}))`,
     projectId, ...AGENT_TERMINAL_STATES, ...ids, ...ids)
-  const hit = new Set(rows.flatMap((r) => [String(r['node_id'] ?? ''), `c-${String(r['id'])}`]))
-  return ids.filter((id) => hit.has(id))
+  const byNode = new Map<string, string>()
+  for (const r of rows) {
+    const agentId = String(r['id'])
+    for (const node of [String(r['node_id'] ?? ''), `c-${agentId}`]) if (ids.includes(node) && !byNode.has(node)) byNode.set(node, agentId)
+  }
+  return byNode
 }
 
 /** The node the client builds (App.board.ts terminal/agent/files/diff, useBrowserOpen.ts, Omnibox.open.ts
@@ -142,7 +147,8 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       const unknown = refs.filter((_, i) => resolved[i] === undefined)
       if (unknown.length) return fail('node_not_found', { unknown })
       const ids = [...new Set(resolved as string[])]
-      const agents = agentNodeIds(ctx.db, String(projectId), ids)
+      const live = liveAgentNodes(ctx.db, String(projectId), ids)
+      const agents = ids.filter((id) => live.has(id))
       if (agents.length) return fail('use_agent_close', { nodeIds: agents, hint: 'These are workers you spawned: close them with agent.close.' })
       const res = (await deps.canvas()).remove({ workspaceId: found.workspaceId, nodeIds: ids })
       if (!res.ok) return fail(res.code)

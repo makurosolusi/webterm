@@ -1,14 +1,12 @@
 // canvas.type (R2): Central types into a terminal or Claude node of a project's board ("run npm test in
 // Mango"), the same input path a human keystroke and the control API's node.prompt take (sessions.input).
 // The typed text is never echoed in the output or the audit row: it may hold anything the user dictated.
-import type { Database } from 'bun:sqlite'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import { MAX_PROMPT_CHARS } from '../../../control/controlTypes'
-import { allRows } from '../../../ledger/ledgerCore'
-import { AGENT_TERMINAL_STATES } from '../../contracts/agent.types'
 import { projectWorkspace } from '../../workspaceLookup'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { obj, S } from '../../../capability/capability.schema'
+import { liveAgentNodes } from './canvas.act.defs'
 import { isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
 /** The two Sessions calls this tool uses (tests pass a fake). */
@@ -29,16 +27,6 @@ function typeShape(input: ToolInput): boolean {
   return Object.keys(input).every((k) => KEYS.includes(k)) && (isSafeId(nodeId) || isNodeName(nodeId, true))
     && typeof text === 'string' && text.length >= 1 && text.length <= MAX_PROMPT_CHARS && plainText(text)
     && (submit === undefined || typeof submit === 'boolean')
-}
-
-/** The live Central-spawned PTY agent shown as node `nodeId`, if any (same match as canvas.close's agent guard). */
-function centralAgentOf(db: Database, projectId: string, nodeId: string): string | null {
-  const ended = AGENT_TERMINAL_STATES.map(() => '?').join(',')
-  const [row] = allRows(db,
-    `SELECT id FROM central_agents WHERE project_id = ? AND runner = 'pty' AND state NOT IN (${ended})
-       AND (node_id = ? OR ('c-' || id) = ?) LIMIT 1`,
-    projectId, ...AGENT_TERMINAL_STATES, nodeId, nodeId)
-  return row ? String(row['id']) : null
 }
 
 /** Builds canvas.type bound to `deps.sessions`. */
@@ -67,7 +55,8 @@ export function createCanvasTypeDefs(deps: CanvasTypeDeps): ToolDef[] {
       if (!hit) return fail('node_not_found', { nodeId: ref })
       const kind = board.find((n) => String(n.id) === hit.id)?.kind
       if (!TYPEABLE.has(String(kind))) return fail('not_a_terminal', { nodeId: hit.id, kind: kind ?? null })
-      const agentRef = centralAgentOf(ctx.db, String(projectId), hit.id)
+      // Same guard as canvas.close: a worker you spawned is driven through agent.*, not typed into.
+      const agentRef = liveAgentNodes(ctx.db, String(projectId), [hit.id]).get(hit.id)
       if (agentRef) return fail('use_agent_tool', { nodeId: hit.id, agentRef, hint: 'This is a worker you spawned: message it with agent.prompt or agent.relay.' })
       const sessions = await deps.sessions()
       if (!sessions.isLive(hit.id)) {
