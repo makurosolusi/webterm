@@ -6,7 +6,7 @@
 // a fresh PTY and wipe the final scrollback the user is looking at.
 import { emitFsEvent } from './fsEvents'
 import { WS_PATH } from '../shared/protocol'
-import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg, ShotMsg, ViewMsg } from '../shared/protocol'
+import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg, ShotMsg, ViewMsg, WorkspacesMsg } from '../shared/protocol'
 import { canResumeWith } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
@@ -74,6 +74,13 @@ const viewListeners = new Set<(msg: ViewMsg) => void>()
 export function subscribeView(cb: (msg: ViewMsg) => void): () => void {
   viewListeners.add(cb)
   return () => { viewListeners.delete(cb) }
+}
+
+const workspacesListeners = new Set<(msg: WorkspacesMsg) => void>()
+/** The server's workspace list changed (Central's `workspace.create`): `t:'workspaces'`. */
+export function subscribeWorkspaces(cb: (msg: WorkspacesMsg) => void): () => void {
+  workspacesListeners.add(cb)
+  return () => { workspacesListeners.delete(cb) }
 }
 
 const shotListeners = new Set<(msg: ShotMsg) => void>()
@@ -175,6 +182,7 @@ function connect() {
     if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
     if (msg.t === 'canvas') { for (const l of [...canvasListeners]) l(msg); return }
     if (msg.t === 'view') { for (const l of [...viewListeners]) l(msg); return }
+    if (msg.t === 'workspaces') { for (const l of [...workspacesListeners]) l(msg); return }
     if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return }
     const sub = subs.get(msg.id)
     if (!sub) return

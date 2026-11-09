@@ -57,3 +57,34 @@ describe('mergeCanvasPush groups', () => {
     expect(sent.at(-1)?.updatedAt).toBe(frame.updatedAt)
   })
 })
+
+describe('mergeCanvasPush name (Central workspace.rename)', () => {
+  it('takes the pushed name and keeps nodes; the same name is the same object', () => {
+    const ws = board(10, 'Old')
+    const out = mergeCanvasPush(ws, { nodes: [], bridges: [], name: 'New' })
+    expect(out).toEqual({ ...ws, name: 'New' })
+    expect(mergeCanvasPush(ws, { nodes: [], bridges: [], name: 'Old' })).toBe(ws)
+  })
+
+  it('an unsent save made before the rename is sent with the new name, on the rename version', async () => {
+    let stored = board(10, 'Old')
+    const sent: Workspace[] = []
+    const q = createSaveQueue({ onStale: vi.fn(), onMissing: vi.fn() }, {
+      save: vi.fn(async (ws: Workspace) => {
+        sent.push(ws)
+        await Promise.resolve()
+        if (stored.updatedAt > ws.updatedAt) throw Object.assign(new Error('PUT -> 409'), { status: 409, body: { code: 'stale', current: stored } })
+        stored = { ...ws, updatedAt: stored.updatedAt + 1 }
+        return stored
+      }),
+    })
+    // Central renames (10 -> 11) while this window holds an edit built on version 10 with the old name.
+    stored = { ...stored, name: 'Central', updatedAt: 11 }
+    const edited = { ...board(10, 'Old'), viewport: { x: 5, y: 5, zoom: 1 } }
+    const save = q.enqueue(edited)
+    q.absorb({ t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], name: 'Central' })
+    await save
+    expect(stored).toMatchObject({ name: 'Central', viewport: { x: 5, y: 5, zoom: 1 }, updatedAt: 12 })
+    expect(sent.at(-1)).toMatchObject({ name: 'Central', updatedAt: 11 })
+  })
+})

@@ -45,12 +45,16 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks'] as const
 // `groups` = the board's whole Layers group list after a server edit (`canvasPush.groups`); the UI
 // takes it as is and re-packs members into its own tab `order`.
-export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[]; groups?: TabGroup[] }
+// `name` = the board's new name (Central's `workspace.rename`); versioned like every push, so an unsent
+// save neither reverts it nor 409s on it.
+export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[]; groups?: TabGroup[]; name?: string }
 // Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given, or
 // with `fit` fit every node into view, the "View: Fit Canvas" command).
 export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?: boolean }
 // Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
 export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg
+// The workspace list changed on the server (Central's `workspace.create`): each window adds the boards it lacks.
+export interface WorkspacesMsg { t: 'workspaces' }
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg
 
 export const WS_PATH = '/ws'

@@ -30,6 +30,7 @@ import { reported } from './workspaceActionError'
 import { confirmNodeClose } from './nodeCloseConfirm'
 import { useCanvasPush } from './workspaceCanvasPush'
 import { useViewPush } from './workspaceView.push'
+import { useWorkspaceListPush } from './workspaceList.push'
 import { useCanvasShot } from './canvasShot'
 import type { Workspace } from '../shared/workspace'
 
@@ -108,6 +109,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     setBoard(false)
   }, [onSelect, workspaces])
   useViewPush({ activeWsRef, onSelect, onFocus, onFit, setBoard }) // central agent's `canvas.show`
+  useWorkspaceListPush({ activeWsRef, setActiveWs, setWorkspaces }) // central agent's `workspace.create` / `workspace.rename`
   useCanvasShot() // central agent's `canvas.screenshot`
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di

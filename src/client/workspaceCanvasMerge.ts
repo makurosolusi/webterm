@@ -1,7 +1,7 @@
 // A server canvas push (`t:'canvas'`) applied to a stored-shape board: the save queue folds it into
 // every unsent payload, the saver into the locked one and the `workspaces` list, so no save written
 // after the push drops what the server added, resurrects what it removed or reverts what it patched
-// or grouped.
+// or grouped (or renamed: Central's `workspace.rename` rides the same versioned push).
 import { CANVAS_PATCH_KEYS, type CanvasMsg } from '../shared/protocol'
 import { packGroups, type TabGroup, type TabLayout } from '../shared/tabLayout.schema'
 import type { Workspace, WsNode } from '../shared/workspace'
@@ -26,9 +26,9 @@ export function withPushedGroups(layout: TabLayout, groups: readonly TabGroup[])
 
 /** `ws` plus the pushed nodes/cables whose ids it lacks, minus the removed nodes and every cable
  *  touching them and the unlinked cables, with updated nodes' patchable fields and the pushed groups
- *  taken from the push; everything else (`updatedAt` too) unchanged. Same object when nothing changes.
+ *  taken from the push, and the pushed `name`; everything else (`updatedAt` too) unchanged. Same object when nothing changes.
  *  A board without `layout` keeps none: its save leaves the stored layout (with the groups) alone. */
-export function mergeCanvasPush(ws: Workspace, push: Pick<CanvasMsg, 'nodes' | 'bridges' | 'removed' | 'updated' | 'unlinked' | 'groups'>): Workspace {
+export function mergeCanvasPush(ws: Workspace, push: Pick<CanvasMsg, 'nodes' | 'bridges' | 'removed' | 'updated' | 'unlinked' | 'groups' | 'name'>): Workspace {
   const gone = new Set(push.removed ?? [])
   const unlinked = new Set(push.unlinked ?? [])
   const updated = new Map((push.updated ?? []).map((n) => [n.id, n]))
@@ -40,7 +40,8 @@ export function mergeCanvasPush(ws: Workspace, push: Pick<CanvasMsg, 'nodes' | '
   const patched = updated.size ? kept.map((n) => { const p = updated.get(n.id); return p ? withPatchedFields(n, p) : n }) : kept
   const keptCables = gone.size || unlinked.size ? ws.bridges.filter((b) => !gone.has(b.source) && !gone.has(b.target) && !unlinked.has(b.id)) : ws.bridges
   const layout = push.groups && ws.layout ? withPushedGroups(ws.layout, push.groups) : ws.layout
-  const unchanged = !updated.size || ws.nodes.every((n) => !updated.has(n.id))
+  const name = push.name ?? ws.name
+  const unchanged = (!updated.size || ws.nodes.every((n) => !updated.has(n.id))) && name === ws.name
   if (unchanged && layout === ws.layout && !added.length && !cables.length && kept.length === ws.nodes.length && keptCables.length === ws.bridges.length) return ws
-  return { ...ws, nodes: [...patched, ...added], bridges: [...keptCables, ...cables], ...(layout ? { layout } : {}) }
+  return { ...ws, name, nodes: [...patched, ...added], bridges: [...keptCables, ...cables], ...(layout ? { layout } : {}) }
 }
