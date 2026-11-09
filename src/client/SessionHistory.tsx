@@ -1,4 +1,4 @@
-// Panel "Agent History" di bawah sidebar Sessions: sesi Claude lampau yang terindeks dari
+// View "Agent History" (badan side bar; judul & tombol sembunyi milik shell SideBar): sesi Claude lampau yang terindeks dari
 // transcript di disk, difilter per workspace, dengan Resume yang membuka node agent di workspace
 // yang tepat. Meniru Orca `docs/site/content/docs/agents/session-history.mdx` (scope Workspace/All,
 // pencarian, Refresh, Resume). Teks produk bahasa Inggris.
@@ -15,8 +15,8 @@ import { randomId } from './randomId'
 import type { Workspace } from '../shared/workspace'
 
 export interface SessionHistoryProps {
-  /** Ikut sidebar Sessions: tertutup = tidak merender apa pun. */
-  open: boolean
+  /** True selama view ini tampil di side bar; tidak aktif = tidak merender & tidak memuat. */
+  active: boolean
   activeWs: Workspace | null
   workspaces: readonly Workspace[]
   deps: ReopenDeps
@@ -26,9 +26,8 @@ type Scope = 'workspace' | 'all'
 const SEARCH_DEBOUNCE_MS = 250
 const AGENT_LABEL: Record<AgentSession['agent'], string> = { claude: 'Claude' }
 
-export default function SessionHistory({ open, activeWs, workspaces, deps }: SessionHistoryProps) {
+export default function SessionHistory({ active, activeWs, workspaces, deps }: SessionHistoryProps) {
   const settings = useLiveSettings()
-  const [expanded, setExpanded] = useState(true)
   const [scope, setScope] = useState<Scope>('workspace')
   const [query, setQuery] = useState('')
   const [q, setQ] = useState('')
@@ -66,8 +65,8 @@ export default function SessionHistory({ open, activeWs, workspaces, deps }: Ses
   }, [cwd, q])
 
   useEffect(() => {
-    if (open && expanded && !noFolder) void load(0)
-  }, [open, expanded, noFolder, load])
+    if (active && !noFolder) void load(0)
+  }, [active, noFolder, load])
 
   const resume = (s: AgentSession) => {
     const node = resumeNode(s, randomId, resumeProfile(s, workspaces, settings))
@@ -82,64 +81,61 @@ export default function SessionHistory({ open, activeWs, workspaces, deps }: Ses
     })
   }
 
-  if (!open) return null
+  if (!active) return null
 
+  const retry = () => void load(0)
   return (
-    <section className={`agent-history nodrag${expanded ? ' agent-history--open' : ''}`} aria-label="Agent history">
-      <div className="agent-history__head">
-        <Button type="button" variant="ghost" size="sm" className="agent-history__toggle" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
-          <span className={`codicon codicon-chevron-${expanded ? 'down' : 'right'}`} aria-hidden />
-          <span className="agent-history__title">Agent History</span>
-          {expanded && !noFolder && <span className="agent-history__count">{items.length} shown · {total}</span>}
-        </Button>
-        {expanded && (
-          <IconButton type="button" size="icon-sm" label="Refresh agent history" onClick={() => void load(0, true)}>
+    <div className="agent-history-view nodrag" aria-label="Agent history">
+      <div className="agent-history__toolbar">
+        <Input className="agent-history__search" type="search" placeholder="Search sessions" aria-label="Search sessions" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="agent-history__bar">
+          <div className="agent-history__scope" role="radiogroup" aria-label="Scope">
+            {(['workspace', 'all'] as const).map((s) => (
+              <Button key={s} type="button" size="xs" variant={scope === s ? 'default' : 'outline'} role="radio" aria-checked={scope === s} onClick={() => setScope(s)}>
+                {s === 'workspace' ? 'Workspace' : 'All'}
+              </Button>
+            ))}
+          </div>
+          {!noFolder && <span className="agent-history__count">{items.length} shown · {total}</span>}
+          <IconButton type="button" size="icon-sm" className="agent-history__refresh" label="Refresh agent history" disabled={noFolder} onClick={() => void load(0, true)}>
             <span className="codicon codicon-refresh" aria-hidden />
           </IconButton>
+        </div>
+      </div>
+      <div className="agent-history__body nowheel">
+        {noFolder && <p className="agent-history__empty">This workspace has no folder. Switch to All to see every session.</p>}
+        {error && (
+          <div className="agent-history__error" role="alert">
+            <span>{error}</span>
+            <Button type="button" variant="secondary" size="xs" onClick={retry}>Retry</Button>
+          </div>
+        )}
+        {!noFolder && loading && items.length === 0 && <p className="agent-history__empty">Loading…</p>}
+        {!noFolder && !loading && !error && items.length === 0 && (
+          <p className="agent-history__empty">{q ? `No sessions match “${q}”.` : 'No agent sessions found here yet.'}</p>
+        )}
+        <ul className="agent-history__list">
+          {!noFolder && items.map((s) => (
+            <li key={`${s.agent}:${s.id}`} className="agent-history__row">
+              <div className="agent-history__main" title={s.title ?? s.id}>
+                <span className="agent-history__name">{s.title ?? 'Untitled session'}</span>
+                <span className="agent-history__meta">
+                  {AGENT_LABEL[s.agent]} · {relativeTime(s.endedAt)} · {s.messageCount} messages
+                  {scope === 'all' && s.cwd ? ` · ${s.cwd}` : ''}
+                </span>
+              </div>
+              <Button type="button" variant="secondary" size="xs" className="agent-history__resume" aria-label={`Resume ${s.title ?? s.id}`} onClick={() => resume(s)}>
+                Resume
+              </Button>
+            </li>
+          ))}
+        </ul>
+        {!noFolder && next !== null && (
+          <Button type="button" variant="secondary" size="xs" className="agent-history__more" disabled={loading} onClick={() => void load(next)}>
+            {loading ? 'Loading…' : 'Load more'}
+          </Button>
         )}
       </div>
-      {expanded && (
-        <>
-          <div className="agent-history__controls">
-            <div className="agent-history__scope" role="radiogroup" aria-label="Scope">
-              {(['workspace', 'all'] as const).map((s) => (
-                <Button key={s} type="button" size="xs" variant={scope === s ? 'default' : 'outline'} role="radio" aria-checked={scope === s} onClick={() => setScope(s)}>
-                  {s === 'workspace' ? 'Workspace' : 'All'}
-                </Button>
-              ))}
-            </div>
-            <Input className="agent-history__search" type="search" placeholder="Search sessions" aria-label="Search sessions" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
-          <div className="agent-history__body nowheel">
-            {noFolder && <p className="agent-history__empty">This workspace has no folder. Switch to All to see every session.</p>}
-            {error && <p className="agent-history__error" role="alert">{error}</p>}
-            {!noFolder && !loading && !error && items.length === 0 && (
-              <p className="agent-history__empty">{q ? `No sessions match “${q}”.` : 'No agent sessions found here yet.'}</p>
-            )}
-            <ul className="agent-history__list">
-              {!noFolder && items.map((s) => (
-                <li key={`${s.agent}:${s.id}`} className="agent-history__row">
-                  <div className="agent-history__main" title={s.title ?? s.id}>
-                    <span className="agent-history__name">{s.title ?? 'Untitled session'}</span>
-                    <span className="agent-history__meta">
-                      {AGENT_LABEL[s.agent]} · {relativeTime(s.endedAt)} · {s.messageCount} messages
-                      {scope === 'all' && s.cwd ? ` · ${s.cwd}` : ''}
-                    </span>
-                  </div>
-                  <Button type="button" variant="secondary" size="xs" className="agent-history__resume" aria-label={`Resume ${s.title ?? s.id}`} onClick={() => resume(s)}>
-                    Resume
-                  </Button>
-                </li>
-              ))}
-            </ul>
-            {next !== null && (
-              <Button type="button" variant="secondary" size="xs" className="agent-history__more" disabled={loading} onClick={() => void load(next)}>
-                {loading ? 'Loading…' : 'Load more'}
-              </Button>
-            )}
-          </div>
-        </>
-      )}
-    </section>
+    </div>
   )
 }

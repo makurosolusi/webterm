@@ -44,7 +44,7 @@ describe('SessionHistory panel', () => {
     })
     const addNode = vi.fn()
     const active = ws('w1', '/repo')
-    render(<SessionHistory open activeWs={active} workspaces={[active]}
+    render(<SessionHistory active activeWs={active} workspaces={[active]}
       deps={{ activeId: 'w1', addNode, setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }} />)
 
     await screen.findByText('Prompt 1')
@@ -66,7 +66,7 @@ describe('SessionHistory panel', () => {
     const other = ws('w2', '/other')
     const selectWorkspace = vi.fn(async () => {})
     const addNode = vi.fn()
-    render(<SessionHistory open activeWs={active} workspaces={[active, other]}
+    render(<SessionHistory active activeWs={active} workspaces={[active, other]}
       deps={{ activeId: 'w1', addNode, setWorkspaces: vi.fn(), selectWorkspace }} />)
     fireEvent.click(screen.getByText('All'))
     await screen.findByText('Prompt 3')
@@ -82,10 +82,54 @@ describe('SessionHistory panel', () => {
     expect((writes[0] as Workspace).nodes[0]).toMatchObject({ kind: 'agent', sessionId: 'sess-3', cwd: '/other/pkg' })
   })
 
-  it('renders nothing when the sidebar is closed', () => {
-    stubPages({})
-    const { container } = render(<SessionHistory open={false} activeWs={null} workspaces={[]}
+  it('inactive view renders nothing and does not fetch', () => {
+    const calls = stubPages({})
+    const { container } = render(<SessionHistory active={false} activeWs={null} workspaces={[]}
       deps={{ activeId: null, addNode: vi.fn(), setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }} />)
     expect(container.innerHTML).toBe('')
+    expect(calls).toEqual([])
+  })
+
+  it('becoming active fetches once and shows the toolbar, with no collapse header', async () => {
+    const calls = stubPages({ '0': { items: [s(1)], total: 1, nextOffset: null } })
+    const active = ws('w1', '/repo')
+    const deps = { activeId: 'w1', addNode: vi.fn(), setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }
+    const { container, rerender } = render(<SessionHistory active={false} activeWs={active} workspaces={[active]} deps={deps} />)
+    rerender(<SessionHistory active activeWs={active} workspaces={[active]} deps={deps} />)
+    await screen.findByText('Prompt 1')
+    expect(calls).toHaveLength(1)
+    expect(container.querySelector('.agent-history-view')).not.toBeNull()
+    expect(container.querySelector('[aria-expanded]')).toBeNull()
+    expect(screen.queryByText(/agent history/i)).toBeNull()
+    expect(screen.getByRole('radio', { name: 'Workspace' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: 'All' })).toBeTruthy()
+    expect(screen.getByLabelText('Search sessions')).toBeTruthy()
+    expect(screen.getByText('1 shown · 1')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Refresh agent history' })).toBeTruthy()
+    expect(container.querySelector('.agent-history__body')?.classList.contains('nowheel')).toBe(true)
+  })
+
+  it('empty, no-folder, no-match and error-with-retry states', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (fail) return new Response('boom', { status: 500 })
+      const q = new URL(url, 'http://x').searchParams.get('q')
+      return new Response(JSON.stringify({ items: [], total: 0, nextOffset: null, q }), { status: 200 })
+    }))
+    const deps = { activeId: 'w1', addNode: vi.fn(), setWorkspaces: vi.fn(), selectWorkspace: vi.fn() }
+    const active = ws('w1', '/repo')
+    const { rerender } = render(<SessionHistory active activeWs={active} workspaces={[active]} deps={deps} />)
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load agent history.')
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await screen.findByText('No agent sessions found here yet.')
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Search sessions'), { target: { value: 'zzz' } })
+    await screen.findByText('No sessions match “zzz”.', {}, { timeout: 2000 })
+
+    const bare = ws('w1')
+    rerender(<SessionHistory active activeWs={bare} workspaces={[bare]} deps={deps} />)
+    expect(screen.getByText(/This workspace has no folder/)).toBeTruthy()
   })
 })
