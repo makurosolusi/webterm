@@ -57,6 +57,8 @@ export interface WorkspaceLifecycleDeps {
   /** Batalkan debounce `scheduleSave` yang menggantung TANPA menulis (lihat `useWorkspaceSaver` di `./workspaceSaver`). */
   cancelSave: () => void
   rf: RefObject<ReactFlowInstance | null>
+  /** "View: Fit Canvas" (`canvasViewport.onFit`), for the central agent's `canvas.show` with `fit`. */
+  onFit: () => void
 }
 
 export interface WorkspaceLifecycle {
@@ -79,7 +81,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   const {
     workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
     setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-    activeWsRef, nodesRef, edgesRef, cancelSave, rf,
+    activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit,
   } = deps
 
   const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired })
@@ -105,7 +107,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     else rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
   }, [onSelect, workspaces])
-  useViewPush({ activeWsRef, onSelect, onFocus, setBoard }) // central agent's `canvas.show`
+  useViewPush({ activeWsRef, onSelect, onFocus, onFit, setBoard }) // central agent's `canvas.show`
   useCanvasShot() // central agent's `canvas.screenshot`
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di

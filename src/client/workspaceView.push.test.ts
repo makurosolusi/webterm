@@ -38,6 +38,7 @@ function target(activeId: string | null) {
       activeWsRef: { current: activeId ? ({ id: activeId } as Workspace) : null },
       onSelect: vi.fn(async (id: string) => { calls.push(`select:${id}`) }),
       onFocus: vi.fn(async (id: string) => { calls.push(`focus:${id}`) }),
+      onFit: vi.fn(() => { calls.push('fit') }),
       setBoard: vi.fn((v: unknown) => { calls.push(`board:${String(v)}`) }),
     },
   }
@@ -73,6 +74,19 @@ describe('canvas.show (t:view)', () => {
     expect(t.onSelect).not.toHaveBeenCalled()
     expect(t.onFocus).not.toHaveBeenCalled()
     expect(calls).toEqual(['board:false'])
+  })
+
+  test('fit: switches, closes the overview, THEN fits the board; without fit nothing is fitted', async () => {
+    const { view, frame } = await fresh()
+    const { t, calls } = target('w1')
+    renderHook(() => view.useViewPush(t))
+    frame({ t: 'view', workspaceId: 'w2', fit: true })
+    await flush()
+    expect(calls).toEqual(['select:w2', 'board:false', 'fit'])
+    calls.length = 0
+    await view.applyView(t, 'w1', 'n1')
+    expect(t.onFit).toHaveBeenCalledTimes(1)
+    expect(calls).toEqual(['focus:n1', 'board:false'])
   })
 
   test('a failed switch is reported with Retry, never swallowed, and does not focus', async () => {

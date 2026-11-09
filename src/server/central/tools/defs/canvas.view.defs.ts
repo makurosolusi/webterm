@@ -61,16 +61,18 @@ export function createCanvasViewDefs(deps: CanvasViewDeps): ToolDef[] {
 
   const show: ToolDef = {
     name: 'canvas.show',
-    summary: "Switch the user's visible canvas to a project workspace, optionally centring one node.",
+    summary: "Switch the user's visible canvas to a project workspace, optionally centring one node or fitting the whole board.",
     tier: 'R1',
     flag: READ_TOOLS_FLAG,
-    usage: '{"projectId":"<id>","nodeId":"<optional node id or name from node.list, e.g. Mango>"}. Every open webterm tab '
-      + 'switches to that workspace (and centres the node). Call it before canvas.screenshot when you want to see another '
-      + 'workspace than the one in viewing. It changes what the user sees, so only switch when the user asked or it helps them.',
-    input: obj({ nodeId: S.str(MAX_ID) }),
-    output: S.keys('workspaceId', 'name', 'nodeId'),
-    auditKeys: ['workspaceId', 'nodeId'],
-    validate: (input) => (onlyKeys(input, ['projectId', 'nodeId']) && (input.nodeId === undefined || isNodeRef(input.nodeId)) ? null : 'invalid_shape'),
+    usage: '{"projectId":"<id>","nodeId":"<optional node id or name from node.list, e.g. Mango>","fit":<optional true: fit every '
+      + 'node into view; not with nodeId>}. Every open webterm tab switches to that workspace (and centres the node, or fits the '
+      + 'board like View: Fit Canvas). Call it before canvas.screenshot when you want to see another workspace than the one in '
+      + 'viewing, or the whole board. It changes what the user sees, so only switch when the user asked or it helps them.',
+    input: obj({ nodeId: S.str(MAX_ID), fit: S.bool() }),
+    output: S.keys('workspaceId', 'name', 'nodeId', 'fit'),
+    auditKeys: ['workspaceId', 'nodeId', 'fit'],
+    validate: (input) => (onlyKeys(input, ['projectId', 'nodeId', 'fit']) && (input.nodeId === undefined || isNodeRef(input.nodeId))
+      && (input.fit === undefined || typeof input.fit === 'boolean') && !(input.fit === true && input.nodeId !== undefined) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {
       const found = projectWorkspace(ctx.db, projectId)
       if (!found.ok) return fail(found.code)
@@ -82,10 +84,11 @@ export function createCanvasViewDefs(deps: CanvasViewDeps): ToolDef[] {
         nodeId = (nodes.find((n) => n.id === ref) ?? nodes.find((n) => n.name.toLowerCase() === ref.toLowerCase()))?.id
         if (!nodeId) return fail('node_not_found', { unknown: [ref] })
       }
+      const fit = input.fit === true ? { fit: true } : {}
       const ui = await deps.ui()
       ui.setActive(found.workspaceId)
-      ui.broadcast({ t: 'view', workspaceId: found.workspaceId, ...(nodeId ? { nodeId } : {}) })
-      return { ok: true, data: { workspaceId: found.workspaceId, name: found.name, ...(nodeId ? { nodeId } : {}) } }
+      ui.broadcast({ t: 'view', workspaceId: found.workspaceId, ...(nodeId ? { nodeId } : {}), ...fit })
+      return { ok: true, data: { workspaceId: found.workspaceId, name: found.name, ...(nodeId ? { nodeId } : {}), ...fit } }
     },
   }
 

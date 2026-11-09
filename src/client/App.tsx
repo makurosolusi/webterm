@@ -137,7 +137,7 @@ export default function App() {
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-      activeWsRef, nodesRef, edgesRef, cancelSave, rf,
+      activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit,
     })
 
   // Notification click → `onFocus`, which switches workspace when the node lives on another board
