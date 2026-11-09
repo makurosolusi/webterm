@@ -32,8 +32,7 @@ const BETA = ws('p2', 'Beta', [node('t3', 'Deploy')])
 const CURRENT = ws('p0', 'Current', [])
 
 const baseProps = (): SessionsPanelProps => ({
-  open: true,
-  onClose: () => {},
+  active: true,
   workspaces: [CURRENT, ALPHA, BETA],
   activeId: 'p0',
   liveActiveNodes: null,
@@ -183,7 +182,6 @@ describe('chrome sidebar', () => {
     press(project, 'ArrowRight')
 
     expect(screen.getByRole('tab', { name: 'Status' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByText('Sessions')).toBeTruthy()
   })
 
   it('ikon memakai codicon, tanpa svg lucide', () => {
@@ -192,7 +190,7 @@ describe('chrome sidebar', () => {
     expect(document.querySelector('.codicon-terminal')).not.toBeNull()
     expect(document.querySelector('.codicon-trash')).not.toBeNull()
     expect(document.querySelector('.codicon-collapse-all')).not.toBeNull()
-    expect(document.querySelector('.sessions-sidebar svg')).toBeNull()
+    expect(document.querySelector('.sessions-view svg')).toBeNull()
   })
 
   it('daftar kosong menampilkan welcome view dengan tombol utama', () => {

@@ -11,6 +11,7 @@ import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
 import { toggleChatView, useSideBar } from './secondarySideBar.store'
 import { SecondarySideBarToggle } from './App.secondarySideBar'
+import type { AppSideBar } from './sideBar/useAppSideBar'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
@@ -22,8 +23,8 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   activeWs: Workspace | null
   board: boolean
   setBoard: Toggle
-  sessionsOpen: boolean
-  setSessionsOpen: Toggle
+  sideBar: Pick<AppSideBar, 'open' | 'view' | 'select'>
+  sessionsAttention: number
   locked: boolean
   setLocked: Toggle
   cleanView: boolean
@@ -34,7 +35,7 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
+  vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
 }: AppDockProps) {
   const side = useSideBar()
   return (
@@ -48,8 +49,10 @@ export default function AppDock({
       onFit={vp.onFit}
       onToggleBoard={() => setBoard((v) => !v)}
       boardOpen={board}
-      sessionsOpen={sessionsOpen}
-      onToggleSessions={() => setSessionsOpen((v) => !v)}
+      sideBarOpen={sideBar.open}
+      sideBarView={sideBar.view}
+      onSideBarView={sideBar.select}
+      sessionsAttention={sessionsAttention}
       // One door: the Central icon is lit while the side bar is open on either tab (Chat or Control).
       chatOpen={side.open}
       onToggleChat={() => toggleChatView(pass.needsYouCount ?? 0)}

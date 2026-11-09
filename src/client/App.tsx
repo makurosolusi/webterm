@@ -6,7 +6,9 @@ import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
-import SessionsPanel, { useSessionsOpen } from './SessionsPanel'
+import SessionsPanel from './SessionsPanel'
+import SideBar from './sideBar/SideBar'
+import { useAppSideBar, useSessionsAttention } from './sideBar/useAppSideBar'
 import AppBottomPanel from './App.bottomPanel'
 import SecondarySideBar from './App.secondarySideBar'
 import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
@@ -72,8 +74,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [locked, setLocked] = useState(false)
-  // Di App, bukan di dalam panel: tombol pembukanya ada di Dock dan geseran dock ikut keadaan ini.
-  const [sessionsOpen, setSessionsOpen] = useSessionsOpen()
+  // Di App, bukan di dalam side bar: ikon view-nya (Layers/Sessions/History) ada di Dock.
+  const sideBar = useAppSideBar()
   // Chat & Central tinggal di secondary side bar kanan; buka/tutup & view-nya milik
   // `secondarySideBar.store` (dibaca Dock, title bar, dan side bar itu sendiri), bukan state App.
   const centralEnabled = useCentralControlEnabled()
@@ -182,6 +184,7 @@ export default function App() {
   const noWorkspaces = workspaces.length === 0
 
   const { needsYouCount, outputStatusItems, outputCommands } = useDockFeeds()
+  const sessionsAttention = useSessionsAttention(workspaces, liveNodes, activeId, statuses)
   // Senses chips: detected ports, Problems counter, Run Task (src/server/ports|problems|tasks).
   const portItems = usePortsStatusItems(activeId, nodeActions.openBrowserAt)
   const problems = useProblems(activeId)
@@ -199,7 +202,7 @@ export default function App() {
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
     newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
     toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
-    toggleSessions: () => setSessionsOpen((v) => !v), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
+    toggleSessions: () => sideBar.setOpen((v) => !v), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
     toggleBoard: () => setBoard((v) => !v),
   })
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
@@ -213,7 +216,7 @@ export default function App() {
   return (
     <SettingsProvider value={settings}>
     <NodeActionsProvider value={nodeActions}>
-    <div className={`app-shell${sessionsOpen && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
+    <div className={`app-shell${sideBar.open && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
@@ -244,26 +247,19 @@ export default function App() {
       {hydrated && !noWorkspaces && (
         <>
           <AppDock
-            {...{ vp, settings, activeWs, board, setBoard, sessionsOpen, setSessionsOpen, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
+            {...{ vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary }}
             extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
-          <SessionsPanel
-            open={sessionsOpen}
-            onClose={() => setSessionsOpen(false)}
-            workspaces={workspaces}
-            activeId={activeId}
-            liveActiveNodes={liveNodes}
-            statuses={statuses}
-            onFocusNode={onFocus}
-            onCloseSession={(id) => void closeSession(id)}
-            onSelectWorkspace={(id) => void onSelect(id)}
-            closedSessions={closedSessions}
-            onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
-            layerCount={flowNodes.length}
-            layers={activeWs ? <LayersPanel nodes={tabsProps.nodes} statuses={statuses} rf={rf} onCloseNode={tabsProps.onCloseNode} onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} /> : undefined}
+          <SideBar
+            open={sideBar.open} view={sideBar.view} onClose={() => sideBar.setOpen(false)} layerCount={flowNodes.length}
+            layers={activeWs ? <LayersPanel nodes={tabsProps.nodes} statuses={statuses} rf={rf} onCloseNode={tabsProps.onCloseNode} onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} /> : null}
+            sessions={<SessionsPanel
+              active={sideBar.open && sideBar.view === 'sessions'} workspaces={workspaces} activeId={activeId} liveActiveNodes={liveNodes} statuses={statuses}
+              onFocusNode={onFocus} onCloseSession={(id) => void closeSession(id)} onSelectWorkspace={(id) => void onSelect(id)}
+              closedSessions={closedSessions} onReopenSession={(id) => void reopenClosed(id, reopenDeps)} />}
+            history={<SessionHistory active={sideBar.open && sideBar.view === 'history'} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />}
           />
-          <SessionHistory open={sessionsOpen} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />
           {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
               menutup lewat Escape/X tab-nya. Persetujuan tinggal di strip Needs-you chat Central. */}
           <AppBottomPanel

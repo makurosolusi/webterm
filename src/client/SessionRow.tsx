@@ -7,6 +7,7 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { TreeItem } from './vscode/register'
 import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
 import { signalOf, UNREAD_LABEL } from './sessionSignal'
+import { SWITCH_WORKSPACE_LABEL } from './sessionMenu'
 
 /** Glyph rule shared with the node tab strips (`./sessionSignal`). */
 const signalOfRow = (row: SessionRowVM) => signalOf(row.statusKind, row.unread === true, row.stateLabel)
@@ -27,39 +28,50 @@ function StatusGlyph({ row }: { row: SessionRowVM }) {
   )
 }
 
+interface InlineActionProps {
+  icon: string
+  tooltip: string
+  ariaLabel: string
+  className: string
+  onActivate: () => void
+}
+
 /**
- * Tombol di dalam `slot="actions"` milik tree item.
+ * Inline action in the tree item's `slot="actions"` (shown on hover/focus by the library).
  *
  * Tree item memasang handler klik di shadow root-nya untuk seleksi, dan handler itu memanggil
  * `stopPropagation()`. Akibatnya klik pada tombol ini tidak pernah sampai ke root React (delegasi
  * event React berhenti di shadow boundary). Jadi listener dipasang NATIF di elemen tombol: ia
  * berjalan lebih dulu, menghentikan bubble ke wrapper, dan hanya memanggil aksi barisnya.
+ * Enter/Space juga ditangkap di sini: `vscode-tree` mem-preventDefault keduanya di host, jadi
+ * tanpa ini keyboard memilih/melipat barisnya alih-alih menekan tombol.
  */
-function EndSessionButton({ label, onEnd }: { label: string; onEnd: () => void }) {
+function InlineAction({ icon, tooltip, ariaLabel, className, onActivate }: InlineActionProps) {
   const ref = useRef<HTMLButtonElement>(null)
-  const onEndRef = useRef(onEnd)
-  onEndRef.current = onEnd
+  const onActivateRef = useRef(onActivate)
+  onActivateRef.current = onActivate
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const handler = (e: Event) => {
+    const run = (e: Event) => {
       e.preventDefault()
       e.stopPropagation()
-      onEndRef.current()
+      onActivateRef.current()
     }
-    el.addEventListener('click', handler)
-    return () => el.removeEventListener('click', handler)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') run(e)
+    }
+    el.addEventListener('click', run)
+    el.addEventListener('keydown', onKey)
+    return () => {
+      el.removeEventListener('click', run)
+      el.removeEventListener('keydown', onKey)
+    }
   }, [])
   return (
-    <IconTooltip label="End session">
-      <button
-        ref={ref}
-        type="button"
-        slot="actions"
-        className="ss-tree__end"
-        aria-label={`End session ${label}`}
-      >
-        <span className="codicon codicon-trash" aria-hidden />
+    <IconTooltip label={tooltip}>
+      <button ref={ref} type="button" slot="actions" className={`ss-tree__action ${className}`} aria-label={ariaLabel}>
+        <span className={`codicon codicon-${icon}`} aria-hidden />
       </button>
     </IconTooltip>
   )
@@ -125,7 +137,13 @@ export function SessionTreeItem({ row, showProject, onCloseSession, register }: 
         </span>
       )}
       <StatusGlyph row={row} />
-      <EndSessionButton label={row.label} onEnd={() => onCloseSession(row.id)} />
+      <InlineAction
+        icon="trash"
+        tooltip="End session"
+        ariaLabel={`End session ${row.label}`}
+        className="ss-tree__end"
+        onActivate={() => onCloseSession(row.id)}
+      />
     </TreeItem>
   )
 }
@@ -147,10 +165,12 @@ export interface SessionGroupItemProps {
   icon?: ReactNode
   signals?: SignalCounts
   /**
-   * Grup workspace membawa id board, sehingga kliknya bisa berpindah board. Header seksi
-   * Status/Nodes tidak punya tujuan pindah — kliknya hanya melipat.
+   * Grup workspace membawa id board untuk inline action / context menu "Switch to Workspace".
+   * Klik header (grup apa pun) hanya melipat: pindah board dari klik expand adalah bug lama.
    */
   workspace?: boolean
+  /** Inline "Switch to Workspace" action; rendered for a workspace group that is not the open board. */
+  onSwitchWorkspace?: (projectId: string) => void
   children: ReactNode
 }
 
@@ -170,6 +190,7 @@ export function SessionGroupItem(props: SessionGroupItemProps) {
     icon,
     signals,
     workspace = false,
+    onSwitchWorkspace,
     children,
   } = props
 
@@ -230,6 +251,15 @@ export function SessionGroupItem(props: SessionGroupItemProps) {
         )}
         <span className="ss-tree__count">{count}</span>
       </span>
+      {workspace && projectId && !isActive && onSwitchWorkspace && (
+        <InlineAction
+          icon="arrow-right"
+          tooltip={SWITCH_WORKSPACE_LABEL}
+          ariaLabel={`${SWITCH_WORKSPACE_LABEL} ${label}`}
+          className="ss-tree__switch"
+          onActivate={() => onSwitchWorkspace(projectId)}
+        />
+      )}
       {children}
     </TreeItem>
   )

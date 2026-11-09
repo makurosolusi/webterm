@@ -31,6 +31,7 @@ export interface SessionsTreeProps {
   projectOpen: (key: string) => boolean
   register: RegisterTreeTarget
   onCloseSession: (id: string) => void
+  onSelectWorkspace: (id: string) => void
 }
 
 /** Pohon sesi (tab project/status + seksi "Recently closed"); murni render dari props. */
@@ -45,6 +46,7 @@ export function SessionsTree({
   projectOpen,
   register,
   onCloseSession,
+  onSelectWorkspace,
 }: SessionsTreeProps) {
   return (
     <Tree
@@ -101,11 +103,11 @@ export function SessionsTree({
               count={g.sessions.length}
               open={!isCollapsed}
               register={register}
-              // Klik header berpindah board kalau board itu belum aktif; klik pada board yang
-              // aktif hanya melipat/membukanya. Chevron tetap melipat board mana pun.
+              // Header click only expands/collapses; switching is the inline action (or menu).
               workspace
               projectId={g.projectId}
               isActive={g.isActive}
+              onSwitchWorkspace={onSelectWorkspace}
               monogram={monogram(g.projectName)}
               color={g.projectColor}
               signals={sig}

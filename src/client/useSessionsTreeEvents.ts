@@ -27,15 +27,15 @@ const isTypeaheadKey = (e: KeyboardEvent, buffer: string): boolean =>
 export function useSessionsTreeEvents(
   treeRef: RefObject<HTMLElement | null>,
   handlers: SessionsTreeEventHandlers,
-  /** Panel tertutup tidak punya elemen pohon; ia dipasang ulang saat nilai ini berubah. */
-  mounted: boolean,
+  /** Listeners attach only while the Sessions view is the visible one. */
+  active: boolean,
 ): void {
   const ref = useRef(handlers)
   ref.current = handlers
 
   useEffect(() => {
     const tree = treeRef.current
-    if (!tree) return
+    if (!tree || !active) return
     let buffer = ''
     let timer: number | undefined
 
@@ -105,5 +105,5 @@ export function useSessionsTreeEvents(
       tree.removeEventListener('keydown', onKeyDown)
       tree.removeEventListener('contextmenu', onContextMenu)
     }
-  }, [treeRef, mounted])
+  }, [treeRef, active])
 }

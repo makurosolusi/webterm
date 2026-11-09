@@ -17,6 +17,7 @@ import { WorkspaceDialog } from './Dock.workspaceDialog'
 
 import type { DockProps } from './Dock.types'
 import { useTabLayout } from './tabLayout.store'
+import { SIDE_BAR_VIEW_COMMANDS } from './sideBar/sideBar.commands'
 export type { DockProps } from './Dock.types'
 
 export { ZOOM_PRESETS } from './Dock.statusBar'
@@ -33,10 +34,10 @@ const ADD_BUILTIN_PREFIX = 'builtin:'
 const ADD_CUSTOM_PREFIX = 'custom:'
 const ADD_TRIGGER_SELECTOR = '[data-slot="vscode-activity-bar-item"][aria-label="Add node"]'
 
-/** Ikon rail yang menyala: Sessions (sidebar), Central (side bar terbuka, tab apa pun), dan Board. */
+/** Ikon rail yang menyala: view side bar kiri yang tampil, Central (side bar terbuka, tab apa pun), dan Board. */
 function activeActivityIds(props: DockProps): string[] {
   return [
-    ...(props.sessionsOpen ? ['sessions'] : []),
+    ...(props.sideBarOpen ? [props.sideBarView] : []),
     ...(props.chatOpen ? ['chat'] : []),
     ...(props.boardOpen ? ['board'] : []),
   ]
@@ -45,7 +46,7 @@ function activeActivityIds(props: DockProps): string[] {
 /**
  * Chrome kiri + bawah aplikasi.
  *
- * Activity bar 48px memuat permukaan (Sessions, Central, Board) dan aksi Add; lock/clean view
+ * Activity bar 48px memuat permukaan (Layers, Sessions, Agent History, Central, Board) dan aksi Add; lock/clean view
  * adalah toggle mode sehingga dirender sendiri dengan `aria-pressed`. Status bar 22px memuat
  * aksi kanvas (`Dock.statusBar.tsx`). Quick Pick Add tetap di sini karena tombol pembukanya ada di rail.
  */
@@ -137,8 +138,14 @@ export default function Dock(props: DockProps) {
   const waiting = props.needsYouCount ?? 0
   // One door to Central (like Copilot in VS Code): opens the side bar on Chat; its Control tab is one click
   // further. The tooltip shows ⌥⌘B through `commandId` (the side bar toggle), so a rebinding never drifts.
+  const attention = props.sessionsAttention ?? 0
   const items: VscodeActivityBarItem[] = [
-    { id: 'sessions', label: 'Toggle Side Bar', icon: codicon('layout-sidebar-left'), commandId: 'view.sessions' },
+    { id: 'layers', label: 'Layers', icon: codicon('layers'), commandId: SIDE_BAR_VIEW_COMMANDS.layers.id },
+    {
+      id: 'sessions', label: 'Sessions', icon: codicon('list-tree'), commandId: SIDE_BAR_VIEW_COMMANDS.sessions.id,
+      badge: attention, tooltip: attention > 0 ? `Sessions (${attention} need${attention === 1 ? 's' : ''} attention)` : undefined,
+    },
+    { id: 'history', label: 'Agent History', icon: codicon('history'), commandId: SIDE_BAR_VIEW_COMMANDS.history.id },
     ...(props.onToggleChat
       ? [{
           id: 'chat', label: 'Central', icon: codicon('comment-discussion'), commandId: 'view.secondarySideBar',
@@ -151,8 +158,10 @@ export default function Dock(props: DockProps) {
 
   const onActivitySelect = (id: string) => {
     switch (id) {
+      case 'layers':
       case 'sessions':
-        props.onToggleSessions()
+      case 'history':
+        props.onSideBarView(id)
         break
       case 'chat':
         props.onToggleChat?.()

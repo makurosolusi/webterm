@@ -13,10 +13,10 @@ const dockProps: DockProps = {
   onAddTerminal: noop, onAddAgent: noop, onCreateWorkspace: noop, onBrowse: noop,
   onUndo: noop, onRedo: noop, canUndo: false, canRedo: true,
   onBack: noop, onForward: noop, canBack: false, canForward: false,
-  onFit: noop, onToggleBoard: noop, sessionsOpen: false, onToggleSessions: noop,
+  onFit: noop, onToggleBoard: noop, sideBarOpen: false, sideBarView: 'layers', onSideBarView: noop,
   zoomPct: 100, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
   locked: false, onToggleLock: noop, cleanView: false, onToggleCleanView: noop, onOpenSettings: noop,
-  needsYouCount: 2, onToggleChat: noop,
+  needsYouCount: 2, onToggleChat: noop, sessionsAttention: 3,
 }
 
 const tipOf = (el: Element): string | null | undefined => {
@@ -32,12 +32,14 @@ afterEach(cleanup)
 describe('activity bar', () => {
   it('exposes every entry by name and shows its tooltip', () => {
     render(<Dock {...dockProps} />)
-    for (const name of ['Toggle Side Bar', 'Central, 2', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
+    for (const name of ['Layers', 'Sessions, 3', 'Agent History', 'Central, 2', 'Board', 'Add node', 'Settings', 'Lock view', 'Clean view']) {
       const btn = screen.getByRole('button', { name })
       expect(btn.hasAttribute('title'), name).toBe(false)
     }
     expect(tipOf(screen.getByRole('button', { name: 'Central, 2' }))).toBe('Central (2 need you)')
     expect(tipOf(screen.getByRole('button', { name: 'Board' }))).toBe('Toggle Kanban board')
+    expect(tipOf(screen.getByRole('button', { name: 'Sessions, 3' }))).toBe('Sessions (3 need attention)')
+    expect(tipOf(screen.getByRole('button', { name: 'Agent History' }))).toBe('Agent History')
   })
 
   it('the Central icon tooltip shows the side bar shortcut (⌥⌘B) from the registry, plus the waiting count', () => {
