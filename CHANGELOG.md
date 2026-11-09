@@ -108,7 +108,8 @@ Operator notes:
 - Agent Chat: resuming a past conversation now shows its earlier messages right away.
 
 ### Changed
-- The node tab strip above the canvas moved into the Layers section of the side bar. The side bar is now one column, Layers on top and Sessions below, and each section folds open or closed (remembered).
+- The left side bar now shows one view at a time, like VS Code: Layers (default), Sessions and Agent History each get the full height, chosen from their icons in the activity bar. Clicking the icon of the view already shown hides the side bar; ⌘⇧\ still toggles it. The last view shown is remembered, and all views share one width. The Sessions icon shows a badge with the number of sessions in other workspaces that need attention. New commands "View: Show Layers", "View: Show Sessions" and "View: Show Agent History" (no default keys).
+- The node tab strip above the canvas moved into the Layers view of the side bar.
 - The left side bar can be resized by dragging its right edge (220 px up to 40% of the window, remembered; double-click resets it) and hides with **Mod+Shift+\\** or the new Hide Side Bar button in its top row. The dock button and the command are now called "Toggle Side Bar".
 - Sessions (Project view) no longer repeats the workspace you have open, since Layers already lists it; Status view still shows every workspace.
 - Terminals keep their drawing buffer, so screenshots show the terminal text instead of a blank area.
@@ -188,6 +189,8 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 
 ### Fixed
+- Expanding or collapsing a workspace group in Sessions no longer switches to that workspace. Switching is now an explicit "Switch to Workspace" button on the group header (also in its context menu).
+- The trash button on a session row can now be reached and pressed from the keyboard.
 - Typing `/model` alone in the Central chat now opens a model and effort picker instead of an error; clicking the model badge in the chat header opens it too.
 - Node tabs (the strip above the canvas and the tab layout) no longer shrink until names are cut to "D…": each tab keeps its icon and full node name readable, and tabs that don't fit go into the "⋯ N more" list. Hovering a tab still shows its full name.
 - Files node: every file you open gets its own editor node, placed in free space beside the Files node, so you can keep many files open. Clicking a file that is already open shows its node instead of opening a second one. Single clicks no longer replace the file in the last editor; the italic title and Keep open button are gone.
