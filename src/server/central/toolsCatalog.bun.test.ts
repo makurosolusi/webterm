@@ -48,7 +48,7 @@ describe('ladderDecision / toolAccess: tier x level', () => {
     expect(toolAccess('goal.propose', 'R1', true, 'propose', () => 'act_gated')).toBe('blocked')
   })
   it('groups by name prefix', () => {
-    const cases: Array<[string, string]> = [['project.read', 'projects'], ['node.list', 'projects'], ['canvas.open', 'projects'], ['canvas.close', 'projects'], ['canvas.edit', 'projects'], ['workspace.create', 'projects'], ['agent.spawn', 'workers'], ['task.run', 'tasks'],
+    const cases: Array<[string, string]> = [['project.read', 'projects'], ['node.list', 'projects'], ['canvas.open', 'projects'], ['canvas.close', 'projects'], ['canvas.edit', 'projects'], ['chat.config', 'projects'], ['workspace.create', 'projects'], ['agent.spawn', 'workers'], ['task.run', 'tasks'],
       ['plan.propose', 'tasks'], ['goal.propose', 'tasks'], ['run.result', 'tasks'], ['memory.get', 'memory'], ['kb.search', 'memory'],
       ['browser_act', 'browser'], ['skill.list', 'skills'], ['channel.bot.propose', 'channels'], ['central_bot', 'channels'],
       ['approval.request', 'approvals'], ['cap.search', 'other'], ['blackboard.read', 'memory'], ['repo.map', 'projects']]
