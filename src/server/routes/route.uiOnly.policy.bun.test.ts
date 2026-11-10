@@ -24,7 +24,7 @@ const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
 const { TOKEN_ACCESS_PATH, tokenAccessRoute } = await import('../tokenAccess.api')
 
 /** Route entries wrapped in `uiOnly` (route.uiOnly.ts) or gated the same way in their handler. */
-const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat']
+const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat', 'claude-view']
 /** Answer without the webterm page: the channel webhook (own provider secret, routed before /api)
  *  and the node-token surfaces (`isNodeTokenPath`) the CLI, browser skill and hooks call. */
 const ALLOWLIST = ['/api/agent-status', '/api/context-link', '/api/control/browser/navigate', '/api/tools', '/api/tools/x']
@@ -45,6 +45,7 @@ const PROBES: [string, string][] = [
   ['POST', '/api/generate-name'],
   ['GET', '/api/agent-chat/n1/stream'], ['GET', '/api/agent-chat/n1/history'], ['POST', '/api/agent-chat/n1/send'],
   ['POST', '/api/agent-chat/n1/interrupt'], ['POST', '/api/agent-chat/n1/permission'], ['POST', '/api/agent-chat/n1/mode'],
+  ['POST', '/api/claude-view/n1'],
 ]
 
 const SRC = join(import.meta.dirname, '..', '..')
@@ -120,6 +121,12 @@ describe('file and workspace routes are human-UI only', () => {
     expect((await call('POST', '/api/generate-name', UI, '{}')).status).toBe(400)
     expect((await call('POST', '/api/generate-name', UI, 'not json')).status).toBe(400)
     expect((await call('POST', '/api/generate-name', UI, JSON.stringify({ node: 'x'.repeat(8192) }))).status).toBe(413)
+  })
+
+  // Only malformed bodies / unknown nodes from the page: a valid switch would end a real session.
+  test('claude-view answers the page: bad body 400, unknown node 404', async () => {
+    expect((await call('POST', '/api/claude-view/n1', UI, '{}')).status).toBe(400)
+    expect((await call('POST', '/api/claude-view/n1', UI, JSON.stringify({ to: 'chat' }))).status).toBe(404)
   })
 
   test('a cross-site page is refused even with fetch metadata', async () => {

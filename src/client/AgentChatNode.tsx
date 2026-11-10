@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useRef } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
@@ -12,6 +12,7 @@ import type { AgentChatData } from '../shared/agentChat.shape'
 import type { AgentChatPatch } from './agentChat/agentChatView'
 import { LazyPaneFallback } from './lazyPaneFallback'
 import { unwatchNode, watchNode } from './unread'
+import { ClaudeViewButton } from './agentChat/claudeViewSwitch'
 
 // The chat body (and its markdown/tool-card tree) loads with the first chat node; the chrome stays eager.
 const AgentChatView = lazy(() => import('./agentChat/agentChatView').then((m) => ({ default: m.AgentChatView })))
@@ -28,6 +29,8 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
   const swatch = d.color ?? agentConfig('claude')?.color ?? FALLBACK_AGENT_COLOR
   const comments = d.comments ?? []
   const expandedH = useRef(height ?? DEFAULT_H)
+  // Reported by the view (its reducer holds the chat status); per node, gates "Open as terminal".
+  const [busy, setBusy] = useState(false)
   // Selected = watched, as in AgentNode: a turn that ends while you sit here is neither unread nor notified.
   useEffect(() => {
     if (!selected) return
@@ -52,6 +55,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
+          extraHeader={<ClaudeViewButton nodeId={id} to="terminal" busy={busy} />}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // No refresh or search in the chat shell yet; the buttons stay because NodeToolbar is shared.
           onRefresh={() => undefined}
@@ -60,7 +64,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
         />
         <div className="node-body">
           <Suspense fallback={<LazyPaneFallback />}>
-            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} />
+            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} onBusy={setBusy} />
           </Suspense>
         </div>
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}
