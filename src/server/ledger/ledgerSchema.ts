@@ -23,6 +23,7 @@ import { applyV21 } from './ledgerSchemaV21'
 import { applyV22 } from './ledgerSchemaV22'
 import { applyV23 } from './ledgerSchemaV23'
 import { applyV24 } from './ledgerSchemaV24'
+import { applyV25 } from './ledgerSchemaV25'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -76,4 +77,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 23, up: applyV23 },
   // v24: cost_run.tier + cost_run.model (model ladder); nullable, no backfill.
   { version: 24, up: applyV24 },
+  // v25: central work tables (task, deps, assignment) + event(correlation_id); additive, nothing to backfill.
+  { version: 25, up: applyV25 },
 ]

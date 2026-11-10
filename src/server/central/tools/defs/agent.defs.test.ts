@@ -6,6 +6,7 @@ import { type AgentHost, createAgentExecutor } from '../../agents/agentExecutor'
 import { createRegistry } from '../toolRegistry'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import type { Tier, ToolInput } from '../toolTypes'
+import { createWorkStore } from '../../work/workStore'
 import { AGENTS_FLAG, createAgentDefs } from './agent.defs'
 
 const T0 = 1_700_000_000_000
@@ -121,5 +122,65 @@ describe('agent tools', () => {
     const id = String(res.data?.agentId)
     const dump = JSON.stringify([res, await s.run('agent.status', { projectId: 'p1', agentRef: id }), allRows(s.f.db, 'SELECT payload_json FROM event')])
     for (const needle of ['wcap_', 'token', '/tmp/wt', 'WEBTERM_']) expect(dump.includes(needle)).toBe(false)
+  })
+})
+
+describe('agent delegation', () => {
+  const work = (s: ReturnType<typeof setup>) => createWorkStore(s.f.db, () => T0)
+  const needsCard = (): GuardDecision => ({ verdict: 'needs_approval', level: 'act_gated', tier: 'R2' })
+
+  it('a spawn records its card on the agent node', async () => {
+    const s = setup()
+    const r = await s.spawn({ title: 'write the docs' })
+    const id = String(r.data?.agentId)
+    expect(work(s).openAssignmentOfNode(`c-${id}`)).toMatchObject({ channel: 'spawn', agentId: id, instruction: 'write the docs', taskId: r.data?.taskId })
+  })
+
+  it('a spawn waiting on its card records too, and a retry adds no card', async () => {
+    const s = setup(needsCard)
+    const first = await s.spawn()
+    expect(first).toMatchObject({ ok: false, code: 'approval_required' })
+    expect(work(s).openAssignmentOfNode(`c-${String(first.data?.agentId)}`)).toMatchObject({ channel: 'spawn' })
+    await s.spawn()
+    expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)
+  })
+
+  it('a spawn refused for another reason records nothing', async () => {
+    const s = setup(() => ({ verdict: 'deny', code: 'level_denied', level: 'act_gated', reason: 'test-only' }))
+    expect((await s.spawn()).code).toBe('level_denied')
+    expect(work(s).listTasks({ projectId: 'p1' })).toEqual([])
+  })
+
+  it('a spawn takes a central task', async () => {
+    const s = setup()
+    const task = work(s).createTask({ projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+    const r = await s.spawn({ taskId: task.id })
+    expect(r.data).toMatchObject({ taskId: task.id, assignmentId: expect.any(String) })
+    expect(work(s).getTask(task.id)?.status).toBe('assigned')
+  })
+
+  it('a reused spawn adds no card', async () => {
+    const s = setup()
+    await s.spawn()
+    await s.spawn()
+    expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)
+  })
+
+  it('a prompt is a follow-up on the spawn card', async () => {
+    const s = setup()
+    const id = String((await s.spawn()).data?.agentId)
+    const r = await s.run('agent.prompt', { projectId: 'p1', agentRef: id, text: 'now the tests', mode: 'steer' })
+    expect(r).toMatchObject({ ok: true, data: { assignmentId: work(s).openAssignmentOfNode(`c-${id}`)?.id } })
+    expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)
+  })
+
+  it('a prompt to an untracked agent opens a card, and a refused prompt settles it', async () => {
+    const s = setup()
+    const a = s.userAgent()
+    s.sessions.delete('c-ag-user')
+    expect((await s.run('agent.prompt', { projectId: 'p1', agentRef: a.id, text: 'go', mode: 'steer' })).code).toBe('session_gone')
+    const [task] = work(s).listTasks({ projectId: 'p1' })
+    expect(task?.status).toBe('failed')
+    expect(work(s).assignmentsOfTask(task!.id)[0]).toMatchObject({ endReason: 'send_failed', agentId: a.id })
   })
 })

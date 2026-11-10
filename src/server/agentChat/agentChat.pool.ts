@@ -16,6 +16,7 @@ import { AgentChatBroker } from './agentChat.broker'
 import { AgentChatLock } from './agentChat.lock'
 import { agentChatLadderPick } from './agentChat.ladder'
 import { nodeConfigOf, nodeModeOf, sameNodeConfig } from './agentChat.snapshot'
+import { recordEvent } from '../events/producers'
 
 /** Open Claude processes at once (same default as the browser's DEFAULT_MAX_LIVE). */
 export const AGENT_CHAT_MAX_LIVE = 3
@@ -55,7 +56,12 @@ export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; mode:
   return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: effectiveClaudeMode(d.mode, t.node.permissionMode, d.skip === true), workspaceId: t.ws.id }
 }
 
-interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void }
+interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void; phase?: 'busy' | 'awaiting' }
+
+/** `close` reason of a server shutdown: not a chat ending, so no `agentChat.closed` signal. */
+export const AGENT_CHAT_SHUTDOWN_REASON = 'server shutdown'
+const BUSY_STATUSES: ReadonlySet<string> = new Set(['starting', 'thinking', 'tool', 'retry'])
+const TURN_END_OUTCOME: Readonly<Record<string, string>> = { idle: 'ok', interrupted: 'interrupted', error: 'error' }
 
 export type AgentChatSendResult = { ok: true } | { ok: false; status: 409; reason: string }
 export type AgentChatControlResult<T> = { ok: true; value: T } | { ok: false; status: 409 | 503; reason: string }
@@ -111,6 +117,7 @@ export class AgentChatPool {
    * event: an open UI then gets the same values by push and its own save of them is a no-op.
    */
   private record(nodeId: string, e: AgentChatEvent): void {
+    this.signalTurn(nodeId, e)
     if (!this.deps.persist || (e.t !== 'init' && e.t !== 'reset' && e.t !== 'config' && e.t !== 'mode')) return
     const t = this.target(nodeId)
     if (!t) return
@@ -120,6 +127,26 @@ export class AgentChatPool {
     const mode = e.t === 'init' || e.t === 'mode' ? nodeModeOf(e.mode) : undefined
     if (mode && mode !== t.node.permissionMode) patch.permissionMode = mode
     if (Object.keys(patch).length) this.deps.persist(t.ws.id, nodeId, patch)
+  }
+
+  /** Turn boundaries only, published as `agentChat.*` so Central's work watcher sees chat nodes (the log stays small). */
+  private signalTurn(nodeId: string, e: AgentChatEvent): void {
+    const entry = this.entries.get(nodeId)
+    if (!entry || e.t !== 'status') return
+    if (BUSY_STATUSES.has(e.status)) {
+      if (entry.phase !== 'busy') this.signal(nodeId, 'turn_start')
+      entry.phase = 'busy'
+    } else if (e.status === 'awaiting') {
+      if (entry.phase !== 'awaiting') this.signal(nodeId, 'needs_input')
+      entry.phase = 'awaiting'
+    } else if (entry.phase && e.status in TURN_END_OUTCOME) {
+      this.signal(nodeId, 'turn_end', { outcome: TURN_END_OUTCOME[e.status] })
+      entry.phase = undefined
+    }
+  }
+
+  private signal(nodeId: string, name: string, payload: Record<string, unknown> = {}): void {
+    recordEvent({ kind: `agentChat.${name}`, source: 'agentChat', actor: 'agent', subject: `node:${nodeId}`, nodeId, workspaceId: this.deps.lookup(nodeId)?.ws.id ?? null, trust: 'trusted', payload })
   }
 
   /** Session id this node runs or will resume (memory first: the stored node may lag the client save). */
@@ -213,6 +240,7 @@ export class AgentChatPool {
     e.off()
     e.session.close(reason)
     this.lock.release(nodeId)
+    if (reason !== AGENT_CHAT_SHUTDOWN_REASON) this.signal(nodeId, 'closed', { reason: reason ?? null })
   }
 
   /** Board save: close the chat nodes `prev` had and `next` no longer has. */
@@ -225,7 +253,7 @@ export class AgentChatPool {
     for (const n of ws?.nodes ?? []) this.close(n.id, 'workspace deleted')
   }
 
-  closeAll(reason = 'server shutdown'): void {
+  closeAll(reason = AGENT_CHAT_SHUTDOWN_REASON): void {
     for (const id of [...this.entries.keys()]) this.close(id, reason)
   }
 

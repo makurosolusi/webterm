@@ -14,7 +14,7 @@ import { toolCapability } from '../central/tools/toolCapability'
 import { execToolReceipt } from '../central/tools/toolExec'
 import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
 import { approvalDigest, consumeApproval, requestApproval } from '../ledger/ledgerApproval'
-import { allRows } from '../ledger/ledgerCore'
+import { allRows, getRow } from '../ledger/ledgerCore'
 import { redactValue } from '../redactSecrets'
 import { APPROVAL_PENDING, CENTRAL_MCP_MINTER } from './mcp.paths'
 import type { McpTool } from './mcp.protocol'
@@ -93,7 +93,8 @@ const pendingReceipt = (approvalId: string, expiresAt: number | null): McpReceip
 
 async function exec(c: CentralMcpDeps, conversationId: string, tool: string, args: Record<string, unknown>, approved: boolean): Promise<{ receipt: McpReceipt; projectId?: string; ownCard: boolean }> {
   const guard = toToolGuard(c.guard, { approved })
-  const ctx = { db: c.db, registry: c.registry, guard, maxTier: 'R3' as const, conversationId, now: c.now ?? Date.now, env: c.env }
+  const turnId = getRow(c.db, 'SELECT active_turn_id FROM central_conversation WHERE id = ?', conversationId)?.active_turn_id
+  const ctx = { db: c.db, registry: c.registry, guard, maxTier: 'R3' as const, conversationId, ...(typeof turnId === 'string' ? { turnId } : {}), now: c.now ?? Date.now, env: c.env }
   const { receipt: r, result } = await execToolReceipt(ctx, tool, args)
   const ownCard = typeof (result?.data as { approvalId?: unknown } | undefined)?.approvalId === 'string'
   return { receipt: { ...r, data: result?.data ?? null }, ...(result?.projectId ? { projectId: result.projectId } : {}), ownCard }

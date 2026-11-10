@@ -1,11 +1,9 @@
 import type { Database } from 'bun:sqlite'
-import { isEnabled } from '../../../featureCapabilities.runtime'
 import { type LedgerContext, getRow } from '../../../ledger/ledgerCore'
 import { approvalDigest, getApproval, requestApproval } from '../../../ledger/ledgerApproval'
 import { createPlanStore } from '../../../orchestrator/plan'
-import { assignControl } from '../../../orchestratorControlService'
 import { proposeGoal } from '../../goalStore'
-import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
+import type { ToolDef, ToolResult } from '../toolTypes'
 import { APPROVAL_NESTED_FORBIDDEN, FORBIDDEN_KEYS } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
 
@@ -93,30 +91,5 @@ const planPropose: ToolDef = {
   },
 }
 
-function assignShape(input: ToolInput): boolean {
-  const assignee = input.assignee
-  return typeof input.itemId === 'string' && input.itemId.trim().length > 0 && Number.isSafeInteger(input.expectedVersion) && (input.expectedVersion as number) >= 1
-    && (assignee === undefined || (typeof assignee === 'string' && assignee.length <= MAX_ID && !/[\s\p{Cc}]/u.test(assignee)))
-}
-const taskAssign: ToolDef = {
-  name: 'task.assign',
-  summary: 'Create a task for an existing pending plan item; does not run or approve.',
-  tier: 'R1',
-  usage: '{"projectId":"<id>","itemId":"<existing pending item>","expectedVersion":<plan version>}. Assign only creates a task for an existing pending plan item. It does not run, spawn, or approve.',
-  input: obj({ itemId: S.str(), expectedVersion: S.int(1), assignee: S.str(MAX_ID) }, ['itemId', 'expectedVersion']),
-  output: S.keys('taskId', 'planVersion'),
-  auditKeys: AUDIT_KEYS,
-  validate: (input) => (assignShape(input) ? null : 'invalid_shape'),
-  async handler(ctx, input, projectId): Promise<ToolResult> {
-    const { createLedger } = await import('../../../ledger/ledger')
-    const ledger = createLedger(ctx.db, { now: Date.now })
-    const result = await assignControl({ projectId: projectId as string, itemId: input.itemId as string, expectedVersion: input.expectedVersion as number, ...(input.assignee ? { assignee: input.assignee as string } : {}) }, { ledger: { mode: 'on', path: '', db: ctx.db, ledger, close() {} }, enabled: isEnabled('workers', ctx.env ?? process.env) })
-    const body = result.body as { taskId?: unknown; planVersion?: unknown; error?: unknown }
-    return result.status === 200
-      ? { ok: true, data: { taskId: String(body.taskId), planVersion: Number(body.planVersion) } }
-      : { ok: false, code: String(body.error ?? 'invalid_proposal') }
-  },
-}
-
-/** The four pre-registry central tools, in prompt order. */
-export const CORE_DEFS: readonly ToolDef[] = [goalPropose, planPropose, taskAssign, approvalRequest]
+/** The pre-registry central tools, in prompt order. */
+export const CORE_DEFS: readonly ToolDef[] = [goalPropose, planPropose, approvalRequest]

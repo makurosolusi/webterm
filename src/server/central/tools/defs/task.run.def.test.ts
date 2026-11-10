@@ -12,7 +12,13 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ControlGuard, Tier, ToolCtx } from '../toolTypes'
+import type { AssignmentView } from '../../../../shared/centralWork'
+import { finishTask } from '../../work/workLifecycle'
+import { createWorkStore } from '../../work/workStore'
+import { createWorkSupervisor } from '../../work/workSupervisor'
 import { createTaskRunDef, runGateFlags } from './task.run.def'
+
+const FIVE_MINUTES_MS = 5 * 60_000
 
 const dirs: string[] = []
 afterEach(() => {
@@ -133,5 +139,89 @@ describe('task.run tool', () => {
     const s = setup({ guard: { check: () => ({ ok: false, code: 'budget_exhausted' }) } })
     expect(await execTool(s.ctx, 'task.run', args)).toMatchObject({ ok: false, code: 'budget_exhausted' })
     expect(s.runs).toHaveLength(0)
+  })
+})
+
+describe('task.run delegation', () => {
+  const store = (s: Setup) => createWorkStore(s.f.db, () => 1)
+
+  it('records the run under its plan item before it starts', async () => {
+    let seen: AssignmentView | null = null
+    const s = setup({ run: () => { seen = store(s).openAssignmentOfNode('run:i1'); return outcome() } })
+    const res = await execTool(s.ctx, 'task.run', args)
+    expect(seen).toMatchObject({ channel: 'run', instruction: 'build' })
+    expect(res.data).toMatchObject({ assignmentId: expect.any(String), workTaskId: expect.any(String), nodeId: 'w-t1-1' })
+  })
+
+  const supervisorOf = (s: Setup) => createWorkSupervisor({
+    store: store(s), now: s.ctx.now,
+    ports: { isLive: () => true, input: () => {}, chatBusy: () => false, chatNodeGone: () => false, chatSend: async () => ({ ok: true }), agentOf: () => null },
+  })
+  const rulesOf = (s: Setup, taskId: string) => store(s).timeline(taskId).map((e) => e.rule)
+  const idsOf = (res: { data?: unknown }) => res.data as { workTaskId: string; assignmentId: string }
+
+  it('a successful run lands in needs_review with its outcome, and a later tick does not stall it', async () => {
+    const s = setup({ run: () => outcome({ task: { id: 't1' } as never, plan: { version: 2 } as never }) })
+    const { workTaskId, assignmentId } = idsOf(await execTool(s.ctx, 'task.run', args))
+    expect(store(s).getTask(workTaskId)?.status).toBe('needs_review')
+    expect(rulesOf(s, workTaskId)).toContain('run_finished')
+    expect(store(s).getAssignment(assignmentId)).toMatchObject({ endedAt: expect.any(Number), result: { taskId: 't1', nodeId: 'w-t1-1', planVersion: 2 } })
+
+    await supervisorOf(s).tick(s.ctx.now() + FIVE_MINUTES_MS)
+    expect(store(s).getTask(workTaskId)?.status).toBe('needs_review')
+    expect(rulesOf(s, workTaskId)).not.toContain('startup')
+  })
+
+  it('a run the startup rule stalled while it blocked still lands in needs_review', async () => {
+    let during: string | undefined
+    const s = setup({
+      run: () => {
+        void supervisorOf(s).tick(s.ctx.now() + FIVE_MINUTES_MS)
+        during = store(s).listTasks({ projectId: 'p1' })[0]?.status
+        return outcome()
+      },
+    })
+    const { workTaskId } = idsOf(await execTool(s.ctx, 'task.run', args))
+    expect(during).toBe('stalled')
+    expect(store(s).getTask(workTaskId)?.status).toBe('needs_review')
+  })
+
+  it('a run that only followed up an already open assignment does not settle it', async () => {
+    const s = setup()
+    store(s).createTask({ id: 'w1', projectId: 'p1', title: 'build', objective: 'build', actor: { kind: 'central' } })
+    const open = store(s).openAssignment({ taskId: 'w1', nodeId: 'run:i1', channel: 'run', instruction: 'build', actor: { kind: 'central' } })
+    expect(idsOf(await execTool(s.ctx, 'task.run', args)).assignmentId).toBe(open.id)
+    expect(store(s).getTask('w1')?.status).toBe('assigned')
+    expect(store(s).getAssignment(open.id)).toMatchObject({ endedAt: null, result: null })
+  })
+
+  it('a run whose card was cancelled meanwhile leaves the card alone', async () => {
+    const s = setup({
+      run: () => {
+        const id = store(s).listTasks({ projectId: 'p1' })[0]?.id as string
+        finishTask(store(s), id, 'cancelled', { actor: { kind: 'human' }, reason: 'stop' })
+        return outcome()
+      },
+    })
+    const res = await execTool(s.ctx, 'task.run', args)
+    expect(res.ok).toBe(true)
+    expect(store(s).getTask(idsOf(res).workTaskId)?.status).toBe('cancelled')
+    expect(rulesOf(s, idsOf(res).workTaskId)).not.toContain('run_finished')
+  })
+
+  it('a run the route refuses before starting records nothing', async () => {
+    const needsApproval = setup({ env: { WEBTERM_RUN_REQUIRE_APPROVAL: 'on' } })
+    await execTool(needsApproval.ctx, 'task.run', args)
+    expect(store(needsApproval).listTasks({ projectId: 'p1' })).toEqual([])
+    const stale = setup({ version: 9 })
+    await execTool(stale.ctx, 'task.run', args)
+    expect(store(stale).listTasks({ projectId: 'p1' })).toEqual([])
+  })
+
+  it('a failed run leaves a failed card', async () => {
+    const s = setup({ run: () => outcome({ ok: false, error: { code: 'verify_failed', message: 'no' } }) })
+    expect((await execTool(s.ctx, 'task.run', args)).ok).toBe(false)
+    expect(store(s).listTasks({ projectId: 'p1' })[0]?.status).toBe('failed')
+    expect(store(s).openAssignmentOfNode('run:i1')).toBeNull()
   })
 })

@@ -25,6 +25,7 @@ import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
 import { type AgentCatalog, createAgentCatalog, DEFAULT_DENY_ROOTS } from './agents/agentCatalog'
 import { createAgentHost } from './agents/agentHost'
 import { startAgentPtyWatcher } from './agents/agentPtyWatcher'
+import { createWorkTracking } from './work/workTracking'
 import { resumeApprovedAgents } from './agents/agentResume'
 import { createMailDeliver } from './agents/mailDeliver'
 import { createMailStore } from './agents/mailStore'
@@ -132,6 +133,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let kb: Database | null = null
   let timer: ReturnType<typeof setInterval> | null = null
   let unwatchPty: (() => void) | null = null
+  let stopWork: (() => void) | null = null
+  const work = createWorkTracking({ db, sessions, now, noTimer: opts.noTimer === true })
   let armed = false
   // Crash recovery runs once per process: a re-arm (Central off -> on) must not sweep turns this process is still running.
   let turnsReconciled = false
@@ -177,6 +180,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
       try { await executor?.reconcile() } catch (err) { log.error('ca2.agents_reconcile_failed', 'agent reconcile failed', { error: err instanceof Error ? err.message : String(err) }) }
     })()
     if (executor) unwatchPty ??= startAgentPtyWatcher({ db, store: executor.store, now })
+    // Chat and terminal delegation do not depend on the spawn executor, so this runs with agents off too.
+    stopWork ??= work.start()
     if (executor && !opts.noTimer) {
       timer = setInterval(() => { handle.sweep().catch((err) => log.error('ca2.sweep_failed', 'approved-agent sweep failed', { error: err instanceof Error ? err.message : String(err) })) }, SWEEP_INTERVAL_MS)
       timer.unref()
@@ -192,6 +197,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     timer = null
     unwatchPty?.()
     unwatchPty = null
+    stopWork?.()
+    stopWork = null
     if (activeCa2() === handle) setActiveCa2(null)
   }
   const unhook = onCapabilityChange('central', { start, stop: pause })

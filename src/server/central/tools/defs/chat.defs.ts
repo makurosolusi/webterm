@@ -2,14 +2,16 @@
 // SDK chat) the way the user does from its composer and footer, with no browser open: send a message, pick
 // model / effort / thinking, switch the permission mode. Terminal and Claude terminal nodes take canvas.type.
 // The message text is never echoed in the output or the audit row: it may hold anything the user dictated.
-import { withNodeNames, isNodeName } from '../../../../shared/nodeNames'
+import { isNodeName } from '../../../../shared/nodeNames'
 import { isPermissionMode, type AgentPermissionMode } from '../../../../shared/workspace'
 import { AGENT_CHAT_KIND } from '../../../../shared/agentChat.shape'
 import type { ChatFail, ChatPort } from '../../../agentChat/agentChat.port'
 import { AGENT_CHAT_EFFORTS } from '../../../agentChat/agentChat.controls'
-import { projectWorkspace } from '../../workspaceLookup'
+import { beginDelegation, settleSend } from '../../work/workDelegation'
+import { createWorkStore } from '../../work/workStore'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { obj, S } from '../../../capability/capability.schema'
+import { type BoardNode, findBoardNode } from './canvas.type.defs'
 import { isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
 export interface ChatDefsDeps {
@@ -26,25 +28,32 @@ const CHAT_MODES: readonly AgentPermissionMode[] = ['manual', 'auto', 'acceptEdi
 const fail = (code: string, data?: Record<string, unknown>): ToolResult => ({ ok: false, code, ...(data ? { data } : {}) })
 const portFail = (r: ChatFail, nodeId: string): ToolResult => fail(r.code, { nodeId, ...(r.hint ? { hint: r.hint } : {}) })
 // Tab and newlines are ordinary text; other C0 bytes could hide text from the approval card.
-const plainText = (s: string): boolean => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(s)
+export const plainText = (s: string): boolean => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(s)
 const nodeRef = (v: unknown): boolean => isSafeId(v) || isNodeName(v, true)
 const onlyKeys = (input: ToolInput, keys: readonly string[]): boolean => Object.keys(input).every((k) => keys.includes(k))
 
-type Target = { ok: true; workspaceId: string; id: string; name: string } | { ok: false; result: ToolResult }
+/** A resolved Agent Chat node. */
+export type ChatTarget = Pick<BoardNode, 'workspaceId' | 'id' | 'name'>
+type Target = ({ ok: true } & ChatTarget) | { ok: false; result: ToolResult }
 
-/** The chat node `ref` (an exact id wins over a name, as in canvas.close) on the project's board. */
+/** The chat node `ref` on the project's board. */
 function findChat(ctx: ToolCtx, projectId: string | undefined, ref: string): Target {
-  const found = projectWorkspace(ctx.db, projectId)
-  if (!found.ok) return { ok: false, result: fail(found.code) }
-  const board = found.nodes as Array<{ id?: unknown; name?: unknown; kind?: unknown }>
-  const named = withNodeNames(board.map((n) => ({ id: String(n.id), name: typeof n.name === 'string' ? n.name : undefined })))
-  const hit = named.find((n) => n.id === ref) ?? named.find((n) => n.name.toLowerCase() === ref.toLowerCase())
-  if (!hit) return { ok: false, result: fail('node_not_found', { nodeId: ref }) }
-  const kind = board.find((n) => String(n.id) === hit.id)?.kind
+  const found = findBoardNode(ctx, projectId, ref)
+  if (!found.ok) return found
+  const { workspaceId, id, name, kind } = found.node
   if (kind !== AGENT_CHAT_KIND) {
-    return { ok: false, result: fail('not_a_chat', { nodeId: hit.id, kind: kind ?? null, hint: 'Only Agent Chat nodes take chat.*; type into terminal and Claude terminal nodes with canvas.type.' }) }
+    return { ok: false, result: fail('not_a_chat', { nodeId: id, kind: kind ?? null, hint: 'Only Agent Chat nodes take chat.*; type into terminal and Claude terminal nodes with canvas.type.' }) }
   }
-  return { ok: true, workspaceId: found.workspaceId, id: hit.id, name: hit.name }
+  return { ok: true, workspaceId, id, name }
+}
+
+/** Records the delegation, then sends the text as the chat's next user message. */
+export async function sendChat(ctx: ToolCtx, port: ChatPort, projectId: string | undefined, t: ChatTarget, text: string, taskId?: string): Promise<ToolResult> {
+  const delegation = beginDelegation(createWorkStore(ctx.db, ctx.now), { projectId: String(projectId), nodeId: t.id, channel: 'chat', instruction: text, ...(taskId ? { taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}) })
+  if (!delegation.ok) return fail(delegation.code, delegation.data)
+  const r = await settleSend(delegation, () => port.send(t.workspaceId, t.id, text), (sent) => (sent.ok ? null : sent.code))
+  if (!r.ok) return portFail(r, t.id)
+  return { ok: true, data: { sent: true, started: r.started, nodeId: t.id, name: t.name, taskId: delegation.taskId, assignmentId: delegation.assignmentId } }
 }
 
 function configShape(input: ToolInput): boolean {
@@ -65,21 +74,20 @@ export function createChatDefs(deps: ChatDefsDeps): ToolDef[] {
     summary: 'Send a message to an Agent Chat node, starting its session if needed. Asks the user.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
-    usage: `{"projectId":"<id>",${NODE_USAGE},"text":"<1-${MAX_CHAT_TEXT} chars>"}. Sends the text as the user's next message in that chat; `
+    usage: `{"projectId":"<id>",${NODE_USAGE},"text":"<1-${MAX_CHAT_TEXT} chars>","taskId":"<optional task this continues>"}. Sends the text as the user's next message in that chat; `
       + 'started=true when its session had to be opened first. Only Agent Chat nodes; terminal and Claude terminal nodes take canvas.type. '
+      + 'Tracked as a delegation: without taskId it continues the open card of the node or starts a new one. '
       + 'Read the reply with node.inspect.',
-    input: obj({ nodeId: S.str(MAX_ID), text: S.str(MAX_CHAT_TEXT) }, ['nodeId', 'text']),
-    output: S.keys('sent', 'started', 'nodeId', 'name'),
+    input: obj({ nodeId: S.str(MAX_ID), text: S.str(MAX_CHAT_TEXT), taskId: S.str(MAX_ID) }, ['nodeId', 'text']),
+    output: S.keys('sent', 'started', 'nodeId', 'name', 'taskId', 'assignmentId'),
     // Never the text: the audit row records which chat was messaged, not what was said.
-    auditKeys: ['nodeId', 'started'],
-    validate: (input) => (onlyKeys(input, ['projectId', 'nodeId', 'text']) && nodeRef(input.nodeId) && typeof input.text === 'string'
-      && input.text.length >= 1 && input.text.length <= MAX_CHAT_TEXT && plainText(input.text) ? null : 'invalid_shape'),
+    auditKeys: ['nodeId', 'started', 'assignmentId'],
+    validate: (input) => (onlyKeys(input, ['projectId', 'nodeId', 'text', 'taskId']) && nodeRef(input.nodeId) && typeof input.text === 'string'
+      && input.text.length >= 1 && input.text.length <= MAX_CHAT_TEXT && plainText(input.text) && (input.taskId === undefined || isSafeId(input.taskId)) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {
       const t = findChat(ctx, projectId, String(input.nodeId))
       if (!t.ok) return t.result
-      const r = await (await deps.chats()).send(t.workspaceId, t.id, String(input.text))
-      if (!r.ok) return portFail(r, t.id)
-      return { ok: true, data: { sent: true, started: r.started, nodeId: t.id, name: t.name } }
+      return sendChat(ctx, await deps.chats(), projectId, t, String(input.text), input.taskId as string | undefined)
     },
   }
 

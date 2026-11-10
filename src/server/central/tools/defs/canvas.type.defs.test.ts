@@ -7,6 +7,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ToolCtx, Tier } from '../toolTypes'
+import { createWorkStore } from '../../work/workStore'
 import { createCanvasTypeDefs, KEY_SETTLE_MS, type TypeSessions } from './canvas.type.defs'
 import { READ_TOOLS_FLAG } from './read.shared'
 
@@ -133,5 +134,55 @@ describe('canvas.type', () => {
     const rows = allRows(f.db, 'SELECT payload_json FROM event')
     expect(JSON.stringify(rows)).not.toContain('hunter2')
     expect(rows.map((r) => JSON.parse(String(r['payload_json'])))).toContainEqual(expect.objectContaining({ tool: 'canvas.type', keys: ['C-c'] }))
+  })
+})
+
+describe('canvas.type delegation', () => {
+  const store = () => createWorkStore(f.db, () => 1)
+  const tasks = () => store().listTasks({ projectId: 'p1' })
+
+  it('records before typing into a Claude terminal', async () => {
+    let seen: string | undefined
+    const original = fake.input
+    fake.input = (id, data) => { seen = store().openAssignmentOfNode(id)?.instruction; original(id, data) }
+    try {
+      const res = await type({ nodeId: 'n3', text: 'run the migration' })
+      expect(seen).toBe('run the migration')
+      expect(res.data).toMatchObject({ assignmentId: store().openAssignmentOfNode('n3')?.id })
+      expect(store().openAssignmentOfNode('n3')).toMatchObject({ channel: 'terminal' })
+    } finally { fake.input = original }
+  })
+
+  it('a plain terminal stays untracked, even when a task is named', async () => {
+    const res = await type({ nodeId: 'n1', text: 'ls', taskId: 'anything' })
+    expect(res).toMatchObject({ ok: true, data: { tracked: false } })
+    expect(tasks()).toEqual([])
+    expect(store().openAssignmentOfNode('n1')).toBeNull()
+  })
+
+  it('keys alone and unsubmitted text are not delegations', async () => {
+    await type({ nodeId: 'n3', keys: ['Escape'] })
+    await type({ nodeId: 'n3', text: 'draft', submit: false })
+    expect(tasks()).toEqual([])
+  })
+
+  it('a stopped session records nothing', async () => {
+    expect((await type({ nodeId: 'n4', text: 'x' })).ok).toBe(false)
+    expect(tasks()).toEqual([])
+  })
+
+  it('a failed write settles the card', async () => {
+    const original = fake.input
+    fake.input = () => { throw new Error('pty gone') }
+    try { expect((await type({ nodeId: 'n3', text: 'go' })).ok).toBe(false) } finally { fake.input = original }
+    expect(tasks()[0]?.status).toBe('failed')
+    expect(store().openAssignmentOfNode('n3')).toBeNull()
+  })
+
+  it('refuses a node busy on another task', async () => {
+    const other = store().createTask({ projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+    await type({ nodeId: 'n3', text: 'first' })
+    expect(await type({ nodeId: 'n3', text: 'second', taskId: other.id })).toMatchObject({ ok: false, code: 'node_busy' })
+    expect(typed).toEqual([['n3', 'first\r']])
   })
 })

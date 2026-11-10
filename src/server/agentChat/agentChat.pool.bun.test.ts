@@ -4,6 +4,8 @@ import { homedir, tmpdir } from 'node:os'
 import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatEvent } from '../../shared/agentChat.wire'
 import type { Workspace, WsNode } from '../../shared/workspace'
+import { eventBus } from '../events/eventBus'
+import type { SenseEvent } from '../events/eventModel'
 import { FakeQuery, fx } from './agentChat.fakeQuery'
 import {
   AGENT_CHAT_MAX_LIVE, AGENT_CHAT_OVER_CAP_NOTICE, AgentChatPool, activeAgentChatPool, agentChatOpenConfig, closeRemovedAgentChats, closeWorkspaceAgentChats, setAgentChatPool, type AgentChatTarget,
@@ -167,5 +169,75 @@ describe('AgentChatPool', () => {
     closeWorkspaceAgentChats(ws)
     closeWorkspaceAgentChats(null)
     expect(activeAgentChatPool()).toBe(undefined)
+  })
+})
+
+describe('turn signals on the event bus', () => {
+  const statusTo = (pool: AgentChatPool, nodeId: string) => {
+    const s = pool.session(nodeId)
+    if (!s) throw new Error(`no session for ${nodeId}`)
+    return (status: 'starting' | 'thinking' | 'tool' | 'awaiting' | 'idle' | 'error' | 'interrupted') => (s as unknown as { emit(b: unknown): void }).emit({ t: 'status', status })
+  }
+  function listen() {
+    const seen: SenseEvent[] = []
+    const off = eventBus.subscribe('agentChat.*', (e) => seen.push(e))
+    return { seen, off, names: () => seen.map((e) => e.kind.slice('agentChat.'.length)) }
+  }
+
+  test('publishes one event per boundary, trusted and with the node id', () => {
+    const { pool } = rig([workspace('w1', [{ id: 'chat' }])])
+    current = pool
+    const to = statusTo(pool, 'chat')
+    const l = listen()
+    to('starting'); to('thinking'); to('tool'); to('thinking')
+    expect(l.names()).toEqual(['turn_start'])
+    to('awaiting')
+    expect(l.names()).toEqual(['turn_start', 'needs_input'])
+    to('tool')
+    expect(l.names()).toEqual(['turn_start', 'needs_input', 'turn_start'])
+    to('idle')
+    expect(l.names()).toEqual(['turn_start', 'needs_input', 'turn_start', 'turn_end'])
+    expect(l.seen.at(-1)).toMatchObject({ trust: 'trusted', nodeId: 'chat', workspaceId: 'w1', payload: { outcome: 'ok' } })
+    l.off()
+  })
+
+  test('a real turn through the session publishes start and end', async () => {
+    const { pool, opens } = rig([workspace('w1', [{ id: 'chat' }])])
+    current = pool
+    const l = listen()
+    pool.send('chat', 'hello')
+    expect(l.names()).toEqual(['turn_start'])
+    opens[0]?.fq.emit(fx.result())
+    await tick(5)
+    expect(l.names()).toEqual(['turn_start', 'turn_end'])
+    expect(l.seen.at(-1)?.payload).toEqual({ outcome: 'ok' })
+    l.off()
+  })
+
+  test('turn_end names an error and an interruption; idle without a turn says nothing', () => {
+    const { pool } = rig([workspace('w1', [{ id: 'chat' }])])
+    current = pool
+    const to = statusTo(pool, 'chat')
+    const l = listen()
+    to('idle')
+    expect(l.names()).toEqual([])
+    to('thinking'); to('error')
+    expect(l.seen.at(-1)?.payload).toEqual({ outcome: 'error' })
+    to('thinking'); to('interrupted')
+    expect(l.seen.at(-1)?.payload).toEqual({ outcome: 'interrupted' })
+    l.off()
+  })
+
+  test('close publishes agentChat.closed, except at server shutdown', () => {
+    const { pool } = rig([workspace('w1', [{ id: 'a' }, { id: 'b' }])])
+    current = pool
+    pool.session('a'); pool.session('b')
+    const l = listen()
+    pool.close('a', 'node removed')
+    expect(l.names()).toEqual(['closed'])
+    expect(l.seen[0]?.payload).toEqual({ reason: 'node removed' })
+    pool.closeAll()
+    expect(l.names()).toEqual(['closed'])
+    l.off()
   })
 })

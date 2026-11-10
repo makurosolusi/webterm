@@ -28,6 +28,7 @@ import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
 import { TASK_RUN_DEF } from './defs/task.run.def'
+import { createTaskWorkDefs } from './defs/task.work.defs'
 import { createWorkspaceDefs } from './defs/workspace.defs'
 import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
 
@@ -71,6 +72,7 @@ const nodeDefs = (): ToolDef[] => [
   ...createCanvasTypeDefs({ sessions: async () => (await import('../../sessions')).sessions }),
   ...createCanvasEditDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
   ...createChatDefs({ chats }),
+  ...createTaskWorkDefs({ chats, sessions: async () => (await import('../../sessions')).sessions }),
   ...createCanvasGroupDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),
   ...createWorkspaceDefs({
     runtime: async () => {
