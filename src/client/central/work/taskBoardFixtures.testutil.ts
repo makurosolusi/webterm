@@ -36,6 +36,11 @@ export function makeClient(columns: Partial<Record<BoardColumn, ColumnState>>, o
     getAutoDone: vi.fn(async () => false),
     setAutoDone: vi.fn(async () => undefined),
     listProjects: vi.fn(async () => [{ id: 'p1', name: 'Alpha' }, { id: 'p2', name: 'Beta' }]),
+    listGoals: vi.fn(async () => ({ items: [], hasMore: false })),
+    activateGoal: vi.fn(async () => undefined),
+    abandonGoal: vi.fn(async () => undefined),
+    listReminders: vi.fn(async () => ({ items: [], hasMore: false })),
+    cancelReminder: vi.fn(async () => undefined),
     ...over,
   }
   return client as unknown as { [K in keyof TaskBoardClient]: Mock<TaskBoardClient[K]> }

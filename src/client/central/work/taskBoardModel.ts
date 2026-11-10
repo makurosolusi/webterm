@@ -1,6 +1,7 @@
 import { BOARD_COLUMNS, WORK_TERMINAL, type BoardColumn, type TaskCard, type TaskPage, type WorkEventView, type WorkStatus } from '../../../shared/centralWork'
 import { InboxApiError } from '../../inboxTypes'
 import { centralErrorMessage } from '../centralLoad'
+import { dueBadge } from './planningModel'
 import { TL } from './taskBoardLabels'
 
 /** Board columns, left to right. */
@@ -12,6 +13,8 @@ export const TASK_BOARD_MAX_LIMIT = 200
 
 /** A loaded column. */
 export type ColumnState = TaskPage
+/** One page of a list. */
+export interface ListPage<T> { items: T[]; hasMore: boolean }
 /** One badge of a card. */
 export interface CardBadge { text: string; tone: 'info' | 'warn' | 'error' | 'ok' }
 /** Actions a user can take on a task. */
@@ -38,7 +41,7 @@ export function outcomeText(value: unknown): string {
 }
 
 /** Badges of a card, most urgent state first. */
-export function cardBadges(card: TaskCard): CardBadge[] {
+export function cardBadges(card: TaskCard, now = Date.now()): CardBadge[] {
   const badges: CardBadge[] = []
   if (card.status === 'waiting_input') badges.push({ text: TL.needsYou, tone: 'warn' })
   if (card.status === 'stalled') badges.push({ text: card.lastRule ? `${TL.stalled} · ${ruleWords(card.lastRule)}` : TL.stalled, tone: 'warn' })
@@ -48,6 +51,9 @@ export function cardBadges(card: TaskCard): CardBadge[] {
   if (card.status === 'cancelled') badges.push({ text: TL.cancelled, tone: 'info' })
   const verdict = card.column === 'needs_review' ? verificationVerdict(card.verification) : null
   if (verdict) badges.push(verdict === 'passed' ? { text: TL.checksPassed, tone: 'ok' } : { text: TL.checksFailed, tone: 'error' })
+  const due = dueBadge(card, now)
+  if (due) badges.push(due)
+  if (card.goalVersion != null) badges.push({ text: TL.goalMarker(card.goalVersion), tone: 'info' })
   return badges
 }
 
@@ -69,6 +75,11 @@ export function actionErrorText(err: unknown): string {
     : centralErrorMessage(err, TL.actionFailed)
 }
 
+/** Readable text for a refused goal action. */
+export function goalErrorText(err: unknown): string {
+  return (err instanceof InboxApiError && TL.goalErrors[err.code]) || actionErrorText(err)
+}
+
 /** Who did it, in plain words. */
 export function actorWords(actor: string): string {
   if (actor.startsWith('agent:')) return TL.agentActor(actor.slice('agent:'.length))
@@ -88,13 +99,13 @@ export function eventWords(ev: WorkEventView): string {
 export const refreshLimit = (loaded: number, page: number): number => Math.min(Math.max(loaded, page), TASK_BOARD_MAX_LIMIT)
 
 /** Adds a "Load more" page; rows a refresh already brought in are not repeated. */
-export function appendPage(column: ColumnState, page: ColumnState): ColumnState {
+export function appendPage<T extends { id: string }>(column: ListPage<T>, page: ListPage<T>): ListPage<T> {
   const seen = new Set(column.items.map((c) => c.id))
   return { items: [...column.items, ...page.items.filter((c) => !seen.has(c.id))], hasMore: page.hasMore }
 }
 
 /** Applies a refreshed head; rows past `limit` stay until they are read again. */
-export function mergeRefreshed(column: ColumnState | undefined, page: ColumnState, limit: number): ColumnState {
+export function mergeRefreshed<T extends { id: string }>(column: ListPage<T> | undefined, page: ListPage<T>, limit: number): ListPage<T> {
   const fresh = new Set(page.items.map((c) => c.id))
   const tail = (column?.items.slice(limit) ?? []).filter((c) => !fresh.has(c.id))
   return { items: [...page.items, ...tail], hasMore: tail.length > 0 ? column?.hasMore ?? page.hasMore : page.hasMore }

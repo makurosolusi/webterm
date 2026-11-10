@@ -1,4 +1,4 @@
-import type { BoardColumn, WorkStatus } from '../../../shared/centralWork'
+import type { BoardColumn, GoalCardStatus, WorkStatus } from '../../../shared/centralWork'
 
 /** Every English string of the task board. */
 export const TL = {
@@ -63,6 +63,30 @@ export const TL = {
     invalid_shape: 'The request was not valid.',
     invalid_note: 'The note is empty or too long.',
   } as Record<string, string>,
+  goals: 'Goals',
+  goalsLoading: 'Loading goals…',
+  goalsFailed: 'Could not load the goals.',
+  goalStatuses: { proposed: 'Proposed', active: 'Active', achieved: 'Achieved', abandoned: 'Abandoned', superseded: 'Replaced' } satisfies Record<GoalCardStatus, string>,
+  goalHorizon: (date: string) => `By ${date}`,
+  goalProgress: (done: number, total: number) => `${done} of ${total} done`,
+  goalProgressOf: (statement: string) => `Progress of ${statement}`,
+  goalNoTasks: 'No tasks yet',
+  goalAllDone: 'All tasks done',
+  goalActivate: 'Activate',
+  goalAbandon: 'Abandon',
+  goalAbandonConfirm: 'Abandon this goal?',
+  goalAbandonYes: 'Yes, abandon',
+  goalMarker: (version: number) => `Goal v${version}`,
+  goalErrors: {
+    stale_version: 'This goal changed since it was loaded. The latest version is shown now.',
+    illegal_transition: 'This goal has moved on, so that action no longer applies.',
+    goal_not_found: 'This goal no longer exists.',
+  } as Record<string, string>,
+  upcoming: 'Upcoming',
+  remindersLoading: 'Loading reminders…',
+  remindersFailed: 'Could not load the reminders.',
+  overdue: 'Overdue',
+  dueIn: (span: string) => `Due in ${span}`,
   detail: 'Task details',
   closeDetail: 'Close task details',
   detailLoading: 'Loading task…',

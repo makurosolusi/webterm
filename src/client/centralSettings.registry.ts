@@ -1,6 +1,7 @@
 // Settings › Central Agent as data: one entry per control. Adding a Central setting = one entry here
 // + its text in `centralSettingsLabels.ts`; `CentralSettingsSection.tsx` renders whatever is listed.
 // Capability sub keys are the wire keys (`subKeyOf` in featureCapabilities.service.ts), not env names.
+import { CHECKIN_DAILY_LIMITS } from '../shared/centralWork'
 import type { CapabilityId } from '../shared/featureCapabilities'
 import type { Settings } from '../shared/settings'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
@@ -18,6 +19,7 @@ export type CentralSource =
   | { kind: 'env'; key: string; unit?: string; scale?: number }
   | { kind: 'setting'; key: keyof Settings }
   | { kind: 'link'; to: CentralLinkTarget }
+  | { kind: 'checkin'; key: 'enabled' | 'dailyLimit' }
 
 export interface CentralOption { value: string; label: string; confirm?: string }
 export interface CentralField {
@@ -61,6 +63,8 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
   }),
   f('askEachWorker', { group: 'autonomy', control: 'switch', source: { kind: 'capability', id: 'workers', sub: 'runRequireApproval' }, needs: 'workers' }),
   f('dailySpawns', { group: 'autonomy', control: 'stepper', source: env('WEBTERM_CENTRAL_DAILY_SPAWNS', { unit: UNIT_TEXT.workers }), min: 0, max: 500, step: 5, needs: 'workers' }),
+  f('checkin', { group: 'autonomy', control: 'switch', source: { kind: 'checkin', key: 'enabled' } }),
+  f('checkinLimit', { group: 'autonomy', control: 'select', source: { kind: 'checkin', key: 'dailyLimit' }, options: CHECKIN_DAILY_LIMITS.map((n) => ({ value: String(n), label: String(n) })) }),
 
   f('costLimit', { group: 'cost', control: 'combobox', source: env(COST_CAP_KEY, { unit: '$' }) }),
   f('ladder', { group: 'cost', control: 'link', source: link('agent', '[aria-label="Model ladder defaults"]'), always: true }),

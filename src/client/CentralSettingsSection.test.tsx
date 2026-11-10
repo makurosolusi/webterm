@@ -63,6 +63,7 @@ beforeEach(() => {
       if (envFails) return json({ error: 'down' }, 500)
       return json({ locked: false, entries: Object.entries(DEFAULTS).map(([key, v]) => ({ key, value: key === COST_CAP_KEY ? v : '', effective: v, default: v, editable: true })) })
     }
+    if (url === '/api/central/checkin-settings') return json({ enabled: false, dailyLimit: 10, usedToday: 0 })
     return json({ items: [] })
   }))
 })

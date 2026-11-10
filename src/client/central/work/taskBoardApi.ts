@@ -1,4 +1,4 @@
-import type { BoardColumn, TaskDetail as TaskDetailPage } from '../../../shared/centralWork'
+import type { BoardColumn, GoalPage, ReminderPage, TaskDetail as TaskDetailPage } from '../../../shared/centralWork'
 import { request } from '../../inboxTransport'
 import { InboxApiError } from '../../inboxTypes'
 import { CENTRAL_API, centralControlApi } from '../centralControlApi'
@@ -6,6 +6,8 @@ import type { ColumnState, TaskAction } from './taskBoardModel'
 
 const TASKS_PATH = `${CENTRAL_API}/tasks`
 const WORK_SETTINGS_PATH = `${CENTRAL_API}/work-settings`
+const GOALS_PATH = `${CENTRAL_API}/goals`
+const REMINDERS_PATH = `${CENTRAL_API}/reminders`
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 /** A page request. */
@@ -19,12 +21,22 @@ export interface TaskBoardClient {
   getAutoDone(projectId: string, signal?: AbortSignal): Promise<boolean>
   setAutoDone(projectId: string, autoDone: boolean): Promise<void>
   listProjects(signal?: AbortSignal): Promise<Array<{ id: string; name: string }>>
+  listGoals(projectId: string | undefined, range: PageRange, signal?: AbortSignal): Promise<GoalPage>
+  activateGoal(projectId: string, version: number): Promise<void>
+  abandonGoal(projectId: string, version: number): Promise<void>
+  listReminders(range: PageRange, signal?: AbortSignal): Promise<ReminderPage>
+  cancelReminder(id: string): Promise<void>
 }
 
 const malformed = (what: string): InboxApiError => new InboxApiError(`${what} response malformed`, 502, 'bad_response')
 const post = (path: string, body: unknown): Promise<unknown> => request(path, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) })
 const query = (params: Record<string, string | number | undefined>): string =>
   new URLSearchParams(Object.entries(params).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]]))).toString()
+const listPage = async <T>(what: string, path: string, signal?: AbortSignal): Promise<{ items: T[]; hasMore: boolean }> => {
+  const body = await request<{ items?: T[]; hasMore?: unknown }>(path, { signal })
+  if (!Array.isArray(body?.items)) throw malformed(what)
+  return { items: body.items, hasMore: body.hasMore === true }
+}
 
 /** Default client over the live server. */
 export const taskBoardApi: TaskBoardClient = {
@@ -51,5 +63,16 @@ export const taskBoardApi: TaskBoardClient = {
   },
   async listProjects(signal) {
     return (await centralControlApi.listBoardNodes(0, undefined, signal)).projects
+  },
+  listGoals: (projectId, { limit, offset }, signal) => listPage('Goal list', `${GOALS_PATH}?${query({ projectId, limit, offset })}`, signal),
+  async activateGoal(projectId, version) {
+    await post(`${GOALS_PATH}/${encodeURIComponent(projectId)}/activate`, { version })
+  },
+  async abandonGoal(projectId, version) {
+    await post(`${GOALS_PATH}/${encodeURIComponent(projectId)}/abandon`, { version })
+  },
+  listReminders: ({ limit, offset }, signal) => listPage('Reminder list', `${REMINDERS_PATH}?${query({ limit, offset })}`, signal),
+  async cancelReminder(id) {
+    await post(`${REMINDERS_PATH}/${encodeURIComponent(id)}/cancel`, {})
   },
 }
