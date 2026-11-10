@@ -31,6 +31,7 @@ export const SETTING_RANGES = {
   // banyak node.
   scrollbackLines: { min: 1_000, max: 100_000, step: 1_000 },
   gridSize: { min: 4, max: 200, step: 1 },
+  centralCheckinDailyLimit: { min: 5, max: 50, step: 1 },
   // Min = ukuran minimum `NodeResizer` semua jenis node.
   defaultNodeWidth: { min: 240, max: 2400, step: 20 },
   defaultNodeHeight: { min: 160, max: 2400, step: 20 },

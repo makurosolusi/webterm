@@ -34,6 +34,10 @@ export interface AgentSettings {
   /** Skip approvals: Central's ask-tier actions run without a card and Claude agents launch with
    *  `bypassPermissions`. Hard denies (halt, pause, caps, budget, policy deny) still apply. */
   skipApprovals: boolean
+  /** Central may start a turn by itself when the supervisor finds something that needs a decision. */
+  centralCheckins: boolean
+  /** Self-started Central turns per local day: 5, 10, 20 or 50. */
+  centralCheckinDailyLimit: number
   /** Per-workspace model/effort override of the model ladder, by workspace id; absent = ladder. */
   projectModels: Record<string, ProjectModelOverride>
 }

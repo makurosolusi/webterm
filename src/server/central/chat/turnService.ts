@@ -31,11 +31,14 @@ import { resolveLimits } from './turnLimits'
 import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
+import { markSystemTurn, systemTurnsToday, withoutHumanLabel, type SystemTurnOrigin } from './turnOrigin'
 
 const log = createLogger('central')
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
+export { localDayStart, systemTurnsToday } from './turnOrigin'
+export type { SystemTurnOrigin } from './turnOrigin'
 export {
   DEFAULT_MESSAGE_LIMIT, MAX_MESSAGE_LIMIT, listConversationSummaries, listMessages,
 } from './turnPersistence'
@@ -102,8 +105,9 @@ export class TurnService {
     this.wiring = deps.wiring ?? (() => (deps.summarize ? { summarize: deps.summarize } : {}))
   }
 
-  /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
-  submit(input: { conversationId: string; clientMessageId?: unknown; text: unknown; attachments?: CentralAttachments }): SubmitResult {
+  /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. With `origin`, `text` goes to the model only and the conversation shows a system notice. */
+  submit(input: { conversationId: string; clientMessageId?: unknown; text: unknown; attachments?: CentralAttachments; origin?: SystemTurnOrigin }): SubmitResult {
+    const { origin } = input
     if (this.runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
     const conversation = resolveOrCreateConversation(this.db, input.conversationId)
     const clientMessageId = normalizeClientMessageId(input.clientMessageId)
@@ -123,6 +127,9 @@ export class TurnService {
     if (this.active.has(conversation.id) || conversation.activeTurnId !== null) {
       throw busyError(conversation, this.active.get(conversation.id))
     }
+    if (origin && systemTurnsToday(this.db, this.now()) >= origin.dailyLimit) {
+      throw new CentralChatError('budget_exhausted', `conversation ${conversation.id}: daily limit of ${origin.dailyLimit} automatic turns is used`, 429)
+    }
     // A `/model` choice since the last good turn: this turn opens a fresh session (reseeded like a rotation).
     const switchModel = modelSwitchPending(this.db, conversation.id)
     const { context = this.context, summarize } = this.wiring()
@@ -131,14 +138,15 @@ export class TurnService {
       ...(switchModel ? { rotate: true } : {}),
     })
     const { history } = built
-    const prompt = withFiles(built.prompt, files)
+    const prompt = withFiles(origin ? withoutHumanLabel(built.prompt, text) : built.prompt, files)
     // Only the real assembler reports rotation; the legacy one never sets it.
     const rotate = (built as { rotateSession?: boolean }).rotateSession === true || switchModel
     const cacheEnv = (built as { cacheEnv?: Record<string, string> }).cacheEnv ?? {}
+    const role = origin ? 'system' : 'human'
     const appended = appendMessage(this.db, {
-      conversationId: conversation.id, role: 'human',
+      conversationId: conversation.id, role,
       // The model still gets the raw text (it may need to relay a pasted secret to a tool); history never keeps it.
-      parts: [
+      parts: origin ? [{ type: 'notice' as const, text: origin.notice }] : [
         ...storeAttachments(conversation.id, { images, files }),
         ...(text ? [{ type: 'text' as const, text: redactSecrets(text) }] : []),
       ],
@@ -147,7 +155,7 @@ export class TurnService {
     if (!appended.created) return this.replay(appended.message)
     const message = appended.message
     this.record(conversation.id, 'message.created', {
-      messageId: message.id, seq: message.seq, role: 'human', parts: message.parts,
+      messageId: message.id, seq: message.seq, role, parts: message.parts,
     }, null, message.id)
     let turn: Turn
     try {
@@ -158,6 +166,7 @@ export class TurnService {
       if ((err as ConversationError).code === 'conversation_busy') throw busyError(conversation)
       throw err
     }
+    if (origin) markSystemTurn(this.db, turn.id)
     this.active.set(conversation.id, turn.id)
     recordTurnTrace(this.db, turn.id, built.trace)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
@@ -169,7 +178,7 @@ export class TurnService {
         rotate: true, beforeSeq: message.seq,
       })
       recordTurnTrace(this.db, turn.id, seeded.trace)
-      return withFiles(seeded.prompt, files)
+      return withFiles(origin ? withoutHumanLabel(seeded.prompt, text) : seeded.prompt, files)
     }
     const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText, summarize)
     this.runs.set(turn.id, done)
