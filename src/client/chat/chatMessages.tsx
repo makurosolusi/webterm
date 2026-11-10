@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChatApprovalCard } from './chatApprovalCard'
 import { ChatCostChip } from './chatCostChip'
+import { TurnMemoryChip } from '../central/turnMemoryChip'
 import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
@@ -167,6 +168,7 @@ function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | unde
         {message.state === 'failed' && <span className="chat-message__failed">failed</span>}
         {message.state === 'cancelled' && <span className="chat-message__cancelled">cancelled</span>}
         {message.usage && message.state !== 'streaming' && <ChatCostChip usage={message.usage} />}
+        {message.usage && message.state !== 'streaming' && message.turnId && <TurnMemoryChip turnId={message.turnId} />}
       </div>
       {message.parts.map((part, index) => (
         <PartView key={`${message.id}-${index}`} part={part} assistant={assistant} />

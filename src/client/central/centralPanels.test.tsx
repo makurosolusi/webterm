@@ -145,13 +145,13 @@ describe('SkillReview', () => {
 })
 
 describe('MemoryView', () => {
-  it('renders scope/trust/kind and hides secret-looking values', async () => {
+  it('lists what is remembered with plain trust labels and hides secret-looking values', async () => {
     render(<MemoryView client={fakeClient()} />)
-    expect(await screen.findByRole('table', { name: "Central's memory" })).toBeTruthy()
-    expect(screen.getByText('bun + react')).toBeTruthy()
+    expect(await screen.findByText('bun + react')).toBeTruthy()
     expect(screen.queryByText(/sk_live/)).toBeNull()
     expect(screen.getByText('[hidden: looks like a password or key]')).toBeTruthy()
-    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    expect(screen.getByText('Confirmed by you')).toBeTruthy()
+    expect(screen.getByText('From an agent, unverified')).toBeTruthy()
   })
 
   it('looksSecret flags credentials, not prose', () => {

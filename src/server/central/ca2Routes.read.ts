@@ -27,6 +27,7 @@ const RECENT_TURNS = 20
 const MODEL_ENV = 'WEBTERM_CENTRAL_MODEL'
 /** Free-tier model ids (P12): shown with a privacy label in the panel. */
 const FREE_MODEL = /(^|[/:-])free($|[/:-])/i
+const MEMORY_LIST_STATUSES: readonly string[] = ['claim', 'fact']
 const REVIEW_STATUSES: readonly SkillStatus[] = ['pending_approval', 'evaluated', 'proposed', 'active', 'rejected']
 
 const clip = (v: unknown): string => redactSecrets(String(v ?? '')).slice(0, MAX_TEXT)
@@ -76,12 +77,23 @@ export function agentsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   }) } }
 }
 
-/** Visible memory (not superseded), newest first, bodies redacted and clipped. */
+const optional = (v: unknown): string | null => (v === null || v === undefined ? null : clip(v))
+
+/** Active memory (same set as Settings › Memory), newest first; `projectId=` and `status=claim|fact` narrow it. */
 export function memoryView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   const page = pageOf(q)
   if (!page) return fail(400, 'invalid_page')
-  const rows = allRows(h.db, "SELECT id, scope, trust, kind, key, body FROM memory WHERE status != 'superseded' ORDER BY updated_at DESC, id LIMIT ? OFFSET ?", page.limit, page.offset)
-  return { status: 200, body: { items: rows.map((r) => ({ id: String(r.id), scope: String(r.scope), trust: String(r.trust), kind: String(r.kind), key: clip(r.key), value: clip(r.body) })) } }
+  const status = q.get('status')
+  if (status !== null && !MEMORY_LIST_STATUSES.includes(status)) return fail(400, 'invalid_status')
+  const projectId = q.get('projectId')?.trim()
+  const where = ["m.status IN ('claim','fact')", 'm.superseded_at IS NULL', "m.scope != 'blackboard'", ...(status ? ['m.status = ?'] : []), ...(projectId ? ['m.project_id = ?'] : [])]
+  const rows = allRows(h.db, `SELECT m.id, m.scope, m.trust, m.kind, m.key, m.body, m.status, m.source_kind, m.source_ref, m.created_at, p.name AS project_name
+    FROM memory m LEFT JOIN project p ON p.id = m.project_id WHERE ${where.join(' AND ')}
+    ORDER BY m.updated_at DESC, m.id LIMIT ? OFFSET ?`, ...(status ? [status] : []), ...(projectId ? [projectId] : []), page.limit, page.offset)
+  return { status: 200, body: { items: rows.map((r) => ({
+    id: String(r.id), scope: String(r.scope), trust: String(r.trust), kind: String(r.kind), key: clip(r.key), value: clip(r.body), status: String(r.status),
+    sourceKind: optional(r.source_kind), sourceRef: optional(r.source_ref), createdAt: Number(r.created_at), projectName: optional(r.project_name) ?? '',
+  })) } }
 }
 
 /** SKILL.md of a record from the folder its status keeps it in; null when the folder is gone. */

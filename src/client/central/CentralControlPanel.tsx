@@ -8,13 +8,14 @@ import AgentList from './AgentList'
 import LevelPanel from './LevelPanel'
 import AbilitiesView from './AbilitiesView'
 import SkillReview from './SkillReview'
+import MemoryView from './MemoryView'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import { type CentralTab, useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
 import './central.css'
 
-type TabId = CentralTab
+type TabId = CentralTab | 'memory'
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
 const TABS: { id: TabId; label: string }[] = [
@@ -22,9 +23,10 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'abilities', label: CL.tabAbilities },
   { id: 'agents', label: CL.tabAgents },
   { id: 'skills', label: CL.tabSkills },
+  { id: 'memory', label: CL.tabMemory },
 ]
 
-/** A tab this panel has; anything else (a removed tab such as the old Approvals or Memory) opens Status. */
+/** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Status. */
 export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'status'
 
 export interface CentralControlPanelProps {
@@ -71,6 +73,7 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
           {tab === 'agents' && <AgentList client={client} visible={visible} />}
           {tab === 'skills' && <SkillReview client={client} />}
           {tab === 'abilities' && <AbilitiesView client={client} />}
+          {tab === 'memory' && <MemoryView client={client} />}
         </div>
       </div>
     </div>

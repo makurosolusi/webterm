@@ -184,7 +184,8 @@ describe('forged browser metadata without the wt_ui cookie opens nothing', () =>
 
 // The board's writes speak for the human (approve, request changes, auto-done): an agent holds a node
 // token, and the outer gate (index.ts `allowed`) must not take it here, nor any capability token.
-const CENTRAL_BOARD_PATHS = ['/api/central/tasks', '/api/central/tasks/t1', '/api/central/tasks/t1/approve', '/api/central/tasks/t1/changes', '/api/central/tasks/t1/cancel', '/api/central/tasks/t1/retry', '/api/central/work-settings']
+const CENTRAL_BOARD_PATHS = ['/api/central/tasks', '/api/central/tasks/t1', '/api/central/tasks/t1/approve', '/api/central/tasks/t1/changes', '/api/central/tasks/t1/cancel', '/api/central/tasks/t1/retry', '/api/central/work-settings',
+  '/api/central/state', '/api/central/memory/m1/confirm', '/api/central/memory/m1/forget', '/api/central/context', '/api/central/turns/t1/context']
 
 describe('the Central task board refuses agent credentials', () => {
   const opens = (pathname: string, headers: Record<string, string>): boolean => authorizeRequest({ headers, expectedToken: ROOT_TOKEN, pathname, isNodeToken: () => true, isCapabilityToken: () => true })
@@ -200,7 +201,7 @@ describe('the Central task board refuses agent credentials', () => {
 
   test('no webterm CLI capability binding dispatches into the board', () => {
     const bound = TOOL_INDEX.list().flatMap((c) => (c.route ? [c.route.path] : []))
-    expect(bound.filter((p) => /^\/api\/central\/(tasks|work-settings)/.test(p))).toEqual([])
+    expect(bound.filter((p) => /^\/api\/central\/(tasks|work-settings|state|memory|context|turns)/.test(p))).toEqual([])
   })
 })
 

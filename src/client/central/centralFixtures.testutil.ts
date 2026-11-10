@@ -18,9 +18,13 @@ export function fakeClient(over: Partial<CentralControlClient> = {}): CentralCon
     rejectSkill: vi.fn(async () => undefined),
     rollbackSkill: vi.fn(async () => undefined),
     listMemory: vi.fn(async () => [
-      { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react' },
-      { id: 'm2', scope: 'user' as const, trust: 'agent' as const, kind: 'fact' as const, key: 'note', value: 'api_key=sk_live_abcdefghijklmnop1234' },
+      { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react', status: 'fact', sourceKind: 'human-edit', sourceRef: null, createdAt: 1, projectName: 'Webterm' },
+      { id: 'm2', scope: 'user' as const, trust: 'agent' as const, kind: 'fact' as const, key: 'note', value: 'api_key=sk_live_abcdefghijklmnop1234', status: 'claim', sourceKind: 'central', sourceRef: 'central:global', createdAt: 1, projectName: '' },
     ]),
+    confirmMemory: vi.fn(async () => undefined),
+    forgetMemory: vi.fn(async () => undefined),
+    getWorkingState: vi.fn(async () => ({ global: { body: 'global notes', version: 3, updatedAt: 1, updatedBy: 'central' }, project: null })),
+    saveWorkingState: vi.fn(async () => undefined),
     listTools: vi.fn(async () => ({ level: 'propose' as const, tools: [
       { name: 'project.list', summary: 'List your projects and their status', group: 'projects' as const, tier: 'R0' as const, on: true, access: 'auto' as const },
       { name: 'node.list', summary: 'List the nodes in a project', group: 'projects' as const, tier: 'R0' as const, on: true, access: 'auto' as const },
