@@ -11,6 +11,7 @@ import { readAutoDone } from './workSettings'
 import { createWorkStore, onWorkMove } from './workStore'
 import { createWorkSupervisor, type WorkSupervisorPorts } from './workSupervisor'
 import { createWorkVerifier, WORK_VERIFY_RULES, type WorkVerifierDeps } from './workVerify'
+import { registerWorkMemory } from './workMemory'
 import { startWorkWatcher } from './workWatcher'
 
 export interface WorkTrackingDeps {
@@ -56,6 +57,7 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     if (move.rule === WORK_VERIFY_RULES.passed && autoDone(move.task.projectId)) return
     noticeWorkMove(db, move, { now, ...(presence ? { presence } : {}) })
   })
+  registerWorkMemory(db, now)
   const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now })
   return {
     start() {

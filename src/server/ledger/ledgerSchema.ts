@@ -25,6 +25,7 @@ import { applyV23 } from './ledgerSchemaV23'
 import { applyV24 } from './ledgerSchemaV24'
 import { applyV25 } from './ledgerSchemaV25'
 import { applyV26 } from './ledgerSchemaV26'
+import { applyV27 } from './ledgerSchemaV27'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -82,4 +83,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 25, up: applyV25 },
   // v26: project.work_auto_done (per-project auto-done switch); default off, nothing to backfill.
   { version: 26, up: applyV26 },
+  // v27: central_state (pinned STATE) + central_turn.context_json (per-turn trace); additive, nothing to backfill.
+  { version: 27, up: applyV27 },
 ]

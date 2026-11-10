@@ -100,7 +100,7 @@ describe('flags on', () => {
     const r = coreRegistry()
     const added = registerCa2Tools(r, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MEMORY: 'on' })
     expect(added.length).toBeGreaterThan(0)
-    expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.'))).toBe(true)
+    expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.') || n.startsWith('state.'))).toBe(true)
     expect(added.filter((n) => n.startsWith('blackboard.'))).toEqual(['blackboard.read', 'blackboard.propose'])
   })
 

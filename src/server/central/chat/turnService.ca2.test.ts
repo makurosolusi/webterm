@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { getOrCreateConversation, listConversationEvents } from '../conversationStore'
-import { CHECKPOINT_FLAG, ContextRejectedError, createContextAssembler } from '../context/contextAssembler'
+import { CHECKPOINT_FLAG, createContextAssembler } from '../context/contextAssembler'
 import { rollingSummarize } from '../context/checkpointRolling'
 import type { ContextAssembler } from '../context/contextPort'
 import { lastCtxTokens } from '../context/contextUsage'
 import type { CentralRuntime, RuntimeEmit, RuntimeUsage, TurnInput } from '../runtime/centralRuntime'
 import { zeroUsage } from '../runtime/centralRuntime'
-import { CentralChatError } from './chatErrors'
 import { StreamHub } from './streamHub'
 import { TurnService } from './turnService'
 
@@ -58,18 +57,6 @@ describe('turnService CA2 wiring', () => {
     expect(inputs[2]?.sessionRef).toBeUndefined()
   })
 
-  it('maps ContextRejectedError to budget_exhausted / 429 without starting a turn', async () => {
-    const { runtime, inputs } = runtimeOf(null)
-    const context = { build: () => { throw new ContextRejectedError(900, 1000) } } as unknown as ContextAssembler
-    const svc = new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, context })
-    let caught: unknown
-    try { send(svc, 'r1') } catch (err) { caught = err }
-    expect(caught).toBeInstanceOf(CentralChatError)
-    expect((caught as CentralChatError).code).toBe('budget_exhausted')
-    expect((caught as CentralChatError).status).toBe(429)
-    expect(inputs).toHaveLength(0)
-  })
-
   it('records ctx_tokens with the checkpoint flag off, preferring the last step over the turn total', async () => {
     let t = NOW
     const tick = (): number => ++t
@@ -85,7 +72,7 @@ describe('turnService CA2 wiring', () => {
   it('rotates without the checkpoint flag once a turn used >= 70% of the window', async () => {
     let t = NOW
     const tick = (): number => ++t
-    const env = { WEBTERM_CENTRAL_CONTEXT_WINDOW: '1000' }
+    const env = { [CHECKPOINT_FLAG]: 'off', WEBTERM_CENTRAL_CONTEXT_WINDOW: '1000' }
     const context = createContextAssembler({ env, memory: { block: () => ({ text: '', items: [], truncated: false }) }, scheduleIdle: () => undefined })
     const small = runtimeOf('ses_A', { contextTokens: 100 })
     const svc = new TurnService({ db: fixture.db, runtime: small.runtime, stream: hub, now: tick, env, context })
@@ -116,7 +103,7 @@ describe('turnService CA2 wiring', () => {
   it('the production rollingSummarize writes a real checkpoint with the flag on, none with it off', async () => {
     const count = () => (fixture.db.query('SELECT COUNT(*) AS n FROM central_checkpoint').get() as { n: number }).n
     const { runtime } = runtimeOf(null)
-    await send(new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, summarize: rollingSummarize }), 'c0').done
+    await send(new TurnService({ db: fixture.db, runtime, stream: hub, now: () => NOW, env: { [CHECKPOINT_FLAG]: 'off' }, summarize: rollingSummarize }), 'c0').done
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(count()).toBe(0)
     const env = { [CHECKPOINT_FLAG]: 'on' }

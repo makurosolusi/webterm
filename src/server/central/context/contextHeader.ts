@@ -1,13 +1,17 @@
-// Deterministic state header (RND/23 §4.4): counts and ids that need attention, <= 2000 chars,
-// JSON keys in fixed order, no clock. Details are read on demand through tools.
+// State header (RND/23 §4.4): the time, open work and what needs attention, <= 4000 chars, JSON keys in
+// fixed order. It carries the clock, so it must stay after the stable prefix (promptPrefix.ts), which is
+// what keeps the provider cache alive. Details are read on demand through tools.
 import type { Database } from 'bun:sqlite'
 import { getRow } from '../../ledger/ledgerCore'
 import { livePortfolio, projectWorkspace } from '../workspaceLookup'
 import { scopeFromConversationId } from '../conversationModel'
+import { MAX_OPEN_ASSIGNMENTS, openWork } from './contextHeaderWork'
 
 /** Hard cap of the header text. */
-export const HEADER_MAX_CHARS = 2000
+export const HEADER_MAX_CHARS = 4000
 const PROJECT_FETCH_LIMIT = 50
+/** Project-list entries kept while open-work detail is still being shrunk. */
+const PROJECT_LIST_FLOOR = 10
 const MAX_NAME = 40
 
 /** The workspace the user is viewing, as its ledger project. */
@@ -35,23 +39,40 @@ export function viewingProject(ledger: Database): Viewing | null {
   return ws.ok ? { projectId, name: ws.name.slice(0, MAX_NAME) } : null
 }
 
+/** Local date and time with weekday and timezone, to the minute. */
+export function headerClock(now: number, timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone): string {
+  const text = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short', timeZone }).format(now)
+  return `${text} (${timeZone})`
+}
+
 /**
- * Renders the header for a conversation scope; shrinks the project list until it fits the cap.
+ * Renders the header for a conversation scope and shrinks it to the cap in a fixed order: long project list,
+ * open assignments, the rest of the project list, per-project work. `time`, `needsYou` and `viewing` always stay.
  * Every canvas workspace is listed even in a project chat (Telegram binds one): `scope` names the bound one.
- * `viewing` is never shrunk away: it is how Central knows what the user has on screen.
  */
-export function buildStateHeader(db: Database, conversationId: string): string {
+export function buildStateHeader(db: Database, conversationId: string, now = Date.now(), timeZone?: string): string {
   const scope = scopeFromConversationId(conversationId)
   const page = livePortfolio(db, { limit: PROJECT_FETCH_LIMIT })
   const viewing = viewingProject(db)
   const projects = page.items.map((p) => ({ approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status }))
-  const render = (count: number): string => `State: ${JSON.stringify({
+  const work = openWork(db, now)
+  const time = headerClock(now, timeZone)
+  const size = { list: projects.length, open: MAX_OPEN_ASSIGNMENTS, work: work.projects.length }
+  const render = (): string => `State: ${JSON.stringify({
+    time,
+    needsYou: work.needsYou,
+    work: work.projects.slice(0, size.work).map((p) => ({ ...p, open: p.open.slice(0, size.open) })),
     projectTotal: page.total,
-    projects: projects.slice(0, count),
+    projects: projects.slice(0, size.list),
     scope: scope.kind === 'project' ? scope.projectId : 'global',
     viewing,
   })}`
-  let count = projects.length
-  while (count > 0 && render(count).length > HEADER_MAX_CHARS) count -= 1
-  return render(count)
+  const shrink: Array<() => boolean> = [
+    () => size.list > PROJECT_LIST_FLOOR && (size.list -= 1, true),
+    () => size.open > 0 && (size.open -= 1, true),
+    () => size.list > 0 && (size.list -= 1, true),
+    () => size.work > 0 && (size.work -= 1, true),
+  ]
+  for (const step of shrink) while (render().length > HEADER_MAX_CHARS && step());
+  return render()
 }

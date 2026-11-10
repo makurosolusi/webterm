@@ -6,8 +6,8 @@ import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import type {
-  AgentActionResult, AgentRow, BoardNodeRow, CentralControlClient, ControlView, MemoryRow,
-  SkillReviewRow, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView,
+  AgentActionResult, AgentRow, BoardNodeRow, CentralControlClient, ContextView, ControlView, MemoryRow,
+  SkillReviewRow, StateDoc, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView, TurnContext, WorkingState,
 } from './centralControlTypes'
 
 export const CENTRAL_API = '/api/central'
@@ -19,10 +19,17 @@ export const BOARD_NODES_PATH = `${CENTRAL_API}/nodes`
 export const SKILLS_PATH = `${CENTRAL_API}/skills`
 export const MEMORY_PATH = `${CENTRAL_API}/memory`
 export const TOOLS_PATH = `${CENTRAL_API}/tools`
+export const STATE_PATH = `${CENTRAL_API}/state`
+export const CONTEXT_PATH = `${CENTRAL_API}/context`
+export const TURNS_PATH = `${CENTRAL_API}/turns`
 
 /** Server codes for a family whose feature is off (503); the tab shows an off state, not an error. */
 export const SKILLS_OFF = 'skills_off'
 export const AGENTS_OFF = 'agents_off'
+/** A working-state save lost the version check (409): someone wrote a newer version first. */
+export const STATE_CONFLICT = 'version_conflict'
+/** A working-state save over the size caps. */
+export const STATE_TOO_LARGE = 'state_too_large'
 /** Sub-option of the Central capability that switches skills (`WEBTERM_CENTRAL_SKILLS`). */
 export const CENTRAL_SKILLS_SUB = 'centralSkills'
 
@@ -62,8 +69,36 @@ const toSkill = (r: unknown): SkillReviewRow | null => (isRec(r) && isRec(r.reco
   : null)
 
 const toMemory = (r: unknown): MemoryRow | null => (isRec(r) && str(r.id)
-  ? { id: str(r.id), scope: str(r.scope) as MemoryRow['scope'], trust: str(r.trust) as MemoryRow['trust'], kind: str(r.kind) as MemoryRow['kind'], key: str(r.key), value: str(r.value) }
+  ? { id: str(r.id), scope: str(r.scope) as MemoryRow['scope'], trust: str(r.trust) as MemoryRow['trust'], kind: str(r.kind) as MemoryRow['kind'], key: str(r.key), value: str(r.value), status: str(r.status), sourceKind: str(r.sourceKind) || null, sourceRef: str(r.sourceRef) || null, createdAt: num(r.createdAt), projectName: str(r.projectName) }
   : null)
+
+const toStateDoc = (r: unknown): StateDoc | null => (isRec(r) ? { body: str(r.body), version: num(r.version), updatedAt: num(r.updatedAt), updatedBy: str(r.updatedBy) } : null)
+
+function toWorkingState(b: unknown): WorkingState {
+  if (!isRec(b)) throw new InboxApiError('State response malformed', 502, 'bad_response')
+  return { global: toStateDoc(b.global), project: toStateDoc(b.project) }
+}
+
+const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+function toContext(b: unknown): ContextView {
+  if (!isRec(b)) throw new InboxApiError('Context response malformed', 502, 'bad_response')
+  const c = b.lastCompaction
+  return {
+    tokens: numOrNull(b.tokens), window: num(b.window), percent: numOrNull(b.percent),
+    lastCompaction: isRec(c) ? { at: num(c.at), trigger: str(c.trigger), preTokens: num(c.preTokens), summary: str(c.summary) || null } : null,
+  }
+}
+
+function toTurnContext(b: unknown): TurnContext {
+  if (!isRec(b) || !Array.isArray(b.memory)) throw new InboxApiError('Turn context response malformed', 502, 'bad_response')
+  const v = b.stateVersions
+  return {
+    memory: b.memory.flatMap((m) => (isRec(m) && str(m.id) ? [{ id: str(m.id), title: str(m.title), trust: str(m.trust), status: str(m.status) }] : [])),
+    checkpointId: str(b.checkpointId) || null, headerChars: numOrNull(b.headerChars),
+    stateVersions: isRec(v) ? { global: numOrNull(v.global), project: numOrNull(v.project) } : null,
+  }
+}
 
 const compact = <T>(rows: (T | null)[]): T[] => rows.filter((r): r is T => r !== null)
 const page = (offset: number) => `limit=${CENTRAL_PAGE_SIZE}&offset=${offset}`
@@ -123,7 +158,14 @@ export const centralControlApi: CentralControlClient = {
   async approveSkill(name, version, phrase) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, phrase }) },
   async rejectSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/reject`, { version }) },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
-  async listMemory(offset, signal) { return compact(rowsOf(await request(`${MEMORY_PATH}?${page(offset)}`, { signal })).map(toMemory)) },
+  async listMemory(offset, signal, filter = {}) {
+    const narrow = `${filter.projectId ? `&projectId=${encodeURIComponent(filter.projectId)}` : ''}${filter.status ? `&status=${filter.status}` : ''}`
+    return compact(rowsOf(await request(`${MEMORY_PATH}?${page(offset)}${narrow}`, { signal })).map(toMemory))
+  },
+  async confirmMemory(id) { await post(`${MEMORY_PATH}/${encodeURIComponent(id)}/confirm`, {}) },
+  async forgetMemory(id) { await post(`${MEMORY_PATH}/${encodeURIComponent(id)}/forget`, {}) },
+  async getWorkingState(projectId, signal) { return toWorkingState(await request(`${STATE_PATH}${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`, { signal })) },
+  async saveWorkingState(projectId, body, expectedVersion) { await post(STATE_PATH, { projectId, body, expectedVersion }) },
   async listTools(signal) { return toTools(await request(TOOLS_PATH, { signal })) },
   listActiveSkills: (signal) => listActiveSkills(signal),
 }
@@ -132,4 +174,14 @@ export const centralControlApi: CentralControlClient = {
 export async function listActiveSkills(signal?: AbortSignal): Promise<Array<{ name: string; description: string }>> {
   return compact(rowsOf(await request(`${SKILLS_PATH}?status=active`, { signal }))
     .map((r) => (isRec(r) && str(r.name) ? { name: str(r.name), description: str(r.description) } : null)))
+}
+
+/** How full a conversation's context is; `tokens` null before its first finished turn. */
+export async function fetchCentralContext(conversationId: string, signal?: AbortSignal): Promise<ContextView> {
+  return toContext(await request(`${CONTEXT_PATH}?conversationId=${encodeURIComponent(conversationId)}`, { signal }))
+}
+
+/** What one turn was given (memories, checkpoint, state versions); called when the chip opens, never per message. */
+export async function fetchTurnContext(turnId: string, signal?: AbortSignal): Promise<TurnContext> {
+  return toTurnContext(await request(`${TURNS_PATH}/${encodeURIComponent(turnId)}/context`, { signal }))
 }

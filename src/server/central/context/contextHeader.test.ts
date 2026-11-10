@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { registerWorkspaceLookup, type WorkspaceRecord } from '../workspaceLookup'
+import { createWorkStore } from '../work/workStore'
 import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace } from './contextHeader'
 
 let f: Fixture
@@ -29,7 +30,7 @@ describe('state header: viewing', () => {
     active = 'ws-wibu' // a workspace whose project livePortfolio creates with id = workspace id
     const text = buildStateHeader(f.db, 'central:global')
     expect(parse(text).viewing).toEqual({ projectId: 'ws-wibu', name: 'wibu' })
-    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['projectTotal', 'projects', 'scope', 'viewing'])
+    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['time', 'needsYou', 'work', 'projectTotal', 'projects', 'scope', 'viewing'])
     active = 'w-p1' // an older project linked to its workspace under a different id
     expect(parse(buildStateHeader(f.db, 'central:global')).viewing).toEqual({ projectId: 'p1', name: 'laya-api' })
   })
@@ -59,5 +60,72 @@ describe('state header: viewing', () => {
       active = a; workspaces = [...list]
       expect(buildStateHeader(f.db, 'central:project:p1')).toContain('"viewing":')
     }
+  })
+})
+
+describe('state header: time and open work', () => {
+  type Work = { id: string; columns: Record<string, number>; needsYou: Record<string, number>; liveAgents: number; open: Array<{ task: string; node: string; status: string; quietMin: number }> }
+  type Rich = Header & { time: string; needsYou: Record<string, number>; work: Work[] }
+  const rich = (text: string): Rich => JSON.parse(text.slice('State: '.length)) as Rich
+  const NOW = 1_700_000_000_000
+  const MIN = 60_000
+  let tasks = 0
+  const task = (projectId: string, status: string, node: string | null = null, title = `task ${tasks + 1}`): string => {
+    const id = `tk${tasks += 1}`
+    const store = createWorkStore(f.db, () => NOW - 5 * MIN)
+    store.createTask({ id, projectId, title, objective: 'o', actor: { kind: 'central' } })
+    if (node !== null) store.openAssignment({ taskId: id, nodeId: node, channel: 'terminal', instruction: 'go', actor: { kind: 'central' } })
+    f.db.query('UPDATE central_task SET status = ? WHERE id = ?').run(status, id)
+    return id
+  }
+
+  it('shows the local time with weekday and timezone', () => {
+    expect(rich(buildStateHeader(f.db, 'central:global', NOW, 'Asia/Jakarta')).time).toBe('Wednesday, 15 November 2023 at 05:13 GMT+7 (Asia/Jakarta)')
+  })
+
+  it('reports board columns, needsYou, live agents and open assignments per project', () => {
+    workspaces[0] = { id: 'w-p1', name: 'laya-api', nodes: [{ id: 'n1', name: 'builder' }] }
+    task('p1', 'running', 'n1', 'build the api')
+    task('p1', 'waiting_input')
+    task('p1', 'failed')
+    task('p1', 'done')
+    task('p2', 'done')
+    f.db.query(`INSERT INTO central_agents (id, project_id, kind, runner, state, owner, started_at) VALUES ('a1', 'p1', 'claude', 'pty', 'running', 'human', 1)`).run()
+    const header = rich(buildStateHeader(f.db, 'central:global', NOW))
+    expect(header.needsYou).toEqual({ waiting_input: 1, needs_review: 0, stalled: 0, failed: 1 })
+    expect(header.work.map((w) => w.id)).toEqual(['p1'])
+    expect(header.work[0]).toMatchObject({
+      columns: { todo: 0, in_progress: 2, needs_review: 1, done: 1 }, needsYou: { waiting_input: 1, failed: 1 }, liveAgents: 1,
+      open: [{ task: 'build the api', status: 'running', quietMin: 5 }],
+    })
+    expect(header.work[0]?.open[0]?.node).not.toBe('n1') // the display name, not the id
+  })
+
+  it('lists at most 8 open assignments per project', () => {
+    for (let i = 0; i < 12; i += 1) task('p1', 'running', `node-${i}`)
+    expect(rich(buildStateHeader(f.db, 'central:global', NOW)).work[0]?.open).toHaveLength(8)
+  })
+
+  it('shrinks detail first and is deterministic: time, needsYou and viewing survive any load', () => {
+    workspaces = Array.from({ length: 60 }, (_, i) => ({ id: `ws-${i}`, name: `${'n'.repeat(55)}${i}`, nodes: [] }))
+    active = 'ws-7'
+    buildStateHeader(f.db, 'central:global', NOW)
+    for (let i = 0; i < 40; i += 1) for (let j = 0; j < 8; j += 1) task(`ws-${i}`, j === 0 ? 'stalled' : 'running', `node-${i}-${j}`, `${'t'.repeat(70)}${j}`)
+    const text = buildStateHeader(f.db, 'central:global', NOW)
+    const header = rich(text)
+    expect(text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
+    expect(header.time).toContain('2023')
+    expect(header.needsYou.stalled).toBe(40)
+    expect(header.viewing?.projectId).toBe('ws-7')
+    expect(header.work.every((w) => w.open.length === 0)).toBe(true)
+    expect(buildStateHeader(f.db, 'central:global', NOW)).toBe(text)
+  })
+
+  it('moderate load keeps every project and trims its assignments evenly', () => {
+    for (const p of ['p1', 'p2', 'p3']) for (let j = 0; j < 8; j += 1) task(p, 'running', `${p}-node-${j}`, `${'t'.repeat(58)}${j}`)
+    const header = rich(buildStateHeader(f.db, 'central:global', NOW))
+    expect(header.work).toHaveLength(3)
+    expect(new Set(header.work.map((w) => w.open.length)).size).toBe(1)
+    expect(buildStateHeader(f.db, 'central:global', NOW).length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
   })
 })

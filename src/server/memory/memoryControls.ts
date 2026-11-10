@@ -135,6 +135,19 @@ export function verifyMemory(db: Database, authority: MemoryAuthority, id: strin
   })
 }
 
+/** A human accepts an agent's claim in place: it becomes a verified human fact. Blackboard rows have their own panel. */
+export function confirmClaim(db: Database, authority: MemoryAuthority, id: string, now: number): MemoryItemView {
+  requireHuman(authority, 'confirmClaim')
+  return tx(memoryContext(db, now), () => {
+    const record = loadActive(db, id)
+    if (record.status !== 'claim' || String(record.scope) === 'blackboard') throw new MemoryRejectedError('not_found', `claim not found: ${id}`)
+    if (record.trust === 'external') throw new MemoryRejectedError('untrusted_source', 'untrusted content cannot be confirmed into a fact')
+    execWrite(db, "UPDATE memory SET status = 'fact', trust = 'human', verified_at = ?, valid_from = ?, stale_after = NULL, updated_at = ? WHERE id = ?", now, now, now, id)
+    appendMemoryEvent(memoryContext(db, now), id, authority.id, 'memory.confirm', { actorKind: authority.kind, origin: record.sourceKind }, now)
+    return view(loadActive(db, id), now)
+  })
+}
+
 /**
  * A human corrects the text: the old row is closed (bi-temporal supersede) and a human fact with the
  * same slot replaces it. Untrusted (external) rows cannot be edited into a fact: add the rule yourself.

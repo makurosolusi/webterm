@@ -20,6 +20,10 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- Central keeps a pinned working state for each project and overall, and you can read and edit it in Control › Memory.
+- Control › Memory shows what Central remembers, where each item came from and how far to trust it, with Confirm and Forget.
+- The Central chat shows how full its context is, and each turn shows which memories it used.
+- Central's context now carries the date and time, open work per project and what needs you.
 - A Tasks tab in the bottom panel shows Central's work in Todo, In progress, Needs review and Done across all projects, with a full history of each card and every automatic step; approve, request changes, cancel or retry from there, with an optional per-project switch to finish automatically when checks pass.
 - **Layers** in the left side bar, like Figma: every node of the open board in tab order, with hover highlighting the node on the canvas, a filter, rename (double-click or F2), and groups. Drag rows to reorder them or move them into and out of groups; **Mod+G** groups the selected nodes and **Mod+Shift+G** ungroups them.
 - Quick move & resize: hold ⌘⌃ (Ctrl+Alt on Windows and Linux) and drag anywhere on a node. The middle moves it (with the selection), an edge or corner resizes it, a right-drag resizes from the nearest corner, and Esc puts it back. Pick ⌘⇧ (Ctrl+Shift) or turn it off in Settings › Canvas › Quick move & resize.
@@ -128,6 +132,9 @@ Operator notes:
 - Central notices when an assigned agent starts late, goes quiet, needs input, or disappears, nudges it, and resumes an Agent Chat once; each automatic step is recorded with its rule.
 
 ### Changed
+- Central's context management is on by default, and a full conversation rotates to a fresh session instead of being refused.
+- Central saves its state before its context is compacted and restores it afterwards.
+- Central can correct or forget its own wrong claims; facts you confirmed stay yours.
 - Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
 - The left side bar now shows one view at a time, like VS Code: Layers (default), Sessions and Agent History each get the full height, chosen from their icons in the activity bar. Clicking the icon of the view already shown hides the side bar; ⌘⇧\ still toggles it. The last view shown is remembered, and all views share one width. The Sessions icon shows a badge with the number of sessions in other workspaces that need attention. New commands "View: Show Layers", "View: Show Sessions" and "View: Show Agent History" (no default keys).
 - The node tab strip above the canvas moved into the Layers view of the side bar.

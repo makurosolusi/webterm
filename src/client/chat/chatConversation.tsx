@@ -19,6 +19,7 @@ import { centralChatAttach, centralParts, centralWire } from './chatCentralAttac
 import type { ChatPart } from './chatTypes'
 import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 import { CentralModelPicker } from '../central/centralModelPicker'
+import { CentralContextMeter } from '../central/centralContextMeter'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -186,6 +187,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const modelSet = (): void => setModelKey((k) => k + 1)
   const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }), conversation.id, modelSet)
   const error = state.error ?? historyError
+  const settledKey = modelKey + (busy ? 0 : state.lastEventSeq)
 
   return (
     <section ref={section} className="chat-conversation" aria-label="Conversation">
@@ -194,7 +196,8 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
           ? <span className="chat-progress" aria-hidden="true" />
           : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
-        {props.commands && <CentralModelPicker conversationId={conversation.id} refreshKey={modelKey + (busy ? 0 : state.lastEventSeq)}
+        {props.commands && <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />}
+        {props.commands && <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
           openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />}
       </header>
 

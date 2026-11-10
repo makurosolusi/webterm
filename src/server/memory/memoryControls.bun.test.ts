@@ -8,7 +8,7 @@ import { MIGRATIONS } from '../ledger/ledgerSchema'
 import { applyV18 } from '../ledger/ledgerSchemaV18'
 import { migrate } from '../ledger/migration'
 import { addProcedural, confirmProcedural, forgetProcedural, HUMAN_UI, listProcedural, proceduralBlock, suggestProcedural } from '../awareness/proceduralMemory'
-import { editMemory, forgetMemory, listMemoryItems, nodeRef, setIncognito, suppressMemory, verifyMemory } from './memoryControls'
+import { confirmClaim, editMemory, forgetMemory, listMemoryItems, nodeRef, setIncognito, suppressMemory, verifyMemory } from './memoryControls'
 import { handleMemoryControlsApi, MEMORY_CONTROLS_PATH } from './memoryControls.api'
 import { searchMemoryHybrid } from './memoryHybrid'
 import { MemoryRejectedError } from './memoryModel'
@@ -43,6 +43,30 @@ test('a superseded fact is not retrieved; the old row keeps a closed validity wi
   const b = rememberClaim(db, ctx({ now: T0 + 1 }), { key: 'deploy.staging.host', body: 'staging uses the bastion' })
   same(db.query('SELECT valid_to, superseded_by FROM memory WHERE id = ?').get(a.record.id), { valid_to: T0 + 1, superseded_by: b.record.id })
   expect(searchMemoryHybrid(db, { viewer: GLOBAL, query: 'vpn', now: T0 + 2 }).length).toBe(0)
+})
+
+test('a human confirms a remembered claim into a served fact, once', () => {
+  const db = fixture()
+  const { record } = rememberClaim(db, ctx(), { key: 'deploy.staging.host', body: 'staging uses the vpn' })
+  expect(confirmClaim(db, HUMAN, record.id, T0 + 5)).toMatchObject({ status: 'fact', trust: 'human' })
+  same(db.query('SELECT status, trust, verified_at, valid_from, stale_after FROM memory WHERE id = ?').get(record.id),
+    { status: 'fact', trust: 'human', verified_at: T0 + 5, valid_from: T0 + 5, stale_after: null })
+  const [hit] = searchMemoryHybrid(db, { viewer: GLOBAL, query: 'staging vpn', now: T0 + 6 })
+  expect(hit?.record).toMatchObject({ id: record.id, status: 'fact', trust: 'human' })
+  expect(count(db, "SELECT COUNT(*) AS c FROM memory_event WHERE memory_id = ? AND kind = 'memory.confirm'", record.id)).toBe(1)
+  expect(codeOf(() => confirmClaim(db, HUMAN, record.id, T0 + 7))).toBe('not_found')
+})
+
+test('confirmClaim refuses external claims, non-humans and rows that are not active claims', () => {
+  const db = fixture()
+  const web = seedRow(db, { key: 'web.page.claim', body: 'a page said this', status: 'claim', trust: 'external' })
+  expect(codeOf(() => confirmClaim(db, HUMAN, web, T0))).toBe('untrusted_source')
+  const { record } = rememberClaim(db, ctx(), { key: 'deploy.prod.host', body: 'prod uses the bastion' })
+  expect(codeOf(() => confirmClaim(db, { kind: 'central', id: 'central:global' }, record.id, T0))).toMatch(/^other:.*only a human/)
+  expect(codeOf(() => confirmClaim(db, HUMAN, 'nope', T0))).toBe('not_found')
+  expect(codeOf(() => confirmClaim(db, HUMAN, seedRow(db, { key: 'global.a.b', body: 'already a fact' }), T0))).toBe('not_found')
+  same(db.query('SELECT status, trust FROM memory WHERE id = ?').get(web), { status: 'claim', trust: 'external' })
+  same(db.query('SELECT status, trust FROM memory WHERE id = ?').get(record.id), { status: 'claim', trust: 'agent' })
 })
 
 test('a fact whose validity window has closed is not served even before supersede bookkeeping', () => {

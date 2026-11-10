@@ -69,6 +69,36 @@ export interface MemoryRow {
   kind: MemoryKind
   key: string
   value: string
+  status: string
+  sourceKind: string | null
+  sourceRef: string | null
+  createdAt: number
+  projectName: string
+}
+
+/** Narrowing of the Remembered list. */
+export interface MemoryFilter { projectId?: string; status?: 'claim' | 'fact' }
+
+/** One pinned working-state document (`central_state`). */
+export interface StateDoc { body: string; version: number; updatedAt: number; updatedBy: string }
+
+/** `GET /api/central/state`: the global document and the selected project's. */
+export interface WorkingState { global: StateDoc | null; project: StateDoc | null }
+
+/** `GET /api/central/context`: how full the conversation's context is. */
+export interface ContextView {
+  tokens: number | null
+  window: number
+  percent: number | null
+  lastCompaction: { at: number; trigger: string; preTokens: number; summary: string | null } | null
+}
+
+/** `GET /api/central/turns/:id/context`: what one turn was given; `headerChars` null = not recorded. */
+export interface TurnContext {
+  memory: Array<{ id: string; title: string; trust: string; status: string }>
+  checkpointId: string | null
+  headerChars: number | null
+  stateVersions: { global: number | null; project: number | null } | null
 }
 
 export type ToolGroup = 'projects' | 'workers' | 'tasks' | 'memory' | 'browser' | 'skills' | 'channels' | 'approvals' | 'other'
@@ -102,7 +132,11 @@ export interface CentralControlClient {
   approveSkill(name: string, version: string, phrase: string): Promise<void>
   rejectSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
-  listMemory(offset: number, signal?: AbortSignal): Promise<MemoryRow[]>
+  listMemory(offset: number, signal?: AbortSignal, filter?: MemoryFilter): Promise<MemoryRow[]>
+  confirmMemory(id: string): Promise<void>
+  forgetMemory(id: string): Promise<void>
+  getWorkingState(projectId: string | undefined, signal?: AbortSignal): Promise<WorkingState>
+  saveWorkingState(projectId: string | null, body: string, expectedVersion: number): Promise<void>
   listTools(signal?: AbortSignal): Promise<ToolsView>
   listActiveSkills(signal?: AbortSignal): Promise<Array<{ name: string; description: string }>>
 }

@@ -1,4 +1,4 @@
-// Bun-only (bun:sqlite). The four memory tools through the real execTool gate (flag, validate, tier, handler).
+// Bun-only (bun:sqlite). The memory tools through the real execTool gate (flag, validate, tier, handler).
 import { expect, test } from 'bun:test'
 import { CANARY, T0, addMessage, fixture, same, seedRow, subset } from '../../../memory/memoryV2.fixture'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
@@ -14,11 +14,12 @@ function setup(conversationId = 'central:global', flag = 'on', maxTier: Tier = '
   return { db, ctx }
 }
 
-test('all four tools are registered with the right tiers and the memory flag', () => {
+test('all memory tools are registered with the right tiers and the memory flag', () => {
   const { ctx } = setup()
   same(ctx.registry.list().map((d) => [d.name, d.tier, d.flag, d.projectScoped]), [
     ['memory.search', 'R0', 'WEBTERM_CENTRAL_MEMORY', false], ['memory.get', 'R0', 'WEBTERM_CENTRAL_MEMORY', false],
-    ['memory.remember', 'R1', 'WEBTERM_CENTRAL_MEMORY', false], ['memory.remember_user', 'R1', 'WEBTERM_CENTRAL_MEMORY', false],
+    ['memory.remember', 'R1', 'WEBTERM_CENTRAL_MEMORY', false],
+    ['memory.update', 'R1', 'WEBTERM_CENTRAL_MEMORY', false], ['memory.forget', 'R1', 'WEBTERM_CENTRAL_MEMORY', false], ['memory.remember_user', 'R1', 'WEBTERM_CENTRAL_MEMORY', false],
   ])
 })
 
@@ -88,4 +89,89 @@ test('audit rows carry ids and counts, never the remembered text', async () => {
   const rows = db.query("SELECT payload_json AS p FROM event WHERE kind = 'central.proposal'").all() as Array<{ p: string }>
   expect((rows.length) > 0).toBe(true)
   expect(rows.some((r) => r.p.includes('distinctive-audit-body-text'))).toBe(false)
+})
+
+const CLAIM = { scope: 'central', status: 'claim', trust: 'agent', verifiedAt: null } as const
+const row = (db: ReturnType<typeof fixture>, id: string) => db.query('SELECT * FROM memory WHERE id = ?').get(id) as Record<string, unknown>
+const events = (db: ReturnType<typeof fixture>, id: string) => db.query('SELECT actor, kind, payload_json AS p FROM memory_event WHERE memory_id = ?').all(id) as Array<{ actor: string; kind: string; p: string }>
+const bodiesFor = async (ctx: ToolCtx, query: string) => ((await execTool(ctx, 'memory.search', { query })).data?.results as Array<{ body: string }>).map((r) => r.body)
+
+test('update supersedes the claim, keeps its origin and history, and writes an event', async () => {
+  const { ctx, db } = setup()
+  const old = seedRow(db, { ...CLAIM, key: 'consolidate.add.new.abc', title: 'staging uses vpn', body: 'staging uses vpn', sourceKind: 'consolidator', sourceRef: 'node:a1', sourceEventId: 7 })
+  const res = await execTool(ctx, 'memory.update', { id: old, text: 'staging uses wireguard' })
+  subset(res, { ok: true, data: { deduped: false, status: 'claim', trust: 'agent' } })
+  const id = res.data?.id as string
+  subset(row(db, old), { status: 'superseded', superseded_by: id, valid_to: T0, body: 'staging uses vpn' })
+  subset(row(db, id), { supersedes: old, key: 'consolidate.add.new.abc', title: 'staging uses wireguard', source_kind: 'consolidator', source_ref: 'node:a1', source_event_id: 7, scope: 'central' })
+  same(events(db, id).map((e) => [e.actor, e.kind]), [['central:central:global', 'memory.update']])
+  same(await bodiesFor(ctx, 'staging'), ['staging uses wireguard'])
+  subset(await execTool(ctx, 'memory.update', { id, text: 'staging uses wireguard' }), { ok: true, data: { id, deduped: true } })
+  subset(await execTool(ctx, 'memory.update', { id: old, text: 'anything else' }), { ok: false, code: 'not_found' })
+})
+
+test('update and forget refuse human-owned rows with a hint and change nothing', async () => {
+  const { ctx, db } = setup()
+  const owned = [
+    seedRow(db, { key: 'global.a.human', body: 'human fact', trust: 'human' }),
+    seedRow(db, { key: 'user.a.quote', body: 'quoted fact', scope: 'user', trust: 'attested' }),
+    seedRow(db, { ...CLAIM, key: 'central.a.claim', body: 'human held claim', trust: 'human' }),
+    seedRow(db, { key: 'central.a.fact', body: 'agent promoted fact', scope: 'central', trust: 'agent' }),
+  ]
+  for (const id of owned) {
+    for (const res of [await execTool(ctx, 'memory.update', { id, text: 'rewritten' }), await execTool(ctx, 'memory.forget', { id, reason: 'wrong' })]) {
+      subset(res, { ok: false, code: 'human_owned' })
+      expect(String(res.data?.hint)).toContain('Ask the user')
+    }
+    expect(row(db, id)['superseded_at']).toBe(null)
+    same(events(db, id), [])
+  }
+})
+
+test('update and forget only reach rows visible to the conversation', async () => {
+  const { ctx, db } = setup('central:project:p1')
+  const hidden = [
+    seedRow(db, { ...CLAIM, key: 'central.b.other', body: 'other project claim', projectId: 'p2' }),
+    seedRow(db, { ...CLAIM, key: 'central.b.web', body: 'web text', trust: 'external' }),
+  ]
+  for (const id of hidden) {
+    subset(await execTool(ctx, 'memory.update', { id, text: 'x y z' }), { ok: false, code: 'not_found' })
+    subset(await execTool(ctx, 'memory.forget', { id, reason: 'x' }), { ok: false, code: 'not_found' })
+  }
+  const shared = seedRow(db, { ...CLAIM, key: 'central.b.shared', body: 'global conversation claim' })
+  const res = await execTool(ctx, 'memory.update', { id: shared, text: 'corrected shared claim' })
+  expect(res.ok).toBe(true)
+  expect(row(db, res.data?.id as string)['project_id']).toBe(null)
+  const own = seedRow(db, { ...CLAIM, key: 'central.b.own', body: 'own project claim', projectId: 'p1' })
+  subset(await execTool({ ...ctx, conversationId: 'central:global' }, 'memory.forget', { id: own, reason: 'x' }), { ok: false, code: 'not_found' })
+})
+
+test('forget closes the window without scrubbing or tombstoning; the same text can be stored again', async () => {
+  const { ctx, db } = setup()
+  const saved = await execTool(ctx, 'memory.remember', { key: 'deploy.prod.region', body: 'prod runs in jakarta' })
+  const id = saved.data?.id as string
+  subset(await execTool(ctx, 'memory.forget', { id, reason: 'moved away' }), { ok: true, data: { id } })
+  subset(row(db, id), { status: 'superseded', valid_to: T0, superseded_by: null, body: 'prod runs in jakarta' })
+  expect(events(db, id).map((e) => e.kind)).toContain('memory.invalidate')
+  expect(events(db, id).some((e) => e.p.includes('moved away'))).toBe(true)
+  same(db.query('SELECT count(*) AS c FROM memory_tombstone').get(), { c: 0 })
+  same(await bodiesFor(ctx, 'jakarta'), [])
+  subset(await execTool(ctx, 'memory.get', { id }), { ok: false, code: 'not_found' })
+  const again = await execTool(ctx, 'memory.remember', { key: 'deploy.prod.region', body: 'prod runs in jakarta' })
+  subset(again, { ok: true, data: { deduped: false, status: 'claim' } })
+  same(await bodiesFor(ctx, 'jakarta'), ['prod runs in jakarta'])
+})
+
+test('update and forget: strict keys, audit carries the id only, secrets refused, PII masked', async () => {
+  const { ctx, db } = setup()
+  const id = seedRow(db, { ...CLAIM, key: 'central.c.one', body: 'original claim' })
+  for (const extra of [{ trust: 'human' }, { status: 'fact' }, { projectId: 'p1' }]) {
+    expect((await execTool(ctx, 'memory.update', { id, text: 'x', ...extra })).ok).toBe(false)
+    expect((await execTool(ctx, 'memory.forget', { id, reason: 'x', ...extra })).ok).toBe(false)
+  }
+  subset(await execTool(ctx, 'memory.update', { id, text: `token ${CANARY}` }), { ok: false, code: 'secret_detected' })
+  const res = await execTool(ctx, 'memory.update', { id, text: 'ping admin@example.com distinctive-update-text' })
+  expect(row(db, res.data?.id as string)['body']).toBe('ping [email] distinctive-update-text')
+  const audit = db.query("SELECT payload_json AS p FROM event WHERE kind = 'central.proposal'").all() as Array<{ p: string }>
+  expect(audit.some((r) => r.p.includes('distinctive-update-text'))).toBe(false)
 })
