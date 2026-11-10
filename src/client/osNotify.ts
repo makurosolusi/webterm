@@ -53,6 +53,9 @@ export function setNotifyCanvas(hooks: Partial<CanvasHooks>): () => void {
   }
 }
 
+/** Fly to a node, switching workspace if it lives on another board (no-op before App installs the hook). */
+export const focusCanvasNode = (id: string): void => canvas.focus?.(id)
+
 function userIsLooking(id: string, watching: boolean): boolean {
   if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
   return watching || (canvas.inView?.(id) ?? false)

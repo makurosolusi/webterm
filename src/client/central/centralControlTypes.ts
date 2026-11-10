@@ -23,9 +23,32 @@ export interface BudgetView {
 export interface StatusView {
   budget: BudgetView
   model: { id: string; free: boolean }
+  /** Newest Central turn; null before the first one. `at` = when it ended, or started while still active. */
+  lastTurn: { at: number; status: string } | null
 }
 
-export type AgentRow = Pick<AgentRecord, 'id' | 'projectId' | 'kind' | 'role' | 'runner' | 'state' | 'owner'>
+export type AgentRow = Pick<AgentRecord, 'id' | 'projectId' | 'kind' | 'role' | 'runner' | 'state' | 'owner' | 'nodeId' | 'startedAt'> & {
+  projectName: string
+  /** False when `nodeId` no longer exists on any board. */
+  nodeOnBoard: boolean
+}
+
+/** Worker list narrowing: running only, and/or one project. */
+export interface AgentFilter { live?: boolean; projectId?: string }
+
+/** `GET /api/central/nodes` row: a Claude node the user opened on a board (not started by Central). */
+export interface BoardNodeRow {
+  nodeId: string
+  workspaceId: string
+  projectId: string
+  projectName: string
+  kind: string
+  title: string
+  live: boolean
+  status: string | null
+}
+
+export interface BoardNodesPage { items: BoardNodeRow[]; projects: Array<{ id: string; name: string }> }
 
 export type AgentAction = 'relay' | 'close'
 
@@ -33,9 +56,10 @@ export type AgentAction = 'relay' | 'close'
 export type AgentActionResult = { status: 'done' } | { status: 'needs_approval'; approvalId: string }
 
 export interface SkillReviewRow {
-  record: SkillRecord
+  record: SkillRecord & { rejectReason?: string }
   lint: { ok: boolean; findings: string[] }
   diff: string
+  canRollback: boolean
 }
 
 export interface MemoryRow {
@@ -71,10 +95,12 @@ export interface CentralControlClient {
   getControl(signal?: AbortSignal): Promise<ControlView>
   getStatus(signal?: AbortSignal): Promise<StatusView>
   halt(reason: string): Promise<void>
-  listAgents(offset: number, signal?: AbortSignal): Promise<AgentRow[]>
+  listAgents(offset: number, signal?: AbortSignal, filter?: AgentFilter): Promise<AgentRow[]>
+  listBoardNodes(offset: number, projectId?: string, signal?: AbortSignal): Promise<BoardNodesPage>
   agentAction(id: string, action: AgentAction, message?: string): Promise<AgentActionResult>
   listSkills(signal?: AbortSignal): Promise<SkillReviewRow[]>
-  approveSkill(name: string, version: string): Promise<void>
+  approveSkill(name: string, version: string, phrase: string): Promise<void>
+  rejectSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
   listMemory(offset: number, signal?: AbortSignal): Promise<MemoryRow[]>
   listTools(signal?: AbortSignal): Promise<ToolsView>

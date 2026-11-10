@@ -1,5 +1,6 @@
 // Write-side actions of the Central Agent v2 control panel (WS-19). The transport has already
 // authenticated the caller; `actor` is the derived identity, never a payload field.
+import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import type { RouteResult } from '../apiShared.types'
 import { redactSecrets } from '../redactSecrets'
 import type { Ca2Handle } from './ca2Boot'
@@ -64,14 +65,18 @@ function skillFailure(err: unknown): RouteResult {
   throw err
 }
 
-/** `POST /skills/:name/approve` and `/rollback`; both need a `human:*` actor. */
-export function skillAction(h: Ca2Handle, name: string, action: 'approve' | 'rollback', raw: unknown, actor: string): RouteResult {
+export type SkillAction = 'approve' | 'rollback' | 'reject'
+
+/** `POST /skills/:name/approve`, `/rollback` and `/reject`; all need a `human:*` actor. Approve also needs the typed phrase. */
+export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw: unknown, actor: string): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
   try {
     if (action === 'rollback') { h.skills.rollback(name, actor); return { status: 200, body: { status: 'done' } } }
-    const version = bodyOf(raw).version
+    const { version, phrase } = bodyOf(raw)
     if (typeof version !== 'string') return fail(400, 'invalid_version')
+    if (action === 'reject') { h.skills.reject(name, version, actor); return { status: 200, body: { status: 'done' } } }
+    if (phrase !== CONFIRM_PHRASE) return fail(400, 'confirm_phrase_mismatch')
     h.skills.approve(name, version, actor, confirmPhrase(name, version))
     return { status: 200, body: { status: 'done' } }
   } catch (err) {

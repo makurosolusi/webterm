@@ -7,11 +7,15 @@ import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
 import { useLiveSettings } from '../useSettings'
 import { CL, LEVEL_MEANING, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
-import type { BudgetView, CentralControlClient, StatusView } from './centralControlTypes'
-import { centralErrorMessage, useLoad } from './centralLoad'
+import type { BudgetView, CentralControlClient, ControlView, StatusView } from './centralControlTypes'
+import { centralErrorMessage, useLiveRefresh, useLoad } from './centralLoad'
+import { isActiveTurnStatus, type ChatTurnStatus } from '../chat/chatTypes'
+import { relativeTime } from '../SessionHistory.model'
 
 export interface LevelPanelProps {
   client?: CentralControlClient
+  /** False while the panel sits mounted behind another view; turning true again re-reads the numbers. */
+  visible?: boolean
   /** Reports the status (model, budget) to the host so it can show the privacy label. */
   onStatus?: (status: StatusView) => void
   /** `/halt` from the Central chat: open the same kill-switch confirmation, then report it via `onHaltAsked`. */
@@ -54,9 +58,19 @@ const openAgentSettings = (): void => {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: AGENT_SETTINGS_SECTION } }))
 }
 
-export default function LevelPanel({ client = centralControlApi, onStatus, askHalt, onHaltAsked }: LevelPanelProps) {
+/** Below L2 Central cannot change anything, so skipping approvals does not alter what the level means. */
+const skipApplies = (level: ControlView['effective']): boolean => level !== 'off' && level !== 'observe'
+
+/** "Working now", "Last turn 5m ago · Idle" or "No turns yet". */
+export function livenessText(turn: StatusView['lastTurn'], now = Date.now()): string {
+  if (!turn) return CL.noTurns
+  return isActiveTurnStatus(turn.status as ChatTurnStatus) ? CL.workingNow : CL.lastTurnIdle(relativeTime(turn.at, now))
+}
+
+export default function LevelPanel({ client = centralControlApi, visible = true, onStatus, askHalt, onHaltAsked }: LevelPanelProps) {
   const control = useLoad((s) => client.getControl(s))
   const status = useLoad((s) => client.getStatus(s))
+  useLiveRefresh(visible, () => { control.reload(); status.reload() })
   const { skipApprovals } = useLiveSettings()
   const [confirming, setConfirming] = useState(false)
   const [reason, setReason] = useState('')
@@ -84,6 +98,9 @@ export default function LevelPanel({ client = centralControlApi, onStatus, askHa
   }
 
   const c = control.data
+  const skipped = skipApprovals && !!c && skipApplies(c.effective)
+  // The ladder names promise asking ("L3 ... asks before risky steps"), so with approvals skipped only the code stays.
+  const levelName = c ? LEVEL_NAMES[c.effective] ?? c.effective : ''
   return (
     <section className="ccp-section" aria-labelledby="ccp-level-h">
       <h3 id="ccp-level-h">{CL.levelHeading}</h3>
@@ -91,20 +108,22 @@ export default function LevelPanel({ client = centralControlApi, onStatus, askHa
       {control.loading && !c && <p role="status">{CL.loading}</p>}
       {c && (
         <div className="ccp-level">
-          <p><strong data-testid="level-effective">{LEVEL_NAMES[c.effective] ?? c.effective}</strong></p>
-          <p>{LEVEL_MEANING[c.effective]}</p>
+          <p><strong data-testid="level-effective">{skipped ? levelName.split(' ')[0] : levelName}</strong></p>
+          <p>{skipped ? CL.levelApprovalsSkipped : LEVEL_MEANING[c.effective]}</p>
           {c.global.level !== c.effective && <p className="ccp-row__meta">{CL.limited}</p>}
         </div>
       )}
       <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
       {skipApprovals && (
         <p className="ccp-row__meta">
-          {CL.approvalsSkipped}{' '}
+          {!skipped && <>{CL.approvalsSkipped}{' '}</>}
           <Button type="button" size="sm" variant="secondary" aria-label={CL.changeApprovalsLabel} onClick={openAgentSettings}>{CL.change}</Button>
         </p>
       )}
+      {statusData && <p data-testid="central-liveness">{livenessText(statusData.lastTurn)}</p>}
       <h3 id="ccp-budget-h">{CL.budgetHeading}</h3>
       {status.error && <p role="alert" className="ccp-error">{status.error}</p>}
+      {status.loading && !statusData && <p role="status">{CL.loading}</p>}
       {statusData && <div role="group" aria-labelledby="ccp-budget-h">{budgetMeters(statusData.budget)}</div>}
       <div className="ccp-halt">
         {!confirming && <Button type="button" size="sm" variant="destructive" onClick={() => { setMsg(null); setConfirming(true) }}>{CL.haltButton}</Button>}

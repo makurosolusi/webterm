@@ -3,7 +3,7 @@
 import { flagOn } from '../../../envFlag'
 import type { SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../../contracts/skill.types'
 import type { Awaitable } from '../../contracts/tool.types'
-import { SkillError } from '../../skills/skillIndex'
+import { SkillError, type StoredSkill } from '../../skills/skillIndex'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { APPROVAL_NESTED_FORBIDDEN } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
@@ -15,7 +15,7 @@ export const SKILL_LIST_MAX = 50
 const STATUSES: readonly SkillStatus[] = ['proposed', 'rejected', 'evaluated', 'pending_approval', 'active', 'disabled', 'archived']
 
 /** Store shape the tools need: the contract plus paginated list. */
-export type SkillToolStore = SkillStore & { list(status?: SkillStatus, page?: { limit?: number; offset?: number }): Awaitable<readonly SkillRecord[]> }
+export type SkillToolStore = Omit<SkillStore, 'propose'> & { propose(input: SkillProposeInput, proposedBy: string): Awaitable<StoredSkill>; list(status?: SkillStatus, page?: { limit?: number; offset?: number }): Awaitable<readonly SkillRecord[]> }
 /** Resolves the store for one call; WS-19 supplies it (data dir + db live in boot wiring). */
 export type SkillStoreResolver = (ctx: ToolCtx) => SkillToolStore
 
@@ -66,7 +66,7 @@ export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[]
       if (!flagged(ctx, SKILLS_FLAG)) return { ok: false, code: 'flag_off' }
       try {
         const rec = await resolve(ctx).propose(input as unknown as SkillProposeInput, `central:${ctx.conversationId}`)
-        return { ok: true, data: { name: rec.name, version: rec.version, status: rec.status } }
+        return { ok: true, data: { name: rec.name, version: rec.version, status: rec.status, ...(rec.rejectReason ? { reason: rec.rejectReason } : {}) } }
       } catch (err) { return failure(err) }
     },
   }

@@ -15,8 +15,8 @@ afterEach(cleanup)
 describe('LevelPanel', () => {
   it('shows the level in plain words, the budget in compact numbers and reports status', async () => {
     const onStatus = vi.fn()
-    const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 13_000, spawns: 0 }, limits: { tokens: 10_000_000, spawns: 20 } }, model: { id: 'opencode/free', free: true } })) })
-    render(<LevelPanel client={client} onStatus={onStatus} />)
+    const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 13_000, spawns: 0 }, limits: { tokens: 10_000_000, spawns: 20 } }, model: { id: 'opencode/free', free: true }, lastTurn: null })) })
+    render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, skipApprovals: false }}><LevelPanel client={client} onStatus={onStatus} /></SettingsProvider>)
     expect((await screen.findByTestId('level-effective')).textContent).toBe('L2 Proposes work, you approve')
     expect(screen.getByText(/nothing runs until you approve it/)).toBeTruthy()
     expect(screen.queryByText(/Limited by your highest allowed level/)).toBeNull()
@@ -32,7 +32,7 @@ describe('LevelPanel', () => {
   it('says when the highest allowed level holds Central below the chosen one; no limit reads plainly', async () => {
     const client = fakeClient({
       getControl: vi.fn(async () => ({ ceiling: 'propose' as const, effective: 'propose' as const, global: { level: 'act_envelope' as const, version: 1, reason: null } })),
-      getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 1_500, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false } })),
+      getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 1_500, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false }, lastTurn: null })),
     })
     render(<LevelPanel client={client} />)
     expect(await screen.findByText('Limited by your highest allowed level.')).toBeTruthy()
@@ -122,24 +122,24 @@ describe('SkillReview', () => {
     render(<SkillReview client={client} />)
     expect(await screen.findByText('Lint passed')).toBeTruthy()
     expect(screen.getByLabelText('Diff').textContent).toContain('+added line')
-    const approve = screen.getByRole('button', { name: 'Approve skill' }) as HTMLButtonElement
+    const approve = screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement
     expect(approve.disabled).toBe(true)
     fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: 'APPROVE' } })
     fireEvent.click(approve)
-    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1'))
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1', 'APPROVE'))
   })
 
   it('failed lint blocks approval; active skill offers rollback', async () => {
     const base = (await fakeClient().listSkills())[0]!
     const client = fakeClient({ listSkills: vi.fn(async () => [
       { ...base, lint: { ok: false, findings: ['secret found'] } },
-      { ...base, record: { ...base.record, name: 'webterm-y', status: 'active' as const } },
+      { ...base, record: { ...base.record, name: 'webterm-y', status: 'active' as const }, canRollback: true },
     ]) })
     render(<SkillReview client={client} />)
     expect(await screen.findByText('Lint failed')).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: 'APPROVE' } })
-    expect((screen.getByRole('button', { name: 'Approve skill' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Rollback' }))
+    expect((screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /^Rollback/ }))
     await waitFor(() => expect(client.rollbackSkill).toHaveBeenCalledWith('webterm-y'))
   })
 })

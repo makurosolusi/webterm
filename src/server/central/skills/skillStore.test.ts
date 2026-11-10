@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nodeSqlite } from '../../nodeSqlite.testutil'
-import { DAY_MS, MAX_ACTIVE_SKILLS, SKILL_PERMISSION, SkillError, getRecord, isSkillName, putRecord } from './skillIndex'
+import { DAY_MS, DDL_SKILL, MAX_ACTIVE_SKILLS, SKILL_PERMISSION, SkillError, ensureSkillTable, getRecord, isSkillName, putRecord } from './skillIndex'
 import { confirmPhrase } from './skillLifecycle'
 import { type SkillAdminStore, createSkillStore } from './skillStore'
 
@@ -14,9 +14,8 @@ let raw: ReturnType<typeof nodeSqlite>
 let store: SkillAdminStore
 const input = (over: Partial<{ name: string; description: string; body: string; caps: string[] }> = {}) => ({ name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], ...over })
 const codeOf = (fn: () => unknown): string | undefined => { try { fn() } catch (err) { return err instanceof SkillError ? err.code : `other:${String(err)}` } return undefined }
-async function activate(name: string, version: string): Promise<void> {
-  await store.evaluate(name, version)
-  store.submit(name, version)
+const asyncCode = (p: Promise<unknown>): Promise<string | undefined> => p.then(() => undefined, (err: unknown) => (err instanceof SkillError ? err.code : `other:${String(err)}`))
+function activate(name: string, version: string): void {
   store.approve(name, version, HUMAN, confirmPhrase(name, version))
 }
 
@@ -40,9 +39,9 @@ describe('builtin skills', () => {
     expect(store.list('active')).toHaveLength(4)
   })
 
-  it('cannot be replaced by a proposal or rolled back', () => {
+  it('cannot be replaced by a proposal or rolled back', async () => {
     store.installBuiltins()
-    expect(codeOf(() => store.propose(input({ name: 'webterm-central-basics' }), 'central:c1'))).toBe('forbidden')
+    expect(await asyncCode(store.propose(input({ name: 'webterm-central-basics' }), 'central:c1'))).toBe('forbidden')
     expect(codeOf(() => store.rollback('webterm-central-basics', HUMAN))).toBe('forbidden')
   })
 })
@@ -56,17 +55,12 @@ describe('permission allowlist', () => {
 })
 
 describe('lifecycle', () => {
-  it('walks proposed -> evaluated -> pending_approval -> active and only then loads', async () => {
-    const rec = store.propose(input(), 'central:c1')
-    expect(rec).toMatchObject({ status: 'proposed', origin: 'central', version: '1', approvedBy: null })
+  it('a proposal reaches pending_approval on its own and only activation makes it loadable', async () => {
+    const rec = await store.propose(input(), 'central:c1')
+    expect(rec).toMatchObject({ status: 'pending_approval', origin: 'central', version: '1', approvedBy: null, evalScore: 1 })
     expect(existsSync(join(root, 'proposed', 'webterm-demo', '1', 'SKILL.md'))).toBe(true)
     expect(store.load('webterm-demo')).toBeNull()
     expect(store.index()).toEqual([])
-    expect(codeOf(() => store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1')))).toBe('forbidden')
-    expect((await store.evaluate('webterm-demo', '1')).status).toBe('evaluated')
-    expect(codeOf(() => store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1')))).toBe('forbidden')
-    expect(store.submit('webterm-demo', '1').status).toBe('pending_approval')
-    expect(store.load('webterm-demo')).toBeNull()
     const active = store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1'))
     expect(active).toMatchObject({ status: 'active', approvedBy: HUMAN, approvedAt: clock })
     expect(readlinkSync(join(root, 'active', 'webterm-demo'))).toBe(join('..', 'versions', 'webterm-demo', '1'))
@@ -77,9 +71,7 @@ describe('lifecycle', () => {
   })
 
   it('activation needs a human actor and the exact typed confirmation (R3)', async () => {
-    store.propose(input(), 'central:c1')
-    await store.evaluate('webterm-demo', '1')
-    store.submit('webterm-demo', '1')
+    await store.propose(input(), 'central:c1')
     const phrase = confirmPhrase('webterm-demo', '1')
     expect(codeOf(() => store.approve('webterm-demo', '1', 'central:c1', phrase))).toBe('forbidden')
     expect(codeOf(() => store.approve('webterm-demo', '1', 'system:builtin', phrase))).toBe('forbidden')
@@ -91,21 +83,33 @@ describe('lifecycle', () => {
     expect(store.approve('webterm-demo', '1', HUMAN, phrase).status).toBe('active')
   })
 
-  it('a failing evaluator or a human reject ends in rejected, never active', async () => {
+  it('a failing evaluator rejects with a reason, never breaks propose, and frees the name', async () => {
     const failing = createSkillStore({ db: raw.db, root, now: () => clock, evaluator: () => ({ passed: false, score: 0.2 }) })
-    failing.propose(input(), 'central:c1')
-    expect(await failing.evaluate('webterm-demo', '1')).toMatchObject({ status: 'rejected', evalScore: 0.2 })
+    const rec = await failing.propose(input(), 'central:c1')
+    expect(rec).toMatchObject({ status: 'rejected', evalScore: 0.2, rejectReason: 'evaluation did not pass (score 0.2)' })
     expect(codeOf(() => failing.submit('webterm-demo', '1'))).toBe('forbidden')
-    failing.propose(input({ name: 'webterm-two' }), 'central:c1')
-    expect(codeOf(() => failing.reject('webterm-two', '1', 'central:c1'))).toBe('forbidden')
-    expect(failing.reject('webterm-two', '1', HUMAN).status).toBe('rejected')
-    expect(failing.load('webterm-two')).toBeNull()
+    expect((await store.propose(input(), 'central:c1')).version).toBe('2')
   })
 
-  it('hash differs when content differs and is locked at proposal', () => {
-    const a = store.propose(input(), 'central:c1')
-    const b = store.propose(input({ name: 'webterm-other', body: `${input().body}\n3. One more line.` }), 'central:c1')
-    const c = store.propose(input({ name: 'webterm-third' }), 'central:c1')
+  it('an evaluator that throws leaves the row rejected and propose resolves', async () => {
+    const broken = createSkillStore({ db: raw.db, root, now: () => clock, evaluator: () => { throw new Error('boom') } })
+    expect(await broken.propose(input(), 'central:c1')).toMatchObject({ status: 'rejected', rejectReason: 'evaluator failed: boom' })
+  })
+
+  it('only a human can reject, and a reject frees the name', async () => {
+    await store.propose(input(), 'central:c1')
+    expect(codeOf(() => store.reject('webterm-demo', '1', 'central:c1'))).toBe('forbidden')
+    const rejected = store.reject('webterm-demo', '1', HUMAN)
+    expect(rejected.status).toBe('rejected')
+    expect(rejected).not.toHaveProperty('rejectReason')
+    expect(store.load('webterm-demo')).toBeNull()
+    expect((await store.propose(input(), 'central:c1')).version).toBe('2')
+  })
+
+  it('hash differs when content differs and is locked at proposal', async () => {
+    const a = await store.propose(input(), 'central:c1')
+    const b = await store.propose(input({ name: 'webterm-other', body: `${input().body}\n3. One more line.` }), 'central:c1')
+    const c = await store.propose(input({ name: 'webterm-third' }), 'central:c1')
     expect(a.sha256).not.toBe(b.sha256)
     expect(a.sha256).toMatch(/^[0-9a-f]{64}$/)
     expect(c.sha256).not.toBe(a.sha256)
@@ -114,9 +118,7 @@ describe('lifecycle', () => {
 
 describe('quarantine tamper checks', () => {
   async function pending() {
-    store.propose(input(), 'central:c1')
-    await store.evaluate('webterm-demo', '1')
-    store.submit('webterm-demo', '1')
+    await store.propose(input(), 'central:c1')
     return join(root, 'proposed', 'webterm-demo', '1')
   }
   it('editing the draft after review blocks approval (hash_mismatch)', async () => {
@@ -134,21 +136,49 @@ describe('quarantine tamper checks', () => {
     expect(codeOf(() => store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1')))).toBe('invalid')
     expect(existsSync(join(root, 'active', 'webterm-demo'))).toBe(false)
   })
-  it('evaluate rejects a draft that was edited after propose', async () => {
-    store.propose(input(), 'central:c1')
+})
+
+describe('rows stuck in proposed', () => {
+  const stick = (name: string) => raw.db.query("UPDATE central_skill SET status = 'proposed' WHERE name = ?").run(name)
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('advance once when the store is created', async () => {
+    await store.propose(input(), 'central:c1')
+    stick('webterm-demo')
+    createSkillStore({ db: raw.db, root, now: () => clock })
+    await settle()
+    expect(getRecord(raw.db, 'webterm-demo', '1')?.status).toBe('pending_approval')
+  })
+
+  it('a draft edited after propose is rejected with the reason, and the sweep survives it', async () => {
+    await store.propose(input(), 'central:c1')
+    await store.propose(input({ name: 'webterm-ok' }), 'central:c1')
+    stick('webterm-demo')
+    stick('webterm-ok')
     appendFileSync(join(root, 'proposed', 'webterm-demo', '1', 'SKILL.md'), 'x\n')
-    expect(await store.evaluate('webterm-demo', '1').catch((e: SkillError) => e.code)).toBe('hash_mismatch')
-    expect(getRecord(raw.db, 'webterm-demo', '1')?.status).toBe('rejected')
+    createSkillStore({ db: raw.db, root, now: () => clock })
+    await settle()
+    expect(getRecord(raw.db, 'webterm-demo', '1')).toMatchObject({ status: 'rejected', rejectReason: expect.stringContaining('content changed') })
+    expect(getRecord(raw.db, 'webterm-ok', '1')?.status).toBe('pending_approval')
+  })
+
+  it('adds the reason column to a table created before it existed, idempotently', () => {
+    raw.db.exec('DROP TABLE central_skill')
+    raw.db.exec(DDL_SKILL)
+    ensureSkillTable(raw.db)
+    ensureSkillTable(raw.db)
+    const columns = raw.db.query('PRAGMA table_info(central_skill)').all() as Array<{ name: string }>
+    expect(columns.filter((c) => c.name === 'reject_reason')).toHaveLength(1)
   })
 })
 
 describe('rollback and active-state tamper', () => {
   it('v2 replaces v1, rollback restores v1 by repointing, a second rollback has nowhere to go', async () => {
-    store.propose(input(), 'central:c1')
-    await activate('webterm-demo', '1')
-    const v2 = store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
+    await store.propose(input(), 'central:c1')
+    activate('webterm-demo', '1')
+    const v2 = await store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
     expect(v2.version).toBe('2')
-    await activate('webterm-demo', '2')
+    activate('webterm-demo', '2')
     expect(getRecord(raw.db, 'webterm-demo', '1')?.status).toBe('archived')
     expect(store.load('webterm-demo')?.body).toContain('Newer procedure')
     expect(codeOf(() => store.rollback('webterm-demo', 'central:c1'))).toBe('forbidden')
@@ -161,10 +191,10 @@ describe('rollback and active-state tamper', () => {
   })
 
   it('rollback refuses a target whose hash no longer matches', async () => {
-    store.propose(input(), 'central:c1')
-    await activate('webterm-demo', '1')
-    store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
-    await activate('webterm-demo', '2')
+    await store.propose(input(), 'central:c1')
+    activate('webterm-demo', '1')
+    await store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
+    activate('webterm-demo', '2')
     appendFileSync(join(root, 'versions', 'webterm-demo', '1', 'SKILL.md'), 'tampered\n')
     expect(codeOf(() => store.rollback('webterm-demo', HUMAN))).toBe('hash_mismatch')
     expect(store.load('webterm-demo')?.record.version).toBe('2')
@@ -175,8 +205,8 @@ describe('rollback and active-state tamper', () => {
     ['added script', (d: string) => writeFileSync(join(d, 'run.sh'), 'echo hi\n')],
     ['deleted folder', (d: string) => rmSync(d, { recursive: true })],
   ])('load disables a skill after %s', async (_label, tamper) => {
-    store.propose(input(), 'central:c1')
-    await activate('webterm-demo', '1')
+    await store.propose(input(), 'central:c1')
+    activate('webterm-demo', '1')
     tamper(join(root, 'versions', 'webterm-demo', '1'))
     expect(store.load('webterm-demo')).toBeNull()
     expect(getRecord(raw.db, 'webterm-demo', '1')?.status).toBe('disabled')
@@ -184,9 +214,9 @@ describe('rollback and active-state tamper', () => {
   })
 
   it('load disables a skill whose active pointer was redirected', async () => {
-    store.propose(input(), 'central:c1')
-    await activate('webterm-demo', '1')
-    store.propose(input({ body: '1. Other.' }), 'central:c1')
+    await store.propose(input(), 'central:c1')
+    activate('webterm-demo', '1')
+    await store.propose(input({ body: '1. Other.' }), 'central:c1')
     const other = join(root, 'proposed', 'webterm-demo', '2')
     rmSync(join(root, 'active', 'webterm-demo'))
     symlinkSync(other, join(root, 'active', 'webterm-demo'))
@@ -196,41 +226,39 @@ describe('rollback and active-state tamper', () => {
 })
 
 describe('propose guards', () => {
-  it('lint failures throw invalid with codes only and write nothing', () => {
-    const err = (() => { try { store.propose(input({ body: 'Run rm -rf build and open ../x' }), 'central:c1') } catch (e) { return e as SkillError } return null })()
+  it('lint failures throw invalid with codes only and write nothing', async () => {
+    const err = await store.propose(input({ body: 'Run rm -rf build and open ../x' }), 'central:c1').then(() => null, (e: SkillError) => e)
     expect(err?.code).toBe('invalid')
     expect(err?.issues).toEqual(expect.arrayContaining(['danger', 'traversal']))
     expect(existsSync(join(root, 'proposed'))).toBe(false)
     expect(store.list()).toEqual([])
   })
-  it('rejects traversal and non-webterm names before touching the filesystem', () => {
-    for (const name of ['../evil', 'webterm-../x', 'frontend-design', 'webterm-a/b', '']) expect(codeOf(() => store.propose(input({ name }), 'central:c1'))).toBe('invalid')
-    expect(codeOf(() => store.propose({ ...input(), caps: 'x' as never }, 'central:c1'))).toBe('invalid')
+  it('rejects traversal and non-webterm names before touching the filesystem', async () => {
+    for (const name of ['../evil', 'webterm-../x', 'frontend-design', 'webterm-a/b', '']) expect(await asyncCode(store.propose(input({ name }), 'central:c1'))).toBe('invalid')
+    expect(await asyncCode(store.propose({ ...input(), caps: 'x' as never }, 'central:c1'))).toBe('invalid')
     expect(readdirSync(root)).toEqual([])
   })
   it('allows one open proposal per name and 3 central proposals per day', async () => {
-    store.propose(input(), 'central:c1')
-    expect(codeOf(() => store.propose(input(), 'central:c1'))).toBe('limit')
-    store.propose(input({ name: 'webterm-b' }), 'central:c1')
-    store.propose(input({ name: 'webterm-c' }), 'central:c1')
-    expect(codeOf(() => store.propose(input({ name: 'webterm-d' }), 'central:c1'))).toBe('limit')
-    expect(store.propose(input({ name: 'webterm-d' }), `${HUMAN}`).origin).toBe('human')
+    await store.propose(input(), 'central:c1')
+    expect(await asyncCode(store.propose(input(), 'central:c1'))).toBe('limit')
+    await store.propose(input({ name: 'webterm-b' }), 'central:c1')
+    await store.propose(input({ name: 'webterm-c' }), 'central:c1')
+    expect(await asyncCode(store.propose(input({ name: 'webterm-d' }), 'central:c1'))).toBe('limit')
+    expect((await store.propose(input({ name: 'webterm-d' }), `${HUMAN}`)).origin).toBe('human')
     clock += DAY_MS + 1
-    expect(store.propose(input({ name: 'webterm-e' }), 'central:c1').status).toBe('proposed')
+    expect((await store.propose(input({ name: 'webterm-e' }), 'central:c1')).status).toBe('pending_approval')
   })
   it('caps the number of active skills', async () => {
     for (let i = 0; i < MAX_ACTIVE_SKILLS; i += 1) putRecord(raw.db, { name: `webterm-fill-${i}`, version: '1', sha256: null, status: 'active', origin: 'human', caps: [], createdAt: 1, proposedBy: null, approvedBy: HUMAN, approvedAt: 1, evalScore: null }, 'filler')
-    store.propose(input(), 'central:c1')
-    await store.evaluate('webterm-demo', '1')
-    store.submit('webterm-demo', '1')
+    await store.propose(input(), 'central:c1')
     expect(codeOf(() => store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1')))).toBe('limit')
   })
 })
 
 describe('list and index', () => {
-  it('filters by status, pages, and keeps the index inside its budget', () => {
-    for (const n of ['a', 'b', 'c']) store.propose(input({ name: `webterm-${n}` }), HUMAN)
-    expect(store.list('proposed')).toHaveLength(3)
+  it('filters by status, pages, and keeps the index inside its budget', async () => {
+    for (const n of ['a', 'b', 'c']) await store.propose(input({ name: `webterm-${n}` }), HUMAN)
+    expect(store.list('pending_approval')).toHaveLength(3)
     expect(store.list('active')).toHaveLength(0)
     expect(store.list(undefined, { limit: 2 })).toHaveLength(2)
     expect(store.list(undefined, { limit: 2, offset: 2 })).toHaveLength(1)

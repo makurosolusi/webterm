@@ -6,7 +6,7 @@ import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import type {
-  AgentActionResult, AgentRow, CentralControlClient, ControlView, MemoryRow,
+  AgentActionResult, AgentRow, BoardNodeRow, CentralControlClient, ControlView, MemoryRow,
   SkillReviewRow, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView,
 } from './centralControlTypes'
 
@@ -15,6 +15,7 @@ export const CONTROL_PATH = `${CENTRAL_API}/control`
 export const HALT_PATH = `${CENTRAL_API}/halt`
 export const STATUS_PATH = `${CENTRAL_API}/status`
 export const AGENTS_PATH = `${CENTRAL_API}/agents`
+export const BOARD_NODES_PATH = `${CENTRAL_API}/nodes`
 export const SKILLS_PATH = `${CENTRAL_API}/skills`
 export const MEMORY_PATH = `${CENTRAL_API}/memory`
 export const TOOLS_PATH = `${CENTRAL_API}/tools`
@@ -47,11 +48,17 @@ function rowsOf(body: unknown): unknown[] {
 }
 
 const toAgent = (r: unknown): AgentRow | null => (isRec(r) && str(r.id)
-  ? { id: str(r.id), projectId: str(r.projectId), kind: str(r.kind), role: r.role === 'reviewer' ? 'reviewer' : 'worker', runner: r.runner === 'exec' ? 'exec' : 'pty', state: str(r.state) as AgentRow['state'], owner: str(r.owner) as AgentRow['owner'] }
+  ? { id: str(r.id), projectId: str(r.projectId), kind: str(r.kind), role: r.role === 'reviewer' ? 'reviewer' : 'worker', runner: r.runner === 'exec' ? 'exec' : 'pty', state: str(r.state) as AgentRow['state'], owner: str(r.owner) as AgentRow['owner'], nodeId: str(r.nodeId) || null, startedAt: num(r.startedAt) || null, projectName: str(r.projectName), nodeOnBoard: r.nodeOnBoard === true }
   : null)
 
+const toBoardNode = (r: unknown): BoardNodeRow | null => (isRec(r) && str(r.nodeId) && str(r.workspaceId)
+  ? { nodeId: str(r.nodeId), workspaceId: str(r.workspaceId), projectId: str(r.projectId), projectName: str(r.projectName), kind: str(r.kind), title: str(r.title), live: r.live === true, status: str(r.status) || null }
+  : null)
+
+const toProject = (r: unknown): { id: string; name: string } | null => (isRec(r) && str(r.id) ? { id: str(r.id), name: str(r.name) } : null)
+
 const toSkill = (r: unknown): SkillReviewRow | null => (isRec(r) && isRec(r.record) && str(r.record.name)
-  ? { record: r.record as unknown as SkillReviewRow['record'], lint: { ok: isRec(r.lint) && r.lint.ok === true, findings: isRec(r.lint) && Array.isArray(r.lint.findings) ? r.lint.findings.map(str) : [] }, diff: str(r.diff) }
+  ? { record: r.record as unknown as SkillReviewRow['record'], lint: { ok: isRec(r.lint) && r.lint.ok === true, findings: isRec(r.lint) && Array.isArray(r.lint.findings) ? r.lint.findings.map(str) : [] }, diff: str(r.diff), canRollback: r.canRollback === true }
   : null)
 
 const toMemory = (r: unknown): MemoryRow | null => (isRec(r) && str(r.id)
@@ -76,6 +83,7 @@ function toStatus(b: unknown): StatusView {
   return {
     budget: { day: str(b.day), used: { tokens: num(b.used.tokens), spawns: num(b.used.spawns) }, limits: { tokens: num(b.limits.tokens), spawns: num(b.limits.spawns) } },
     model: { id: str(b.model.id), free: b.model.free === true },
+    lastTurn: isRec(b.lastTurn) ? { at: num(b.lastTurn.at), status: str(b.lastTurn.status) } : null,
   }
 }
 
@@ -98,14 +106,22 @@ export const centralControlApi: CentralControlClient = {
   async getControl(signal) { return toControl(await request(CONTROL_PATH, { signal })) },
   async getStatus(signal) { return toStatus(await request(STATUS_PATH, { signal })) },
   async halt(reason) { await post(HALT_PATH, { reason }) },
-  async listAgents(offset, signal) { return compact(rowsOf(await request(`${AGENTS_PATH}?${page(offset)}`, { signal })).map(toAgent)) },
+  async listAgents(offset, signal, filter = {}) {
+    const narrow = `${filter.live ? '&live=1' : ''}${filter.projectId ? `&projectId=${encodeURIComponent(filter.projectId)}` : ''}`
+    return compact(rowsOf(await request(`${AGENTS_PATH}?${page(offset)}${narrow}`, { signal })).map(toAgent))
+  },
+  async listBoardNodes(offset, projectId, signal) {
+    const body = await request(`${BOARD_NODES_PATH}?${page(offset)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`, { signal })
+    return { items: compact(rowsOf(body).map(toBoardNode)), projects: isRec(body) && Array.isArray(body.projects) ? compact(body.projects.map(toProject)) : [] }
+  },
   async agentAction(id, action, message) {
     const body = await post(`${AGENTS_PATH}/${encodeURIComponent(id)}/${action}`, message === undefined ? {} : { message })
     const approvalId = isRec(body) ? str(body.approvalId) : ''
     return approvalId ? { status: 'needs_approval', approvalId } : ({ status: 'done' } satisfies AgentActionResult)
   },
   async listSkills(signal) { return compact(rowsOf(await request(SKILLS_PATH, { signal })).map(toSkill)) },
-  async approveSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version }) },
+  async approveSkill(name, version, phrase) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, phrase }) },
+  async rejectSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/reject`, { version }) },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
   async listMemory(offset, signal) { return compact(rowsOf(await request(`${MEMORY_PATH}?${page(offset)}`, { signal })).map(toMemory)) },
   async listTools(signal) { return toTools(await request(TOOLS_PATH, { signal })) },

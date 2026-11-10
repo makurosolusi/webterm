@@ -21,6 +21,9 @@ export class SkillError extends Error {
   constructor(readonly code: SkillErrorCode, message: string, readonly issues: readonly string[] = []) { super(message) }
 }
 
+/** A record as stored; `rejectReason` says why evaluation refused it (absent for a human reject). */
+export type StoredSkill = SkillRecord & { rejectReason?: string }
+
 /** Everything a skill operation needs; `allowedCaps` narrows `webterm.caps` when set. */
 export interface SkillCtx { db: Database; root: string; now(): number; allowedCaps?: ReadonlySet<string> }
 
@@ -62,11 +65,15 @@ CREATE TABLE IF NOT EXISTS central_skill (
 CREATE INDEX IF NOT EXISTS idx_central_skill_status ON central_skill (status, created_at);
 `
 
-interface Row { name: string; version: string; sha256: string | null; status: SkillStatus; origin: SkillOrigin; description: string; caps: string; created_at: number; proposed_by: string | null; approved_by: string | null; approved_at: number | null; eval_score: number | null }
-const toRecord = (r: Row): SkillRecord => ({ name: r.name, version: r.version, sha256: r.sha256, status: r.status, origin: r.origin, caps: JSON.parse(r.caps) as string[], createdAt: r.created_at, proposedBy: r.proposed_by, approvedBy: r.approved_by, approvedAt: r.approved_at, evalScore: r.eval_score })
+interface Row { name: string; version: string; sha256: string | null; status: SkillStatus; origin: SkillOrigin; description: string; caps: string; created_at: number; proposed_by: string | null; approved_by: string | null; approved_at: number | null; eval_score: number | null; reject_reason?: string | null }
+const toRecord = (r: Row): StoredSkill => ({ name: r.name, version: r.version, sha256: r.sha256, status: r.status, origin: r.origin, caps: JSON.parse(r.caps) as string[], createdAt: r.created_at, proposedBy: r.proposed_by, approvedBy: r.approved_by, approvedAt: r.approved_at, evalScore: r.eval_score, ...(r.reject_reason ? { rejectReason: r.reject_reason } : {}) })
 
-/** Creates the index table when missing (idempotent). */
-export function ensureSkillTable(db: Database): void { db.exec(DDL_SKILL) }
+/** Creates the index table when missing and adds columns older tables lack (idempotent). */
+export function ensureSkillTable(db: Database): void {
+  db.exec(DDL_SKILL)
+  const columns = db.query('PRAGMA table_info(central_skill)').all() as Array<{ name: string }>
+  if (!columns.some((c) => c.name === 'reject_reason')) db.exec('ALTER TABLE central_skill ADD COLUMN reject_reason TEXT')
+}
 
 /** Inserts or replaces one record. */
 export function putRecord(db: Database, rec: SkillRecord, description: string): void {
@@ -75,13 +82,13 @@ export function putRecord(db: Database, rec: SkillRecord, description: string): 
 }
 
 /** Patches status and optional columns of one version. */
-export function setStatus(db: Database, name: string, version: string, status: SkillStatus, extra: { evalScore?: number; approvedBy?: string; approvedAt?: number } = {}): void {
-  db.query('UPDATE central_skill SET status = ?, eval_score = COALESCE(?, eval_score), approved_by = COALESCE(?, approved_by), approved_at = COALESCE(?, approved_at) WHERE name = ? AND version = ?')
-    .run(status, extra.evalScore ?? null, extra.approvedBy ?? null, extra.approvedAt ?? null, name, version)
+export function setStatus(db: Database, name: string, version: string, status: SkillStatus, extra: { evalScore?: number; approvedBy?: string; approvedAt?: number; rejectReason?: string } = {}): void {
+  db.query('UPDATE central_skill SET status = ?, eval_score = COALESCE(?, eval_score), approved_by = COALESCE(?, approved_by), approved_at = COALESCE(?, approved_at), reject_reason = COALESCE(?, reject_reason) WHERE name = ? AND version = ?')
+    .run(status, extra.evalScore ?? null, extra.approvedBy ?? null, extra.approvedAt ?? null, extra.rejectReason ?? null, name, version)
 }
 
 /** One record or null. */
-export function getRecord(db: Database, name: string, version: string): SkillRecord | null {
+export function getRecord(db: Database, name: string, version: string): StoredSkill | null {
   const row = db.query('SELECT * FROM central_skill WHERE name = ? AND version = ?').get(name, version) as Row | null
   return row ? toRecord(row) : null
 }
@@ -98,7 +105,7 @@ export function versionsOf(db: Database, name: string): SkillRecord[] {
 }
 
 /** Newest-first page, optionally by status. */
-export function listRecords(db: Database, status: SkillStatus | undefined, limit = DEFAULT_LIST_LIMIT, offset = 0): SkillRecord[] {
+export function listRecords(db: Database, status: SkillStatus | undefined, limit = DEFAULT_LIST_LIMIT, offset = 0): StoredSkill[] {
   const where = status ? 'WHERE status = ?' : ''
   const args = status ? [status, limit, offset] : [limit, offset]
   return (db.query(`SELECT * FROM central_skill ${where} ORDER BY created_at DESC, name, CAST(version AS INTEGER) DESC LIMIT ? OFFSET ?`).all(...args) as Row[]).map(toRecord)

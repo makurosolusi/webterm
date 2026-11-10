@@ -11,7 +11,7 @@ import SkillReview from './SkillReview'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
-import { type CentralTab, useCentralTabRequest } from '../secondarySideBar.store'
+import { type CentralTab, useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
 import './central.css'
 
 type TabId = CentralTab
@@ -39,6 +39,9 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
   const enabled = useCentralControlEnabled(enabledProp)
   // A Central chat command (`/status`, `/halt`) may pick the tab, also before this lazy panel mounted.
   const request = useCentralTabRequest()
+  // The side bar keeps this panel mounted behind Chat, so "shown" is its view, not whether it is mounted.
+  const sideBar = useSideBar()
+  const visible = sideBar.open && sideBar.view === 'central'
   const [tab, setTab] = useState<TabId>(knownTab(request?.tab))
   const [askHalt, setAskHalt] = useState(false)
   useEffect(() => {
@@ -64,8 +67,8 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
         {status?.model.free && <p className="ccp-privacy" role="note">{CL.privacyLabel} ({status.model.id})</p>}
         {/* refreshKey remounts the active section so it reloads its data. */}
         <div key={`${tab}-${refreshKey}`} className="ccp-section-host">
-          {tab === 'status' && <LevelPanel client={client} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
-          {tab === 'agents' && <AgentList client={client} />}
+          {tab === 'status' && <LevelPanel client={client} visible={visible} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
+          {tab === 'agents' && <AgentList client={client} visible={visible} />}
           {tab === 'skills' && <SkillReview client={client} />}
           {tab === 'abilities' && <AbilitiesView client={client} />}
         </div>

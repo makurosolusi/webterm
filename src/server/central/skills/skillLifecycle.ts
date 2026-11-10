@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { SkillRecord, SkillStatus } from '../contracts/skill.types'
 import type { Awaitable } from '../contracts/tool.types'
 import { writeTx } from '../writeTx'
-import { HASH_FILE, MAX_ACTIVE_SKILLS, SKILL_FILE, type SkillCtx, SkillError, activeRecord, countActive, getRecord, hashFolder, setStatus, skillDir, versionsOf } from './skillIndex'
+import { HASH_FILE, MAX_ACTIVE_SKILLS, SKILL_FILE, type SkillCtx, SkillError, type StoredSkill, activeRecord, countActive, getRecord, hashFolder, setStatus, skillDir, versionsOf } from './skillIndex'
 import { type LintResult, lintSkill } from './skillLint'
 
 export interface SkillEvalInput { name: string; version: string; description: string; body: string; caps: readonly string[] }
@@ -24,8 +24,13 @@ function requireHuman(by: string): void {
   if (!HUMAN_RE.test(by)) throw new SkillError('forbidden', 'only a human actor may change skill activation')
 }
 
+const reasonOf = (err: unknown): string => {
+  if (err instanceof SkillError && err.issues.length) return `${err.message}: ${err.issues.join(', ')}`
+  return err instanceof Error ? err.message : String(err)
+}
+
 /** Loads a record or throws `not_found`. */
-export function requireRecord(ctx: SkillCtx, name: string, version: string): SkillRecord {
+export function requireRecord(ctx: SkillCtx, name: string, version: string): StoredSkill {
   skillDir(ctx.root, 'proposed', name, version)
   const rec = getRecord(ctx.db, name, version)
   if (!rec) throw new SkillError('not_found', `skill ${name}@${version} not found`)
@@ -57,11 +62,16 @@ export async function evaluateSkill(ctx: SkillCtx, name: string, version: string
   requireStatus(rec, ['proposed'])
   let lint: LintResult
   try { lint = verifyFolder(ctx, rec, skillDir(ctx.root, 'proposed', name, version)) } catch (err) {
-    setStatus(ctx.db, name, version, 'rejected')
+    setStatus(ctx.db, name, version, 'rejected', { rejectReason: reasonOf(err) })
     throw err
   }
-  const result = await evaluator({ name, version, description: lint.meta?.description ?? '', body: lint.body, caps: rec.caps })
-  setStatus(ctx.db, name, version, result.passed ? 'evaluated' : 'rejected', { evalScore: result.score })
+  let result: SkillEvalResult
+  try { result = await evaluator({ name, version, description: lint.meta?.description ?? '', body: lint.body, caps: rec.caps }) } catch (err) {
+    setStatus(ctx.db, name, version, 'rejected', { rejectReason: `evaluator failed: ${reasonOf(err)}` })
+    throw new SkillError('invalid', `evaluator failed for ${name}@${version}: ${reasonOf(err)}`)
+  }
+  if (result.passed) setStatus(ctx.db, name, version, 'evaluated', { evalScore: result.score })
+  else setStatus(ctx.db, name, version, 'rejected', { evalScore: result.score, rejectReason: `evaluation did not pass (score ${result.score})` })
   return requireRecord(ctx, name, version)
 }
 

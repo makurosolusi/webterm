@@ -13,6 +13,12 @@
 .ccp-kv dd { margin: 0; }
 .ccp-kv__row { display: contents; }
 .ccp-meter { display: grid; grid-template-columns: 80px 160px 1fr; align-items: center; gap: 8px; }
+.ccp-meter progress { appearance: none; width: 100%; height: 6px; border: 0; border-radius: 3px; overflow: hidden; background: var(--vscode-panel-border); }
+.ccp-meter progress::-webkit-progress-bar { background: var(--vscode-panel-border); }
+.ccp-meter progress::-webkit-progress-value { background: var(--vscode-progressBar-background); }
+.ccp-meter progress::-moz-progress-bar { background: var(--vscode-progressBar-background); }
+.ccp-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 4px 0 8px; }
+.ccp-filters label { display: inline-flex; align-items: center; gap: 6px; }
 .ccp-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border: 1px solid var(--vscode-inputValidation-errorBorder); background: var(--vscode-editorWidget-background); }
 .ccp-confirm p { flex-basis: 100%; margin: 0; }
 .ccp-list { list-style: none; margin: 0; padding: 0; }
