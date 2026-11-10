@@ -23,6 +23,7 @@ export type RetentionEntry =
   | { kind: 'cascade'; parent: string; rule: string }
   | { kind: 'exempt'; reason: string }
 
+const SETTLED_WORK = `'done', 'cancelled', 'failed'`
 const TERMINAL_TURNS = TURN_STATUSES.filter((s) => !isActiveTurnStatus(s)).map((s) => `'${s}'`).join(', ')
 
 /** Deletes at most `limit` rows of `table` matching `where` (table names are constants, never input). */
@@ -71,6 +72,12 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_event: sweep('replay events 30+ days old whose turn is settled (no conversation is archived; turns end)', (ctx, now, limit) =>
     deleteBatch(ctx, 'central_event', `created_at < ? AND (turn_id IS NULL OR NOT EXISTS
       (SELECT 1 FROM central_turn t WHERE t.id = central_event.turn_id AND t.status NOT IN (${TERMINAL_TURNS})))`, limit, now - SETTLED_RETENTION_MS)),
+  central_task: sweep('done/cancelled/failed 30+ days ago, no open assignment and no unsettled dependent; deps and assignments cascade', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_task', `status IN (${SETTLED_WORK}) AND updated_at < ?
+      AND NOT EXISTS (SELECT 1 FROM central_assignment a WHERE a.task_id = central_task.id AND a.ended_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM central_task_dep d JOIN central_task t ON t.id = d.task_id WHERE d.blocked_by_id = central_task.id AND t.status NOT IN (${SETTLED_WORK}))`, limit, now - SETTLED_RETENTION_MS)),
+  central_task_dep: { kind: 'cascade', parent: 'central_task', rule: 'ON DELETE CASCADE from central_task' },
+  central_assignment: { kind: 'cascade', parent: 'central_task', rule: 'ON DELETE CASCADE from central_task' },
   agent_mail: sweep('expired (24 h TTL set at send)', (ctx, now, limit) => deleteBatch(ctx, 'agent_mail', 'expires_at <= ?', limit, now)),
   cost_usage: sweep('responses 400+ days old (caps only read today and the current dag)', (ctx, now, limit) =>
     deleteBatch(ctx, 'cost_usage', 'ts < ?', limit, now - USAGE_RETENTION_MS)),
