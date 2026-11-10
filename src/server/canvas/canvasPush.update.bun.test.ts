@@ -23,14 +23,14 @@ function setup() {
 
 test('patches the allowed fields only, clears null title/color, stores them and broadcasts the full patched nodes', () => {
   const { db, sent, push, ws } = setup()
-  const patch = { id: 'a', x: 50, y: 60, width: 800, title: null, color: null, collapsed: true, hideLinks: true, cmd: 'rm -rf /', kind: 'files' }
+  const patch = { id: 'a', x: 50, y: 60, width: 800, title: null, color: null, collapsed: true, hideLinks: true, cwd: '/etc', url: 'https://evil.test' }
   const res = push.update({ workspaceId: ws.id, patches: [patch as never, { id: 'b', title: 'Docs' }] })
   if (!res.ok) throw new Error(`update refused: ${res.code}`)
   const stored = db.get(ws.id)!
   const a = stored.nodes.find((n) => n.id === 'a')!
   expect({ x: a.x, y: a.y, width: a.width, height: a.height, collapsed: a.collapsed, hideLinks: a.hideLinks }).toEqual({ x: 50, y: 60, width: 800, height: 400, collapsed: true, hideLinks: true })
   expect('title' in a || 'color' in a).toBe(false)
-  expect({ cmd: a.cmd, kind: a.kind }).toEqual({ cmd: 'claude', kind: 'agent' }) // unknown keys ignored
+  expect({ cwd: a.cwd, url: a.url }).toEqual({ cwd: undefined, url: undefined }) // unknown keys ignored
   expect(stored.nodes.find((n) => n.id === 'b')!.title).toBe('Docs')
   expect(stored.nodes.find((n) => n.id === 'c')).toEqual(ws.nodes[2])
   expect(res.nodes).toEqual(stored.nodes.slice(0, 2))
@@ -51,6 +51,21 @@ test('patches an agent chat node session id, config and mode; null clears the se
   if (!cleared.ok) throw new Error(`update refused: ${cleared.code}`)
   expect('chatSessionId' in db.get(ws.id)!.nodes.find((n) => n.id === 'chat')!).toBe(false)
   expect(db.get(ws.id)!.nodes.find((n) => n.id === 'chat')).toMatchObject({ permissionMode: 'plan', chatConfig: { model: 'opus' } })
+})
+
+test('Claude view switch keys: kind, agentId, sessionId and cmd apply; null deletes agentId/sessionId/cmd', () => {
+  const { db, sent, push, ws } = setup()
+  const toChat = push.update({ workspaceId: ws.id, patches: [{ id: 'a', kind: 'agentChat', chatSessionId: 's-1', sessionId: null, agentId: null, cmd: null }] })
+  if (!toChat.ok) throw new Error(`update refused: ${toChat.code}`)
+  const chat = db.get(ws.id)!.nodes.find((n) => n.id === 'a')!
+  expect(chat).toMatchObject({ kind: 'agentChat', chatSessionId: 's-1', title: 'Agent', width: 600 })
+  expect('agentId' in chat || 'sessionId' in chat || 'cmd' in chat).toBe(false)
+  const toTerm = push.update({ workspaceId: ws.id, patches: [{ id: 'a', kind: 'agent', agentId: 'claude', sessionId: 's-1', chatSessionId: null, cmd: 'claude' }] })
+  if (!toTerm.ok) throw new Error(`update refused: ${toTerm.code}`)
+  const term = db.get(ws.id)!.nodes.find((n) => n.id === 'a')!
+  expect(term).toMatchObject({ kind: 'agent', agentId: 'claude', sessionId: 's-1', cmd: 'claude' })
+  expect('chatSessionId' in term).toBe(false)
+  expect(sent.at(-1)).toMatchObject({ t: 'canvas', updated: [{ id: 'a', kind: 'agent', agentId: 'claude', sessionId: 's-1' }] })
 })
 
 test('adds and removes cables; an existing cable id is skipped', () => {

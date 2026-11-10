@@ -28,12 +28,16 @@ export type CanvasAddResult =
 export type CanvasRemoveResult =
   | { ok: true; workspace: Workspace; removed: CanvasNode[] }
   | { ok: false; code: 'workspace_not_found' | 'node_not_found' }
-/** Fields of an existing node a push may change; `null` clears title/color/chatSessionId. Any other key is ignored.
- *  The agent chat fields are written by the node's server session (agentChat.runtime.ts), never by Central's canvas.edit. */
-export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode'>> & {
+/** Fields of an existing node a push may change; `null` clears title/color/chatSessionId/agentId/sessionId/cmd. Any other key is ignored.
+ *  The agent chat fields are written by the node's server session (agentChat.runtime.ts), and kind/agentId/sessionId/cmd
+ *  by the Claude view switch (agentChat.view.ts), never by Central's canvas.edit (its ops set only layout/look fields). */
+export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode' | 'kind'>> & {
   title?: string | null
   color?: string | null
   chatSessionId?: string | null
+  agentId?: CanvasNode['agentId'] | null
+  sessionId?: string | null
+  cmd?: string | null
 }
 export interface CanvasUpdateInput {
   workspaceId: string

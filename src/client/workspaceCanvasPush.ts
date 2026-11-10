@@ -37,13 +37,17 @@ function applyRemoved(live: LiveBoard, removed: readonly string[]): void {
   live.setEdges((prev) => prev.filter((e) => !touches(e)))
 }
 
-/** `n` with the pushed node's position, size, title/color/collapsed/hideLinks and agent chat
- *  session id / config / mode, as `toFlow` maps them; every live-only prop (selected, dragging,
- *  measured, ...) and the rest of `data` kept. */
+/** `n` with the pushed node's position, size, title/color/collapsed/hideLinks, agent chat
+ *  session id / config / mode and its kind (chat <-> terminal view switch: `type` follows `kind`, so
+ *  React Flow mounts the other component) with the agent/session/cmd it launches with, as `toFlow`
+ *  maps them; every live-only prop (selected, dragging, measured, ...) and the rest of `data` kept. */
 function patchFlow(n: Node, pushed: WsNode): Node {
   const f = toFlow(pushed)
-  const { title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode } = f.data as Partial<WsNode>
-  return { ...n, position: f.position, width: f.width, height: f.height, data: { ...n.data, title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode } }
+  const { title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode, kind, agentId, sessionId, cmd } = f.data as Partial<WsNode>
+  return {
+    ...n, type: f.type, position: f.position, width: f.width, height: f.height,
+    data: { ...n.data, title, color, collapsed, hideLinks, chatSessionId, chatConfig, permissionMode, kind, agentId, sessionId, cmd },
+  }
 }
 
 /** Patch the updated nodes in place and drop the unlinked cables. */

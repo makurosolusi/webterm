@@ -10,6 +10,7 @@ import { connectTabLayout, getTabLayout } from './tabLayout.store'
 import { createSaveQueue } from './workspaceSaveQueue'
 import { mergeCanvasPush } from './workspaceCanvasMerge'
 import { applyCanvasPush, type LiveBoard } from './workspaceCanvasPush'
+import { toFlow } from './store'
 
 const AGENT: WsNode = { id: 'agent-1', kind: 'agent', x: 0, y: 0 }
 const BROWSER: WsNode = { id: 'b1', kind: 'browser', url: 'https://example.com', x: 432, y: 0 }
@@ -244,14 +245,14 @@ describe('canvas update push (patched nodes, unlinked cables)', () => {
   const update: CanvasMsg = { t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], updated: [MOVED], unlinked: [CABLE.id] }
 
   it('patches position, size and look in place, keeping selection, drag, measured state and other data', () => {
-    const agent: Node = { id: 'agent-1', type: 'agent', position: { x: 0, y: 0 }, width: 400, height: 300, selected: true, dragging: true, measured: { width: 400, height: 300 }, data: { kind: 'agent', cmd: 'claude', color: '#f00', title: 'Old' } }
+    const agent: Node = { id: 'agent-1', type: 'agent', position: { x: 0, y: 0 }, width: 400, height: 300, selected: true, dragging: true, measured: { width: 400, height: 300 }, data: { kind: 'agent', cwd: '/repo', color: '#f00', title: 'Old' } }
     const other: Node = { id: 'b1', type: 'browser', position: { x: 432, y: 0 }, data: {} }
     const keep = { id: 'keep', source: 'agent-1', target: 'b1' }
     const { b, state } = live([agent, other], [{ id: CABLE.id, source: 'agent-1', target: 'b1' }, keep])
     expect(applyCanvasPush(b, update)).toBe(true)
     const [a, o] = state.nodes
     expect(a).toMatchObject({ position: { x: 300, y: 200 }, width: 700, height: 300, selected: true, dragging: true, measured: { width: 400, height: 300 } })
-    expect(a.data).toEqual({ kind: 'agent', cmd: 'claude', color: undefined, title: 'Planner', collapsed: true, hideLinks: undefined })
+    expect(a.data).toEqual({ kind: 'agent', cwd: '/repo', color: undefined, title: 'Planner', collapsed: true, hideLinks: undefined })
     expect(o).toBe(other)
     expect(b.nodesRef.current).toEqual(state.nodes)
     expect(state.edges).toEqual([keep])
@@ -279,6 +280,21 @@ describe('canvas update push (patched nodes, unlinked cables)', () => {
     applyCanvasPush(b, { ...chatUpdate, updated: [fresh] })
     expect(state.nodes[0].data.chatSessionId).toBeUndefined()
     expect(mergeCanvasPush(board(10, 'w', [pushed]), { nodes: [], bridges: [], updated: [fresh] }).nodes[0]).not.toHaveProperty('chatSessionId')
+  })
+
+  it('a chat <-> terminal view switch swaps the node type and carries session/agent/cmd', () => {
+    const CHAT: WsNode = { id: 'c1', kind: 'agentChat', x: 0, y: 0, agentId: 'claude', chatSessionId: 's1', cwd: '/repo' }
+    const TERM: WsNode = { id: 'c1', kind: 'agent', x: 0, y: 0, agentId: 'claude', sessionId: 's1', cmd: 'claude', chatSessionId: 's1', cwd: '/repo' }
+    const msg = (n: WsNode): CanvasMsg => ({ t: 'canvas', workspaceId: 'w1', base: 10, updatedAt: 11, nodes: [], bridges: [], updated: [n] })
+    const { b, state } = live([{ ...toFlow(CHAT), selected: true }], [])
+    applyCanvasPush(b, msg(TERM))
+    expect(state.nodes[0]).toMatchObject({ type: 'agent', selected: true })
+    expect(state.nodes[0].data).toMatchObject({ kind: 'agent', agentId: 'claude', sessionId: 's1', cmd: 'claude', cwd: '/repo' })
+    applyCanvasPush(b, msg(CHAT))
+    expect(state.nodes[0].type).toBe('agentChat')
+    expect(state.nodes[0].data).toMatchObject({ kind: 'agentChat', agentId: 'claude', chatSessionId: 's1' })
+    // No terminal launch left over from the terminal view.
+    expect([state.nodes[0].data.sessionId, state.nodes[0].data.cmd]).toEqual([undefined, undefined])
   })
 
   it('a pending save locked before the push keeps the patched fields and loses the unlinked cable', async () => {
