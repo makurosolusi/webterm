@@ -157,6 +157,13 @@ test('a Central turn calls an R0 tool natively over MCP and the receipt streams 
   expect(rows(db, "SELECT count(*) AS c FROM event WHERE kind = 'mcp.call' AND actor = 'central'")[0]?.c).toBeGreaterThan(1)
 })
 
+test('a tool audit row links back to the turn that issued it', async () => {
+  const { done } = await turn(service(0), [{ name: 'test_peek', args: {} }])
+  const audit = rows(db, "SELECT correlation_id, payload_json FROM event WHERE kind = 'central.proposal' ORDER BY seq DESC LIMIT 1")[0]
+  expect(audit?.correlation_id).toBe(done.id)
+  expect(JSON.parse(String(audit?.payload_json))).toMatchObject({ tool: 'test.peek', conversationId: 'central:global' })
+})
+
 test('R2: one approval card; approve runs the call exactly once inside the turn; a repeat asks again', async () => {
   const svc = service(10_000)
   const call = { name: 'test_deploy', args: { projectId: 'p1', target: 'prod' } }

@@ -26,8 +26,8 @@ describe('registry', () => {
     expect(reg.get('a.one')?.tier).toBe('R0')
     expect(reg.get('missing')).toBeUndefined()
   })
-  it('default registry holds the four core tools, all R1', () => {
-    expect(defaultRegistry().list().map((d) => d.name).sort()).toEqual(['approval.request', 'goal.propose', 'plan.propose', 'task.assign'])
+  it('default registry holds the core tools, all R1', () => {
+    expect(defaultRegistry().list().map((d) => d.name).sort()).toEqual(['approval.request', 'goal.propose', 'plan.propose'])
     expect(CORE_DEFS.every((d) => d.tier === 'R1')).toBe(true)
   })
   it('toolsHash is stable across registration order and changes with content', () => {
@@ -39,6 +39,27 @@ describe('registry', () => {
     expect(toolsHash(make([defs[1]!, defs[2]!, defs[0]!]))).toBe(h1)
     expect(toolsHash(make([defs[0]!, defs[1]!, fake('c', 'R3')]))).not.toBe(h1)
     expect(toolsHash(make([defs[0]!, defs[1]!, fake('c', 'R2', { usage: 'changed' })]))).not.toBe(h1)
+  })
+})
+
+describe('tool audit correlation', () => {
+  const row = (f: Fixture) => allRows(f.db, "SELECT correlation_id, payload_json FROM event WHERE kind = 'central.proposal' ORDER BY seq DESC LIMIT 1")[0] as { correlation_id: string | null; payload_json: string }
+  it('links the audit row to the issuing turn and carries the conversation, task and node ids', async () => {
+    const f = fixture()
+    const reg = createRegistry()
+    reg.register(fake('x.tool', 'R0', { handler: () => ({ ok: true, data: { taskId: 't-9', nodeId: 'n-9', secret: 'never' } }), auditKeys: [] }))
+    await execTool(ctxOf(f, reg, 'R0', ALLOW_ALL_GUARD, { turnId: 'turn-1', conversationId: 'central:project:p1' }), 'x.tool', { projectId: 'p1' })
+    expect(row(f).correlation_id).toBe('turn-1')
+    expect(JSON.parse(row(f).payload_json)).toEqual({ tool: 'x.tool', ok: true, tier: 'R0', projectId: 'p1', conversationId: 'central:project:p1', taskId: 't-9', nodeId: 'n-9' })
+    f.close()
+  })
+  it('has no correlation id outside a turn', async () => {
+    const f = fixture()
+    const reg = createRegistry()
+    reg.register(fake('x.tool', 'R0'))
+    await execTool(ctxOf(f, reg, 'R0'), 'x.tool', { projectId: 'p1' })
+    expect(row(f).correlation_id).toBeNull()
+    f.close()
   })
 })
 

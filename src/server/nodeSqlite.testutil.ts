@@ -10,6 +10,9 @@ export function nodeSqlite(): { db: Database; raw: DatabaseSync } {
   const raw = new DatabaseSync(':memory:')
   const bind = (params: unknown[]): Bind[] => params as Bind[]
   const db = {
+    get inTransaction() {
+      return raw.isTransaction
+    },
     query(sql: string) {
       const statement = raw.prepare(sql)
       return {

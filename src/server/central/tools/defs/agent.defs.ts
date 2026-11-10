@@ -1,8 +1,10 @@
 // agent.* tools (WS-09). Built from an executor so guard and host stay injected; WS-19 registers the result.
 import { getRow } from '../../../ledger/ledgerCore'
-import { AGENT_STATES_FOR_FILTER, agentView, isCentralOwned, type AgentExecutor } from '../../agents/agentExecutor'
+import { AGENT_STATES_FOR_FILTER, agentNodeId, agentView, isCentralOwned, type AgentExecutor } from '../../agents/agentExecutor'
 import { agentReqId } from '../../agents/agentStore'
 import type { AgentRecord, AgentState } from '../../contracts'
+import { beginDelegation, settleSend, type DelegationInput } from '../../work/workDelegation'
+import { createWorkStore } from '../../work/workStore'
 import { type ToolCtx, type ToolDef, type ToolInput, type ToolResult, type ToolValidationCode, tierWithin } from '../toolTypes'
 import { FORBIDDEN_KEYS } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
@@ -19,13 +21,28 @@ const MAX_TAIL = 200
 const DEFAULT_TAIL = 50
 const MAX_PAGE = 100
 const ROLES = ['worker', 'reviewer']
-const AUDIT_KEYS = ['agentId', 'state', 'approvalId', 'count', 'kind', 'defHash'] as const
+const AUDIT_KEYS = ['agentId', 'state', 'approvalId', 'count', 'kind', 'defHash', 'assignmentId'] as const
 
 const safeId = (v: unknown, max = MAX_ID): v is string => typeof v === 'string' && v.length >= 1 && v.length <= max && SAFE_ID.test(v)
 const intIn = (v: unknown, min: number, max: number): boolean => v === undefined || (Number.isSafeInteger(v) && (v as number) >= min && (v as number) <= max)
 const onlyKeys = (input: ToolInput, allowed: readonly string[]): boolean => Object.keys(input).every((k) => allowed.includes(k))
 const agentsMode = (ctx: ToolCtx): string => ((ctx.env ?? process.env)[AGENTS_FLAG] ?? '').trim().toLowerCase()
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
+
+type AgentDelegation = Pick<DelegationInput, 'projectId' | 'nodeId' | 'agentId' | 'instruction'>
+const delegate = (ctx: ToolCtx, input: ToolInput, target: AgentDelegation) => beginDelegation(createWorkStore(ctx.db, ctx.now), {
+  ...target, channel: 'spawn', ...(typeof input.taskId === 'string' ? { taskId: input.taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
+})
+
+/** Records a spawn the executor accepted (running or waiting on its card); a retry of a settled spawn records nothing. */
+function recordSpawn(ctx: ToolCtx, input: ToolInput, projectId: string, r: ToolResult): ToolResult {
+  const agentId = r.data?.agentId
+  if ((!r.ok && r.code !== 'approval_required') || r.data?.reused === true || typeof agentId !== 'string') return r
+  const nodeId = typeof r.data?.nodeId === 'string' ? r.data.nodeId : agentNodeId(agentId)
+  const d = delegate(ctx, input, { projectId, nodeId, agentId, instruction: String(input.title) })
+  // The agent already exists here, so a refused record is reported on the result instead of failing the spawn.
+  return { ...r, data: { ...r.data, ...(d.ok ? { taskId: d.taskId, assignmentId: d.assignmentId } : { untracked: d.code }) } }
+}
 
 /** Runs `fn` only when the flag is `propose` or `auto`; the registry flag check only understands `on`. */
 export function flagged(fn: (ctx: ToolCtx, input: ToolInput, projectId: string) => Promise<ToolResult> | ToolResult): ToolDef['handler'] {
@@ -83,7 +100,7 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
   }
   const spawn: ToolDef = {
     name: 'agent.spawn', summary: 'Start a worker or reviewer agent; the server picks cwd and command. A pty agent appears on the project canvas.', tier: 'R2', auditKeys: AUDIT_KEYS,
-    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional existing task id>"}. May return approval_required. A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. It starts with only its role and task id/title; give it the work with agent.prompt (mode steer).',
+    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional task from task.create>"}. May return approval_required. Tracked as a delegation (new card unless taskId is given). A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. It starts with only its role and task id/title; give it the work with agent.prompt (mode steer).',
     input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), role: S.oneOf(...ROLES), title: S.str(MAX_TITLE), taskId: S.str(MAX_ID) }, ['requestId', 'kind', 'role', 'title']),
     output: S.anyObj('Agent id and state, or approval_required.'),
     // `role` is a forbidden key for other tools but is this tool's own field; everything else stays forbidden.
@@ -93,20 +110,28 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
       const ok = onlyKeys(input, ['projectId', 'requestId', 'kind', 'role', 'title', 'taskId']) && safeId(requestId) && safeId(kind, MAX_KIND) && ROLES.includes(role as string)
         && typeof title === 'string' && title.length >= 1 && title.length <= MAX_TITLE && noControl(title) && (taskId === undefined || safeId(taskId))
       if (!ok) return 'invalid_shape'
-      return typeof taskId === 'string' && getRow(ctx.db, 'SELECT 1 AS one FROM task WHERE id = ? AND project_id = ?', taskId, String(input.projectId).trim()) === null ? 'task_not_found' : null
+      return typeof taskId === 'string' && getRow(ctx.db, 'SELECT 1 AS one FROM central_task WHERE id = ? AND project_id = ?', taskId, String(input.projectId).trim()) === null ? 'task_not_found' : null
     },
-    handler: flagged((ctx, input, projectId) => executor.spawn({
+    // `taskId` names a central task; the executor's own taskId is a ledger task reference, so it is not forwarded.
+    handler: flagged(async (ctx, input, projectId) => recordSpawn(ctx, input, projectId, await executor.spawn({
       projectId, kind: String(input.kind), role: input.role as 'worker' | 'reviewer', title: String(input.title), reqId: agentReqId(projectId, String(input.requestId)),
-      ...(input.taskId ? { taskId: String(input.taskId) } : {}), owner: `central:${ctx.conversationId}`, requireApproval: agentsMode(ctx) === 'propose',
-    })),
+      owner: `central:${ctx.conversationId}`, requireApproval: agentsMode(ctx) === 'propose',
+    }))),
   }
   const prompt: ToolDef = {
     name: 'agent.prompt', summary: 'Send a message to a running agent (R1 for central agents, R2 for user agents).', tier: 'R1', auditKeys: AUDIT_KEYS,
-    usage: `{"projectId":"<id>","agentRef":"<agentId>","text":"<=${MAX_PROMPT_CHARS} chars","mode":"steer|followup"}. followup only when the agent is not working.`,
-    input: obj({ agentRef: S.str(MAX_ID), text: S.str(MAX_PROMPT_CHARS), mode: S.oneOf('steer', 'followup') }, ['agentRef', 'text', 'mode']),
+    usage: `{"projectId":"<id>","agentRef":"<agentId>","text":"<=${MAX_PROMPT_CHARS} chars","mode":"steer|followup","taskId":"<optional task this continues>"}. followup only when the agent is not working. Tracked as a delegation.`,
+    input: obj({ agentRef: S.str(MAX_ID), text: S.str(MAX_PROMPT_CHARS), mode: S.oneOf('steer', 'followup'), taskId: S.str(MAX_ID) }, ['agentRef', 'text', 'mode']),
     output: S.anyObj(),
-    validate: (input) => (refShape(input, ['text', 'mode']) && typeof input.text === 'string' && input.text.trim().length > 0 && input.text.length <= MAX_PROMPT_CHARS && (input.mode === 'steer' || input.mode === 'followup') ? null : 'invalid_shape'),
-    handler: withAgent(async (ctx, input, projectId, a) => (await ownerGate(ctx, a, 'agent.prompt', projectId)) ?? executor.prompt(a, String(input.text), input.mode as 'steer' | 'followup')),
+    validate: (input) => (refShape(input, ['text', 'mode', 'taskId']) && typeof input.text === 'string' && input.text.trim().length > 0 && input.text.length <= MAX_PROMPT_CHARS && (input.mode === 'steer' || input.mode === 'followup') && (input.taskId === undefined || safeId(input.taskId)) ? null : 'invalid_shape'),
+    handler: withAgent(async (ctx, input, projectId, a) => {
+      const denied = await ownerGate(ctx, a, 'agent.prompt', projectId)
+      if (denied) return denied
+      const d = delegate(ctx, input, { projectId, nodeId: a.nodeId ?? agentNodeId(a.id), agentId: a.id, instruction: String(input.text) })
+      if (!d.ok) return { ok: false, code: d.code, data: d.data }
+      const r = await settleSend(d, () => executor.prompt(a, String(input.text), input.mode as 'steer' | 'followup'), (sent) => (sent.ok ? null : sent.code ?? 'prompt_failed'))
+      return r.ok ? { ...r, data: { ...r.data, taskId: d.taskId, assignmentId: d.assignmentId } } : r
+    }),
   }
   const close: ToolDef = {
     name: 'agent.close', summary: 'Stop an agent: graceful cancel, or kill with force (R1 central agents, R2 user agents).', tier: 'R1', auditKeys: AUDIT_KEYS,

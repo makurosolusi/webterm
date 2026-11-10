@@ -37,6 +37,8 @@ export interface ToolCtx {
   /** Highest tier this caller may execute. */
   maxTier: Tier
   conversationId: string
+  /** Turn that issued this call, when it runs inside a real Central turn. */
+  turnId?: string
   now(): number
   /** Flag source; defaults to `process.env`. */
   env?: Record<string, string | undefined>

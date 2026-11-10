@@ -7,6 +7,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixtu
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import { createRegistry } from '../toolRegistry'
 import type { ToolCtx, Tier } from '../toolTypes'
+import { createWorkStore } from '../../work/workStore'
 import { createChatDefs, MAX_CHAT_TEXT } from './chat.defs'
 import { READ_TOOLS_FLAG } from './read.shared'
 
@@ -86,9 +87,60 @@ describe('chat.send', () => {
     failNext = null
     const ok = await run('chat.send', { nodeId: 'n1', text: SECRET })
     expect(JSON.stringify(ok)).not.toContain('hunter2')
-    const audit = allRows(f.db, 'SELECT payload_json FROM event').map((r) => JSON.parse(String(r['payload_json'])))
-    expect(audit).toEqual([expect.objectContaining({ tool: 'chat.send', nodeId: 'n1', code: 'chat_busy' }), expect.objectContaining({ tool: 'chat.send', nodeId: 'n1', started: false })])
+    const audit = allRows(f.db, 'SELECT kind, payload_json FROM event')
+    const tools = audit.filter((r) => r['kind'] === 'central.proposal').map((r) => JSON.parse(String(r['payload_json'])))
+    expect(tools).toEqual([expect.objectContaining({ tool: 'chat.send', nodeId: 'n1', code: 'chat_busy' }), expect.objectContaining({ tool: 'chat.send', nodeId: 'n1', started: false })])
     expect(JSON.stringify(audit)).not.toContain('hunter2')
+  })
+})
+
+describe('chat.send delegation', () => {
+  const store = () => createWorkStore(f.db, () => 1)
+  const openOf = (node: string) => store().openAssignmentOfNode(node)
+
+  it('records the assignment before the port is called', async () => {
+    const seen: Array<string | undefined> = []
+    const original = port.send
+    port.send = async (ws, id, text) => { seen.push(openOf(id)?.instruction); return original(ws, id, text) }
+    try {
+      const res = await execTool(ctx(), 'chat.send', { projectId: 'p1', nodeId: 'n1', text: 'fix the login' })
+      expect(seen).toEqual(['fix the login'])
+      expect(res.data).toMatchObject({ assignmentId: openOf('n1')?.id, taskId: openOf('n1')?.taskId })
+      expect(openOf('n1')).toMatchObject({ channel: 'chat', conversationId: 'central:global' })
+    } finally { port.send = original }
+  })
+
+  it('keeps a conversation on one card', async () => {
+    await run('chat.send', { nodeId: 'n1', text: 'first' })
+    const first = openOf('n1')
+    await run('chat.send', { nodeId: 'n1', text: 'second' })
+    expect(openOf('n1')?.id).toBe(first?.id)
+    expect(store().listTasks({ projectId: 'p1' })).toHaveLength(1)
+  })
+
+  it('a refused send leaves a failed card with an ended assignment', async () => {
+    failNext = { code: 'chat_offline' }
+    expect(await run('chat.send', { nodeId: 'n1', text: 'go' })).toMatchObject({ ok: false, code: 'chat_offline' })
+    const [task] = store().listTasks({ projectId: 'p1' })
+    expect(task?.status).toBe('failed')
+    expect(openOf('n1')).toBeNull()
+    expect(store().assignmentsOfTask(task!.id)[0]?.endReason).toBe('send_failed')
+  })
+
+  it('a throwing port also settles the card', async () => {
+    const original = port.send
+    port.send = async () => { throw new Error('socket closed') }
+    try { expect((await run('chat.send', { nodeId: 'n1', text: 'go' })).ok).toBe(false) } finally { port.send = original }
+    expect(store().listTasks({ projectId: 'p1' })[0]?.status).toBe('failed')
+  })
+
+  it('refuses an unknown task and sends nothing', async () => {
+    expect(await run('chat.send', { nodeId: 'n1', text: 'go', taskId: 'nope' })).toMatchObject({ ok: false, code: 'task_not_found' })
+    expect(calls).toEqual([])
+  })
+
+  it('refuses a bad taskId shape', async () => {
+    expect(await run('chat.send', { nodeId: 'n1', text: 'go', taskId: 'has space' })).toMatchObject({ ok: false, code: 'invalid_shape' })
   })
 })
 
