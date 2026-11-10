@@ -46,7 +46,7 @@ export function boardColumnOf(status: WorkStatus): BoardColumn {
 /** How a reported task gets accepted. */
 export type WorkAcceptance = 'project_checks' | 'review'
 /** Route the instruction took to reach the agent. */
-export type AssignmentChannel = 'chat' | 'terminal' | 'spawn' | 'run'
+export type AssignmentChannel = 'chat' | 'terminal' | 'spawn'
 
 /** A central task as read by tools and the board. */
 export interface TaskView {
@@ -118,6 +118,10 @@ export interface TaskCard extends Omit<TaskView, 'blockedBy'> {
   lastRule: string | null
   blockedBy: { id: string; title: string }[]
   verification: unknown | null
+  /** Version of the project goal this task was planned under. */
+  goalVersion?: number | null
+  /** Position in the project's plan; orders the todo column when set. */
+  seq?: number | null
 }
 
 /** `GET /api/central/tasks`. */
@@ -136,6 +140,61 @@ export interface TaskDetail {
 
 /** Answer of every `POST /api/central/tasks/:id/*`. */
 export type TaskActionResult = { task: TaskCard } | { error: string }
+
+/** Lifecycle status of a project goal. */
+export type GoalCardStatus = 'proposed' | 'active' | 'achieved' | 'abandoned' | 'superseded'
+
+/** A project's goal with the board progress of the tasks planned under it. */
+export interface GoalCard {
+  projectId: string
+  projectName: string
+  version: number
+  statement: string
+  status: GoalCardStatus
+  horizon: string
+  counts: Record<BoardColumn, number>
+  total: number
+  /** Every linked task is finished and at least one was done; marking the goal achieved stays a human decision. */
+  complete: boolean
+}
+
+/** `GET /api/central/goals`. */
+export interface GoalPage {
+  items: GoalCard[]
+  hasMore: boolean
+}
+
+/** Lifecycle status of a Central reminder. */
+export type ReminderStatus = 'pending' | 'fired' | 'cancelled'
+
+/** One row of `GET /api/central/reminders`. */
+export interface ReminderCard {
+  id: string
+  projectId: string | null
+  projectName: string | null
+  taskId: string | null
+  text: string
+  dueAt: number
+  status: ReminderStatus
+}
+
+/** `GET /api/central/reminders`. */
+export interface ReminderPage {
+  items: ReminderCard[]
+  hasMore: boolean
+}
+
+/** Allowed values of the daily limit on self-started Central turns. */
+export const CHECKIN_DAILY_LIMITS = [5, 10, 20, 50] as const
+/** Limit used until the user picks another one. */
+export const DEFAULT_CHECKIN_DAILY_LIMIT = 10
+
+/** `GET|POST /api/central/checkin-settings`. */
+export interface CheckinSettings {
+  enabled: boolean
+  dailyLimit: number
+  usedToday: number
+}
 
 /** `GET /api/central/work-settings`. */
 export interface WorkSettings {

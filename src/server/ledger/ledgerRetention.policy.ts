@@ -78,6 +78,10 @@ export const RETENTION: Record<string, RetentionEntry> = {
       AND NOT EXISTS (SELECT 1 FROM central_task_dep d JOIN central_task t ON t.id = d.task_id WHERE d.blocked_by_id = central_task.id AND t.status NOT IN (${SETTLED_WORK}))`, limit, now - SETTLED_RETENTION_MS)),
   central_task_dep: { kind: 'cascade', parent: 'central_task', rule: 'ON DELETE CASCADE from central_task' },
   central_assignment: { kind: 'cascade', parent: 'central_task', rule: 'ON DELETE CASCADE from central_task' },
+  central_reminder: sweep('fired or cancelled, created 30+ days ago', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_reminder', "status != 'pending' AND created_at < ?", limit, now - SETTLED_RETENTION_MS)),
+  central_checkin_reason: sweep('delivered 30+ days ago; an overdue row stays with its task so the task never fires twice', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_checkin_reason', "sent_at IS NOT NULL AND sent_at < ? AND kind != 'task_overdue'", limit, now - SETTLED_RETENTION_MS)),
   agent_mail: sweep('expired (24 h TTL set at send)', (ctx, now, limit) => deleteBatch(ctx, 'agent_mail', 'expires_at <= ?', limit, now)),
   cost_usage: sweep('responses 400+ days old (caps only read today and the current dag)', (ctx, now, limit) =>
     deleteBatch(ctx, 'cost_usage', 'ts < ?', limit, now - USAGE_RETENTION_MS)),

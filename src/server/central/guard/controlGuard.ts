@@ -24,7 +24,7 @@ const MAX_TRACKED_DIGESTS = 500
 const MAX_DIGEST = 64
 const MAX_TOOL = 64
 const GUARD_AUDIT_KIND = 'central.guard'
-const SPAWN_TOOLS: readonly string[] = ['agent.spawn', 'task.run']
+const SPAWN_TOOLS: readonly string[] = ['agent.spawn']
 /** Agent states that no longer hold a worker slot (`approval_pending` has not started yet). */
 const SLOT_FREE_STATES = ['approval_pending', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
 /** Central acts as this principal in the policy (PLAN S2). */

@@ -15,6 +15,7 @@ import { type ChannelBotDefDeps, createChannelBotDef } from './defs/channel.bot.
 import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
+import { REMINDER_DEFS } from './defs/reminder.defs'
 import { STATE_DEFS } from './defs/state.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { createCanvasActDefs } from './defs/canvas.act.defs'
@@ -28,7 +29,6 @@ import { createNodeReadDefs } from './defs/read.node'
 import { PROJECT_READ_DEFS } from './defs/read.project'
 import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
-import { TASK_RUN_DEF } from './defs/task.run.def'
 import { createTaskWorkDefs } from './defs/task.work.defs'
 import { createWorkspaceDefs } from './defs/workspace.defs'
 import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
@@ -92,7 +92,6 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
     [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...nodeDefs(), ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
-    [agentsOn(env), () => [TASK_RUN_DEF]],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
     [on(env, KNOWLEDGE_FLAG) && !!deps.openKb, () => createKnowledgeDefs(deps.openKb as () => Database)],
     // repo.map keeps its own cache (repomap.db), so it needs no knowledge.db handle.
@@ -100,6 +99,7 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     [on(env, SKILLS_FLAG) && !!deps.skills, () => createSkillDefs(deps.skills as SkillStoreResolver)],
     [central, () => createMemoryDefs({ ...(deps.userStore ? { userStore: deps.userStore } : {}) })],
     [central, () => STATE_DEFS],
+    [central, () => REMINDER_DEFS],
     // Shared blackboard (F5-b): read + propose; nodes see them through Central's MCP projection.
     [central, () => BLACKBOARD_DEFS],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
@@ -109,7 +109,7 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
   for (const [enabled, build] of groups) {
     if (!enabled) continue
     for (const def of build()) {
-      // Per-def flags (skill.propose, task.run) refine the group; a def without one follows its group.
+      // Per-def flags (skill.propose) refine the group; a def without one follows its group.
       if (registry.get(def.name) || !defEnabled(def, env)) continue
       registry.register(def)
       added.push(def.name)

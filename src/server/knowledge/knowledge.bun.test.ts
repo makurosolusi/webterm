@@ -141,12 +141,17 @@ test('missing root and non-git dir do not crash; answers are labeled stale', asy
 })
 
 test('attention rules are pure and ordered', () => {
-  const base: BriefSnapshot = { now: NOW, name: 'X', branch: 'main', dirtyCount: 0, pendingApprovals: [], failedTasks: [], blockedAgents: [], liveAgents: 0, pendingPlanItems: 0, taskCounts: {} }
+  const base: BriefSnapshot = { now: NOW, name: 'X', branch: 'main', dirtyCount: 0, pendingApprovals: [], failedTasks: [], blockedAgents: [], liveAgents: 0, readyTasks: 0, taskCounts: {} }
   expect(evaluateAttention(base).length).toBe(0)
-  const all = evaluateAttention({ ...base, dirtyCount: 2, pendingApprovals: [{ id: 'a1', kind: 'k' }], failedTasks: [{ id: 't1', status: 'failed' }], blockedAgents: [{ id: 'g1', waitedMs: 11 * 60_000 }], pendingPlanItems: 1 })
-  expect(all.map((a) => a.rule).join(',')).toBe('approval_pending,task_failed,agent_blocked,dirty_no_agent,plan_item_ready')
+  const all = evaluateAttention({ ...base, dirtyCount: 2, pendingApprovals: [{ id: 'a1', kind: 'k' }], failedTasks: [{ id: 't1', status: 'failed' }], blockedAgents: [{ id: 'g1', waitedMs: 11 * 60_000 }], readyTasks: 1 })
+  expect(all.map((a) => a.rule).join(',')).toBe('approval_pending,task_failed,agent_blocked,dirty_no_agent,task_ready')
   expect(all[2]?.evidence).toContain('11 min')
   expect(evaluateAttention({ ...base, dirtyCount: 2, liveAgents: 1 }).length).toBe(0) // dirty but an agent is running
+})
+
+test('tasks ready on the board suggest task.assign, and plan items no longer count', () => {
+  const base: BriefSnapshot = { now: NOW, name: 'X', branch: 'main', dirtyCount: 0, pendingApprovals: [], failedTasks: [], blockedAgents: [], liveAgents: 0, readyTasks: 2, taskCounts: {} }
+  expect(evaluateAttention(base)).toEqual([{ rule: 'task_ready', evidence: '2 board tasks ready to assign', suggestedTool: 'task.assign' }])
 })
 
 test('brief from a real ledger: rules fire, stale parts named, within 800 tokens', async () => {

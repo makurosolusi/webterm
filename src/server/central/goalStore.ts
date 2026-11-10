@@ -7,7 +7,10 @@ import type { Database } from 'bun:sqlite'
 import { writeTx } from './writeTx'
 import { MAX_PROJECT_ID } from '../apiShared.types'
 import { appendEvent } from '../ledger/ledgerEvent'
-import { execWrite, getRow, type LedgerContext } from '../ledger/ledgerCore'
+import { allRows, execWrite, getRow, type LedgerContext, type Row } from '../ledger/ledgerCore'
+import { BOARD_COLUMNS, boardColumnOf, type BoardColumn, type GoalCard, type GoalPage, type WorkStatus } from '../../shared/centralWork'
+import { createLogger } from '../logs'
+import { redactSecrets } from '../redactSecrets'
 import {
   type Goal,
   type GoalDraftInput,
@@ -23,6 +26,7 @@ export const EVENT_GOAL_ABANDONED = 'goal.abandoned'
 const MAX_REASON = 500
 const MAX_ACTOR_ID = 200
 const CONTROL = /[\u0000-\u001f\u007f]/
+const log = createLogger('central.goal')
 
 /** Audit identity for a goal mutation; authority is enforced at the HTTP layer. */
 export interface GoalActor {
@@ -107,6 +111,11 @@ function saveGoal(db: Database, projectId: string, goal: Goal, ts: number): void
   if (changed !== 1) throw new GoalError('project_not_found', `project not found: ${projectId}`)
 }
 
+/** Task links follow the goal to its new version: project + version must keep naming the same goal's tasks. */
+function relinkTasks(db: Database, projectId: string, from: number, to: number): void {
+  execWrite(db, 'UPDATE central_task SET goal_version = ? WHERE project_id = ? AND goal_version = ?', to, projectId, from)
+}
+
 function stale(expected: unknown, current: Goal | null): never {
   throw new GoalError(
     'stale_version',
@@ -137,6 +146,8 @@ export function proposeGoal(db: Database, input: ProposeGoalInput): Goal {
     }
     const goal: Goal = { version: (current?.version ?? 0) + 1, status: 'proposed', ...content }
     saveGoal(txDb, projectId, goal, ts)
+    // Re-proposing a proposal revises the same goal; after a closed goal the old tasks stay with it.
+    if (current?.status === 'proposed') relinkTasks(txDb, projectId, current.version, goal.version)
     appendEvent(ctxOf(txDb), {
       actor: actor.id,
       kind: EVENT_GOAL_PROPOSED,
@@ -172,6 +183,7 @@ function transition(
     assertGoalTransition(current.status, next, actor.kind)
     const goal: Goal = { ...current, status: next, version: current.version + 1 }
     saveGoal(txDb, projectId, goal, ts)
+    relinkTasks(txDb, projectId, current.version, goal.version)
     appendEvent(ctxOf(txDb), {
       actor: actor.id,
       kind,
@@ -202,4 +214,43 @@ export function abandonGoal(db: Database, input: AbandonGoalInput): Goal {
     throw new GoalError('invalid_goal', `abandon reason must be 1..${MAX_REASON} characters`)
   }
   return transition(db, input, 'abandoned', EVENT_GOAL_ABANDONED, reason)
+}
+
+/** Zero tasks in every board column. */
+export const emptyColumns = (): Record<BoardColumn, number> => Object.fromEntries(Object.keys(BOARD_COLUMNS).map((c) => [c, 0])) as Record<BoardColumn, number>
+
+function parsedRow(row: Row): Goal | null {
+  try {
+    return parseGoalStored(String(row.goal_json))
+  } catch (err) {
+    log.warn('goal.corrupt', `goal of project ${String(row.id)} left off the list`, { projectId: String(row.id), error: err instanceof Error ? err.message : String(err) })
+    return null
+  }
+}
+
+/** A page of goals with their linked tasks' board counts, newest change first: one query each, never one per project. */
+export function goalCards(db: Database, { projectId, limit, offset }: { projectId?: string; limit: number; offset: number }): GoalPage {
+  const rows = allRows(db, `SELECT id, name, goal_json FROM project WHERE goal_json IS NOT NULL ${projectId ? 'AND id = ?' : ''} ORDER BY updated_at DESC, id LIMIT ? OFFSET ?`,
+    ...(projectId ? [projectId] : []), limit + 1, offset)
+  const page = rows.slice(0, limit)
+  const tally = new Map<string, { counts: Record<BoardColumn, number>; done: number }>()
+  for (const r of allRows(db, `SELECT project_id, goal_version, status, COUNT(*) AS n FROM central_task
+    WHERE goal_version IS NOT NULL AND project_id IN (SELECT value FROM json_each(?)) GROUP BY project_id, goal_version, status`, JSON.stringify(page.map((p) => String(p.id))))) {
+    const key = `${String(r.project_id)}:${String(r.goal_version)}`
+    const entry = tally.get(key) ?? { counts: emptyColumns(), done: 0 }
+    tally.set(key, entry)
+    entry.counts[boardColumnOf(r.status as WorkStatus)] += Number(r.n)
+    if (r.status === 'done') entry.done += Number(r.n)
+  }
+  const items = page.flatMap((row): GoalCard[] => {
+    const goal = parsedRow(row)
+    if (!goal) return []
+    const { counts, done } = tally.get(`${String(row.id)}:${goal.version}`) ?? { counts: emptyColumns(), done: 0 }
+    const total = Object.values(counts).reduce((sum, n) => sum + n, 0)
+    return [{
+      projectId: String(row.id), projectName: redactSecrets(String(row.name)), version: goal.version, statement: redactSecrets(goal.statement), status: goal.status, horizon: goal.horizon,
+      counts, total, complete: done > 0 && counts.done === total,
+    }]
+  })
+  return { items, hasMore: rows.length > limit }
 }

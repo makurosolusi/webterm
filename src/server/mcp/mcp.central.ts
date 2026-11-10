@@ -21,12 +21,12 @@ import type { McpTool } from './mcp.protocol'
 import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
 
 /**
- * Tools whose handler runs its own approval (agent.spawn cards + resume sweep, task.run's worker.run
- * approval, channel.bot.propose's typed-confirm approval). A second generic card would ask twice, so
+ * Tools whose handler runs its own approval (agent.spawn cards + resume sweep,
+ * channel.bot.propose's typed-confirm approval). A second generic card would ask twice, so
  * for these the guard's `needs_approval` passes and the handler decides; denies still deny. Their receipts
  * still carry the card's ledger `approvalStatus` (toolExec.ts), so an expired/rejected card is never reported as waiting.
  */
-const OWN_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['agent.spawn', 'task.run', 'channel.bot.propose'])
+const OWN_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['agent.spawn', 'channel.bot.propose'])
 const APPROVAL_ID_PREFIX = 'ct-'
 const APPROVAL_HASH_CHARS = 24
 

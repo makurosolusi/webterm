@@ -55,7 +55,7 @@ describe('cap.search / cap.describe', () => {
     const f = fixture()
     const res = await execTool(ctxOf(f, reg, 'R0'), 'cap.describe', { name: 'plan.propose' })
     expect(res.data).toMatchObject({ name: 'plan.propose', tier: 'R1', scope: 'project', input: { required: ['projectId', 'items'] } })
-    expect(String(res.data?.usage)).toContain('expectedVersion')
+    expect(String(res.data?.usage)).toContain('blockedBy')
     expect((await execTool(ctxOf(f, reg, 'R0'), 'cap.describe', { name: 'flagged.tool' })).code).toBe('not_found')
     f.close()
   })

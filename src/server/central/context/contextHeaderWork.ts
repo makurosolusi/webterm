@@ -12,7 +12,9 @@ const MAX_WORK_PROJECTS = 20
 const TASK_FETCH_LIMIT = 200
 const MAX_TITLE = 60
 const MAX_NODE = 40
+const MAX_GOAL = 120
 const MINUTE_MS = 60_000
+const LIVE_GOALS = ['active', 'proposed']
 const OPEN_STATUSES = WORK_STATUSES.filter((s) => !WORK_TERMINAL.includes(s))
 
 export interface NeedsYou { waiting_input: number; needs_review: number; stalled: number; failed: number }
@@ -23,6 +25,7 @@ export interface ProjectWork {
   columns: Record<BoardColumn, number>
   needsYou: NeedsYou
   liveAgents: number
+  goal: { statement: string; status: string } | null
   open: OpenAssignment[]
 }
 export interface OpenWork { needsYou: NeedsYou; projects: ProjectWork[] }
@@ -36,18 +39,30 @@ export function openWork(db: Database, now: number): OpenWork {
   const needsYou = noNeeds()
   const byProject = new Map<string, ProjectWork>()
   const withOpen = new Set<string>()
+  const entryOf = (id: string, name: unknown): ProjectWork => {
+    const entry = byProject.get(id) ?? { id, name: redactSecrets(String(name)).slice(0, MAX_NODE), columns: noColumns(), needsYou: noNeeds(), liveAgents: 0, goal: null, open: [] }
+    byProject.set(id, entry)
+    return entry
+  }
   for (const r of allRows(db, 'SELECT t.project_id, p.name, t.status, COUNT(*) AS n FROM central_task t JOIN project p ON p.id = t.project_id GROUP BY t.project_id, p.name, t.status')) {
     const id = String(r.project_id)
     const status = r.status as WorkStatus
     const n = Number(r.n)
-    const entry = byProject.get(id) ?? { id, name: redactSecrets(String(r.name)).slice(0, MAX_NODE), columns: noColumns(), needsYou: noNeeds(), liveAgents: 0, open: [] }
-    byProject.set(id, entry)
+    const entry = entryOf(id, r.name)
     entry.columns[boardColumnOf(status)] += n
     if (OPEN_STATUSES.includes(status)) withOpen.add(id)
     if (status in needsYou) {
       entry.needsYou[status as keyof NeedsYou] += n
       needsYou[status as keyof NeedsYou] += n
     }
+  }
+  // A live goal lists its project even with an empty board: that is the project waiting to be planned.
+  for (const r of allRows(db, `SELECT id, name, json_extract(goal_json, '$.statement') AS statement, json_extract(goal_json, '$.status') AS status FROM project WHERE json_valid(goal_json)`)) {
+    const id = String(r.id)
+    const status = String(r.status)
+    if (!byProject.has(id) && !LIVE_GOALS.includes(status)) continue
+    entryOf(id, r.name).goal = { statement: redactSecrets(String(r.statement)).slice(0, MAX_GOAL), status }
+    if (LIVE_GOALS.includes(status)) withOpen.add(id)
   }
   for (const r of allRows(db, 'SELECT project_id, COUNT(*) AS n FROM central_agents WHERE ended_at IS NULL GROUP BY project_id')) {
     const entry = byProject.get(String(r.project_id))

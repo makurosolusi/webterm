@@ -58,7 +58,8 @@ const SYSTEM = { actor: { kind: 'system' } } as const
 test('each listed state names the task and project, once per entry', () => {
   const s = setup()
   s.away()
-  const { taskId } = s.assigned('running', { channel: 'run' })
+  const { taskId, assignmentId } = s.assigned('running')
+  s.store.endAssignment(assignmentId, 'ended') // no open attempt: no hook would forward this
   s.store.moveTask(taskId, 'waiting_input', SYSTEM)
   s.store.moveTask(taskId, 'running', SYSTEM)
   s.store.moveTask(taskId, 'stalled', SYSTEM)
@@ -76,7 +77,7 @@ test('each listed state names the task and project, once per entry', () => {
   ])
 })
 
-for (const [channel, count] of [['terminal', 0], ['spawn', 0], ['chat', 0], ['run', 1]] as const) {
+for (const [channel, count] of [['terminal', 0], ['spawn', 0], ['chat', 0]] as const) {
   test(`waiting_input on a ${channel} assignment: ${count} task notice; other states still notify`, () => {
     const s = setup()
     s.away()

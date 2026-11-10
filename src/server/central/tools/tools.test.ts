@@ -26,9 +26,9 @@ describe('registry', () => {
     expect(reg.get('a.one')?.tier).toBe('R0')
     expect(reg.get('missing')).toBeUndefined()
   })
-  it('default registry holds the core tools, all R1', () => {
-    expect(defaultRegistry().list().map((d) => d.name).sort()).toEqual(['approval.request', 'goal.propose', 'plan.propose'])
-    expect(CORE_DEFS.every((d) => d.tier === 'R1')).toBe(true)
+  it('default registry holds the core tools, R1 except the goal read', () => {
+    expect(defaultRegistry().list().map((d) => d.name).sort()).toEqual(['approval.request', 'goal.get', 'goal.propose', 'plan.propose'])
+    expect(CORE_DEFS.filter((d) => d.tier !== 'R1').map((d) => d.name)).toEqual(['goal.get'])
   })
   it('toolsHash is stable across registration order and changes with content', () => {
     const defs = [fake('a', 'R0'), fake('b', 'R1'), fake('c', 'R2')]

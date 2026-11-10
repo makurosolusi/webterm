@@ -101,6 +101,32 @@ describe('state header: time and open work', () => {
     expect(header.work[0]?.open[0]?.node).not.toBe('n1') // the display name, not the id
   })
 
+  const setGoal = (id: string, statement: string, status: string): void => { f.db.query('UPDATE project SET goal_json = ? WHERE id = ?').run(JSON.stringify({ version: 1, status, statement }), id) }
+
+  it('shows the goal statement and status, clipped, with the project work', () => {
+    task('p1', 'running', 'n1')
+    setGoal('p1', 'g'.repeat(300), 'active')
+    const [work] = rich(buildStateHeader(f.db, 'central:global', NOW)).work as Array<Work & { goal: { statement: string; status: string } }>
+    expect(work?.goal).toEqual({ statement: 'g'.repeat(120), status: 'active' })
+  })
+
+  it('lists a project with a live goal and an empty board, and not one whose goal is closed', () => {
+    setGoal('p2', 'Plan me', 'proposed')
+    setGoal('p3', 'Long gone', 'abandoned')
+    const { work } = rich(buildStateHeader(f.db, 'central:global', NOW))
+    expect(work.map((w) => w.id)).toEqual(['p2'])
+    expect(work[0]).toMatchObject({ goal: { statement: 'Plan me', status: 'proposed' }, columns: { todo: 0 } })
+  })
+
+  it('goals stay inside the cap and go with their project in the shrink', () => {
+    workspaces = Array.from({ length: 60 }, (_, i) => ({ id: `ws-${i}`, name: `${'n'.repeat(55)}${i}`, nodes: [] }))
+    buildStateHeader(f.db, 'central:global', NOW)
+    for (let i = 0; i < 40; i += 1) { task(`ws-${i}`, 'stalled', `node-${i}`, 't'.repeat(70)); setGoal(`ws-${i}`, 'g'.repeat(400), 'active') }
+    const text = buildStateHeader(f.db, 'central:global', NOW)
+    expect(text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
+    expect(rich(text).needsYou.stalled).toBe(40)
+  })
+
   it('lists at most 8 open assignments per project', () => {
     for (let i = 0; i < 12; i += 1) task('p1', 'running', `node-${i}`)
     expect(rich(buildStateHeader(f.db, 'central:global', NOW)).work[0]?.open).toHaveLength(8)

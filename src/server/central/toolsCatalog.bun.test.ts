@@ -28,7 +28,7 @@ describe('ladderDecision / toolAccess: tier x level', () => {
     ['project.bootstrap', 'R3', ['blocked', 'blocked', 'asks', 'asks', 'asks']],
     ['agent.spawn', 'R2', ['blocked', 'blocked', 'blocked', 'asks', 'auto']],
     // Spawn lift: an R1 spawn tool needs act_gated and is judged R2, unlike a plain R1 tool.
-    ['task.run', 'R1', ['blocked', 'blocked', 'blocked', 'asks', 'auto']],
+    ['agent.spawn', 'R1', ['blocked', 'blocked', 'blocked', 'asks', 'auto']],
     ['agent.spawn', 'R3', ['blocked', 'blocked', 'blocked', 'asks', 'asks']],
   ]
   for (const [name, tier, want] of table) {
@@ -48,7 +48,7 @@ describe('ladderDecision / toolAccess: tier x level', () => {
     expect(toolAccess('goal.propose', 'R1', true, 'propose', () => 'act_gated')).toBe('blocked')
   })
   it('groups by name prefix', () => {
-    const cases: Array<[string, string]> = [['project.read', 'projects'], ['node.list', 'projects'], ['canvas.open', 'projects'], ['canvas.close', 'projects'], ['canvas.edit', 'projects'], ['chat.config', 'projects'], ['workspace.create', 'projects'], ['agent.spawn', 'workers'], ['task.run', 'tasks'],
+    const cases: Array<[string, string]> = [['project.read', 'projects'], ['node.list', 'projects'], ['canvas.open', 'projects'], ['canvas.close', 'projects'], ['canvas.edit', 'projects'], ['chat.config', 'projects'], ['workspace.create', 'projects'], ['agent.spawn', 'workers'], ['task.get', 'tasks'],
       ['plan.propose', 'tasks'], ['goal.propose', 'tasks'], ['run.result', 'tasks'], ['memory.get', 'memory'], ['kb.search', 'memory'],
       ['browser_act', 'browser'], ['skill.list', 'skills'], ['channel.bot.propose', 'channels'], ['central_bot', 'channels'],
       ['approval.request', 'approvals'], ['cap.search', 'other'], ['blackboard.read', 'memory'], ['repo.map', 'projects']]
