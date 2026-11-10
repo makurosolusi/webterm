@@ -22,6 +22,7 @@ import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
 import { usePresencePing } from './presencePing'
 import OutputPanelHost from './output/outputPanelHost'
+import { TASK_BOARD_STATUS_ITEM } from './central/work/taskBoardView'
 import { usePortsStatusItems } from './PortsChip'
 import { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
@@ -249,7 +250,7 @@ export default function App() {
           <AppDock
             {...{ vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
             {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary }}
-            extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...portItems, ...problems.statusItems, ...tasks.statusItems]}
+            extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems]}
           />
           <SideBar
             open={sideBar.open} view={sideBar.view} onClose={() => sideBar.setOpen(false)} layerCount={flowNodes.length}
@@ -265,7 +266,7 @@ export default function App() {
           <AppBottomPanel
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
             onFocus={(id) => void onFocus(id)}
-            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} />
+            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} />
           {/* Chat & Central di kanan (ala Copilot Chat): kolom grid `aux`, canvas menyempit, tidak ditutupi. */}
           <SecondarySideBar centralEnabled={centralEnabled} />
           <OutputPanelHost />

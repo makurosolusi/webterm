@@ -1,0 +1,55 @@
+import type { BoardColumn, TaskDetail as TaskDetailPage } from '../../../shared/centralWork'
+import { request } from '../../inboxTransport'
+import { InboxApiError } from '../../inboxTypes'
+import { CENTRAL_API, centralControlApi } from '../centralControlApi'
+import type { ColumnState, TaskAction } from './taskBoardModel'
+
+const TASKS_PATH = `${CENTRAL_API}/tasks`
+const WORK_SETTINGS_PATH = `${CENTRAL_API}/work-settings`
+const JSON_HEADERS = { 'Content-Type': 'application/json' }
+
+/** A page request. */
+export interface PageRange { limit: number; offset: number }
+
+/** What the board needs from the server. */
+export interface TaskBoardClient {
+  listColumn(column: BoardColumn, projectId: string | undefined, range: PageRange, signal?: AbortSignal): Promise<ColumnState>
+  getTask(id: string, range: PageRange, signal?: AbortSignal): Promise<TaskDetailPage>
+  act(id: string, action: TaskAction, body?: Record<string, string>): Promise<void>
+  getAutoDone(projectId: string, signal?: AbortSignal): Promise<boolean>
+  setAutoDone(projectId: string, autoDone: boolean): Promise<void>
+  listProjects(signal?: AbortSignal): Promise<Array<{ id: string; name: string }>>
+}
+
+const malformed = (what: string): InboxApiError => new InboxApiError(`${what} response malformed`, 502, 'bad_response')
+const post = (path: string, body: unknown): Promise<unknown> => request(path, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(body) })
+const query = (params: Record<string, string | number | undefined>): string =>
+  new URLSearchParams(Object.entries(params).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]]))).toString()
+
+/** Default client over the live server. */
+export const taskBoardApi: TaskBoardClient = {
+  async listColumn(column, projectId, { limit, offset }, signal) {
+    const body = await request<Partial<ColumnState>>(`${TASKS_PATH}?${query({ column, projectId, limit, offset })}`, { signal })
+    if (!Array.isArray(body?.items)) throw malformed('Task list')
+    return { items: body.items, hasMore: body.hasMore === true }
+  },
+  async getTask(id, { limit, offset }, signal) {
+    const body = await request<Partial<TaskDetailPage>>(`${TASKS_PATH}/${encodeURIComponent(id)}?${query({ limit, offset })}`, { signal })
+    if (!body?.task || !Array.isArray(body.assignments) || !Array.isArray(body.timeline)) throw malformed('Task detail')
+    return { task: body.task, assignments: body.assignments, timeline: body.timeline, hasMoreTimeline: body.hasMoreTimeline === true }
+  },
+  async act(id, action, body = {}) {
+    const reply = await post(`${TASKS_PATH}/${encodeURIComponent(id)}/${action}`, body) as { error?: unknown } | undefined
+    if (typeof reply?.error === 'string') throw new InboxApiError(`Task ${action} on ${id} refused`, 409, reply.error)
+  },
+  async getAutoDone(projectId, signal) {
+    const body = await request<{ autoDone?: unknown }>(`${WORK_SETTINGS_PATH}?${query({ projectId })}`, { signal })
+    return body?.autoDone === true
+  },
+  async setAutoDone(projectId, autoDone) {
+    await post(WORK_SETTINGS_PATH, { projectId, autoDone })
+  },
+  async listProjects(signal) {
+    return (await centralControlApi.listBoardNodes(0, undefined, signal)).projects
+  },
+}

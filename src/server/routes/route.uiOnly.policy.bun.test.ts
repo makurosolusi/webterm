@@ -18,7 +18,7 @@ const { API_ROUTES, handleApi } = await import('../api')
 const { routeCtx } = await import('./route.core')
 const { FS_VERB_METHODS } = await import('../fsApi')
 const { TOOL_INDEX } = await import('../cli/cli.registry')
-const { isNodeTokenPath, TOKEN_HEADER } = await import('../auth')
+const { authorizeRequest, CAPABILITY_HEADER, isNodeTokenPath, TOKEN_HEADER } = await import('../auth')
 const { getTokenState, setTokenState } = await import('../tokenBootstrap')
 const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
 const { TOKEN_ACCESS_PATH, tokenAccessRoute } = await import('../tokenAccess.api')
@@ -179,6 +179,28 @@ describe('forged browser metadata without the wt_ui cookie opens nothing', () =>
     const paths = [...new Set([...apiPathsByFile().values()].flat())]
     const unreached = API_ROUTES.filter((r) => r.match && !paths.some((p) => METHODS.some((m) => matching(p, m).includes(r.name))))
     expect(unreached.map((r) => r.name)).toEqual([])
+  })
+})
+
+// The board's writes speak for the human (approve, request changes, auto-done): an agent holds a node
+// token, and the outer gate (index.ts `allowed`) must not take it here, nor any capability token.
+const CENTRAL_BOARD_PATHS = ['/api/central/tasks', '/api/central/tasks/t1', '/api/central/tasks/t1/approve', '/api/central/tasks/t1/changes', '/api/central/tasks/t1/cancel', '/api/central/tasks/t1/retry', '/api/central/work-settings']
+
+describe('the Central task board refuses agent credentials', () => {
+  const opens = (pathname: string, headers: Record<string, string>): boolean => authorizeRequest({ headers, expectedToken: ROOT_TOKEN, pathname, isNodeToken: () => true, isCapabilityToken: () => true })
+
+  test('a valid node token or capability token opens no board path; the root token does', () => {
+    for (const p of CENTRAL_BOARD_PATHS) {
+      expect(`${p}: ${isNodeTokenPath(p)}`).toBe(`${p}: false`)
+      expect(`${p}: ${opens(p, { [TOKEN_HEADER]: 'node-token' })}`).toBe(`${p}: false`) // test-only
+      expect(`${p}: ${opens(p, { [CAPABILITY_HEADER]: 'wcap_test' })}`).toBe(`${p}: false`) // test-only
+      expect(`${p}: ${opens(p, { [TOKEN_HEADER]: ROOT_TOKEN })}`).toBe(`${p}: true`)
+    }
+  })
+
+  test('no webterm CLI capability binding dispatches into the board', () => {
+    const bound = TOOL_INDEX.list().flatMap((c) => (c.route ? [c.route.path] : []))
+    expect(bound.filter((p) => /^\/api\/central\/(tasks|work-settings)/.test(p))).toEqual([])
   })
 })
 

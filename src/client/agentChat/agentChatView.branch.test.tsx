@@ -100,7 +100,11 @@ describe('Edit a sent message', () => {
 })
 
 describe('usage limit notice', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('shows one notice with the reset time and clears it when a turn succeeds', async () => {
+    // test-only: local mid-day, so the reset an hour later stays on the same day ("at", not "on"). Mocks Date only; timers stay real for waitFor.
+    vi.setSystemTime(new Date(2026, 10, 10, 12))
     const { emit } = setup()
     const at = Date.now() + 60 * 60_000
     emit(initEvent(1, 's-1'), { seq: 2, t: 'rateLimit', status: 'rejected', resetsAt: at, limit: 'five_hour' })

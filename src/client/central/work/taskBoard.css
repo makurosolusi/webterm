@@ -1,0 +1,43 @@
+.task-board { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; color: var(--vscode-foreground); font-size: 12px; line-height: 18px; }
+.task-board :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.task-board p, .task-board h3, .task-board h4 { margin: 0; }
+.task-board__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 4px 8px; }
+.task-board__switch { display: inline-flex; align-items: center; gap: 6px; }
+.task-board__state { padding: 8px; }
+.task-board__error { color: var(--vscode-errorForeground); }
+.task-board__main { display: flex; flex: 1 1 0; min-height: 0; }
+.task-board__columns { display: flex; flex: 1 1 0; gap: 8px; min-width: 0; padding: 0 8px 8px; overflow-x: auto; }
+
+.task-column { display: flex; flex: 1 1 220px; flex-direction: column; min-width: 200px; min-height: 0; border: 1px solid var(--vscode-panel-border); border-radius: 4px; }
+.task-column[data-collapsed='true'] { flex: 0 0 auto; min-width: 120px; }
+.task-column__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 26px; padding: 2px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+.task-column__head h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.task-column__count { padding: 0 6px; border-radius: 8px; font-size: 11px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+.task-column__body { display: flex; flex: 1 1 0; flex-direction: column; gap: 6px; min-height: 0; padding: 6px; overflow-y: auto; }
+
+.task-card { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; background: var(--vscode-editorWidget-background); cursor: default; }
+.task-card[data-selected='true'] { border-color: var(--vscode-focusBorder); }
+.task-card[data-status='failed'] { border-color: var(--vscode-inputValidation-errorBorder); }
+.task-card__title { justify-content: flex-start; height: auto; padding: 0; font-weight: 600; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.task-card__meta { color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+.task-card__node, .task-card__badges, .task-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.task-card__actions { margin-top: 4px; }
+.task-card__note { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+
+.task-badge { height: auto; white-space: normal; text-align: left; }
+.task-badge[data-tone='warn'] { background: var(--vscode-inputValidation-warningBackground); color: var(--vscode-foreground); }
+.task-badge[data-tone='error'] { background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-errorForeground); }
+.task-badge[data-tone='ok'] { background: transparent; color: var(--vscode-testing-iconPassed); border-color: currentColor; }
+
+.task-detail { display: flex; flex: 0 0 340px; flex-direction: column; min-height: 0; border-left: 1px solid var(--vscode-panel-border); }
+.task-detail__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+.task-detail__head h3 { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.task-detail__body { flex: 1 1 0; min-height: 0; padding: 6px 8px; overflow-y: auto; }
+.task-detail__body h4 { margin-top: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.task-detail__text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-detail__list { margin: 0; padding: 0; list-style: none; }
+.task-detail__attempt { padding: 4px 0; border-bottom: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
+.task-detail__timeline { border-left: 1px solid var(--vscode-panel-border); margin-top: 4px; }
+.task-detail__event { padding: 2px 0 6px 8px; overflow-wrap: anywhere; }
+[data-verdict='passed'] { color: var(--vscode-testing-iconPassed); }
+[data-verdict='failed'] { color: var(--vscode-errorForeground); }

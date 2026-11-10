@@ -50,6 +50,20 @@ export interface NewAssignment {
 export interface EndOptions { actor?: WorkActor; rule?: string }
 export interface NoteOptions { actor?: WorkActor; rule?: string; reason?: string }
 
+/** One committed status change, handed to `onWorkMove` observers. */
+export interface WorkMove {
+  /** The task after the move. */
+  task: TaskView
+  from: WorkStatus
+  to: WorkStatus
+  rule: string | null
+  reason: string | null
+  /** Route of the attempt this move belongs to, if any. */
+  channel: AssignmentChannel | null
+  /** Ledger event of this move: unique per state entry. */
+  seq: number
+}
+
 export interface WorkStore {
   createTask(input: NewTask): TaskView
   updateTask(id: string, patch: TaskPatch): TaskView

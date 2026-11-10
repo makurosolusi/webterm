@@ -17,10 +17,19 @@ import {
 import { describeAgentNode } from '../channels/channelPresenceDescribe'
 import { eventBus } from '../events/eventBus'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
+import { TELEGRAM_CHANNEL } from '../channels/channelDispatch'
+import { DEFAULT_FORWARD_AWAY_MINUTES } from '../channels/channelStoreSchema'
+import { redactSecrets } from '../redactSecrets'
 import { appendCentralNotice } from './chat/conversationNotice'
+import type { AssignmentChannel, WorkStatus } from '../../shared/centralWork'
+import type { WorkMove } from './work/workModel'
 
 const log = createLogger('central')
 export const CENTRAL_NOTICE_INTERVAL_MS = 3000
+const MINUTE_MS = 60_000
+/** These run Claude with webterm's status hooks (Agent Chat too: the SDK runs PermissionRequest beside `canUseTool`), so the agent forwarder already announces their waits. */
+const HOOK_FORWARDED: readonly AssignmentChannel[] = ['terminal', 'spawn', 'chat']
+const WORK_NOTICE: Partial<Record<WorkStatus, string>> = { waiting_input: 'needs your input', stalled: 'has stalled', failed: 'failed', needs_review: 'is ready for review' }
 
 let telegramMirror: ForwarderStore | null = null
 
@@ -55,6 +64,29 @@ export function sweepCentralNotices(db: Database, seen: Set<string>, opts: { now
   const open = new Set(items.map((item) => item.id))
   for (const id of seen) if (!open.has(id)) seen.delete(id)
   return added
+}
+
+/**
+ * Tells the user a task needs them, under the agent forwarder's rule (channelPresence.ts): only while
+ * every tab has been away and the workspace is not muted, since someone at the board already sees it.
+ * The key is the move's event, so one state entry is one notice in Central and one per bound chat.
+ */
+export function noticeWorkMove(db: Database, move: WorkMove, opts: { presence?: PresenceTracker; now?: () => number } = {}): void {
+  const verb = WORK_NOTICE[move.to]
+  if (!verb || (move.to === 'waiting_input' && move.channel !== null && HOOK_FORWARDED.includes(move.channel))) return
+  const presence = opts.presence ?? processPresence
+  const store = telegramMirror
+  const minutes = store ? store.forwardAwayMinutes : DEFAULT_FORWARD_AWAY_MINUTES
+  if (minutes === 0 || presence.awayMs() < minutes * MINUTE_MS) return
+  const project = getRow(db, 'SELECT name, workspace_id FROM project WHERE id = ?', move.task.projectId)
+  if (project && presence.isMuted(String(project['workspace_id']))) return
+  const text = redactSecrets(`Task "${move.task.title}" in ${String(project?.['name'] ?? move.task.projectId)} ${verb}.`)
+  const key = `work:${move.task.id}:${move.seq}`
+  appendCentralNotice(db, { key, text, ...(opts.now ? { now: opts.now } : {}) })
+  if (!store) return
+  for (const { chatId, binding } of store.listBindings(TELEGRAM_CHANNEL)) {
+    if (binding.projectId === move.task.projectId) store.enqueueReply({ key: `notice:${key}:${chatId}`, channel: TELEGRAM_CHANNEL, chatId, text })
+  }
 }
 
 export interface CentralNoticesDeps {

@@ -105,3 +105,39 @@ export interface WorkEventView {
   conversationId: string | null
   turnId: string | null
 }
+
+/** A task as shown on the board. `blockedBy` lists only the dependencies that are not done yet. */
+export interface TaskCard extends Omit<TaskView, 'blockedBy'> {
+  projectName: string
+  column: BoardColumn
+  /** The open attempt, else the latest one. */
+  assignment: AssignmentView | null
+  nodeName: string | null
+  nodeExists: boolean
+  /** Rule of the latest timeline event that had one. */
+  lastRule: string | null
+  blockedBy: { id: string; title: string }[]
+  verification: unknown | null
+}
+
+/** `GET /api/central/tasks`. */
+export interface TaskPage {
+  items: TaskCard[]
+  hasMore: boolean
+}
+
+/** `GET /api/central/tasks/:id`. */
+export interface TaskDetail {
+  task: TaskCard
+  assignments: AssignmentView[]
+  timeline: WorkEventView[]
+  hasMoreTimeline: boolean
+}
+
+/** Answer of every `POST /api/central/tasks/:id/*`. */
+export type TaskActionResult = { task: TaskCard } | { error: string }
+
+/** `GET /api/central/work-settings`. */
+export interface WorkSettings {
+  autoDone: boolean
+}

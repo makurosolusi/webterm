@@ -1,4 +1,4 @@
-// The app's bottom panel: Problems, Activity and Output as tabs of one surface. Central chat (with
+// The app's bottom panel: Problems, Activity, Output and Tasks as tabs of one surface. Central chat (with
 // the Needs-you strip that replaced the Inbox) and the Central control panel live in the secondary
 // side bar (`App.secondarySideBar`).
 import type { MutableRefObject } from 'react'
@@ -8,6 +8,7 @@ import BottomPanelHost, { type BottomPanelView } from './bottomPanelHost'
 import { useOutputView } from './output/outputPanelHost'
 import ProblemsPanel, { type useProblems } from './ProblemsPanel'
 import { useTimelineView } from './Timeline'
+import { useTaskBoardView } from './central/work/taskBoardView'
 
 export interface AppBottomPanelProps {
   problems: ReturnType<typeof useProblems>
@@ -19,6 +20,8 @@ export interface AppBottomPanelProps {
   workspaces: readonly Workspace[]
   liveNodes?: readonly WsNode[]
   activeId?: string | null
+  /** Central capability is on; the Tasks tab exists only then. */
+  centralEnabled?: boolean
 }
 
 export default function AppBottomPanel(props: AppBottomPanelProps): React.JSX.Element | null {
@@ -34,6 +37,7 @@ export default function AppBottomPanel(props: AppBottomPanelProps): React.JSX.El
     },
     useTimelineView({ workspaces: props.workspaces, liveNodes: props.liveNodes, activeId: props.activeId, onFocusNode: props.onFocus }),
     useOutputView(),
+    useTaskBoardView(props.centralEnabled === true),
   ]
   return <BottomPanelHost views={views} />
 }

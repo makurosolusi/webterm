@@ -3,11 +3,14 @@ import { activeAgentChatPool } from '../../agentChat/agentChat.pool'
 import { getRow } from '../../ledger/ledgerCore'
 import type { WorkerSessionPort } from '../../orchestrator/workerRuntimeSession'
 import { projectRepo } from '../../orchestratorRunProduction'
+import type { PresenceTracker } from '../../channels/channelPresence'
 import type { AgentState } from '../contracts'
 import { projectWorkspace } from '../workspaceLookup'
-import { createWorkStore } from './workStore'
+import { noticeWorkMove } from '../centralNotices'
+import { readAutoDone } from './workSettings'
+import { createWorkStore, onWorkMove } from './workStore'
 import { createWorkSupervisor, type WorkSupervisorPorts } from './workSupervisor'
-import { createWorkVerifier, type WorkVerifierDeps } from './workVerify'
+import { createWorkVerifier, WORK_VERIFY_RULES, type WorkVerifierDeps } from './workVerify'
 import { startWorkWatcher } from './workWatcher'
 
 export interface WorkTrackingDeps {
@@ -17,6 +20,8 @@ export interface WorkTrackingDeps {
   noTimer: boolean
   /** Test seam: the verification check (default: the project's real checks). */
   check?: WorkVerifierDeps['check']
+  /** Test seam: who is looking (default: the process-wide tracker). */
+  presence?: PresenceTracker
 }
 
 function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervisorPorts {
@@ -42,9 +47,15 @@ function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervi
 }
 
 /** One per process: the verifier outlives a pause, so a bounce can tell a running verification from an orphaned one. */
-export function createWorkTracking({ db, sessions, now, noTimer, check }: WorkTrackingDeps): { start(): () => void } {
+export function createWorkTracking({ db, sessions, now, noTimer, check, presence }: WorkTrackingDeps): { start(): () => void } {
   const store = createWorkStore(db, now)
-  const verifier = createWorkVerifier({ store, now, cwdOf: (projectId) => projectRepo(db, projectId), ...(check ? { check } : {}) })
+  const autoDone = (projectId: string): boolean => readAutoDone(db, projectId) === true
+  const verifier = createWorkVerifier({ store, now, cwdOf: (projectId) => projectRepo(db, projectId), autoDone, ...(check ? { check } : {}) })
+  onWorkMove(db, (move) => {
+    // A task that passed on an auto-done project is done a moment later: nothing to review, so nothing to announce.
+    if (move.rule === WORK_VERIFY_RULES.passed && autoDone(move.task.projectId)) return
+    noticeWorkMove(db, move, { now, ...(presence ? { presence } : {}) })
+  })
   const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now })
   return {
     start() {
