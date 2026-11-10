@@ -3,7 +3,7 @@ import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
 import { agentConfig, canResume, hasUsage, isContextCapable, mintsSessionId } from '../shared/workspace'
-import type { AgentId, AgentStatus, Comment } from '../shared/workspace'
+import type { AgentId, AgentStatus, Comment, Pane } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
@@ -23,6 +23,7 @@ import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
 import { autoTitleFromWork, canResumeAfter, identityColor, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
 import { AgentFailedBar } from './AgentFailedBar'
+import { ClaudeTerminalViewButton } from './agentChat/claudeViewSwitch'
 
 const COLLAPSED_H = 40
 
@@ -51,7 +52,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     cmd?: string; cwd?: string; agentId?: AgentId; color?: string; name?: string; title?: string
     sessionId?: string; collapsed?: boolean; comments?: Comment[]; agentModel?: string
-    hideLinks?: boolean; claudeProfileId?: string
+    hideLinks?: boolean; claudeProfileId?: string; panes?: Pane
   }
   const { cmd, cwd, agentId, sessionId } = d
   const { onSession, onToggleHideLinks, openBrowserAt } = useNodeActions()
@@ -292,6 +293,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}
+          extraHeader={<ClaudeTerminalViewButton nodeId={id} agentId={agentId} panes={d.panes} status={status} />}
         />
         <div className="node-body relative">
           {/* A1/A2: Retry resumes the conversation when there is one, else launches it afresh. */}

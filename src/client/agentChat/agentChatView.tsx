@@ -42,6 +42,8 @@ export interface AgentChatViewProps {
   chatConfig?: AgentChatNodeConfig
   /** Persists session id / mode / config into the node's data (rf.updateNodeData). */
   onNodeData: (patch: AgentChatPatch) => void
+  /** Told whenever a turn starts or ends (the node chrome disables "Open as terminal" meanwhile). */
+  onBusy?: (busy: boolean) => void
   /** Test seam; defaults to the HTTP + SSE transport of `nodeId`. */
   transport?: AgentChatTransport
 }
@@ -86,7 +88,7 @@ function useBatchedEvents(apply: (events: AgentChatEvent[]) => void) {
   return useMemo(() => ({ push, cancel }), [push, cancel])
 }
 
-export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, onNodeData, transport: injected }: AgentChatViewProps) {
+export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, onNodeData, onBusy, transport: injected }: AgentChatViewProps) {
   const transport = useMemo(() => injected ?? createAgentChatTransport(nodeId), [injected, nodeId])
   const [state, dispatch] = useReducer(agentChatReducer, nodeId, initialAgentChatState)
   const [stream, setStream] = useState<ChatStreamStatus>('connecting')
@@ -155,6 +157,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
   }, [state, atBottom])
 
   const busy = isBusyStatus(state.status)
+  useEffect(() => { onBusy?.(busy) }, [busy, onBusy])
   const send = (text: string, images: ComposerImage[] = []): void => {
     if (!branch.editing && controls.intercept(text, images.length > 0)) return
     setSendError(null)
