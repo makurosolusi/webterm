@@ -1,7 +1,7 @@
 // Test-only: a scripted stand-in for the Agent SDK `query()` that ClaudeRuntime injects (`options.query`).
 // Records the options and the user message of every call and plays scripted SDK messages. Never imported
 // by production code; no Claude process is involved.
-import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { HookEvent, HookInput, HookJSONOutput, Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { CentralQuery } from './claudeOptions'
 
 /** One `query()` call as the runtime made it. */
@@ -55,4 +55,14 @@ export function hang(records: readonly unknown[] = []): FakePlay {
     yield* records
     await new Promise<never>(() => undefined)
   }
+}
+
+/** Runs the registered SDK hooks of `event` whose matcher equals `match`, as the CLI would, and returns their outputs. */
+export async function fireHook(options: Options, event: HookEvent, match: string, input: Record<string, unknown>): Promise<HookJSONOutput[]> {
+  const outputs: HookJSONOutput[] = []
+  for (const matcher of options.hooks?.[event] ?? []) {
+    if (matcher.matcher !== undefined && matcher.matcher !== match) continue
+    for (const hook of matcher.hooks) outputs.push(await hook({ hook_event_name: event, ...input } as HookInput, undefined, { signal: new AbortController().signal }))
+  }
+  return outputs
 }

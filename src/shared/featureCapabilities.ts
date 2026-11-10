@@ -48,7 +48,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
     subs: [
       { key: 'WEBTERM_CENTRAL_SKILLS', label: 'Let Central use skills you review and approve', defaultOn: false },
       { key: 'WEBTERM_CENTRAL_SKILL_PROPOSE', label: 'Suggest new skills', defaultOn: false },
-      { key: 'WEBTERM_CENTRAL_CHECKPOINT', label: 'Summarize long conversations', defaultOn: false },
+      { key: 'WEBTERM_CENTRAL_CHECKPOINT', label: 'Summarize long conversations', defaultOn: true },
     ],
   },
   workers: {

@@ -10,12 +10,22 @@ let counter = 0
 
 /**
  * Source prelude every fake starts with: `emit(record)`, `readStdin()` (the SDK's initialize request and the
- * user message, as JSON lines; the SDK ends stdin after the one-message prompt) and `flag(name)` (the SDK
- * passes `--name=value`).
+ * user message, as JSON lines; it returns once the user message is in, like the real CLI, because with
+ * `options.hooks` the SDK keeps stdin open until the run's result) and `flag(name)` (the SDK passes `--name=value`).
  */
 const PRELUDE = `import fs from 'node:fs'
 const emit = (record) => process.stdout.write(JSON.stringify(record) + '\\n')
-const readStdin = () => fs.readFileSync(0, 'utf8')
+const readStdin = () => {
+  const chunks = []
+  const chunk = Buffer.alloc(65536)
+  for (;;) {
+    const n = fs.readSync(0, chunk, 0, chunk.length, null)
+    if (n === 0) return Buffer.concat(chunks).toString('utf8')
+    chunks.push(Buffer.from(chunk.subarray(0, n)))
+    const text = Buffer.concat(chunks).toString('utf8')
+    if (text.endsWith('\\n') && text.includes('"type":"user"')) return text
+  }
+}
 const flag = (name) => process.argv.find((a) => a.startsWith(name + '='))?.slice(name.length + 1)
 `
 

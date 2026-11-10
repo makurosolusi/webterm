@@ -24,10 +24,21 @@ export interface ContextBuildInput {
   beforeSeq?: number
 }
 
+/** What a turn was given, stored in `central_turn.context_json`. */
+export interface ContextTrace {
+  memoryIds: string[]
+  checkpointId: string | null
+  headerHash: string
+  headerChars: number
+  stateVersions: { global: number | null; project: number | null }
+}
+
 export interface ContextBuildOutput {
   prompt: string
   /** Prior message ids, oldest first; call before the new human message is appended. */
   history: string[]
+  /** Absent on assemblers that do not inject tracked context. */
+  trace?: ContextTrace
 }
 
 /** Builds what the runtime sees for one turn. */

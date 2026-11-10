@@ -116,6 +116,7 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_message: exempt('user-visible chat history, kept like a transcript'),
   central_turn: exempt('one row per chat turn, read with its messages'),
   central_checkpoint: exempt('conversation context state, replaced per conversation'),
+  central_state: exempt('one capped document per scope, overwritten in place; project rows cascade with their project'),
   central_agents: exempt('live agents and their resume approvals; small, ended rows are history'),
   central_breaker: exempt('one row per breaker key'),
   central_skill: exempt('skill registry, one row per skill version'),

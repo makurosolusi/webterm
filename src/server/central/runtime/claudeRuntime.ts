@@ -9,12 +9,12 @@ import { basename, dirname, join } from 'node:path'
 import { query as sdkQuery, type Query, type SDKUserMessage, type SpawnedProcess } from '@anthropic-ai/claude-agent-sdk'
 import {
   type AdapterRuntimeKind, type CancelToken, type CentralRuntime, type RuntimeEmit,
-  type RuntimeResult, type TurnInput, createCancelToken,
+  type RuntimeResult, createCancelToken,
 } from './centralRuntime'
 import { createTurnEmitter } from './runtimeEvents'
 import { applyClaudeEvent, parseClaudeMessage } from './claudeEvents'
 import {
-  type ClaudeRuntimeOptions, DEFAULT_MAX_TURNS, DEFAULT_WALL_MS, MICROS_PER_USD, centralQueryOptions, claudeChildEnv, claudeModelArg,
+  type ClaudeRuntimeOptions, type ClaudeTurnInput, DEFAULT_MAX_TURNS, DEFAULT_WALL_MS, MICROS_PER_USD, centralQueryOptions, claudeChildEnv, claudeModelArg,
 } from './claudeOptions'
 import { type ClaudeTurnState, defaultWorkDir, ensureWorkDir, failTurn, finishTurn, newTurnState } from './claudeSession'
 import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './claudeMcp'
@@ -53,7 +53,7 @@ export class ClaudeRuntime implements CentralRuntime {
     this.mcp = options.mcp ?? createCentralMcpLink({ dir: join(dirname(options.workDir ?? defaultWorkDir()), 'mcp') })
   }
 
-  async turn(input: TurnInput, emit: RuntimeEmit, signal?: AbortSignal): Promise<RuntimeResult> {
+  async turn(input: ClaudeTurnInput, emit: RuntimeEmit, signal?: AbortSignal): Promise<RuntimeResult> {
     if (this.active.has(input.turnId)) {
       throw new Error(`claude runtime: turn ${input.turnId} is already active`)
     }
@@ -63,7 +63,7 @@ export class ClaudeRuntime implements CentralRuntime {
     const state = newTurnState()
     let sessionId = (this.options.newSessionId ?? randomUUID)()
     // The input of the current attempt: a fresh-session retry drops `sessionRef`.
-    let attempt: TurnInput = input
+    let attempt: ClaudeTurnInput = input
     let link: OpenedMcp | null = null
     let secrets: string[] = []
     let launch: Launch | null = null
@@ -146,6 +146,7 @@ export class ClaudeRuntime implements CentralRuntime {
           live.q = q
           const ctx = { emitter, state, maxTurns: attempt.limits.maxTurns ?? DEFAULT_MAX_TURNS, kill: stop, now: this.now, ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }) }
           for await (const message of q) {
+            attempt.compaction?.onMessage(message)
             const event = parseClaudeMessage(message)
             if (event !== null) applyClaudeEvent(event, ctx)
           }
@@ -210,7 +211,7 @@ export class ClaudeRuntime implements CentralRuntime {
   }
 
   /** The rotated-session prompt for a fresh session; the turn's own prompt if it cannot be built. */
-  private freshText(input: TurnInput): string {
+  private freshText(input: ClaudeTurnInput): string {
     if (input.freshSessionText === undefined) return input.text
     try {
       return input.freshSessionText()
@@ -237,7 +238,7 @@ export class ClaudeRuntime implements CentralRuntime {
 
   /** SDK options for one attempt, run through the Central launch profile (read per turn, so an edit reaches the next turn). */
   private queryOptions(
-    input: TurnInput, sessionId: string, mcpConfig: string, abort: AbortController, state: ClaudeTurnState,
+    input: ClaudeTurnInput, sessionId: string, mcpConfig: string, abort: AbortController, state: ClaudeTurnState,
     onChild: (child: SpawnedProcess) => void,
   ): { options: ReturnType<typeof centralQueryOptions>; secrets: string[]; launch: Launch } {
     const model = claudeModelArg(input.model ?? this.options.model ?? process.env[CENTRAL_MODEL_FLAG])
@@ -259,6 +260,7 @@ export class ClaudeRuntime implements CentralRuntime {
         maxTurns: input.limits.maxTurns ?? DEFAULT_MAX_TURNS,
         ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
         cwd: ensureWorkDir(this.options.workDir), env, abort,
+        ...(input.compaction?.hooks === undefined ? {} : { hooks: input.compaction.hooks }),
       }),
       ...claudeSdkSpawn({
         launch: resolved, onChild,
@@ -273,6 +275,6 @@ export class ClaudeRuntime implements CentralRuntime {
  * The prompt: one SDKUserMessage, the plain text or with images the image blocks then the text block (as
  * Agent Chat sends a paste). The SDK ends the child's stdin once it is consumed, as `-p` did.
  */
-async function* promptOf(input: TurnInput): AsyncGenerator<SDKUserMessage> {
+async function* promptOf(input: ClaudeTurnInput): AsyncGenerator<SDKUserMessage> {
   yield { type: 'user', message: { role: 'user', content: userContent(input.text, input.images ?? []) }, parent_tool_use_id: null }
 }

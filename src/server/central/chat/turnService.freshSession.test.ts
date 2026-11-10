@@ -96,7 +96,7 @@ describe('stale Claude session', () => {
     seedStaleClaudeSession('stale-claude-session')
     const { query, stdins } = fakeClaude()
     // The real assembler, checkpoint flag off: normal turns stay legacy (plain text), the forced seed still runs.
-    const context = createContextAssembler({ env: {}, scheduleIdle: () => undefined })
+    const context = createContextAssembler({ env: { WEBTERM_CENTRAL_CHECKPOINT: 'off' }, scheduleIdle: () => undefined })
     const svc = new TurnService({ db: fixture.db, runtime: claudeRuntime(query), stream: hub, now: () => NOW, context })
 
     await svc.submit({ conversationId: 'central:global', clientMessageId: 'c1', text: 'hello' }).done

@@ -1,5 +1,6 @@
 // Registry env: Central Agent v2 (RND/29-CA2-ARSITEKTUR-b.md 4.7). Data murni; flag default off kecuali
-// WEBTERM_CHANNEL_APPROVAL_BUTTONS (on, F3-a zero-config: kartu gate Telegram langsung bisa ditekan),
+// WEBTERM_CHANNEL_APPROVAL_BUTTONS (on, F3-a zero-config: kartu gate Telegram langsung bisa ditekan) dan
+// WEBTERM_CENTRAL_CHECKPOINT (on, zero-config: Central selalu tahu keadaan kerja),
 // angka = batas aman. `hot` hanya untuk kunci yang pembacanya membaca process.env tiap panggilan (bukti: HOT_PROOF
 // di envRegistry.parity.test.ts); sisanya boot. Rentang angka di sini batas konservatif UI, bukan batas pembaca.
 import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
@@ -30,7 +31,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Set by the Worker orchestrator card (Central asks you to approve each worker) and the Autonomy card (Central starts workers on its own within its limits). A value in .env or the shell still wins.',
     dangerous: true,
   }),
-  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, hot: true, label: 'Summarize long conversations', description: 'Keep a short running summary of the Central conversation so long chats stay on track. Built without an extra model call.' }),
+  flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, hot: true, label: 'Summarize long conversations', description: 'Keep Central up to date in every reply (time, open work, pinned state) and keep a running summary so long chats stay on track. On by default; turn off only for the bare conversation.' }, 'on'),
   num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, unit: 'ms', label: 'Time limit per reply', description: 'How long Central may work on one reply, in milliseconds (default 120,000 = 2 minutes). Applies from the next reply.' }),
   num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, unit: 'tokens', label: 'Daily token limit', description: 'How many tokens Central may use per day (UTC). Cached input counts for less. Default 10,000,000; 0 = no limit.' }),
   num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, hot: true, unit: 'workers', label: 'Workers per day', description: 'How many workers Central may start per day (UTC). 0 = no spawning.' }),
@@ -50,6 +51,6 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, unit: 'workers', label: 'Workers at once', description: 'How many workers Central may run at the same time when it works on its own. Applies after a restart.' }),
   flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Messages to workers', description: 'Central may send messages to workers it started (needs the Worker orchestrator).' }),
   flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central look at projects', description: 'Central may read your projects, nodes and tasks. Follows the Central Agent switch.' }),
-  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once. Central starts a fresh session at 70% and refuses a reply at 85%. Applies from the next reply.' }),
+  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once. Central starts a fresh session at 70%, carrying over a summary. Applies from the next reply.' }),
   num('WEBTERM_CENTRAL_TURN_STEPS', 'central-turn', 1, 100, DEFAULT_TURN_STEPS, { ...C, hot: true, unit: 'steps', label: 'Steps per reply', description: 'How many steps (tool calls) Central may take in one reply. Applies from the next reply.' }),
 ]

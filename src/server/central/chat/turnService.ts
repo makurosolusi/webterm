@@ -13,6 +13,7 @@ import {
 } from '../conversationStore'
 import type { AppendMessageResponse } from '../centralTypes'
 import type { CentralRuntime, RuntimeEvent, RuntimeResult, TurnInput } from '../runtime/centralRuntime'
+import type { ClaudeTurnInput } from '../runtime/claudeOptions'
 import { DEFAULT_CENTRAL_TOOLS } from './toolExecutors'
 import type { StreamHub } from './streamHub'
 import { CentralChatError, chatErrorStatus } from './chatErrors'
@@ -22,9 +23,9 @@ import {
 } from './turnPersistence'
 import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents'
 import { createLegacyContextAssembler, type ContextAssembler } from '../context/contextPort'
-import { ContextRejectedError } from '../context/contextAssembler'
+import { createCompactionPort } from '../context/compactionHooks'
 import type { Summarize } from '../context/checkpointSummarizer'
-import { recordTurnContext } from './turnContextLog'
+import { recordTurnContext, recordTurnTrace } from './turnContextLog'
 import { type CentralAttachments, storeAttachments, withFiles } from './chatAttachments'
 import { resolveLimits } from './turnLimits'
 import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
@@ -125,16 +126,10 @@ export class TurnService {
     // A `/model` choice since the last good turn: this turn opens a fresh session (reseeded like a rotation).
     const switchModel = modelSwitchPending(this.db, conversation.id)
     const { context = this.context, summarize } = this.wiring()
-    let built: ReturnType<ContextAssembler['build']>
-    try {
-      built = context.build({
-        db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
-        ...(switchModel ? { rotate: true } : {}),
-      })
-    } catch (err) {
-      if (err instanceof ContextRejectedError) throw new CentralChatError('budget_exhausted', err.message, chatErrorStatus(err.code))
-      throw err
-    }
+    const built = context.build({
+      db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+      ...(switchModel ? { rotate: true } : {}),
+    })
     const { history } = built
     const prompt = withFiles(built.prompt, files)
     // Only the real assembler reports rotation; the legacy one never sets it.
@@ -164,13 +159,18 @@ export class TurnService {
       throw err
     }
     this.active.set(conversation.id, turn.id)
+    recordTurnTrace(this.db, turn.id, built.trace)
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
     // Rotated-session context, built only if the runtime finds its resumed session gone.
-    const freshSessionText = (): string => withFiles(context.build({
-      db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
-      rotate: true, beforeSeq: message.seq,
-    }).prompt, files)
+    const freshSessionText = (): string => {
+      const seeded = context.build({
+        db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+        rotate: true, beforeSeq: message.seq,
+      })
+      recordTurnTrace(this.db, turn.id, seeded.trace)
+      return withFiles(seeded.prompt, files)
+    }
     const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText, summarize)
     this.runs.set(turn.id, done)
     void done.finally(() => {
@@ -230,7 +230,7 @@ export class TurnService {
     const resume = turn.sessionRef === null || rotate ? null : turn.sessionRef
     const pick = centralTurnModel(this.db, conversation.id, this.env, resume)
     const stamp = (r: RuntimeResult): RuntimeResult => ({ ...r, usage: { ...r.usage, tier: pick.tier, ...(pick.effort ? { effort: pick.effort } : {}) } })
-    const input: TurnInput = {
+    const input: ClaudeTurnInput = {
       conversationId: conversation.id, turnId: turn.id,
       text: ask.prompt, history,
       ...(ask.images?.length ? { images: ask.images } : {}),
@@ -241,6 +241,7 @@ export class TurnService {
       ...(pick.effort ? { effort: pick.effort } : {}),
       ...(Object.keys(cacheEnv).length ? { cacheEnv } : {}),
       freshSessionText,
+      compaction: createCompactionPort({ db: this.db, conversationId: conversation.id, env: this.env, now: this.now, ...(summarize ? { summarize } : {}) }),
     }
     try {
       const result = stamp(await runtime.turn(input, emit))
