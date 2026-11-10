@@ -123,6 +123,8 @@ Operator notes:
 - A Claude node can switch between the Agent Chat view and the raw terminal view from a button in its header (**Open as terminal** / **Open as chat**). The same Claude conversation continues on the other side: the running side is stopped first so only one writes the session, and every open window updates live. The switch is refused with a clear message while Claude is mid-turn or waiting on a permission prompt, for split terminals, and for terminals Central spawned as workers.
 - Control panel Status shows when Central last worked.
 - Control panel Agents: live-only by default, project filter, an "On the board" list of Agent Chats and Claude terminals, and Open node.
+- Central now records every task it hands to an agent: who was asked, what, since when and how it is going, with new task tools for planning and assigning work.
+- Central notices when an assigned agent starts late, goes quiet, needs input, or disappears, nudges it, and resumes an Agent Chat once; each automatic step is recorded with its rule.
 
 ### Changed
 - Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
@@ -206,6 +208,7 @@ Operator notes:
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 - A terminal Claude node whose saved profile is a default that no longer exists now launches with Default without the missing-profile notice. A profile you picked yourself and then deleted still shows the notice.
 - An agent status that went quiet for 20 minutes is now recorded in the event log.
+- `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
 - A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.
