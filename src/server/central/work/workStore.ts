@@ -1,9 +1,11 @@
 import type { Database } from 'bun:sqlite'
 import { canWorkTransition, type AssignmentChannel, type AssignmentView, type TaskView, type WorkAcceptance, type WorkEventView, type WorkStatus } from '../../../shared/centralWork'
-import { allRows, execWrite, getRow, jsonOf, newId, parseJson, requireText, tx, type LedgerContext, type Row } from '../../ledger/ledgerCore'
+import { allRows, execWrite, getRow, inTransaction, jsonOf, newId, parseJson, requireText, tx, type LedgerContext, type Row } from '../../ledger/ledgerCore'
 import { appendEvent, clampLimit, clampOffset } from '../../ledger/ledgerEvent'
-import { WorkError, type MoveOptions, type WorkActor, type WorkStore } from './workModel'
+import { createLogger } from '../../logs'
+import { WorkError, type MoveOptions, type WorkActor, type WorkMove, type WorkStore } from './workModel'
 
+const log = createLogger('central.work')
 const LIST_BOUNDS = { def: 50, max: 200, label: 'listTasks' }
 const TIMELINE_BOUNDS = { def: 100, max: 500, label: 'timeline' }
 const OPEN_ASSIGNMENTS_MAX = 200
@@ -25,7 +27,8 @@ function toTask(r: Row): TaskView {
   }
 }
 
-function toAssignment(r: Row): AssignmentView {
+/** Maps a `central_assignment` row. */
+export function toAssignment(r: Row): AssignmentView {
   return {
     id: String(r.id), taskId: String(r.task_id), projectId: String(r.project_id), nodeId: String(r.node_id), agentId: str(r.agent_id),
     channel: r.channel as AssignmentChannel, instruction: String(r.instruction), attempt: Number(r.attempt), startedAt: Number(r.started_at),
@@ -53,6 +56,27 @@ function mayMarkDone(actor: WorkActor): boolean {
   return actor.kind === 'human' || (actor.kind === 'system' && actor.autoDone === true)
 }
 
+// Keyed by database, not by store: tools build a store per call, and each of them must be observed.
+const moveObservers = new WeakMap<Database, Set<(move: WorkMove) => void>>()
+
+/** Calls `fn` after the commit of every task move on `db`, whichever store made it; a throw is logged and never reaches the mover. */
+export function onWorkMove(db: Database, fn: (move: WorkMove) => void): void {
+  const observers = moveObservers.get(db) ?? new Set()
+  moveObservers.set(db, observers.add(fn))
+}
+
+function publishMoves(db: Database, moves: readonly WorkMove[]): void {
+  for (const fn of moveObservers.get(db) ?? []) {
+    for (const move of moves) {
+      try {
+        fn(move)
+      } catch (err) {
+        log.error('work.move_observer_failed', `observer of task ${move.task.id} moving to ${move.to} failed`, { taskId: move.task.id, seq: move.seq, error: err instanceof Error ? err.message : String(err) })
+      }
+    }
+  }
+}
+
 /** Repository over the central work tables; every state change commits with its ledger event. */
 export function createWorkStore(db: Database, now: () => number): WorkStore {
   const ctx: LedgerContext = { db, now }
@@ -72,14 +96,33 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     kind: string; actor: WorkActor; task: TaskView; assignment?: AssignmentView | null
     from?: WorkStatus; to?: WorkStatus; reason?: string; rule?: string
   }
-  const record = ({ kind, actor, task, assignment, from, to, reason, rule }: EventInput): void => {
-    appendEvent(ctx, {
+  const record = ({ kind, actor, task, assignment, from, to, reason, rule }: EventInput): number => {
+    return appendEvent(ctx, {
       kind, actor: actorName(actor, rule), projectId: task.projectId, correlationId: task.id,
       payload: {
         from: from ?? null, to: to ?? null, reason: reason ?? null, rule: rule ?? null, assignmentId: assignment?.id ?? null, nodeId: assignment?.nodeId ?? null,
         conversationId: assignment?.conversationId ?? task.conversationId, turnId: assignment?.turnId ?? task.turnId,
       },
-    })
+    }).seq
+  }
+
+  let batch: WorkMove[] = []
+  /** Runs `fn` in a transaction, then tells the observers what it moved; a rollback tells them nothing. */
+  const moving = <T>(fn: () => T): T => {
+    const joined = inTransaction(db)
+    const outer = batch
+    const moves: WorkMove[] = []
+    batch = moves
+    let result: T
+    try {
+      result = tx(ctx, fn)
+    } finally {
+      batch = outer
+    }
+    // Joined a caller's transaction: it ends before any microtask runs, and a rollback takes the event row with it.
+    if (joined) queueMicrotask(() => publishMoves(db, moves.filter((m) => getRow(db, 'SELECT 1 AS one FROM event WHERE seq = ?', m.seq))))
+    else publishMoves(db, moves)
+    return result
   }
 
   const assignmentOfMove = (task: TaskView, assignmentId?: string): AssignmentView | null => {
@@ -98,8 +141,10 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     if (execWrite(db, 'UPDATE central_task SET status = ?, updated_at = ? WHERE id = ? AND status = ?', to, now(), cur.id, cur.status) !== 1) {
       throw new WorkError('concurrent_update', 'moveTask', cur.id, edge)
     }
-    record({ kind: `work.task.${to}`, actor: options.actor, task: cur, assignment, from: cur.status, to, reason: options.reason, rule: options.rule })
-    return requireTask(cur.id, 'moveTask')
+    const seq = record({ kind: `work.task.${to}`, actor: options.actor, task: cur, assignment, from: cur.status, to, reason: options.reason, rule: options.rule })
+    const moved = requireTask(cur.id, 'moveTask')
+    batch.push({ task: moved, from: cur.status, to, rule: options.rule ?? null, reason: options.reason ?? null, channel: assignment?.channel ?? null, seq })
+    return moved
   }
 
   const unblockDependents = (doneId: string): void => {
@@ -148,7 +193,7 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
       return allRows(db, `${TASK_SELECT}${clause} ORDER BY t.updated_at DESC, t.id LIMIT ? OFFSET ?`, ...args, clampLimit(limit, LIST_BOUNDS), clampOffset(offset, LIST_BOUNDS.label)).map(toTask)
     },
     setDeps(taskId, blockedByIds) {
-      return tx(ctx, () => {
+      return moving(() => {
         const cur = requireTask(taskId, 'setDeps')
         if (cur.status !== 'todo' && cur.status !== 'blocked') throw new WorkError('deps_locked', 'setDeps', taskId, cur.status)
         const ids = JSON.stringify([...new Set(blockedByIds)])
@@ -167,14 +212,14 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
       })
     },
     moveTask(id, to, options) {
-      return tx(ctx, () => {
+      return moving(() => {
         const moved = applyMove(requireTask(id, 'moveTask'), to, options)
         if (to === 'done') unblockDependents(id)
         return moved
       })
     },
     openAssignment(input) {
-      return tx(ctx, () => {
+      return moving(() => {
         const task = requireTask(input.taskId, 'openAssignment')
         if (task.status === 'blocked') throw new WorkError('task_blocked', 'openAssignment', task.id)
         if (openOfTask(task.id)) throw new WorkError('assignment_open', 'openAssignment', task.id)
