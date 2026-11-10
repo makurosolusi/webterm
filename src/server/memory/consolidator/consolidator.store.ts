@@ -1,5 +1,5 @@
 // Consolidator proposals in the memory ledger. Every proposed op is a `claim` (scope `central`, source kind
-// `consolidator`), written through the shared write guard (memoryGuard: PII mask, tombstones, incognito,
+// `consolidator`, bound to the project of the node it came from, global when the node has none), written through the shared write guard (memoryGuard: PII mask, tombstones, incognito,
 // untrusted-only-claim), deduped by content hash, and expires unconfirmed after PROPOSAL_TTL_MS
 // (archiveExpiredClaims). Only a human turns one into memory: add → fact (procedure → a verified
 // procedural rule), update → editMemory supersede, invalidate → the target's validity window is closed.
@@ -7,6 +7,7 @@
 import type { Database } from 'bun:sqlite'
 import { addProcedural, HUMAN_UI } from '../../awareness/proceduralMemory'
 import { recordHelperUsage, type HelperUsage } from '../../cost/costCapture'
+import { listWorkspaces, syncWorkspaceProjects } from '../../central/workspaceLookup'
 import { allRows, execWrite, getRow, newId, tx } from '../../ledger/ledgerCore'
 import { redactSecrets } from '../../redactSecrets'
 import { archiveExpiredClaims, contentHash } from '../memoryConsolidate'
@@ -26,6 +27,8 @@ const TITLE_MAX = 120
 const LIST_MAX = 200
 const USAGE_PREFIX = 'consolidator:'
 const ACTIVE = "status IN ('claim','fact') AND superseded_at IS NULL"
+/** Rows a reader in project `?` can see; with a null param, only global rows. */
+const IN_REACH = '(project_id IS NULL OR project_id = ?)'
 const PENDING = `scope = 'central' AND source_kind = '${CONSOLIDATOR_SOURCE}' AND status = 'claim' AND superseded_at IS NULL`
 
 export interface ProposalView {
@@ -50,10 +53,22 @@ const parseKey = (key: string): { op: ConsolidationOp; targetId: string | null }
   return { op: op as ConsolidationOp, targetId: target === undefined || target === 'new' ? null : target }
 }
 
-/** Active, unsuppressed memories the model may update/invalidate (newest first). Blackboard rows stay out. */
-export function knownMemories(db: Database, limit = KNOWN_MAX): KnownMemory[] {
+/**
+ * Ledger project of a node: the workspace its hooks reported, else the board holding it; null when neither
+ * gives one. Syncs first because a new workspace has no project row until something asks for it.
+ */
+export function projectOfNode(db: Database, nodeId: string, reportedWorkspaceId: string | null, now: number): string | null {
+  syncWorkspaceProjects(db, () => now)
+  const workspaceId = reportedWorkspaceId ?? listWorkspaces()?.find((w) => Array.isArray(w.nodes) && w.nodes.some((n: { id?: unknown }) => n.id === nodeId))?.id
+  if (!workspaceId) return null
+  const row = getRow(db, 'SELECT id FROM project WHERE workspace_id = ? LIMIT 1', workspaceId)
+  return row === null ? null : String(row['id'])
+}
+
+/** Active, unsuppressed memories in reach of `projectId` the model may update/invalidate (newest first). Blackboard rows stay out. */
+export function knownMemories(db: Database, projectId: string | null = null, limit = KNOWN_MAX): KnownMemory[] {
   return allRows(db, `SELECT id, kind, body FROM memory WHERE status = 'fact' AND superseded_at IS NULL AND suppressed_at IS NULL
-    AND scope IN ('central','user','global') ORDER BY updated_at DESC, id LIMIT ?`, limit)
+    AND scope IN ('central','user','global') AND ${IN_REACH} ORDER BY updated_at DESC, id LIMIT ?`, projectId, limit)
     .map((r) => ({ id: String(r['id']), kind: String(r['kind']), text: redactSecrets(String(r['body'])) }))
 }
 
@@ -71,26 +86,27 @@ export function recordRunUsage(db: Database, runId: string, nodeId: string | nul
   recordHelperUsage(db, 'consolidator', u, { id: runId, nodeId, now: () => now })
 }
 
-const hasActiveHash = (db: Database, hash: string): boolean =>
-  getRow(db, `SELECT 1 AS one FROM memory WHERE content_hash = ? AND ${ACTIVE} LIMIT 1`, hash) !== null
+const hasActiveHash = (db: Database, hash: string, projectId: string | null): boolean =>
+  getRow(db, `SELECT 1 AS one FROM memory WHERE content_hash = ? AND ${ACTIVE} AND ${IN_REACH} LIMIT 1`, hash, projectId) !== null
 
 /**
  * Files each op as a claim. A forgotten text, an incognito node or a duplicate is skipped with its code;
  * nothing here can produce a fact. `sourceEventId` = the Senses event the session was read at (provenance).
  */
-export function writeProposals(db: Database, ops: readonly ProposedOp[], src: { nodeId: string | null; sourceEventId: number | null }, now: number): WriteOutcome {
+export function writeProposals(db: Database, ops: readonly ProposedOp[], src: { nodeId: string | null; sourceEventId: number | null; projectId?: string | null }, now: number): WriteOutcome {
+  const projectId = src.projectId ?? null
   const out: WriteOutcome = { written: [], skipped: [] }
   const ref = src.nodeId === null ? CONSOLIDATOR_SOURCE : nodeRef(src.nodeId)
   tx(memoryContext(db, now), () => archiveExpiredClaims(db, now))
   for (const o of ops) {
     const title = o.text.slice(0, TITLE_MAX)
     const hash = contentHash(title, o.text)
-    if (hasActiveHash(db, hash)) { out.skipped.push({ text: o.text, code: 'duplicate' }); continue }
+    if (hasActiveHash(db, hash, projectId)) { out.skipped.push({ text: o.text, code: 'duplicate' }); continue }
     const id = newId()
     try {
       tx(memoryContext(db, now), () => {
         insertMemoryRow(db, {
-          id, projectId: null, scope: 'central', key: `consolidate.${o.op}.${o.targetId ?? 'new'}.${hash.slice(0, 16)}`, title, body: o.text,
+          id, projectId, scope: 'central', key: `consolidate.${o.op}.${o.targetId ?? 'new'}.${hash.slice(0, 16)}`, title, body: o.text,
           status: 'claim', kind: o.kind, trust: 'agent', sourceKind: CONSOLIDATOR_SOURCE, sourceRef: ref, supersedes: null, contentHash: hash,
           staleAfter: now + PROPOSAL_TTL_MS, verifiedAt: null, now, sessionRef: ref, sourceEventId: src.sourceEventId,
         })
@@ -130,7 +146,8 @@ export function confirmConsolidatorProposal(db: Database, authority: MemoryAutho
     if (r.trust === 'external') throw new MemoryRejectedError('untrusted_source', 'a proposal from an untrusted source cannot be confirmed')
     const { op, targetId } = parseKey(r.key)
     let resultId = r.id
-    if (op === 'add' && r.kind === 'procedure') resultId = addProcedural(db, HUMAN_UI, r.body, now).id
+    // A standing rule reaches every session and cannot be project-bound, so a project's rule stays a project fact.
+    if (op === 'add' && r.kind === 'procedure' && r.projectId === null) resultId = addProcedural(db, HUMAN_UI, r.body, now).id
     else if (op === 'add') {
       execWrite(db, "UPDATE memory SET status = 'fact', trust = 'human', verified_at = ?, valid_from = ?, stale_after = NULL, updated_at = ? WHERE id = ?", now, now, now, r.id)
     } else {
