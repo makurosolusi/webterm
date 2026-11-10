@@ -49,13 +49,14 @@ async function runHandler(def: ToolDef, ctx: ToolCtx, args: ToolInput, projectId
 }
 
 /** Codes meaning "not allowed" rather than "went wrong"; they map to receipt outcome `denied`. */
-const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'approval_rejected', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
+const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'approval_rejected', 'approval_expired', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
 /** What the caller can do next for codes that have one obvious follow-up. */
 const NEXT: Record<string, string> = {
   unknown_tool: 'cap.search {"query":"<words>"} lists the tools that exist',
   invalid_shape: 'cap.describe {"name":"<tool>"} shows the exact input schema',
   approval_required: 'an approval card is shown in the Central chat; tell the human, then retry the same call after they approve',
   approval_rejected: 'the human rejected this; do not retry it, tell them',
+  approval_expired: 'the approval card expired unanswered and the agent was cancelled; tell the human, and spawn again with a new requestId only if it is still wanted',
   tier_denied: 'propose it instead; a human approves higher tiers',
 }
 /** `approval_required` next step by the card's ledger status, so the model never points at a dead card. */

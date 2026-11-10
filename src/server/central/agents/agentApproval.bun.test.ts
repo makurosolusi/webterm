@@ -3,8 +3,8 @@
 // an approved one starts it. Real ledger + real tool receipt path; guard/host are fakes.
 import { expect, test } from 'bun:test'
 import type { ControlGuard } from '../contracts'
-import { freshDb, T0 } from '../guard/controlGuard.testutil'
-import { decideApproval, getApproval } from '../../ledger/ledgerApproval'
+import { eventKinds, freshDb, T0 } from '../guard/controlGuard.testutil'
+import { decideApproval, expireApprovals, getApproval } from '../../ledger/ledgerApproval'
 import { getRow } from '../../ledger/ledgerCore'
 import { createRegistry } from '../tools/toolRegistry'
 import { ALLOW_ALL_GUARD, execToolReceipt } from '../tools/toolExec'
@@ -14,12 +14,12 @@ import { resumeApprovedAgents } from './agentResume'
 
 const TTL_MS = 15 * 60_000 // test-only: ledgerApproval DEFAULT_TTL_MS
 
-function setup() {
+function setup(skipApprovals = false) {
   const db = freshDb()
   const clock = { t: T0 }
   const now = () => clock.t
   const guard: ControlGuard = {
-    check: () => ({ verdict: 'needs_approval', level: 'propose', tier: 'R2' }), effectiveLevel: () => 'propose', recordUsage: () => undefined,
+    check: () => ({ verdict: 'needs_approval', level: 'propose', tier: 'R2' }), effectiveLevel: () => 'propose', recordUsage: () => undefined, skipsApprovals: () => skipApprovals,
     breaker: { allow: () => ({ allowed: true, state: 'closed' }), trip: () => 'closed', recordSuccess: () => undefined },
   }
   const sessions = new Set<string>()
@@ -132,4 +132,40 @@ test('approved card that lapsed unused: a retry re-pends and says pending on the
   s.decide(`agent-${agentId}-2`, true)
   expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(1)
   expect(s.ex.store.get(agentId)?.state).toBe('working')
+})
+
+const expiredAgent = async (s: ReturnType<typeof setup>): Promise<string> => {
+  const agentId = String((await s.spawn()).result?.data?.agentId)
+  s.clock.t += TTL_MS + 1
+  expect(expireApprovals({ db: s.db, now: s.now })).toBe(1)
+  return agentId
+}
+
+test('expired card: the sweep cancels the agent and issues no new card', async () => {
+  const s = setup()
+  const agentId = await expiredAgent(s)
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
+  expect(s.ex.store.get(agentId)).toMatchObject({ state: 'cancelled', endReason: 'approval_expired' })
+  expect(getApproval({ db: s.db, now: s.now }, `agent-${agentId}-2`)).toBeNull()
+  expect(eventKinds(s.db, 'central.agent').filter((p) => p['phase'] === 'spawn.expired')).toHaveLength(1)
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
+  expect(eventKinds(s.db, 'central.agent').filter((p) => p['phase'] === 'spawn.expired')).toHaveLength(1)
+})
+
+test('expired card: skip-approvals does not launch it, nobody consented', async () => {
+  const s = setup(true)
+  const agentId = await expiredAgent(s)
+  expect(await resumeApprovedAgents(s.db, s.ex, s.now)).toBe(0)
+  expect(s.ex.store.get(agentId)).toMatchObject({ state: 'cancelled', endReason: 'approval_expired' })
+})
+
+test('expired card: a retry after the sweep says approval_expired and asks for a new requestId', async () => {
+  const s = setup()
+  const agentId = await expiredAgent(s)
+  await resumeApprovedAgents(s.db, s.ex, s.now)
+  const retry = await s.spawn()
+  expect(retry.result).toMatchObject({ ok: false, code: 'approval_expired', data: { agentId, approvalStatus: 'expired' } })
+  expect(String(retry.result?.data?.hint)).toContain('new requestId')
+  expect(s.ex.store.get(agentId)?.state).toBe('cancelled')
+  expect(getApproval({ db: s.db, now: s.now }, `agent-${agentId}-2`)).toBeNull()
 })
