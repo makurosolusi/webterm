@@ -8,6 +8,7 @@ import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { listConversationEvents } from './central/conversationStore'
 import { ConversationError } from './central/conversationModel'
 import { activeCa2 } from './central/ca2Active'
+import type { Ca2Handle } from './central/ca2Boot'
 import { createContextAssembler } from './central/context/contextAssembler'
 import { createCentralSummarize } from './central/context/checkpointLlm'
 import { MockRuntime } from './central/runtime/mockRuntime'
@@ -19,7 +20,7 @@ import { createPortfolioReadExecutor } from './central/chat/toolExecutors'
 import { StreamHub } from './central/chat/streamHub'
 import { registerApprovalStream } from './central/chat/approvalPublish'
 import {
-  CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages,
+  CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages, type TurnWiring,
 } from './central/chat/turnService'
 import { createChatConversation } from './central/chat/turnPersistence'
 import { conversationModelState, parseModelChoice, setConversationModel } from './central/chat/conversationModelChoice'
@@ -73,16 +74,22 @@ function buildService(db: Database, kind: RuntimeKind, deps: Pick<CentralChatDep
     : kind === 'claude'
       ? new ClaudeRuntime({ ...deps.claudeOptions, preflight: claudePreflightOf(deps.claudeOptions) })
       : null
-  // With CA2 armed on this db, retrieval uses its memory provider; the assembler delegates to the
-  // legacy path on its own when the checkpoint flag is off, so flags-off behaviour is unchanged.
-  const ca2 = activeCa2()
-  const armed = ca2 && ca2.db === db ? ca2 : null
-  // Armed: checkpoints get the model summarizer near rotation (rolling summary below it, deterministic fallback
-  // on failure; F5-c), so `WEBTERM_CENTRAL_CHECKPOINT` never idles. Tool calls are guarded where they run (mcp.central.ts).
-  const wiring = armed
-    ? { context: createContextAssembler({ memory: armed.memory }), summarize: createCentralSummarize() }
-    : {}
-  return { service: new TurnService({ db, runtime, stream, now, ...wiring }), stream, db }
+  return { service: new TurnService({ db, runtime, stream, now, wiring: () => armedWiring(db) }), stream, db }
+}
+
+const wiringByHandle = new WeakMap<Ca2Handle, TurnWiring>()
+
+/** Read per turn because the service outlives Central's arm/pause cycles; empty while unarmed on this db. */
+function armedWiring(db: Database): TurnWiring {
+  const armed = activeCa2()
+  if (!armed || armed.db !== db) return {}
+  let wiring = wiringByHandle.get(armed)
+  if (!wiring) {
+    // Flag off, the assembler delegates to the legacy path; the summarizer is the model near rotation, rolling below it (F5-c).
+    wiring = { context: createContextAssembler({ memory: armed.memory }), summarize: createCentralSummarize() }
+    wiringByHandle.set(armed, wiring)
+  }
+  return wiring
 }
 
 export function resolveChatService(deps: CentralChatDeps, db: Database, kind: RuntimeKind): ChatService {
