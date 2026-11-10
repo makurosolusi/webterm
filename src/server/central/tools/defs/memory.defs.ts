@@ -1,11 +1,11 @@
 /**
- * Central memory tools (WS-08): two readers (R0) and two writers (R1). Inputs are matched against a
+ * Central memory tools (WS-08): two readers (R0) and four writers (R1). Inputs are matched against a
  * strict key allowlist, so a model cannot smuggle `trust`, `scope`, `projectId` or `status`; the
  * viewer project comes from the conversation id, never from input. All output is redacted.
  */
-import { MEMORY_ALL_SCOPES } from '../../../memory/memoryModel'
+import { MEMORY_ALL_SCOPES, MemoryRejectedError } from '../../../memory/memoryModel'
 import { getVisibleMemory, searchMemoryHybrid, type MemoryViewer } from '../../../memory/memoryHybrid'
-import { REMEMBER_KINDS, rememberClaim, rememberUser, type RememberContext } from '../../../memory/memoryRemember'
+import { MAX_BODY_CHARS, MAX_REASON_CHARS, REMEMBER_KINDS, correctClaim, invalidateClaim, rememberClaim, rememberUser, type RememberContext } from '../../../memory/memoryRemember'
 import type { UserMemoryStore } from '../../../memory/memoryUserStore'
 import type { MemoryAnyScope, MemoryKind, MemoryRecord } from '../../../memory/memoryModel'
 import { scopeFromConversationId } from '../../conversationModel'
@@ -20,6 +20,7 @@ const SEARCH_LIMIT_MAX = 8
 const QUERY_MAX_CHARS = 300
 const ID_MAX_CHARS = 100
 const OUT_BODY_CHARS = 600
+const HUMAN_OWNED_HINT = 'The user confirmed this, or the system verified it, so Central cannot change it. Ask the user to correct or remove it in the Memory panel.'
 
 export interface MemoryDefDeps {
   /** File store for `user` memory (WEBTERM_MEMORY_DIR); absent = SQLite only (tests, flag-off setups). */
@@ -93,6 +94,39 @@ const remember: ToolDef = {
   },
 }
 
+/** Runs a claim write; `human_owned` comes back with what to do next instead of a bare code. */
+function claimWrite(write: () => ToolResult): ToolResult {
+  try {
+    return write()
+  } catch (err) {
+    if (err instanceof MemoryRejectedError && err.code === 'human_owned') return { ok: false, code: err.code, data: { hint: HUMAN_OWNED_HINT } }
+    throw err
+  }
+}
+
+const update: ToolDef = {
+  name: 'memory.update', summary: 'Correct an unverified claim; the old version stays in history.', tier: 'R1', flag: MEMORY_FLAG,
+  projectScoped: false, auditKeys: ['id'],
+  usage: `{"id":"<memory id>","text":"<=${MAX_BODY_CHARS} chars, the corrected claim, no secrets"}. Claims only; a fact is refused with human_owned, so ask the user.`,
+  input: obj({ id: S.str(ID_MAX_CHARS), text: S.str() }, ['id', 'text']),
+  output: S.keys('id', 'deduped', 'status', 'trust', 'hint'),
+  validate: (input) => (onlyKeys(input, ['id', 'text']) && text(input.id, ID_MAX_CHARS) && typeof input.text === 'string' ? null : 'invalid_shape'),
+  handler: (ctx, input) => claimWrite(() => {
+    const { record, deduped } = correctClaim(ctx.db, rememberCtx(ctx), { id: input.id, text: input.text })
+    return { ok: true, data: { id: record.id, deduped, status: record.status, trust: record.trust } }
+  }),
+}
+
+const forget: ToolDef = {
+  name: 'memory.forget', summary: 'Mark an unverified claim as no longer true; it stays in history.', tier: 'R1', flag: MEMORY_FLAG,
+  projectScoped: false, auditKeys: ['id'],
+  usage: `{"id":"<memory id>","reason":"<=${MAX_REASON_CHARS} chars, why it no longer holds"}. Claims only; a fact is refused with human_owned, so ask the user. A correct version can be remembered later.`,
+  input: obj({ id: S.str(ID_MAX_CHARS), reason: S.str() }, ['id', 'reason']),
+  output: S.keys('id', 'hint'),
+  validate: (input) => (onlyKeys(input, ['id', 'reason']) && text(input.id, ID_MAX_CHARS) && typeof input.reason === 'string' ? null : 'invalid_shape'),
+  handler: (ctx, input) => claimWrite(() => ({ ok: true, data: { id: invalidateClaim(ctx.db, rememberCtx(ctx), { id: input.id, reason: input.reason }).id } })),
+}
+
 export function createMemoryDefs(deps: MemoryDefDeps = {}): readonly ToolDef[] {
   const rememberUserDef: ToolDef = {
     name: 'memory.remember_user', summary: 'Save a personal fact about the user; needs their exact words as quote.', tier: 'R1', flag: MEMORY_FLAG,
@@ -106,5 +140,5 @@ export function createMemoryDefs(deps: MemoryDefDeps = {}): readonly ToolDef[] {
       return { ok: true, data: { id: record.id, deduped, status: record.status, trust: record.trust } }
     },
   }
-  return [search, get, remember, rememberUserDef]
+  return [search, get, remember, update, forget, rememberUserDef]
 }

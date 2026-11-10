@@ -1,9 +1,10 @@
 /**
- * Central's two memory write paths (RND/24 4, invariant I4 revised):
+ * Central's memory write paths (RND/24 4, invariant I4 revised):
  *  - `rememberClaim`: a `claim` in scope `central`, trust `agent`, never a fact.
  *  - `rememberUser`: a `fact` in scope `user`, trust `attested`, only with a quote the SERVER
  *    verified against a real human message; the stored body IS the quote, not central's paraphrase.
- * Neither path can write `core`, project facts or `global`. The actor is fixed to `central`.
+ *  - `correctClaim` / `invalidateClaim`: change a visible claim; anything human-confirmed is refused.
+ * None of them can write `core`, project facts or `global`. The actor is fixed to `central`.
  */
 import type { Database } from 'bun:sqlite'
 import { getRow, newId, tx } from '../ledger/ledgerCore'
@@ -14,12 +15,14 @@ import { appendMemoryEvent, memoryContext } from './memoryCore'
 import { guardMemoryWrite } from './memoryGuard'
 import { maskPii } from './memoryPii'
 import { type NewMemoryRow, findActiveByHash, findRowByKey, insertMemoryRow, supersedeRow } from './memoryInsert'
+import { getVisibleMemory } from './memoryHybrid'
 import { MemoryConflictError, type MemoryKind, MemoryRejectedError, type MemoryRecord } from './memoryModel'
 import type { UserMemoryStore } from './memoryUserStore'
 
 export const MAX_BODY_CHARS = 1200
 export const MAX_KEY_CHARS = 120
 export const MAX_TITLE_CHARS = 120
+export const MAX_REASON_CHARS = 300
 /** Central writes per hour (RND/24 4). */
 export const REMEMBER_RATE_PER_HOUR = 20
 const HOUR_MS = 3_600_000
@@ -71,7 +74,7 @@ function cleanKind(value: unknown, fallback: MemoryKind): MemoryKind {
 function enforceRate(db: Database, now: number): void {
   const row = getRow(
     db,
-    "SELECT COUNT(*) AS n FROM memory_event WHERE actor LIKE 'central:%' AND kind IN ('memory.claim','memory.remember_user') AND ts > ?",
+    "SELECT COUNT(*) AS n FROM memory_event WHERE actor LIKE 'central:%' AND kind IN ('memory.claim','memory.remember_user','memory.update','memory.invalidate') AND ts > ?",
     now - HOUR_MS
   )
   if (Number(row?.['n'] ?? 0) >= REMEMBER_RATE_PER_HOUR) reject('rate_limited', `at most ${REMEMBER_RATE_PER_HOUR} central memory writes per hour`)
@@ -106,6 +109,51 @@ export function rememberClaim(db: Database, ctx: RememberContext, input: ClaimIn
     appendMemoryEvent(memoryContext(db, ctx.now), row.id, `${CENTRAL_ACTOR_PREFIX}${ctx.conversationId}`, 'memory.claim',
       { actorKind: 'central', supersedes: old?.id ?? null }, ctx.now)
     return { record: findRowByKey(db, ctx.projectId, 'central', key) as MemoryRecord, deduped: false }
+  })
+}
+
+/** A claim this conversation may change; hidden rows are `not_found`, human-confirmed ones `human_owned`. */
+function loadOwnClaim(db: Database, ctx: RememberContext, id: unknown): MemoryRecord {
+  const record = typeof id === 'string' ? getVisibleMemory(db, { projectId: ctx.projectId }, id, ctx.now) : null
+  if (record === null) reject('not_found', `memory not found: ${String(id)}`)
+  if (record.status !== 'claim' || record.trust === 'human') reject('human_owned', `memory ${record.id} is a ${record.status} (${record.trust}); only the user may change it`)
+  return record
+}
+
+/** Corrects a visible claim by bi-temporal supersede: the origin stays on the new row, the corrector goes in the event. */
+export function correctClaim(db: Database, ctx: RememberContext, input: { id: unknown; text: unknown }): RememberResult {
+  const body = cleanText(input.text, 'text', MAX_BODY_CHARS)
+  return tx(memoryContext(db, ctx.now), () => {
+    const old = loadOwnClaim(db, ctx, input.id)
+    // A derived title repeats the wrong text and FTS indexes it, so it is rebuilt; a key-as-title stays.
+    const title = old.title === old.key ? old.key : body.slice(0, MAX_TITLE_CHARS)
+    const hash = contentHash(title, body)
+    if (hash === old.contentHash) return { record: old, deduped: true }
+    enforceRate(db, ctx.now)
+    const id = newId()
+    supersedeRow(db, old, ctx.now, id)
+    insertMemoryRow(db, {
+      id, projectId: old.projectId, scope: old.scope, key: old.key, title, body, status: 'claim', kind: old.kind, trust: 'agent',
+      sourceKind: old.sourceKind ?? 'central', sourceRef: old.sourceRef ?? ctx.conversationId, supersedes: old.id, contentHash: hash,
+      staleAfter: old.staleAfter, verifiedAt: null, now: ctx.now, sessionRef: ctx.conversationId, sourceEventId: old.sourceEventId,
+    })
+    appendMemoryEvent(memoryContext(db, ctx.now), id, `${CENTRAL_ACTOR_PREFIX}${ctx.conversationId}`, 'memory.update', { actorKind: 'central', supersedes: old.id }, ctx.now)
+    return { record: findRowByKey(db, old.projectId, old.scope, old.key) as MemoryRecord, deduped: false }
+  })
+}
+
+/**
+ * Closes a visible claim's validity window and frees its key. No tombstone and no scrub, unlike the
+ * human `forgetMemory`: Central can be wrong about a claim being wrong, and the text may be true later.
+ */
+export function invalidateClaim(db: Database, ctx: RememberContext, input: { id: unknown; reason: unknown }): MemoryRecord {
+  const reason = cleanText(input.reason, 'reason', MAX_REASON_CHARS)
+  return tx(memoryContext(db, ctx.now), () => {
+    const old = loadOwnClaim(db, ctx, input.id)
+    enforceRate(db, ctx.now)
+    supersedeRow(db, old, ctx.now, null)
+    appendMemoryEvent(memoryContext(db, ctx.now), old.id, `${CENTRAL_ACTOR_PREFIX}${ctx.conversationId}`, 'memory.invalidate', { actorKind: 'central', reason }, ctx.now)
+    return old
   })
 }
 
