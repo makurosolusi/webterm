@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- A Tasks tab in the bottom panel shows Central's work in Todo, In progress, Needs review and Done across all projects, with a full history of each card and every automatic step; approve, request changes, cancel or retry from there, with an optional per-project switch to finish automatically when checks pass.
 - **Layers** in the left side bar, like Figma: every node of the open board in tab order, with hover highlighting the node on the canvas, a filter, rename (double-click or F2), and groups. Drag rows to reorder them or move them into and out of groups; **Mod+G** groups the selected nodes and **Mod+Shift+G** ungroups them.
 - Quick move & resize: hold ⌘⌃ (Ctrl+Alt on Windows and Linux) and drag anywhere on a node. The middle moves it (with the selection), an edge or corner resizes it, a right-drag resizes from the nearest corner, and Esc puts it back. Pick ⌘⇧ (Ctrl+Shift) or turn it off in Settings › Canvas › Quick move & resize.
 - Central knows which project workspace you are looking at and which nodes are on it.
