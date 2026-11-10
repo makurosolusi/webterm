@@ -43,7 +43,13 @@ export interface WorkSupervisorPorts {
   agentOf(agentId: string): { state: AgentState; endReason: string | null } | null
 }
 
-export interface WorkSupervisorDeps { store: WorkStore; ports: WorkSupervisorPorts; now(): number }
+export interface WorkSupervisorDeps {
+  store: WorkStore
+  ports: WorkSupervisorPorts
+  now(): number
+  /** Runs at the end of every tick; the check-in engine lives on this one timer. */
+  afterTick?(at: number): Promise<void>
+}
 
 export interface WorkSupervisor {
   tick(at?: number): Promise<void>
@@ -57,7 +63,7 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 const terminalAgent = (state: AgentState): boolean => (AGENT_TERMINAL_STATES as readonly AgentState[]).includes(state)
 
 /** Applies the liveness rules to open assignments; deterministic, no model is called. */
-export function createWorkSupervisor({ store, ports, now }: WorkSupervisorDeps): WorkSupervisor {
+export function createWorkSupervisor({ store, ports, now, afterTick }: WorkSupervisorDeps): WorkSupervisor {
   let timer: ReturnType<typeof setInterval> | null = null
   let ticking = false
 
@@ -125,7 +131,7 @@ export function createWorkSupervisor({ store, ports, now }: WorkSupervisorDeps):
       store.moveTask(task.id, 'stalled', { actor: SYSTEM, rule: startup.name, reason: 'no signal since started', assignmentId: a.id })
     } else if (task.status === 'running' && quiet >= stalled.afterMs) {
       store.moveTask(task.id, 'stalled', { actor: SYSTEM, rule: stalled.name, reason: `no signal for ${Math.floor(quiet / MINUTE_MS)} minutes`, assignmentId: a.id })
-    } else if (task.status === 'running' && quiet >= heartbeat.afterMs && a.channel !== 'run' && (a.nudgedAt === null || a.nudgedAt < since)) {
+    } else if (task.status === 'running' && quiet >= heartbeat.afterMs && (a.nudgedAt === null || a.nudgedAt < since)) {
       await nudge(a, task, quiet, at)
     }
   }
@@ -142,6 +148,11 @@ export function createWorkSupervisor({ store, ports, now }: WorkSupervisorDeps):
         }
       } catch (err) {
         log.error('work.tick_failed', 'liveness tick could not list open assignments', { error: errorText(err) })
+      }
+      try {
+        await afterTick?.(at)
+      } catch (err) {
+        log.error('work.checkin_failed', `check-in pass at ${at} failed`, { at, error: errorText(err) })
       } finally {
         ticking = false
       }

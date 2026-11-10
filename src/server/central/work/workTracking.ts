@@ -7,12 +7,19 @@ import type { PresenceTracker } from '../../channels/channelPresence'
 import type { AgentState } from '../contracts'
 import { projectWorkspace } from '../workspaceLookup'
 import { noticeWorkMove } from '../centralNotices'
+import { resolveChatService } from '../../centralChatHandlers'
+import { appendCentralNotice } from '../chat/conversationNotice'
+import { centralRuntimeKind } from '../runtime/runtimeFlag'
+import { createLogger } from '../../logs'
+import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
 import { readAutoDone } from './workSettings'
 import { createWorkStore, onWorkMove } from './workStore'
 import { createWorkSupervisor, type WorkSupervisorPorts } from './workSupervisor'
 import { createWorkVerifier, WORK_VERIFY_RULES, type WorkVerifierDeps } from './workVerify'
 import { registerWorkMemory } from './workMemory'
 import { startWorkWatcher } from './workWatcher'
+
+const log = createLogger('central.work')
 
 export interface WorkTrackingDeps {
   db: Database
@@ -47,6 +54,14 @@ function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervi
   }
 }
 
+function startCheckinTurn(db: Database): (turn: CheckinTurn) => string {
+  return (turn) => {
+    const { response, done } = resolveChatService({}, db, centralRuntimeKind()).service.submit(turn)
+    done.catch((err: unknown) => log.warn('work.checkin_turn_failed', `check-in turn ${response.turnId} did not finish`, { turnId: response.turnId, error: err instanceof Error ? err.message : String(err) }))
+    return response.turnId
+  }
+}
+
 /** One per process: the verifier outlives a pause, so a bounce can tell a running verification from an orphaned one. */
 export function createWorkTracking({ db, sessions, now, noTimer, check, presence }: WorkTrackingDeps): { start(): () => void } {
   const store = createWorkStore(db, now)
@@ -58,7 +73,12 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     noticeWorkMove(db, move, { now, ...(presence ? { presence } : {}) })
   })
   registerWorkMemory(db, now)
-  const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now })
+  const checkin = createWorkCheckin({
+    db, store, now, settings: productionCheckinSettings, submit: startCheckinTurn(db),
+    notice: (key, text, conversationId) => { appendCentralNotice(db, { key, text, conversationId, now }) },
+  })
+  onWorkMove(db, checkin.onMove)
+  const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now, afterTick: checkin.tick })
   return {
     start() {
       verifier.recoverInterrupted()

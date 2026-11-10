@@ -35,7 +35,7 @@ function reviewTask() {
 
 test('the registered board tools are exactly the planned ones', () => {
   const names = everyTool().list().map((d) => d.name).filter((n) => n.startsWith('task.')).sort()
-  expect(names).toEqual(['task.assign', 'task.cancel', 'task.create', 'task.get', 'task.list', 'task.run', 'task.status', 'task.update'])
+  expect(names).toEqual(['task.assign', 'task.cancel', 'task.create', 'task.get', 'task.list', 'task.status', 'task.update'])
 })
 
 test('no registered tool sets a done status through its input', async () => {
@@ -52,7 +52,7 @@ test('tool code only moves tasks along non-done edges', () => {
   const dir = dirname(fileURLToPath(import.meta.url))
   const sources = [...readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.includes('.test.')).map((f) => join(dir, f)), join(dir, '../../work/workDelegation.ts')]
   const targets = sources.flatMap((file) => [...readFileSync(file, 'utf8').matchAll(/moveTask\(\s*[^,]+,\s*([^,]+),/g)].map((m) => m[1]))
-  expect(targets.sort()).toEqual(["'cancelled'", "'reported'", "'running'", "'todo'", 'restore'])
+  expect(targets.sort()).toEqual(["'cancelled'", "'todo'", 'restore'])
   expect(sources.filter((file) => readFileSync(file, 'utf8').includes('autoDone'))).toEqual([])
 })
 

@@ -29,12 +29,12 @@ describe('AbilitiesView', () => {
     render(<AbilitiesView client={fakeClient()} />)
     await screen.findByTestId('ability-counts')
     fireEvent.click(screen.getByRole('radio', { name: 'Asks you' }))
-    expect(screen.getByText('Suggest a plan')).toBeTruthy()
+    expect(screen.getByText('Plan tasks')).toBeTruthy()
     expect(screen.queryByText('List projects')).toBeNull()
     fireEvent.click(screen.getByRole('radio', { name: 'Not allowed' }))
     expect(screen.getByText('Start a worker')).toBeTruthy()
     expect(screen.getByText('Open a web page')).toBeTruthy()
-    expect(screen.queryByText('Suggest a plan')).toBeNull()
+    expect(screen.queryByText('Plan tasks')).toBeNull()
   })
 
   it('a failed load is a plain error with Refresh that loads again', async () => {

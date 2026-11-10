@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { appendMessage, getOrCreateConversation } from '../conversationStore'
+import { createWorkStore } from '../work/workStore'
 import { collectFacts, insertCheckpoint, latestCheckpoint } from './checkpointStore'
 import { FALLBACK_MESSAGES, createCheckpoint, createFallbackCheckpoint, type Summarize } from './checkpointSummarizer'
 
@@ -23,11 +24,19 @@ describe('collectFacts', () => {
     const a = collectFacts(fixture.db, CONV)
     expect(collectFacts(fixture.db, CONV)).toBe(a)
     const facts = JSON.parse(a)
-    expect(Object.keys(facts)).toEqual(['activeTasks', 'lastProposal', 'pendingApprovals', 'pendingPlanItems', 'projectId', 'schemaV'])
+    expect(Object.keys(facts)).toEqual(['activeTasks', 'lastProposal', 'openWork', 'pendingApprovals', 'projectId', 'schemaV'])
     expect(facts.projectId).toBe('p1')
     expect(facts.pendingApprovals.map((x: { id: string }) => x.id)).toEqual(['a-expired', 'a-live'])
-    expect(facts.pendingPlanItems).toEqual([{ id: 'i1', title: 'item 1' }])
     expect(facts.activeTasks).toEqual([{ id: 't-pending', status: 'pending' }])
+  })
+
+  it('names the open board tasks of the project, not the closed ones or another project', () => {
+    const store = createWorkStore(fixture.db, () => 1)
+    store.createTask({ id: 'w-open', projectId: 'p1', title: 'build it', objective: 'o', actor: { kind: 'central' } })
+    store.createTask({ id: 'w-gone', projectId: 'p1', title: 'dropped', objective: 'o', actor: { kind: 'central' } })
+    store.moveTask('w-gone', 'cancelled', { actor: { kind: 'central' } })
+    store.createTask({ id: 'w-other', projectId: 'p2', title: 'elsewhere', objective: 'o', actor: { kind: 'central' } })
+    expect(JSON.parse(collectFacts(fixture.db, CONV)).openWork).toEqual([{ id: 'w-open', status: 'todo', title: 'build it' }])
   })
 
   it('records the newest tool card as lastProposal', () => {

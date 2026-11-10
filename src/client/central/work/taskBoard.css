@@ -29,6 +29,25 @@
 .task-badge[data-tone='error'] { background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-errorForeground); }
 .task-badge[data-tone='ok'] { background: transparent; color: var(--vscode-testing-iconPassed); border-color: currentColor; }
 
+.task-plan { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 6px 8px; max-height: 40%; padding: 0 8px 6px; overflow-y: auto; }
+.task-plan:empty { display: none; }
+.task-plan__state { color: var(--vscode-descriptionForeground); }
+.task-plan__list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.task-goals { flex: 2 1 320px; min-width: 0; }
+.task-goal { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; background: var(--vscode-editorWidget-background); }
+.task-goal__line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.task-goal__statement { flex: 1 1 160px; min-width: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.task-goal__bar { appearance: none; width: 96px; height: 6px; border: 0; border-radius: 3px; overflow: hidden; background: var(--vscode-panel-border); }
+.task-goal__bar::-webkit-progress-bar { background: var(--vscode-panel-border); }
+.task-goal__bar::-webkit-progress-value { background: var(--vscode-progressBar-background); }
+.task-goal__bar::-moz-progress-bar { background: var(--vscode-progressBar-background); }
+.task-goal__hint { color: var(--vscode-testing-iconPassed); }
+.task-goal__actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-left: auto; }
+.task-upcoming { flex: 1 1 220px; min-width: 0; }
+.task-upcoming__title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.task-upcoming__row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.task-upcoming__text { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+
 .task-detail { display: flex; flex: 0 0 340px; flex-direction: column; min-height: 0; border-left: 1px solid var(--vscode-panel-border); }
 .task-detail__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
 .task-detail__head h3 { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }

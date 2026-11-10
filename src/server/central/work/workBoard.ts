@@ -8,6 +8,7 @@ import { listWorkspaces } from '../workspaceLookup'
 import { toAssignment } from './workStore'
 
 const IN_LIST = 'IN (SELECT value FROM json_each(?))'
+const orNull = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value))
 const clean = (value: unknown): unknown => redactValue(value, PERSIST_LIMITS)
 const group = <T>(rows: Row[], key: string, of: (r: Row) => T): Map<string, T[]> => {
   const out = new Map<string, T[]>()
@@ -32,7 +33,16 @@ function nodeNamesOf(ids: ReadonlySet<string>): Map<string, Map<string, string>>
   return out
 }
 
-/** Board cards of `tasks`, in the same order. */
+const isPlannedTodo = (card: TaskCard): boolean => card.column === 'todo' && card.seq !== null && card.seq !== undefined
+
+/** Planned todo cards take the page slots those cards held, in plan order; every other card stays put. */
+function inPlanOrder(cards: TaskCard[]): TaskCard[] {
+  const planned = cards.filter(isPlannedTodo).sort((a, b) => (a.seq as number) - (b.seq as number))
+  let next = 0
+  return cards.map((card) => (isPlannedTodo(card) ? planned[next++] as TaskCard : card))
+}
+
+/** Board cards of `tasks`, in the same order except that planned todo cards follow their plan. */
 export function taskCards(db: Database, tasks: readonly TaskView[]): TaskCard[] {
   if (tasks.length === 0) return []
   const ids = JSON.stringify(tasks.map((t) => t.id))
@@ -46,8 +56,9 @@ export function taskCards(db: Database, tasks: readonly TaskView[]): TaskCard[] 
     WHERE correlation_id ${IN_LIST} AND json_extract(payload_json, '$.rule') IS NOT NULL GROUP BY correlation_id`, ids).map((r) => [String(r.correlation_id), String(r.rule)]))
   const blockers = group(allRows(db, `SELECT d.task_id, b.id, b.title FROM central_task_dep d JOIN central_task b ON b.id = d.blocked_by_id
     WHERE d.task_id ${IN_LIST} AND b.status != 'done' ORDER BY b.id`, ids), 'task_id', (r) => ({ id: String(r.id), title: redactSecrets(String(r.title)) }))
+  const plan = new Map(allRows(db, `SELECT id, goal_version, seq FROM central_task WHERE id ${IN_LIST}`, ids).map((r) => [String(r.id), r]))
   const names = nodeNamesOf(new Set(tasks.flatMap((t) => (assignments.has(t.id) ? [projects.get(t.projectId)?.workspaceId ?? ''] : []))))
-  return tasks.map((task) => {
+  return inPlanOrder(tasks.map((task) => {
     const assignment = assignments.get(task.id) ?? null
     const project = projects.get(task.projectId)
     const nodeName = assignment ? names.get(project?.workspaceId ?? '')?.get(assignment.nodeId) ?? null : null
@@ -55,6 +66,7 @@ export function taskCards(db: Database, tasks: readonly TaskView[]): TaskCard[] 
       ...task, title: redactSecrets(task.title), objective: redactSecrets(task.objective), verification: clean(task.verification),
       projectName: redactSecrets(project?.name ?? task.projectId), column: boardColumnOf(task.status), assignment: assignment && cleanAssignment(assignment),
       nodeName, nodeExists: nodeName !== null, lastRule: rules.get(task.id) ?? null, blockedBy: blockers.get(task.id) ?? [],
+      goalVersion: orNull(plan.get(task.id)?.goal_version), seq: orNull(plan.get(task.id)?.seq),
     }
-  })
+  }))
 }

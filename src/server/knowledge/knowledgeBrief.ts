@@ -27,7 +27,7 @@ export interface BriefSnapshot {
   failedTasks: Array<{ id: string; status: string }>
   blockedAgents: Array<{ id: string; waitedMs: number }>
   liveAgents: number
-  pendingPlanItems: number
+  readyTasks: number
   taskCounts: Record<string, number>
 }
 
@@ -38,7 +38,7 @@ export function evaluateAttention(s: BriefSnapshot): BriefAttention[] {
   if (s.failedTasks.length) out.push({ rule: 'task_failed', evidence: `${s.failedTasks.length} failed/blocked since last verified: ${s.failedTasks.map((t) => `${t.id} ${t.status}`).join(', ')}`, suggestedTool: 'task.status' })
   if (s.blockedAgents.length) out.push({ rule: 'agent_blocked', evidence: s.blockedAgents.map((a) => `${a.id} waiting ${Math.round(a.waitedMs / 60_000)} min`).join(', '), suggestedTool: 'agent.read' })
   if (s.dirtyCount > 0 && s.liveAgents === 0) out.push({ rule: 'dirty_no_agent', evidence: `${s.dirtyCount} uncommitted paths on ${s.branch ?? 'unknown branch'} with no running agent`, suggestedTool: 'project.read' })
-  if (s.pendingPlanItems > 0) out.push({ rule: 'plan_item_ready', evidence: `${s.pendingPlanItems} pending plan items ready to assign`, suggestedTool: 'task.assign' })
+  if (s.readyTasks > 0) out.push({ rule: 'task_ready', evidence: `${s.readyTasks} board tasks ready to assign`, suggestedTool: 'task.assign' })
   return out
 }
 
@@ -55,7 +55,7 @@ function gather(db: Database, projectId: string, now: number, dirtyCount: number
     failedTasks: allRows(db, "SELECT id, status FROM task WHERE project_id = ? AND status IN ('failed','blocked') AND updated_at > ? ORDER BY updated_at DESC LIMIT ?", projectId, lastVerified, LIST_LIMIT).map((r) => ({ id: String(r.id), status: String(r.status) })),
     blockedAgents: allRows(db, "SELECT id, COALESCE(last_event_at, started_at) AS since FROM central_agents WHERE project_id = ? AND state = 'waiting_input' AND COALESCE(last_event_at, started_at) < ? ORDER BY since LIMIT ?", projectId, now - AGENT_BLOCKED_MS, LIST_LIMIT).map((r) => ({ id: String(r.id), waitedMs: now - Number(r.since) })),
     liveAgents: Number(getRow(db, `SELECT COUNT(*) AS c FROM central_agents WHERE project_id = ? AND state NOT IN (${terminal})`, projectId)?.c ?? 0),
-    pendingPlanItems: Number(getRow(db, "SELECT COUNT(*) AS c FROM plan_item i JOIN plan p ON p.id = i.plan_id WHERE p.project_id = ? AND p.status IN ('draft','active') AND i.status = 'pending'", projectId)?.c ?? 0),
+    readyTasks: Number(getRow(db, "SELECT COUNT(*) AS c FROM central_task WHERE project_id = ? AND status = 'todo'", projectId)?.c ?? 0),
   }
 }
 

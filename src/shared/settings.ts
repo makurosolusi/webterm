@@ -133,6 +133,8 @@ export const DEFAULT_SETTINGS: Settings = {
   claudePermissionMode: 'auto',
   hookReplyApprovals: true,
   skipApprovals: true,
+  centralCheckins: true,
+  centralCheckinDailyLimit: 10,
   projectModels: {},
   gridSize: 24,
   snapToGrid: false,

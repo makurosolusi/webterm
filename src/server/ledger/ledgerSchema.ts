@@ -26,6 +26,8 @@ import { applyV24 } from './ledgerSchemaV24'
 import { applyV25 } from './ledgerSchemaV25'
 import { applyV26 } from './ledgerSchemaV26'
 import { applyV27 } from './ledgerSchemaV27'
+import { applyV28 } from './ledgerSchemaV28'
+import { applyV29 } from './ledgerSchemaV29'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -85,4 +87,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 26, up: applyV26 },
   // v27: central_state (pinned STATE) + central_turn.context_json (per-turn trace); additive, nothing to backfill.
   { version: 27, up: applyV27 },
+  // v28: central_task.goal_version + seq (Goal -> Plan -> Task chain); nullable, no backfill.
+  { version: 28, up: applyV28 },
+  // v29: central_reminder + central_checkin_reason + central_turn.origin (self-started turns); additive, old turns are 'user'.
+  { version: 29, up: applyV29 },
 ]

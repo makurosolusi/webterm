@@ -1,5 +1,6 @@
 // `central_checkpoint` access (schema v8) and the deterministic facts a checkpoint carries (RND/23 §4.3).
 import type { Database } from 'bun:sqlite'
+import { WORK_STATUSES, WORK_TERMINAL } from '../../../shared/centralWork'
 import { CHECKPOINT_NARRATIVE_MAX } from '../../ledger/ledgerSchemaV8'
 import { redactSecrets } from '../../redactSecrets'
 import { scopeFromConversationId, type MessagePart } from '../conversationModel'
@@ -24,7 +25,7 @@ export interface CheckpointMessage { id: string; seq: number; role: string; text
 /** Entries per fact list; keeps `facts_json` small and the checkpoint block under budget. */
 export const FACT_LIST_LIMIT = 10
 const FACT_TITLE_CHARS = 80
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const list = (db: Database, sql: string, ...args: unknown[]): Array<Record<string, unknown>> =>
   db.query(sql).all(...args) as Array<Record<string, unknown>>
@@ -69,18 +70,13 @@ export function collectFacts(db: Database, conversationId: string): string {
   const args = projectId === null ? [FACT_LIST_LIMIT] : [projectId, FACT_LIST_LIMIT]
   const approvals = list(db, `SELECT id, kind FROM approval WHERE status = 'pending' ${filter} ORDER BY id LIMIT ?`, ...args)
   const tasks = list(db, `SELECT id, status FROM task WHERE status IN ('leased','pending') ${filter} ORDER BY id LIMIT ?`, ...args)
-  const planItems = list(
-    db,
-    `SELECT plan_item.id AS id, plan_item.title AS title FROM plan_item JOIN plan ON plan.id = plan_item.plan_id
-     WHERE plan_item.status = 'pending' ${projectId === null ? '' : 'AND plan.project_id = ?'}
-     ORDER BY plan_item.id LIMIT ?`,
-    ...args
-  )
+  const open = WORK_STATUSES.filter((status) => !WORK_TERMINAL.includes(status))
+  const work = list(db, `SELECT id, title, status FROM central_task WHERE status IN (SELECT value FROM json_each(?)) ${filter} ORDER BY updated_at DESC, id LIMIT ?`, JSON.stringify(open), ...args)
   return JSON.stringify({
     activeTasks: tasks.map((t) => ({ id: String(t['id']), status: String(t['status']) })),
     lastProposal: lastProposal(db, conversationId),
+    openWork: work.map((t) => ({ id: String(t['id']), status: String(t['status']), title: redactSecrets(String(t['title'])).slice(0, FACT_TITLE_CHARS) })),
     pendingApprovals: approvals.map((a) => ({ id: String(a['id']), kind: String(a['kind']) })),
-    pendingPlanItems: planItems.map((i) => ({ id: String(i['id']), title: String(i['title']).slice(0, FACT_TITLE_CHARS) })),
     projectId,
     schemaV: SCHEMA_VERSION,
   })

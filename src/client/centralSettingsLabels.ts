@@ -36,6 +36,8 @@ export const CENTRAL_TEXT = {
   telegramOff: 'Not connected.',
   confirmAutonomy:
     'Let Central work on its own?\n\nIt will start workers without asking at every step. Only turn it on if you trust the agents that run.',
+  checkinUsed: (used: number, limit: number): string => `Used today: ${used} of ${limit}`,
+  checkinFailed: 'Could not load the check-in settings.',
   summaryTitle: 'Central Agent',
   summaryLink: 'Managed in Central Agent →',
 } as const
@@ -49,6 +51,8 @@ export const CENTRAL_FIELD_TEXT = {
   level: { label: 'What Central may do', hint: 'Propose work = every worker waits for your approval card.' },
   askEachWorker: { label: 'Ask before each worker runs', hint: 'Show an approval card before a worker starts.' },
   dailySpawns: { label: 'Workers per day', hint: 'How many workers Central may start per day. 0 = none.' },
+  checkin: { label: 'Let Central check in by itself', hint: 'Central starts a turn on its own when something needs a decision, such as a stalled task or a reminder that came due.' },
+  checkinLimit: { label: 'Check-ins per day', hint: 'The most check-ins Central may start in one day.' },
   costLimit: { label: 'Daily spending limit', hint: 'Near the limit work moves to cheaper models.' },
   ladder: { label: 'Model ladder & per-workspace overrides', hint: 'Which model each kind of task uses.' },
   report: { label: 'Spending report', hint: 'What Central and its workers spent.' },

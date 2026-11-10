@@ -12,6 +12,7 @@ import { AgentEngineField } from './AgentEngineField'
 import { callCapabilities } from './capabilitiesApi'
 import { CAPABILITY_STATUS_LABEL } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
+import { useCheckinSettings, type CheckinApi } from './centralSettings.checkin'
 import { Segmented, Stepper } from './centralSettings.controls'
 import { useCentralEnv, type CentralEnv } from './centralSettings.env'
 import { CENTRAL_FIELDS, CENTRAL_GROUPS, type CentralField, type CentralGroup, type CentralLinkTarget } from './centralSettings.registry'
@@ -47,12 +48,13 @@ export function levelToggle(field: CentralField, target: string, view: (id: Capa
 }
 
 /** Why a control is disabled, or null. */
-function reasonOf(field: CentralField, api: CapabilitiesApi, env: CentralEnv): string | null {
+function reasonOf(field: CentralField, api: CapabilitiesApi, env: CentralEnv, checkin: CheckinApi): string | null {
   const view = (id: CapabilityId): CapabilityView | undefined => api.data?.capabilities.find((v) => v.id === id)
   if (field.always) return null
   if (!isOn(view('central'))) return CENTRAL_TEXT.offReason
   if (field.needs && !isOn(view(field.needs))) return field.needs === 'autonomy' ? CENTRAL_TEXT.autonomyOffReason : CENTRAL_TEXT.workersOffReason
   const src = field.source
+  if (src.kind === 'checkin' && !checkin.data) return checkin.error ? CENTRAL_TEXT.unavailable : CENTRAL_TEXT.loading
   if (src.kind === 'capability' && src.sub && !view(src.id)?.subs?.some((s) => s.key === src.sub)) return CENTRAL_TEXT.unavailable
   if (src.kind === 'env' && field.control !== 'combobox') {
     if (env.load.status === 'loading') return CENTRAL_TEXT.loading
@@ -67,6 +69,7 @@ function reasonOf(field: CentralField, api: CapabilitiesApi, env: CentralEnv): s
 export function CentralSettingsSection({ settings: s, onChange, onNavigate }: CentralSettingsSectionProps): React.JSX.Element {
   const api = useCapabilities()
   const env = useCentralEnv()
+  const checkin = useCheckinSettings()
   const query = useSettingsSearch()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [engineError, setEngineError] = useState<string | null>(null)
@@ -127,6 +130,20 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
         ...all.map((p) => ({ value: p.id, label: p.id === DEFAULT_CLAUDE_PROFILE.id ? `${p.name} (claude)` : p.name }))]
       return <SettingsSelect id={id} value={current} options={options} disabled={disabled} onChange={(v) => onChange({ [src.key]: v })} />
     }
+    if (src.kind === 'checkin') {
+      const { data } = checkin
+      if (field.control === 'switch') return <Switch id={id} checked={data?.enabled ?? false} disabled={disabled || checkin.saving} onCheckedChange={(on) => void checkin.save({ enabled: on })} />
+      if (!data) return null
+      const limit = String(data.dailyLimit)
+      const opts = field.options ?? []
+      return (
+        <>
+          <SettingsSelect id={id} value={limit} disabled={disabled || checkin.saving} onChange={(v) => void checkin.save({ dailyLimit: Number(v) })}
+            options={opts.some((o) => o.value === limit) ? opts : [...opts, { value: limit, label: limit }]} />
+          <span role="status" className="st-hint">{CENTRAL_TEXT.checkinUsed(data.usedToday, data.dailyLimit)}</span>
+        </>
+      )
+    }
     if (src.kind !== 'env') return null
     const raw = env.value(src.key)
     const busy = disabled || env.savingKey === src.key
@@ -148,10 +165,10 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
   }
 
   const row = (field: CentralField): React.ReactNode => {
-    if (field.control === 'combobox') return <CostLimitField key={field.id} disabledReason={reasonOf(field, api, env) ?? undefined} />
+    if (field.control === 'combobox') return <CostLimitField key={field.id} disabledReason={reasonOf(field, api, env, checkin) ?? undefined} />
     if (field.id === 'engine') return matches(field) ? engine() : null
     const id = `st-central-${field.id}`
-    const reason = reasonOf(field, api, env)
+    const reason = reasonOf(field, api, env, checkin)
     const src = field.source
     const err = src.kind === 'env' && env.saveError?.key === src.key ? env.saveError.message : null
     return (
@@ -165,6 +182,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
                 onClick={() => onNavigate({ section: 'capabilities', anchor: `[data-capability="${src.id}"]` })}>{CENTRAL_TEXT.open} →</Button>
             : null}
           {err ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(err)}</span> : null}
+          {field.id === 'checkin' && checkin.saveError ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(checkin.saveError)}</span> : null}
         </div>
       </Field>
     )
@@ -204,6 +222,11 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
       {env.load.status === 'error' ? (
         <p role="alert" className="st-hint">
           {CENTRAL_TEXT.loadFailed(env.load.error)} <Button size="xs" variant="secondary" onClick={env.reload}>{CENTRAL_TEXT.retry}</Button>
+        </p>
+      ) : null}
+      {checkin.error && !checkin.data ? (
+        <p role="alert" className="st-hint">
+          {CENTRAL_TEXT.checkinFailed} <Button size="xs" variant="secondary" onClick={checkin.reload}>{CENTRAL_TEXT.retry}</Button>
         </p>
       ) : null}
       {central?.status === 'needs-step' && central.step?.kind === 'fixChain' ? (

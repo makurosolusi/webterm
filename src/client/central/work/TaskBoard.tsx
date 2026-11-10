@@ -5,11 +5,13 @@ import { Switch } from '@/components/ui/switch'
 import { isAbortError } from '../../inboxApi'
 import { CapabilityOffer } from '../../CapabilityOffer'
 import { centralErrorMessage, useLoad } from '../centralLoad'
+import { GoalsStrip } from './GoalsStrip'
 import { TaskColumn } from './TaskColumn'
 import { TaskDetail } from './TaskDetail'
 import { taskBoardApi, type TaskBoardClient } from './taskBoardApi'
 import { TL } from './taskBoardLabels'
 import { COLUMN_ORDER } from './taskBoardModel'
+import { UpcomingList } from './UpcomingList'
 import { useTaskActions, useTaskBoard } from './useTaskBoard'
 import './taskBoard.css'
 
@@ -116,6 +118,12 @@ export default function TaskBoard({ client = taskBoardApi, visible = true }: Tas
         </Select>
         {projectId && <AutoDoneSwitch key={projectId} client={client} projectId={projectId} />}
       </div>
+      {!board.off && (
+        <div className="task-plan">
+          <GoalsStrip client={client} projectId={projectId} visible={visible} onChanged={board.refresh} />
+          <UpcomingList client={client} visible={visible} />
+        </div>
+      )}
       {board.off && <div className="task-board__state" data-central-off="tasks"><p>{TL.off}</p><CapabilityOffer id="central" onDone={board.retry} /></div>}
       {board.loading && <p role="status" className="task-board__state">{TL.loading}</p>}
       {board.error && (
