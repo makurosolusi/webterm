@@ -23,6 +23,8 @@ import { NODE_STATUS_FILE, StatusStore } from './sessionsStatusStore'
 import { missingBinaryText } from './sessionsNotices'
 import { locateBinary } from './loginShellPath'
 import { dataDir } from './config'
+import { recordEvent } from './events/producers'
+import type { StaleSweepEntry } from './nodeRegistry'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
 // menjaga kontrak itu tanpa memaksa semua pemanggil tahu file barunya.
@@ -217,6 +219,19 @@ export class Sessions extends SessionsAdopt {
   }
 }
 
+/** Appends one `agent.stale` event for a node the stale sweep removed. */
+export function recordAgentStale({ id, idleMs }: StaleSweepEntry): void {
+  recordEvent({
+    kind: 'agent.stale',
+    source: 'pty',
+    actor: 'system',
+    subject: `node:${id}`,
+    nodeId: id,
+    trust: 'trusted',
+    payload: { rule: 'stale_sweep', lastStatus: 'working', idleMs },
+  })
+}
+
 const boot = bootSupervisor()
 export const sessions = new Sessions({}, boot.supervisor)
 sessions.supervisorNotice = boot.notice
@@ -224,6 +239,7 @@ sessions.supervisorNotice = boot.notice
 if (boot.supervisor) sessions.statusStore = new StatusStore(join(dataDir(), NODE_STATUS_FILE))
 // Jamnya hidup sekali per proses, di singleton — bukan di constructor, supaya `new Sessions()` di
 // test tetap bebas timer dan memilih sendiri kapan menyapu.
+sessions.onStaleSweep = recordAgentStale
 sessions.startStaleSweep()
 
 /** Node id yang dikenal workspace mana pun (id pane split `node:pN` ikut node induknya), termasuk
