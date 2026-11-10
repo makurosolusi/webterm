@@ -7,6 +7,7 @@ import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from './ca2Boot'
 import { ca2Dispatch, isCa2Path } from './ca2Routes'
 import { addAgent, freshDb, rows, run, T0 } from './guard/controlGuard.testutil'
+import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { CORE_DEFS } from './tools/defs/core.defs'
 import { createRegistry } from './tools/toolRegistry'
@@ -111,15 +112,13 @@ describe('halt and control', () => {
 })
 
 describe('skills admin', () => {
-  async function pend(): Promise<void> {
-    h.skills?.propose(SKILL, 'central:c1')
-    await h.skills?.evaluate(SKILL.name, '1')
-    h.skills?.submit(SKILL.name, '1')
-  }
+  const pend = () => h.skills?.propose(SKILL, 'central:c1')
+  const approve = (version: string) => call('POST', `/api/central/skills/${SKILL.name}/approve`, { version, phrase: CONFIRM_PHRASE })
+  const listed = async () => ((await get('/api/central/skills'))?.body as { items: Array<Record<string, any>> }).items
 
   it('lists the review queue with lint, diff and the confirm phrase', async () => {
     await pend()
-    const items = ((await get('/api/central/skills'))?.body as { items: Array<Record<string, any>> }).items
+    const items = (await listed()).filter((i) => i.record.status !== 'active')
     expect(items).toHaveLength(1)
     expect(items[0]?.record).toMatchObject({ name: SKILL.name, version: '1', status: 'pending_approval' })
     expect(items[0]?.lint).toMatchObject({ ok: true, findings: [] })
@@ -142,10 +141,8 @@ describe('skills admin', () => {
     const first = ((await get('/api/central/skills'))?.body as { items: Array<{ diff: string }> }).items[0]?.diff ?? ''
     expect(first).toContain('+ 2. Write five lines.')
     expect(first.split('\n').filter((l) => l !== '' && !l.startsWith('+ '))).toEqual([])
-    await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })
-    h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
-    await h.skills?.evaluate(SKILL.name, '2')
-    h.skills?.submit(SKILL.name, '2')
+    await approve('1')
+    await h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
     const diff = ((await get('/api/central/skills'))?.body as { items: Array<{ diff: string }> }).items[0]?.diff ?? ''
     expect(diff).toContain('- 2. Write five lines.')
     expect(diff).toContain('+ 2. Write ten lines.')
@@ -155,18 +152,71 @@ describe('skills admin', () => {
   it('a human approve activates the skill; a bad version is a client error', async () => {
     await pend()
     expect((await call('POST', `/api/central/skills/${SKILL.name}/approve`, {}))?.status).toBe(400)
-    expect((await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '9' }))?.status).toBe(404)
-    expect(await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })).toMatchObject({ status: 200, body: { status: 'done' } })
+    expect((await approve('9'))?.status).toBe(404)
+    expect(await approve('1')).toMatchObject({ status: 200, body: { status: 'done' } })
     expect(h.skills?.load(SKILL.name)?.record.approvedBy).toBe('human:root')
+  })
+
+  it('lists active skills beside open ones, builtin ones without rollback', async () => {
+    await pend()
+    const items = await listed()
+    expect(items[0]?.record.status).toBe('pending_approval')
+    const builtin = items.find((i) => i.record.origin === 'builtin')
+    expect(builtin).toMatchObject({ record: { status: 'active' }, diff: '', canRollback: false, lint: { ok: true, findings: [] } })
+  })
+
+  it('offers rollback only when an earlier version exists', async () => {
+    await pend()
+    await approve('1')
+    expect((await listed()).find((i) => i.record.name === SKILL.name)?.canRollback).toBe(false)
+    await h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
+    await approve('2')
+    expect((await listed()).find((i) => i.record.name === SKILL.name)).toMatchObject({ record: { version: '2' }, canRollback: true })
+    expect((await call('POST', `/api/central/skills/${SKILL.name}/rollback`))?.status).toBe(200)
+  })
+
+  it('reject needs a human and a version, drops the row and frees the name', async () => {
+    await pend()
+    const reject = (body: unknown, actor?: string) => call('POST', `/api/central/skills/${SKILL.name}/reject`, body, actor)
+    expect(await reject({ version: '1' }, 'central:c1')).toMatchObject({ status: 403, body: { error: 'human_only' } })
+    expect(await reject({})).toMatchObject({ status: 400, body: { error: 'invalid_version' } })
+    expect(await reject({ version: '9' })).toMatchObject({ status: 404 })
+    expect(await reject({ version: '1' })).toEqual({ status: 200, body: { status: 'done' } })
+    expect((await listed()).some((i) => i.record.name === SKILL.name)).toBe(false)
+    expect((await h.skills?.propose(SKILL, 'central:c1'))?.version).toBe('2')
+    expect(await reject({ version: '1' })).toMatchObject({ status: 403 })
+  })
+
+  it('a rejection by evaluation stays listed with its reason', async () => {
+    await pend()
+    run(h.db, "UPDATE central_skill SET status = 'rejected', reject_reason = 'evaluation did not pass (score 0.2)' WHERE name = ?", SKILL.name)
+    expect((await listed()).find((i) => i.record.name === SKILL.name)?.record).toMatchObject({ status: 'rejected', rejectReason: 'evaluation did not pass (score 0.2)' })
   })
 
   it('?status=active lists the approved skills with their description (the Central chat / list)', async () => {
     await pend()
     const before = ((await get('/api/central/skills?status=active'))?.body as { items: unknown[] }).items
     expect(before.some((s) => (s as { name: string }).name === SKILL.name)).toBe(false)
-    await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })
+    await approve('1')
     const items = ((await get('/api/central/skills?status=active'))?.body as { items: Array<{ name: string; description: string }> }).items
     expect(items.find((s) => s.name === SKILL.name)).toEqual({ name: SKILL.name, description: SKILL.description })
+  })
+})
+
+describe('skill review policy', () => {
+  it('proposing alone yields a version a human can approve', async () => {
+    const rec = await h.skills?.propose(SKILL, 'central:c1')
+    expect(rec?.status).toBe('pending_approval')
+    expect(h.skills?.list('pending_approval').map((r) => r.name)).toEqual([SKILL.name])
+  })
+
+  it('the server refuses approve unless the body carries the typed phrase', async () => {
+    await h.skills?.propose(SKILL, 'central:c1')
+    run(h.db, "UPDATE central_skill SET status = 'pending_approval' WHERE name = ?", SKILL.name)
+    for (const body of [{ version: '1' }, { version: '1', phrase: 'approve' }, { version: '1', phrase: confirmPhrase(SKILL.name, '1') }]) {
+      expect(await call('POST', `/api/central/skills/${SKILL.name}/approve`, body)).toEqual({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
+    }
+    expect(h.skills?.load(SKILL.name)).toBeNull()
   })
 })
 
@@ -181,6 +231,7 @@ describe('a family whose feature is off answers 503 <feature>_off, not a fall-th
     expect(await ca2Dispatch(off, req('POST', '/api/central/agents/a1/close'))).toEqual({ status: 503, body: { error: 'agents_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/rollback'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/reject'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect((await ca2Dispatch(off, req('POST', '/api/central/skills')))?.status).toBe(405)
     for (const p of ['/api/central/status', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
   })

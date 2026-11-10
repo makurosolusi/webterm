@@ -14,17 +14,18 @@ let fixture: Fixture
 beforeEach(() => { fixture = openFixture(); factory.calls = 0 })
 afterEach(() => { setActiveCa2(null); fixture.close() })
 
-const summarizeOf = (s: { service: unknown }): unknown => (s.service as { summarize?: unknown }).summarize
+const summarizeOf = (s: { service: unknown }): unknown => (s.service as { wiring: () => { summarize?: unknown } }).wiring().summarize
 
-it('armed Central uses the LLM summarizer factory', () => {
+it('armed Central builds the LLM summarizer once per handle', () => {
   setActiveCa2({ db: fixture.db, memory: { block: () => ({ text: '', items: [], truncated: false }) } } as never)
   const chat = resolveChatService({ now: () => 1 }, fixture.db, 'mock')
-  expect(factory.calls).toBe(1)
   expect(summarizeOf(chat)).toBe(fake)
+  expect(summarizeOf(chat)).toBe(fake)
+  expect(factory.calls).toBe(1)
 })
 
 it('unarmed Central writes no checkpoint summary', () => {
   const chat = resolveChatService({ now: () => 1 }, fixture.db, 'mock')
-  expect(factory.calls).toBe(0)
   expect(summarizeOf(chat)).toBeUndefined()
+  expect(factory.calls).toBe(0)
 })

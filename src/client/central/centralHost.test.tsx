@@ -94,7 +94,7 @@ describe('CentralControlPanel', () => {
   })
 
   it('shows no privacy label for a non-free model', async () => {
-    const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 0, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false } })) })
+    const client = fakeClient({ getStatus: vi.fn(async () => ({ budget: { day: 'd', used: { tokens: 0, spawns: 0 }, limits: { tokens: 0, spawns: 0 } }, model: { id: 'paid', free: false }, lastTurn: null })) })
     render(<CentralControlPanel open enabled client={client} />)
     await screen.findByText(/No limit/)
     expect(screen.queryByRole('note')).toBeNull()

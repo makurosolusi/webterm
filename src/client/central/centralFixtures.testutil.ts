@@ -5,15 +5,17 @@ import type { CentralControlClient } from './centralControlTypes'
 export function fakeClient(over: Partial<CentralControlClient> = {}): CentralControlClient {
   return {
     getControl: vi.fn(async () => ({ ceiling: 'act_gated' as const, effective: 'propose' as const, global: { level: 'propose' as const, version: 3, reason: null } })),
-    getStatus: vi.fn(async () => ({ budget: { day: '2026-11-03', used: { tokens: 250, spawns: 2 }, limits: { tokens: 1000, spawns: 20 } }, model: { id: 'opencode/free', free: true } })),
+    getStatus: vi.fn(async () => ({ budget: { day: '2026-11-03', used: { tokens: 250, spawns: 2 }, limits: { tokens: 1000, spawns: 20 } }, model: { id: 'opencode/free', free: true }, lastTurn: null })),
     halt: vi.fn(async () => undefined),
-    listAgents: vi.fn(async () => [{ id: 'ag1', projectId: 'webterm', kind: 'opencode', role: 'worker' as const, runner: 'exec' as const, state: 'working' as const, owner: 'central:c1' as const }]),
+    listAgents: vi.fn(async () => [{ id: 'ag1', projectId: 'webterm', kind: 'opencode', role: 'worker' as const, runner: 'exec' as const, state: 'working' as const, owner: 'central:c1' as const, nodeId: null, startedAt: 1, projectName: 'Webterm', nodeOnBoard: false }]),
+    listBoardNodes: vi.fn(async () => ({ items: [], projects: [] })),
     agentAction: vi.fn(async () => ({ status: 'done' as const })),
     listSkills: vi.fn(async () => [{
       record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval' as const, origin: 'central' as const, caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 0.9 },
-      lint: { ok: true, findings: [] }, diff: '+added line\n-removed line\n context',
+      lint: { ok: true, findings: [] }, diff: '+added line\n-removed line\n context', canRollback: false,
     }]),
     approveSkill: vi.fn(async () => undefined),
+    rejectSkill: vi.fn(async () => undefined),
     rollbackSkill: vi.fn(async () => undefined),
     listMemory: vi.fn(async () => [
       { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react' },

@@ -8,6 +8,12 @@ export interface NodeStatusEntry {
   updatedAt: number
 }
 
+/** One node removed by `sweepStale`; `idleMs` is how long its `working` status had been silent. */
+export interface StaleSweepEntry {
+  id: string
+  idleMs: number
+}
+
 /** Kenapa node berhenti: prosesnya keluar SENDIRI, atau kita yang menutupnya. `failed` = the open
  *  itself threw before any process ran (agent-211-A1); like `closed` it only fills an empty slot. */
 export type NodeExitReason = 'self' | 'closed' | 'failed'
@@ -117,17 +123,17 @@ export class NodeRegistry {
   }
 
   /**
-   * Hapus status `working` yang sudah diam melewati jendela, dan kembalikan id yang tersapu.
+   * Hapus status `working` yang sudah diam melewati jendela, dan kembalikan node yang tersapu.
    *
    * MENGHAPUS, bukan menggantinya dengan `done`/`waiting` — alasannya di `agentStale.ts`. Node yang
    * tersapu dirender "Unknown", dan event berikutnya menaruhnya kembali ke `working` (self-healing).
    */
-  sweepStale(now: number = Date.now()): string[] {
-    const swept: string[] = []
+  sweepStale(now: number = Date.now()): StaleSweepEntry[] {
+    const swept: StaleSweepEntry[] = []
     for (const [id, entry] of this.statuses) {
       if (!isStaleWorking(entry.status, entry.updatedAt, now)) continue
       this.statuses.delete(id)
-      swept.push(id)
+      swept.push({ id, idleMs: now - entry.updatedAt })
     }
     if (swept.length) this.onStatusChange?.()
     return swept

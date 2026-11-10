@@ -43,13 +43,11 @@ describe('skill tool defs', () => {
 
   it('propose stores a draft only; load stays not_found until a human activates', async () => {
     const res = await execTool(ctxOf(), 'skill.propose', input)
-    expect(res).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1', status: 'proposed' } })
+    expect(res).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1', status: 'pending_approval' } })
     expect(store.list('active')).toEqual([])
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })).code).toBe('not_found')
-    const listed = await execTool(ctxOf(), 'skill.list', { status: 'proposed' })
-    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', version: '1', status: 'proposed', origin: 'central' }])
-    await store.evaluate('webterm-demo', '1')
-    store.submit('webterm-demo', '1')
+    const listed = await execTool(ctxOf(), 'skill.list', { status: 'pending_approval' })
+    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', version: '1', status: 'pending_approval', origin: 'central' }])
     store.approve('webterm-demo', '1', 'human:alice', confirmPhrase('webterm-demo', '1'))
     const loaded = await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })
     expect(loaded).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1' } })

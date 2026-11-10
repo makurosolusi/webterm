@@ -9,15 +9,16 @@ import { panicSnapshotAll } from '../checkpoint/checkpoint.service'
 import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
-import { closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
+import { type SkillAction, closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
 import { agentsView, memoryView, skillsView, statusView } from './ca2Routes.read'
+import { type BoardDeps, nodesView } from './ca2Routes.nodes'
 import { type ControlRequest, controlRoute } from './guard/haltApi'
 import { toolsView } from './toolsCatalog.api'
 
 const BASE = '/api/central'
 const BODY_MAX_BYTES = 64 * 1024
 const AGENT_ACTION = /^\/api\/central\/agents\/([^/]+)\/(relay|close)$/
-const SKILL_ACTION = /^\/api\/central\/skills\/([^/]+)\/(approve|rollback)$/
+const SKILL_ACTION = /^\/api\/central\/skills\/([^/]+)\/(approve|rollback|reject)$/
 /** The transport only admits the root credential, so that is the identity every action runs as. */
 const ROOT_ACTOR = { kind: 'root', id: 'root' } as const
 const ROOT_HUMAN = 'human:root'
@@ -25,18 +26,19 @@ const log = createLogger('central.ca2')
 
 /** Whether `path` belongs to the CA2 panel families (used to answer 405 instead of falling through). */
 export const isCa2Path = (path: string): boolean =>
-  ['/status', '/agents', '/skills', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path)
+  ['/status', '/agents', '/nodes', '/skills', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path)
 
 const notAllowed: RouteResult = { status: 405, body: { error: 'method_not_allowed' } }
 const decode = (s: string): string | null => { try { return decodeURIComponent(s) } catch { return null } }
 
 /** Pure dispatcher: `null` = not a CA2 path; tests call this without HTTP. */
 export async function ca2Dispatch(
-  h: Ca2Handle, req: { method: string; path: string; query: URLSearchParams; body: () => Promise<unknown> }, actor = ROOT_HUMAN,
+  h: Ca2Handle, req: { method: string; path: string; query: URLSearchParams; body: () => Promise<unknown> }, actor = ROOT_HUMAN, board?: BoardDeps,
 ): Promise<RouteResult | null> {
   const { method, path, query } = req
   if (!isCa2Path(path)) return null
-  const reads: Record<string, () => RouteResult> = {
+  const reads: Record<string, () => RouteResult | Promise<RouteResult>> = {
+    '/nodes': () => nodesView(h, query, board),
     '/status': () => statusView(h), '/memory': () => memoryView(h, query),
     '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query), '/tools': () => toolsView(h),
   }
@@ -49,7 +51,7 @@ export async function ca2Dispatch(
     const id = decode((agent ?? skill)?.[1] ?? '')
     if (id === null) return { status: 400, body: { error: 'invalid_id' } }
     if (agent) return agent[2] === 'relay' ? relayAgent(h, id, await req.body()) : closeAgent(h, id)
-    return skillAction(h, id, skill?.[2] === 'approve' ? 'approve' : 'rollback', await req.body(), actor)
+    return skillAction(h, id, skill?.[2] as SkillAction, await req.body(), actor)
   }
   if (path === `${BASE}/control` || path === `${BASE}/halt`) {
     const control: ControlRequest = { method, path, query, body: method === 'GET' ? undefined : await req.body(), actor: ROOT_ACTOR }

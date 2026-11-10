@@ -14,6 +14,29 @@ export function centralErrorMessage(err: unknown, fallback: string = CL.loadFail
 /** Server code of a failed call (`skills_off`, `agents_off`, ...) so a panel can show an off state. */
 const codeOf = (err: unknown): string | null => (err instanceof InboxApiError ? err.code : null)
 
+/** How often an on-screen panel re-reads while nothing else tells it the numbers moved. */
+export const LIVE_REFRESH_MS = 30_000
+
+/**
+ * Keeps a stays-mounted panel current: `refresh` runs when `visible` turns true again, when the browser tab
+ * comes back, and every `LIVE_REFRESH_MS` while shown. The client has no app-wide "Central turn ended" signal
+ * (only the open chat conversation sees it), so the interval covers a turn that ends while this panel is shown.
+ */
+export function useLiveRefresh(visible: boolean, refresh: () => void): void {
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+  const wasVisible = useRef(visible)
+  useEffect(() => {
+    if (visible && !wasVisible.current) refreshRef.current()
+    wasVisible.current = visible
+    if (!visible) return
+    const tick = (): void => { if (document.visibilityState === 'visible') refreshRef.current() }
+    const timer = setInterval(tick, LIVE_REFRESH_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick) }
+  }, [visible])
+}
+
 export interface Loaded<T> { data: T | null; error: string | null; code: string | null; loading: boolean; reload: () => void }
 
 /** Loads once and on `reload()`; the in-flight request is aborted on unmount or reload. */
@@ -24,10 +47,15 @@ export function useLoad<T>(load: (signal: AbortSignal) => Promise<T>): Loaded<T>
   const [state, setState] = useState<{ data: T | null; error: string | null; code: string | null; loading: boolean }>({ data: null, error: null, code: null, loading: true })
   useEffect(() => {
     const ac = new AbortController()
-    setState((s) => ({ ...s, loading: true }))
+    setState((s) => (s.data === null ? { ...s, loading: true } : s))
     loadRef.current(ac.signal).then(
       (data) => { if (!ac.signal.aborted) setState({ data, error: null, code: null, loading: false }) },
-      (err: unknown) => { if (!ac.signal.aborted && !isAbortError(err)) setState({ data: null, error: centralErrorMessage(err), code: codeOf(err), loading: false }) },
+      (err: unknown) => {
+        if (ac.signal.aborted || isAbortError(err)) return
+        const code = codeOf(err)
+        // A failed background refresh keeps what is shown; a feature that went off has nothing to show.
+        setState((s) => ({ data: code?.endsWith('_off') ? null : s.data, error: centralErrorMessage(err), code, loading: false }))
+      },
     )
     return () => ac.abort()
   }, [tick])
@@ -46,12 +74,14 @@ export function usePaged<T>(fetchPage: (offset: number, signal: AbortSignal) => 
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)
   const [req, setReq] = useState({ offset: 0, n: 0 })
+  const loaded = useRef(false)
   useEffect(() => {
     const ac = new AbortController()
-    setLoading(true)
+    if (!loaded.current) setLoading(true)
     fetchRef.current(req.offset, ac.signal).then(
       (rows) => {
         if (ac.signal.aborted) return
+        loaded.current = true
         setItems((prev) => (req.offset === 0 ? rows : [...prev, ...rows]))
         setHasMore(rows.length >= CENTRAL_PAGE_SIZE)
         setError(null)

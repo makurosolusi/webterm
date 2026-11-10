@@ -4,10 +4,11 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { SkillContent, SkillIndexEntry, SkillOrigin, SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../contracts/skill.types'
+import { createLogger } from '../../logs'
 import { type SkillEvaluator, activeDir, approveSkill, evaluateSkill, rejectSkill, rollbackSkill, staticEvaluator, submitForApproval, verifyFolder } from './skillLifecycle'
 import {
-  DAY_MS, HASH_FILE, MAX_ACTIVE_SKILLS, MAX_PROPOSALS_PER_DAY, SKILL_FILE, type SkillCtx, SkillError, activeDescriptions, activeRecord, assertSkillName,
-  countCreatedSince, ensureSkillTable, hashFolder, isSkillName, listRecords, putRecord, setStatus, skillDir, versionsOf,
+  DAY_MS, HASH_FILE, MAX_ACTIVE_SKILLS, MAX_PROPOSALS_PER_DAY, SKILL_FILE, type SkillCtx, SkillError, type StoredSkill, activeDescriptions, activeRecord, assertSkillName,
+  countCreatedSince, ensureSkillTable, getRecord, hashFolder, isSkillName, listRecords, putRecord, setStatus, skillDir, versionsOf,
 } from './skillIndex'
 import { formatSkill, lintSkill } from './skillLint'
 
@@ -15,6 +16,8 @@ import { formatSkill, lintSkill } from './skillLint'
 export const INDEX_CHAR_BUDGET = 2000
 const OPEN_STATES: readonly SkillStatus[] = ['proposed', 'evaluated', 'pending_approval']
 const BUILTIN_ACTOR = 'system:builtin'
+const SWEEP_LIMIT = 200
+const log = createLogger('central.skills')
 export const BUILTIN_DIR = join(dirname(fileURLToPath(import.meta.url)), 'builtin')
 
 export interface SkillStoreOptions { db: Database; root: string; now?: () => number; evaluator?: SkillEvaluator; allowedCaps?: ReadonlySet<string>; builtinDir?: string }
@@ -23,9 +26,10 @@ export interface SkillPage { limit?: number; offset?: number }
 /** `SkillStore` plus the human-only admin steps; none of these are exposed as tools. */
 export interface SkillAdminStore extends SkillStore {
   index(): readonly SkillIndexEntry[]
-  list(status?: SkillStatus, page?: SkillPage): readonly SkillRecord[]
+  list(status?: SkillStatus, page?: SkillPage): readonly StoredSkill[]
   load(name: string): SkillContent | null
-  propose(input: SkillProposeInput, proposedBy: string): SkillRecord
+  /** Stores the draft, then evaluates and submits it; resolves to its final state (`pending_approval` or `rejected`). */
+  propose(input: SkillProposeInput, proposedBy: string): Promise<StoredSkill>
   rollback(name: string, by: string): SkillRecord
   /** Needs a `human:` actor and the typed phrase from `confirmPhrase`. */
   approve(name: string, version: string, approvedBy: string, typedConfirm?: string): SkillRecord
@@ -55,6 +59,25 @@ function proposeSkill(ctx: SkillCtx, input: SkillProposeInput, proposedBy: strin
   const rec: SkillRecord = { name: input.name, version, sha256: hashFolder(dir), status: 'proposed', origin, caps: lint.meta?.caps ?? [], createdAt: ctx.now(), proposedBy, approvedBy: null, approvedAt: null, evalScore: null }
   putRecord(ctx.db, rec, input.description)
   return rec
+}
+
+/** Evaluate then submit; a failure is logged and leaves the row rejected, it never reaches the proposer. */
+async function advanceProposal(ctx: SkillCtx, rec: SkillRecord, evaluator: SkillEvaluator): Promise<StoredSkill> {
+  const fields = { name: rec.name, version: rec.version }
+  try {
+    const evaluated = await evaluateSkill(ctx, rec.name, rec.version, evaluator)
+    if (evaluated.status === 'evaluated') return submitForApproval(ctx, rec.name, rec.version)
+    log.warn('skills.evaluate_rejected', `skill ${rec.name}@${rec.version} did not pass evaluation`, fields)
+    return evaluated
+  } catch (err) {
+    log.error('skills.evaluate_failed', `could not evaluate skill ${rec.name}@${rec.version}`, { ...fields, error: err instanceof Error ? err.message : String(err) })
+    return getRecord(ctx.db, rec.name, rec.version) ?? rec
+  }
+}
+
+/** One pass over rows that were proposed before proposals advanced by themselves. */
+async function advanceStuckProposals(ctx: SkillCtx, evaluator: SkillEvaluator): Promise<void> {
+  for (const rec of listRecords(ctx.db, 'proposed', SWEEP_LIMIT)) await advanceProposal(ctx, rec, evaluator)
 }
 
 function loadSkill(ctx: SkillCtx, name: string): SkillContent | null {
@@ -99,6 +122,7 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
   ensureSkillTable(opts.db)
   const ctx: SkillCtx = { db: opts.db, root: opts.root, now: opts.now ?? Date.now, ...(opts.allowedCaps ? { allowedCaps: opts.allowedCaps } : {}) }
   const evaluator = opts.evaluator ?? staticEvaluator
+  void advanceStuckProposals(ctx, evaluator).catch((err: unknown) => log.error('skills.sweep_failed', 'could not advance stuck skill proposals', { error: err instanceof Error ? err.message : String(err) }))
   return {
     index(): readonly SkillIndexEntry[] {
       let used = 0
@@ -112,7 +136,7 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
     },
     list: (status, page = {}) => listRecords(ctx.db, status, page.limit, page.offset),
     load: (name) => loadSkill(ctx, name),
-    propose: (input, proposedBy) => proposeSkill(ctx, input, proposedBy),
+    propose: async (input, proposedBy) => advanceProposal(ctx, proposeSkill(ctx, input, proposedBy), evaluator),
     approve: (name, version, approvedBy, typedConfirm) => approveSkill(ctx, name, version, approvedBy, typedConfirm),
     rollback: (name, by) => rollbackSkill(ctx, name, by),
     evaluate: (name, version) => evaluateSkill(ctx, name, version, evaluator),

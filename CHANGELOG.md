@@ -121,6 +121,8 @@ Operator notes:
 - Central's `canvas.open` can open Agent Chat nodes (`kind: "chat"`).
 - When Central tries to type into an Agent Chat node, it is pointed to the chat tools instead.
 - A Claude node can switch between the Agent Chat view and the raw terminal view from a button in its header (**Open as terminal** / **Open as chat**). The same Claude conversation continues on the other side: the running side is stopped first so only one writes the session, and every open window updates live. The switch is refused with a clear message while Claude is mid-turn or waiting on a permission prompt, for split terminals, and for terminals Central spawned as workers.
+- Control panel Status shows when Central last worked.
+- Control panel Agents: live-only by default, project filter, an "On the board" list of Agent Chats and Claude terminals, and Open node.
 
 ### Changed
 - Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
@@ -203,6 +205,7 @@ Operator notes:
 - The webterm page uses only its session cookie for `/api`, `/ws` and live streams. A `?token=` link still signs a browser in once and then disappears from the address bar; the server no longer accepts a token in any URL.
 - A signed-out browser shows only the sign-in screen, so it no longer logs refused settings, history and presence requests to the console.
 - A terminal Claude node whose saved profile is a default that no longer exists now launches with Default without the missing-profile notice. A profile you picked yourself and then deleted still shows the notice.
+- An agent status that went quiet for 20 minutes is now recorded in the event log.
 
 ### Fixed
 - A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.
@@ -287,6 +290,12 @@ Operator notes:
 - Deleting the Claude launch profile that is the default (or Central's) moves that setting back to Default instead of leaving it pointing at nothing.
 - An Agent Chat's saved model, effort and thinking now apply when its session starts. Its session, settings and permission mode are saved on the server as they change, so they survive with no window open and other open windows follow live.
 - Closing an Agent Chat node from Central now ends its Claude process instead of leaving it running.
+- Central's checkpoints and its richer context now run reliably; they could stay off until a restart after Central was paused.
+- Lessons Central learns from an agent stay with that project instead of showing up in every project.
+- Workers Central spawns in a terminal now show when they finish, need input, or exit, instead of staying "working" forever.
+- A spawn approval nobody answered now ends that agent instead of leaving it waiting forever.
+- Control panel Status: figures refresh by themselves, budget bars follow the theme, and the level text is honest when approvals are skipped.
+- Skills proposed by Central now reach review; active skills can be rolled back; proposals can be rejected; the approval phrase is checked on the server.
 
 ### Removed
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

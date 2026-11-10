@@ -59,6 +59,6 @@ describe('Agents tab off state', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }))
     await waitFor(() => expect(listAgents).toHaveBeenCalledTimes(2))
     expect(f.mock.calls[1][0]).toBe('/api/capabilities/workers')
-    expect(await screen.findByText(CL.empty)).toBeTruthy()
+    expect(await screen.findByText(CL.agentsNoneLive)).toBeTruthy()
   })
 })

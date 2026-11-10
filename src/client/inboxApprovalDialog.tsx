@@ -9,10 +9,10 @@ import { arrangeDialogButtons } from '@/components/vscode/vscodeDialogButtons'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import type { ApprovalChallenge } from './inboxApi'
+import { CONFIRM_PHRASE } from '../shared/approvalConfirm'
 import './inboxApprovalDialog.css'
 
-/** The exact text the operator must type. Not a regex, not case-folded: consent is literal. */
-export const CONFIRM_PHRASE = 'APPROVE'
+export { CONFIRM_PHRASE }
 
 export type ReviewPhase =
   | 'requesting'

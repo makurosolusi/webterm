@@ -40,6 +40,12 @@ export {
 } from './turnPersistence'
 export type { MessagePage, StoredMessage } from './turnPersistence'
 
+/** What a turn assembles its prompt and summarizes with; an absent field falls back to the service's own. */
+export interface TurnWiring {
+  context?: ContextAssembler
+  summarize?: Summarize
+}
+
 export interface TurnServiceDeps {
   db: Database
   runtime: CentralRuntime | null
@@ -51,6 +57,8 @@ export interface TurnServiceDeps {
   env?: NodeJS.ProcessEnv
   /** Checkpoint summarizer; without one no checkpoint is written after a turn (rotation still seeds a fallback). */
   summarize?: Summarize
+  /** Read at the start of every turn, so a long-lived service follows Central arming; replaces `summarize`. */
+  wiring?: () => TurnWiring
 }
 
 export interface SubmitResult {
@@ -78,7 +86,7 @@ export class TurnService {
   private readonly now: () => number
   private readonly context: ContextAssembler
   private readonly env: NodeJS.ProcessEnv
-  private readonly summarize: Summarize | undefined
+  private readonly wiring: () => TurnWiring
   private readonly runs = new Map<string, Promise<Turn>>()
   private readonly active = new Map<string, string>()
   private readonly states = new Map<string, RunState>()
@@ -90,7 +98,7 @@ export class TurnService {
     this.now = deps.now ?? Date.now
     this.context = deps.context ?? createLegacyContextAssembler()
     this.env = deps.env ?? process.env
-    this.summarize = deps.summarize
+    this.wiring = deps.wiring ?? (() => (deps.summarize ? { summarize: deps.summarize } : {}))
   }
 
   /** Idempotent submit: the same `clientMessageId` replays the same message/turn ids. */
@@ -116,9 +124,10 @@ export class TurnService {
     }
     // A `/model` choice since the last good turn: this turn opens a fresh session (reseeded like a rotation).
     const switchModel = modelSwitchPending(this.db, conversation.id)
+    const { context = this.context, summarize } = this.wiring()
     let built: ReturnType<ContextAssembler['build']>
     try {
-      built = this.context.build({
+      built = context.build({
         db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
         ...(switchModel ? { rotate: true } : {}),
       })
@@ -158,11 +167,11 @@ export class TurnService {
     log.info('central.turn.start', 'central chat turn started', { turnId: turn.id, runtime: this.runtime.kind })
     this.record(conversation.id, 'turn.status', { status: turn.status }, turn.id, null)
     // Rotated-session context, built only if the runtime finds its resumed session gone.
-    const freshSessionText = (): string => withFiles(this.context.build({
+    const freshSessionText = (): string => withFiles(context.build({
       db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
       rotate: true, beforeSeq: message.seq,
     }).prompt, files)
-    const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText)
+    const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText, summarize)
     this.runs.set(turn.id, done)
     void done.finally(() => {
       this.runs.delete(turn.id)
@@ -204,7 +213,7 @@ export class TurnService {
 
   private async runTurn(
     conversation: Conversation, turn: Turn, ask: { prompt: string; images: TurnInput['images'] }, history: string[], rotate: boolean,
-    cacheEnv: Record<string, string>, freshSessionText: () => string
+    cacheEnv: Record<string, string>, freshSessionText: () => string, summarize: Summarize | undefined
   ): Promise<Turn> {
     const runtime = this.runtime
     if (runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
@@ -236,7 +245,7 @@ export class TurnService {
     try {
       const result = stamp(await runtime.turn(input, emit))
       const finished = finalizeTurn(this.db, this.stream, conversation.id, turn.id, assistant.id, state, result, this.now)
-      recordTurnContext({ db: this.db, env: this.env, now: this.now, ...(this.summarize ? { summarize: this.summarize } : {}) }, conversation.id, turn.id, result)
+      recordTurnContext({ db: this.db, env: this.env, now: this.now, ...(summarize ? { summarize } : {}) }, conversation.id, turn.id, result)
       return finished
     } catch (err) {
       // Name only: runtime error messages can quote the conversation.

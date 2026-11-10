@@ -30,7 +30,7 @@ describe('NodeRegistry status', () => {
 
     const swept = reg.sweepStale(T0 + WORKING_STALE_MS + 1)
 
-    expect(swept).toEqual(['stale'])
+    expect(swept).toEqual([{ id: 'stale', idleMs: WORKING_STALE_MS + 1 }])
     expect(reg.getStatus('stale')).toBeUndefined()
     // `working` yang baru diperbarui belum basi.
     expect(reg.getStatus('fresh')).toEqual({ status: 'working', updatedAt: T0 + WORKING_STALE_MS })

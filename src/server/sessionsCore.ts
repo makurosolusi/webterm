@@ -8,12 +8,15 @@ import type { AgentStatus } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
 import { STALE_SWEEP_MS } from '../shared/agentStale'
-import { NodeRegistry, tailOutputBytes, type NodeExit } from './nodeRegistry'
+import { NodeRegistry, tailOutputBytes, type NodeExit, type StaleSweepEntry } from './nodeRegistry'
 import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 import { ptyLog } from './sessionsLog'
 import type { TmuxSupervisor } from './ptySupervisor'
 import { nextEpoch, replay } from './sessionsAttach'
+import { createLogger } from './logs'
+
+const agentLog = createLogger('agent')
 
 /** Ekor output yang ikut tombstone exit. Kosong = `undefined`, supaya tombstone node tanpa output
  *  tidak membawa string kosong dan `getExit()` tetap ringkas dibandingkan. */
@@ -38,6 +41,9 @@ export class SessionsCore {
   /** Durable last status per node (A4). Set by the singleton only, like `supervisor` it lives outside
    *  `options`, so `new Sessions()` in a test writes nothing unless it hands in a tmp-path store. */
   statusStore?: StatusStore
+
+  /** Told about each node the stale sweep removes. Set by the singleton only, like `statusStore`. */
+  onStaleSweep?: (entry: StaleSweepEntry) => void
 
   /** Supervisor yang benar-benar dipakai. PTY ter-inject (test) tidak pernah lewat tmux. */
   protected get supervised(): TmuxSupervisor | null {
@@ -78,10 +84,16 @@ export class SessionsCore {
    * `done`/`waiting` — alasannya di `agentStale.ts`. Self-healing: event berikutnya menulis ulang.
    */
   sweepStale(now: number = this.now()): void {
-    for (const id of this.registry.sweepStale(now)) {
+    for (const entry of this.registry.sweepStale(now)) {
+      const { id } = entry
       ptyLog.statusCleared(id)
       // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
       this.map.get(id)?.subs.send({ t: 'status', id })
+      try {
+        this.onStaleSweep?.(entry)
+      } catch (err) {
+        agentLog.warn('agent.stale.report_failed', 'Failed to report stale sweep of node', { ids: { nodeId: id }, cause: err instanceof Error ? err.message : String(err) })
+      }
     }
   }
 

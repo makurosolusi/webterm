@@ -16,7 +16,7 @@ import { nodeRef } from '../memoryControls'
 import { isIncognito } from '../memoryGuard'
 import { CONSOLIDATION_SCHEMA, consolidationPrompt, parseOps, TRANSCRIPT_MAX_CHARS } from './consolidator.model'
 import type { ConsolidatorModel } from './consolidator.runner'
-import { CONSOLIDATOR_DAILY_TOKENS, knownMemories, recordRunUsage, tokensToday, writeProposals } from './consolidator.store'
+import { CONSOLIDATOR_DAILY_TOKENS, knownMemories, projectOfNode, recordRunUsage, tokensToday, writeProposals } from './consolidator.store'
 
 export const IDLE_MS = 10 * 60_000
 export const NIGHT_HOUR = 3
@@ -47,7 +47,7 @@ const empty = (status: RunStatus): RunResult => ({ status, written: [], skipped:
 const conversational = (l: string): boolean => l.startsWith('user: ') || l.startsWith('assistant: ')
 
 /** One consolidator pass over what a node said since `cursors.get(nodeId)`. */
-export async function consolidateNode(deps: ConsolidatorDeps, cursors: Map<string, number>, nodeId: string, sourceEventId: number | null): Promise<RunResult> {
+export async function consolidateNode(deps: ConsolidatorDeps, cursors: Map<string, number>, nodeId: string, sourceEventId: number | null, workspaceId: string | null = null): Promise<RunResult> {
   const db = deps.db()
   if (!db) return empty('off')
   if (isIncognito(db, [nodeRef(nodeId)])) return empty('incognito')
@@ -58,14 +58,15 @@ export async function consolidateNode(deps: ConsolidatorDeps, cursors: Map<strin
   const from = (cursors.get(nodeId) ?? 0) <= lines.length ? (cursors.get(nodeId) ?? 0) : 0 // shorter = a new transcript
   if (from >= lines.length) return empty('nothing_new')
   const transcript = redactSecrets(lines.slice(from).join('\n')).slice(-TRANSCRIPT_MAX_CHARS)
-  const known = knownMemories(db)
+  const projectId = projectOfNode(db, nodeId, workspaceId, deps.now())
+  const known = knownMemories(db, projectId)
   const prompt = consolidationPrompt(transcript, known)
   const now = deps.now()
   if (tokensToday(db, now) + Math.ceil(prompt.length / CHARS_PER_TOKEN) + OUTPUT_ESTIMATE_TOKENS > (deps.dailyTokens ?? CONSOLIDATOR_DAILY_TOKENS)) return empty('capped')
   const answer = await withTimeout((signal) => deps.model({ prompt, schema: CONSOLIDATION_SCHEMA }, signal), RUN_TIMEOUT_MS, 'consolidator')
   recordRunUsage(db, newId(), nodeId, answer.usage, deps.now())
   cursors.set(nodeId, lines.length)
-  const out = writeProposals(db, parseOps(answer.output, known), { nodeId, sourceEventId }, deps.now())
+  const out = writeProposals(db, parseOps(answer.output, known), { nodeId, sourceEventId, projectId }, deps.now())
   return { status: 'ok', ...out }
 }
 
@@ -73,13 +74,13 @@ export async function consolidateNode(deps: ConsolidatorDeps, cursors: Map<strin
 export function createConsolidator(deps: ConsolidatorDeps, bus: Pick<EventBus, 'subscribe'>) {
   const cursors = new Map<string, number>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
-  const seen = new Map<string, { at: number; seq: number | null }>()
+  const seen = new Map<string, { at: number; seq: number | null; workspaceId: string | null }>()
   let chain: Promise<unknown> = Promise.resolve()
   let lastNight = ''
   const warn = deps.warn ?? (() => {})
 
   const enqueue = (nodeId: string, seq: number | null): Promise<RunResult> => {
-    const run = chain.then(() => consolidateNode(deps, cursors, nodeId, seq)).catch((err: unknown) => {
+    const run = chain.then(() => consolidateNode(deps, cursors, nodeId, seq, seen.get(nodeId)?.workspaceId ?? null)).catch((err: unknown) => {
       warn('consolidator run failed; proposals skipped this time', { ids: { nodeId }, cause: err instanceof Error ? err.message : String(err) })
       return empty('failed')
     })
@@ -97,7 +98,7 @@ export function createConsolidator(deps: ConsolidatorDeps, bus: Pick<EventBus, '
     bus.subscribe('hook.*', (e) => {
       if (!e.nodeId) return
       const seq = e.seq > 0 ? e.seq : null
-      seen.set(e.nodeId, { at: e.ts, seq })
+      seen.set(e.nodeId, { at: e.ts, seq, workspaceId: e.workspaceId })
       if (e.kind === 'hook.Stop') arm(e.nodeId, seq)
       else if (BUSY_HOOKS.has(e.kind)) disarm(e.nodeId)
     }),

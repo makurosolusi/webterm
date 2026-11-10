@@ -112,6 +112,8 @@ export interface AgentExecutor {
   resume(agentId: string): Promise<ToolResult>
   /** Cancels an `approval_pending` agent whose card a human rejected (resume sweep). */
   reject(agentId: string): ToolResult
+  /** Cancels an `approval_pending` agent whose card nobody answered: no consent, so no new card (resume sweep). */
+  expire(agentId: string): ToolResult
   /** Puts a fresh card on an `approval_pending` agent whose approval lapsed unused (resume sweep). */
   renew(agentId: string): Promise<ToolResult>
   prompt(agent: AgentRecord, text: string, mode: 'steer' | 'followup'): Promise<ToolResult>
@@ -234,12 +236,12 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id, approvalStatus: 'pending' } }
   }
 
-  const rejected = (agent: AgentRecord): ToolResult => ({ ok: false, code: 'approval_rejected', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'rejected' } })
+  const refused = (agent: AgentRecord, status: 'rejected' | 'expired'): ToolResult => ({ ok: false, code: `approval_${status}`, data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: status, ...(status === 'expired' ? { hint: 'The approval card expired unanswered and this agent is cancelled; spawn again with a new requestId.' } : {}) } })
 
-  function rejectPending(agent: AgentRecord): ToolResult {
-    const cancelled = tryMove(agent.id, 'cancelled', { reason: 'approval_rejected' })
-    if (cancelled) audit(cancelled, 'spawn.rejected', { approvalId: agent.approvalId })
-    return rejected(cancelled ?? agent)
+  function endPending(agent: AgentRecord, status: 'rejected' | 'expired'): ToolResult {
+    const cancelled = tryMove(agent.id, 'cancelled', { reason: `approval_${status}` })
+    if (cancelled) audit(cancelled, `spawn.${status}`, { approvalId: agent.approvalId })
+    return refused(cancelled ?? agent, status)
   }
 
   /**
@@ -255,7 +257,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     // Skip approvals: an open or lapsed card no longer holds the agent; the guard's denies still do.
     if (skip() && (status === 'pending' || status === 'expired')) return (await gate(agent.projectId, 'agent.spawn', tier)) ?? launch(agent)
     if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
-    if (status === 'rejected') return rejectPending(agent)
+    if (status === 'rejected') return endPending(agent, 'rejected')
     if (status === 'expired') return pendApproval(agent)
     const digest = getRow(db, 'SELECT d.action_digest AS digest FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?', agent.approvalId)?.['digest']
     // Single use: when the resume sweep consumed it first, that sweep starts the agent; report where it is.
@@ -268,7 +270,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
 
   /** Adds kind (+ custom definition hash) to a spawn result so the audit trail ties a spawn to one definition. */
   const withDefHash = (r: ToolResult, kind: string): ToolResult => {
-    if (!r.ok && r.code !== 'approval_required' && r.code !== 'approval_rejected') return r
+    if (!r.ok && r.code !== 'approval_required' && r.code !== 'approval_rejected' && r.code !== 'approval_expired') return r
     const defHash = host.defHashOf?.(kind)
     return { ...r, data: { ...r.data, kind, ...(defHash ? { defHash } : {}) } }
   }
@@ -289,7 +291,8 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     if (existing) {
       if (existing.projectId !== input.projectId || existing.kind !== input.kind || existing.role !== input.role || existing.taskId !== (input.taskId ?? null)) return { ok: false, code: 'request_conflict' }
       if (existing.state === 'approval_pending') return settlePending(existing, tier)
-      if (existing.state === 'cancelled' && existing.endReason === 'approval_rejected') return rejected(existing)
+      if (existing.state === 'cancelled' && existing.endReason === 'approval_rejected') return refused(existing, 'rejected')
+      if (existing.state === 'cancelled' && existing.endReason === 'approval_expired') return refused(existing, 'expired')
       if (existing.state !== 'requested') return snapshot(existing, { reused: true })
       // Crash remnant before the launch claim: judge it again, the earlier verdict is not trusted.
       const again = await gate(input.projectId, 'agent.spawn', tier)
@@ -326,7 +329,11 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     },
     reject(agentId) {
       const agent = store.get(agentId)
-      return agent?.state === 'approval_pending' ? rejectPending(agent) : { ok: false, code: 'not_pending' }
+      return agent?.state === 'approval_pending' ? endPending(agent, 'rejected') : { ok: false, code: 'not_pending' }
+    },
+    expire(agentId) {
+      const agent = store.get(agentId)
+      return agent?.state === 'approval_pending' ? endPending(agent, 'expired') : { ok: false, code: 'not_pending' }
     },
     async renew(agentId) {
       const agent = store.get(agentId)
@@ -345,12 +352,13 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     async close(agent, reason, force) {
       if (isTerminalState(agent.state)) return snapshot(agent, { already: true })
       if (agent.state === 'closing') return { ok: false, code: 'agent_closing' }
-      if (agent.runner === 'exec') handles.get(agent.id)?.kill()
-      else if (agent.nodeId) await host.closePty(agent.nodeId, force)
       const code = reason.slice(0, 200)
+      // Moved before the PTY goes: closing it publishes pty.exit synchronously, which would win as session_exited.
       const done = agent.state === 'accepted'
         ? tryMove(agent.id, 'closing', { reason: code }) && tryMove(agent.id, 'closed', { reason: code })
         : tryMove(agent.id, force ? 'killed' : 'cancelled', { reason: code })
+      if (agent.runner === 'exec') handles.get(agent.id)?.kill()
+      else if (agent.nodeId) await host.closePty(agent.nodeId, force)
       audit(agent, 'close', { force, to: done?.state ?? null })
       return done ? snapshot(done) : { ok: false, code: 'conflict' }
     },
