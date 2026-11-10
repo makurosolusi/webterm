@@ -120,6 +120,7 @@ Operator notes:
 - Central's `node.inspect` reads an Agent Chat node: status, model and settings, permission mode, cost, context use, a waiting permission request and the last turns of the conversation, with secrets redacted. `node.list` shows whether a chat is live.
 - Central's `canvas.open` can open Agent Chat nodes (`kind: "chat"`).
 - When Central tries to type into an Agent Chat node, it is pointed to the chat tools instead.
+- A Claude node can switch between the Agent Chat view and the raw terminal view from a button in its header (**Open as terminal** / **Open as chat**). The same Claude conversation continues on the other side: the running side is stopped first so only one writes the session, and every open window updates live. The switch is refused with a clear message while Claude is mid-turn or waiting on a permission prompt, for split terminals, and for terminals Central spawned as workers.
 
 ### Changed
 - Sessions now lists every workspace top to bottom in tab order, including the one you have open. Each shows a status dot, its name, a "Current" chip on the open one, its folder and git branch, and its sessions right below. Clicking a session in another workspace still switches to it, and the list no longer reshuffles.
