@@ -8,7 +8,8 @@ import type { LaunchTest } from '../claudeLauncher/claudeLaunch.client'
 import { resetCapabilitiesCache } from '../useCapabilities'
 import { BrowserStep } from './setup.browser'
 import { claudeCheckState, ClaudeStep } from './setup.claude'
-import { capabilityWrites, fakeServer, NOT_FOUND, READY, type FakeServer } from './setup.fakeServer'
+import { DOWNLOAD_TEXT } from '../advancedLabels'
+import { capabilityWrites, DL_IDLE, fakeServer, NOT_FOUND, READY, type FakeServer } from './setup.fakeServer'
 import { SETUP_TEXT } from './setup.labels'
 import { BasicsStep, CentralStep } from './setup.steps'
 import type { StepNav } from './setup.ui'
@@ -133,8 +134,56 @@ describe('Browser step', () => {
   })
 
   it('the Download Chromium slot shows only when the server supports it', async () => {
-    await step({ extras: { chromiumDownload: { supported: true } } })
+    await step({ extras: { chromiumDownload: { supported: true, state: 'idle', percent: 0 } } })
     expect(screen.getByRole('button', { name: SETUP_TEXT.browser.download })).toBeTruthy()
+    cleanup()
+    resetCapabilitiesCache()
+    await step({ extras: { chromiumDownload: { supported: false, state: 'idle', percent: 0 } } })
+    expect(screen.queryByRole('button', { name: SETUP_TEXT.browser.download })).toBeNull()
+  })
+
+  it('Download Chromium: start, progress with Cancel, done selects it and Continue turns the browser on', async () => {
+    const s = await step({ candidates: [], extras: { chromiumDownload: { supported: true, state: 'idle', percent: 0 } } })
+    click(SETUP_TEXT.browser.download)
+    const startBtn = await screen.findByRole('button', { name: DOWNLOAD_TEXT.start })
+    expect((screen.getByRole('button', { name: SETUP_TEXT.next }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(startBtn)
+    await waitFor(() => expect(s.calls.some((c) => c.method === 'POST' && c.url === '/api/capabilities/chromium-download')).toBe(true))
+    expect(await screen.findByRole('button', { name: DOWNLOAD_TEXT.cancel })).toBeTruthy()
+    s.download = { ...DL_IDLE, state: 'downloading', percent: 42 }
+    await waitFor(() => expect(screen.getByRole('progressbar', { name: DOWNLOAD_TEXT.progressLabel }).getAttribute('aria-valuenow')).toBe('42'), { timeout: 2000 })
+    expect(screen.getByText(DOWNLOAD_TEXT.progress(42))).toBeTruthy()
+    s.chromiumValue = '/data/browsers/chrome/linux-1/chrome-linux64/chrome'
+    s.download = { ...DL_IDLE, state: 'done', percent: 100, executablePath: s.chromiumValue }
+    expect(await screen.findByText(s.chromiumValue, {}, { timeout: 2000 })).toBeTruthy()
+    await waitFor(() => expect(s.calls.filter((c) => c.url === '/api/capabilities' && c.method === 'GET').length).toBeGreaterThan(1)) // reloaded after done
+    expect(pressed(SETUP_TEXT.browser.download)).toBe('true')
+    click(SETUP_TEXT.next)
+    await waitFor(() => expect(nav.next).toHaveBeenCalled())
+    expect(capabilityWrites(s)).toEqual(['browser=on'])
+    expect(s.calls.some((c) => c.url === '/api/capabilities/advanced')).toBe(false) // the server already saved the path
+  })
+
+  it('Download Chromium: Cancel returns to the start button; a failure shows the reason and Retry starts again', async () => {
+    const s = await step({ extras: { chromiumDownload: { supported: true, state: 'downloading', percent: 5 } }, download: { ...DL_IDLE, state: 'downloading', percent: 5 } })
+    expect(pressed(SETUP_TEXT.browser.download)).toBe('true') // a running download is the default choice
+    fireEvent.click(await screen.findByRole('button', { name: DOWNLOAD_TEXT.cancel }))
+    expect(await screen.findByRole('button', { name: DOWNLOAD_TEXT.start })).toBeTruthy()
+    s.download = { ...DL_IDLE, state: 'failed', error: 'Not enough free disk space to download Chromium (about 600 MB is needed).' }
+    cleanup()
+    render(<BrowserStep nav={nav} />)
+    expect(await screen.findByText(/Not enough free disk space/)).toBeTruthy()
+    click(DOWNLOAD_TEXT.retry)
+    expect(await screen.findByRole('button', { name: DOWNLOAD_TEXT.cancel })).toBeTruthy()
+  })
+
+  it('Download Chromium: an unreachable server says so and Retry reads the status again', async () => {
+    const s = await step({ extras: { chromiumDownload: { supported: true, state: 'idle', percent: 0 } }, downloadFail: true })
+    click(SETUP_TEXT.browser.download)
+    expect(await screen.findByText(DOWNLOAD_TEXT.unreachable)).toBeTruthy()
+    click(DOWNLOAD_TEXT.retry)
+    expect(await screen.findByRole('button', { name: DOWNLOAD_TEXT.start })).toBeTruthy()
+    expect(s.calls.filter((c) => c.url === '/api/capabilities/chromium-download').length).toBe(2)
   })
 
   it('a failed save shows the error and Retry; the step stays', async () => {

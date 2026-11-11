@@ -6,7 +6,7 @@ export const AUDIT_MAX_ROWS = 1000
 /** `detail` dipotong supaya satu baris tak membengkak. */
 const DETAIL_MAX_CHARS = 200
 
-export type AuditAction = 'grant' | 'revoke' | 'sub' | 'advanced' | 'denied' | 'reset'
+export type AuditAction = 'grant' | 'revoke' | 'sub' | 'advanced' | 'denied' | 'reset' | 'download'
 
 export interface AuditEntry {
   /** Id katalog atau 'advanced'. */

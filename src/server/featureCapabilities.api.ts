@@ -12,15 +12,25 @@ import { peerOf } from './featureCapabilities.guard'
 import type { DetectOptions } from './featureCapabilities.detect'
 import { buildResponse, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
 import { createLogger } from './logs'
+import { chromiumDownloader, type ChromiumDownloader } from './browser/browserDownload'
 
 const log = createLogger('capabilities')
 export const CAPABILITIES_PATH = '/api/capabilities'
+/** `GET` status, `POST` start, `POST .../cancel` (browserDownload.ts). Mutations go through the settings guard like every other write here. */
+export const CHROMIUM_DOWNLOAD_PATH = '/api/capabilities/chromium-download'
+const DOWNLOAD_SEG = 'chromium-download'
 const SECRETS_SUBDIR = 'secrets'
 /** Metode yang diizinkan per rute tetap; rute `/:id` dan `/:id/sub` hanya POST. */
-const FIXED_METHODS: Record<string, string> = { '/': 'GET', 'advanced/': 'GET|PUT', 'reset/': 'POST', 'telegram/connect': 'POST' }
+const FIXED_METHODS: Record<string, string> = {
+  '/': 'GET', 'advanced/': 'GET|PUT', 'reset/': 'POST', 'telegram/connect': 'POST',
+  [`${DOWNLOAD_SEG}/`]: 'GET|POST', [`${DOWNLOAD_SEG}/cancel`]: 'POST',
+}
 
 /** Seam produksi yang bisa diganti tes. */
-export interface CapabilityExtras { env: NodeJS.ProcessEnv; detect: (opts?: DetectOptions) => Detect | Promise<Detect>; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch'] }
+export interface CapabilityExtras {
+  env: NodeJS.ProcessEnv; detect: (opts?: DetectOptions) => Detect | Promise<Detect>; dataDir: string; secrets: CapCtx['secrets']; fetch: CapCtx['fetch']
+  downloader: ChromiumDownloader
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const isCapabilityId = (v: string): v is CapabilityId => (CAPABILITY_IDS as readonly string[]).includes(v)
@@ -68,9 +78,11 @@ export async function capabilitiesRoute(
     dataDir: dir, secrets: extras.secrets ?? createFileSecretStore(join(dir, SECRETS_SUBDIR)),
   }
   // `?refresh=1` = "Periksa lagi": deteksi melewati cache probe login untuk panggilan ini saja; polling biasa tetap ber-cache.
+  const downloader = extras.downloader ?? chromiumDownloader(() => x.dataDir)
+  if (method === 'GET' && seg === DOWNLOAD_SEG) return send(res, { status: 200, body: downloader.status() })
   if (method === 'GET') {
     const fresh = new URL(req.url ?? '/', 'http://x').searchParams.get('refresh') === '1'
-    return send(res, { status: 200, body: buildResponse(env, await x.detect({ fresh }), x.dataDir) })
+    return send(res, { status: 200, body: buildResponse(env, await x.detect({ fresh }), x.dataDir, downloader.status()) })
   }
 
   const verdict = deps.guard(req)
@@ -89,6 +101,16 @@ export async function capabilitiesRoute(
   if (body === undefined) return true
   const c: CapCtx = { settings: deps.service, env, detect: x.detect, dataDir: x.dataDir, secrets: x.secrets, fetch: x.fetch, audit: note }
   if (seg === 'reset') return send(res, await reset(c))
+  if (seg === DOWNLOAD_SEG) {
+    if (sub === 'cancel') return send(res, { status: 200, body: downloader.cancel() })
+    const status = downloader.start(async (chromiumPath) => {
+      const r = await setAdvanced(c, { chromiumPath })
+      if (r.status !== 200) throw new Error(`chromium download: saving the browser location answered ${r.status}`)
+    })
+    if (!status) return fail(res, 409, 'unsupported_platform')
+    note({ capability: 'browser', action: 'download' })
+    return send(res, { status: 202, body: status })
+  }
   if (!isRecord(body)) return fail(res, 400, 'invalid_body')
   if (seg === 'advanced') return send(res, await setAdvanced(c, body))
   if (sub === 'connect') return typeof body.token === 'string' ? send(res, await connect(c, body.token)) : fail(res, 400, 'invalid_body')

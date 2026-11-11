@@ -3,6 +3,8 @@
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import { ENV_BROWSER } from '../shared/browser.contract'
 import { chromiumCandidates, detectChromium } from './browser/chromium.launch'
+import { headlessReason } from './browser/chromium.flags'
+import { downloadSupported, type DownloadStatus } from './browser/browserDownload'
 import { detectAgentEngine } from './central/runtime/runtimeDetect'
 import { CENTRAL_RUNTIME_FLAG } from './central/runtime/runtimeFlag'
 import type { EnvChange } from './envSettings.service'
@@ -15,8 +17,13 @@ const AUTO = 'auto'
 /** Batas panjang path agar body tak membengkak; validasi isi tetap oleh registry. */
 const PATH_MAX_CHARS = 1024
 
+const IDLE: Pick<DownloadStatus, 'state' | 'percent'> = { state: 'idle', percent: 0 }
+
 /** Isi `advanced` untuk GET: nilai terpilih + hasil deteksi (tanpa mengikuti pilihan eksplisit). */
-export function advancedView(env: NodeJS.ProcessEnv, dataDir: string): CapabilitiesResponse['advanced'] {
+export function advancedView(
+  env: NodeJS.ProcessEnv, dataDir: string,
+  download: Pick<DownloadStatus, 'state' | 'percent'> = IDLE, platform: NodeJS.Platform = process.platform,
+): CapabilitiesResponse['advanced'] {
   const chosen = (env[CENTRAL_RUNTIME_FLAG] ?? '').trim().toLowerCase()
   return {
     agentEngine: {
@@ -25,6 +32,9 @@ export function advancedView(env: NodeJS.ProcessEnv, dataDir: string): Capabilit
     },
     chromiumPath: chromiumView(env),
     dataDir,
+    chromiumDownload: { supported: downloadSupported(platform), state: download.state, percent: download.percent },
+    // The display check alone (an explicit headless setting is the user's choice, not a lock).
+    headlessForced: headlessReason({ ...env, [ENV_BROWSER.headless]: undefined }, platform) === 'no_display' ? 'no_display' : null,
   }
 }
 

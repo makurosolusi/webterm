@@ -1,10 +1,13 @@
-import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
 import { TEST_TOKEN, fakeBotApi, ok } from './channels/telegramPollHarness'
 import { setupEnv, recorder } from './envSettings.testutil'
-import { capabilitiesRoute } from './featureCapabilities.api'
+import { capabilitiesRoute, type CapabilityExtras } from './featureCapabilities.api'
+import { createChromiumDownloader } from './browser/browserDownload'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { settingsGuard } from './featureCapabilities.guard'
 import { TEST_UI_COOKIE } from './uiSession.testutil'
@@ -15,12 +18,12 @@ import { advancedView } from './featureCapabilities.advanced'
 const ORIGIN = 'http://127.0.0.1:8700'
 interface Opts { origin?: string | null; remote?: boolean; cookie?: false; query?: string }
 
-function harness(fetch = fakeBotApi([]).fetch) {
+function harness(fetch = fakeBotApi([]).fetch, more: Partial<CapabilityExtras> = {}) {
   const h = setupEnv({})
   const audits: AuditEntry[] = []
   const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
   const detectCalls: Array<{ fresh?: boolean } | undefined> = []
-  const extras = { env: h.target, detect: (o?: { fresh?: boolean }) => { detectCalls.push(o); return { chromium: true, telegramToken: false, agentEngine: true } }, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch }
+  const extras = { env: h.target, detect: (o?: { fresh?: boolean }) => { detectCalls.push(o); return { chromium: true, telegramToken: false, agentEngine: true } }, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch, ...more }
   const call = async (method: string, path: string, body?: unknown, opts: Opts = {}) => {
     const headers: Record<string, string> = { host: '127.0.0.1:8700' }
     if (opts.origin !== null) headers.origin = opts.origin ?? ORIGIN
@@ -195,6 +198,45 @@ describe('POST /reset', () => {
     expect(r.status).toBe(200)
     expect(h.target.WEBTERM_FILES_VIEWERS).toBeUndefined()
     expect(r.json?.capabilities.every((c: { status: string }) => c.status === 'off')).toBe(true)
+  })
+})
+
+describe('chromium-download', () => {
+  // test-only: the injected installer writes a real file so the saved override resolves on disk.
+  const withDownloader = (platform: NodeJS.Platform = 'linux') => {
+    const dir = mkdtempSync(join(tmpdir(), 'wt-capdl-'))
+    const install = async (job: { cacheDir: string }) => {
+      mkdirSync(job.cacheDir, { recursive: true })
+      writeFileSync(join(job.cacheDir, 'chrome'), '')
+      return join(job.cacheDir, 'chrome')
+    }
+    const downloader = createChromiumDownloader({ dataDir: () => dir, install, platform })
+    return { dir, h: harness(undefined, { downloader, dataDir: dir }) }
+  }
+
+  it('POST starts (202), GET reports done, and the download becomes the browser in use', async () => {
+    const { dir, h } = withDownloader()
+    const start = await h.call('POST', '/api/capabilities/chromium-download', {})
+    expect(start.status).toBe(202)
+    expect(start.json?.state).toBe('downloading')
+    await vi.waitFor(async () => expect((await h.call('GET', '/api/capabilities/chromium-download', undefined, { origin: null })).json?.state).toBe('done'))
+    const bin = join(dir, 'browsers', 'chrome')
+    expect(h.target.WEBTERM_BROWSER_BIN).toBe(bin)
+    const caps = await h.call('GET', '/api/capabilities', undefined, { origin: null })
+    expect(caps.json?.advanced.chromiumPath).toMatchObject({ active: bin, source: 'override' })
+    expect(caps.json?.advanced.chromiumDownload).toEqual({ supported: true, state: 'done', percent: 100 })
+    expect(h.audits.map((a) => `${a.capability}:${a.action}`)).toEqual(['browser:download', 'advanced:advanced'])
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('start and cancel are writes: 403 without the page cookie or Origin; unsupported platform 409', async () => {
+    const { dir, h } = withDownloader('aix')
+    expect((await h.call('POST', '/api/capabilities/chromium-download', {}, { cookie: false })).status).toBe(403)
+    expect((await h.call('POST', '/api/capabilities/chromium-download/cancel', {}, { origin: null })).status).toBe(403)
+    expect((await h.call('DELETE', '/api/capabilities/chromium-download')).status).toBe(405)
+    expect((await h.call('POST', '/api/capabilities/chromium-download', {})).json).toEqual({ error: 'unsupported_platform' })
+    expect((await h.call('POST', '/api/capabilities/chromium-download/cancel', {})).json?.state).toBe('idle')
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 

@@ -42,10 +42,38 @@ const PLAYWRIGHT_BINS = [
 ] as const
 const PLAYWRIGHT_DIR = /^chromium-(\d+)$/
 
+/** `<data dir>/browsers`: where "Download Chromium" installs (browserDownload.ts), layout of @puppeteer/browsers' Cache. */
+export const BROWSERS_SUBDIR = 'browsers'
+/** Cache layout `<cacheDir>/chrome/<platform>-<buildId>/<bin>` (Chrome for Testing). */
+const DOWNLOADED_BROWSER = 'chrome'
+const DOWNLOADED_BINS = [...PLAYWRIGHT_BINS, 'chrome-linux-arm64/chrome'] as const
+const DOWNLOADED_DIR = /^[a-z0-9_]+-(\d+(?:\.\d+)*)$/
+
+/** Data dir as config.ts `dataDir()` derives it, from an env snapshot (pure: tests pass their own); null without either var. */
+export const dataDirOf = (env: Record<string, string | undefined>): string | null =>
+  env.WEBTERM_DATA_DIR || (env.HOME ? join(env.HOME, '.webterm-server') : null)
+
+/** Newest version first (`131.0.6778.85` > `131.0.6778.9`). */
+const byVersionDesc = (a: string, b: string): number => {
+  const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)]
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
+  return 0
+}
+
+/** Binaries a previous "Download Chromium" left in `<data dir>/browsers`, newest build first (survives restarts without the override). */
+export function downloadedCandidates(dataDir: string, listDir: ListDir = defaultListDir): string[] {
+  const root = join(dataDir, BROWSERS_SUBDIR, DOWNLOADED_BROWSER)
+  return listDir(root)
+    .map((name) => ({ name, version: DOWNLOADED_DIR.exec(name)?.[1] }))
+    .filter((d): d is { name: string; version: string } => d.version !== undefined)
+    .sort((a, b) => byVersionDesc(a.version, b.version))
+    .flatMap((d) => DOWNLOADED_BINS.map((b) => join(root, d.name, b)))
+}
+
 export type ListDir = (dir: string) => string[]
 const defaultListDir: ListDir = (dir) => (existsSync(dir) ? readdirSync(dir) : [])
 
-/** Semua biner Chromium yang ADA di disk, urut prioritas: lokasi umum -> PATH -> cache Playwright (revisi terbaru dulu). */
+/** Semua biner Chromium yang ADA di disk, urut prioritas: lokasi umum -> PATH -> unduhan webterm -> cache Playwright (revisi terbaru dulu). */
 export function chromiumCandidates(
   env: Record<string, string | undefined>,
   exists: (p: string) => boolean = existsSync,
@@ -61,7 +89,9 @@ export function chromiumCandidates(
       .sort((a, b) => b.rev - a.rev)
       .flatMap((d) => PLAYWRIGHT_BINS.map((b) => join(root, d.name, b)))
   }) : []
-  return [...new Set([...BIN_CANDIDATES, ...fromPath, ...fromPlaywright])].filter((p) => exists(p))
+  const data = dataDirOf(env)
+  const fromDownload = data ? downloadedCandidates(data, listDir) : []
+  return [...new Set([...BIN_CANDIDATES, ...fromPath, ...fromDownload, ...fromPlaywright])].filter((p) => exists(p))
 }
 
 export class LaunchError extends Error {

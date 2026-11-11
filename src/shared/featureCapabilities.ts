@@ -37,7 +37,19 @@ export interface CapabilitiesResponse {
       overrideInvalid: boolean; candidates: string[]
     }
     dataDir: string // read-only
+    /** "Download Chromium": `supported` = the server's platform has a build; state/percent of a running download.
+     *  Optional on the wire like `headlessForced`: the client hides the option / lock when absent. */
+    chromiumDownload?: { supported: boolean; state: ChromiumDownloadState; percent: number }
+    /** `no_display`: Linux server without DISPLAY/WAYLAND_DISPLAY, the browser can only run headless. */
+    headlessForced?: 'no_display' | null
   }
+}
+
+export type ChromiumDownloadState = 'idle' | 'downloading' | 'done' | 'failed'
+/** `GET /api/capabilities/chromium-download` (and the POST replies). */
+export interface ChromiumDownloadStatus {
+  state: ChromiumDownloadState; percent: number; bytes: number; total: number
+  error: string | null; executablePath: string | null
 }
 
 /** Katalog kemampuan; urutan = CAPABILITY_IDS dan sekaligus urutan topologis (prasyarat lebih dulu). */

@@ -26,6 +26,19 @@ export const ADVANCED_TEXT = {
   changeFailed: 'The change did not go through. Try again in a moment.',
 } as const
 
+/** "Download Chromium" (wizard Browser step and Settings › Capabilities › Advanced). */
+export const DOWNLOAD_TEXT = {
+  start: 'Download Chromium (~200 MB)',
+  hint: 'Chrome for Testing from Google, saved in the webterm data folder. Nothing else on this computer changes.',
+  checking: 'Checking the download…',
+  progress: (percent: number): string => (percent > 0 ? `Downloading Chromium… ${percent}%` : 'Downloading Chromium…'),
+  progressLabel: 'Chromium download',
+  cancel: 'Cancel',
+  retry: 'Retry',
+  done: 'Chromium is downloaded and in use:',
+  unreachable: 'Could not reach the webterm server. Try again.',
+} as const
+
 /** Picker label adds what the engine can do; `name` is the bare engine name used in status sentences. */
 export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string; name: string }> = [
   { value: 'auto', label: 'Automatic', name: 'Automatic' },
