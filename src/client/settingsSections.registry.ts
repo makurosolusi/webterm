@@ -3,13 +3,13 @@
 import { CANVAS_BG_SECTION } from './canvasBackground.open'
 
 /** Sidebar group headings, in display order. */
-export const SETTINGS_GROUPS = ['Editor', 'Agents', 'Workspace', 'System'] as const
+export const SETTINGS_GROUPS = ['General', 'Agents', 'Workspace', 'System'] as const
 
 /** Settings sections: nav entry + page header, one place, listed in group order. `icon` is a codicon name; `description` says what is inside. */
 export const SETTINGS_SECTIONS = [
-  { id: 'terminal', group: 'Editor', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
-  { id: 'interaction', group: 'Editor', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
-  { id: 'shell', group: 'Editor', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
+  { id: 'terminal', group: 'General', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
+  { id: 'interaction', group: 'General', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
+  { id: 'shell', group: 'General', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
   { id: 'agent', group: 'Agents', label: 'Agent', icon: 'hubot', description: 'Permissions, custom agents, profiles' },
   { id: 'central', group: 'Agents', label: 'Central Agent', icon: 'comment-discussion', description: 'Autonomy, spending, abilities' },
   { id: 'rules', group: 'Agents', label: 'Rules & approvals', icon: 'shield', description: 'What agents may do without asking' },

@@ -316,11 +316,6 @@
   font-weight: 600;
 }
 
-/* Grup hasil pencarian tanpa field yang cocok tidak perlu judul kosong. */
-.st-search-group:not(:has(.st-field)) {
-  display: none;
-}
-
 .st-note,
 .st-muted {
   color: var(--vscode-descriptionForeground, var(--muted));
@@ -337,11 +332,6 @@
   margin: 0;
   padding: 12px 14px;
   color: var(--vscode-descriptionForeground, var(--muted));
-}
-
-/* Ada field yang lolos filter berarti pesan kosong tidak relevan. */
-.st-main:has(.st-field) .st-no-results {
-  display: none;
 }
 
 /* -------------------------------------------------------------------- field */
