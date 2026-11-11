@@ -105,7 +105,8 @@ export function SettingsCombobox({
   }
 
   return (
-    <span className="st-combo">
+    // While the list is open Escape belongs to it: the marker keeps Settings' capture-phase Escape off.
+    <span className="st-combo" data-settings-escape={open ? '' : undefined}>
       <span className="st-combo-box">
         <input
           ref={inputRef}
