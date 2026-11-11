@@ -39,7 +39,8 @@ declare module 'bun:sqlite' {
       all(...params: unknown[]): unknown[]
       get(...params: unknown[]): unknown
       /** `changes` = rows a write touched (Db.save's precondition check reads it). */
-      run(...params: unknown[]): { changes: number }
+      run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint }
     }
+    close(): void
   }
 }
