@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import { createLogger } from '../logs'
 import type { ResolveInput } from '../models/modelLadder'
 import { pickModel } from '../models/modelPick'
+import { requestedModel } from '../models/modelRequest'
 import { evidenceVerified } from '../orchestrator/orchestratorModel'
 import type { AgentSpawnResult } from '../spawn/agentSpawn'
 import type { ExecOutcome } from '../central/agents/execRunner'
@@ -172,7 +173,7 @@ export function createDagScheduler(ports: DagPorts) {
       let costId: string | null = null
       let producedDiff: boolean | undefined = false
       try {
-        if (ports.cost) costId = await ports.cost.begin({ kind: 'dag', ref: dag.id, label: `${dag.title}: ${task.key}`, nodeId, tier: pick.tier, model: pick.model })
+        if (ports.cost) costId = await ports.cost.begin({ kind: 'dag', ref: dag.id, label: `${dag.title}: ${task.key}`, nodeId, tier: pick.tier, model: requestedModel(pick.model) })
         producedDiff = await settle(dispatchId, await handle.done)
       } finally {
         if (ports.cost) await ports.cost.end(costId, { ...(producedDiff === undefined ? {} : { producedDiff }) })

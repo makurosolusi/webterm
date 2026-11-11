@@ -5,6 +5,7 @@
 // outrank it, or an inherited ANTHROPIC_AUTH_TOKEN would silently win over the key chosen here.
 // Command mode touches no credential at all: the user's own launch command (a launch profile) injects it.
 import { CLAUDE_PROFILE_LIMITS } from '../../shared/claudeLaunch/claudeLaunch.profiles'
+import { PROVIDER_ENV_ALLOWLIST, SCRUB_VAR } from '../agentEnv'
 
 
 export type ProviderMode = 'login' | 'apiKey' | 'custom' | 'command'
@@ -52,10 +53,7 @@ const MODEL_RE = /^[A-Za-z0-9._:/@[\]-]+$/
 
 /** Variables that would outrank or redirect the chosen credential. */
 export const CLOUD_FLAGS = ['CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'CLAUDE_CODE_USE_ANTHROPIC_AWS', 'CLAUDE_CODE_USE_MANTLE'] as const
-/** Credential/endpoint variables a key mode owns: whichever it does not set is cleared. */
-export const PROVIDER_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL'] as const
-/** Strips credentials from Bash/hook/MCP subprocesses of the claude process (docs: env-vars, "What the subprocess environment scrub removes"). */
-export const SCRUB_VAR = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
+export { SCRUB_VAR }
 
 /** http(s) URL without credentials, query or fragment; trailing `/` and a trailing `/v1` are dropped. */
 export function normalizeBaseUrl(raw: string): string | null {
@@ -80,7 +78,8 @@ export function providerEnv(c: ProviderConfig, secret: string | null): ProviderE
   const set: Record<string, string> = { [credVar]: secret, [SCRUB_VAR]: '1' }
   if (c.mode === 'custom' && c.baseUrl) set.ANTHROPIC_BASE_URL = c.baseUrl
   if (c.model) set.ANTHROPIC_MODEL = c.model
-  const unset = [...PROVIDER_VARS, ...CLOUD_FLAGS].filter((k) => !(k in set))
+  // A key mode owns every provider var (agentEnv list): server-env ones it does not set are cleared, so the card wins.
+  const unset = [...PROVIDER_ENV_ALLOWLIST, ...CLOUD_FLAGS].filter((k) => !(k in set))
   return { set, unset }
 }
 

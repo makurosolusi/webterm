@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeFakeClaude } from '../runtime/claude.fakeBin'
+import { resetProviderConfig, saveProvider } from '../../claudeProvider/claudeProvider.store'
 import { createClaudeClassifier } from '../../policy/policy.classifier.claude'
 import type { HelperKind, HelperUsage } from '../../cost/costCapture'
 import { HELPER_EFFORT, createClaudeStructured, createStructuredRunner, parseStructuredAnswer } from './claudeStructured'
@@ -49,6 +50,41 @@ describe('structured runner', () => {
     const g = fake('run2', { ok: true })
     await createStructuredRunner('brief', { bin: g.bin, model: 'sonnet', effort: 'medium' })({ prompt: 'x', schema: {} }, signal())
     expect([after(g.argv(), '--model'), after(g.argv(), '--effort')]).toEqual(['sonnet', 'medium'])
+  })
+
+  it('never overrides a provider model: card model drops --model, a server-env tier var keeps the alias, SMALL_FAST is passed by name', async () => {
+    const bare = { ...RESULT({ ok: true }), modelUsage: undefined }
+    const fakeBare = (name: string) => {
+      const log = join(dir, `${name}.argv.json`)
+      const bin = writeFakeClaude(dir, `fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)))
+readStdin()
+process.stdout.write(${JSON.stringify(JSON.stringify(bare))})`)
+      return { bin, argv: () => JSON.parse(readFileSync(log, 'utf8')) as string[] }
+    }
+    saveProvider({ mode: 'custom', baseUrl: 'http://127.0.0.1:9', credential: 'authToken', model: 'my-proxy/glm-4.6' }, 'test-only-secret')
+    try {
+      const card = fakeBare('card')
+      const a = await createStructuredRunner('brief', { bin: card.bin })({ prompt: 'x', schema: {} }, signal())
+      expect(card.argv()).not.toContain('--model')
+      expect(a.usage.model).toBe('my-proxy/glm-4.6')
+      resetProviderConfig()
+
+      process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = 'proxy-small'
+      const tier = fakeBare('tier')
+      const b = await createStructuredRunner('brief', { bin: tier.bin })({ prompt: 'x', schema: {} }, signal())
+      expect(after(tier.argv(), '--model')).toBe('haiku')
+      expect(b.usage.model).toBe('proxy-small')
+      delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+
+      process.env.ANTHROPIC_SMALL_FAST_MODEL = 'proxy-fast'
+      const fast = fakeBare('fast')
+      await createStructuredRunner('brief', { bin: fast.bin })({ prompt: 'x', schema: {} }, signal())
+      expect(after(fast.argv(), '--model')).toBe('proxy-fast')
+    } finally {
+      delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+      delete process.env.ANTHROPIC_SMALL_FAST_MODEL
+      resetProviderConfig()
+    }
   })
 
   it('books every output-only call under its kind; a failing book never fails the helper', async () => {

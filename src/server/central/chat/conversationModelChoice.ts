@@ -10,6 +10,8 @@ import { type Effort, type LadderModel, type Tier, MODEL_IDS, resolveModel } fro
 import { appendMessage, sessionRefFor } from '../conversationStore'
 import { claudeModelArg } from '../runtime/claudeOptions'
 import { CENTRAL_MODEL_FLAG } from '../runtime/runtimeShared'
+import { modelRequest } from '../../models/modelRequest'
+import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { CentralChatError } from './chatErrors'
 import type { StreamHub } from './streamHub'
 import { recordEvent, resolveOrCreateConversation } from './turnPersistence'
@@ -75,8 +77,9 @@ function sessionModel(db: Database, conversationId: string, sessionRef: string):
 function freshModel(choice: ModelChoice | null, env: NodeJS.ProcessEnv): CentralTurnModel {
   const setting = claudeModelArg(env[CENTRAL_MODEL_FLAG]).arg
   const pick = resolveModel({ kind: 'central', override: choice ?? (setting ? { model: setting } : null) })
-  // A full `claude-*` id from the setting goes through as typed; the ladder only names it.
-  const model = !choice && setting?.startsWith('claude-') ? setting : pick.model
+  // A full id or proxy name from the setting goes through as typed; the ladder only names it. The ladder's
+  // own default never overrides a model the user chose for their provider.
+  const model = choice ? pick.model : setting ?? (pick.model && modelRequest(pick.model, claudeEnv(env)).flag)
   return { model, alias: pick.model, effort: pick.effort, tier: pick.tier, reason: choice ? 'conversation /model' : setting ? 'Central model setting' : pick.reason }
 }
 

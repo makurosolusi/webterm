@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { logBus } from '../../logs'
 import { CENTRAL_STEWARD_PROMPT, centralQueryOptions, claudeChildEnv, claudeModelArg } from './claudeOptions'
 
 describe('claudeChildEnv', () => {
-  it('keeps only allowlisted variables and drops root tokens, provider keys and capability tokens', () => {
+  it('keeps only allowlisted variables and named provider vars; drops root tokens, other provider keys and capability tokens', () => {
     const env = claudeChildEnv({
       PATH: '/usr/bin', HOME: '/home/u', LANG: 'en_US.UTF-8', LC_ALL: 'C', https_proxy: 'http://p:1',
       CLAUDE_CONFIG_DIR: '/cfg', SSL_CERT_FILE: '/ca.pem',
-      WEBTERM_TOKEN: 'root', NODETERM_NODE_ID: 'n1', ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k',
+      WEBTERM_TOKEN: 'root', NODETERM_NODE_ID: 'n1', ANTHROPIC_API_KEY: 'k', ANTHROPIC_UNLISTED: 'x', OPENAI_API_KEY: 'k',
       CLAUDE_CODE_OAUTH_TOKEN: 't', SECRET_THING: 'x', WCAP_HOLDER: 'wcap_abc123', SHELL: '/bin/zsh',
     })
     expect(Object.keys(env).sort()).toEqual(
-      ['CLAUDE_CONFIG_DIR', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SSL_CERT_FILE', 'https_proxy']
+      ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_CONFIG_DIR', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SSL_CERT_FILE', 'https_proxy']
     )
   })
 
@@ -76,8 +77,18 @@ describe('claudeModelArg', () => {
     expect(claudeModelArg(undefined)).toEqual({ ignored: false })
   })
 
-  it('does not forward provider/model or unknown ids', () => {
+  it('passes proxy model names; refuses shell metacharacters, whitespace and leftover opencode/ models with one warning naming the variable', () => {
+    expect(claudeModelArg('my-proxy/glm-4.6')).toEqual({ arg: 'my-proxy/glm-4.6', ignored: false })
+    expect(claudeModelArg('z-ai/glm-4.6')).toEqual({ arg: 'z-ai/glm-4.6', ignored: false })
+    expect(claudeModelArg('gpt-x')).toEqual({ arg: 'gpt-x', ignored: false })
+    expect(claudeModelArg('us.anthropic.claude-x:0@v[1m]')).toEqual({ arg: 'us.anthropic.claude-x:0@v[1m]', ignored: false })
+    const before = logBus.query().filter((e) => e.event === 'central.claude_model_ignored').length
+    expect(claudeModelArg('a; rm')).toEqual({ ignored: true })
+    expect(claudeModelArg('$(x)')).toEqual({ ignored: true })
+    expect(claudeModelArg('two words')).toEqual({ ignored: true })
     expect(claudeModelArg('opencode/deepseek-v4.1-flash-free')).toEqual({ ignored: true })
-    expect(claudeModelArg('gpt-x')).toEqual({ ignored: true })
+    const warns = logBus.query().filter((e) => e.event === 'central.claude_model_ignored')
+    expect(warns.length - before).toBe(1)
+    expect(warns.at(-1)?.message).toContain('WEBTERM_CENTRAL_MODEL')
   })
 })

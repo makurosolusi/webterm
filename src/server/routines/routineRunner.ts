@@ -11,6 +11,7 @@ import { createInboxItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
 import { createLogger } from '../logs'
 import { pickModel } from '../models/modelPick'
+import { requestedModel } from '../models/modelRequest'
 import { redactSecrets } from '../redactSecrets'
 import type { AgentSpawnRequest, AgentSpawnResult } from '../spawn/agentSpawn'
 import { routineTier, untrustedMayFire, type Routine, type RoutineRun, type RunTrigger } from './routineModel'
@@ -107,7 +108,7 @@ export function createRoutineRunner(deps: RunnerDeps) {
     let costId: string | null = null
     let producedDiff = false
     try {
-      if (deps.cost) costId = await deps.cost.begin({ kind: 'routine', ref: r.id, label: r.name, workspaceId: r.workspaceId, nodeId: spawned.nodeId, tier: pick.tier, model: pick.model })
+      if (deps.cost) costId = await deps.cost.begin({ kind: 'routine', ref: r.id, label: r.name, workspaceId: r.workspaceId, nodeId: spawned.nodeId, tier: pick.tier, model: requestedModel(pick.model) })
       const outcome = spawned.handle ? await spawned.handle.done : null
       const last = outcome?.lastEvent ?? null
       const costUsd = typeof last?.['total_cost_usd'] === 'number' ? last['total_cost_usd'] : null

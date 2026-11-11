@@ -225,6 +225,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- A custom Claude proxy set in the server environment or `.env` (base URL, token and model variables) now reaches Central, its background helpers, workers and AI commit messages, not only terminals; Central no longer reports 'not signed in' when a proxy token is set.
+- Webterm no longer forces Claude model ids over a model you chose for your provider, so proxies with their own model names work in Central's helpers and workers; `WEBTERM_CENTRAL_MODEL` accepts proxy model names.
 - A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.
 - The Central chat no longer marks a canvas screenshot (or any tool that returns an image) as failed when it succeeded. Claude Code sends an image result as an `[Image: …]` text block plus the receipt JSON, and the two were joined before parsing.
 - `canvas.screenshot` now captures the nodes and edges. They were dropped when the canvas was panned (React Flow's viewport overflows but does not clip, yet was treated as a clipping container) and for terminal nodes, whose `display: contents` wrapper `checkVisibility()` reports as not visible.

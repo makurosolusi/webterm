@@ -31,10 +31,10 @@ function runtime(play: FakePlay = OK_RECORDS, extra: Partial<ClaudeRuntimeOption
 }
 
 describe('ClaudeRuntime child isolation', () => {
-  it('scrubs WEBTERM_/NODETERM_/provider/capability values from the child env', async () => {
+  it('scrubs WEBTERM_/NODETERM_/unlisted provider/capability values from the child env', async () => {
     const env = {
       PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir, LANG: 'C',
-      WEBTERM_TOKEN: 'root', NODETERM_NODE_ID: 'n1', NODETERM_PORT: '1', ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k',
+      WEBTERM_TOKEN: 'root', NODETERM_NODE_ID: 'n1', NODETERM_PORT: '1', ANTHROPIC_API_KEY: 'k', ANTHROPIC_UNLISTED: 'k', OPENAI_API_KEY: 'k',
       CLAUDE_CODE_OAUTH_TOKEN: 'k', MY_CAP: 'wcap_deadbeef',
     }
     const rt = runtime(OK_RECORDS, { env })
@@ -42,7 +42,7 @@ describe('ClaudeRuntime child isolation', () => {
     expect(result.outcome).toBe('success')
     const keys = Object.keys(rt.calls[0]?.options.env ?? {})
     expect(keys).toEqual(expect.arrayContaining(['PATH', 'HOME', 'LANG']))
-    expect(keys.filter((k) => /^(WEBTERM_|NODETERM_|ANTHROPIC_|OPENAI_|CLAUDE_CODE_OAUTH|MY_CAP)/.test(k))).toEqual([])
+    expect(keys.filter((k) => /^(WEBTERM_|NODETERM_|ANTHROPIC_UNLISTED|OPENAI_|CLAUDE_CODE_OAUTH|MY_CAP)/.test(k))).toEqual([])
   })
 
   it('locks the SDK options down: no built-in tools, webterm MCP only, deny-by-default, no settings, never a bypass', async () => {
@@ -123,7 +123,7 @@ describe('ClaudeRuntime child isolation', () => {
     expect(statSync(work).mode & 0o777).toBe(0o700)
   })
 
-  it('forwards an alias model, drops provider/model, and sends the budget cap', async () => {
+  it('forwards an alias or proxy model, drops a leftover opencode/ model, and sends the budget cap', async () => {
     const a = runtime(OK_RECORDS, { model: 'sonnet' })
     await a.turn(turnInput({ limits: { maxCostMicros: 500_000 } }), recorder().emit)
     expect(a.calls[0]?.options.model).toBe('sonnet')
@@ -135,6 +135,10 @@ describe('ClaudeRuntime child isolation', () => {
     expect(b.calls[0]?.options.model).toBeUndefined()
     expect(b.calls[0]?.options.maxBudgetUsd).toBeUndefined()
     expect(b.calls[0]?.options.maxTurns).toBe(3)
+
+    const c = runtime(OK_RECORDS, { model: 'z-ai/glm-4.6' })
+    await c.turn(turnInput({ turnId: 't3' }), recorder().emit)
+    expect(c.calls[0]?.options.model).toBe('z-ai/glm-4.6')
   })
 
   it('never reads the model from provider-style env when none is configured', async () => {

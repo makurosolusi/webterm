@@ -7,6 +7,7 @@
 // loggedIn:true with authMethod api_key / oauth_token, so it counts as ready.
 import { spawn } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
+import { envProxyAuth } from '../agentEnv'
 import { binaryOnPath } from '../binaryOnPath'
 import { redactSecrets } from '../redactSecrets'
 import { isClaudeToken } from '../../shared/claudeLaunch/claudeLaunch.normalize'
@@ -57,6 +58,7 @@ export const PROBE_TEXT = {
   claudeOk: (v: string): string => (v ? `claude ${v}` : 'claude found'),
   authOk: (m: string): string => (m === 'api_key' || m === 'oauth_token' ? `Signed in with a credential from the environment (${m})` : `Signed in${m ? ` (${m})` : ''}`),
   authProvider: 'Using the Claude provider from Settings › Capabilities',
+  authEnvProxy: 'Using the proxy from the server environment (ANTHROPIC_BASE_URL)',
   authMissing: 'Claude Code is not signed in.',
   authHint: 'Run "claude auth login" on the server.',
   authHintWrapped: 'Run "claude auth login" on the server, or let the wrapper provide ANTHROPIC_API_KEY.',
@@ -157,6 +159,10 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
   if (d.provider && d.provider.mode !== 'login' && d.provider.mode !== 'command') {
     if (!d.provider.ready) return fail('auth', 'auth_failed', PROBE_TEXT.providerNotReady)
     steps.push({ stage: 'auth', ok: true, message: PROBE_TEXT.authProvider })
+    return { ok: true, profile, steps }
+  }
+  if (envProxyAuth(d.env)) {
+    steps.push({ stage: 'auth', ok: true, message: PROBE_TEXT.authEnvProxy })
     return { ok: true, profile, steps }
   }
   const hint = wrapped ? PROBE_TEXT.authHintWrapped : PROBE_TEXT.authHint

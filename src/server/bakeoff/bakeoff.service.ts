@@ -17,6 +17,7 @@ import type { ExecOutcome } from '../central/agents/execRunner'
 import { bakeoffGate, beginCostRun, endCostRun } from '../cost/costOracle'
 import { dagWorkerArgv } from '../dag/dag.ports'
 import { pickModel } from '../models/modelPick'
+import { requestedModel } from '../models/modelRequest'
 import { git } from '../gitScm'
 import { createInboxItem, resolveItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
@@ -171,7 +172,7 @@ export function createBakeoffService(ports: BakeoffPorts) {
         store.finishCandidate(candId, { status: 'failed', exitCode: null, error: `spawn: ${message}`, costMicros: null, durationMs: 0, verified: false, verdict: null })
         continue
       }
-      const costRunId = beginCostRun(ports.ctx.db, { kind: 'bakeoff', ref: id, label: `Bake-off #${i + 1}`, workspaceId: input.workspaceId ?? null, nodeId, tier: pick.tier, model: pick.model }, () => startedAt)
+      const costRunId = beginCostRun(ports.ctx.db, { kind: 'bakeoff', ref: id, label: `Bake-off #${i + 1}`, workspaceId: input.workspaceId ?? null, nodeId, tier: pick.tier, model: requestedModel(pick.model) }, () => startedAt)
       settled.push(res.handle.done.then((o) => settle({ id: candId, bakeoffId: id, idx: i + 1, path: w.path, startedAt, costRunId }, o, baseSha)))
     }
     const all = Promise.all(settled).then(() => maybeReady(id))
