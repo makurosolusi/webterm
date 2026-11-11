@@ -2,11 +2,12 @@
 // starts uses (agent nodes, Central, headless helpers). Server: claudeProvider/claudeProvider.api.ts.
 // The key is write-only: the server answers "set" or not, the typed value lives in component state
 // until Save and is cleared right after; it is never logged or put in an error message.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
+import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
 import { SettingsCombobox } from './SettingsCombobox'
 import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
@@ -59,7 +60,12 @@ export const PROVIDER_TEXT = {
   removeKey: 'Remove key',
   model: 'Default model (optional)',
   save: 'Save',
-  saved: 'Saved.',
+  saving: 'Saving…',
+  clean: 'Saved',
+  noChanges: 'No changes to save',
+  saved: '✓ Saved',
+  savedAt: (at: string): string => `at ${at}.`,
+  savedToast: 'Claude provider saved',
   savedCheckFailed: 'Saved, but the check failed — new sessions will fail until this is fixed.',
   test: 'Test connection',
   testing: 'Testing…',
@@ -74,13 +80,21 @@ export const PROVIDER_TEXT = {
   resetFailed: (code: string): string => `Could not reset (${code}). Try again.`,
 }
 
+/** Saves the pending edits (resolves true when saved or nothing to save); filled in by the card. */
+export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null>
+
 /** The Claude provider card; loads from the server and waits for it on every change. `onTested`: the host
- *  shows the result itself (setup wizard's live check), so the card hides its own and reports each test. */
-export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; onTested?(): void } = {}): React.JSX.Element {
+ *  shows the result itself (setup wizard's live check), so the card hides its own and reports each test.
+ *  `commitRef`: the host saves through it (wizard Continue), so the card hides its own Save. */
+export function ClaudeProviderCard({ onProfiles, onTested, commitRef }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; onTested?(): void; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
+  const [saved, setSaved] = useState<{ seq: number; at: string } | null>(null)
+  const [toast, setToast] = useState<{ seq: number; severity: VscodeNotificationSeverity; title: string } | null>(null)
+  const seq = useRef(0)
   const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [mode, setMode] = useState<Mode>('login')
   const [baseUrl, setBaseUrl] = useState('')
@@ -101,29 +115,38 @@ export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profi
     call(PATH, 'GET').then((s) => adopt(s as unknown as State)).catch(() => setError(PROVIDER_TEXT.loadFailed))
   }, [])
 
-  /** true = saved (or nothing to save). */
+  const markSaved = (): void => {
+    const n = ++seq.current
+    setSaved({ seq: n, at: new Date().toLocaleTimeString() })
+    setToast({ seq: n, severity: 'info', title: PROVIDER_TEXT.savedToast })
+  }
+  const fail = (message: string): void => {
+    setError(message)
+    setToast({ seq: ++seq.current, severity: 'error', title: message })
+  }
+  /** true = saved. */
   const save = async (secretOverride?: '', profileId?: string): Promise<boolean> => {
-    setBusy(true); setError(null); setNotice(null)
+    setBusy(true); setSaving(true); setError(null); setSaved(null)
     const s = secretOverride ?? (secret.trim() === '' ? undefined : secret)
     try {
       adopt(await call(PATH, 'PUT', mode === 'command' ? { mode, profileId }
         : { mode, baseUrl, credential, model, ...(s === undefined ? {} : { secret: s }) }) as unknown as State)
       setSecret('')
-      setNotice(PROVIDER_TEXT.saved)
+      markSaved()
       return true
     } catch (e) {
-      setError(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
+      fail(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
       return false
-    } finally { setBusy(false) }
+    } finally { setBusy(false); setSaving(false) }
   }
   const [resetting, setResetting] = useState(false)
   const reset = async (): Promise<void> => {
-    setBusy(true); setResetting(true); setError(null); setNotice(null)
+    setBusy(true); setResetting(true); setError(null); setSaved(null)
     try {
       adopt(await call(RESET_PATH, 'POST') as unknown as State)
-      setNotice(PROVIDER_TEXT.saved)
+      markSaved()
     } catch (e) {
-      setError(PROVIDER_TEXT.resetFailed(e instanceof Error ? e.message : 'error'))
+      fail(PROVIDER_TEXT.resetFailed(e instanceof Error ? e.message : 'error'))
     } finally { setBusy(false); setResetting(false) }
   }
   const p = state?.provider
@@ -143,6 +166,12 @@ export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profi
     if (dirty && !(await save())) return
     await runTest()
   }
+  // Command mode keeps its draft in ClaudeProviderCommand, which fills this with its own save (null = clean).
+  const commandCommit = useRef<(() => Promise<boolean>) | null>(null)
+  useEffect(() => {
+    if (!commitRef) return
+    commitRef.current = async () => mode === 'command' ? (commandCommit.current ? commandCommit.current() : true) : !dirty || save()
+  })
 
   return (
     <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2">
@@ -160,7 +189,8 @@ export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profi
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
           {mode === 'command' && p ? (
-            <ClaudeProviderCommand provider={p} busy={busy} testing={testing} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles} />
+            <ClaudeProviderCommand provider={p} busy={busy} testing={testing} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles}
+              onError={(m) => setToast({ seq: ++seq.current, severity: 'error', title: m })} pending={commandCommit} hideSave={!!commitRef} />
           ) : null}
           {mode === 'custom' ? (
             <>
@@ -178,7 +208,8 @@ export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profi
             </>
           ) : null}
           {mode !== 'command' ? <div className="flex items-center gap-2">
-            <Button size="sm" disabled={busy} onClick={() => void save()}>{PROVIDER_TEXT.save}</Button>
+            {commitRef ? null : <Button size="sm" disabled={busy || !dirty} aria-busy={saving} title={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}
+              onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>}
             <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testing ? PROVIDER_TEXT.testing : PROVIDER_TEXT.test}</Button>
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
           </div> : null}
@@ -189,13 +220,15 @@ export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profi
             </p>
           ) : null}
           {/* Save clears the server's lastTest, so a failed one here is a test of what was just saved. */}
-          {notice && state.lastTest?.ok === false ? <p role="status" className="text-xs text-(--vscode-editorWarning-foreground)">
+          {saved && state.lastTest?.ok === false ? <p key={saved.seq} role="status" className="text-xs text-(--vscode-editorWarning-foreground)">
             <span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.savedCheckFailed}</p>
-          : notice ? <p role="status" className="text-xs">{notice} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
-          {!notice && state.restartNeeded > 0 ? <p className="text-xs opacity-70">{PROVIDER_TEXT.restart(state.restartNeeded)}</p> : null}
+          : saved ? <p key={saved.seq} role="status" className="text-xs">{PROVIDER_TEXT.saved} {PROVIDER_TEXT.savedAt(saved.at)} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
+          {!saved && state.restartNeeded > 0 ? <p className="text-xs opacity-70">{PROVIDER_TEXT.restart(state.restartNeeded)}</p> : null}
         </>
       ) : null}
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
+      {toast ? <VscodeNotification key={toast.seq} id={`claude-provider-${toast.seq}`} severity={toast.severity} title={toast.title}
+        onClose={() => setToast((t) => (t?.seq === toast.seq ? null : t))} /> : null}
     </section>
   )
 }

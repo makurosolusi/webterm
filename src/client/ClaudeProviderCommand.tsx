@@ -2,7 +2,7 @@
 // `envman -e claude:malik-opus -- claude`, which injects the credential itself. The command is stored as
 // a Claude launch profile (Settings > Agent), the same list that page edits; this form only creates or
 // picks one, then the card points the provider at it (PUT {mode:'command', profileId}).
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,9 @@ export const COMMAND_TEXT = {
   secret: 'This command looks like it contains a key. Prefer a wrapper such as envman so the secret stays out of webterm settings.',
   missing: 'The selected command was removed. Pick another or create a new one.',
   save: 'Save',
+  saving: 'Saving…',
+  clean: 'Saved',
+  noChanges: 'No changes to save',
   test: 'Test connection',
   testing: 'Testing…',
   loadFailed: 'Could not load the saved commands.',
@@ -61,6 +64,12 @@ export interface ClaudeProviderCommandProps {
   test(): Promise<void>
   /** The profile list changed: keep the Settings panel's in-memory copy in step. */
   onProfiles?(profiles: ClaudeLaunchProfile[]): void
+  /** A save failed here (the profile write): the card toasts it. */
+  onError?(message: string): void
+  /** Filled with this form's save while it has unsaved edits, null when clean (wizard Continue). */
+  pending?: MutableRefObject<(() => Promise<boolean>) | null>
+  /** The host saves through `pending`, so no Save button here. */
+  hideSave?: boolean
 }
 
 export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.Element {
@@ -112,10 +121,14 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       p.onProfiles?.(r.profiles)
       return await p.commit(r.id)
     } catch (e) {
-      setError(COMMAND_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
+      const message = COMMAND_TEXT.saveFailed(e instanceof Error ? e.message : 'error')
+      setError(message); p.onError?.(message)
       return false
     } finally { setWorking(false) }
   }
+  useEffect(() => {
+    if (p.pending) p.pending.current = clean || command.trim() === '' ? null : saveDraft
+  })
   const runTest = async (): Promise<void> => {
     if (!clean && !(await saveDraft())) return
     await p.test()
@@ -152,7 +165,8 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       {provider.mode === 'command' && provider.commandWarning === 'looks_like_secret' ? <p role="status" className="text-xs text-amber-600">{COMMAND_TEXT.secret}</p> : null}
       <p className="text-xs opacity-70">{COMMAND_TEXT.note}</p>
       <div className="flex items-center gap-2">
-        <Button size="sm" disabled={disabled || command.trim() === ''} onClick={() => void saveDraft()}>{COMMAND_TEXT.save}</Button>
+        {p.hideSave ? null : <Button size="sm" disabled={disabled || command.trim() === '' || clean} aria-busy={working} title={clean && !working ? COMMAND_TEXT.noChanges : undefined}
+          onClick={() => void saveDraft()}>{working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</Button>}
         <Button variant="outline" size="sm" disabled={disabled || command.trim() === ''} onClick={() => void runTest()}>{p.testing ? COMMAND_TEXT.testing : COMMAND_TEXT.test}</Button>
       </div>
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}

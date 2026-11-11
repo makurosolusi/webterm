@@ -246,6 +246,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Claude provider: clicking Save now always shows what happened. Save reads "Saved" and is disabled until you change something, shows "Saving…" while it works, then a fresh "✓ Saved at <time>" line and a notification (or an error with a notification when it fails), even when you save the same thing twice. In the setup wizard, Continue saves your provider changes and stays on the step if that fails, so there is no separate Save there.
 - Setup's Claude step shows one result: Test connection in the provider card re-runs the check at the top instead of printing a second, differently worded failure.
 - A launch command whose wrapper is not signed in (for example envman's "not logged in") now says so, shows the sign-in command the wrapper suggested with a Copy button, and no longer tells you to run the command in a terminal "to see the full error" when that error is already shown.
 - Saving the Claude provider no longer reads as plain success when its test failed: it says "Saved, but the check failed — new sessions will fail until this is fixed."

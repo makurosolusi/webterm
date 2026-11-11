@@ -173,6 +173,9 @@ describe('Claude provider: Custom command', () => {
     serve({ profiles: [profile], provider: { mode: 'command', profileId: 'p1', profile, commandWarning: 'looks_like_secret', secretSet: false, ready: true } })
     render(<ClaudeProviderCard />)
     expect(await screen.findByText(COMMAND_TEXT.secret)).toBeTruthy()
+    // The warning never blocks: an edit enables Save (unchanged, it reads "Saved").
+    await screen.findByRole('button', { name: COMMAND_TEXT.clean })
+    fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     expect((screen.getByRole('button', { name: COMMAND_TEXT.save }) as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -232,6 +235,20 @@ describe('Claude provider: Custom command', () => {
     expect(PUTS()).toHaveLength(1)
     expect(PUTS()[0]!.body).toMatchObject({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken' })
     expect(PUTS()[0]!.body).not.toHaveProperty('profileId')
+  })
+
+  it('the saved command reads "Saved" (disabled) until edited; Save then shows a fresh "✓ Saved at" line', async () => {
+    const profile = { id: 'p1', name: 'envman: claude:malik-opus', command: CMD }
+    serve({ profiles: [profile], provider: { mode: 'command', profileId: 'p1', profile, secretSet: false, ready: true } })
+    render(<ClaudeProviderCard />)
+    const clean = await screen.findByRole('button', { name: COMMAND_TEXT.clean }) as HTMLButtonElement
+    expect(clean.disabled).toBe(true)
+    expect(clean.title).toBe(COMMAND_TEXT.noChanges)
+    fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: `${CMD} --verbose` } })
+    fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
+    expect((await screen.findByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).getAttribute('role')).toBe('status')
+    expect(await screen.findByText(PROVIDER_TEXT.savedToast)).toBeTruthy()
+    expect((screen.getByRole('button', { name: COMMAND_TEXT.clean }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('names a command after its wrapper and -e target', () => {

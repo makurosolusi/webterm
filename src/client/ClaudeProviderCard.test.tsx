@@ -9,6 +9,8 @@ const KEY = 'sk-test-only-0123456789abcdef' // test-only
 type Call = { url: string; method: string; body?: string }
 let calls: Call[] = []
 let resetFails = 0
+let putFails = 0
+let putGate: Promise<void> | null = null
 
 function serve(view: Record<string, unknown>, test = { ok: false, message: 'The endpoint rejected the credential.', at: 1 }): void {
   let current = { provider: view, lastTest: null, restartNeeded: 0 }
@@ -16,6 +18,8 @@ function serve(view: Record<string, unknown>, test = { ok: false, message: 'The 
     const method = init.method ?? 'GET'
     calls.push({ url, method, body: init.body as string | undefined })
     if (method === 'PUT') {
+      await putGate
+      if (putFails-- > 0) return new Response(JSON.stringify({ error: 'write_failed' }), { status: 500 })
       const b = JSON.parse(init.body as string)
       current = { provider: { mode: b.mode, baseUrl: b.baseUrl, credential: b.credential, secretSet: !!b.secret, ready: !!b.secret }, lastTest: null, restartNeeded: 1 }
       return new Response(JSON.stringify(current), { status: 200 })
@@ -30,7 +34,7 @@ function serve(view: Record<string, unknown>, test = { ok: false, message: 'The 
   }))
 }
 
-beforeEach(() => { calls = []; resetFails = 0 })
+beforeEach(() => { calls = []; resetFails = 0; putFails = 0; putGate = null })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('ClaudeProviderCard', () => {
@@ -57,7 +61,8 @@ describe('ClaudeProviderCard', () => {
     render(<ClaudeProviderCard />)
     expect(await screen.findByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.reset }))
-    expect(await screen.findByText(PROVIDER_TEXT.resetFailed('write_failed'))).toBeTruthy()
+    // Inline alert plus the error toast.
+    expect(await screen.findAllByText(PROVIDER_TEXT.resetFailed('write_failed'))).toHaveLength(2)
     expect(screen.getByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.reset }))
     await waitFor(() => expect(screen.queryByText(new RegExp(PROVIDER_TEXT.damaged.slice(0, 40)))).toBeNull())
@@ -83,14 +88,14 @@ describe('ClaudeProviderCard', () => {
     for (const s of spies) for (const c of s.mock.calls) expect(JSON.stringify(c)).not.toContain(KEY)
   })
 
-  it('a passing test after Save keeps the plain "Saved." and the restart hint', async () => {
+  it('a passing test after Save keeps the plain "✓ Saved" and the restart hint', async () => {
     serve({ mode: 'login', secretSet: false, ready: true }, { ok: true, message: 'Connected.', at: 1 })
     render(<ClaudeProviderCard />)
     fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
     fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.test }))
     expect(await screen.findByText('Connected.')).toBeTruthy()
-    expect(screen.getByText(new RegExp(`^${PROVIDER_TEXT.saved} ${PROVIDER_TEXT.restart(1).slice(0, 30)}`))).toBeTruthy()
+    expect(screen.getByText(new RegExp(`^${PROVIDER_TEXT.saved} at .+ ${PROVIDER_TEXT.restart(1).slice(0, 30)}`))).toBeTruthy()
     expect(screen.queryByText(PROVIDER_TEXT.savedCheckFailed)).toBeNull()
   })
 
@@ -116,5 +121,60 @@ describe('ClaudeProviderCard', () => {
     fireEvent.keyDown(model, { key: 'ArrowDown' })
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Claude Code default', 'haiku', 'sonnet', 'opus', 'fable'])
     expect((screen.getByLabelText(PROVIDER_TEXT.key) as HTMLInputElement).type).toBe('password')
+  })
+
+  describe('Save feedback', () => {
+    const saveButton = (name: string): HTMLButtonElement => screen.getByRole('button', { name }) as HTMLButtonElement
+    const typeKey = (): void => { fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } }) }
+    const savedLine = (): HTMLElement => screen.getByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))
+
+    it('Save is disabled with "No changes to save" while the form equals the saved provider, enabled after an edit', async () => {
+      serve({ mode: 'apiKey', secretSet: true, ready: true })
+      render(<ClaudeProviderCard />)
+      const clean = await screen.findByRole('button', { name: PROVIDER_TEXT.clean }) as HTMLButtonElement
+      expect(clean.disabled).toBe(true)
+      expect(clean.title).toBe(PROVIDER_TEXT.noChanges)
+      typeKey()
+      expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
+      fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.modes.login }))
+      expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
+    })
+
+    it('shows Saving… while busy, then a fresh "✓ Saved at" line and a toast, also for a second identical save', async () => {
+      serve({ mode: 'apiKey', secretSet: true, ready: true })
+      let release = (): void => undefined
+      putGate = new Promise<void>((r) => { release = r })
+      render(<ClaudeProviderCard />)
+      await screen.findByLabelText(PROVIDER_TEXT.key)
+      typeKey()
+      fireEvent.click(saveButton(PROVIDER_TEXT.save))
+      const busy = await screen.findByRole('button', { name: PROVIDER_TEXT.saving }) as HTMLButtonElement
+      expect(busy.disabled).toBe(true)
+      expect(busy.getAttribute('aria-busy')).toBe('true')
+      release()
+      const first = await waitFor(savedLine)
+      expect(first.getAttribute('role')).toBe('status')
+      expect(document.getElementById('claude-provider-1')?.textContent).toContain(PROVIDER_TEXT.savedToast)
+      expect(saveButton(PROVIDER_TEXT.clean).disabled).toBe(true)
+      putGate = null
+      typeKey()
+      fireEvent.click(saveButton(PROVIDER_TEXT.save))
+      await waitFor(() => expect(document.getElementById('claude-provider-2')).toBeTruthy())
+      expect(savedLine()).not.toBe(first)
+      expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2)
+    })
+
+    it('a failed save shows an inline alert and an error toast, and Save is enabled again', async () => {
+      serve({ mode: 'apiKey', secretSet: true, ready: true })
+      putFails = 1
+      render(<ClaudeProviderCard />)
+      await screen.findByLabelText(PROVIDER_TEXT.key)
+      typeKey()
+      fireEvent.click(saveButton(PROVIDER_TEXT.save))
+      await waitFor(() => expect(screen.getAllByRole('alert').filter((a) => a.textContent?.includes(PROVIDER_TEXT.saveFailed('write_failed')))).toHaveLength(2))
+      expect(document.querySelector('[data-slot="vscode-notification"][data-severity="error"]')).toBeTruthy()
+      expect(screen.queryByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).toBeNull()
+      expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
+    })
   })
 })

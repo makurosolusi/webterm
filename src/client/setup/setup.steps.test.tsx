@@ -90,6 +90,32 @@ describe('Claude step', () => {
     expect(screen.queryByText(/see the full error/)).toBeNull()
   })
 
+  it('no separate Save: Continue with nothing changed just moves on', async () => {
+    const s = fakeServer()
+    render(<ClaudeStep nav={nav} />)
+    await screen.findByRole('button', { name: PROVIDER_TEXT.test })
+    expect(screen.queryByRole('button', { name: new RegExp(`^(${PROVIDER_TEXT.save}|${PROVIDER_TEXT.clean})$`) })).toBeNull()
+    click(SETUP_TEXT.next)
+    await waitFor(() => expect(nav.next).toHaveBeenCalledTimes(1))
+    expect(s.calls.filter((c) => c.method === 'PUT')).toHaveLength(0)
+  })
+
+  it('Continue saves pending provider edits first, then moves on; a failed save keeps the step with the error', async () => {
+    const s = fakeServer({ providerSaveFail: true })
+    render(<ClaudeStep nav={nav} />)
+    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
+    fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: 'sk-test-only' } }) // test-only
+    click(SETUP_TEXT.next)
+    expect(await screen.findByText(SETUP_TEXT.claude.saveFailed)).toBeTruthy()
+    expect(screen.getAllByRole('alert').some((a) => a.textContent === PROVIDER_TEXT.saveFailed('write_failed'))).toBe(true)
+    expect(nav.next).not.toHaveBeenCalled()
+    click(SETUP_TEXT.retry)
+    await waitFor(() => expect(nav.next).toHaveBeenCalledTimes(1))
+    const puts = s.calls.filter((c) => c.method === 'PUT' && c.url === '/api/claude-provider')
+    expect(puts).toHaveLength(2)
+    expect(puts[1]!.body).toMatchObject({ mode: 'apiKey', secret: 'sk-test-only' })
+  })
+
   it('a failed copy says so instead of claiming success', async () => {
     fakeServer({ launch: NOT_FOUND })
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn(async () => { throw new Error('denied') }) } })
