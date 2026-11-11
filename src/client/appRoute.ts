@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
-import type { CentralTab } from './secondarySideBar.store'
+import { CENTRAL_PANEL_TABS } from './central/centralTabs'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
@@ -23,8 +23,8 @@ export function toSettingsRouteSection(id: string): SettingsRouteSection {
   return LEGACY_SETTINGS_SECTION[id] ?? pick(SETTINGS_ROUTE_SECTIONS, id) ?? 'terminal'
 }
 
-/** `?ctab=` values: the tabs of the Central control panel. */
-export const CENTRAL_ROUTE_TABS = ['status', 'abilities', 'agents', 'skills', 'memory'] as const satisfies readonly (CentralTab | 'memory')[]
+/** `?ctab=` values: the tabs of the Central control panel (same list the panel renders). */
+export const CENTRAL_ROUTE_TABS = CENTRAL_PANEL_TABS
 /** `?panel=` values: the views of the bottom panel (`App.bottomPanel`). */
 export const BOTTOM_PANEL_ROUTE_IDS = ['problems', 'activity', 'output', 'tasks'] as const
 /** `?view=` values: full-screen views over the board. */

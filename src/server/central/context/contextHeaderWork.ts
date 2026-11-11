@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite'
 import { BOARD_COLUMNS, WORK_STATUSES, WORK_TERMINAL, boardColumnOf, type BoardColumn, type WorkStatus } from '../../../shared/centralWork'
 import { allRows } from '../../ledger/ledgerCore'
 import { redactSecrets } from '../../redactSecrets'
+import { createHealthStore } from '../health/healthStore'
 import { taskCards } from '../work/workBoard'
 import { createWorkStore } from '../work/workStore'
 
@@ -14,6 +15,10 @@ const MAX_TITLE = 60
 const MAX_NODE = 40
 const MAX_GOAL = 120
 const MINUTE_MS = 60_000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+/** Projects named in the global health line. */
+const MAX_HEALTH_PROJECTS = 5
 const LIVE_GOALS = ['active', 'proposed']
 const OPEN_STATUSES = WORK_STATUSES.filter((s) => !WORK_TERMINAL.includes(s))
 
@@ -81,4 +86,32 @@ export function openWork(db: Database, now: number): OpenWork {
   for (const p of projects) p.open = p.open.sort((a, b) => (signalAt.get(a) as number) - (signalAt.get(b) as number) || a.task.localeCompare(b.task)).slice(0, MAX_OPEN_ASSIGNMENTS)
   projects.sort((a, b) => needTotal(b.needsYou) - needTotal(a.needsYou) || a.id.localeCompare(b.id))
   return { needsYou, projects: projects.slice(0, MAX_WORK_PROJECTS) }
+}
+
+const ago = (ms: number): string => {
+  const d = Math.max(0, ms)
+  if (d < HOUR_MS) return `${Math.floor(d / MINUTE_MS)}m ago`
+  if (d < 2 * DAY_MS) return `${Math.floor(d / HOUR_MS)}h ago`
+  return `${Math.floor(d / DAY_MS)}d ago`
+}
+
+/**
+ * One compact health line: a project chat gets its open counts and last scan, the global chat only the projects
+ * holding open HIGH findings. Details come from the health tools.
+ */
+export function healthLine(db: Database, projectId: string | null, now: number): string {
+  if (projectId !== null) {
+    const s = createHealthStore(db, () => now).summary(projectId)
+    if (s.lastScan === null) return 'never scanned'
+    const levels = (['high', 'medium', 'low'] as const).filter((l) => s[l] > 0).map((l) => `${s[l]} ${l}`)
+    const scan = s.lastScan.status === 'done' ? '' : ` (${s.lastScan.status})`
+    return `${s.open} open${levels.length > 0 ? ` (${levels.join(', ')})` : ''} · last scan ${ago(now - s.lastScan.startedAt)}${scan}`
+  }
+  const rows = allRows(db, `SELECT p.name, COUNT(*) AS n FROM central_finding f JOIN project p ON p.id = f.project_id
+    WHERE f.status = 'open' AND f.severity = 'high' GROUP BY f.project_id, p.name ORDER BY n DESC, p.name`)
+  if (rows.length === 0) return 'no open high findings'
+  const total = rows.reduce((sum, r) => sum + Number(r.n), 0)
+  const named = rows.slice(0, MAX_HEALTH_PROJECTS).map((r) => `${redactSecrets(String(r.name)).slice(0, MAX_NODE)} ${Number(r.n)}`)
+  const more = rows.length > MAX_HEALTH_PROJECTS ? `, +${rows.length - MAX_HEALTH_PROJECTS} more` : ''
+  return `${total} open high in ${rows.length} project(s): ${named.join(', ')}${more}`
 }

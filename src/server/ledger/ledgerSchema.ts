@@ -28,6 +28,7 @@ import { applyV26 } from './ledgerSchemaV26'
 import { applyV27 } from './ledgerSchemaV27'
 import { applyV28 } from './ledgerSchemaV28'
 import { applyV29 } from './ledgerSchemaV29'
+import { applyV30 } from './ledgerSchemaV30'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -91,4 +92,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 28, up: applyV28 },
   // v29: central_reminder + central_checkin_reason + central_turn.origin (self-started turns); additive, old turns are 'user'.
   { version: 29, up: applyV29 },
+  // v30: central_finding + central_health_scan (project health advice with evidence); additive, nothing to backfill.
+  { version: 30, up: applyV30 },
 ]

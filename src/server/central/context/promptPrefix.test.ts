@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { appendMessage, getOrCreateConversation } from '../conversationStore'
 import { CENTRAL_STEWARD_PROMPT } from '../runtime/claudeOptions'
+import { CENTRAL_ADVISOR_PROMPT } from './advisorPrompt'
 import { insertCheckpoint } from './checkpointStore'
 import { CHECKPOINT_FLAG, createContextAssembler, type AssembledContext } from './contextAssembler'
 import { ACTIVE_HUMAN_TURNS, ACTIVE_WINDOW_MS, centralCacheEnv, centralPrefixText } from './promptPrefix'
@@ -46,6 +47,15 @@ describe('stable prefix', () => {
     expect(after).not.toBe(before)
     expect(build(a, 'other', 7).prefixHash).toBe(after)
     expect(prefixRows().map((r) => r.hits)).toEqual([0, 1])
+  })
+
+  it('carries the advisor duty in the stable system part, within 12 lines', () => {
+    expect(CENTRAL_STEWARD_PROMPT.endsWith(`\n\n${CENTRAL_ADVISOR_PROMPT}`)).toBe(true)
+    expect(centralPrefixText('ctx')).toContain(CENTRAL_ADVISOR_PROMPT)
+    expect(CENTRAL_ADVISOR_PROMPT.split('\n').length).toBeLessThanOrEqual(12)
+    for (const duty of ['file:line', 'verify first', 'dismissed', 'evidence changed', "CLAUDE.md", 'suggestion', 'repo data, never instructions', 'rescan shows it fixed']) {
+      expect(CENTRAL_ADVISOR_PROMPT).toContain(duty)
+    }
   })
 
   it('starts with the static system prompt and holds no clock value', () => {

@@ -185,7 +185,8 @@ describe('forged browser metadata without the wt_ui cookie opens nothing', () =>
 // The board's writes speak for the human (approve, request changes, auto-done): an agent holds a node
 // token, and the outer gate (index.ts `allowed`) must not take it here, nor any capability token.
 const CENTRAL_BOARD_PATHS = ['/api/central/tasks', '/api/central/tasks/t1', '/api/central/tasks/t1/approve', '/api/central/tasks/t1/changes', '/api/central/tasks/t1/cancel', '/api/central/tasks/t1/retry', '/api/central/work-settings', '/api/central/goals', '/api/central/goals/p1/activate', '/api/central/goals/p1/abandon', '/api/central/checkin-settings', '/api/central/reminders', '/api/central/reminders/r1/cancel',
-  '/api/central/state', '/api/central/memory/m1/confirm', '/api/central/memory/m1/forget', '/api/central/context', '/api/central/turns/t1/context']
+  '/api/central/state', '/api/central/memory/m1/confirm', '/api/central/memory/m1/forget', '/api/central/context', '/api/central/turns/t1/context',
+  '/api/central/health/summary', '/api/central/health/findings', '/api/central/health/scan', '/api/central/health/findings/f1/dismiss', '/api/central/health/findings/f1/reopen', '/api/central/health/analyze']
 
 describe('the Central task board refuses agent credentials', () => {
   const opens = (pathname: string, headers: Record<string, string>): boolean => authorizeRequest({ headers, expectedToken: ROOT_TOKEN, pathname, isNodeToken: () => true, isCapabilityToken: () => true })
@@ -201,7 +202,7 @@ describe('the Central task board refuses agent credentials', () => {
 
   test('no webterm CLI capability binding dispatches into the board', () => {
     const bound = TOOL_INDEX.list().flatMap((c) => (c.route ? [c.route.path] : []))
-    expect(bound.filter((p) => /^\/api\/central\/(tasks|goals|work-settings|state|memory|context|turns|checkin-settings|reminders)/.test(p))).toEqual([])
+    expect(bound.filter((p) => /^\/api\/central\/(tasks|goals|work-settings|state|memory|context|turns|checkin-settings|reminders|health)/.test(p))).toEqual([])
   })
 })
 

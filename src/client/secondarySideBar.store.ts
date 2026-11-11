@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react'
 import { createPanelSize } from './panelSize'
 import { appNavigate } from './appRoute'
+import type { CentralPanelTab } from './central/centralTabs'
 
 export type SideBarView = 'chat' | 'central'
 export interface SideBarState {
@@ -121,8 +122,8 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener) }
 }
 
-/** Sub-tabs of the Central control panel. */
-export type CentralTab = 'status' | 'abilities' | 'agents' | 'skills'
+/** Tabs a Central chat command may open. */
+export type CentralTab = Extract<CentralPanelTab, 'status' | 'abilities' | 'agents' | 'skills'>
 /** The last "show this Central tab" request; `seq` makes a repeat of the same tab a new request. */
 export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
 let centralRequest: CentralTabRequest | null = null

@@ -64,6 +64,7 @@ describe('whitelists match the surfaces they open', () => {
   })
   it('every Central tab is one the panel has', () => {
     for (const t of CENTRAL_ROUTE_TABS) expect(knownTab(t)).toBe(t)
+    expect(parseAppRoute('/', '?ctab=health').ctab).toBe('health')
   })
   it('bottom panel ids are the view ids', () => {
     expect([...BOTTOM_PANEL_ROUTE_IDS].sort()).toEqual(['activity', 'output', 'problems', 'tasks'])
