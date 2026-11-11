@@ -18,10 +18,12 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
+- New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
 - First-run setup after sign-in: connect Claude, set up the browser node, Central Agent and the basics; each step can be skipped, closing keeps progress, and Help › Set up webterm… (or `Setup: Open` in ⌘K) reopens it.
+- Download Chromium: with no browser on the server, setup's Browser step and Settings › Capabilities › Advanced can download Chrome for Testing (~200 MB) with progress, Cancel and Retry, and use it right away; the headless switch shows locked on for a Linux server without a display.
 - Welcome screen: a "Finish setup" checklist showing which setup steps are done, skipped or not set; click one to jump to it.
 - Accounts: on first run you create the owner account (username and a password of at least 12 characters) from the computer running webterm, or from another device with the setup code in `<data dir>/secrets/SETUP_CODE`. After that you sign in with that username and password; the sign-in screen counts down after too many wrong tries and brings you back to the page you asked for.
 - Settings > Account (`?settings=account`, also the account button in the title bar): change your username or password (a password change signs every other session out), see each browser signed in to your account with when it was last active, sign any of them out or all others at once, and Sign out.

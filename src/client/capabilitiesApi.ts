@@ -1,5 +1,5 @@
 // Klien REST tipis untuk /api/capabilities (kontrak ENVSIMPLE-b §1). Token hanya di header.
-import type { CapabilitiesResponse, CapabilityId } from '../shared/featureCapabilities'
+import type { CapabilitiesResponse, CapabilityId, ChromiumDownloadStatus } from '../shared/featureCapabilities'
 
 const PATH = '/api/capabilities'
 const HTTP_BAD_GATEWAY = 502
@@ -52,3 +52,7 @@ export const setCapability = (id: CapabilityId, enabled: boolean): Promise<Capab
 /** Nyalakan/matikan satu sub-opsi kemampuan induk. */
 export const setCapabilitySub = (id: CapabilityId, key: string, on: boolean): Promise<CapabilitiesResponse> =>
   state(`/${id}/sub`, 'POST', { key, on })
+
+/** "Download Chromium": status, start (202) or cancel; every reply is the current download status. */
+export const chromiumDownload = (action: 'status' | 'start' | 'cancel'): Promise<ChromiumDownloadStatus> =>
+  callCapabilities<ChromiumDownloadStatus>(action === 'cancel' ? '/chromium-download/cancel' : '/chromium-download', action === 'status' ? 'GET' : 'POST', action === 'status' ? undefined : {})

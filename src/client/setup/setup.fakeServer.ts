@@ -1,7 +1,7 @@
 // test-only: a fake webterm server for the wizard tests. Routes by URL + method, keeps the
 // capability set (closing prerequisites/dependents like the real service) and records every call.
 import { vi } from 'vitest'
-import { CAPABILITIES, CAPABILITY_IDS, closure, dependents, type CapabilitiesResponse, type CapabilityId } from '../../shared/featureCapabilities'
+import { CAPABILITIES, CAPABILITY_IDS, closure, dependents, type CapabilitiesResponse, type CapabilityId, type ChromiumDownloadStatus } from '../../shared/featureCapabilities'
 import type { LaunchTest } from '../claudeLauncher/claudeLaunch.client'
 
 export interface FakeServer {
@@ -15,7 +15,13 @@ export interface FakeServer {
   /** Next capability POST answers 500. */
   postFail: boolean
   extras: Record<string, unknown>
+  /** "Download Chromium" status the server reports; POST start/cancel move it, tests move it on. */
+  download: ChromiumDownloadStatus
+  /** Next download request answers 500. */
+  downloadFail: boolean
 }
+
+export const DL_IDLE: ChromiumDownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null }
 
 export const READY: LaunchTest = {
   ok: true, profile: { id: 'default', name: 'Default' }, warnings: [],
@@ -49,7 +55,7 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 
 /** Install the fake as global `fetch`; returns its mutable state. */
 export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
-  const s: FakeServer = { calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, ...over }
+  const s: FakeServer = { calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false, ...over }
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = String(input)
     const method = (init.method ?? 'GET').toUpperCase()
@@ -59,6 +65,11 @@ export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
     if (url.startsWith('/api/claude-provider/detect')) return json({ wrappers: [] })
     if (url.startsWith('/api/claude-provider')) return json({ provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 })
     if (url.startsWith('/api/settings/env')) return json(method === 'GET' ? { entries: [{ key: 'WEBTERM_BROWSER_HEADLESS', kind: 'flag', group: 'browser', label: 'Headless mode', value: '', default: 'off' }], locked: false } : {})
+    if (url.startsWith('/api/capabilities/chromium-download')) {
+      if (s.downloadFail) { s.downloadFail = false; return json({ error: 'boom' }, 500) }
+      if (method === 'POST') s.download = url.endsWith('/cancel') ? DL_IDLE : { ...DL_IDLE, state: 'downloading' }
+      return json(s.download, method === 'POST' && !url.endsWith('/cancel') ? 202 : 200)
+    }
     if (url === '/api/capabilities/advanced' && method === 'PUT') { s.chromiumValue = (body as { chromiumPath: string }).chromiumPath; return json(capsView(s)) }
     if (url.startsWith('/api/capabilities') && method === 'GET') return s.capsFail-- > 0 ? json({ error: 'boom' }, 500) : json(capsView(s))
     const m = /^\/api\/capabilities\/(\w+)$/.exec(url)
