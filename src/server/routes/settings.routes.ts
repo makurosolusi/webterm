@@ -19,10 +19,8 @@ export function applyPtyOptions(): void {
   sessions.options = {
     shell: s.defaultShell,
     scrollbackBytes: s.scrollbackBytes,
-    // `--permission-mode auto` baru ada di Claude Code >= 2.1.71 dan webterm belum punya probe
-    // versi CLI, jadi mode default 'auto' diteruskan sebagai ABSEN: peluncuran claude tetap polos
-    // persis seperti sebelum setting ini ada. Mode pilihan user eksplisit tetap diteruskan.
-    claudePermissionMode: mode === 'auto' ? undefined : mode,
+    // Same mode Agent Chat gets (agentChat.runtime.ts): `auto` is passed through, not dropped.
+    claudePermissionMode: mode,
     hookReplyApprovals: s.hookReplyApprovals,
   }
 }

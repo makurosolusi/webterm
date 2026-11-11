@@ -63,9 +63,9 @@ export const CENTRAL_FIELD_TEXT = {
   turnSteps: { label: 'Steps per reply', hint: 'Most actions Central may take in one reply.' },
   contextWindow: { label: 'Context window', hint: 'How much conversation the model can hold.' },
   dailyTokens: { label: 'Daily token budget', hint: 'Most tokens Central may use per day.' },
-  maxInflight: { label: 'Max workers at once', hint: 'Takes effect the next time webterm starts.' },
+  maxInflight: { label: 'Max workers at once', hint: 'How many workers Central runs side by side when it works on its own. Applies to the next worker it starts.' },
   knowledge: { label: 'Project knowledge', hint: 'Central builds a searchable index of your projects.' },
-  reliability: { label: 'Steadier autonomy', hint: 'Queues and retries work when Central works on its own.' },
+  reliability: { label: 'Steadier autonomy', hint: 'Stops retrying a task that keeps failing the same way, and tidies up workers left from before a restart.' },
   mail: { label: 'Agent mail', hint: 'Central may leave messages for its workers.' },
 } as const
 

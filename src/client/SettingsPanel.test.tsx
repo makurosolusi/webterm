@@ -314,7 +314,6 @@ describe('SettingsPanel agents', () => {
     const agent: CustomAgent = { id: 'custom:dead', label: 'Proxy', launchCmd: 'proxy' }
     const { onChange } = renderPanel({
       customAgents: [agent],
-      defaultAgent: agent.id,
       disabledAgents: [agent.id],
     })
     fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
@@ -323,7 +322,6 @@ describe('SettingsPanel agents', () => {
 
     expect(onChange).toHaveBeenCalledWith({
       customAgents: [],
-      defaultAgent: DEFAULT_SETTINGS.defaultAgent,
       disabledAgents: [],
     })
   })

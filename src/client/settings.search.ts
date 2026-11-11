@@ -84,7 +84,6 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('shell', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
   // Agent (SettingsAgents.tsx, SettingsModels.tsx, ClaudeLaunchProfilesCard.tsx)
   e('agent', 'skipApprovals', 'Skip approvals', 'Central and every Claude agent act without asking you first.', 'yolo dangerous permission ask'),
-  e('agent', 'defaultAgent', 'Agent default', 'The agent launched by the quick-add button.'),
   e('agent', 'claudePermissionMode', 'Claude permission mode', undefined, 'permission-mode approval plan'),
   e('agent', 'hookReplyApprovals', 'Hook approvals from the canvas', undefined, 'approve deny permission'),
   e('agent', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),

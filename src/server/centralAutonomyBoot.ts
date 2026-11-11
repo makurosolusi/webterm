@@ -1,5 +1,5 @@
 // Boot wiring for the central autonomous loop. The controller always exists (never `null`) and
-// is hot-switchable: `onCapabilityChange('autonomy')` starts/stops the single timer, and every
+// is hot-switchable: `onCapabilityChange('autonomy')` starts/stops the waker, and every
 // tick re-checks `isEnabled('autonomy')` + `isEnabled('workers')`, because a tick spawns a real
 // worker through the same route a human would call. It never bypasses gates: approval-required
 // runs still answer 409 (autonomy never approves; that is normal, not an anomaly), and a paused
@@ -131,9 +131,13 @@ export function startCentralAutonomyBoot(opts: AutonomyBootOptions): AutonomyCon
       }
     },
     intervalMs,
-    ...(reliable && runtime
-      ? { dispatch: { maxInflight: maxInflightFromEnv(env[MAX_INFLIGHT_ENV]), breaker: createBreakerStore({ db: runtime.db, now: Date.now }) } }
-      : {}),
+    // Dispatch always: "Max workers at once" applies whenever autonomy runs and is re-read per
+    // dispatch (Settings writes process.env). Reliability mode only adds the persistent breaker,
+    // the boot reconcile and the longer default sweep.
+    dispatch: {
+      maxInflight: () => maxInflightFromEnv(env[MAX_INFLIGHT_ENV]),
+      ...(reliable && runtime ? { breaker: createBreakerStore({ db: runtime.db, now: Date.now }) } : { sweepMs: intervalMs }),
+    },
   })
 
   let reconciled = false
@@ -152,7 +156,7 @@ export function startCentralAutonomyBoot(opts: AutonomyBootOptions): AutonomyCon
       log(
         reliable
           ? 'central autonomy: on (reliability mode: non-blocking dispatch, wake + sweep, persistent breaker)'
-          : `central autonomy: on (every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} consecutive failures per project)`
+          : `central autonomy: on (non-blocking dispatch, sweep every ${intervalMs}ms, max ${DEFAULT_MAX_CONSECUTIVE_FAILURES} consecutive failures per project)`
       )
     } catch (err) {
       warn(`central autonomy: start failed (${err instanceof Error ? err.name : typeof err})`)

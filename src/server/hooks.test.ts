@@ -350,8 +350,11 @@ describe('permissionModeFlag', () => {
     expect(permissionModeFlag('plan')).toBe('--permission-mode plan')
     expect(permissionModeFlag('bypassPermissions')).toBe('--permission-mode bypassPermissions')
   })
-  it('emits nothing for manual, undefined or an unrecognized value', () => {
-    expect(permissionModeFlag('manual')).toBe('')
+  it('passes auto through and sends manual as the CLI name default, like Agent Chat', () => {
+    expect(permissionModeFlag('auto')).toBe('--permission-mode auto')
+    expect(permissionModeFlag('manual')).toBe('--permission-mode default')
+  })
+  it('emits nothing for undefined or an unrecognized value', () => {
     expect(permissionModeFlag(undefined)).toBe('')
     // Settings bisa diedit tangan — nilai asing tidak boleh mendarat di baris perintah.
     expect(permissionModeFlag('; rm -rf /' as never)).toBe('')
@@ -396,8 +399,8 @@ describe('buildClaudeFlags', () => {
   it('emits --permission-mode when one is passed in', () => {
     expect(flags(false, 'acceptEdits')).toContain('--permission-mode acceptEdits')
   })
-  it('stays byte-identical to the bare line for manual mode', () => {
-    expect(flags(false, 'manual')).toBe(flags(false))
+  it('sends manual explicitly as default (a bare launch starts in auto on current Claude Code)', () => {
+    expect(flags(false, 'manual')).toBe(flags(false).replace('--session-id uuid-x', '--session-id uuid-x --permission-mode default'))
   })
   it('never puts a URL on the command line (regression: envman 404 on `http:`)', () => {
     // Blob JSON inline membawa URL callback hook ke argv; pembungkus seperti envman memindai tiap

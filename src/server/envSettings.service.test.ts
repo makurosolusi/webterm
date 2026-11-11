@@ -17,7 +17,7 @@ describe('presedensi override > env > default', () => {
   it('tiga tingkat, dan reset mengembalikan nilai env awal', () => {
     const s = setupEnv({ WEBTERM_LEDGER: 'shadow' })
     expect(entry(s, 'WEBTERM_LEDGER')).toMatchObject({ source: 'env', value: 'shadow' })
-    expect(entry(s, 'WEBTERM_CENTRAL_TOOLS')).toMatchObject({ source: 'default', value: 'read' })
+    expect(entry(s, 'WEBTERM_CENTRAL_AGENTS')).toMatchObject({ source: 'default', value: 'off' })
 
     expect(s.svc.update({ set: { WEBTERM_LEDGER: 'on' }, unset: [] }, ROOT).ok).toBe(true)
     expect(entry(s, 'WEBTERM_LEDGER')).toMatchObject({ source: 'override', value: 'on' })

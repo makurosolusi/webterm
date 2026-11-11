@@ -24,24 +24,25 @@ function spy(ids: CapabilityId[]): void {
 afterEach(() => { offs.splice(0).forEach((off) => off()); events.length = 0 })
 
 describe('kunci turunan Worker/Otonomi', () => {
-  it('linkedSettings: Worker = propose + tools write + planner; Otonomi = auto; mati = off/read', () => {
-    expect(linkedSettings(new Set(['workers']))).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_TOOLS: 'write', WEBTERM_CENTRAL_PLANNER: 'on' })
-    expect(linkedSettings(new Set(['autonomy']))).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'auto', WEBTERM_CENTRAL_TOOLS: 'write' })
-    expect(linkedSettings(new Set(['central']))).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'off', WEBTERM_CENTRAL_TOOLS: 'read', WEBTERM_CENTRAL_PLANNER: 'off' })
+  it('linkedSettings: Worker = propose; Otonomi = auto; mati = off; retired dead keys are no longer written', () => {
+    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose' })
+    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
+    expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off' })
   })
   it('toggle menulis nilainya ke env; mematikan Otonomi turun ke propose', async () => {
     const h = harness()
     await toggle(h.ctx, 'workers', true)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_TOOLS: 'write', WEBTERM_CENTRAL_PLANNER: 'on' })
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose' })
+    expect(h.target.WEBTERM_CENTRAL_TOOLS).toBeUndefined()
     await toggle(h.ctx, 'autonomy', true)
     expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('auto')
     await toggle(h.ctx, 'autonomy', false)
     expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('propose')
   })
   it('nilai eksplisit dari shell/.env tidak ditimpa kartu', async () => {
-    const h = harness({ WEBTERM_CENTRAL_AGENTS: 'off', WEBTERM_CENTRAL_TOOLS: 'read' })
+    const h = harness({ WEBTERM_CENTRAL_AGENTS: 'off' })
     await toggle(h.ctx, 'workers', true)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'off', WEBTERM_CENTRAL_TOOLS: 'read', WEBTERM_CENTRAL_PLANNER: 'on' })
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'off' })
   })
   it('Worker berubah saat Central tetap on = hook central di-bounce (CA2 merakit ulang tool worker)', async () => {
     const h = harness()
@@ -80,13 +81,13 @@ describe('detail dan sub', () => {
 describe('syncLinkedSettings (boot)', () => {
   it('Worker yang sudah on sebelum perubahan mendapat nilai turunan tanpa toggle; boot kedua tak menulis', () => {
     const h = harness({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' })
-    expect(syncLinkedSettings(h.svc, h.target).sort()).toEqual(['WEBTERM_CENTRAL_AGENTS', 'WEBTERM_CENTRAL_PLANNER', 'WEBTERM_CENTRAL_TOOLS'])
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_TOOLS: 'write', WEBTERM_CENTRAL_PLANNER: 'on' })
+    expect(syncLinkedSettings(h.svc, h.target)).toEqual(['WEBTERM_CENTRAL_AGENTS'])
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose' })
     expect(syncLinkedSettings(h.svc, h.target)).toEqual([])
   })
   it('env eksplisit menang dan kartu mati tidak menulis apa pun', () => {
     const h = harness({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' })
-    expect(syncLinkedSettings(h.svc, h.target).sort()).toEqual(['WEBTERM_CENTRAL_PLANNER', 'WEBTERM_CENTRAL_TOOLS'])
+    expect(syncLinkedSettings(h.svc, h.target)).toEqual([])
     expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('propose')
     expect(syncLinkedSettings(harness().svc, {})).toEqual([])
   })

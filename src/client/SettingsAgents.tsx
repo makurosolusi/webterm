@@ -1,7 +1,7 @@
 // Section Agent: `customAgents` (daftar record) butuh lebih dari satu input. Bentuknya mengikuti
 // nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: satu kartu per agent
 // custom. Claude's launch command lives in the launch profiles card; other CLIs have no builtin row.
-import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
+import type { CustomAgent, Settings } from '../shared/settings'
 import {
   AGENT_CONFIG,
   BUILTIN_AGENT_IDS,
@@ -46,10 +46,6 @@ export function AgentSettings({
   const removeAgent = (id: string): void =>
     onChange({
       customAgents: s.customAgents.filter((a) => a.id !== id),
-      // Buang id mati dari kunci yang merujuknya, jangan hanya dari daftar: `defaultAgent` yang
-      // menunjuk agent terhapus akan menjadikan tombol quick-add menjalankan `custom:<uuid>`
-      // sebagai perintah shell.
-      defaultAgent: s.defaultAgent === id ? DEFAULT_SETTINGS.defaultAgent : s.defaultAgent,
       disabledAgents: s.disabledAgents.filter((d) => d !== id),
     })
 
@@ -78,15 +74,6 @@ export function AgentSettings({
         tone={s.skipApprovals ? 'warning' : undefined}
         value={s.skipApprovals}
         onChange={(v) => onChange({ skipApprovals: v })}
-      />
-      <SelectField
-        id="st-defaultAgent"
-        setting="defaultAgent"
-        label="Agent default"
-        hint="The agent launched by the quick-add button."
-        value={s.defaultAgent}
-        options={agentOptions}
-        onChange={(v) => onChange({ defaultAgent: v })}
       />
       <SelectField
         id="st-claudePermissionMode"

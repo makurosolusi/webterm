@@ -3,7 +3,7 @@
 // and `centralChatSse`; the transport layer already enforces root/loopback, so
 // this module never reads a token and never puts one in an event or response.
 //
-// Flags: `WEBTERM_CENTRAL=on` AND `WEBTERM_CENTRAL_CHAT=on`. Chat off means "not
+// Gate: the `central` capability (isEnabled). Chat off means "not
 // mounted" (404 by the fallback). Runtime off answers 503 `central_runtime_off`; `claude` builds a
 // real runtime and reports an unready CLI as a failed turn (`runtime_unavailable`), never as 503.
 import { isEnabled } from './featureCapabilities.runtime'

@@ -93,11 +93,8 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
 
 /** Kunci turunan: on bila SEMUA kemampuan `needs` on. Ditulis `deriveFlags`, tak tampil di UI. */
 export const DERIVED_FLAGS: readonly { key: string; needs: readonly CapabilityId[] }[] = [
-  { key: 'WEBTERM_CENTRAL_CHAT', needs: ['central'] },
   { key: 'WEBTERM_CENTRAL_MEMORY', needs: ['central'] },
   { key: 'WEBTERM_CENTRAL_READ_TOOLS', needs: ['central'] },
-  { key: 'WEBTERM_CHANNELS', needs: ['telegram'] },
-  { key: 'WEBTERM_CENTRAL_TELEGRAM', needs: ['central', 'telegram'] },
   { key: 'WEBTERM_FILES_WATCH', needs: ['files'] },
   { key: 'WEBTERM_FILES_GIT_STATUS', needs: ['files'] },
   { key: 'WEBTERM_FILES_QUICK_OPEN', needs: ['files'] },
@@ -111,8 +108,7 @@ export const DERIVED_FLAGS: readonly { key: string; needs: readonly CapabilityId
  */
 export const LINKED_SETTINGS: readonly { key: string; needs: readonly CapabilityId[]; on: string; off: string }[] = [
   // Worker on = Central boleh mengusulkan dan menjalankan worker; tiap aksi tetap lewat kartu persetujuan (propose).
-  { key: 'WEBTERM_CENTRAL_TOOLS', needs: ['workers'], on: 'write', off: 'read' },
-  { key: 'WEBTERM_CENTRAL_PLANNER', needs: ['workers'], on: 'on', off: 'off' },
+  // (WEBTERM_CENTRAL_TOOLS/_PLANNER dulu ditulis di sini tanpa pembaca runtime; dihapus, nilai tersimpan lama diabaikan.)
   // Tanpa kartu per aksi (auto) hanya lewat kartu Otonomi yang berbahaya; urutan ini = auto menang atas propose.
   { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['autonomy'], on: 'auto', off: 'off' },
   { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['workers'], on: 'propose', off: 'off' },

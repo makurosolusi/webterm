@@ -19,13 +19,13 @@ describe('ENV_REGISTRY', () => {
     expect(isBootstrapOnly(ENV_SETTINGS_SWITCH)).toBe(true)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_TELEGRAM_API_BASE')
   })
-  it('jumlah entri 60; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
-    expect(ENV_REGISTRY).toHaveLength(60)
-    const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_TOKENS']
-    const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_CENTRAL_TURN_TOKENS: '1000' }))
+  it('jumlah entri 55; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
+    expect(ENV_REGISTRY).toHaveLength(55)
+    const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_TOKENS', 'WEBTERM_CHANNELS', 'WEBTERM_CENTRAL_TELEGRAM', 'WEBTERM_CENTRAL_TOOLS', 'WEBTERM_CENTRAL_PLANNER', 'WEBTERM_CENTRAL_CHAT']
+    const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_CENTRAL_TURN_TOKENS: '1000', WEBTERM_CENTRAL_TOOLS: 'write' }))
     expect(s.svc.state({ root: true }).entries.filter((e) => retired.includes(e.key))).toEqual([])
     expect(s.svc.update({ set: { WEBTERM_LEDGER: 'on' }, unset: [] }, { root: true }).ok).toBe(true)
-    expect(JSON.parse(s.overrides.json as string)).toMatchObject({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_CENTRAL_TURN_TOKENS: '1000', WEBTERM_LEDGER: 'on' })
+    expect(JSON.parse(s.overrides.json as string)).toMatchObject({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_CENTRAL_TURN_TOKENS: '1000', WEBTERM_CENTRAL_TOOLS: 'write', WEBTERM_LEDGER: 'on' })
   })
 
   it('kelas dangerous dan secret sesuai rancangan', () => {
@@ -102,18 +102,13 @@ const RT = 'WEBTERM_CENTRAL_RUNTIME'
 /** Tabel vonis c-ENV-02 (E01..E26): owner, section, audience, restart, key requires. */
 const VERDICT: Row[] = [
   [L, 'platform', 'Basics', 'user', 'boot', []],
-  ['WEBTERM_CHANNELS', 'channels', 'Telegram', 'user', 'hot', []],
-  [TG, 'channels', 'Telegram', 'user', 'hot', ['WEBTERM_CHANNELS']],
+  [TG, 'channels', 'Telegram', 'user', 'hot', []],
   ['WEBTERM_TELEGRAM_MODE', 'channels', 'Telegram', 'user', 'boot', [TG]],
   ['WEBTERM_TELEGRAM_BOT_TOKEN', 'channels', 'Telegram', 'user', 'hot', [TG]],
   ['WEBTERM_TELEGRAM_WEBHOOK_SECRET', 'channels', 'Telegram', 'advanced', 'boot', [TG, 'WEBTERM_TELEGRAM_MODE']],
   [CE, 'central', 'Central', 'user', 'hot', []],
-  ['WEBTERM_CENTRAL_CHAT', 'central', 'Central', 'user', 'hot', [CE]],
-  ['WEBTERM_CENTRAL_TELEGRAM', 'channels', 'Telegram', 'user', 'hot', [TG, CE, 'WEBTERM_CENTRAL_CHAT', RT]],
   [RT, 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MODEL', 'central', 'Central', 'advanced', 'hot', [RT]],
-  ['WEBTERM_CENTRAL_PLANNER', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_CENTRAL_TOOLS']],
-  ['WEBTERM_CENTRAL_TOOLS', 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_MEMORY', 'central', 'Central', 'user', 'hot', [CE]],
   ['WEBTERM_CENTRAL_AUTONOMY', 'central', 'Central', 'user', 'hot', [CE, 'WEBTERM_ORCHESTRATOR_RUN']],
   ['WEBTERM_ORCHESTRATOR_RUN', 'platform', 'Orchestrator', 'user', 'hot', []],
@@ -128,9 +123,9 @@ const VERDICT: Row[] = [
 ]
 
 describe('vonis c-ENV-02 per entri', () => {
-  it('tabel mencakup 24 kunci inti, tanpa duplikat', () => {
-    expect(VERDICT).toHaveLength(24)
-    expect(new Set(VERDICT.map((r) => r[0])).size).toBe(24)
+  it('tabel mencakup 19 kunci inti, tanpa duplikat', () => {
+    expect(VERDICT).toHaveLength(19)
+    expect(new Set(VERDICT.map((r) => r[0])).size).toBe(19)
   })
   it.each(VERDICT)('%s: owner/section/audience/restart/requires', (key, owner, section, audience, restart, requires) => {
     const s = specFor(key) as EnvSpec
@@ -143,16 +138,15 @@ describe('vonis c-ENV-02 per entri', () => {
       expect(specFor(k)?.restartRequired, k).toBe(false)
     }
   })
-  it('grup: Telegram+central-telegram di telegram, log di logs, file di files', () => {
-    expect(specFor('WEBTERM_CENTRAL_TELEGRAM')?.group).toBe('telegram')
+  it('grup: Telegram di telegram, log di logs, file di files', () => {
+    expect(specFor('WEBTERM_TELEGRAM')?.group).toBe('telegram')
     for (const k of ['WEBTERM_LOG_LEVEL', 'WEBTERM_LOG_BUFFER', 'WEBTERM_LOG_FILE']) expect(specFor(k)?.group, k).toBe('logs')
     for (const s of ENV_REGISTRY.filter((x) => x.key.startsWith('WEBTERM_FILES_'))) expect(s).toMatchObject({ group: 'files', owner: 'files' })
   })
-  it('E01 ledger: optionLabels; E02 channels: default on, nilai asing tidak sah, ON dinormalisasi', () => {
+  it('E01 ledger: optionLabels, nilai asing tidak sah, ON dinormalisasi', () => {
     expect(specFor('WEBTERM_LEDGER')?.optionLabels).toEqual({ off: 'Off', shadow: 'Shadow', on: 'On' })
-    expect(specFor('WEBTERM_CHANNELS')).toMatchObject({ kind: 'enum', default: 'on' })
-    expect(validateEnvValue(specFor('WEBTERM_CHANNELS') as EnvSpec, 'maybe').ok).toBe(false)
-    expect(validateEnvValue(specFor('WEBTERM_CHANNELS') as EnvSpec, 'ON')).toEqual({ ok: true, value: 'on' })
+    expect(validateEnvValue(specFor('WEBTERM_LEDGER') as EnvSpec, 'maybe').ok).toBe(false)
+    expect(validateEnvValue(specFor('WEBTERM_LEDGER') as EnvSpec, 'ON')).toEqual({ ok: true, value: 'on' })
   })
   it('E04 mode Telegram: default kosong + effectiveDefault; kosong dan poll/webhook sah, nilai lain tidak', () => {
     const s = specFor('WEBTERM_TELEGRAM_MODE') as EnvSpec
@@ -164,8 +158,7 @@ describe('vonis c-ENV-02 per entri', () => {
     for (const v of ['', 'poll', 'webhook']) expect(validateEnvValue(s, v).ok, v).toBe(true)
     expect(validateEnvValue(s, 'push').ok).toBe(false)
   })
-  it('E13 tools, E26 log file: optionLabels; E25 buffer: unit entri, rentang 100..100000', () => {
-    expect(specFor('WEBTERM_CENTRAL_TOOLS')?.optionLabels).toEqual({ read: 'Read only', write: 'Can write' })
+  it('E26 log file: optionLabels; E25 buffer: unit entri, rentang 100..100000', () => {
     expect(specFor('WEBTERM_LOG_FILE')?.optionLabels).toEqual({ on: 'On', off: 'Off' })
     expect(specFor('WEBTERM_LOG_BUFFER')).toMatchObject({ unit: 'entries', min: 100, max: 100000 })
   })

@@ -35,9 +35,8 @@ const CASES: Case[] = [
   { name: 'files mutate tanpa viewers', stored: { [M]: on }, set: [], ignored: [M] },
   { name: 'files viewers + mutate', stored: { [F]: on, [M]: on }, set: ['files', 'filesWrite'], ignored: [] },
   { name: 'telegram saja', stored: { [T]: on }, set: ['telegram'], ignored: [] },
-  { name: 'channels tanpa telegram', stored: { WEBTERM_CHANNELS: on }, set: [], ignored: ['WEBTERM_CHANNELS'] },
-  { name: 'central_telegram tanpa telegram', stored: { [C]: on, WEBTERM_CENTRAL_TELEGRAM: on }, set: ['central'], ignored: ['WEBTERM_CENTRAL_TELEGRAM'] },
-  { name: 'central + telegram + jembatan', stored: { [C]: on, [T]: on, WEBTERM_CENTRAL_TELEGRAM: on }, set: ['central', 'telegram'], ignored: [] },
+  // Retired keys (no runtime reader) stay stored but are neither applied nor reported.
+  { name: 'retired channels/central_telegram kept harmless', stored: { [C]: on, WEBTERM_CHANNELS: on, WEBTERM_CENTRAL_TELEGRAM: on }, set: ['central'], ignored: [] },
   { name: 'files_watch tanpa files', stored: { WEBTERM_FILES_WATCH: on }, set: [], ignored: ['WEBTERM_FILES_WATCH'] },
   { name: 'ledger lama diabaikan senyap', stored: { WEBTERM_LEDGER: on }, set: [], ignored: [] },
   { name: 'semua tujuh', stored: { [C]: on, [W]: on, [A]: on, WEBTERM_BROWSER: on, [F]: on, [M]: on, [T]: on }, set: [...CAPABILITY_IDS], ignored: [] },
@@ -92,7 +91,7 @@ test('urutan kunci tersimpan tak berpengaruh', () => {
 
 test('satu warn per kunci yang diabaikan, hanya nama kunci, walau dipanggil berulang', () => {
   const ignoredKeys = [...new Set(CASES.flatMap((c) => c.ignored))]
-  expect(ignoredKeys.length >= 5).toBe(true)
+  expect(ignoredKeys.length >= 4).toBe(true)
   CASES.forEach((c, idx) => legacyToCapabilities(envFromStore(200 + idx, c.stored))) // putaran kedua
   const warns = logBus.query().filter((e) => e.event === 'capability.legacy_ignored')
   const perKey = new Map<string, number>()

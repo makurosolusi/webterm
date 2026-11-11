@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
+import { isPermissionMode, type AgentPermissionMode } from '../shared/workspace'
 import { AgentSettings } from './SettingsAgents'
 
 afterEach(cleanup)
@@ -29,7 +30,8 @@ describe('AgentSettings skip approvals', () => {
     expect(reason?.textContent).toContain('Skip approvals is on, so agents start without asking.')
     fireEvent.click(screen.getByRole('button', { name: 'Turn off Skip approvals to choose' }))
     expect(onChange).toHaveBeenCalledWith({ skipApprovals: false })
-    expect(screen.getByText(/nothing stops a wrong action/).getAttribute('style')).toContain('--st-warning')
+    // The hint is a plain string now (searchable); the warning lives in the text itself.
+    expect(screen.getByText(/nothing stops a wrong action/)).toBeTruthy()
   })
 
   it('when off, the permission mode select is enabled and toggling on sends skipApprovals: true', () => {
@@ -48,5 +50,17 @@ describe('AgentSettings skip approvals', () => {
     expect([...modeSelect().options].map((o) => o.textContent)).toEqual([
       'Ask before every action', 'Auto (default)', 'Approve file edits automatically', 'Plan only, change nothing', 'Never ask (no prompts)',
     ])
+  })
+
+  it('every permission mode a session can hold is an option, so the select never shows blank for a valid value', () => {
+    const modes: AgentPermissionMode[] = ['manual', 'auto', 'acceptEdits', 'plan', 'bypassPermissions']
+    expect(modes.every(isPermissionMode)).toBe(true)
+    for (const mode of modes) {
+      cleanup()
+      render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, skipApprovals: false, claudePermissionMode: mode }} onChange={vi.fn()} />)
+      expect(modeSelect().value).toBe(mode)
+      expect(modeSelect().selectedOptions[0]?.textContent).toBeTruthy()
+    }
+    expect([...modeSelect().options].map((o) => o.value).sort()).toEqual([...modes].sort())
   })
 })
