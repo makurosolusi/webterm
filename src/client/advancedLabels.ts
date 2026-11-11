@@ -20,9 +20,11 @@ export const ADVANCED_TEXT = {
   chromiumMissing: 'Chromium was not found. Enter its location here.',
   chromiumUseAuto: 'Use automatic',
   chromiumRedetect: 'Detect again',
-  dataDirLabel: 'Data folder',
   reset: 'Reset capabilities',
   resetHint: 'Restores capability choices to their defaults. Your data is not deleted.',
+  resetConfirm: 'Reset capabilities to their defaults?',
+  resetting: 'Resetting…',
+  resetDone: 'Capabilities are back to their defaults',
   changeFailed: 'The change did not go through. Try again in a moment.',
 } as const
 

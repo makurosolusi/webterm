@@ -3,7 +3,6 @@
 // no sign-in path (no /auth/login, no `?token=` link), the value never reaches the console.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CapabilitiesSection } from './CapabilitiesSection'
 import { TokenAccessCard } from './TokenAccessCard'
 import { TOKEN_TEXT } from './tokenAccessLabels'
 import type { TokenStatus } from './tokenAccess.api.client'
@@ -143,17 +142,5 @@ describe('TokenAccessCard', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     render(<TokenAccessCard />)
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(TOKEN_TEXT.loadFailed))
-  })
-
-  it.each(['token', 'access', 'security', 'tunnel'])('Settings search "%s" finds the card', async (q) => {
-    serve([OFF])
-    render(<CapabilitiesSection projectId="p1" query={q} sectionTitle="Capabilities" />)
-    expect(await screen.findByRole('region', { name: TOKEN_TEXT.title })).toBeTruthy()
-  })
-
-  it('unrelated search hides the card', () => {
-    serve([OFF])
-    render(<CapabilitiesSection projectId="p1" query="chromium" sectionTitle="Capabilities" />)
-    expect(screen.queryByRole('region', { name: TOKEN_TEXT.title })).toBeNull()
   })
 })

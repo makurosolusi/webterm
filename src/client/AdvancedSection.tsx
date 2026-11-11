@@ -1,13 +1,18 @@
-// Bagian "Lanjutan" (b §4): tepat empat butir, tertutup secara bawaan.
+// Settings › Features › Advanced: where Chromium is (+ download it), and Reset capabilities (asks first,
+// then busy, then the result with its time). Closed by default; the Browser card's step opens it.
 import { useState } from 'react'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ActionResult, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { ADVANCED_TEXT } from './advancedLabels'
-import { AgentEngineField } from './AgentEngineField'
 import { callCapabilities } from './capabilitiesApi'
 import { ChromiumDownload } from './ChromiumDownload'
 import { ChromiumPathField } from './ChromiumPathField'
-import { capabilityErrorMessage, type CapabilitiesLoad } from './useCapabilities'
+import { capabilityErrorMessage } from './useCapabilities'
 
 type Advanced = CapabilitiesResponse['advanced']
 
@@ -15,16 +20,15 @@ export interface AdvancedSectionProps {
   advanced: Advanced
   /** Dipanggil setelah server menerima perubahan, agar kartu memuat ulang. */
   onChanged(): Promise<unknown>
-  /** Reload with fresh detection (the engine's "Check again"); defaults to `onChanged`. */
-  onRecheck?(): Promise<CapabilitiesLoad>
   /** Terbuka atau tidak; dikendalikan induk supaya tombol langkah di kartu Browser bisa membukanya. */
   open: boolean
   onOpenChange(open: boolean): void
 }
 
-/** Bagian Lanjutan: mesin agen, lokasi Chromium (+ unduh Chromium), folder data (baca-saja), setel ulang. */
-export function AdvancedSection({ advanced, onChanged, onRecheck, open, onOpenChange }: AdvancedSectionProps): React.JSX.Element {
+/** Bagian Lanjutan: lokasi Chromium (+ unduh Chromium) dan setel ulang. */
+export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: AdvancedSectionProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
+  const [asking, setAsking] = useState(false)
 
   const run = async (suffix: string, method: string, body: unknown): Promise<void> => {
     try {
@@ -35,25 +39,47 @@ export function AdvancedSection({ advanced, onChanged, onRecheck, open, onOpenCh
       setError(capabilityErrorMessage(e, ADVANCED_TEXT.changeFailed))
     }
   }
+  const reset = useAction(async () => {
+    try {
+      await callCapabilities('/reset', 'POST', {})
+    } catch (e) {
+      throw new Error(capabilityErrorMessage(e, ADVANCED_TEXT.changeFailed), { cause: e })
+    }
+    await onChanged()
+  }, { label: ADVANCED_TEXT.reset, success: () => ADVANCED_TEXT.resetDone, failure: (e) => (e instanceof Error ? e.message : ADVANCED_TEXT.changeFailed) })
+  const confirmReset = (): void => {
+    setAsking(false)
+    void reset.run()
+  }
 
   return (
     <details className="st-capabilities-advanced" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
       <summary>{ADVANCED_TEXT.summary}</summary>
-      {onRecheck ? <AgentEngineField redetect={onRecheck} active={open} /> : null}
       <ChromiumPathField chromium={advanced.chromiumPath}
         save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />
       {advanced.chromiumDownload?.supported ? <ChromiumDownload onDone={onChanged} /> : null}
       <div className="flex flex-col gap-1 py-2">
-        <span className="text-[13px]">{ADVANCED_TEXT.dataDirLabel}</span>
-        <code className="text-xs break-all">{advanced.dataDir}</code>
-      </div>
-      <div className="flex flex-col gap-1 py-2">
-        <Button size="sm" variant="outline" className="self-start" onClick={() => void run('/reset', 'POST', {})}>
-          {ADVANCED_TEXT.reset}
+        <Button size="sm" variant="outline" className="self-start" disabled={reset.busy} aria-busy={reset.busy} onClick={() => setAsking(true)}>
+          {reset.busy ? ADVANCED_TEXT.resetting : ADVANCED_TEXT.reset}
         </Button>
         <p className="m-0 text-xs opacity-70">{ADVANCED_TEXT.resetHint}</p>
+        <ActionResult action={reset} />
       </div>
       {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
+      {asking ? (
+        <AlertDialog open onOpenChange={(o) => { if (!o) setAsking(false) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{ADVANCED_TEXT.resetConfirm}</AlertDialogTitle>
+              <AlertDialogDescription>{ADVANCED_TEXT.resetHint}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus>Cancel</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={confirmReset}>{ADVANCED_TEXT.reset}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </details>
   )
 }

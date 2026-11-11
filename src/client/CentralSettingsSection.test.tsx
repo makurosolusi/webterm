@@ -252,6 +252,6 @@ describe('Settings › Central Agent', () => {
     expect(title()).toBe('Agent')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Open Browser' }))
-    expect(title()).toBe('Capabilities')
+    expect(title()).toBe('Features')
   })
 })

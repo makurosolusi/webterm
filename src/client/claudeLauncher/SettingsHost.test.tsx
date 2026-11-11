@@ -25,11 +25,18 @@ describe('SettingsHost', () => {
     expect(onOpen).toHaveBeenCalledWith('agent', null)
   })
 
-  it('maps a legacy event id to its route section', () => {
+  it('the workspace menu\'s Canvas Background opens Appearance on that field', () => {
     const onOpen = vi.fn()
     render(host(null, onOpen))
     act(() => openWorkspaceCanvasBackground())
-    expect(onOpen).toHaveBeenCalledWith('background', null)
+    expect(onOpen).toHaveBeenCalledWith('appearance', 'canvasBackground')
+  })
+
+  it('maps a legacy event id to its route section', () => {
+    const onOpen = vi.fn()
+    render(host(null, onOpen))
+    act(() => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'background:workspace' } })) })
+    expect(onOpen).toHaveBeenCalledWith('appearance', null)
   })
 
   it('shows the section it is given and reports nav clicks as section changes', async () => {

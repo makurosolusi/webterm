@@ -5,7 +5,7 @@ import { keybindingOverrides, type KeybindingOverrides } from './keybindings.sto
 import { isAppChord } from './keybindings.resolve'
 import { hostPlatform, isMacPlatform, type KeyPlatform } from './terminalKeys.platform'
 
-export { isMacPlatform, isWindowsPlatform, type KeyPlatform } from './terminalKeys.platform'
+export { isLinuxPlatform, isMacPlatform, isWindowsPlatform, type KeyPlatform } from './terminalKeys.platform'
 export * from './terminalKeys.mouse'
 
 /**

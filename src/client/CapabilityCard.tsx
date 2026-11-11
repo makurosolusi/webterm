@@ -1,8 +1,13 @@
 // Kartu satu kemampuan: judul, blurb, SATU sakelar, status, langkah, dan sub-opsi (hanya saat aktif).
+// Menyalakan hal berbahaya ditanya lewat AlertDialog app (bukan `window.confirm`); mematikan tak pernah ditanya.
+import { useState, type ReactNode } from 'react'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { CAPABILITIES, closure, dependents } from '../shared/featureCapabilities'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { CAPABILITY_STATUS_LABEL, CAPABILITY_TEXT, joinTitles } from './capabilitiesLabels'
-import { CENTRAL_TEXT } from './centralSettingsLabels'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -17,18 +22,21 @@ export interface CapabilityCardProps {
   onToggle(enabled: boolean): void
   onSub?(key: string, on: boolean): void
   onStep?(kind: NonNullable<CapabilityView['step']>['kind']): void
+  /** Extra sub-option shown while on (Files: "Edit and upload files"). */
+  children?: ReactNode
 }
 
 /** Kemampuan yang menyala hanya lewat konfirmasi; katalog bersama baru menandai `dangerous` di tingkat sub-opsi. */
 const DANGEROUS: readonly CapabilityId[] = ['autonomy']
-/** Konfirmasi menyalakan hal berbahaya (pola `window.confirm` WorkspaceBar.tsx:101-105; dialog ditekan = false = tetap mati). */
-const confirmOn = (label: string): boolean => window.confirm(CAPABILITY_TEXT.confirmDangerous(label))
 
 const titles = (ids: readonly CapabilityId[]): string => joinTitles(ids.map((i) => CAPABILITIES[i].title))
 
 /** Kartu kemampuan; presentasional, semua mutasi lewat callback. */
 export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
-  const { view, all = [], busy = false, error, onToggle, onSub, onStep } = props
+  const { view, all = [], busy = false, error, onToggle, onSub, onStep, children } = props
+  // What waits for a "Turn on" in the dialog (null = no dialog); Cancel leaves everything off.
+  const [asking, setAsking] = useState<{ label: string; run(): void } | null>(null)
+  const confirmOn = (label: string, run: () => void): void => setAsking({ label, run })
   const on = view.status === 'on'
   const turnsOn = on ? [] : (view.alsoTurnsOn ?? closure(view.id).filter((i) => i !== view.id && all.find((v) => v.id === i)?.status !== 'on'))
   const turnsOff = on ? dependents(view.id).filter((d) => all.find((v) => v.id === d)?.status === 'on') : []
@@ -40,16 +48,16 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
   // mematikan tidak pernah ditanya.
   const dangerous = DANGEROUS.includes(view.id)
   const toggle = (next: boolean): void => {
-    if (next && dangerous && !confirmOn(view.title)) return
-    onToggle(next)
+    if (next && dangerous) confirmOn(view.title, () => onToggle(true))
+    else onToggle(next)
   }
   const step = (kind: NonNullable<CapabilityView['step']>['kind']): void => {
-    if (kind === 'fixChain' && dangerous && !confirmOn(view.title)) return
-    onStep?.(kind)
+    if (kind === 'fixChain' && dangerous) confirmOn(view.title, () => onStep?.(kind))
+    else onStep?.(kind)
   }
   const sub = (s: NonNullable<CapabilityView['subs']>[number], next: boolean): void => {
-    if (next && s.dangerous && !confirmOn(s.label)) return
-    onSub?.(s.key, next)
+    if (next && s.dangerous) confirmOn(s.label, () => onSub?.(s.key, true))
+    else onSub?.(s.key, next)
   }
   return (
     <section aria-label={view.title} aria-busy={busy} data-capability={view.id} data-field={`capability.${view.id}`} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
@@ -73,20 +81,22 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
           <Label htmlFor={`capability-sub-${view.id}-${s.key}`} className="text-xs">{s.label}</Label>
         </div>
       ))}
+      {on ? children : null}
       {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
-    </section>
-  )
-}
-
-/** Capabilities › Central Agent: status + a link; its switches are in Settings › Central Agent. */
-export function CentralSummaryRow({ view, onOpen }: { view: CapabilityView; onOpen?(): void }): React.JSX.Element {
-  return (
-    <section aria-label={CENTRAL_TEXT.summaryTitle} data-capability="central" data-field="capability.central" className="flex items-center justify-between gap-2 border-b border-(--vscode-widget-border,transparent) py-3">
-      <span className="text-[13px] font-semibold">{CENTRAL_TEXT.summaryTitle}</span>
-      <div className="flex items-center gap-2">
-        <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>
-        <Button size="xs" variant="link" className="px-0" disabled={!onOpen} onClick={onOpen}>{CENTRAL_TEXT.summaryLink}</Button>
-      </div>
+      {asking ? (
+        <AlertDialog open onOpenChange={(open) => { if (!open) setAsking(null) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{CAPABILITY_TEXT.confirmTitle(asking.label)}</AlertDialogTitle>
+              <AlertDialogDescription>{CAPABILITY_TEXT.confirmBody}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus>{CAPABILITY_TEXT.confirmCancel}</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={() => { asking.run(); setAsking(null) }}>{CAPABILITY_TEXT.offerAction}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </section>
   )
 }

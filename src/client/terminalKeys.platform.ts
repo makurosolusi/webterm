@@ -14,6 +14,12 @@ export function isWindowsPlatform(): boolean {
   return /win/i.test(platformString())
 }
 
+/** Linux desktop (not Android): where middle-click pastes the primary selection by convention. */
+export function isLinuxPlatform(): boolean {
+  const p = platformString()
+  return /linux/i.test(p) && !/android/i.test(p)
+}
+
 /** Platform yang dipakai keputusan chord. Injectable supaya bisa dites tanpa `navigator`. */
 export interface KeyPlatform {
   isMac: boolean

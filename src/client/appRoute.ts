@@ -7,7 +7,6 @@
 // changes inside an open overlay and closing it replace the entry.
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
-import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
@@ -16,14 +15,17 @@ import { toSettingsFieldId, type SettingsFieldId } from './settings.link'
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
  *  loaded Settings panel stays out of the start-up chunk. */
 export const SETTINGS_ROUTE_SECTIONS: readonly SectionId[] = SETTINGS_SECTIONS.map((s) => s.id)
-/** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
+/** Retired ids and where they land now: `env`/`channels` -> Features, the old Control mega page -> Health,
+ *  Interaction and Shell & buffer -> Terminal, Canvas background (global or `:workspace`) -> Appearance.
+ *  A link that also names a field lands on the page holding that field (SettingsPanel `pageOfField`). */
 const LEGACY_SETTINGS_SECTION: Readonly<Record<string, SettingsRouteSection>> = {
-  env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
+  env: 'capabilities', channels: 'capabilities', control: 'health',
+  interaction: 'terminal', shell: 'terminal', background: 'appearance', 'background:workspace': 'appearance', 'canvas-background': 'appearance',
 }
 
-/** Section for an id from a link, an event or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Terminal. */
+/** Section for an id from a link, an event or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Appearance (the first page). */
 export function toSettingsRouteSection(id: string): SettingsRouteSection {
-  return LEGACY_SETTINGS_SECTION[id] ?? pick(SETTINGS_ROUTE_SECTIONS, id) ?? 'terminal'
+  return LEGACY_SETTINGS_SECTION[id] ?? pick(SETTINGS_ROUTE_SECTIONS, id) ?? 'appearance'
 }
 
 /** `?ctab=` values: the tabs of the Central control panel (same list the panel renders). */
@@ -144,7 +146,7 @@ function makeActions(latest: { current: { route: AppRoute; navigate: NavigateFun
     pendingRoute = to
   }
   return {
-    openSettings: (section = 'terminal', field = null) => change({ settings: section, field }),
+    openSettings: (section = 'appearance', field = null) => change({ settings: section, field }),
     closeSettings: () => change({ settings: null, field: null }),
     setCentralTab: (ctab, opts) => change({ ctab }, opts?.replace === true),
     setPanel: (panel, opts) => change({ panel }, opts?.replace === true),

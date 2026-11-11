@@ -1,5 +1,6 @@
 // Settings › Account (`?settings=account`): who is signed in, change username (needs the password),
-// change password (signs every other session out, OWASP ASVS 3.3), the sessions list and Sign out.
+// change password (signs every other session out, OWASP ASVS 3.3), and the sessions list, whose row for
+// this device is the one Sign out (without an account, a lone Sign out button stands in for it).
 // Server: src/server/routes/auth.account.routes.ts. Sentences: accountLabels.ts.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -56,15 +57,20 @@ export function AccountSection({ reload = defaultReload, now = Date.now }: Accou
           <p className="text-[13px]">{ACCOUNT_TEXT.signedInAs} <strong data-testid="account-username">{user.username}</strong></p>
           <UsernameForm onRenamed={setUser} now={now} />
           <PasswordForm onChanged={() => setSessionsKey((k) => k + 1)} now={now} />
+          {/* The one Sign out with an account: this device's row in the sessions list. */}
           <AccountSessions refreshKey={sessionsKey} onSignOutHere={signOut} now={now} />
         </>
-      ) : <p className="text-[13px]">{ACCOUNT_TEXT.noAccount}</p>}
-      <section aria-labelledby="account-signout-title" className="flex flex-col items-start gap-2">
-        <h4 id="account-signout-title" className="text-[13px] font-semibold">{ACCOUNT_TEXT.signOutTitle}</h4>
-        <p className="text-xs opacity-70">{ACCOUNT_TEXT.signOutIntro}</p>
-        <Button size="sm" variant="outline" onClick={signOut}>{ACCOUNT_TEXT.signOut}</Button>
-        {signOutError ? <p role="alert" className="text-xs text-destructive">{signOutError}</p> : null}
-      </section>
+      ) : (
+        <>
+          <p className="text-[13px]">{ACCOUNT_TEXT.noAccount}</p>
+          <section aria-labelledby="account-signout-title" className="flex flex-col items-start gap-2">
+            <h4 id="account-signout-title" className="text-[13px] font-semibold">{ACCOUNT_TEXT.signOutTitle}</h4>
+            <p className="text-xs opacity-70">{ACCOUNT_TEXT.signOutIntro}</p>
+            <Button size="sm" variant="outline" onClick={signOut}>{ACCOUNT_TEXT.signOut}</Button>
+          </section>
+        </>
+      )}
+      {signOutError ? <p role="alert" className="text-xs text-destructive">{signOutError}</p> : null}
     </div>
   )
 }

@@ -31,6 +31,7 @@ import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import { openWorkspaceCanvasBackground } from './canvasBackground.open'
+import { setWorkspaceMuted, useNotifyPrefs } from './osNotify.prefs'
 import { openSetup } from './setup/setup.open'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
@@ -102,6 +103,7 @@ export default function WorkspaceBar({
   )
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const mutedIds = useNotifyPrefs().muted
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -334,6 +336,10 @@ export default function WorkspaceBar({
               onClick: () => startRename(activeGroup.projectId, activeGroup.projectName),
             },
             { label: 'Canvas Background…', onClick: openWorkspaceCanvasBackground },
+            // Per-workspace mute lives here, next to the workspace (Settings › Notifications holds the global switches).
+            mutedIds.includes(activeGroup.projectId)
+              ? { label: 'Unmute Notifications', onClick: () => setWorkspaceMuted(activeGroup.projectId, false) }
+              : { label: 'Mute Notifications', onClick: () => setWorkspaceMuted(activeGroup.projectId, true) },
             {
               label: 'Delete',
               danger: true,

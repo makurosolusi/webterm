@@ -19,12 +19,11 @@ describe('DEFAULT_SETTINGS', () => {
     expect(mergeSettings({ terminalFontZoomKeys: false }).terminalFontZoomKeys).toBe(false)
   })
 
-  it('terminalGpuRendering tidak menawarkan mode "shared" milik nodeterm', () => {
-    expect(DEFAULT_SETTINGS.terminalGpuRendering).toBe('auto')
-    // Pengaman tipe: nilai 'shared' tidak boleh assignable.
-    // @ts-expect-error 'shared' bukan TerminalGpuRendering di webterm
-    const _: Settings['terminalGpuRendering'] = 'shared'
-    void _
+  it('retired keys (GPU rendering, inactive cursor, middle-click paste) are dropped on load', () => {
+    const merged = mergeSettings({ terminalGpuRendering: 'off', cursorInactiveStyle: 'none', terminalMiddleClickPaste: true }) as unknown as Record<string, unknown>
+    expect(merged.terminalGpuRendering).toBeUndefined()
+    expect(merged.cursorInactiveStyle).toBeUndefined()
+    expect(merged.terminalMiddleClickPaste).toBeUndefined()
   })
 })
 

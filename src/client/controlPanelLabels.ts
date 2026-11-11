@@ -42,6 +42,9 @@ export const HEALTH_TEXT = {
   protectionMissing: 'Agent protection status is not available yet.',
   allProtected: 'Agents are protected',
   partly: (kind: string, why: string): string => `Partly protected — ${kind}${why ? `: ${why}` : ''}`,
+  dataDir: 'Data folder',
+  developerMode: 'Show developer tools',
+  developerModeHint: 'Adds the Developer page with every raw value, for troubleshooting. Also on with ?dev=1 in the address.',
 } as const
 
 /** Settings › Spending: the pointer to Central's own limit. */
@@ -62,6 +65,9 @@ export const DOCTOR_TEXT = {
   loadFailed: 'The checks could not be run. Try again in a moment.',
   fixing: 'Fixing…',
   fixFailed: 'The fix did not work; see the explanation.',
+  fixed: (title: string): string => `Fixed: ${title} is OK now`,
+  stillWrong: 'Fix applied, but the check still finds a problem; see the explanation.',
+  open: (label: string): string => `Open ${label}`,
   status: { ok: 'OK', warn: 'Warning', fail: 'Problem', off: 'Not in use' } as Readonly<Record<string, string>>,
 } as const
 

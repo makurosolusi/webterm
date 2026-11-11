@@ -1,8 +1,10 @@
 // Settings card "Default projects folder": where Clone repository / New project start. Shows the
-// folder in use, lets the user type or Browse another, and Reset to `~/webterm/projects`. A new
-// value is checked by the server first (absolute, not in the data dir, not a file); a missing
-// folder is fine, it is made on first clone or new project.
+// folder in use, lets the user type or Browse another (the field's own Reset goes back to
+// `~/webterm/projects`). A new value is checked by the server first (absolute, not in the data dir,
+// not a file) while Save shows "Checking…"; then the field's save status says Saving… / Saved. A
+// missing folder is fine, it is made on first clone or new project.
 import { useEffect, useState } from 'react'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import FolderPicker from '../FolderPicker'
@@ -33,6 +35,8 @@ export function ProjectsFolderSetting({ value, onChange }: { value: string; onCh
       setError(errText(e))
     }
   }
+  // Busy state only; the outcome is the error line below or the field's own Saved status.
+  const saveDraft = useAction(() => save(draft), { label: 'Save projects folder', toast: 'never' })
 
   const current = value || builtin
   return (
@@ -44,10 +48,9 @@ export function ProjectsFolderSetting({ value, onChange }: { value: string; onCh
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Input id={INPUT_ID} className="st-input st-mono min-w-48 flex-1" value={draft} placeholder={builtin} spellCheck={false}
-            onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void save(draft) }} />
-          <Button size="sm" variant="secondary" disabled={draft.trim() === value} onClick={() => void save(draft)}>Save</Button>
+            onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveDraft.run() }} />
+          {draft.trim() !== value ? <ActionButton size="sm" variant="secondary" action={saveDraft} busyLabel="Checking…">Save</ActionButton> : null}
           <Button size="sm" variant="outline" onClick={() => setBrowsing(true)}>Browse…</Button>
-          <Button size="sm" variant="ghost" disabled={!value} onClick={() => void save('')}>Reset to default</Button>
         </div>
         {error && <p className="m-0 text-xs text-destructive" role="alert">{error}</p>}
       </div>

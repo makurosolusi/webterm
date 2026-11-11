@@ -344,3 +344,14 @@
 .st-table { border-collapse: collapse; font-size: 12px; }
 .st-table th, .st-table td { padding: 2px 12px 2px 0; text-align: left; }
 .st-table th { color: var(--vscode-descriptionForeground, var(--text-muted)); font-weight: 600; }
+
+/* The page's "Advanced" disclosure (SettingsAdvanced). */
+.st-advanced {
+  padding: 12px 0;
+}
+
+.st-advanced > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
