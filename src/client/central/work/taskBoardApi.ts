@@ -1,13 +1,17 @@
+import type { FindingView } from '../../../shared/centralHealth'
 import type { BoardColumn, GoalPage, ReminderPage, TaskDetail as TaskDetailPage } from '../../../shared/centralWork'
 import { request } from '../../inboxTransport'
 import { InboxApiError } from '../../inboxTypes'
-import { CENTRAL_API, centralControlApi } from '../centralControlApi'
+import { CENTRAL_API, CENTRAL_PAGE_SIZE, centralControlApi } from '../centralControlApi'
 import type { ColumnState, TaskAction } from './taskBoardModel'
 
 const TASKS_PATH = `${CENTRAL_API}/tasks`
 const WORK_SETTINGS_PATH = `${CENTRAL_API}/work-settings`
 const GOALS_PATH = `${CENTRAL_API}/goals`
 const REMINDERS_PATH = `${CENTRAL_API}/reminders`
+const FINDINGS_PATH = `${CENTRAL_API}/health/findings`
+/** Review checks shown on a task: open and dismissed, never the fixed ones. */
+const TASK_FINDING_STATUSES = 'open,dismissed'
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 /** A page request. */
@@ -26,6 +30,8 @@ export interface TaskBoardClient {
   abandonGoal(projectId: string, version: number): Promise<void>
   listReminders(range: PageRange, signal?: AbortSignal): Promise<ReminderPage>
   cancelReminder(id: string): Promise<void>
+  /** First page of the review-check findings recorded for a task. */
+  listTaskFindings(taskId: string, signal?: AbortSignal): Promise<{ items: FindingView[]; hasMore: boolean }>
 }
 
 const malformed = (what: string): InboxApiError => new InboxApiError(`${what} response malformed`, 502, 'bad_response')
@@ -75,4 +81,6 @@ export const taskBoardApi: TaskBoardClient = {
   async cancelReminder(id) {
     await post(`${REMINDERS_PATH}/${encodeURIComponent(id)}/cancel`, {})
   },
+  listTaskFindings: (taskId, signal) =>
+    listPage('Review checks', `${FINDINGS_PATH}?${query({ taskId, status: TASK_FINDING_STATUSES, limit: CENTRAL_PAGE_SIZE, offset: 0 })}`, signal),
 }
