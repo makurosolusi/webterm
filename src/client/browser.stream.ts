@@ -1,12 +1,14 @@
 // Klien WS biner ke /ws/browser: SATU socket untuk semua node browser (PLAN b §4.4).
 // Frame biner (header `decodeFrameHeader`) -> `onFrame`; teks JSON -> `onMsg`. Token lewat query,
 // sama seperti `ws.ts`. Attach disimpan dan diputar ulang di tiap (re)connect; input yang dikirim
-// saat socket mati DIBUANG (input basi yang terlambat tiba lebih berbahaya daripada hilang).
+// saat socket mati DIBUANG (input basi yang terlambat tiba lebih berbahaya daripada hilang); node
+// tahu lewat `onConnection(false)`. Reconnect: backoff full-jitter `reconnectDelay`, berhenti selama
+// socket bersama `offline`/`auth` (server tak terjangkau / sesi UI habis), lanjut saat `connected`.
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import type { ClientMsg, FrameLatency, ServerMsg, ViewportMsg } from '../shared/browser.contract'
 import { decodeFrameHeader } from '../shared/browser.wire'
+import { getConnection, reconnectDelay, subscribeConnection, type ConnectionPhase } from './ws.connection'
 
-const RECONNECT_MS = 1000
 const WS_OPEN = 1 // WebSocket.readyState OPEN (protokol)
 
 export interface BrowserListener {
@@ -27,6 +29,9 @@ export interface BrowserStream {
   reset: () => void
 }
 
+/** Fase socket bersama yang membuat reconnect sia-sia: tunggu `connected`. */
+const paused = (p: ConnectionPhase): boolean => p === 'offline' || p === 'auth'
+
 const isServerMsg = (v: unknown): v is ServerMsg =>
   typeof v === 'object' && v !== null && typeof (v as { t?: unknown }).t === 'string' && typeof (v as { id?: unknown }).id === 'string'
 
@@ -36,6 +41,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
   const attached = new Map<string, ViewportMsg>()
   let ws: WebSocket | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
+  let attempt = 0 // reconnect gagal berturut-turut; direset oleh open
 
   const send = (m: ClientMsg) => {
     if (ws && ws.readyState === WS_OPEN) ws.send(JSON.stringify(m))
@@ -62,6 +68,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
     sock.binaryType = 'arraybuffer'
     ws = sock
     sock.onopen = () => {
+      attempt = 0
       for (const l of listeners.values()) l.onConnection(true)
       for (const [id, vp] of attached) send({ t: 'attach', id, ...vp })
     }
@@ -70,10 +77,24 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
       if (ws !== sock) return
       ws = null
       for (const l of listeners.values()) l.onConnection(false)
-      if (attached.size > 0 && !timer) timer = setTimeout(() => { timer = null; if (!ws) connect() }, RECONNECT_MS)
+      schedule()
     }
     sock.onerror = () => sock.close()
   }
+
+  const schedule = () => {
+    if (attached.size === 0 || timer || ws || paused(getConnection().phase)) return
+    timer = setTimeout(() => { timer = null; if (!ws) connect() }, reconnectDelay(attempt++))
+  }
+
+  // Socket bersama memutuskan kapan server terjangkau: jeda saat offline/auth, sambung saat kembali.
+  subscribeConnection((c) => {
+    if (paused(c.phase) && timer) { clearTimeout(timer); timer = null }
+    if (c.phase === 'connected' && !ws && attached.size > 0) {
+      if (timer) { clearTimeout(timer); timer = null }
+      connect()
+    }
+  })
 
   const detach = (id: string) => {
     if (attached.delete(id)) send({ t: 'detach', id })

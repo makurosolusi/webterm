@@ -8,6 +8,7 @@ import { InboxApiError } from './inboxTypes'
 import { request } from './inboxTransport'
 import { closestNodeRoot } from './nodeRoot'
 import { getTabLayout } from './tabLayout.store'
+import { getConnection, subscribeConnection } from './ws.connection'
 
 /** Interval detak selama tab terlihat; jauh di bawah ambang "away" server (menit). */
 export const PRESENCE_PING_MS = 30_000
@@ -28,13 +29,20 @@ export function focusedNodeId(): string | null {
   return document.querySelector('.react-flow__node.selected')?.getAttribute('data-id') ?? null
 }
 
+// Satu peringatan per gangguan, bukan satu per detak: direset oleh detak yang berhasil.
+let warned = false
+
 function ping(): void {
+  // Server tak terjangkau (socket bersama tidak `connected`): detak pasti gagal, lewati saja.
+  if (getConnection().phase !== 'connected') return
   const visible = document.visibilityState === 'visible'
   const body = { visible, muted: readNotifyPrefs().muted, nodeId: visible ? focusedNodeId() : null }
-  request<unknown>('/api/channels/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch((err: unknown) => {
+  request<unknown>('/api/channels/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => { warned = false }, (err: unknown) => {
     // 404 = Telegram mati (rute tak terpasang): kondisi normal, bukan galat.
     if (err instanceof InboxApiError && err.status === 404) return
-    console.warn('[presence] POST /api/channels/presence failed', err)
+    if (warned) return
+    warned = true
+    console.warn('[presence] POST /api/channels/presence failed; silent until a ping succeeds', err)
   })
 }
 
@@ -53,7 +61,15 @@ export function usePresencePing(enabled: boolean): void {
     const timer = setInterval(onVisibility, PRESENCE_PING_MS)
     document.addEventListener('visibilitychange', onVisibility)
     document.addEventListener('focusin', onFocus)
+    // Detak segera saat server kembali, bukan menunggu interval berikutnya.
+    let phase = getConnection().phase
+    const offConnection = subscribeConnection((c) => {
+      const was = phase
+      phase = c.phase
+      if (c.phase === 'connected' && was !== 'connected') onVisibility()
+    })
     return () => {
+      offConnection()
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
       document.removeEventListener('focusin', onFocus)

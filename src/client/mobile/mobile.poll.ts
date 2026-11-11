@@ -1,5 +1,6 @@
 // Poll-while-visible for the /m screens: load now, then every `ms` while the page is shown (a
-// phone in a pocket should not keep the radio busy), and again the moment it comes back.
+// phone in a pocket should not keep the radio busy), and again the moment it comes back or the
+// network does (`online`), so a screen left on after a dead zone does not wait a whole interval.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { inboxErrorMessage, isAbortError } from '../inboxApi'
 
@@ -24,7 +25,12 @@ export function usePoll<T>(load: () => Promise<T>, ms: number): { data: T | null
     const timer = setInterval(() => { if (document.visibilityState === 'visible') reload() }, ms)
     const onShow = () => { if (document.visibilityState === 'visible') reload() }
     document.addEventListener('visibilitychange', onShow)
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onShow) }
+    window.addEventListener('online', onShow)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onShow)
+      window.removeEventListener('online', onShow)
+    }
   }, [ms, reload])
 
   return { data, error, reload }
