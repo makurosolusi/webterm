@@ -62,7 +62,8 @@ export interface HealthStore {
   list(input: ListFindingsInput): FindingView[]
   get(id: string): FindingView | null
   summary(projectId: string): HealthSummary
-  latestScan(projectId: string): HealthScanView | null
+  /** Newest scan of the project, of `origin` when given (any origin otherwise). */
+  latestScan(projectId: string, origin?: FindingOrigin): HealthScanView | null
   lastScanAt(projectId: string, origin: FindingOrigin): number | null
 }
 
@@ -161,8 +162,10 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
     return candidates.map((f) => ({ ...f, status: 'fixed' as const, fixedAt: at }))
   }
 
-  function latestScan(projectId: string): HealthScanView | null {
-    const r = getRow(db, 'SELECT * FROM central_health_scan WHERE project_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1', projectId)
+  function latestScan(projectId: string, origin?: FindingOrigin): HealthScanView | null {
+    const r = origin === undefined
+      ? getRow(db, 'SELECT * FROM central_health_scan WHERE project_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1', projectId)
+      : getRow(db, 'SELECT * FROM central_health_scan WHERE project_id = ? AND origin = ? ORDER BY started_at DESC, rowid DESC LIMIT 1', projectId, origin)
     return r ? toScan(r) : null
   }
 
@@ -268,7 +271,7 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
       const rows = allRows(db, `SELECT severity, COUNT(*) AS n FROM central_finding WHERE project_id = ? AND status = 'open' GROUP BY severity`, projectId)
       const by = (s: HealthLevel): number => Number(rows.find((r) => r['severity'] === s)?.['n'] ?? 0)
       const high = by('high'), medium = by('medium'), low = by('low')
-      return { open: high + medium + low, high, medium, low, lastScan: latestScan(projectId) }
+      return { open: high + medium + low, high, medium, low, lastScan: latestScan(projectId, 'scan') }
     },
 
     latestScan,

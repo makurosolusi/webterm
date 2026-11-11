@@ -16,7 +16,7 @@ import { SECRET_DOTENV_FILES } from '../../agentSandbox'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { recordHelperUsage, type HelperUsage } from '../../cost/costCapture'
-import { allRows, getRow, type Row } from '../../ledger/ledgerCore'
+import { allRows } from '../../ledger/ledgerCore'
 import { activeLedgerRuntime } from '../../ledger/ledgerRuntimeState'
 import { createLogger } from '../../logs'
 import { modelRequest } from '../../models/modelRequest'
@@ -126,15 +126,6 @@ export interface HealthAnalyzerDeps {
   globalRulesPath?: string | null
 }
 
-function toScan(r: Row): HealthScanView {
-  return {
-    id: String(r['id']), projectId: String(r['project_id']), origin: 'analysis', status: String(r['status']) as HealthScanView['status'],
-    startedAt: Number(r['started_at']), finishedAt: r['finished_at'] === null ? null : Number(r['finished_at']),
-    filesScanned: Number(r['files_scanned']), truncated: Number(r['truncated']) === 1, opened: Number(r['opened']), fixed: Number(r['fixed']),
-    error: r['error'] === null ? null : String(r['error']),
-  }
-}
-
 /** Measured facts for the prompt: open findings per rule and the largest tracked files. */
 async function analysisContext(db: Database, projectId: string, cwd: string, tracked: readonly string[]): Promise<AnalysisContext> {
   const openByRule = Object.fromEntries(allRows(db, `SELECT rule, COUNT(*) AS n FROM central_finding WHERE project_id = ? AND status = 'open' GROUP BY rule`, projectId)
@@ -216,10 +207,7 @@ export function createHealthAnalyzer(deps: HealthAnalyzerDeps): HealthAnalyzer {
     },
     running: (projectId) => inFlight.has(projectId),
     retryAt,
-    latest(projectId) {
-      const r = getRow(db, `SELECT * FROM central_health_scan WHERE project_id = ? AND origin = 'analysis' ORDER BY started_at DESC, rowid DESC LIMIT 1`, projectId)
-      return r ? toScan(r) : null
-    },
+    latest: (projectId) => store.latestScan(projectId, 'analysis'),
     dropped: (projectId) => droppedBy.get(projectId) ?? null,
   }
 }

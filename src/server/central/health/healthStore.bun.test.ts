@@ -149,18 +149,31 @@ test('opened events are capped per scan; the summary event carries the full coun
   expect(payload.opened).toBe(150)
 })
 
-test('summary counts open findings by severity with the latest scan; lastScanAt is per origin', () => {
+test('summary counts open findings by severity with the latest project scan; lastScanAt is per origin', () => {
   const { store, scan, byFp } = setup()
   expect(store.summary('p')).toEqual({ open: 0, high: 0, medium: 0, low: 0, lastScan: null })
   expect(store.lastScanAt('p', 'scan')).toBeNull()
-  scan([draft('a', { severity: 'high' }), draft('b'), draft('c', { severity: 'low' })])
+  const first = scan([draft('a', { severity: 'high' }), draft('b'), draft('c', { severity: 'low' })])
   store.dismiss(byFp('c').id, 'fine', 'human')
   const last = scan([draft('a', { severity: 'high' }), draft('b'), draft('c', { severity: 'low' })], { origin: 'review', taskId: 't1' })
   const s = store.summary('p')
   expect(s).toMatchObject({ open: 2, high: 1, medium: 1, low: 0 })
-  expect(s.lastScan?.id).toBe(last.scan.id)
+  expect(s.lastScan?.id).toBe(first.scan.id) // a newer review is not the project's last scan
   expect(store.lastScanAt('p', 'review')).toBe(last.scan.startedAt)
   expect(last.scan.startedAt).toBeGreaterThan(store.lastScanAt('p', 'scan') ?? Infinity)
+})
+
+test('latestScan filters by origin; without one it returns the newest of any origin', () => {
+  const { store, scan } = setup()
+  const full = scan([draft('a')])
+  const review = scan([draft('r')], { origin: 'review', taskId: 't1' })
+  const analysis = store.startScan('p', 'analysis')
+  expect(store.latestScan('p')?.id).toBe(analysis.id)
+  expect(store.latestScan('p', 'scan')?.id).toBe(full.scan.id)
+  expect(store.latestScan('p', 'review')?.id).toBe(review.scan.id)
+  expect(store.latestScan('p', 'analysis')?.id).toBe(analysis.id)
+  expect(store.summary('p').lastScan?.id).toBe(full.scan.id)
+  expect(store.latestScan('other', 'scan')).toBeNull()
 })
 
 test('deleting the project cascades findings and scans; deleting a task keeps its findings', () => {

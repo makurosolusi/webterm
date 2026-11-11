@@ -82,7 +82,7 @@ function scan(h: Ca2Handle, store: HealthStore, { projectId }: Body): RouteResul
   const service = healthServiceFor(h.db, h.now)
   if (service.running(projectId)) return fail(409, 'scan_running')
   void service.runScan(projectId, 'scan') // never rejects; the row is written before this returns
-  return { status: 202, body: store.latestScan(projectId) }
+  return { status: 202, body: store.latestScan(projectId, 'scan') }
 }
 
 /** Dismiss/reopen; the decision is mirrored into project memory, whose failure is logged and never fails the action. */

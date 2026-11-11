@@ -76,7 +76,7 @@ const scan: ToolDef = {
     const service = healthServiceFor(ctx.db, ctx.now)
     if (service.running(id)) return { ok: false, code: 'scan_running', data: { detail: 'A scan of this project is already running.' } }
     void service.runScan(id, 'scan') // never rejects; the scan row exists before this returns
-    return { ok: true, data: { scanId: createHealthStore(ctx.db, ctx.now).latestScan(id)?.id ?? null, status: 'running' } }
+    return { ok: true, data: { scanId: createHealthStore(ctx.db, ctx.now).latestScan(id, 'scan')?.id ?? null, status: 'running' } }
   },
 }
 

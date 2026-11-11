@@ -94,6 +94,15 @@ describe('health routes', () => {
     expect((await r.call('GET', `${B}/scan`)).status).toBe(405)
   })
 
+  it('returns the scan just started even when a newer review row exists', async () => {
+    const r = rig()
+    r.db.exec(`INSERT INTO central_health_scan (id, project_id, origin, status, started_at) VALUES ('rv-later', 'p1', 'review', 'running', ${T0 + 60_000})`)
+    const res = await r.call('POST', `${B}/scan`, '', { projectId: 'p1' })
+    expect(res).toMatchObject({ status: 202, body: { projectId: 'p1', status: 'running', origin: 'scan' } })
+    expect((res.body as { id: string }).id).not.toBe('rv-later')
+    expect((await r.call('GET', `${B}/summary`, 'projectId=p1')).body).toMatchObject({ lastScan: { origin: 'scan' } })
+  })
+
   it('writes are human-only', async () => {
     const r = rig()
     const id = r.store.list({ projectId: 'p1' })[0]!.id
