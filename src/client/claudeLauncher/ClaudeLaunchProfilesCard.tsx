@@ -2,6 +2,8 @@
 // `envman -e claude:malik-opus -- claude`. A list like VS Code's settings list editor: the built-in
 // Default (`claude`, read-only) first, then the user's profiles with their resolved command, badges
 // and Edit / Test / Delete. Add and Edit open ClaudeProfileEditor inline; Test probes the SAVED profile.
+// Saves patch only the changed profile (the server merges by id); Delete is an awaited server call so a
+// refusal (the profile is still in use) is shown on the row.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../../shared/settings'
@@ -11,6 +13,8 @@ import {
 } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { Field, SelectField } from '../SettingsFields'
 import { randomId } from '../randomId'
+import { deleteLaunchProfile, ProfileInUseError } from '../claudeProvider.api'
+import type { ProfileInUse } from '../../shared/settings.patch'
 import { testClaudeLaunch, type LaunchTest } from './claudeLaunch.client'
 import { ClaudeProfileEditor, type ProfileDraft } from './ClaudeProfileEditor'
 import { LaunchSteps } from './LaunchSteps'
@@ -41,6 +45,11 @@ export const PROFILES_TEXT = {
   /** Central's own pick lives in Settings › Central Agent › Claude profile. */
   sameAsDefault: 'Same as default for new agents',
   testFailed: (code: string): string => `Test could not run (${code}). Save, then try again.`,
+  removing: 'Deleting…',
+  inUse: (name: string, reason: ProfileInUse): string => (reason === 'provider'
+    ? `"${name}" is the command the Claude provider runs (Custom command). Pick another command or mode there first.`
+    : reason === 'builtin' ? 'The built-in Default cannot be deleted.' : `"${name}" is still in use.`),
+  removeFailed: (name: string, code: string): string => `Could not delete "${name}" (${code}).`,
 }
 
 const describe = (p: ClaudeLaunchProfile): string => (p.id === DEFAULT_CLAUDE_PROFILE.id ? `${p.name} (claude)` : p.name)
@@ -54,6 +63,7 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange }: { settings: 
   const [editing, setEditing] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState<string | null>(null)
   const [focusKey, setFocusKey] = useState<string | null>(null)
+  const [removal, setRemoval] = useState<{ id: string; error?: string } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focusKey === null) return
@@ -66,22 +76,29 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange }: { settings: 
   const centralId = resolveProfileLaunch(s, centralProfileId(s)).profile.id
   const close = (key: string): void => { setEditing(null); setFocusKey(key) }
   const save = (id: string | null, d: ProfileDraft): void => {
-    if (id) onChange({ claudeLaunchProfiles: s.claudeLaunchProfiles.map((p) => (p.id === id ? { ...p, ...d } : p)) })
+    const old = s.claudeLaunchProfiles.find((p) => p.id === id)
+    if (old) onChange({ claudeLaunchProfiles: [{ ...old, ...d }] })
     else {
       const created = { id: randomId(), ...d }
-      onChange({ claudeLaunchProfiles: [...s.claudeLaunchProfiles, created] })
+      onChange({ claudeLaunchProfiles: [created] })
       setJustSaved(created.id)
     }
     close(id ? `edit-${id}` : 'add')
   }
-  const remove = (id: string): void => {
-    onChange({
-      claudeLaunchProfiles: s.claudeLaunchProfiles.filter((p) => p.id !== id),
+  const remove = async (p: ClaudeLaunchProfile): Promise<void> => {
+    setRemoval({ id: p.id })
+    try {
       // Never leave a pointer at a deleted profile: it would silently fall back at the next launch.
-      ...(s.defaultClaudeProfileId === id ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
-      ...(s.centralClaudeProfileId === id ? { centralClaudeProfileId: '' } : {}),
-    })
-    setFocusKey('add')
+      await deleteLaunchProfile(p.id, {
+        ...(s.defaultClaudeProfileId === p.id ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
+        ...(s.centralClaudeProfileId === p.id ? { centralClaudeProfileId: '' } : {}),
+      })
+      setRemoval(null)
+      setFocusKey('add')
+    } catch (e) {
+      const error = e instanceof ProfileInUseError ? PROFILES_TEXT.inUse(p.name, e.reason) : PROFILES_TEXT.removeFailed(p.name, e instanceof Error ? e.message : 'error')
+      setRemoval({ id: p.id, error })
+    }
   }
   const takenBy = (id: string | null): string[] => all.filter((p) => p.id !== id).map((p) => p.name)
   const options = all.map((p) => ({ value: p.id, label: describe(p) }))
@@ -92,7 +109,8 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange }: { settings: 
           {all.map((p) => (editing === p.id
             ? <ClaudeProfileEditor key={p.id} profile={p} taken={takenBy(p.id)} onSave={(d) => save(p.id, d)} onCancel={() => close(`edit-${p.id}`)} />
             : <ProfileRow key={p.id} profile={p} command={preview(s, p.id)} isDefault={defaultId === p.id} isCentral={centralId === p.id}
-                onEdit={() => setEditing(p.id)} onRemove={() => remove(p.id)}
+                onEdit={() => setEditing(p.id)} onRemove={() => void remove(p)}
+                removing={removal?.id === p.id && removal.error === undefined} removeError={removal?.id === p.id ? removal.error : undefined}
                 saved={justSaved === p.id ? {
                   useForAgents: () => { onChange({ defaultClaudeProfileId: p.id }) },
                   useForCentral: () => { onChange({ centralClaudeProfileId: p.id }) },
@@ -111,8 +129,10 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange }: { settings: 
   )
 }
 
-function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemove, saved }: {
+function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemove, removing, removeError, saved }: {
   profile: ClaudeLaunchProfile
+  removing: boolean
+  removeError?: string
   command: string
   isDefault: boolean
   isCentral: boolean
@@ -149,7 +169,7 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
       {confirming ? (
         <div role="alertdialog" aria-label={PROFILES_TEXT.confirmRemove(p.name)} className="flex flex-wrap items-center gap-2 text-xs">
           <span>{PROFILES_TEXT.confirmRemove(p.name)}</span>
-          <Button size="xs" variant="destructive" autoFocus onClick={onRemove}>{PROFILES_TEXT.remove}</Button>
+          <Button size="xs" variant="destructive" autoFocus disabled={removing} aria-busy={removing} onClick={onRemove}>{removing ? PROFILES_TEXT.removing : PROFILES_TEXT.remove}</Button>
           <Button size="xs" variant="ghost" onClick={() => setConfirming(false)}>{PROFILES_TEXT.cancel}</Button>
         </div>
       ) : null}
@@ -163,6 +183,7 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
       ) : null}
       {test ? <LaunchSteps steps={test.steps} /> : null}
       {testError ? <p role="alert" className="m-0 text-xs text-destructive">{testError}</p> : null}
+      {removeError ? <p role="alert" className="m-0 text-xs text-destructive">{removeError}</p> : null}
     </section>
   )
 }

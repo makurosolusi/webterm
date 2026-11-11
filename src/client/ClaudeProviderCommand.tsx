@@ -62,8 +62,6 @@ export interface ClaudeProviderCommandProps {
   commit(profileId: string): Promise<boolean>
   /** Probe the saved provider (no save first: this form already saved). */
   test(): Promise<void>
-  /** The profile list changed: keep the Settings panel's in-memory copy in step. */
-  onProfiles?(profiles: ClaudeLaunchProfile[]): void
   /** A save failed here (the profile write): the card toasts it. */
   onError?(message: string): void
   /** Filled with this form's save while it has unsaved edits, null when clean (wizard Continue). */
@@ -118,7 +116,6 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
     try {
       const r = await upsertLaunchProfile({ id: selected === NEW ? null : selected, name: shownName.trim() || COMMAND_TEXT.fallbackName, command })
       setProfiles(r.profiles); setSelected(r.id); setName(r.profiles.find((x) => x.id === r.id)?.name ?? ''); setNameTouched(true)
-      p.onProfiles?.(r.profiles)
       return await p.commit(r.id)
     } catch (e) {
       const message = COMMAND_TEXT.saveFailed(e instanceof Error ? e.message : 'error')

@@ -35,6 +35,16 @@ export function isModified(settings: Settings, key: keyof Settings): boolean {
 /** Patch yang mengembalikan satu kunci ke defaultnya. Entry keys (`settings.patch.ts`) merge per
  *  entry, so `{}` would remove nothing: their reset deletes each entry of `current` with `null`. */
 export function resetPatch(key: keyof Settings, current?: Settings): SettingsPatch {
+  if (key === 'claudeLaunchProfiles') {
+    // Profiles merge by id too: delete each one, and move the pointers off them in the same write.
+    const list = current?.claudeLaunchProfiles ?? []
+    const at = (id: string | undefined): boolean => list.some((p) => p.id === id)
+    return {
+      claudeLaunchProfiles: list.map((p) => ({ id: p.id, deleted: true as const })),
+      ...(at(current?.defaultClaudeProfileId) ? { defaultClaudeProfileId: DEFAULT_SETTINGS.defaultClaudeProfileId } : {}),
+      ...(at(current?.centralClaudeProfileId) ? { centralClaudeProfileId: DEFAULT_SETTINGS.centralClaudeProfileId } : {}),
+    }
+  }
   if (isEntryKey(key)) return { [key]: Object.fromEntries(Object.keys(current?.[key] ?? {}).map((id) => [id, null])) }
   return { [key]: DEFAULT_SETTINGS[key] }
 }

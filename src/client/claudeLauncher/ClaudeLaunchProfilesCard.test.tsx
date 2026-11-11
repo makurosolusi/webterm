@@ -8,9 +8,9 @@ import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../../shared/set
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
 import { applySettingsPatch, type SettingsPatch } from '../../shared/settings.patch'
-import { SettingsItemScopeProvider, isModified } from '../settingsContext'
+import { SettingsItemScopeProvider, isModified, resetPatch } from '../settingsContext'
 import { resetConfirmTitle } from '../SettingsFields'
-import { ClaudeLaunchProfilesCard } from './ClaudeLaunchProfilesCard'
+import { ClaudeLaunchProfilesCard, PROFILES_TEXT } from './ClaudeLaunchProfilesCard'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -150,12 +150,13 @@ describe('ClaudeLaunchProfilesCard', () => {
     expect(within(row('Work')).getByText('Default for new agents')).toBeTruthy()
   })
 
-  it('Edit reuses the editor prefilled; Delete asks first, then resets pointers', () => {
+  it('Edit reuses the editor prefilled; Delete asks first, then resets pointers', async () => {
     const spy = setup({ claudeLaunchProfiles: [MALIK], defaultClaudeProfileId: 'm', centralClaudeProfileId: 'm' })
     fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Edit' }))
     expect((within(editor()).getByLabelText('Name') as HTMLInputElement).value).toBe('Malik')
     type('Launch command', 'envman -e claude:malik-sonnet --')
     fireEvent.click(within(editor()).getByRole('button', { name: 'Save' }))
+    // Only the edited profile is sent: the server merges by id, so profiles this copy never saw survive.
     expect(lastProfiles(spy)).toEqual([{ id: 'm', name: 'Malik', command: 'envman -e claude:malik-sonnet --' }])
     expect(document.activeElement).toBe(within(row('Malik')).getByRole('button', { name: 'Edit' }))
     fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Delete' }))
@@ -163,9 +164,22 @@ describe('ClaudeLaunchProfilesCard', () => {
     fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
     fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Delete' }))
+    const puts: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit = {}) => {
+      if (init.method === 'PUT') puts.push(JSON.parse(init.body as string))
+      return new Response('{}', { status: 200 })
+    }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
-    expect(spy).toHaveBeenLastCalledWith({ claudeLaunchProfiles: [], defaultClaudeProfileId: 'default', centralClaudeProfileId: '' })
-    expect(screen.queryByRole('region', { name: 'Malik' })).toBeNull()
+    // An explicit tombstone, awaited, with the pointers moved in the same write.
+    await waitFor(() => expect(puts).toEqual([{ claudeLaunchProfiles: [{ id: 'm', deleted: true }], defaultClaudeProfileId: 'default', centralClaudeProfileId: '' }]))
+  })
+
+  it('a refused Delete (the provider runs it) is shown on the row and the profile stays', async () => {
+    setup({ claudeLaunchProfiles: [MALIK] })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'profile_in_use', profileId: 'm', reason: 'provider' }), { status: 409 })))
+    fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+    expect((await within(row('Malik')).findByRole('alert')).textContent).toBe(PROFILES_TEXT.inUse('Malik', 'provider'))
   })
 
   it('Test shows each stage with a check or a cross and the fix hint', async () => {
@@ -214,8 +228,13 @@ describe('ClaudeLaunchProfilesCard', () => {
     expect(row('Work')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Claude launch profiles' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reset' }))
-    expect(spy).toHaveBeenLastCalledWith({ claudeLaunchProfiles: [] })
+    expect(spy).toHaveBeenLastCalledWith({ claudeLaunchProfiles: [{ id: 'm', deleted: true }, { id: 'w', deleted: true }] })
     expect(screen.queryByRole('region', { name: 'Work' })).toBeNull()
+  })
+
+  it('the profiles reset also moves the pointers off the deleted profiles (the server refuses a dangling one)', () => {
+    const s = { ...DEFAULT_SETTINGS, claudeLaunchProfiles: [MALIK], defaultClaudeProfileId: 'm', centralClaudeProfileId: 'm' }
+    expect(resetPatch('claudeLaunchProfiles', s)).toEqual({ claudeLaunchProfiles: [{ id: 'm', deleted: true }], defaultClaudeProfileId: 'default', centralClaudeProfileId: '' })
   })
 
   it('resetConfirmTitle: only non-empty lists and maps ask', () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, afterAll, beforeAll } from 'vitest'
 import { DEFAULT_SETTINGS, mergeSettings } from '../shared/settings'
 import { capabilityAgentId, setCustomAgentBaseResolver } from '../shared/workspace'
 import { configureLogging, getLogLevel, logBus, setLogLevel } from './logs'
-import { nextSettings, nextSettingsDocument, parseStored, registerAgentBaseResolver, SettingsValidationError } from './settingsStore'
+import { nextSettings, nextSettingsDocument, parseStored, registerAgentBaseResolver, SettingsConflictError, SettingsValidationError } from './settingsStore'
 
 afterEach(() => setCustomAgentBaseResolver(null))
 
@@ -157,20 +157,38 @@ describe('nextSettingsDocument: the raw stored document is the source of truth',
     expect((doc.claudeLaunchProfiles as unknown[]).length).toBe(1)
   })
 
-  it('removing the profile the default / Central point at moves them to Default / follow-default', () => {
-    const stored = JSON.stringify({ claudeLaunchProfiles: [{ id: 'a', name: 'A', command: 'claude' }, { id: 'b', name: 'B', command: 'claude' }], defaultClaudeProfileId: 'a', centralClaudeProfileId: 'a' })
-    const { doc, settings } = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'b', name: 'B', command: 'claude' }] })
-    expect([doc.defaultClaudeProfileId, doc.centralClaudeProfileId]).toEqual(['default', ''])
-    expect([settings.defaultClaudeProfileId, settings.centralClaudeProfileId]).toEqual(['default', ''])
-    // Removing another profile leaves the pointers alone.
-    const kept = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', name: 'A', command: 'claude' }] }).doc
-    expect([kept.defaultClaudeProfileId, kept.centralClaudeProfileId]).toEqual(['a', 'a'])
+  // The bug this pins: the setup wizard wrote an envman profile straight to the server, then Settings ›
+  // Agent saved its stale full list and erased it, so Claude silently fell back to plain `claude`.
+  const ENVMAN = { id: 'em', name: 'envman', command: 'envman -e claude:x -- claude' } // test-only
+  const A = { id: 'a', name: 'A', command: 'claude' } // test-only
+  const conflict = (fn: () => unknown): SettingsConflictError => {
+    try { fn() } catch (e) { if (e instanceof SettingsConflictError) return e; throw e }
+    throw new Error('expected SettingsConflictError')
+  }
+
+  it('a stale full-list write merges by id: a profile the writer never saw survives', () => {
+    const stored = JSON.stringify({ claudeLaunchProfiles: [A, ENVMAN] })
+    const { settings } = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ ...A, name: 'A2' }] })
+    expect(settings.claudeLaunchProfiles).toEqual([{ ...A, name: 'A2' }, ENVMAN])
+    expect(nextSettings(stored, { claudeLaunchProfiles: [] }).claudeLaunchProfiles).toEqual([A, ENVMAN])
+    expect(nextSettings(stored, { claudeLaunchProfiles: [{ id: 'n', name: 'N', command: 'claude' }] }).claudeLaunchProfiles.map((p) => p.id)).toEqual(['a', 'em', 'n'])
   })
 
-  it('deleting the seeded "custom" default resets it too', () => {
-    const { doc, settings } = nextSettingsDocument('{"agentLaunchCommands":{"claude":"wrap claude"}}', { claudeLaunchProfiles: [] })
-    expect(settings.defaultClaudeProfileId).toBe('default')
-    expect(parseStored(JSON.stringify(doc)).defaultClaudeProfileId).toBe('default')
+  it('an explicit tombstone deletes; one for an unknown id is a no-op', () => {
+    const stored = JSON.stringify({ claudeLaunchProfiles: [A, ENVMAN] })
+    const { doc } = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', deleted: true }, { id: 'gone', deleted: true }] })
+    expect(doc.claudeLaunchProfiles).toEqual([ENVMAN])
+  })
+
+  it('refuses (SettingsConflictError) to delete the built-in, the provider\'s profile, or one a pointer keeps', () => {
+    const stored = JSON.stringify({ claudeLaunchProfiles: [A, ENVMAN], defaultClaudeProfileId: 'a', centralClaudeProfileId: 'a' })
+    expect(conflict(() => nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'default', deleted: true }] })).reason).toBe('builtin')
+    expect(conflict(() => nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'em', deleted: true }] }, { providerProfileId: 'em' }))).toMatchObject({ profileId: 'em', reason: 'provider' })
+    expect(conflict(() => nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', deleted: true }] })).reason).toBe('default')
+    expect(conflict(() => nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', deleted: true }], defaultClaudeProfileId: 'default' })).reason).toBe('central')
+    // Moving both pointers off it in the same write (what the profiles card does) lets it go.
+    const { settings } = nextSettingsDocument(stored, { claudeLaunchProfiles: [{ id: 'a', deleted: true }], defaultClaudeProfileId: 'default', centralClaudeProfileId: '' })
+    expect(settings.claudeLaunchProfiles).toEqual([ENVMAN])
   })
 
   it('an already-dangling default (old data) is left as stored by unrelated writes', () => {

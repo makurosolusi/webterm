@@ -16,10 +16,10 @@
 
 import { normalizeCustomAgents, type CustomAgentError } from '../shared/customAgent.schema'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
-import { applySettingsPatch } from '../shared/settings.patch'
+import { applySettingsPatch, isProfileTombstone, type ProfileInUse } from '../shared/settings.patch'
 import { projectModelsPatchErrors } from '../shared/settings.projectModels'
 import { inputHistoryPatchErrors } from '../shared/settings.inputHistory'
-import { DEFAULT_CLAUDE_PROFILE, seedClaudeProfiles, type ClaudeLaunchSettings } from '../shared/claudeLaunch/claudeLaunch.profiles'
+import { DEFAULT_CLAUDE_PROFILE, seedClaudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createLogger } from './logs'
 
@@ -32,6 +32,14 @@ export class SettingsValidationError extends Error {
   constructor(readonly errors: CustomAgentError[]) {
     super(`invalid settings: ${errors.length} error(s)`)
     this.name = 'SettingsValidationError'
+  }
+}
+
+/** A `claudeLaunchProfiles` tombstone for a profile that must stay; the route maps it to HTTP 409. */
+export class SettingsConflictError extends Error {
+  constructor(readonly profileId: string, readonly reason: ProfileInUse) {
+    super(`launch profile ${profileId} cannot be deleted: ${reason}`)
+    this.name = 'SettingsConflictError'
   }
 }
 
@@ -88,9 +96,15 @@ function acceptsShape(key: string, v: unknown): boolean {
  * HTTP input cannot add junk. Entry keys (`settings.patch.ts`) merge one entry, `null` deletes.
  * `patch.customAgents` is validated `strict` and THROWS `SettingsValidationError`, so a broken PUT
  * is refused (400) instead of silently dropped; so is a `patch.projectModels` entry with an unknown model/effort
- * and a `patch.inputHistory` list not in stored form.
+ * and a `patch.inputHistory` list not in stored form. `patch.claudeLaunchProfiles` upserts by id;
+ * a tombstone for the built-in Default, the provider's command-mode profile (`providerProfileId`) or
+ * the profile the default / Central still points at AFTER this patch THROWS `SettingsConflictError`.
  */
-export function nextSettingsDocument(storedJson: string | null, patch: unknown): { doc: Record<string, unknown>; settings: Settings } {
+export function nextSettingsDocument(
+  storedJson: string | null,
+  patch: unknown,
+  opts: { providerProfileId?: string } = {},
+): { doc: Record<string, unknown>; settings: Settings } {
   const p = asRecord(patch)
   if (Array.isArray(p.customAgents)) {
     const { errors } = normalizeCustomAgents(p.customAgents, 'strict')
@@ -103,30 +117,24 @@ export function nextSettingsDocument(storedJson: string | null, patch: unknown):
   const accepted = Object.fromEntries(Object.entries(p).filter(([k, v]) => acceptsShape(k, v)))
   const stored = storedDocument(storedJson)
   const doc = applySettingsPatch(stored, accepted)
-  let settings = mergeSettings(doc, warnDropped)
+  const settings = mergeSettings(doc, warnDropped)
+  refuseInUseDeletes(mergeSettings(stored), settings, accepted.claudeLaunchProfiles, opts.providerProfileId)
   for (const k of Object.keys(accepted)) doc[k] = settings[k as keyof Settings]
-  const pointers = droppedProfilePointers(mergeSettings(stored), settings)
-  if (Object.keys(pointers).length) {
-    Object.assign(doc, pointers)
-    settings = { ...settings, ...pointers }
-  }
   // The one-time load migration (legacy claude command -> profile) is persisted with the write.
   Object.assign(doc, seedClaudeProfiles(doc, settings.agentLaunchCommands.claude))
   return { doc, settings }
 }
 
-/**
- * Every writer (the profiles card, the provider card, any PUT): a write that removes the profile the
- * default or Central points at moves that pointer to where launches fall back (Default / '' = follow the
- * default), like the profiles card does. Only a removal in THIS write: an already-dangling default (old data)
- * is left alone, the launcher reads it as Default (`claudeLauncher.effective`), so its nodes keep launching silently.
- */
-function droppedProfilePointers(prev: Settings, next: Settings): Partial<ClaudeLaunchSettings> {
-  const removed = (id: string): boolean =>
-    prev.claudeLaunchProfiles.some((p) => p.id === id) && !next.claudeLaunchProfiles.some((p) => p.id === id)
-  return {
-    ...(removed(next.defaultClaudeProfileId) ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
-    ...(removed(next.centralClaudeProfileId) ? { centralClaudeProfileId: '' } : {}),
+/** Throws for the first tombstone in `profilesPatch` that deletes a stored profile still in use. */
+function refuseInUseDeletes(prev: Settings, next: Settings, profilesPatch: unknown, providerProfileId: string | undefined): void {
+  if (!Array.isArray(profilesPatch)) return
+  for (const e of profilesPatch.filter(isProfileTombstone)) {
+    const id = e.id
+    if (id === DEFAULT_CLAUDE_PROFILE.id) throw new SettingsConflictError(id, 'builtin')
+    if (!prev.claudeLaunchProfiles.some((p) => p.id === id)) continue // already gone: nothing to protect
+    if (id === providerProfileId) throw new SettingsConflictError(id, 'provider')
+    if (id === next.defaultClaudeProfileId) throw new SettingsConflictError(id, 'default')
+    if (id === next.centralClaudeProfileId) throw new SettingsConflictError(id, 'central')
   }
 }
 

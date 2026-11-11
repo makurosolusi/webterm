@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Settings } from '../shared/settings'
 import { SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { settingsRoute, type SettingsStore } from './settingsApi'
-import { nextSettings } from './settingsStore'
+import { nextSettings, nextSettingsDocument } from './settingsStore'
 
 const CAP = SETTINGS_BODY_MAX_BYTES
 
@@ -199,6 +199,17 @@ describe('PUT /api/settings customAgents strict', () => {
     expect(res.statusCode).toBe(400)
     expect(res.json()).toEqual({ error: 'invalid_settings', errors: [{ index: 0, field: 'inputHistory.list', code: 'invalid_list' }] })
     expect(res.body).not.toContain('remembered.example')
+  })
+
+  it('deleting a launch profile still in use => 409 profile_in_use with the reason', async () => {
+    const stored = JSON.stringify({ claudeLaunchProfiles: [{ id: 'em', name: 'E', command: 'claude' }] })
+    const store: SettingsStore = { getSettings: () => SNAPSHOT, saveSettings: (p) => (nextSettingsDocument(stored, p, { providerProfileId: 'em' }), SNAPSHOT) }
+    const req = trackedReq('PUT')
+    feed(req, [JSON.stringify({ claudeLaunchProfiles: [{ id: 'em', deleted: true }] })])
+    const res = recorder()
+    await settingsRoute(req, res, 'PUT', store)
+    expect(res.statusCode).toBe(409)
+    expect(res.json()).toEqual({ error: 'profile_in_use', profileId: 'em', reason: 'provider' })
   })
 
   it('galat non-validasi tetap dilempar ke pemanggil', async () => {
