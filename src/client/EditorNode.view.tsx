@@ -4,7 +4,7 @@ import { useMemo, useState, type MouseEvent } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { useReactFlow, useStore, useStoreApi } from '@xyflow/react'
 import NodeContextMenu from './NodeContextMenu'
-import { effectiveWrap, useWordWrap, wrapChordLabel } from './editorWrap'
+import { effectiveWrap, useWordWrap, useWrapChord, wrapChordLabel } from './editorWrap'
 import { fitNodeWidth, fitRefusal } from './editorFit'
 import { useNodeResizeState } from './nodeResize/nodeResize.store'
 import { useTabLayout } from './tabLayout.store'
@@ -21,6 +21,7 @@ export function useEditorView(id: string, filePath: string, live: Live, minWidth
   const toggleWrap = () => rf.updateNodeData(id, (n) => ({ wordWrap: !effectiveWrap((n.data as { wordWrap?: unknown }).wordWrap, filePath) }))
   const target = useMemo(() => (live ? { monaco: live.monaco, options: live.editor, code: [live.editor] } : null), [live])
   useWordWrap(target, wrap, toggleWrap)
+  const wrapKey = wrapChordLabel(useWrapChord())
 
   // Re-render on lock / tab mode so the refusal is current.
   useNodeResizeState()
@@ -40,7 +41,7 @@ export function useEditorView(id: string, filePath: string, live: Live, minWidth
       y={at.y}
       onClose={() => setAt(null)}
       rows={[
-        { label: wrap ? 'Turn word wrap off' : 'Turn word wrap on', hint: `Toggle word wrap (${wrapChordLabel()})`, disabled: !live, onClick: toggleWrap },
+        { label: wrap ? 'Turn word wrap off' : 'Turn word wrap on', hint: wrapKey ? `Toggle word wrap (${wrapKey})` : 'Toggle word wrap', disabled: !live, onClick: toggleWrap },
         { label: 'Fit width to content', hint: refusal ?? 'Size the node to the longest visible line', disabled: !!refusal, onClick: fit },
       ]}
     />

@@ -214,7 +214,7 @@ export default function Dock(props: DockProps) {
             className="vscode-activity-bar__item dock-btn rounded-none"
             label="Clean view"
             tooltip={props.cleanView ? 'Clean view is on. Click to show the chrome again' : 'Clean view is off. Click to hide all chrome'}
-            commandId="view.cleanView.key"
+            commandId="view.cleanView"
             side="right"
             aria-pressed={props.cleanView}
             onClick={props.onToggleCleanView}

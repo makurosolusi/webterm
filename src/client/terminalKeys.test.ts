@@ -11,9 +11,11 @@ import {
   suppressMiddleClickPaste,
   terminalFontZoomChord,
   terminalKeyAction,
+  terminalZoomAction,
   xtermOwnsMouseDown,
   type TerminalKeyEvent,
 } from './terminalKeys'
+import type { Command } from './commandRegistry'
 
 const MAC = { isMac: true, isWindows: false }
 const LINUX = { isMac: false, isWindows: false }
@@ -138,13 +140,38 @@ describe('terminalKeyAction', () => {
       .toBe('native')
   })
 
-  it('gates app chords on the policy', () => {
+  it('gates app chords on the policy, following the registry', () => {
+    const list: Command[] = [{ id: 'tab.goto.1', label: 'x', defaultKey: 'Mod+1', run: () => {} }]
     const cmd1 = key({ key: '1', code: 'Digit1', metaKey: true })
-    expect(terminalKeyAction(cmd1, 'app-first', MAC)).toBe('bubble')
-    expect(terminalKeyAction(cmd1, 'terminal-first', MAC)).toBe('pass')
-    const ctrl0 = key({ key: '0', code: 'Digit0', ctrlKey: true })
-    expect(terminalKeyAction(ctrl0, 'app-first', LINUX)).toBe('bubble')
-    expect(terminalKeyAction(ctrl0, 'terminal-first', LINUX)).toBe('pass')
+    expect(terminalKeyAction(cmd1, 'app-first', MAC, list, {})).toBe('bubble')
+    expect(terminalKeyAction(cmd1, 'terminal-first', MAC, list, {})).toBe('pass')
+    expect(terminalKeyAction(cmd1, 'app-first', MAC, [], {})).toBe('pass') // nothing bound: the shell's
+  })
+
+  it('hands a rebound chord back to the app and returns the old one to the shell', () => {
+    const list: Command[] = [{ id: 'search', label: 'x', defaultKey: 'Mod+Shift+F', run: () => {} }]
+    const ctrlShiftF = key({ key: 'F', code: 'KeyF', ctrlKey: true, shiftKey: true })
+    const ctrlAltS = key({ key: 's', code: 'KeyS', ctrlKey: true, altKey: true })
+    expect(terminalKeyAction(ctrlShiftF, 'app-first', LINUX, list, {})).toBe('bubble')
+    expect(terminalKeyAction(ctrlAltS, 'app-first', LINUX, list, {})).toBe('pass')
+    const moved = { search: 'Mod+Alt+S' }
+    expect(terminalKeyAction(ctrlShiftF, 'app-first', LINUX, list, moved)).toBe('pass')
+    expect(terminalKeyAction(ctrlAltS, 'app-first', LINUX, list, moved)).toBe('bubble')
+  })
+
+  it('never writes Ctrl+Shift+\\ (SIGQUIT) to the shell on Linux when it is an app command', () => {
+    const list: Command[] = [{ id: 'view.sessions', label: 'x', defaultKey: 'Mod+Shift+\\', run: () => {} }]
+    const e = key({ key: '|', code: 'Backslash', ctrlKey: true, shiftKey: true })
+    expect(terminalKeyAction(e, 'app-first', LINUX, list, {})).toBe('bubble')
+    expect(terminalKeyAction(e, 'app-first', LINUX, [], {})).toBe('pass')
+  })
+
+  it('keeps bare Ctrl+letter for the shell off macOS unless the user bound it', () => {
+    const list: Command[] = [{ id: 'omni', label: 'x', defaultKey: 'Mod+K', run: () => {} }]
+    const ctrlK = key({ key: 'k', code: 'KeyK', ctrlKey: true })
+    expect(terminalKeyAction(ctrlK, 'app-first', LINUX, list, {})).toBe('pass') // readline kill-line
+    expect(terminalKeyAction(key({ key: 'k', code: 'KeyK', metaKey: true }), 'app-first', MAC, list, {})).toBe('bubble')
+    expect(terminalKeyAction(ctrlK, 'app-first', LINUX, list, { omni: 'Mod+K' })).toBe('bubble')
   })
 
   it('bubbles the clean-view escape chord under EITHER policy', () => {
@@ -189,6 +216,16 @@ describe('terminalKeyAction', () => {
     expect(terminalKeyAction(key({ key: 'a', code: 'KeyA' }), 'app-first', MAC)).toBe('pass')
     expect(terminalKeyAction(key({ key: 'c', code: 'KeyC', ctrlKey: true }), 'app-first', LINUX))
       .toBe('pass')
+  })
+})
+
+describe('terminalZoomAction', () => {
+  it('keeps the broad default shape until the command is rebound', () => {
+    expect(terminalZoomAction(key({ key: '+', code: 'Equal', metaKey: true, shiftKey: true }), {}, true)).toBe('increase')
+    const rebound = { 'terminal.fontZoomIn': 'Mod+Alt+=' }
+    expect(terminalZoomAction(key({ key: '=', code: 'Equal', metaKey: true }), rebound, true)).toBeNull()
+    expect(terminalZoomAction(key({ key: '=', code: 'Equal', metaKey: true, altKey: true }), rebound, true)).toBe('increase')
+    expect(terminalZoomAction(key({ key: '-', code: 'Minus', metaKey: true }), { 'terminal.fontZoomOut': null }, true)).toBeNull()
   })
 })
 

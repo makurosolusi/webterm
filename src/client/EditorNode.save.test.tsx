@@ -9,6 +9,7 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
+import './commandRegistry.defaults' // registers Toggle Word Wrap (Alt+Z), as App does
 
 const fake = vi.hoisted(() => {
   type Binding = { kb: number; scope: string | null; run: () => void }
@@ -17,7 +18,7 @@ const fake = vi.hoisted(() => {
   const remove = (b: Binding) => ({ dispose: () => { const i = bindings.indexOf(b); if (i >= 0) bindings.splice(i, 1) } })
   const monaco = {
     Uri: { file: () => ({ with: () => 'uri' }) },
-    KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 },
+    KeyMod: { CtrlCmd: 1, Alt: 4 }, KeyCode: { KeyS: 2, KeyZ: 8 },
     editor: {
       getModel: () => null,
       createModel: () => ({ dispose: () => {} }),

@@ -39,7 +39,7 @@ export function loadMonaco(): Promise<MonacoApi> {
     // `"./*" -> "./esm/vs/*.js"`, jadi path dalam gaya lama `monaco-editor/esm/vs/...` jadi dobel
     // prefiks dan gagal resolve.
     // The LSP bridge and chord forwarding only act on Monaco, so they ride in its chunk too.
-    const [monaco, editorWorker, jsonWorker, cssWorker, htmlWorker, tsWorker, { wireEditorLsp }, { forwardTabChords }] = await Promise.all([
+    const [monaco, editorWorker, jsonWorker, cssWorker, htmlWorker, tsWorker, { wireEditorLsp }, { forwardEditorChords }] = await Promise.all([
       import('monaco-editor'),
       import('monaco-editor/editor/editor.worker.js?worker'),
       import('monaco-editor/language/json/json.worker.js?worker'),
@@ -62,8 +62,8 @@ export function loadMonaco(): Promise<MonacoApi> {
 
     defineWebtermThemes(monaco)
     wireTsWorkerReaper(monaco)
-    // Tab-layout chords must reach the app from inside every editor (editor nodes and diff sides).
-    forwardTabChords(monaco)
+    // App chords (tab layout, rebound commands) must reach the app from inside every editor; follows rebinding live.
+    forwardEditorChords(monaco)
     // Language servers (hover, go-to-definition, rename...) for editor-node models; see editorLsp.monaco.ts.
     wireEditorLsp(monaco, {
       // The workspace this tab serves (App sets it for the browser socket too).

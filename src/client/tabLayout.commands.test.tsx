@@ -10,7 +10,6 @@ import { connectWorkspaceLayout } from './App.tabs'
 import { useCanvasViewport } from './canvasViewport'
 import { eventChord, findConflicts, listCommands, normalizeChord, type Command } from './commandRegistry'
 import { FIXED_COMMANDS, LAYERS_GROUP_KEY, LAYERS_UNGROUP_KEY, appCommands } from './commandRegistry.defaults'
-import { isTabLayoutChord } from './tabLayout.keys'
 import { TOGGLE_LAYOUT_ID, tabLayoutCommands, toggleLayoutMode, useTabLayoutCommands } from './tabLayout.commands'
 import { activateTab, connectTabLayout, getTabLayout, setMode } from './tabLayout.store'
 import { terminalKeyAction } from './terminalKeys'
@@ -124,12 +123,14 @@ describe('chords', () => {
     const ev = (code: string, o: object) => ({ type: 'keydown', key: '', code, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...o })
     const MAC = { isMac: true, isWindows: false }
     const LINUX = { isMac: false, isWindows: false }
-    expect(terminalKeyAction(ev('KeyL', { ctrlKey: true, shiftKey: true, key: 'L' }), 'app-first', LINUX)).toBe('bubble')
-    expect(isTabLayoutChord(ev('KeyW', { metaKey: true }), true)).toBe(true)
-    expect(isTabLayoutChord(ev('KeyW', { ctrlKey: true }), false)).toBe(false) // Ctrl+W stays readline's
-    expect(isTabLayoutChord(ev('KeyW', { ctrlKey: true, altKey: true }), false)).toBe(true)
-    expect(isTabLayoutChord(ev('BracketRight', { metaKey: true, shiftKey: true }), true)).toBe(true)
-    expect(terminalKeyAction(ev('BracketRight', { metaKey: true, shiftKey: true, key: '}' }), 'app-first', MAC)).toBe('bubble')
+    const mac = tabLayoutCommands(vi.fn(), true, true)
+    const linux = tabLayoutCommands(vi.fn(), true, false)
+    expect(terminalKeyAction(ev('KeyL', { ctrlKey: true, shiftKey: true, key: 'L' }), 'app-first', LINUX, linux, {})).toBe('bubble')
+    expect(terminalKeyAction(ev('KeyW', { metaKey: true }), 'app-first', MAC, mac, {})).toBe('bubble')
+    expect(terminalKeyAction(ev('KeyW', { ctrlKey: true }), 'app-first', LINUX, linux, {})).toBe('pass') // Ctrl+W stays readline's
+    expect(terminalKeyAction(ev('KeyW', { ctrlKey: true, altKey: true }), 'app-first', LINUX, linux, {})).toBe('bubble')
+    expect(terminalKeyAction(ev('BracketRight', { metaKey: true, shiftKey: true, key: '}' }), 'app-first', MAC, mac, {})).toBe('bubble')
+    expect(terminalKeyAction(ev('Digit2', { ctrlKey: true, key: '2' }), 'app-first', LINUX, linux, {})).toBe('bubble') // tab.goto.2
   })
 })
 

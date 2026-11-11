@@ -1,7 +1,7 @@
 import { createElement, useCallback, useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { useNeedsYouCount } from './chat/needsYouApi'
-import { outputPaletteCommands, useOutputToggleHotkey } from './output/outputCommands'
+import { outputPaletteCommands } from './output/outputCommands'
 import { useOutputStatusItems } from './output/outputStatusItem'
 import { resolveTerminalTheme } from './themes'
 import { toggleTimeline } from './Timeline'
@@ -96,8 +96,7 @@ export function useDockFeeds() {
   // Badge berbagi SATU poller dengan strip Needs-you dan kartu persetujuan (`chat/needsYouApi`).
   const needsYouCount = useNeedsYouCount()
   // Panel Output (log sistem): state-nya modul bersama, jadi menu View, palette, dan status bar
-  // tak perlu prop. Lihat `./output/outputCommands`.
-  useOutputToggleHotkey()
+  // tak perlu prop; chord Toggle Output ada di registry. Lihat `./output/outputCommands`.
   const outputItems = useOutputStatusItems()
   const outputStatusItems = useMemo(() => [...outputItems, ACTIVITY_STATUS_ITEM], [outputItems])
   const outputCommands = useMemo(() => outputPaletteCommands(), [])

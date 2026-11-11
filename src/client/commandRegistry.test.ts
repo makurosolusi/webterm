@@ -70,6 +70,33 @@ describe('bindings and conflicts', () => {
   })
 })
 
+describe('dispatch precedence', () => {
+  const g1: Command = { id: 'g1', label: 'G1', defaultKey: 'Mod+J', run: () => {} }
+  const g2: Command = { id: 'g2', label: 'G2', defaultKey: 'Mod+K', run: () => {} }
+  const ed: Command = { id: 'ed', label: 'Ed', defaultKey: 'Mod+J', scope: 'editor', run: () => {} }
+
+  it('a scoped command beats a global one only while its scope is active', () => {
+    expect(commandForChord('Mod+J', [g1, ed], {}, ['editor'])?.id).toBe('ed')
+    expect(commandForChord('Mod+J', [g1, ed], {}, ['terminal'])?.id).toBe('g1')
+    expect(commandForChord('Mod+J', [g1, ed], {})?.id).toBe('g1')
+  })
+
+  it('in one scope the most recent user override wins, and the clash is warned once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(commandForChord('Mod+J', [g1, g2], { g2: 'Mod+J' })?.id).toBe('g2')
+    expect(commandForChord('Mod+J', [g2, g1], { g1: 'Mod+J', g2: 'Mod+J' })?.id).toBe('g2')
+    expect(commandForChord('Mod+J', [g2, g1], { g2: 'Mod+J', g1: 'Mod+J' })?.id).toBe('g1')
+    commandForChord('Mod+J', [g1, g2], { g2: 'Mod+J' })
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('g1, g2'))).toHaveLength(1)
+    warn.mockRestore()
+  })
+
+  it('maps punctuation by physical key, so Shift and macOS Option do not change the chord', () => {
+    expect(eventChord(key({ key: '≠', code: 'Equal', metaKey: true, altKey: true }), true)).toBe('Mod+Alt+=')
+    expect(eventChord(key({ key: '~', code: 'Backquote', ctrlKey: true, shiftKey: true }), true)).toBe('Ctrl+Shift+`')
+  })
+})
+
 describe('registry', () => {
   let off: (() => void) | undefined
   afterEach(() => off?.())

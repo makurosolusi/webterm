@@ -1,10 +1,10 @@
 // Shared state and commands for the Output panel: one module store so the status bar item, the
 // View menu, the command palette and the shortcut all drive the same panel without prop drilling.
-import { useEffect, useSyncExternalStore } from 'react'
+import { useSyncExternalStore } from 'react'
 import type { LogLevel } from '../../shared/logEntry'
 import { toggleBottomView } from '../bottomPanelHost'
-import { isMacPlatform } from '../terminalKeys'
-import { isOutputToggleChord, outputShortcutLabel } from './outputChord'
+import { registerCommands, type Command } from '../commandRegistry'
+import { OUTPUT_TOGGLE_KEY } from './outputChord'
 
 /** localStorage key for the open state of the Output panel. */
 export const OUTPUT_OPEN_KEY = 'webterm.outputOpen'
@@ -93,18 +93,9 @@ export function resetOutputStateForTest(): void {
 
 /* --- Shortcut --------------------------------------------------------------------------------- */
 
-/** Window-level toggle. Like Clean View it is not gated by typing targets: it needs a modifier chord. */
-export function useOutputToggleHotkey(): void {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.defaultPrevented || e.repeat || !isOutputToggleChord(e, isMacPlatform())) return
-      e.preventDefault()
-      toggleOutput()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-}
+/** View: Toggle Output, a global registry command: rebindable, and handed back by a focused terminal. */
+export const OUTPUT_TOGGLE_COMMAND: Command = { id: 'output.toggle', label: 'View: Toggle Output', defaultKey: OUTPUT_TOGGLE_KEY, run: toggleOutput }
+registerCommands([OUTPUT_TOGGLE_COMMAND])
 
 /* --- Palette commands --------------------------------------------------------------------------- */
 
@@ -115,10 +106,9 @@ export interface PaletteCommand {
   run: () => void
 }
 
-/** Command Palette entries, worded as in VS Code. */
-export function outputPaletteCommands(isMac: boolean = isMacPlatform()): PaletteCommand[] {
+/** Command Palette entries without a keybinding, worded as in VS Code (Toggle Output is in the registry). */
+export function outputPaletteCommands(): PaletteCommand[] {
   return [
-    { id: 'output.toggle', label: 'View: Toggle Output', keybinding: outputShortcutLabel(isMac), run: toggleOutput },
     { id: 'output.clear', label: 'Output: Clear Output', run: () => void clearOutput() },
     { id: 'output.setLevel', label: 'Output: Set Log Level…', run: openLevelPicker },
   ]

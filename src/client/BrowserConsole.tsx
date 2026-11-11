@@ -12,12 +12,10 @@ import { Label } from '@/components/ui/label'
 import { sourceLabel } from '../shared/browser.console'
 import type { ConsoleClientMsg, ConsoleEntry, ConsoleView } from '../shared/browser.console'
 import type { Lease } from '../shared/browser.contract'
-import { eventChord } from './commandRegistry'
-import { isMacPlatform } from './terminalKeys'
+import { commandMatches } from './keybindings.resolve'
 
-/** Command id + chord of the toggle (Chrome's ⌥⌘J), listed in the Keyboard Shortcuts overlay as a fixed command. */
+/** Registry command of the toggle (default Chrome's ⌥⌘J, rebindable; `commandRegistry.defaults`). */
 export const CONSOLE_COMMAND_ID = 'browser.toggleConsole'
-export const CONSOLE_CHORD = 'Mod+Alt+J'
 /** Rows rendered at most (newest kept); the buffer itself holds up to CONSOLE_BUFFER_MAX. */
 export const CONSOLE_RENDER_MAX = 200
 
@@ -181,7 +179,7 @@ export function useConsoleDrawer(hostRef: RefObject<HTMLElement | null>, view: C
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const node = hostRef.current?.closest('.browser-node')
-      if (!node?.contains(document.activeElement) || eventChord(e, isMacPlatform()) !== CONSOLE_CHORD) return
+      if (!node?.contains(document.activeElement) || !commandMatches(e, CONSOLE_COMMAND_ID)) return
       e.preventDefault()
       e.stopPropagation()
       toggle()
