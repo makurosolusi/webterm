@@ -113,3 +113,14 @@ test('offline: skips ticks, warns once per outage, pings again the moment the so
   unmount()
   warn.mockRestore()
 })
+
+test('a board whose socket never opened (no terminal: stays `connecting`) still pings; offline skips', async () => {
+  setConnection({ phase: 'connecting', attempt: 0 })
+  const { unmount } = renderHook(() => usePresencePing(true))
+  await vi.advanceTimersByTimeAsync(PRESENCE_PING_MS)
+  expect(fetchMock).toHaveBeenCalledTimes(2) // mount + one tick
+  setConnection({ phase: 'offline', attempt: 0 })
+  vi.advanceTimersByTime(PRESENCE_PING_MS * 3)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  unmount()
+})

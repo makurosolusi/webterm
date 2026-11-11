@@ -8,7 +8,7 @@ import { InboxApiError } from './inboxTypes'
 import { request } from './inboxTransport'
 import { closestNodeRoot } from './nodeRoot'
 import { getTabLayout } from './tabLayout.store'
-import { getConnection, subscribeConnection } from './ws.connection'
+import { getConnection, streamPaused, subscribeConnection } from './ws.connection'
 
 /** Interval detak selama tab terlihat; jauh di bawah ambang "away" server (menit). */
 export const PRESENCE_PING_MS = 30_000
@@ -33,8 +33,9 @@ export function focusedNodeId(): string | null {
 let warned = false
 
 function ping(): void {
-  // Server tak terjangkau (socket bersama tidak `connected`): detak pasti gagal, lewati saja.
-  if (getConnection().phase !== 'connected') return
+  // Server tak terjangkau (socket bersama reconnecting/offline/auth): detak pasti gagal, lewati saja.
+  // Bukan `!== 'connected'`: socket dibuka malas, board tanpa terminal tetap `connecting` selamanya.
+  if (streamPaused()) return
   const visible = document.visibilityState === 'visible'
   const body = { visible, muted: readNotifyPrefs().muted, nodeId: visible ? focusedNodeId() : null }
   request<unknown>('/api/channels/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => { warned = false }, (err: unknown) => {
