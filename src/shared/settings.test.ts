@@ -143,3 +143,21 @@ describe('quickDrag', () => {
     expect(mergeSettings({ quickDrag: 1 }).quickDrag).toBe('cmdCtrl')
   })
 })
+
+describe('cable color and thickness', () => {
+  it('defaults keep today\'s look: theme color, 2px', () => {
+    expect(DEFAULT_SETTINGS.edgeColor).toBe('default')
+    expect(DEFAULT_SETTINGS.edgeWidth).toBe(2)
+  })
+
+  it('keeps a hex color and a width in range', () => {
+    expect(mergeSettings({ edgeColor: '#3B82f6', edgeWidth: 1.5 })).toMatchObject({ edgeColor: '#3B82f6', edgeWidth: 1.5 })
+  })
+
+  it('bad color falls back to default; width is clamped, NaN is default', () => {
+    for (const bad of ['red', '#fff', '#12345g', 'var(--x)', '', 7]) expect(mergeSettings({ edgeColor: bad }).edgeColor).toBe('default')
+    expect(mergeSettings({ edgeWidth: 99 }).edgeWidth).toBe(4)
+    expect(mergeSettings({ edgeWidth: 0 }).edgeWidth).toBe(1)
+    expect(mergeSettings({ edgeWidth: Number.NaN }).edgeWidth).toBe(2)
+  })
+})

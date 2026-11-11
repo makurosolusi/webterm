@@ -23,15 +23,17 @@ export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>)
   return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }
 
-/** Warna edge: foreground editor ~70% opaque supaya terbaca di atas latar kustom (gambar/gradasi/terang);
- *  terpilih = `focusBorder`. Fallback ke token lama supaya tetap benar bila `--vscode-*` belum dipetakan.
- *  `canvas-ui.css` memakai ekspresi yang sama untuk `.react-flow__marker` — ubah keduanya bersamaan. */
+/** Warna edge: `--edge-color` (Settings › Cable color, dipasang di root canvas) atau foreground editor
+ *  ~70% opaque supaya terbaca di atas latar kustom; terpilih = `focusBorder`. Fallback ke token lama
+ *  bila `--vscode-*` belum dipetakan. `canvas-ui.css` memakai ekspresi yang sama untuk
+ *  `.react-flow__marker` — ubah keduanya bersamaan. */
 export const EDGE_STROKE_OPACITY_PCT = 70
-export const EDGE_STROKE = `color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent)`
+export const EDGE_STROKE = `var(--edge-color, color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent))`
 export const EDGE_STROKE_SELECTED = 'var(--vscode-focusBorder, var(--accent))'
-/** Tebal garis edge: 2px idle, 3px terpilih (juga tebal saat hover, lewat `canvas-ui.css`). */
+/** Tebal garis edge default (Settings › Cable thickness); terpilih dan hover masing-masing menambah
+ *  `EDGE_WIDTH_EXTRA` (hover lewat `--edge-hover-extra` di `canvas-ui.css`). */
 export const EDGE_WIDTH = 2
-export const EDGE_WIDTH_SELECTED = 3
+export const EDGE_WIDTH_EXTRA = 1
 /** Kepala panah (px) dan `strokeWidth` panah idle. */
 export const ARROW_SIZE = 13
 export const IDLE_ARROW_STROKE = 1
@@ -42,6 +44,9 @@ export const EDGE_INTERACTION_WIDTH = 24
  *  — ubah keduanya bersamaan, dan jaga agar tetap berbeda dari `IDLE_ARROW_STROKE`. Warna marker
  *  sendiri `currentColor`: `var()` berspasi/berkoma tak aman dijadikan bagian id elemen. */
 export const SELECTED_ARROW_STROKE = 2
+
+/** Kabel yang sedang ditarik: warna dan tebal sama dengan kabel idle. */
+export const connectionLineStyle = (width: number = EDGE_WIDTH) => ({ stroke: EDGE_STROKE, strokeWidth: width })
 
 /** Label per jenis kabel. Kabel buka-file BUKAN context link — menyebutnya "context" adalah label
  *  bohong tentang apa yang dibaca agent. */
@@ -57,7 +62,7 @@ const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }>
  *  Ditandai, BUKAN dibuang: `edges` di sini adalah yang dilihat store React Flow, jadi edge yang
  *  dibuang tidak terlihat oleh `deleteElements` — menghapus node-nya akan meninggalkan bridge
  *  yatim, dan `rf.getEdges()` di dalam node akan menyangka pasangannya belum terhubung. */
-export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
+export function decorateEdges(edges: Edge[], nodes: Node[], width: number = EDGE_WIDTH): Edge[] {
   const hidden = hiddenEdgeNodeIds(nodes as { id: string; data: { hideLinks?: boolean } }[])
   return edges.map((e) => {
     const arrow = {
@@ -75,7 +80,7 @@ export function decorateEdges(edges: Edge[], nodes: Node[]): Edge[] {
       labelBgStyle: { fill: 'var(--canvas-bg)', fillOpacity: 1 },
       style: {
         stroke: e.selected ? EDGE_STROKE_SELECTED : EDGE_STROKE,
-        strokeWidth: e.selected ? EDGE_WIDTH_SELECTED : EDGE_WIDTH,
+        strokeWidth: e.selected ? width + EDGE_WIDTH_EXTRA : width,
       },
       interactionWidth: EDGE_INTERACTION_WIDTH,
       markerStart: arrow,

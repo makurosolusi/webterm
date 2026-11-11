@@ -53,6 +53,20 @@ export const SHELL_PRESETS: readonly ComboPreset[] = [
 
 export const GRID_SIZE_OPTIONS = [8, 12, 16, 20, 24, 32, 40, 48].map((n) => ({ value: n, label: `${n} px` }))
 export const NODE_WIDTH_OPTIONS = [400, 480, 560, 640, 800, 960, 1200, 1600].map((n) => ({ value: n, label: `${n} px` }))
+export const EDGE_WIDTH_OPTIONS = [1, 1.5, 2, 3, 4].map((n) => ({
+  value: n, label: `${n} px${n === DEFAULT_SETTINGS.edgeWidth ? ' (default)' : ''}`,
+}))
+/** Mid-tone cable colors that stay visible on both light and dark canvases. */
+export const EDGE_COLOR_PRESETS: readonly { label: string; color: string }[] = [
+  { label: 'Blue', color: '#3b82f6' },
+  { label: 'Teal', color: '#14b8a6' },
+  { label: 'Green', color: '#22c55e' },
+  { label: 'Amber', color: '#f59e0b' },
+  { label: 'Orange', color: '#f97316' },
+  { label: 'Red', color: '#ef4444' },
+  { label: 'Pink', color: '#ec4899' },
+  { label: 'Purple', color: '#8b5cf6' },
+]
 export const NODE_HEIGHT_OPTIONS = [280, 360, 440, 520, 600, 720, 900, 1200].map((n) => ({ value: n, label: `${n} px` }))
 
 /** Cost cap suggestions in dollars; '' = no limit. The field id is Central's own limit (Settings › Central Agent); the Spending page's pause-all cap shares the presets but keeps its own history (PAUSE_ALL_FIELD_ID 'cost.pauseAllAt'). */

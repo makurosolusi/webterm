@@ -20,14 +20,14 @@
 
 .react-flow__marker {
   /* Sama dengan EDGE_STROKE di canvasStyle.ts. */
-  color: color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) 70%, transparent);
+  color: var(--edge-color, color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) 70%, transparent));
 }
 
-/* Hover menebalkan kabel ke tebal terpilih (EDGE_WIDTH_SELECTED). Tebal inline dari ContextEdge
-   berbentuk `var(--edge-hover-width, <tebal>)`, jadi variabel ini cukup di-set di sini tanpa
-   menimpa style inline. */
+/* Hover menebalkan kabel sebesar EDGE_WIDTH_EXTRA di atas tebal pilihan. Tebal inline dari
+   ContextEdge berbentuk `calc(<tebal> + var(--edge-hover-extra, 0px))`, jadi variabel ini cukup
+   di-set di sini tanpa menimpa style inline. */
 .react-flow__edge:hover {
-  --edge-hover-width: 3px;
+  --edge-hover-extra: 1px;
 }
 
 /* Panah edge terpilih. `strokeWidth=2` = SELECTED_ARROW_STROKE di canvasStyle.ts (masuk id marker). */

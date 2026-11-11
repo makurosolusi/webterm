@@ -60,6 +60,25 @@ describe('settings pickers per screen', () => {
     expect(select('Grid size').value).toBe('30')
   })
 
+  it('Canvas section: cable color swatches + native custom picker, cable thickness select', () => {
+    const onChange = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
+    render(<CanvasSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
+    expect(screen.getByRole('button', { name: 'Default' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Teal' }))
+    expect(onChange).toHaveBeenLastCalledWith({ edgeColor: '#14b8a6' })
+    const custom = screen.getByLabelText('Custom cable color') as HTMLInputElement
+    expect(custom.type).toBe('color')
+    fireEvent.change(custom, { target: { value: '#123456' } })
+    expect(onChange).toHaveBeenLastCalledWith({ edgeColor: '#123456' })
+    fireEvent.click(screen.getByRole('button', { name: 'Default' }))
+    expect(onChange).toHaveBeenLastCalledWith({ edgeColor: 'default' })
+    expect([...select('Cable thickness').options].map((o) => o.value)).toEqual(['1', '1.5', '2', '3', '4'])
+    expect(select('Cable thickness').value).toBe('2')
+    fireEvent.change(select('Cable thickness'), { target: { value: '3' } })
+    expect(onChange).toHaveBeenLastCalledWith({ edgeWidth: 3 })
+  })
+
   it('Agents: a custom agent launch command is a combobox offering claude', () => {
     const onChange = vi.fn()
     render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, customAgents: [{ id: 'custom:x', label: 'X', launchCmd: '' }] }} onChange={onChange} />)

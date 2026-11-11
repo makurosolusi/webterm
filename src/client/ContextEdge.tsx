@@ -18,8 +18,8 @@ export default function FloatingEdge(props: EdgeProps) {
   })
   const width = Number(props.style?.strokeWidth ?? EDGE_WIDTH)
   const haloWidth = width + HALO_EXTRA_WIDTH
-  // Hover = `--edge-hover-width` di canvas-ui.css; tanpa hover jatuh ke tebal normal.
-  const style = { ...props.style, strokeWidth: `var(--edge-hover-width, ${width}px)` }
+  // Hover menambah `--edge-hover-extra` (canvas-ui.css), jadi selalu lebih tebal dari tebal pilihan.
+  const style = { ...props.style, strokeWidth: `calc(${width}px + var(--edge-hover-extra, 0px))` }
   return (
     <>
     <path className="edge-halo" d={path} fill="none" stroke="var(--canvas-bg)" strokeWidth={haloWidth}

@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import {
-  ARROW_SIZE, decorateEdges, EDGE_INTERACTION_WIDTH, EDGE_STROKE, EDGE_STROKE_OPACITY_PCT, EDGE_STROKE_SELECTED,
-  EDGE_WIDTH, EDGE_WIDTH_SELECTED, IDLE_ARROW_STROKE, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, SELECTED_ARROW_STROKE,
+  ARROW_SIZE, connectionLineStyle, decorateEdges, EDGE_INTERACTION_WIDTH, EDGE_STROKE, EDGE_STROKE_OPACITY_PCT, EDGE_STROKE_SELECTED,
+  EDGE_WIDTH, EDGE_WIDTH_EXTRA, IDLE_ARROW_STROKE, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, SELECTED_ARROW_STROKE,
 } from './canvasStyle'
 
 const nodes: Node[] = [
@@ -27,7 +27,6 @@ describe('decorateEdges — gaya VS Code', () => {
 
   it('terpilih: focusBorder 3px, panah memakai strokeWidth penanda CSS', () => {
     const [e] = decorateEdges([edge(true)], nodes)
-    expect(EDGE_WIDTH_SELECTED).toBe(3)
     expect(e.style).toEqual({ stroke: EDGE_STROKE_SELECTED, strokeWidth: 3 })
     expect(e.markerEnd).toMatchObject({ color: 'currentColor', strokeWidth: SELECTED_ARROW_STROKE })
     expect(css).toContain(`[id*='strokeWidth=${SELECTED_ARROW_STROKE}']`)
@@ -49,10 +48,24 @@ describe('decorateEdges — gaya VS Code', () => {
     expect(JSON.stringify(idle.markerEnd)).not.toBe(JSON.stringify(sel.markerEnd))
   })
 
-  it('canvas-ui.css selaras: warna marker idle = EDGE_STROKE, hover = tebal terpilih', () => {
-    expect(css).toContain(`color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent)`)
-    expect(EDGE_STROKE).toContain(`${EDGE_STROKE_OPACITY_PCT}%`)
-    expect(css).toMatch(new RegExp(`\\.react-flow__edge:hover\\s*\\{[^}]*--edge-hover-width:\\s*${EDGE_WIDTH_SELECTED}px`))
+  it('canvas-ui.css selaras: warna marker idle = EDGE_STROKE (ikut --edge-color), hover menambah tebal', () => {
+    const marker = `var(--edge-color, color-mix(in srgb, var(--vscode-editor-foreground, var(--muted)) ${EDGE_STROKE_OPACITY_PCT}%, transparent))`
+    expect(EDGE_STROKE).toBe(marker)
+    expect(css).toMatch(/\.react-flow__marker\s*\{[^}]*color:\s*var\(--edge-color,/)
+    expect(css).toMatch(new RegExp(`\\.react-flow__edge:hover\\s*\\{[^}]*--edge-hover-extra:\\s*${EDGE_WIDTH_EXTRA}px`))
+    expect(EDGE_WIDTH_EXTRA).toBeGreaterThan(0)
+  })
+
+  it('kabel yang sedang ditarik sama dengan kabel idle', () => {
+    expect(connectionLineStyle(3)).toEqual(decorateEdges([edge(false)], nodes, 3)[0].style)
+    expect(connectionLineStyle()).toEqual(decorateEdges([edge(false)], nodes)[0].style)
+  })
+
+  it('tebal pilihan dipakai; terpilih tetap lebih tebal dan tetap focusBorder', () => {
+    for (const w of [1, 1.5, 4]) {
+      expect(decorateEdges([edge(false)], nodes, w)[0].style).toEqual({ stroke: EDGE_STROKE, strokeWidth: w })
+      expect(decorateEdges([edge(true)], nodes, w)[0].style).toEqual({ stroke: EDGE_STROKE_SELECTED, strokeWidth: w + EDGE_WIDTH_EXTRA })
+    }
   })
 })
 
