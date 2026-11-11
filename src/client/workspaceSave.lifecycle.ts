@@ -2,9 +2,11 @@
 // style: the debounced save is written the moment the page may go away (hidden, pagehide,
 // beforeunload) instead of being dropped with the timer, and leaving while a save is pending, in
 // flight or failed asks first. The PUT itself rides `keepalive` (see `saveWorkspace`), so a
-// flush on unload survives the document. A failed save is retried as soon as the link is back.
+// flush on unload survives the document. A failed save is retried as soon as the link is back:
+// the browser's `online`, or the shared socket entering `connected` from any other phase (first
+// connect, reconnect, a re-auth after `auth`).
 import { useEffect } from 'react'
-import { onReconnect } from './ws'
+import { getConnection, subscribeConnection } from './ws.connection'
 
 export interface SaveLifecycleDeps {
   /** Write the debounced save now. */
@@ -28,13 +30,18 @@ export function useSaveLifecycle({ flushSave, retrySave, hasUnsaved }: SaveLifec
     window.addEventListener('beforeunload', onBeforeUnload)
     window.addEventListener('online', retrySave)
     document.addEventListener('visibilitychange', onVisibility)
-    const offReconnect = onReconnect(retrySave)
+    let phase = getConnection().phase
+    const offConnection = subscribeConnection((s) => {
+      const was = phase
+      phase = s.phase
+      if (s.phase === 'connected' && was !== 'connected') retrySave()
+    })
     return () => {
       window.removeEventListener('pagehide', flushSave)
       window.removeEventListener('beforeunload', onBeforeUnload)
       window.removeEventListener('online', retrySave)
       document.removeEventListener('visibilitychange', onVisibility)
-      offReconnect()
+      offConnection()
     }
   }, [flushSave, retrySave, hasUnsaved])
 }
