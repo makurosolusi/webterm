@@ -36,11 +36,18 @@ export interface FinishScanInput {
   taskId?: string | null
 }
 
+/** A dismissed finding seen again with different evidence; `finding.evidence` is still what the human dismissed. */
+export interface ChangedDismissed { finding: FindingView; evidence: string }
+
+/** What `finishScan` changed. */
+export interface FinishScanResult { scan: HealthScanView; opened: FindingView[]; fixed: FindingView[]; changedDismissed: ChangedDismissed[] }
+
 export interface ListFindingsInput {
   projectId: string
   statuses?: FindingStatus[]
   severities?: HealthLevel[]
   rules?: HealthRule[]
+  origins?: FindingOrigin[]
   taskId?: string
   limit?: number
   offset?: number
@@ -48,7 +55,7 @@ export interface ListFindingsInput {
 
 export interface HealthStore {
   startScan(projectId: string, origin: FindingOrigin): HealthScanView
-  finishScan(scanId: string, result: FinishScanInput): { scan: HealthScanView; opened: FindingView[]; fixed: FindingView[] }
+  finishScan(scanId: string, result: FinishScanInput): FinishScanResult
   failScan(scanId: string, error: string): HealthScanView
   dismiss(id: string, reason: string, actor: string): FindingView
   reopen(id: string, actor: string): FindingView
@@ -83,6 +90,8 @@ function toScan(r: Row): HealthScanView {
   }
 }
 
+/** Whitespace-only differences are not new evidence. */
+const sameEvidence = (a: string, b: string): boolean => a.replace(/\s+/g, ' ').trim() === b.replace(/\s+/g, ' ').trim()
 const marks = (n: number): string => Array.from({ length: n }, () => '?').join(', ')
 const SEVERITY_ORDER = "CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END"
 
@@ -115,7 +124,8 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
     })
   }
 
-  function upsert(scan: HealthScanView, d: FindingDraft, taskId: string | null, at: number): FindingView | null {
+  /** Writes one draft; returns the finding when it (re)opened, `changed` when a dismissed one has new evidence. */
+  function upsert(scan: HealthScanView, d: FindingDraft, taskId: string | null, at: number): { opened?: FindingView; changed?: ChangedDismissed } {
     const existing = getRow(db, 'SELECT * FROM central_finding WHERE project_id = ? AND fingerprint = ?', scan.projectId, d.fingerprint)
     if (!existing) {
       const id = newId()
@@ -123,20 +133,21 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
         evidence, source, suggestion, status, task_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
         id, scan.projectId, d.fingerprint, scan.origin, d.rule, d.severity, d.confidence, d.file, d.line, d.title,
         d.evidence, d.source, d.suggestion, taskId, at, at)
-      return mustFinding(id, 'health.finishScan')
+      return { opened: mustFinding(id, 'health.finishScan') }
     }
     const id = String(existing['id'])
     switch (String(existing['status']) as FindingStatus) {
       case 'open':
         execWrite(db, 'UPDATE central_finding SET line = ?, evidence = ?, last_seen_at = ? WHERE id = ?', d.line, d.evidence, at, id)
-        return null
+        return {}
       case 'fixed':
         execWrite(db, `UPDATE central_finding SET status = 'open', fixed_at = NULL, line = ?, evidence = ?, last_seen_at = ? WHERE id = ?`,
           d.line, d.evidence, at, id)
-        return mustFinding(id, 'health.finishScan')
+        return { opened: mustFinding(id, 'health.finishScan') }
       case 'dismissed':
+        // Evidence stays as it was at dismissal, so a later scan can tell the human what changed since.
         execWrite(db, 'UPDATE central_finding SET last_seen_at = ? WHERE id = ?', at, id)
-        return null
+        return sameEvidence(String(existing['evidence']), d.evidence) ? {} : { changed: { finding: toFinding({ ...existing, last_seen_at: at }), evidence: d.evidence } }
     }
   }
 
@@ -174,10 +185,12 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
         const taskId = result.taskId ?? null
         const seen = new Set<string>()
         const opened: FindingView[] = []
+        const changedDismissed: ChangedDismissed[] = []
         for (const d of result.drafts) {
           seen.add(d.fingerprint)
-          const f = upsert(scan, d, taskId, at)
+          const { opened: f, changed } = upsert(scan, d, taskId, at)
           if (f) opened.push(f)
+          if (changed) changedDismissed.push(changed)
         }
         const fixed = result.truncated ? [] : autoFix(scan, result.rules, seen, taskId, at)
         execWrite(db, `UPDATE central_health_scan SET status = 'done', finished_at = ?, files_scanned = ?, truncated = ?, opened = ?, fixed = ? WHERE id = ?`,
@@ -189,7 +202,7 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
           kind: 'health.scan.finished', actor: SCAN_ACTOR, projectId: scan.projectId, correlationId: scanId,
           payload: { scanId, origin: scan.origin, taskId, filesScanned: done.filesScanned, truncated: done.truncated, opened: opened.length, fixed: fixed.length, rules: result.rules },
         })
-        return { scan: done, opened, fixed }
+        return { scan: done, opened, fixed, changedDismissed }
       })
     },
 
@@ -240,6 +253,7 @@ export function createHealthStore(db: Database, now: () => number): HealthStore 
       inFilter('status', input.statuses)
       inFilter('severity', input.severities)
       inFilter('rule', input.rules)
+      inFilter('origin', input.origins)
       if (input.taskId !== undefined) { where.push('task_id = ?'); params.push(input.taskId) }
       return allRows(db, `SELECT * FROM central_finding WHERE ${where.join(' AND ')}
         ORDER BY ${SEVERITY_ORDER}, last_seen_at DESC, id LIMIT ? OFFSET ?`, ...params, limit, offset).map(toFinding)

@@ -30,7 +30,8 @@ const DELEGATION_RULE = 'delegation'
 const ASSIGNMENT_OPEN_EVENT = 'work.assignment.open'
 const RETRY_CODES: readonly string[] = ['central_runtime_off', 'conversation_busy', 'budget_exhausted']
 
-type ReasonKind = 'task_stalled' | 'task_failed' | 'reminder_due' | 'task_overdue' | 'task_handoff'
+/** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts. */
+export type ReasonKind = 'task_stalled' | 'task_failed' | 'reminder_due' | 'task_overdue' | 'task_handoff' | 'health_finding' | 'health_changed'
 interface Reason { id: string; kind: ReasonKind; projectId: string | null; taskId: string | null; text: string; createdAt: number }
 type Enabled = Omit<CheckinSettings, 'usedToday'>
 
@@ -75,6 +76,18 @@ export interface WorkCheckin {
 
 const toReason = (r: Row): Reason => ({ id: String(r.id), kind: r.kind as ReasonKind, projectId: r.project_id === null ? null : String(r.project_id), taskId: r.task_id === null ? null : String(r.task_id), text: String(r.text), createdAt: Number(r.created_at) })
 
+/** One reason to queue; a second one with the same `dedupeKey` is dropped. */
+export interface CheckinReasonInput { kind: ReasonKind; dedupeKey: string; projectId: string | null; taskId: string | null; text: string; now: number }
+
+/**
+ * Queues a durable check-in reason. Delivery (window, daily limit, on/off setting, halted projects) is the tick's job,
+ * so callers outside the engine only record why Central should look. Returns whether a new row was written.
+ */
+export function queueCheckinReason(db: Database, r: CheckinReasonInput): boolean {
+  return execWrite(db, `INSERT INTO central_checkin_reason (id, dedupe_key, kind, project_id, task_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedupe_key) DO NOTHING`,
+    newId(), r.dedupeKey, r.kind, r.projectId, r.taskId, previewText(r.text, REASON_CHARS) ?? r.dedupeKey, r.now) > 0
+}
+
 /** The labelled prompt of a check-in; reasons are one JSON line each, so agent-written text cannot break out of the fence. */
 export function checkinPrompt(reasons: readonly { kind: string; projectId: string | null; taskId: string | null; text: string; createdAt: number }[]): string {
   const lines = reasons.map((r) => JSON.stringify({ kind: r.kind, projectId: r.projectId, taskId: r.taskId, at: new Date(r.createdAt).toISOString(), text: r.text }))
@@ -88,9 +101,8 @@ export function checkinPrompt(reasons: readonly { kind: string; projectId: strin
 export function createWorkCheckin({ db, store, now, settings, submit, notice, env }: WorkCheckinDeps): WorkCheckin {
   const ctx = { db, now }
 
-  const enqueue = (key: string, kind: ReasonKind, projectId: string | null, taskId: string | null, text: string): void => {
-    execWrite(db, `INSERT INTO central_checkin_reason (id, dedupe_key, kind, project_id, task_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedupe_key) DO NOTHING`,
-      newId(), key, kind, projectId, taskId, previewText(text, REASON_CHARS) ?? key, now())
+  const enqueue = (dedupeKey: string, kind: ReasonKind, projectId: string | null, taskId: string | null, text: string): void => {
+    queueCheckinReason(db, { kind, dedupeKey, projectId, taskId, text, now: now() })
   }
 
   const projectName = (id: string): string => String(getRow(db, 'SELECT name FROM project WHERE id = ?', id)?.name ?? id)

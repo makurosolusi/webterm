@@ -17,6 +17,7 @@ import { findingFingerprint } from './healthFingerprint'
 import { DEFAULT_MAX_BYTES_PER_FILE, DEFAULT_MAX_FILES, isSkippedPath, readText, trackedFiles } from './healthScan'
 import { SOURCE_EXTENSIONS, extOf, isSizeExempt, isTestFile, sizeFindings } from './healthRules.size'
 import { emptyCatchFindings, todoFindings } from './healthRules.text'
+import { notifyFinished } from './healthNotify'
 import type { HealthStore } from './healthStore'
 
 const log = createLogger('central.health')
@@ -142,7 +143,7 @@ export async function reviewDrafts(cwd: string, taskId: string, changes: Map<str
 const message = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /** Observer for `onWorkMove`: a move into needs_review starts one async review of that task's changes. */
-export function createHealthReview({ db, store, cwdOf }: HealthReviewDeps): HealthReview {
+export function createHealthReview({ db, store, now, cwdOf }: HealthReviewDeps): HealthReview {
   const running = new Map<string, Promise<void>>()
   const again = new Set<string>()
   const statusOf = (taskId: string): string | null => {
@@ -159,7 +160,8 @@ export function createHealthReview({ db, store, cwdOf }: HealthReviewDeps): Heal
     const scan = store.startScan(task.projectId, 'review')
     try {
       const result = await reviewDrafts(cwd, task.id, changes)
-      store.finishScan(scan.id, { ...result, rules: REVIEW_RULES, taskId: task.id })
+      const finished = store.finishScan(scan.id, { ...result, rules: REVIEW_RULES, taskId: task.id })
+      notifyFinished(db, finished, now())
     } catch (err) {
       store.failScan(scan.id, `review of task ${task.id}: ${message(err)}`)
       throw err

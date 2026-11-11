@@ -55,11 +55,13 @@ describe('health routes', () => {
     expect(r.ids(await r.call('GET', `${B}/findings`, 'projectId=p1&severity=high,low'))).toEqual(['a', 'c'])
     expect(r.ids(await r.call('GET', `${B}/findings`, 'projectId=p1&rule=empty_catch'))).toEqual(['c'])
     expect(r.ids(await r.call('GET', `${B}/findings`, 'taskId=t1'))).toEqual(['d'])
+    expect(r.ids(await r.call('GET', `${B}/findings`, 'projectId=p1&origin=review'))).toEqual(['d'])
+    expect(r.ids(await r.call('GET', `${B}/findings`, 'projectId=p1&origin=scan,analysis')).sort()).toEqual(['a', 'b', 'c'])
     const page = await r.call('GET', `${B}/findings`, 'projectId=p1&limit=2')
     expect((page.body as { hasMore: boolean }).hasMore).toBe(true)
     expect(r.ids(await r.call('GET', `${B}/findings`, 'projectId=p1&limit=2&offset=2')).length).toBe(2)
     for (const [q, error] of [['', 'invalid_project'], ['projectId=p1&status=gone', 'invalid_status'], ['projectId=p1&severity=x', 'invalid_severity'],
-      ['projectId=p1&rule=x', 'invalid_rule'], ['taskId=a%20b', 'invalid_task'], ['projectId=p1&limit=0', 'invalid_page']]) {
+      ['projectId=p1&rule=x', 'invalid_rule'], ['projectId=p1&origin=x', 'invalid_origin'], ['taskId=a%20b', 'invalid_task'], ['projectId=p1&limit=0', 'invalid_page']]) {
       expect(await r.call('GET', `${B}/findings`, q)).toEqual({ status: 400, body: { error } })
     }
     expect((await r.call('GET', `${B}/findings`, 'taskId=ghost')).status).toBe(404)

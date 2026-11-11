@@ -7,6 +7,7 @@ import type { FindingOrigin, HealthScanView } from '../../../shared/centralHealt
 import { allRows } from '../../ledger/ledgerCore'
 import { createLogger } from '../../logs'
 import { projectRepo } from '../../orchestratorRunProduction'
+import { notifyFinished } from './healthNotify'
 import { createHealthStore, type HealthStore } from './healthStore'
 import { scanProject, type ScanResult } from './healthScan'
 
@@ -58,8 +59,9 @@ export function createHealthService({ db, now, store, cwdOf, scan = (cwd) => sca
     const cwd = cwdOf(started.projectId)
     if (cwd === null) return failed(started, `project ${started.projectId} has no repository folder to scan`)
     try {
-      const result = await scan(cwd)
-      return store.finishScan(started.id, result).scan
+      const finished = store.finishScan(started.id, await scan(cwd))
+      notifyFinished(db, finished, now())
+      return finished.scan
     } catch (err) {
       log.warn('health.scan_failed', `health scan ${started.id} of project ${started.projectId} failed`, { scanId: started.id, projectId: started.projectId, error: errorText(err) })
       return failed(started, `scan failed: ${errorText(err)}`)
