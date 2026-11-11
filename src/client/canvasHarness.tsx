@@ -158,6 +158,8 @@ export interface CanvasFixture {
   settings?: Partial<Settings>
   /** URL the app boots at (path + search, e.g. `/w/ws-2?settings=canvas`). Default `/`. */
   url?: string
+  /** Capability ids answered `on` by `GET /api/capabilities` (e.g. `['central']`). Without it the route 404s. */
+  capabilitiesOn?: string[]
 }
 
 /** The URL the mounted app is at now (path + search), as its router sees it. */
@@ -222,6 +224,7 @@ function routeFetch(fx: CanvasFixture) {
       return reply(all.find((w) => w.id === id) ?? ws)
     }
     if (path === '/api/browser/status' && fx.browserStatus) return reply(fx.browserStatus)
+    if (path === '/api/capabilities' && fx.capabilitiesOn) return reply({ capabilities: fx.capabilitiesOn.map((id) => ({ id, status: 'on' })), advanced: {} })
     if (path === '/api/active') return reply({ id: fx.blank ? null : HARNESS_WS_ID })
     if (path === '/api/fs/list') return reply(fx.dirs[arg] ?? [])
     if (path === '/api/fs/read') return reply({ content: fx.files?.[arg] ?? '' })

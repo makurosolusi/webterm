@@ -3,6 +3,7 @@
 // under `webterm.secondarySideBar`; the width is a `panelSize` store like the bottom panel height.
 import { useSyncExternalStore } from 'react'
 import { createPanelSize } from './panelSize'
+import { appNavigate } from './appRoute'
 
 export type SideBarView = 'chat' | 'central'
 export interface SideBarState {
@@ -126,13 +127,18 @@ export type CentralTab = 'status' | 'abilities' | 'agents' | 'skills'
 export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
 let centralRequest: CentralTabRequest | null = null
 
-/** Opens the side bar on the Central view at `tab` (Central chat commands); `halt` also asks the kill-switch confirmation. */
+/** Opens the side bar on the Central view at `tab` (Central chat commands); `halt` also asks the kill-switch
+ *  confirmation. The tab goes into the URL (`?ctab=`) when the app router is up. */
 export function openCentralTab(tab: CentralTab, halt = false): void {
   centralRequest = { tab, seq: (centralRequest?.seq ?? 0) + 1, ...(halt ? { halt } : {}) }
-  setSideBar({ open: true, view: 'central' })
+  // Under the router the URL alone: `?ctab=` opens the side bar (`useCentralTabUrlSync`). Opening it here
+  // too would render Central before the (transition) navigation lands and record `status` over `tab`.
+  const nav = appNavigate()
+  if (nav) nav.setCentralTab(tab)
+  else setSideBar({ open: true, view: 'central' })
 }
 
-/** The latest `openCentralTab` request (not persisted: a reload starts on the panel's default tab). */
+/** The latest `openCentralTab` request (not persisted; under the app router the tab itself is in the URL). */
 export function useCentralTabRequest(): CentralTabRequest | null {
   return useSyncExternalStore(subscribe, () => centralRequest)
 }

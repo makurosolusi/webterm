@@ -74,7 +74,7 @@ export default function App() {
   const [edges, setEdges] = useState<Edge[]>([])
   const [statuses, setStatuses] = useState<Record<string, AgentStatus>>({})
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
-  const { route, actions: routeActions, board, setBoard, showSettings, setShowSettings, showHelp, setShowHelp } = useAppUrlState() // overlays live in the URL (./appRoute)
+  const { route, actions: routeActions, board, setBoard, setShowSettings, showHelp, setShowHelp } = useAppUrlState() // overlays live in the URL (./appRoute)
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam side bar: ikon view-nya (Layers/Sessions/History) ada di Dock.
   const sideBar = useAppSideBar()
@@ -267,9 +267,9 @@ export default function App() {
           <AppBottomPanel
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
             onFocus={(id) => void onFocus(id)}
-            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} />
+            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} panel={route.panel} />
           {/* Chat & Central di kanan (ala Copilot Chat): kolom grid `aux`, canvas menyempit, tidak ditutupi. */}
-          <SecondarySideBar centralEnabled={centralEnabled} />
+          <SecondarySideBar centralEnabled={centralEnabled} ctab={route.ctab} setCentralTab={routeActions.setCentralTab} />
           <OutputPanelHost />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
@@ -286,7 +286,7 @@ export default function App() {
       {cleanView && <CleanViewHint />}
       <ConnectionStatus onAuthRequired={requireSignIn} />{/* one app-wide surface; `auth` reuses the boot gate above */}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
+      <SettingsHost section={route.settings} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (
         <Omnibox

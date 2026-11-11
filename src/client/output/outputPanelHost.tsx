@@ -7,7 +7,7 @@ import type { VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import type { BottomPanelView } from '../bottomPanelHost'
 import { useLogStream } from './useLogStream'
 import {
-  closeLevelPicker, closeOutput, publishOutputCounts, registerOutputActions, setOutputLevel,
+  closeLevelPicker, closeOutput, openOutput, publishOutputCounts, registerOutputActions, setOutputLevel,
   useOutputPanelState,
 } from './outputCommands'
 
@@ -27,7 +27,7 @@ const OutputPanel = lazy(() => import('./OutputPanel'))
 export function useOutputView(): BottomPanelView {
   const { open, focusToken } = useOutputPanelState()
   return {
-    id: 'output', label: 'Output', tooltip: 'Output', open, onClose: closeOutput,
+    id: 'output', label: 'Output', tooltip: 'Output', open, onClose: closeOutput, onOpen: openOutput,
     render: () => <Suspense fallback={null}><OutputPanel focusFilterToken={focusToken} /></Suspense>,
   }
 }

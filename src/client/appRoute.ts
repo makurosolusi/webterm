@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import type { SectionId } from './SettingsPanel'
+import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
 import type { CentralTab } from './secondarySideBar.store'
 
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS` (a test keeps both lists equal). Listed here,
@@ -15,6 +16,16 @@ export const SETTINGS_ROUTE_SECTIONS = [
   'terminal', 'interaction', 'shell', 'agent', 'central', 'rules', 'memory', 'automations', 'spending',
   'canvas', 'background', 'capabilities', 'health', 'developer',
 ] as const satisfies readonly SectionId[]
+/** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
+const LEGACY_SETTINGS_SECTION: Readonly<Record<string, SettingsRouteSection>> = {
+  env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
+}
+
+/** Section for an id from a link, an event or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Terminal. */
+export function toSettingsRouteSection(id: string): SettingsRouteSection {
+  return LEGACY_SETTINGS_SECTION[id] ?? pick(SETTINGS_ROUTE_SECTIONS, id) ?? 'terminal'
+}
+
 /** `?ctab=` values: the tabs of the Central control panel. */
 export const CENTRAL_ROUTE_TABS = ['status', 'abilities', 'agents', 'skills', 'memory'] as const satisfies readonly (CentralTab | 'memory')[]
 /** `?panel=` values: the views of the bottom panel (`App.bottomPanel`). */
@@ -93,8 +104,9 @@ export interface AppRouteActions {
   /** Open Settings on `section` (default Terminal); already open → switch section in place. */
   openSettings: (section?: SettingsRouteSection) => void
   closeSettings: () => void
-  setCentralTab: (tab: CentralRouteTab | null) => void
-  setPanel: (panel: BottomPanelRouteId | null) => void
+  /** `replace` records what is already on screen (a side bar or panel restored at boot) without a Back step. */
+  setCentralTab: (tab: CentralRouteTab | null, opts?: { replace?: boolean }) => void
+  setPanel: (panel: BottomPanelRouteId | null, opts?: { replace?: boolean }) => void
   setView: (view: AppRouteView | null) => void
   setHelp: (open: boolean) => void
   /** Show board `id` (null = no board). `replace` for corrections that must not add a Back step. */
@@ -113,8 +125,8 @@ function makeActions(latest: { current: { route: AppRoute; navigate: NavigateFun
   return {
     openSettings: (section = 'terminal') => change({ settings: section }),
     closeSettings: () => change({ settings: null }),
-    setCentralTab: (ctab) => change({ ctab }),
-    setPanel: (panel) => change({ panel }),
+    setCentralTab: (ctab, opts) => change({ ctab }, opts?.replace === true),
+    setPanel: (panel, opts) => change({ panel }, opts?.replace === true),
     setView: (view) => change({ view }),
     setHelp: (help) => change({ help }),
     goWorkspace: (workspaceId, opts) => change({ workspaceId }, opts?.replace === true),

@@ -3,7 +3,7 @@
 // board on screen and `/w/:workspaceId`.
 import { useEffect, useMemo, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { useAppRoute, type AppRoute, type AppRouteActions } from './appRoute'
+import { useAppRoute, type AppRoute, type AppRouteActions, type SettingsRouteSection } from './appRoute'
 import type { Workspace } from '../shared/workspace'
 
 /** URL-derived overlay state with the setter shapes App's children already take. */
@@ -12,7 +12,6 @@ export interface AppUrlState {
   actions: AppRouteActions
   board: boolean
   setBoard: Dispatch<SetStateAction<boolean>>
-  showSettings: boolean
   setShowSettings: (open: boolean) => void
   showHelp: boolean
   setShowHelp: (open: boolean) => void
@@ -23,16 +22,20 @@ export function useAppUrlState(): AppUrlState {
   const { route, actions } = useAppRoute()
   const routeRef = useRef(route)
   routeRef.current = route
+  // Opening Settings from the app (Mod+, gear) lands on the section last shown in this page session,
+  // like VS Code's Settings editor; a fresh page starts on Terminal (a reload with `?settings=` keeps its section).
+  const lastSettings = useRef<SettingsRouteSection>('terminal')
+  if (route.settings) lastSettings.current = route.settings
   const setters = useMemo(() => ({
     // `routeRef`, not the render's `route`: a toggle must flip what the URL says NOW.
     setBoard: (v: SetStateAction<boolean>) => {
       const open = typeof v === 'function' ? v(routeRef.current.view === 'kanban') : v
       actions.setView(open ? 'kanban' : null)
     },
-    setShowSettings: (open: boolean) => (open ? actions.openSettings(routeRef.current.settings ?? undefined) : actions.closeSettings()),
+    setShowSettings: (open: boolean) => (open ? actions.openSettings(routeRef.current.settings ?? lastSettings.current) : actions.closeSettings()),
     setShowHelp: actions.setHelp,
   }), [actions])
-  return { route, actions, board: route.view === 'kanban', showSettings: route.settings !== null, showHelp: route.help, ...setters }
+  return { route, actions, board: route.view === 'kanban', showHelp: route.help, ...setters }
 }
 
 export interface WorkspaceUrlSyncDeps {

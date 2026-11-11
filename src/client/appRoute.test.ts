@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BOTTOM_PANEL_ROUTE_IDS, CENTRAL_ROUTE_TABS, EMPTY_APP_ROUTE, SETTINGS_ROUTE_SECTIONS,
-  buildAppHref, navigationMode, parseAppRoute, type AppRoute,
+  buildAppHref, navigationMode, parseAppRoute, toSettingsRouteSection, type AppRoute,
 } from './appRoute'
 import { SETTINGS_SECTIONS } from './SettingsPanel'
 import { knownTab } from './central/CentralControlPanel'
@@ -66,5 +66,15 @@ describe('whitelists match the surfaces they open', () => {
   })
   it('bottom panel ids are the view ids', () => {
     expect([...BOTTOM_PANEL_ROUTE_IDS].sort()).toEqual(['activity', 'output', 'problems', 'tasks'])
+  })
+})
+
+describe('toSettingsRouteSection', () => {
+  it('maps legacy ids, keeps known ones, sends the rest to Terminal', () => {
+    expect(toSettingsRouteSection('background:workspace')).toBe('background')
+    expect(toSettingsRouteSection('env')).toBe('capabilities')
+    expect(toSettingsRouteSection('control')).toBe('health')
+    expect(toSettingsRouteSection('memory')).toBe('memory')
+    expect(toSettingsRouteSection('preview')).toBe('terminal')
   })
 })
