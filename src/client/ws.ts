@@ -10,11 +10,11 @@ import { HEALTH_PATH, WS_PATH } from '../shared/protocol'
 import type { ClientMsg, ExitMsg, HelloMsg, ServerMsg } from '../shared/protocol'
 import { replayOpen } from './ws.replayOpen'
 import { type ConnectionPhase, getConnection, reconnectDelay, setConnection, setRetryHandler } from './ws.connection'
-import { dispatchBroadcast } from './ws.listeners'
+import { dispatchBroadcast, notifyReconnect } from './ws.listeners'
 import { browserOffline, createHeartbeat, installWakeTriggers } from './ws.liveness'
 
 export { replayOpen } from './ws.replayOpen'
-export { getStatus, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
+export { getStatus, onReconnect, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -64,26 +64,9 @@ let attempts = 0
 /** The server refused our credential: no retry loop until `retryNow()`. */
 let authStopped = false
 let probing = false
-let triggersInstalled = false
+let uninstallTriggers: (() => void) | null = null
 /** Build of the first `hello` this page met: what its bundle was served with. */
 let pageBuild: string | undefined
-
-const reconnectListeners = new Set<() => void>()
-
-/**
- * Daftarkan callback yang jalan setelah tiap RECONNECT (bukan koneksi pertama), sesudah replay
- * `open` dan antrean; untuk memulihkan state per-koneksi di server (mis. langganan fswatch).
- */
-export function onReconnect(cb: () => void): () => void {
-  reconnectListeners.add(cb)
-  return () => { reconnectListeners.delete(cb) }
-}
-
-function url(): string {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  // No credential in the URL: the same-origin upgrade carries the `wt_ui` session cookie.
-  return `${proto}://${location.host}${WS_PATH}`
-}
 
 const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
 const waitingPhase = (): ConnectionPhase => (everConnected ? 'reconnecting' : 'connecting')
@@ -177,10 +160,17 @@ function socketClosed(): void {
   if (failedConnect) probeAuth()
 }
 
+/**
+ * Open the socket. Every path (first subscribe, reconnect timer, wake trigger, retry) routes here.
+ * No `location` = the DOM is gone: a timer outlived its page (a torn-down jsdom test environment),
+ * and there is no origin to connect to.
+ */
 function connect() {
-  if (!triggersInstalled) { triggersInstalled = true; installWakeTriggers({ wake, offline: wentOffline }) }
+  if (typeof location === 'undefined') return
+  uninstallTriggers ??= installWakeTriggers({ wake, offline: wentOffline })
   setConnection({ phase: waitingPhase(), attempt: attempts })
-  ws = new WebSocket(url())
+  // No credential in the URL: the same-origin upgrade carries the `wt_ui` session cookie.
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${WS_PATH}`)
   ws.onopen = () => {
     // A reconnect re-attaches to live PTYs. The xterm still holds what it showed before the drop,
     // so its open carries `since`: the server sends only what came after, or `reset` first (the
@@ -199,9 +189,7 @@ function connect() {
     const pending = [...queue.values()]
     queue.clear()
     for (const m of pending) ws!.send(JSON.stringify(m))
-    if (wasReconnect) for (const cb of [...reconnectListeners]) {
-      try { cb() } catch (err) { console.warn('ws: onReconnect listener failed', err) }
-    }
+    if (wasReconnect) notifyReconnect()
   }
   ws.onmessage = (ev) => {
     let msg: ServerMsg
@@ -234,6 +222,17 @@ function connect() {
   }
   ws.onclose = socketClosed
   ws.onerror = () => ws?.close()
+}
+
+/** Test teardown: drop the socket, every timer, the window listeners and all per-page state. */
+export function __resetWsForTests(): void {
+  clearTimer()
+  heartbeat.stop()
+  uninstallTriggers?.(); uninstallTriggers = null
+  if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); ws = null }
+  subs.clear(); queue.clear(); closedByUs.clear()
+  everConnected = opened = authStopped = probing = false; attempts = 0; pageBuild = undefined
+  setConnection({ phase: 'connecting', attempt: 0, bootId: undefined, build: undefined, serverRestartedAt: undefined, buildChanged: false })
 }
 
 export function send(msg: ClientMsg) {

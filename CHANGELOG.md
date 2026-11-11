@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- `bun run dev:fresh` starts a second, isolated webterm that behaves like a first run on a new machine (own temp data dir, home, Claude config, ports and tmux socket), next to your normal one; Ctrl+C stops it and deletes everything it wrote.
 - Link previews (Open Graph / Twitter cards with a 1200x630 image) when a webterm link is shared, using the address the link was opened from.
 - Editor and diff nodes: Word wrap toggle (⌥Z), on by default for Markdown and text, remembered per node.
 - Fit width to content: in the node menu, or double-click the right edge while resizing.

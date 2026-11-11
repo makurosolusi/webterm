@@ -1,6 +1,6 @@
 // resolveHostPort: presedensi host & parsing port, pakai env palsu agar tak menyentuh process.env.
 import { test, expect } from 'bun:test'
-import { DEFAULT_PORT, parsePort, resolveHostPort } from './serverConfig'
+import { DEFAULT_PORT, VITE_CACHE_DIR_KEY, parsePort, resolveHostPort, viteCacheDir } from './serverConfig'
 
 /** Pesan galat yang dilempar fn, atau undefined bila tidak melempar (typings bun:test tak punya toThrow). */
 function thrown(fn: () => unknown): string | undefined {
@@ -48,4 +48,10 @@ test('parsePort menolak 0, di atas 65535, non-angka, desimal, dan negatif', () =
   for (const raw of ['0', '65536', 'abc', '80.5', '-1']) {
     expect(thrown(() => parsePort(raw))).toBe(`PORT="${raw}" is not a valid port (1-65535)`)
   }
+})
+
+test('viteCacheDir: unset or blank keeps Vite default, a value is passed through trimmed', () => {
+  expect(viteCacheDir({})).toBe(undefined)
+  expect(viteCacheDir({ [VITE_CACHE_DIR_KEY]: '  ' })).toBe(undefined)
+  expect(viteCacheDir({ [VITE_CACHE_DIR_KEY]: ' /tmp/x/vite ' })).toBe('/tmp/x/vite')
 })
