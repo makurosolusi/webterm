@@ -6,6 +6,7 @@ import { screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { mountHeld, unmountCanvas } from './canvasHarness'
 import { getConnection } from './ws.connection'
+import { CONNECTION_TEXT } from './ConnectionStatus'
 
 class FakeWS {
   static instances: FakeWS[] = []
@@ -32,5 +33,5 @@ test('the Welcome screen opens the shared socket, reaches connected and shows no
   expect(getConnection().phase).toBe('connecting') // a real attempt is in flight
   FakeWS.instances[0].up()
   await waitFor(() => expect(getConnection().phase).toBe('connected'))
-  expect(screen.getByRole('status').textContent).toBe('')
+  expect(screen.getByRole('status', { name: CONNECTION_TEXT.label }).textContent).toBe('')
 })

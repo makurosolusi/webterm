@@ -20,10 +20,6 @@ import Omnibox from './Omnibox'
 import { openEditorAt, useOmnibox } from './Omnibox.open'
 import { setLspFileOpener } from './editorLsp.store'
 import { useAppCommands } from './commandRegistry.defaults'
-import { useCommandKeybindings } from './commandRegistry'
-import { useKeybindingsSync } from './keybindings.store'
-import { usePresencePing } from './presencePing'
-import { connectEagerly } from './ws'
 import OutputPanelHost from './output/outputPanelHost'
 import { TASK_BOARD_STATUS_ITEM } from './central/work/taskBoardView'
 import { usePortsStatusItems } from './PortsChip'
@@ -51,7 +47,7 @@ import { useLayersCommands } from './layers.commands'
 import { useAppTabs } from './App.tabs'
 import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
-import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
+import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds, useAppSession } from './App.hooks'
 import { useAppUrlState, useWorkspaceUrlSync } from './App.route'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -106,10 +102,8 @@ export default function App() {
   const applyRef = useRef<((ws: Workspace) => void) | null>(null) // set below, once `applyWorkspace` exists
   const { scheduleSave, flushSave, cancelSave, saveStatusItems } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces, onAuthRequired: requireSignIn })
 
-  // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
-  // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
-  // di test ia menulis lewat `fetch` yang stub-nya sudah dicabut — rejection liar yang tidak bisa
-  // ditelusuri ke test mana pun, dan muncul-hilang tergantung balapan.
+  // Batalkan simpanan menggantung saat unmount: tanpa ini timer menembak PUT setelah App hilang —
+  // di test lewat `fetch` yang stub-nya sudah dicabut (rejection liar, flaky antar test).
   useEffect(() => () => cancelSave(), [cancelSave])
 
   // Concern viewport — readout zoom, zoom/fit, riwayat pandangan. Lihat `./canvasViewport`:
@@ -209,10 +203,7 @@ export default function App() {
     toggleSessions: () => sideBar.setOpen((v) => !v), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
     toggleBoard: () => setBoard((v) => !v),
   })
-  useKeybindingsSync(settings.keybindings, settingsHydrated, update)
-  useCommandKeybindings()
-  usePresencePing(!authRequired)
-  useEffect(() => { if (!authRequired) connectEagerly() }, [authRequired]) // App mounts only signed in (appBoot.tsx)
+  useAppSession(!authRequired, settings, settingsHydrated, update)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // SignInScreen tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
