@@ -15,6 +15,13 @@ export const AGENT_CHAT_PATH = '/api/agent-chat'
 export const AGENT_CHAT_SSE_EVENT = 'agent-chat'
 /** Items per history page ("Load earlier"). */
 export const AGENT_CHAT_HISTORY_PAGE = 50
+/** Mirrors `IDEMPOTENCY_HEADER` in src/server/agentChat/agentChat.idempotency.ts. */
+export const IDEMPOTENCY_HEADER = 'Idempotency-Key'
+
+/** Random client message id (the idempotency key of one send); not a secret. */
+export function newClientMessageId(): string {
+  return crypto.randomUUID()
+}
 
 const EVENT_TYPES = new Set<string>(['status', 'init', 'delta', 'message', 'tool', 'permission', 'permissionResolved', 'result', 'notice', 'mode',
   'config', 'context', 'commandOutput', 'compact', 'reset', 'commandsChanged', 'queued', 'rateLimit', 'task'])
@@ -135,8 +142,19 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
       throw new AgentChatApiError(op, nodeId, status, code, agentChatErrorMessage(op, err))
     }
   }
-  const post = (op: AgentChatOperation, verb: string, body: unknown): Promise<void> =>
-    call<unknown>(op, verb, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => undefined)
+  const post = (op: AgentChatOperation, verb: string, body: unknown, headers: Record<string, string> = {}): Promise<void> =>
+    call<unknown>(op, verb, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }).then(() => undefined)
+  // Idempotent send/fork: each message gets a client id sent as `Idempotency-Key`; the server
+  // answers a repeat of that key from the first attempt. A failed request keeps its id, so the
+  // view's Retry (the same verb + body again) reuses it: if the first attempt did reach Claude and
+  // only the answer was lost, the retry does not send the message twice.
+  let unconfirmed: { what: string; id: string } | null = null
+  const once = (op: 'send' | 'fork', body: Record<string, unknown>): Promise<void> => {
+    const what = JSON.stringify([op, body])
+    const id = unconfirmed?.what === what ? unconfirmed.id : newClientMessageId()
+    unconfirmed = { what, id }
+    return post(op, op, body, { [IDEMPOTENCY_HEADER]: id }).then(() => { if (unconfirmed?.id === id) unconfirmed = null })
+  }
 
   return {
     stream: (opts) => openSseStream<AgentChatEvent>({
@@ -145,7 +163,7 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
       parse: (_type, data) => parseAgentChatFrame(data),
       reapply: (e) => e.t === 'init' || e.t === 'permission',
     }, { ...opts, ...(createSource ? { createSource } : {}) }),
-    send: (text, priority, images) => post('send', 'send', { text, ...(priority ? { priority } : {}), ...(images?.length ? { images } : {}) }),
+    send: (text, priority, images) => once('send', { text, ...(priority ? { priority } : {}), ...(images?.length ? { images } : {}) }),
     upload: async (file, name) => {
       const body = await call<{ path?: unknown }>('upload', `upload?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file })
       if (typeof body?.path !== 'string') throw new AgentChatApiError('upload', nodeId, 502, 'bad_response', `The server did not return a path for ${name}.`)
@@ -180,7 +198,7 @@ export function createAgentChatTransport(nodeId: string, createSource?: (url: st
         ...(typeof b.skippedLinks === 'number' ? { skippedLinks: b.skippedLinks } : {}),
       }
     },
-    fork: (messageId, text, images) => post('fork', 'fork', { messageId, text, ...(images?.length ? { images } : {}) }),
+    fork: (messageId, text, images) => once('fork', { messageId, text, ...(images?.length ? { images } : {}) }),
     stopTask: (taskId) => post('stop task', 'stoptask', { taskId }),
   }
 }

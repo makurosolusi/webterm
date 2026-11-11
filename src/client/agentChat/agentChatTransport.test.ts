@@ -180,3 +180,29 @@ describe('agent chat transport: control verbs', () => {
     expect(await t.fork('x', 'y').catch((e: unknown) => e)).toMatchObject({ message: expect.stringContaining('not in the saved transcript') })
   })
 })
+
+describe('agent chat transport: idempotent send', () => {
+  const keyOf = (i: number): string | undefined => (call(i).init.headers as Record<string, string>)['Idempotency-Key']
+
+  it('each send carries a fresh Idempotency-Key; a retry of a failed send reuses it until it lands', async () => {
+    const t = createAgentChatTransport('n1')
+    await t.send('one')
+    await t.send('one') // a deliberate second "one" after a success is a new message
+    expect(keyOf(0)).toMatch(/^[A-Za-z0-9_-]{8,128}$/)
+    expect(keyOf(1)).not.toBe(keyOf(0))
+
+    fetchMock.mockRejectedValueOnce(new TypeError('offline')) // answer lost: the server may have it
+    await t.send('two').catch(() => undefined)
+    await t.send('two') // the view's Retry
+    expect(keyOf(3)).toBe(keyOf(2))
+    await t.send('two')
+    expect(keyOf(4)).not.toBe(keyOf(3)) // confirmed: the id is spent
+
+    fetchMock.mockRejectedValueOnce(new TypeError('offline'))
+    await t.fork('m-1', 'edited').catch(() => undefined)
+    await t.send('other') // a different message never inherits the failed one's id
+    await t.fork('m-1', 'edited')
+    expect(keyOf(6)).not.toBe(keyOf(5))
+    expect(keyOf(7)).not.toBe(keyOf(5)) // 'other' replaced the pending one: Retry after that is a new send
+  })
+})

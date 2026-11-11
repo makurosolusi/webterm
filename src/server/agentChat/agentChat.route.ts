@@ -14,6 +14,7 @@ import { CONTROL_VERBS, controlVerb, type ListSessions } from './agentChat.route
 import { BRANCH_VERBS, branchVerb, type ForkSession } from './agentChat.route.branch'
 import { AGENT_CHAT_BODY_MAX_BYTES, bad, fail, ok, readObject, uint, type Body, type Ctx, type Fail } from './agentChat.route.core'
 import { AGENT_CHAT_SSE_EVENT, streamVerb } from './agentChat.route.stream'
+import { createIdempotency, idempotencyKey, type Idempotency } from './agentChat.idempotency'
 
 const log = createLogger('agent-chat')
 
@@ -34,7 +35,11 @@ export interface AgentChatRouteDeps {
   listSessions?: ListSessions
   /** SDK `forkSession` (POST fork); tests inject a fake. */
   forkSession?: ForkSession
+  /** Replay store of `Idempotency-Key` send/fork answers (default: one per process). */
+  idempotency?: Idempotency
 }
+
+const sharedIdempotency = createIdempotency()
 
 function decodeNodeId(raw: string): string | undefined {
   try {
@@ -131,6 +136,14 @@ export async function agentChatRoute(c: Ctx, deps: AgentChatRouteDeps): Promise<
   if (c.method !== want) return fail(c, { status: 405, error: 'method_not_allowed', reason: `${verb} takes ${want}.` })
   if (verb === 'stream') return streamVerb(c, deps, nodeId, s)
   if (verb in CONTROL_VERBS) return controlVerb(c, deps, nodeId, verb, s)
+  // A retried send/fork (same key) is answered from the first attempt: one message to Claude.
+  const key = verb === 'send' || verb === 'fork' ? idempotencyKey(c.req.headers) : undefined
+  if (key) {
+    return (deps.idempotency ?? sharedIdempotency).run(c.res, `${nodeId}\n${verb}`, key, (res) => {
+      const inner = { ...c, res }
+      return verb === 'fork' ? branchVerb(inner, deps, nodeId, verb, s) : post(inner, deps, nodeId, verb, s)
+    })
+  }
   if (verb in BRANCH_VERBS) return branchVerb(c, deps, nodeId, verb, s)
   if (verb === 'history') return history(c, deps, nodeId, s)
   return post(c, deps, nodeId, verb, s)
