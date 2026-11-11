@@ -41,6 +41,7 @@ export function makeClient(columns: Partial<Record<BoardColumn, ColumnState>>, o
     abandonGoal: vi.fn(async () => undefined),
     listReminders: vi.fn(async () => ({ items: [], hasMore: false })),
     cancelReminder: vi.fn(async () => undefined),
+    listTaskFindings: vi.fn(async () => ({ items: [], hasMore: false })),
     ...over,
   }
   return client as unknown as { [K in keyof TaskBoardClient]: Mock<TaskBoardClient[K]> }

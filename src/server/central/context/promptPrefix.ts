@@ -20,7 +20,7 @@ const MINUTE_MS = 60_000
 export const ACTIVE_HUMAN_TURNS = 3
 export const ACTIVE_WINDOW_MS = 60 * MINUTE_MS
 
-/** The stable prefix text: static system first, then stable project context. */
+/** The stable prefix text: static system first (steward prompt incl. the advisor duty, advisorPrompt.ts), then stable project context. */
 export function centralPrefixText(stableContext: string): string {
   return [CENTRAL_STEWARD_PROMPT, stableContext].filter((p) => p !== '').join('\n\n')
 }

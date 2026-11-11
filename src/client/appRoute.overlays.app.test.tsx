@@ -10,6 +10,7 @@ import { openCentralTab, reloadSideBarFromStorage, setSideBar } from './secondar
 import { setTimelineOpen } from './Timeline'
 import { resetOutputStateForTest } from './output/outputCommands'
 import { resetCapabilitiesCache } from './useCapabilities'
+import { HL } from './central/health/healthModel'
 
 beforeAll(installCanvasDom)
 beforeEach(() => {
@@ -79,6 +80,12 @@ describe('Central tab in the URL', () => {
     expect(screen.getByRole('tab', { name: 'Control' }).getAttribute('aria-selected')).toBe('true')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Agents' }))
     await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?ctab=agents`))
+  })
+
+  it('a reload with `?ctab=health` shows the Central side bar on Health', async () => {
+    await mountCanvas(fx(`${BOARD}?ctab=health`, ['central']))
+    await waitFor(async () => expect((await screen.findByRole('tab', { name: HL.tab })).getAttribute('aria-selected')).toBe('true'))
+    expect(harnessUrl).toBe(`${BOARD}?ctab=health`)
   })
 
   it('openCentralTab writes `?ctab=`; Back closes the side bar, Forward reopens it', async () => {
