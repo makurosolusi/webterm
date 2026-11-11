@@ -55,6 +55,9 @@ export function resetProviderConfig(store: SecretStore = defaultStore()): void {
   store.remove(CONFIG_KEY)
 }
 
+/** True once a provider choice was saved (any mode, even a damaged file): the user configured Claude. */
+export const providerSaved = (store: SecretStore = defaultStore()): boolean => store.read(CONFIG_KEY) !== null
+
 export const loadSecret = (store: SecretStore = defaultStore()): string | null => store.read(SECRET_KEY)
 
 /** Saves config; `secret` undefined = keep, null = remove, string = replace. */

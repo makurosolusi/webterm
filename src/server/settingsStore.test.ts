@@ -34,6 +34,13 @@ describe('nextSettings', () => {
     expect(nextSettingsDocument('{"quickDrag":"off"}', { quickDrag: 'bogus' }).doc.quickDrag).toBe('cmdCtrl')
   })
 
+  it('setup PATCH merges one step into the stored steps and drops unknown ones', () => {
+    const stored = JSON.stringify({ setup: { completedAt: null, steps: { claude: 'done' } } })
+    const { doc, settings } = nextSettingsDocument(stored, { setup: { steps: { browser: 'skipped', bogus: 'done', central: 'nah' } } })
+    expect(settings.setup).toEqual({ completedAt: null, steps: { claude: 'done', browser: 'skipped' } })
+    expect(doc.setup).toEqual(settings.setup)
+  })
+
   it('ignores a non-object patch rather than wiping the store', () => {
     expect(nextSettings('{"fontSize":21}', null).fontSize).toBe(21)
     expect(nextSettings('{"fontSize":21}', 'nope').fontSize).toBe(21)
