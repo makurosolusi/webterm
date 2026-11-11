@@ -38,6 +38,9 @@ SingleSelect, SplitLayout, TabHeader, TabPanel, Tabs, Table (plus Body, Cell,
 Header, HeaderCell, Row), Textarea, Textfield, ToolbarButton, ToolbarContainer,
 Tree, TreeItem.
 
+`ToolbarButton` adds a `disabled` prop the element lacks (`toolbarButton.tsx`): ARIA on the inner
+focusable button, dimmed look, and click/Enter/Space blocked. Use it instead of `aria-disabled`.
+
 ## Not provided by the library
 
 These have no component in v2.4.0 and must stay on existing webterm/Radix

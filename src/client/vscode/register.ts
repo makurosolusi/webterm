@@ -46,7 +46,7 @@ export const TabPanel = keepRefCleanup(Lit.VscodeTabPanel)
 export const Tabs = keepRefCleanup(Lit.VscodeTabs)
 export const Textarea = keepRefCleanup(Lit.VscodeTextarea)
 export const Textfield = keepRefCleanup(Lit.VscodeTextfield)
-export const ToolbarButton = keepRefCleanup(Lit.VscodeToolbarButton)
+export { ToolbarButton } from './toolbarButton'
 export const ToolbarContainer = keepRefCleanup(Lit.VscodeToolbarContainer)
 export const Tree = keepRefCleanup(Lit.VscodeTree)
 export const TreeItem = keepRefCleanup(Lit.VscodeTreeItem)

@@ -69,8 +69,6 @@ export interface OrchestratorRunDeps {
   now?: () => number
   /** Test seam: is the default profile's program installed? Production probes PATH (only matters when nothing is configured). */
   claudeOnPath?: () => boolean
-  /** Principal workers are spawned under (K3 lineage): `central` for Central's task.run; absent = human-ui. */
-  spawnParent?: string
 }
 
 export function projectRepo(db: Database, projectId: string): string | null {
@@ -202,7 +200,6 @@ export async function productionRuntime(
     cmd: compose.cmd,
     agentId,
     plan: compose.plan as PlanStore,
-    ...(deps.spawnParent ? { spawnParent: deps.spawnParent } : {}),
   })
 }
 

@@ -49,8 +49,8 @@ export interface NodeToolbarProps {
  * yang tak muat disembunyikan dan pindah ke atas menu "…" (`nodeToolbar.overflow`). "…", Stop dan Close
  * tak pernah ikut hilang.
  *
- * `maximizeDisabled` memberi `aria-disabled` di host; `vscode-toolbar-button` v2.4.0 tidak punya
- * properti `disabled`, jadi CSS yang mematikan pointer dan penjaga di handler yang menahan aksinya.
+ * `maximizeDisabled` memakai prop `disabled` milik `ToolbarButton` (ARIA di tombol yang menerima fokus,
+ * tampilan redup, klik/Enter/Space ditahan).
  */
 export default function NodeToolbar(props: NodeToolbarProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
@@ -79,8 +79,8 @@ export default function NodeToolbar(props: NodeToolbarProps) {
       node: (
         <ToolbarButton
           label={maxLabel} title={maxLabel} data-title={maxLabel}
-          aria-disabled={maximizeOff || undefined}
-          onClick={() => { if (!maximizeOff) props.onToggleMaximize() }}
+          disabled={maximizeOff}
+          onClick={props.onToggleMaximize}
         ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton>
       ),
       menuItem: { type: 'item', id: 'maximize', label: maxLabel, disabled: maximizeOff, onSelect: props.onToggleMaximize } as const,

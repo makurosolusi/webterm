@@ -143,6 +143,37 @@ describe('NodeToolbar', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
+  // The focusable element is the shadow <button>; the host carries no role (vscode-toolbar-button has no `disabled`).
+  const maxButton = async (c: HTMLElement) => {
+    const host = c.querySelector('[data-title="Maximize"]') as HTMLElement & { updateComplete: Promise<unknown> }
+    await host.updateComplete
+    return { host, inner: host.shadowRoot!.querySelector('button')! }
+  }
+
+  it('disabled Maximize: aria-disabled on the focusable button, dimmed, and a click (what Enter/Space dispatch on a button) does nothing', async () => {
+    const onToggleMaximize = vi.fn()
+    const { container } = render(<NodeToolbar {...base} maximized={false} maximizeDisabled onToggleMaximize={onToggleMaximize} />)
+    const { host, inner } = await maxButton(container)
+    expect(inner.getAttribute('aria-disabled')).toBe('true')
+    expect(inner.style.cursor).toBe('default')
+    expect(host.style.opacity).toBe('0.4')
+    fireEvent.click(inner)
+    fireEvent.click(host)
+    expect(onToggleMaximize).not.toHaveBeenCalled()
+  })
+
+  it('enabled Maximize: no aria-disabled, and a click toggles', async () => {
+    const onToggleMaximize = vi.fn()
+    const { container, rerender } = render(<NodeToolbar {...base} maximized={false} maximizeDisabled onToggleMaximize={onToggleMaximize} />)
+    rerender(<NodeToolbar {...base} maximized={false} onToggleMaximize={onToggleMaximize} />)
+    const { host, inner } = await maxButton(container)
+    expect(inner.hasAttribute('aria-disabled')).toBe(false)
+    expect(inner.style.cursor).toBe('')
+    expect(host.style.opacity).toBe('')
+    fireEvent.click(inner)
+    expect(onToggleMaximize).toHaveBeenCalledTimes(1)
+  })
+
   it('does not offer Name with AI / Dictate / links when the node cannot do them', () => {
     const { container } = render(<NodeToolbar {...base} maximized={false} />)
     fireEvent.click(container.querySelector('[data-title="More Actions…"]') as Element)

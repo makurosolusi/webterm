@@ -281,13 +281,6 @@
 .node-header > .node-description { flex-shrink: 1000000; }
 .node-header > .node-title { flex-shrink: 1000; min-width: var(--nc-title-min-w); }
 
-/* vscode-toolbar-button v2.4.0 tidak punya properti `disabled`; `aria-disabled` di host adalah
-   kontrak kita sendiri. Opacity .4 + pointer mati seperti state disabled VS Code. */
-.node-toolbar vscode-toolbar-button[aria-disabled='true'] {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
 /* VS Code action-bar separator (1px x 16px): keeps destructive Stop/Close apart from the layout actions. */
 .node-toolbar__separator { width: 1px; height: 16px; margin: 0 4px; flex-shrink: 0; background: var(--vscode-menu-separatorBackground); }
 /* Stop in the VS Code debug-toolbar red, so it never reads as a layout square. */
