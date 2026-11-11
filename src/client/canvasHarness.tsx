@@ -17,6 +17,7 @@ import { vi } from 'vitest'
 // harness ini menutup semua test canvas yang kini merender chrome VS Code (tombol editor, dsb).
 import './vscode/test-setup'
 import App from './App'
+import { __resetWsForTests } from './ws'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -288,6 +289,9 @@ export function renderedViewport(): Viewport {
  *  `screen` menemukan dua canvas. */
 export function unmountCanvas(): void {
   cleanup()
+  // The shared socket's reconnect/heartbeat timers are module-level: left running they fire after
+  // this file's jsdom env is torn down (`location is not defined`).
+  __resetWsForTests()
   vi.unstubAllGlobals()
 }
 

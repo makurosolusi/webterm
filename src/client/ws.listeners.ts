@@ -77,3 +77,21 @@ export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
   if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return true }
   return false
 }
+
+const reconnectListeners = new Set<() => void>()
+
+/**
+ * Daftarkan callback yang jalan setelah tiap RECONNECT (bukan koneksi pertama), sesudah replay
+ * `open` dan antrean; untuk memulihkan state per-koneksi di server (mis. langganan fswatch).
+ */
+export function onReconnect(cb: () => void): () => void {
+  reconnectListeners.add(cb)
+  return () => { reconnectListeners.delete(cb) }
+}
+
+/** Run every `onReconnect` callback (ws.ts, after a reconnect's replay); one failing does not stop the rest. */
+export function notifyReconnect(): void {
+  for (const cb of [...reconnectListeners]) {
+    try { cb() } catch (err) { console.warn('ws: onReconnect listener failed', err) }
+  }
+}
