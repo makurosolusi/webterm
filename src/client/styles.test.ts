@@ -240,7 +240,9 @@ describe('node-chrome.css', () => {
     // Tombol header memakai `vscode-toolbar-button`; kelas status lama dan merah "danger" sudah tidak ada.
     expect(chrome).not.toContain('.icon-btn {')
     expect(chrome).not.toContain('.node-toolbar__danger')
-    expect(chrome).toContain(".node-toolbar vscode-toolbar-button[aria-disabled='true']")
+    // Disabled toolbar buttons are styled by the wrapper (vscode/toolbarButton.tsx, tested in
+    // nodeChromeWidgets.test.tsx), not a CSS `pointer-events: none` that would kill the tooltip.
+    expect(chrome).not.toContain("vscode-toolbar-button[aria-disabled='true']")
     expect(chrome).toContain('border-radius: 50%')
   })
 
