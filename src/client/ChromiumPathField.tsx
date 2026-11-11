@@ -13,7 +13,7 @@ export interface ChromiumPathFieldProps {
   /** Simpan override; '' = hapus override (pakai otomatis). */
   save(path: string): Promise<void>
   /** Muat ulang dari server; deteksi berjalan ulang di tiap GET. */
-  redetect(): Promise<void>
+  redetect(): Promise<unknown>
 }
 
 /** Path aktif + sumbernya, combobox (kandidat di disk + path yang pernah dipakai) yang menyimpan saat dipilih/Enter/blur, dan kembali ke otomatis. */

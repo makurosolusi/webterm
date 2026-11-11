@@ -246,7 +246,9 @@ describe('Claude provider: Custom command', () => {
     render(<ClaudeProviderCard />)
     const clean = await screen.findByRole('button', { name: COMMAND_TEXT.clean }) as HTMLButtonElement
     expect(clean.disabled).toBe(true)
-    expect(clean.title).toBe(COMMAND_TEXT.noChanges)
+    expect(clean.parentElement?.getAttribute('data-slot')).toBe('icon-tooltip-disabled') // hint, not a native title
+    fireEvent.pointerMove(clean.parentElement!, { pointerType: 'mouse' })
+    expect((await screen.findByRole('tooltip')).textContent).toContain(COMMAND_TEXT.noChanges)
     fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: `${CMD} --verbose` } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     expect((await screen.findByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).getAttribute('role')).toBe('status')
