@@ -12,6 +12,7 @@ import { mainModel } from '../runtime/claudeResult'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 import { createLogger } from '../../logs'
+import { modelRequest } from '../../models/modelRequest'
 import type { HelperKind, HelperUsage } from '../../cost/costCapture'
 
 export const SUMMARY_MODEL = 'haiku'
@@ -67,8 +68,10 @@ export function parseStructuredAnswer(stdout: string, requestedModel: string = S
   }
 }
 
-export function structuredArgv(schema: object, opts: { model?: string; effort?: EffortLevel } = {}): string[] {
-  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), '--model', opts.model ?? SUMMARY_MODEL,
+/** `model: null` passes no `--model` (the provider's own model applies). */
+export function structuredArgv(schema: object, opts: { model?: string | null; effort?: EffortLevel } = {}): string[] {
+  const model = opts.model === undefined ? SUMMARY_MODEL : opts.model
+  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), ...(model === null ? [] : ['--model', model]),
     '--effort', opts.effort ?? HELPER_EFFORT,
     '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
     '--max-turns', String(MAX_TURNS), '--max-budget-usd', String(SUMMARY_BUDGET_USD)]
@@ -79,7 +82,6 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
   const now = opts.now ?? Date.now
   const maxPerHour = opts.maxPerHour ?? SUMMARY_MAX_PER_HOUR
   const model = opts.model ?? SUMMARY_MODEL
-  const argv = (schema: object): string[] => structuredArgv(schema, { model, ...(opts.effort ? { effort: opts.effort } : {}) })
   const calls: number[] = []
   return (req, signal) => new Promise<StructuredAnswer>((resolve, reject) => {
     const at = now()
@@ -87,8 +89,11 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
     if (calls.length >= maxPerHour) { reject(new Error(`${kind}: hourly cap reached`)); return }
     if (signal.aborted) { reject(new Error(`${kind}: aborted before start`)); return }
     calls.push(at)
-    const [cmd, ...args] = opts.bin ? [opts.bin, ...argv(req.schema)] : [...centralClaudeLaunch().argv, ...argv(req.schema)]
-    const child = spawn(cmd as string, args, { cwd: tmpdir(), env: claudeEnv(claudeChildEnv(process.env)), stdio: ['pipe', 'pipe', 'ignore'], shell: false })
+    const env = claudeEnv(claudeChildEnv(process.env))
+    const request = modelRequest(model, env)
+    const argv = structuredArgv(req.schema, { model: request.flag, ...(opts.effort ? { effort: opts.effort } : {}) })
+    const [cmd, ...args] = opts.bin ? [opts.bin, ...argv] : [...centralClaudeLaunch().argv, ...argv]
+    const child = spawn(cmd as string, args, { cwd: tmpdir(), env, stdio: ['pipe', 'pipe', 'ignore'], shell: false })
     let out = ''
     const kill = (): void => { child.kill('SIGKILL') }
     signal.addEventListener('abort', kill, { once: true })
@@ -98,7 +103,7 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
     child.on('close', (code) => {
       signal.removeEventListener('abort', kill)
       if (code !== 0) { reject(new Error(`${kind}: claude exited ${code}`)); return }
-      try { resolve(parseStructuredAnswer(out, model)) } catch (err) { reject(new Error(`${kind}: ${(err as Error).message}`, { cause: err })) }
+      try { resolve(parseStructuredAnswer(out, request.requested)) } catch (err) { reject(new Error(`${kind}: ${(err as Error).message}`, { cause: err })) }
     })
     child.stdin.end(req.prompt)
   })

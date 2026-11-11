@@ -59,6 +59,8 @@ describe('model precedence (conversation > setting > ladder)', () => {
 
   it('passes a full claude-* setting through as typed', () => {
     expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'claude-opus-5-5' }, null)).toMatchObject({ model: 'claude-opus-5-5', tier: 'T3' })
+    expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'my-proxy/glm-4.6' }, null)).toMatchObject({ model: 'my-proxy/glm-4.6', reason: 'Central model setting' })
+    expect(centralTurnModel(fixture.db, CONV, { ANTHROPIC_MODEL: 'my-proxy/glm-4.6' }, null)).toMatchObject({ model: null, alias: 'sonnet', tier: 'T2' })
   })
 
   it('rejects unknown models and efforts', () => {

@@ -25,6 +25,7 @@ import { createPolicyStore } from '../policy/policy.store'
 import { AGENT_SPAWN_CAPABILITY, type AgentSpawnMode } from './agentSpawn.capability'
 import { resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import type { ModelPick } from '../models/modelLadder'
+import { defaultModelEnv, modelRequest, type ModelEnv } from '../models/modelRequest'
 
 /** Deepest allowed generation: root (0) -> its agents (1) -> their sub-agents (2). */
 export const SPAWN_MAX_DEPTH_DEFAULT = 2
@@ -87,21 +88,23 @@ const hasFlag = (args: readonly string[], flag: string): boolean => args.some((a
 
 /**
  * `--model`/`--effort` for a ladder pick. A flag the launch profile already sets is kept, unless the pick is
- * the user's explicit override (then ours comes later on the line and wins).
+ * the user's explicit override (then ours comes later on the line and wins). A model the user chose for
+ * their provider (card or ANTHROPIC_* model vars in `env`) is never overridden (`modelRequest`).
  */
-export function modelFlags(profileFlags: readonly string[], pick?: ModelPick | null): string[] {
+export function modelFlags(profileFlags: readonly string[], pick?: ModelPick | null, env: () => ModelEnv = defaultModelEnv): string[] {
   if (!pick) return []
   const forced = pick.reason === 'user override'
+  const flag = pick.model && (forced || !hasFlag(profileFlags, '--model')) ? modelRequest(pick.model, env()).flag : null
   return [
-    ...(pick.model && (forced || !hasFlag(profileFlags, '--model')) ? ['--model', pick.model] : []),
+    ...(flag ? ['--model', flag] : []),
     ...(pick.effort && (forced || !hasFlag(profileFlags, '--effort')) ? ['--effort', pick.effort] : []),
   ]
 }
 
 /** Claude Code non-interactive form via the launch profile (absent = default), on the ladder's model; JSON result so `execRunner` keeps the final event. */
-export function claudeHeadlessArgv(prompt: string, profileId?: string, pick?: ModelPick | null): string[] {
+export function claudeHeadlessArgv(prompt: string, profileId?: string, pick?: ModelPick | null, env?: () => ModelEnv): string[] {
   const launch = resolveClaudeLaunch(profileId)
-  return [...launch.argv, '-p', prompt, '--output-format', 'json', ...modelFlags(launch.flags, pick)]
+  return [...launch.argv, '-p', prompt, '--output-format', 'json', ...modelFlags(launch.flags, pick, env)]
 }
 
 const isRoot = (p: Principal): boolean => principalKind(p) !== 'node'
@@ -174,7 +177,7 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
         const pe = kind === DEFAULT_AGENT_KIND ? providerEnvOf() : { set: {}, unset: [] }
         const env = pe.unset.length ? applyProviderEnv(h.env ?? process.env, { set: {}, unset: pe.unset }) : h.env
         const overrides = { ...h.overrides, ...pe.set }
-        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string, h.claudeProfileId, h.pick), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
+        handle = exec({ argv: h.argv ?? claudeHeadlessArgv(req.prompt as string, h.claudeProfileId, h.pick, () => applyProviderEnv(h.env ?? process.env, pe)), cwd: req.cwd as string, env, overrides, timeoutMs: h.timeoutMs ?? SPAWN_HEADLESS_TIMEOUT_MS })
       }
     } catch (err) {
       live.delete(childId)
