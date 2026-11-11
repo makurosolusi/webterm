@@ -21,7 +21,7 @@ import { asObject } from './control/controlTypes'
 import type { LedgerRuntime } from './ledger/ledgerRuntime'
 import { activeLedgerRuntime } from './ledger/ledgerRuntimeState'
 import { isValidNodeToken } from './hooksTokens'
-import { decidePermission, listPendingPermissions } from './permission/permission.human'
+import { decidePermission, listPendingPermissions, listRecentPermissions } from './permission/permission.human'
 import { recordEvent } from './events/producers'
 import type { AppendEventInput } from './events/eventModel'
 import type { InboxActDeps, OutboxPort } from './inbox/inboxActions'
@@ -124,7 +124,9 @@ export async function approvalHumanRoute(
     return true
   }
   if (route === 'permission_list') {
-    sendJson(res, 200, { items: listPendingPermissions(runtime.db, now) })
+    // `?recent=1`: the newest prompts (any status) that Settings › Rules & secrets offers as one-click rules.
+    const items = url.searchParams.get('recent') === '1' ? listRecentPermissions(runtime.db) : listPendingPermissions(runtime.db, now)
+    sendJson(res, 200, { items })
     return true
   }
   const inboxDeps = (): InboxActDeps => ({

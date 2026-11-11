@@ -79,7 +79,7 @@ export function agentsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
 
 const optional = (v: unknown): string | null => (v === null || v === undefined ? null : clip(v))
 
-/** Active memory (same set as Settings › Memory), newest first; `projectId=` and `status=claim|fact` narrow it. */
+/** Active memory (same set as Control › Memory), newest first; `projectId=` and `status=claim|fact` narrow it. */
 export function memoryView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   const page = pageOf(q)
   if (!page) return fail(400, 'invalid_page')
