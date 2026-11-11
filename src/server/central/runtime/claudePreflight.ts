@@ -38,6 +38,7 @@ export const READY_TTL_MS = 30_000
 const CODE: Record<LaunchFailure, Exclude<ClaudeReady, { ok: true }>['code']> = {
   wrapper_not_found: 'claude_check_failed',
   wrapper_failed: 'claude_check_failed',
+  wrapper_signed_out: 'claude_check_failed',
   claude_not_found: 'claude_not_found',
   auth_failed: 'claude_not_authenticated',
   check_failed: 'claude_check_failed',

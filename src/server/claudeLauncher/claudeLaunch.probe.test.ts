@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CLAUDE_INSTALL, probeClaudeLaunch } from './claudeLaunch.probe'
+import { CLAUDE_INSTALL, probeClaudeLaunch, wrapperSignIn } from './claudeLaunch.probe'
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { createClaudePreflight } from '../central/runtime/claudePreflight'
 import { registerClaudeLaunchSettings } from './claudeLauncher'
@@ -36,6 +36,12 @@ exit 2
 const FAILING_ENVMAN = `#!/bin/sh
 echo "auth failed for token sk-ant-api03-SECRETSECRETSECRET1234" >&2
 exit 3
+`
+
+// The real envman v0.28 message for a machine without `envman login` (test-only copy).
+const SIGNED_OUT_ENVMAN = `#!/bin/sh
+echo "Error: need auth to fetch claude:malik-opus — not logged in: run 'envman login <server> --token <token>'" >&2
+exit 1
 `
 
 const dirs: string[] = []
@@ -78,6 +84,28 @@ describe('probeClaudeLaunch (real fake bins)', () => {
     const msg = r.steps[0]?.message ?? ''
     expect(msg).toMatch(/^envman exited with code 3: auth failed for token /)
     expect(msg).not.toContain('SECRETSECRET')
+  })
+
+  it('wrapper exits with its full error on one line: no "see the full error" hint', async () => {
+    const r = await probeClaudeLaunch(profile('envman -e x -- claude'), { env: bin({ envman: FAILING_ENVMAN, claude: FAKE_CLAUDE }), provider: login })
+    expect(r.steps[0]?.hint).toBe(undefined)
+  })
+
+  it('wrapper not signed in: wrapper_signed_out with the command the wrapper suggested', async () => {
+    const r = await probeClaudeLaunch(profile('envman -e claude:malik-opus -- claude'), { env: bin({ envman: SIGNED_OUT_ENVMAN, claude: FAKE_CLAUDE }), provider: login })
+    expect(r).toMatchObject({ ok: false, failed: 'wrapper_signed_out' })
+    const hint = 'envman is not signed in for the user webterm runs as. Sign in, then Check again.'
+    expect(r.steps).toEqual([{
+      stage: 'wrapper', ok: false, message: expect.stringContaining('envman exited with code 1: Error: need auth'), hint,
+      signIn: { tool: 'envman', hint, command: 'envman login <server> --token <token>' },
+    }])
+  })
+
+  it('sign-in messages of other wrappers are recognised; unrelated failures are not', () => {
+    expect(wrapperSignIn('op', 'You are not currently signed in. Please run `op signin --help` for instructions')).toMatchObject({ tool: 'op', command: 'op signin --help' })
+    expect(wrapperSignIn('doppler', 'Doppler Error: you must provide a token')).toEqual({ tool: 'doppler', hint: expect.any(String) })
+    expect(wrapperSignIn('envman', 'load x: open x: no such file or directory')).toBe(null)
+    expect(wrapperSignIn('envman', "not logged in: run 'rm -rf / login'")?.command).toBe(undefined) // only the tool's own command
   })
 
   it('claude missing behind the wrapper', async () => {
