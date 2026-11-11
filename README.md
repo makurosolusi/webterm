@@ -142,6 +142,17 @@ bun run build:binary   # emits ./webterm
 ./webterm              # runs from any directory; reads HOST / PORT (and a .env) from the cwd
 ```
 
+### Command-line options
+
+The server entry (`./webterm` or `bun src/server/index.ts`) handles these before it opens the database or binds a port; with no options it starts the server.
+
+- `-h, --help` — usage, options and the main environment variables.
+- `-v, --version` — version and build id.
+- `-r, --readme` — this README, built into the binary (paged through `less` on a terminal).
+- `-d, --docs [topic]` — list topics (this README's sections plus `env`, the full environment reference), or print one.
+
+An unknown option prints a suggestion and exits with status 2.
+
 ## Tests
 
 Split by runtime:
