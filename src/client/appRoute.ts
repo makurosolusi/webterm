@@ -119,14 +119,22 @@ export interface AppRouteActions {
   goWorkspace: (id: string | null, opts?: { replace?: boolean }) => void
 }
 
+// The route last navigated to by ANY `useAppRoute` instance, until the current task's microtasks
+// run (by then React has the new location). Each instance's `latest` only knows its own calls: two
+// instances navigating in one commit (App's workspace URL sync + the setup auto-open via the bridge)
+// each built on the stale render and the second dropped the first's change (`?setup=` lost).
+let pendingRoute: AppRoute | null = null
+
 function makeActions(latest: { current: { route: AppRoute; navigate: NavigateFunction } }): AppRouteActions {
   const change = (patch: Partial<AppRoute>, forceReplace = false): void => {
-    const from = latest.current.route
+    const from = pendingRoute ?? latest.current.route
     const to = { ...from, ...patch }
     const href = buildAppHref(to)
     if (href === buildAppHref(from)) return
     latest.current.navigate(href, { replace: forceReplace || navigationMode(from, to) === 'replace' })
     latest.current.route = to // a second call in the same tick builds on this one, not on the last render
+    if (pendingRoute === null) queueMicrotask(() => { pendingRoute = null })
+    pendingRoute = to
   }
   return {
     openSettings: (section = 'terminal') => change({ settings: section }),
