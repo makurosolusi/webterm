@@ -39,7 +39,7 @@ export function isSkippedPath(path: string): boolean {
 }
 
 /** Tracked files of the repo at `cwd` (paths relative to `cwd`); throws with context when git fails. */
-async function trackedFiles(cwd: string): Promise<string[]> {
+export async function trackedFiles(cwd: string): Promise<string[]> {
   const g = gitCommand(['-C', cwd, 'ls-files', '-z'])
   const out = await new Promise<string>((resolve, reject) => {
     execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env }, (err, stdout, stderr) => {
@@ -51,7 +51,7 @@ async function trackedFiles(cwd: string): Promise<string[]> {
 }
 
 /** Reads a text file, or null when it is over `maxBytes`, binary, or no longer a regular file. */
-async function readText(abs: string, maxBytes: number): Promise<string | null> {
+export async function readText(abs: string, maxBytes: number): Promise<string | null> {
   const info = await stat(abs).catch((err: NodeJS.ErrnoException) => {
     if (err.code === 'ENOENT' || err.code === 'ENOTDIR') return null // tracked but deleted in the work tree
     throw new Error(`health scan: stat ${abs} failed: ${err.message}`)
