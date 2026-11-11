@@ -28,15 +28,18 @@ export function capabilityErrorMessage(e: unknown, fallback: string): string {
   return CAPABILITY_TEXT.forbidden
 }
 
+/** Outcome of a load, so a caller's own button can say what happened (the hook's `error` stays for the section top). */
+export type CapabilitiesLoad = { ok: true; data: CapabilitiesResponse } | { ok: false; error: string }
+
 export interface CapabilitiesApi {
   data: CapabilitiesResponse | null
   loading: boolean
   error: string | null
   /** Id yang sedang diubah (untuk aria-busy), atau null. */
   busyId: CapabilityId | null
-  refresh(): Promise<void>
-  /** Muat ulang dengan deteksi segar (lewati cache probe login); untuk tombol "Periksa lagi". */
-  recheck(): Promise<void>
+  refresh(): Promise<CapabilitiesLoad>
+  /** Reload with fresh detection (skips the sign-in probe cache); for "Check again". */
+  recheck(): Promise<CapabilitiesLoad>
   /** Resolve true bila server menerima; false + `error` terisi bila gagal. */
   toggle(id: CapabilityId, enabled: boolean): Promise<boolean>
   setSub(id: CapabilityId, key: string, on: boolean): Promise<boolean>
@@ -50,14 +53,17 @@ export function useCapabilities(): CapabilitiesApi {
   const [busyId, setBusyId] = useState<CapabilityId | null>(null)
 
   // `fresh` tak boleh menumpang muatan biasa yang sedang jalan (hasilnya masih dari cache): selalu panggilan sendiri.
-  const load = useCallback(async (fresh: boolean) => {
+  const load = useCallback(async (fresh: boolean): Promise<CapabilitiesLoad> => {
     setLoading(true)
     try {
-      if (fresh) publish(await fetchCapabilities(true))
-      else publish(await (inflight ??= fetchCapabilities().finally(() => { inflight = null })))
+      const data = fresh ? await fetchCapabilities(true) : await (inflight ??= fetchCapabilities().finally(() => { inflight = null }))
+      publish(data)
       setError(null)
+      return { ok: true, data }
     } catch (e) {
-      setError(capabilityErrorMessage(e, CAPABILITY_TEXT.loadFailed))
+      const error = capabilityErrorMessage(e, CAPABILITY_TEXT.loadFailed)
+      setError(error)
+      return { ok: false, error }
     } finally {
       setLoading(false)
     }
