@@ -1,9 +1,9 @@
 // Wizard step 1, Claude: a live check of how webterm starts Claude (the profile Central uses) and
 // the existing Claude provider card for the credential. Claude missing = the official install
 // commands with copy buttons, the docs link and "Check again".
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ClaudeProviderCard } from '../ClaudeProviderCard'
+import { ClaudeProviderCard, type ProviderCommitRef } from '../ClaudeProviderCard'
 import { testClaudeLaunch, type LaunchTest } from '../claudeLauncher/claudeLaunch.client'
 import { LaunchSteps } from '../claudeLauncher/LaunchSteps'
 import { SETUP_TEXT } from './setup.labels'
@@ -52,6 +52,7 @@ export function ClaudeStep({ nav }: StepProps): React.JSX.Element {
   const [result, setResult] = useState<LaunchTest | null>(null)
   const [error, setError] = useState(false)
   const [run, setRun] = useState(0)
+  const commit: ProviderCommitRef = useRef(null)
   useEffect(() => {
     let live = true
     setResult(null)
@@ -88,9 +89,10 @@ export function ClaudeStep({ nav }: StepProps): React.JSX.Element {
         {state === 'wrapperSignedOut' && signInCommand ? <CopyLine label={T.signIn} command={signInCommand} /> : null}
         {state !== 'checking' && state !== 'ready' ? again : null}
       </div>
-      {/* One status surface: the check above. The card's Test connection re-runs it instead of showing its own result. */}
-      <ClaudeProviderCard onTested={() => setRun((n) => n + 1)} />
-      <StepFooter nav={nav} where={T.where} />
+      {/* One status surface: the check above. The card's Test connection re-runs it instead of showing its own result.
+          No separate Save here: Continue saves the card's pending edits first and stays on the step when that fails. */}
+      <ClaudeProviderCard onTested={() => setRun((n) => n + 1)} commitRef={commit} />
+      <StepFooter nav={nav} where={T.where} commit={async () => (commit.current && !(await commit.current()) ? T.saveFailed : null)} />
     </div>
   )
 }

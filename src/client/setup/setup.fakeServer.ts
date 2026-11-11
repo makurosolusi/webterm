@@ -22,6 +22,8 @@ export interface FakeServer {
   /** GET /api/claude-provider answer; POST .../test answers `{ test: providerTest }`. */
   provider: Record<string, unknown>
   providerTest: { ok: boolean; message: string; at: number }
+  /** Next provider PUT answers 500. */
+  providerSaveFail: boolean
 }
 
 export const DL_IDLE: ChromiumDownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null }
@@ -71,7 +73,7 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
   const s: FakeServer = {
     calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false,
-    provider: { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }, providerTest: { ok: true, message: 'Connected.', at: 1 }, ...over,
+    provider: { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }, providerTest: { ok: true, message: 'Connected.', at: 1 }, providerSaveFail: false, ...over,
   }
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = String(input)
@@ -81,6 +83,7 @@ export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
     if (url.startsWith('/api/claude-launch/test')) return s.launch === 'error' ? json({ error: 'probe_failed' }, 500) : json(s.launch)
     if (url.startsWith('/api/claude-provider/detect')) return json({ wrappers: [] })
     if (url === '/api/claude-provider/test') return json({ test: s.providerTest })
+    if (url.startsWith('/api/claude-provider') && method === 'PUT' && s.providerSaveFail) { s.providerSaveFail = false; return json({ error: 'write_failed' }, 500) }
     if (url.startsWith('/api/claude-provider')) return json(s.provider)
     if (url.startsWith('/api/settings/env')) return json(method === 'GET' ? { entries: [{ key: 'WEBTERM_BROWSER_HEADLESS', kind: 'flag', group: 'browser', label: 'Headless mode', value: '', default: 'off' }], locked: false } : {})
     if (url.startsWith('/api/capabilities/chromium-download')) {
