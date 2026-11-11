@@ -150,6 +150,7 @@ The server entry (`./webterm` or `bun src/server/index.ts`) handles these before
 - `-v, --version` — version and build id.
 - `-r, --readme` — this README, built into the binary (paged through `less` on a terminal).
 - `-d, --docs [topic]` — list topics (this README's sections plus `env`, the full environment reference), or print one.
+- `--reset-password <username>` — set a new password for an account and sign it out everywhere, without starting the server. It asks twice on a terminal (no echo), or reads the first line of stdin. Exit status 0 on success, 1 when the account (or the database) does not exist, 2 on a usage error or a password shorter than 12 characters.
 
 An unknown option prints a suggestion and exits with status 2.
 

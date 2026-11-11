@@ -8,10 +8,12 @@ export type CliAction =
   | { kind: 'version' }
   | { kind: 'readme' }
   | { kind: 'docs'; topic?: string }
+  | { kind: 'reset-password'; username: string }
   | { kind: 'error'; message: string }
 
 export interface CliOption {
-  short: string
+  /** Omitted for rare, destructive flags that should be typed out in full. */
+  short?: string
   long: string
   arg?: string
   description: string
@@ -23,17 +25,20 @@ export const CLI_OPTIONS: readonly CliOption[] = [
   { short: '-v', long: '--version', description: 'Print the version and build id and exit.' },
   { short: '-r', long: '--readme', description: 'Print the README (paged through less on a terminal).' },
   { short: '-d', long: '--docs', arg: '[topic]', description: 'List documentation topics, or print one topic.' },
+  { long: '--reset-password', arg: '<username>', description: 'Set a new password for an account (read from the terminal or stdin) and sign it out everywhere. The server need not run.' },
 ]
 
-type FlagKind = 'help' | 'version' | 'readme' | 'docs'
+type FlagKind = 'help' | 'version' | 'readme' | 'docs' | 'reset-password'
 const FLAG_KIND = new Map<string, FlagKind>(
   CLI_OPTIONS.flatMap((o) => {
     const kind = o.long.slice(2) as FlagKind
-    return [[o.short, kind], [o.long, kind]] as const
+    return o.short ? [[o.short, kind], [o.long, kind]] as const : [[o.long, kind]] as const
   }),
 )
+/** Flags whose value is required (`--flag value` or `--flag=value`). */
+const NEEDS_VALUE: ReadonlySet<FlagKind> = new Set(['reset-password'])
 /** When several flags are given, the first in this list wins (`-h -v` prints help). */
-const PRIORITY: readonly FlagKind[] = ['help', 'version', 'readme', 'docs']
+const PRIORITY: readonly FlagKind[] = ['help', 'version', 'readme', 'docs', 'reset-password']
 const MAX_SUGGEST_DISTANCE = 2
 
 /** Edit distance (insert/delete/substitute), two-row DP. */
@@ -67,20 +72,24 @@ function unknown(arg: string): CliAction {
 /** Parse argv (without the runtime and script path). Empty argv = start the server. */
 export function parseArgs(argv: readonly string[]): CliAction {
   const seen = new Set<FlagKind>()
-  let topic: string | undefined
+  const values = new Map<FlagKind, string>()
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     const eq = arg.startsWith('--') ? arg.indexOf('=') : -1
     const name = eq > 0 ? arg.slice(0, eq) : arg
     const kind = FLAG_KIND.get(name)
     if (!kind) return unknown(arg)
-    if (eq > 0 && kind !== 'docs') return { kind: 'error', message: `option '${name}' takes no value` }
+    const takesValue = kind === 'docs' || NEEDS_VALUE.has(kind)
+    if (eq > 0 && !takesValue) return { kind: 'error', message: `option '${name}' takes no value` }
     seen.add(kind)
-    if (kind !== 'docs') continue
-    if (eq > 0) topic = arg.slice(eq + 1)
-    else if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) topic = argv[++i]
+    if (!takesValue) continue
+    if (eq > 0) values.set(kind, arg.slice(eq + 1))
+    else if (i + 1 < argv.length && !argv[i + 1].startsWith('-')) values.set(kind, argv[++i])
+    if (NEEDS_VALUE.has(kind) && !values.get(kind)) return { kind: 'error', message: `option '${name}' needs a value` }
   }
   const winner = PRIORITY.find((k) => seen.has(k))
   if (!winner) return { kind: 'serve' }
-  return winner === 'docs' ? { kind: 'docs', topic } : { kind: winner }
+  if (winner === 'docs') return { kind: 'docs', topic: values.get('docs') }
+  if (winner === 'reset-password') return { kind: 'reset-password', username: values.get('reset-password') as string }
+  return { kind: winner }
 }
