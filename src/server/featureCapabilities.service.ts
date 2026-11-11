@@ -7,6 +7,7 @@ import { connectTelegram, type ConnectFailure } from './channels/telegram.connec
 import { flagOr } from './envFlag'
 import type { SecretStore } from './envSecrets.store'
 import type { EnvSettings } from './envSettings.service'
+import { sharedDownloadStatus, type DownloadStatus } from './browser/browserDownload'
 import { advancedChange, advancedView, fieldOfKey } from './featureCapabilities.advanced'
 import type { AuditEntry } from './featureCapabilities.audit'
 import { rememberTelegramBot, type Detect } from './featureCapabilities.detect'
@@ -77,8 +78,8 @@ export function viewOf(id: CapabilityId, env: NodeJS.ProcessEnv, detect: Detect)
 }
 
 /** Respons penuh: semua kemampuan urut katalog + bagian lanjutan. */
-export function buildResponse(env: NodeJS.ProcessEnv, detect: Detect, dataDir: string): CapabilitiesResponse {
-  return { capabilities: CAPABILITY_IDS.map((id) => viewOf(id, env, detect)), advanced: advancedView(env, dataDir) }
+export function buildResponse(env: NodeJS.ProcessEnv, detect: Detect, dataDir: string, download: DownloadStatus = sharedDownloadStatus()): CapabilitiesResponse {
+  return { capabilities: CAPABILITY_IDS.map((id) => viewOf(id, env, detect)), advanced: advancedView(env, dataDir, download) }
 }
 const snap = async (c: CapCtx): Promise<CapabilitiesResponse> => buildResponse(c.env, await c.detect(), c.dataDir)
 

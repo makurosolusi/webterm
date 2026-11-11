@@ -45,6 +45,19 @@ describe('chromiumCandidates', () => {
     const fs = fakeFs(['/usr/bin/chromium'])
     expect(chromiumCandidates({ PATH: '/usr/bin' }, fs.exists, fs.listDir)).toEqual(['/usr/bin/chromium'])
   })
+  it('finds a build "Download Chromium" left in <data dir>/browsers (newest first), after PATH and before Playwright', () => {
+    const root = '/d/browsers/chrome'
+    const linux = (v: string) => `${root}/linux-${v}/chrome-linux64/chrome`
+    const fs = fakeFs([linux('131.0.6778.9'), linux('131.0.6778.85'), '/opt/bin/chromium', `${PW}/chromium-1200/chrome-linux64/chrome`],
+      { [root]: ['linux-131.0.6778.9', 'linux-131.0.6778.85', '131.0.0-chrome-linux64.zip'], [PW]: ['chromium-1200'] })
+    expect(chromiumCandidates({ PATH: '/opt/bin', HOME: '/home/u', WEBTERM_DATA_DIR: '/d' }, fs.exists, fs.listDir)).toEqual([
+      '/opt/bin/chromium', linux('131.0.6778.85'), linux('131.0.6778.9'), `${PW}/chromium-1200/chrome-linux64/chrome`,
+    ])
+    // Without WEBTERM_DATA_DIR the default data dir under HOME is searched, like config.ts dataDir().
+    const mac = '/home/u/.webterm-server/browsers/chrome/mac_arm-131.0.6778.85/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
+    const fs2 = fakeFs([mac], { '/home/u/.webterm-server/browsers/chrome': ['mac_arm-131.0.6778.85'] })
+    expect(detectChromium({ HOME: '/home/u' }, fs2.exists, fs2.listDir)).toEqual({ path: mac, source: 'auto' })
+  })
   it('empty when nothing exists, and without HOME skips the Playwright cache', () => {
     const listDir = (d: string) => { throw new Error(`unexpected listDir ${d}`) }
     expect(chromiumCandidates({}, () => false, listDir)).toEqual([])

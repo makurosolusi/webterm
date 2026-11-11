@@ -46,6 +46,8 @@ const PROBES: [string, string][] = [
   ['GET', '/api/agent-chat/n1/stream'], ['GET', '/api/agent-chat/n1/history'], ['POST', '/api/agent-chat/n1/send'],
   ['POST', '/api/agent-chat/n1/interrupt'], ['POST', '/api/agent-chat/n1/permission'], ['POST', '/api/agent-chat/n1/mode'],
   ['POST', '/api/claude-view/n1'],
+  // "Download Chromium" spends ~200 MB and picks the browser to use: a human write (settings guard), never an agent's.
+  ['POST', '/api/capabilities/chromium-download'], ['POST', '/api/capabilities/chromium-download/cancel'],
 ]
 
 const SRC = join(import.meta.dirname, '..', '..')
