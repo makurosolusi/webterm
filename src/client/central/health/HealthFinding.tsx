@@ -70,6 +70,7 @@ export function HealthFinding({ finding, client }: { finding: FindingView; clien
       <p className="health-finding__meta">
         {view.source} · {HL.confidence(view.confidence)}
         {needsVerify(view.confidence) && <span className="ccp-badge ccp-badge--warn">{HL.verifyFirst}</span>}
+        {view.origin === 'analysis' && <span className="ccp-badge" title={HL.verifiedQuoteHint}>{HL.verifiedQuote}</span>}
       </p>
       <p><strong>{HL.suggestion}:</strong> {view.suggestion}</p>
       {view.status === 'dismissed' && view.dismissedReason && <p className="health-finding__meta">{HL.dismissedBecause(view.dismissedReason)}</p>}

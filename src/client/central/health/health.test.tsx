@@ -7,7 +7,7 @@ import { knownTab } from '../CentralControlPanel'
 import { CENTRAL_PAGE_SIZE } from '../centralControlApi'
 import { shimRadixSelect } from '../work/taskBoardFixtures.testutil'
 import HealthView from './HealthView'
-import { healthApi, type HealthClient, type HealthSummaryView } from './healthApi'
+import { healthApi, type AnalysisView, type HealthClient, type HealthSummaryView } from './healthApi'
 import { HL, SCAN_POLL_MS } from './healthModel'
 
 beforeAll(shimRadixSelect)
@@ -33,6 +33,8 @@ function makeClient(over: Partial<HealthClient> = {}) {
     scan: vi.fn(async () => undefined),
     dismiss: vi.fn(async (id: string, reason: string) => findingOf({ id, status: 'dismissed', dismissedReason: reason })),
     reopen: vi.fn(async (id: string) => findingOf({ id })),
+    getAnalysis: vi.fn(async (): Promise<AnalysisView> => ({ scan: null, running: false, retryAt: null, dropped: null })),
+    analyze: vi.fn(async () => undefined),
     ...over,
   }
   return client as unknown as { [K in keyof HealthClient]: Mock<HealthClient[K]> }
@@ -190,7 +192,79 @@ describe('Health filters, dismiss and pages', () => {
   })
 })
 
+const analysisOf = (over: Partial<AnalysisView> = {}): AnalysisView => ({ scan: null, running: false, retryAt: null, dropped: null, ...over })
+
+describe('Health deep analysis', () => {
+  it('offers Deep analysis with its cost note and starts it', async () => {
+    const client = makeClient()
+    render(<HealthView client={client} />)
+    fireEvent.click(await screen.findByRole('button', { name: HL.analyze }))
+    expect(screen.getByText(HL.analyzeCost)).toBeTruthy()
+    await waitFor(() => expect(client.analyze).toHaveBeenCalledWith('p1'))
+  })
+
+  it('shows running, then reloads findings and summary when it ends', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const getAnalysis = vi.fn(async () => analysisOf({ running: true, scan: scanOf({ origin: 'analysis', status: 'running', finishedAt: null }) }))
+    const client = makeClient({ getAnalysis })
+    render(<HealthView client={client} />)
+    expect(((await screen.findByRole('button', { name: HL.analyzing })) as HTMLButtonElement).disabled).toBe(true)
+    const lists = client.listFindings.mock.calls.length
+    const summaries = client.getSummary.mock.calls.length
+    getAnalysis.mockResolvedValue(analysisOf({ scan: scanOf({ origin: 'analysis', opened: 3 }), retryAt: Date.now() + 3_600_000, dropped: { quote_not_found: 2 } }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(SCAN_POLL_MS) })
+    expect(await screen.findByText(/Last analysis .* 3 new · 2 unverified claims dropped/)).toBeTruthy()
+    await waitFor(() => expect(client.listFindings.mock.calls.length).toBeGreaterThan(lists))
+    expect(client.getSummary.mock.calls.length).toBeGreaterThan(summaries)
+  })
+
+  it('disables the button during the cooldown and says when it is available', async () => {
+    render(<HealthView client={makeClient({ getAnalysis: vi.fn(async () => analysisOf({ retryAt: Date.now() + 1_800_000 })) })} />)
+    expect(((await screen.findByRole('button', { name: HL.analyze })) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/^Available again at /)).toBeTruthy()
+  })
+
+  it('shows a failed analysis with its error', async () => {
+    render(<HealthView client={makeClient({ getAnalysis: vi.fn(async () => analysisOf({ scan: scanOf({ origin: 'analysis', status: 'failed', error: 'analysis failed: claude exited 1' }) })) })} />)
+    expect((await screen.findByRole('alert')).textContent).toBe(HL.lastAnalysisFailed('analysis failed: claude exited 1'))
+  })
+
+  it('treats 429 cooldown as state, not an error; other failures say so', async () => {
+    const analyze = vi.fn().mockRejectedValue(new InboxApiError('slow down', 429, 'cooldown'))
+    const client = makeClient({ analyze })
+    render(<HealthView client={client} />)
+    fireEvent.click(await screen.findByRole('button', { name: HL.analyze }))
+    await waitFor(() => expect(client.getAnalysis).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('alert')).toBeNull()
+    analyze.mockRejectedValue(new InboxApiError('boom', 500, 'internal_error'))
+    fireEvent.click(await screen.findByRole('button', { name: HL.analyze }))
+    expect((await screen.findByRole('alert')).textContent).toBe(HL.analyzeFailed)
+  })
+
+  it('origin buttons filter the list; analysis findings carry a Verified quote badge', async () => {
+    const client = makeClient({ listFindings: vi.fn(async () => ({ items: [findingOf({ origin: 'analysis', rule: 'analysis', confidence: 'medium' })], hasMore: false })) })
+    render(<HealthView client={client} />)
+    expect(await screen.findByText(HL.verifiedQuote)).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('group', { name: HL.originLabel })).getByRole('button', { name: 'Analysis' }))
+    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'open', origin: 'analysis' }, expect.anything(), expect.anything()))
+  })
+})
+
 describe('healthApi', () => {
+  it('reads and starts the analysis and sends the origin filter', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ scan: null, running: false, retryAt: 5, dropped: null }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await healthApi.getAnalysis('p1')).toEqual({ scan: null, running: false, retryAt: 5, dropped: null })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/central/health/analyze?projectId=p1')
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 's' }), { status: 202 }))
+    await healthApi.analyze('p1')
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
+    expect([url, init.method, init.body]).toEqual(['/api/central/health/analyze', 'POST', JSON.stringify({ projectId: 'p1' })])
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }))
+    await healthApi.listFindings('p1', { status: 'open', origin: 'review' }, { limit: 50, offset: 0 })
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/central/health/findings?projectId=p1&status=open&origin=review&limit=50&offset=0')
+  })
+
   it('builds the findings query and posts a dismiss reason', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)

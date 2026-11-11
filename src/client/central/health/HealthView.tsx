@@ -1,4 +1,4 @@
-// Central's Health tab: per-project findings with evidence, the latest scan, and a manual scan.
+// Central's Health tab: per-project findings with evidence, the latest scan, a manual scan and the deep analysis.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -8,9 +8,10 @@ import { InboxApiError } from '../../inboxTypes'
 import { openCentralSettings } from '../LevelPanel'
 import { CENTRAL_PAGE_SIZE } from '../centralControlApi'
 import { centralErrorMessage, useLiveRefresh, useLoad, usePaged } from '../centralLoad'
+import { HealthAnalysis } from './HealthAnalysis'
 import { HealthFinding } from './HealthFinding'
 import { healthApi, type HealthClient, type HealthSummaryView } from './healthApi'
-import { DEFAULT_FILTER, HEALTH_PROJECT_KEY, HL, LEVELS, LEVEL_LABEL, RULES, RULE_LABEL, SCAN_POLL_MS, SCAN_RUNNING, STATUSES, STATUS_LABEL, isGone, isNoRepoError, isOff, type FindingFilter } from './healthModel'
+import { DEFAULT_FILTER, HEALTH_PROJECT_KEY, HL, LEVELS, LEVEL_LABEL, ORIGINS, ORIGIN_LABEL, RULES, RULE_LABEL, SCAN_POLL_MS, SCAN_RUNNING, STATUSES, STATUS_LABEL, isGone, isNoRepoError, isOff, type FindingFilter } from './healthModel'
 import './health.css'
 
 const ALL = 'all'
@@ -62,7 +63,7 @@ function Header({ summary, running, onScan }: { summary: HealthSummaryView; runn
 
 function Findings({ client, projectId, filter, lastScanAt }: { client: HealthClient; projectId: string; filter: FindingFilter; lastScanAt: number | null }) {
   const list = usePaged((offset, signal) => client.listFindings(projectId, filter, { limit: CENTRAL_PAGE_SIZE, offset }, signal).then((p) => p.items))
-  const filtered = filter.status !== DEFAULT_FILTER.status || filter.severity !== undefined || filter.rule !== undefined
+  const filtered = filter.status !== DEFAULT_FILTER.status || filter.severity !== undefined || filter.rule !== undefined || filter.origin !== undefined
   return (
     <>
       {list.error && <Failed text={list.error} onRetry={list.reload} />}
@@ -119,6 +120,7 @@ function HealthBody({ client, projectId, visible }: { client: HealthClient; proj
     <>
       <Header summary={data} running={running} onScan={() => void scan()} />
       {summary.error && <Failed text={summary.error} onRetry={summary.reload} />}
+      <HealthAnalysis client={client} projectId={projectId} visible={visible} onFinished={() => { setListKey((k) => k + 1); summary.reload() }} />
       {scanError && <p role="alert" className="ccp-error">{scanError}</p>}
       {!running && last?.status === 'failed' && <p role="alert" className="ccp-error">{isNoRepoError(last.error) ? HL.noRepo : HL.lastScanFailed(last.error)}</p>}
       {!last && !running ? (
@@ -131,6 +133,7 @@ function HealthBody({ client, projectId, visible }: { client: HealthClient; proj
           <div className="ccp-filters" role="group" aria-label={HL.filtersLabel}>
             <Choice label={HL.statusLabel} options={STATUSES} names={STATUS_LABEL} value={filter.status} onChange={(status) => setFilter({ ...filter, status: status ?? 'open' })} />
             <Choice label={HL.severityLabel} options={LEVELS} names={LEVEL_LABEL} value={filter.severity} any onChange={(severity) => setFilter({ ...filter, severity })} />
+            <Choice label={HL.originLabel} options={ORIGINS} names={ORIGIN_LABEL} value={filter.origin} any onChange={(origin) => setFilter({ ...filter, origin })} />
             <Select value={filter.rule ?? ALL} onValueChange={(v) => setFilter({ ...filter, rule: v === ALL ? undefined : v as HealthRule })}>
               <SelectTrigger aria-label={HL.ruleLabel}><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -140,7 +143,7 @@ function HealthBody({ client, projectId, visible }: { client: HealthClient; proj
             </Select>
           </div>
           {/* A changed filter or finished scan is a different list: the key drops old rows and any in-flight page. */}
-          <Findings key={`${filter.status}-${filter.severity}-${filter.rule}-${listKey}`} client={client} projectId={projectId} filter={filter} lastScanAt={last?.finishedAt ?? null} />
+          <Findings key={`${filter.status}-${filter.severity}-${filter.rule}-${filter.origin}-${listKey}`} client={client} projectId={projectId} filter={filter} lastScanAt={last?.finishedAt ?? null} />
         </>
       )}
     </>

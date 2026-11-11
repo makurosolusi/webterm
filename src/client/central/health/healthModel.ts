@@ -1,8 +1,8 @@
 // Health tab labels, filter shape and small pure helpers.
-import type { FindingStatus, FindingView, HealthLevel, HealthRule } from '../../../shared/centralHealth'
+import type { FindingOrigin, FindingStatus, FindingView, HealthLevel, HealthRule } from '../../../shared/centralHealth'
 
 /** Findings list filter; `undefined` means "any". */
-export interface FindingFilter { status: FindingStatus; severity?: HealthLevel; rule?: HealthRule }
+export interface FindingFilter { status: FindingStatus; severity?: HealthLevel; rule?: HealthRule; origin?: FindingOrigin }
 
 export const DEFAULT_FILTER: FindingFilter = { status: 'open' }
 /** How often the summary is re-read while a scan runs. */
@@ -12,6 +12,8 @@ export const DISMISS_REASON_MAX = 500
 /** localStorage key of the remembered project. */
 export const HEALTH_PROJECT_KEY = 'webterm.healthProject'
 export const SCAN_RUNNING = 'scan_running'
+export const ANALYSIS_RUNNING = 'analysis_running'
+export const ANALYSIS_COOLDOWN = 'cooldown'
 const PROJECT_NOT_FOUND = 'project_not_found'
 /** Route not answering: Central is off (its routes fall through to a bare 404). */
 const NOT_RUNNING = 'http_404'
@@ -19,6 +21,7 @@ const NOT_RUNNING = 'http_404'
 const NO_REPO_ERROR = /no repository folder/i
 
 export const STATUSES: FindingStatus[] = ['open', 'dismissed', 'fixed']
+export const ORIGINS: FindingOrigin[] = ['scan', 'review', 'analysis']
 export const LEVELS: HealthLevel[] = ['high', 'medium', 'low']
 export const RULES: HealthRule[] = ['file_size', 'unreferenced_module', 'todo_no_context', 'empty_catch', 'new_file_no_test', 'analysis']
 
@@ -77,6 +80,17 @@ export const HL = {
   reopen: 'Reopen',
   reopenLabel: (title: string) => `Reopen ${title}`,
   actionFailed: 'That did not work. Try again.',
+  originLabel: 'Found by',
+  analyze: 'Deep analysis',
+  analyzing: 'Analyzing…',
+  analyzeCost: 'Uses Claude, about $0.50 at most. Claims are kept only when their quote is found in the code.',
+  analyzeFailed: 'Could not start the analysis.',
+  analyzeAgain: (time: string) => `Available again at ${time}`,
+  lastAnalysis: (when: string, opened: number) => `Last analysis ${when} · ${opened} new`,
+  droppedClaims: (n: number) => `${n} unverified ${n === 1 ? 'claim' : 'claims'} dropped`,
+  lastAnalysisFailed: (error: string | null) => `The last analysis failed${error ? `: ${error}` : '.'}`,
+  verifiedQuote: 'Verified quote',
+  verifiedQuoteHint: 'The quoted code was found at this line. The judgement is the model\u2019s: verify before acting.',
 } as const
 
 export const STATUS_LABEL: Record<FindingStatus, string> = { open: 'Open', dismissed: 'Dismissed', fixed: 'Fixed' }
@@ -85,6 +99,7 @@ export const RULE_LABEL: Record<HealthRule, string> = {
   file_size: 'File too large', unreferenced_module: 'Unused module', todo_no_context: 'TODO without context',
   empty_catch: 'Empty catch', new_file_no_test: 'New file without test', analysis: 'Analysis',
 }
+export const ORIGIN_LABEL: Record<FindingOrigin, string> = { scan: 'Scan', review: 'Review', analysis: 'Analysis' }
 export const DISMISS_PRESETS = ['Intentional', 'False positive', 'Will fix later'] as const
 
 /** `file:line`, or the file alone when the finding has no line. */

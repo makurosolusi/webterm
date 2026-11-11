@@ -20,3 +20,4 @@
 .health-loc { display: inline-flex; align-items: center; gap: 4px; }
 .health-loc code { font-family: var(--vscode-editor-font-family, monospace); overflow-wrap: anywhere; }
 .health-dismiss textarea { flex-basis: 100%; }
+.health-analysis { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0 0 8px; }

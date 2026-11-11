@@ -68,6 +68,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'health.summary': { title: 'Check project health', text: 'Shows how many problems a project scan found and when it last ran.' },
   'health.findings': { title: 'List health findings', text: 'Lists the problems found in a project, each with its file, line and evidence.' },
   'health.scan': { title: 'Scan project health', text: 'Checks a project’s code for problems such as oversized files or empty catches. Changes nothing.' },
+  'health.analyze': { title: 'Analyze project structure', text: 'Asks a read-only Claude helper to review a project’s structure; only claims whose quote is found in the code are kept. Changes nothing.' },
   'cap.describe': { title: 'Explain a tool', text: 'Explains how one of its own tools is used.' },
   'cap.search': { title: 'Find a tool', text: 'Looks up its own tools by keyword.' },
 }
