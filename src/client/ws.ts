@@ -4,13 +4,17 @@
 // only the gap, or `reset` + the whole scrollback when it cannot (pty-207-9).
 // A subscriber whose session has exited is NOT replayed: its `open` would make the server spawn
 // a fresh PTY and wipe the final scrollback the user is looking at.
-import { emitFsEvent } from './fsEvents'
-import { WS_PATH } from '../shared/protocol'
-import type { CanvasMsg, ClientMsg, ExitMsg, OpenMsg, ServerMsg, ShotMsg, ViewMsg, WorkspacesMsg } from '../shared/protocol'
-import { canResumeWith } from '../shared/workspace'
-import type { AgentStatus } from '../shared/workspace'
-import { noteStatus } from './unread'
-import { reconnectDelay, setConnection } from './ws.connection'
+// Offline resilience: full-jitter backoff, wake triggers + app-level heartbeat (ws.liveness.ts),
+// the server `hello` (restart / new build) and an auth probe that stops a refused credential looping.
+import { HEALTH_PATH, WS_PATH } from '../shared/protocol'
+import type { ClientMsg, ExitMsg, HelloMsg, ServerMsg } from '../shared/protocol'
+import { replayOpen } from './ws.replayOpen'
+import { type ConnectionPhase, getConnection, reconnectDelay, setConnection, setRetryHandler } from './ws.connection'
+import { dispatchBroadcast } from './ws.listeners'
+import { browserOffline, createHeartbeat, installWakeTriggers } from './ws.liveness'
+
+export { replayOpen } from './ws.replayOpen'
+export { getStatus, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
 
 interface Sub {
   onOutput: (data: string) => void
@@ -47,56 +51,22 @@ function exitReasonFor(id: string, reason: ExitMsg['reason']): ExitReason | unde
   return closedByUs.delete(id) ? 'closed' : 'peer-closed'
 }
 
-// Status is per-node but consumed by two readers: the node's own dot and the
-// board overlay. Keep it on a separate channel so it survives independent of
-// whether a terminal is currently mounted/subscribed.
-// `undefined` ikut disiarkan: itu sapuan basi mencabut status (lihat `shared/agentStale.ts`), dan
-// pembaca yang tidak mendengarnya akan menyimpan 'working' yang sudah dicabut selamanya.
-const statuses = new Map<string, AgentStatus>()
-const statusListeners = new Set<(id: string, status: AgentStatus | undefined) => void>()
-
-export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined) => void): () => void {
-  statusListeners.add(cb)
-  return () => { statusListeners.delete(cb) }
-}
-export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
-
-const canvasListeners = new Set<(msg: CanvasMsg) => void>()
-
-/** Nodes/cables the server added to a stored board (`t:'canvas'`). */
-export function subscribeCanvas(cb: (msg: CanvasMsg) => void): () => void {
-  canvasListeners.add(cb)
-  return () => { canvasListeners.delete(cb) }
-}
-
-const viewListeners = new Set<(msg: ViewMsg) => void>()
-/** The central agent asks this window to show a board (and maybe one node): `t:'view'`. */
-export function subscribeView(cb: (msg: ViewMsg) => void): () => void {
-  viewListeners.add(cb)
-  return () => { viewListeners.delete(cb) }
-}
-
-const workspacesListeners = new Set<(msg: WorkspacesMsg) => void>()
-/** The server's workspace list changed (Central's `workspace.create`): `t:'workspaces'`. */
-export function subscribeWorkspaces(cb: (msg: WorkspacesMsg) => void): () => void {
-  workspacesListeners.add(cb)
-  return () => { workspacesListeners.delete(cb) }
-}
-
-const shotListeners = new Set<(msg: ShotMsg) => void>()
-/** The central agent asks for a screenshot of what the user sees: `t:'shot'`. */
-export function subscribeShot(cb: (msg: ShotMsg) => void): () => void {
-  shotListeners.add(cb)
-  return () => { shotListeners.delete(cb) }
-}
 let ws: WebSocket | null = null
 let everConnected = false
+/** The current socket fired `open` (a close before that is a refused/failed connect). */
+let opened = false
 // Messages that wait for the socket, keyed so the queue stays bounded: the latest resize per
 // terminal, one close per terminal, the latest watch state per dir. Input is NEVER queued: keys
 // typed during an outage are dropped, not replayed into the shell minutes later (pty-207-5).
 const queue = new Map<string, ClientMsg>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let attempts = 0
+/** The server refused our credential: no retry loop until `retryNow()`. */
+let authStopped = false
+let probing = false
+let triggersInstalled = false
+/** Build of the first `hello` this page met: what its bundle was served with. */
+let pageBuild: string | undefined
 
 const reconnectListeners = new Set<() => void>()
 
@@ -116,24 +86,100 @@ function url(): string {
 }
 
 const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
+const waitingPhase = (): ConnectionPhase => (everConnected ? 'reconnecting' : 'connecting')
+
+// Half-open socket (no pong): abandon it now. `close()` on a dead link can take minutes to fire
+// `onclose`, so the handlers are detached and the close path runs right away.
+const heartbeat = createHeartbeat((id) => { if (isOpen()) ws!.send(JSON.stringify({ t: 'ping', id })) }, () => abandonSocket())
+
+function abandonSocket(): void {
+  const s = ws
+  if (!s) return
+  s.onopen = s.onmessage = s.onclose = s.onerror = null
+  s.close()
+  socketClosed()
+}
 
 function scheduleReconnect(): void {
-  if (reconnectTimer) return
+  if (reconnectTimer || authStopped) return
+  // No network: waiting out a backoff only burns attempts. `online` (a wake trigger) resumes.
+  if (browserOffline()) { setConnection({ phase: 'offline', attempt: attempts }); return }
   const delay = reconnectDelay(attempts++)
-  setConnection({ phase: everConnected ? 'reconnecting' : 'connecting', retryAt: Date.now() + delay })
+  setConnection({ phase: waitingPhase(), attempt: attempts, retryAt: Date.now() + delay })
   reconnectTimer = setTimeout(() => { reconnectTimer = null; connect() }, delay)
 }
 
-/** Skip the backoff wait ("Retry now"). No-op while a socket exists. */
-export function reconnectNow(): void {
-  if (ws) return
+function clearTimer(): void {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = null
+}
+
+/** Skip the backoff wait and connect now; also leaves the `auth` and `offline` stops. No-op while a socket exists. */
+export function reconnectNow(): void {
+  authStopped = false
+  if (ws) return
+  clearTimer()
   connect()
+}
+setRetryHandler(reconnectNow)
+
+/** A wake event: check a socket that looks open, or retry a closed one without waiting. */
+function wake(): void {
+  if (authStopped) return
+  if (isOpen()) heartbeat.probe()
+  else if (!ws && (subs.size > 0 || everConnected)) { clearTimer(); connect() }
+}
+
+function wentOffline(): void {
+  if (isOpen()) { heartbeat.probe(); return } // a real drop shows up as a missed pong
+  if (ws || authStopped || !browserOffline()) return
+  clearTimer()
+  setConnection({ phase: 'offline', attempt: attempts })
+}
+
+/**
+ * A connect failed before opening: ask /api/health why. 401/403 = our credential is refused, which
+ * no amount of retrying fixes; anything else (network error, 5xx) keeps the backoff going.
+ */
+function probeAuth(): void {
+  if (probing || typeof fetch !== 'function') return
+  probing = true
+  fetch(HEALTH_PATH, { cache: 'no-store' })
+    .then((r) => r.status, () => 0) // 0 = unreachable: the server is down, not refusing us
+    .then((status) => {
+      probing = false
+      if ((status !== 401 && status !== 403) || isOpen()) return
+      authStopped = true
+      clearTimer()
+      if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); ws = null }
+      setConnection({ phase: 'auth', attempt: attempts })
+    })
+}
+
+function noteHello(m: HelloMsg): void {
+  const prev = getConnection()
+  pageBuild ??= m.build
+  setConnection({
+    phase: prev.phase,
+    bootId: m.bootId,
+    build: m.build,
+    serverRestartedAt: prev.bootId && prev.bootId !== m.bootId ? Date.now() : prev.serverRestartedAt,
+    buildChanged: m.build !== pageBuild,
+  })
+}
+
+function socketClosed(): void {
+  const failedConnect = !opened
+  ws = null
+  opened = false
+  heartbeat.stop()
+  scheduleReconnect()
+  if (failedConnect) probeAuth()
 }
 
 function connect() {
-  setConnection({ phase: everConnected ? 'reconnecting' : 'connecting' })
+  if (!triggersInstalled) { triggersInstalled = true; installWakeTriggers({ wake, offline: wentOffline }) }
+  setConnection({ phase: waitingPhase(), attempt: attempts })
   ws = new WebSocket(url())
   ws.onopen = () => {
     // A reconnect re-attaches to live PTYs. The xterm still holds what it showed before the drop,
@@ -143,8 +189,10 @@ function connect() {
     // Exited terminals are not replayed: their screen holds the exit notice.
     const wasReconnect = everConnected
     everConnected = true
+    opened = true
     attempts = 0
-    setConnection({ phase: 'connected' })
+    heartbeat.start()
+    setConnection({ phase: 'connected', attempt: 0 })
     for (const sub of subs.values()) {
       if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.epoch ? { ...sub.open, since: { epoch: sub.epoch, seq: sub.seq } } : sub.open))
     }
@@ -163,27 +211,9 @@ function connect() {
       console.warn('ws: ignoring a frame that is not JSON', err)
       return
     }
-    if (msg.t === 'status') {
-      if (msg.status === undefined) {
-        // Sapuan basi: statusnya DICABUT, bukan diganti. Dan sengaja TIDAK lewat `noteStatus` —
-        // sapuan bukan kabar, tidak ada yang terjadi untuk dibaca, jadi node ini tidak ditandai
-        // belum-dibaca.
-        statuses.delete(msg.id)
-      } else {
-        statuses.set(msg.id, msg.status)
-        // Aturan SET unread hidup DI SINI, bukan di komponen node: ini satu-satunya tempat yang
-        // melihat status node mana pun, termasuk node workspace non-aktif yang tak ter-mount.
-        noteStatus(msg.id, msg.status)
-      }
-      for (const l of statusListeners) l(msg.id, msg.status)
-      return
-    }
-    // Petunjuk watcher file manager (flag WATCH): lewat bus, bukan sub terminal.
-    if (msg.t === 'fsdirty') { emitFsEvent({ kind: 'dirty', path: msg.dir, origin: 'remote' }); return }
-    if (msg.t === 'canvas') { for (const l of [...canvasListeners]) l(msg); return }
-    if (msg.t === 'view') { for (const l of [...viewListeners]) l(msg); return }
-    if (msg.t === 'workspaces') { for (const l of [...workspacesListeners]) l(msg); return }
-    if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return }
+    if (msg.t === 'pong') { heartbeat.pong(msg.id); return }
+    if (msg.t === 'hello') { noteHello(msg); return }
+    if (dispatchBroadcast(msg)) return
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'reset') {
@@ -202,33 +232,8 @@ function connect() {
       sub.onExit(msg.code, exitReasonFor(msg.id, msg.reason))
     }
   }
-  ws.onclose = () => {
-    ws = null
-    scheduleReconnect()
-  }
+  ws.onclose = socketClosed
   ws.onerror = () => ws?.close()
-}
-
-/**
- * Bentuk `open` yang DISIMPAN untuk replay, yang belum tentu sama dengan yang dikirim sekarang.
- *
- * Peluncuran pertama sebuah node agent mencetak session id-nya (`--session-id <sid>`), dan id itu
- * hanya bisa dicetak SEKALI: claude menolak yang kedua dengan "Session ID … is already in use."
- * (lihat `withSessionId` di shared/workspace.ts). Selama PTY-nya hidup itu tak berakibat — server
- * me-re-attach dan mengabaikan `cmd`/`resume` sepenuhnya — tapi sesudah RESTART SERVER registri
- * sesinya kosong, jadi replay yang sama benar-benar MELUNCURKAN, dan node-nya mati di peluncuran.
- * Jadi yang disimpan adalah bentuk sambungnya: `--resume <sid>` yang sama.
- *
- * Tanpa pemeriksaan transcript di sini dengan sengaja: kalau percakapannya sudah tidak ada di disk,
- * server menurunkan kembali `resume` lewat probe-nya sendiri (`server/transcriptPresence.ts`) dan
- * meluncurkan dengan `--session-id` plus catatan ke terminal. Jadi aman di kedua arah.
- */
-export function replayOpen(msg: OpenMsg): OpenMsg {
-  const sid = msg.sessionId
-  // Digerbangi `canResumeWith`: tanpa bentuk resume yang membawa id, membalik `resume` justru
-  // meluncurkan polos dan node itu kehilangan rantai sesinya (`launchLine`).
-  if (!sid || !msg.agentId || !canResumeWith(msg.agentId, sid)) return msg
-  return { ...msg, resume: true }
 }
 
 export function send(msg: ClientMsg) {
@@ -284,7 +289,7 @@ export function subscribe(
   const sub: Sub = { onOutput, onExit, onReset, seq: 0 }
   subs.set(id, sub)
   // A pending reconnect timer will connect; connecting now as well would leave two sockets.
-  if (!ws && !reconnectTimer) connect()
+  if (!ws && !reconnectTimer && !authStopped) connect()
   return () => {
     if (subs.get(id) !== sub) return // a newer mount owns this id now
     subs.delete(id)

@@ -21,7 +21,7 @@ class FakeSocket {
   fire(event: string, ...args: unknown[]): void { this.handlers.get(event)?.(...args) }
 }
 
-function serve() {
+function serve(identity?: { bootId: string; build: string }) {
   const ws = new FakeSocket()
   let send: ((m: ServerMsg) => void) | undefined
   const resynced: string[] = []
@@ -31,7 +31,7 @@ function serve() {
     resync: vi.fn((id: string, s: (m: ServerMsg) => void) => { resynced.push(id); s({ t: 'reset', id, epoch: 'e' }) }),
   }
   const hub = { watch: vi.fn(), unwatch: vi.fn(), dropClient: vi.fn() }
-  serveTerminalSocket(ws as never, { sessions: sessions as never, fsWatchHub: hub as never, watchOn: () => false, clients: () => 1 })
+  serveTerminalSocket(ws as never, { sessions: sessions as never, fsWatchHub: hub as never, watchOn: () => false, clients: () => 1, identity })
   ws.fire('message', JSON.stringify({ t: 'open', id: 'n1', cols: 80, rows: 24 }))
   return { ws, sessions, hub, resynced, send: (m: ServerMsg) => send!(m) }
 }
@@ -95,5 +95,28 @@ describe('heartbeat', () => {
     expect(ws.pings).toBe(0)
     expect(sessions.detach).toHaveBeenCalledTimes(1)
     expect(hub.dropClient).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('app-level heartbeat and hello', () => {
+  test('a ping is answered with a pong of the same id and never reaches the sessions', () => {
+    const { ws, sessions } = serve()
+    sessions.handle.mockClear()
+    ws.fire('message', JSON.stringify({ t: 'ping', id: '7' }))
+    expect(ws.sent).toEqual([{ t: 'pong', id: '7' }])
+    expect(sessions.handle).not.toHaveBeenCalled()
+  })
+
+  test('any client frame counts as alive for the ws-level heartbeat', () => {
+    const { ws } = serve()
+    vi.advanceTimersByTime(WS_HEARTBEAT_MS)
+    ws.fire('message', JSON.stringify({ t: 'ping', id: '1' })) // no ws pong, but the tab is talking
+    vi.advanceTimersByTime(WS_HEARTBEAT_MS)
+    expect(ws.terminated).toBe(0)
+  })
+
+  test('the first frame of a connection is hello with bootId and build', () => {
+    const { ws } = serve({ bootId: 'boot-1', build: '0.8.0+abc' })
+    expect(ws.sent[0]).toEqual({ t: 'hello', bootId: 'boot-1', build: '0.8.0+abc' })
   })
 })

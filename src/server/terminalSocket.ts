@@ -3,6 +3,7 @@ import type { ClientMsg, ServerMsg } from '../shared/protocol'
 import type { Sessions } from './sessions'
 import type { fsWatchHub } from './fsWatch'
 import { createLogger } from './logs'
+import type { ServerIdentity } from './health.api'
 
 /**
  * One terminal WebSocket (`/ws`): message dispatch plus the two guards a long-lived socket needs.
@@ -15,6 +16,8 @@ import { createLogger } from './logs'
  *
  * Heartbeat, the `ws` README pattern: ping every `WS_HEARTBEAT_MS`, `terminate()` a socket that did
  * not answer the previous ping, so a half-open connection stops holding subscriptions forever.
+ * Browsers cannot see those pings, so the client also sends app-level `{t:'ping'}` and expects
+ * `{t:'pong'}`; and every connection opens with `{t:'hello', bootId, build}` (health.api.ts).
  */
 
 /** Queued bytes above which a socket gets no more output (nodeterm `WS_DROP_WATER`). */
@@ -33,6 +36,8 @@ export interface TerminalSocketDeps {
   watchOn: () => boolean
   /** Connected client count, for the connect log line. */
   clients: () => number
+  /** Sent as the first frame (`hello`); absent in tests that do not care. */
+  identity?: ServerIdentity
 }
 
 type Socket = Pick<WebSocket, 'readyState' | 'OPEN' | 'bufferedAmount' | 'send' | 'ping' | 'terminate' | 'on'>
@@ -66,6 +71,8 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
     ws.send(JSON.stringify(m))
   }
 
+  if (deps.identity) send({ t: 'hello', bootId: deps.identity.bootId, build: deps.identity.build })
+
   let alive = true
   ws.on('pong', () => { alive = true })
   const heartbeat = setInterval(() => {
@@ -86,6 +93,9 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
       wsLog.warn('ws.bad_message', 'WebSocket message is not JSON; ignored', { bytes: String(raw).length, error: err })
       return
     }
+    // Any frame proves the client is there; a ping is answered here, it is not a session message.
+    alive = true
+    if (msg?.t === 'ping') { send({ t: 'pong', id: String(msg.id) }); return }
     try {
       // fswatch/fsunwatch are not PTY sessions; with the watch capability off they are ignored.
       if (msg.t === 'fswatch' || msg.t === 'fsunwatch') {
