@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- `webterm --help`, `--version`, `--readme` and `--docs [topic]`: the server binary answers these without starting, and a mistyped option now stops with a suggestion (exit 2) instead of starting the server.
 - Link previews (Open Graph / Twitter cards with a 1200x630 image) when a webterm link is shared, using the address the link was opened from.
 - Editor and diff nodes: Word wrap toggle (⌥Z), on by default for Markdown and text, remembered per node.
 - Fit width to content: in the node menu, or double-click the right edge while resizing.

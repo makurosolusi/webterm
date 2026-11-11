@@ -1,3 +1,5 @@
+// Must stay the first import: CLI flags (--help, --version, ...) exit before any side effect below.
+import './cli/cliGate'
 import http from 'node:http'
 import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
