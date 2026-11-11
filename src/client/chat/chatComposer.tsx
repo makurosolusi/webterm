@@ -13,6 +13,7 @@ import type { ComposerImage } from './chatAttach'
 import { AttachTray, useComposerAttach, type AttachFiles } from './chatComposerAttach'
 import { useComposerCompletion } from '../agentChat/completionMenu'
 import type { ComposerCompletion } from '../agentChat/composerCompletion'
+import { OFFLINE_REASON, useDisconnected } from '../useConnection'
 
 export interface ChatComposerProps {
   busy: boolean
@@ -66,7 +67,9 @@ export default function ChatComposer(props: ChatComposerProps) {
   useEffect(() => { if (autoFocus) area.current?.focus() }, [autoFocus])
   const tooLong = props.maxLength !== undefined && text.length > props.maxLength
   const hasContent = text.trim() !== '' || files.images.length > 0
-  const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy
+  // Offline: the draft stays editable and is never cleared; only sending waits for the server.
+  const offline = useDisconnected()
+  const canSend = hasContent && !props.busy && !props.disabled && !tooLong && !files.busy && !offline
 
   const seed = props.seed
   useEffect(() => {
@@ -181,13 +184,14 @@ export default function ChatComposer(props: ChatComposerProps) {
           </IconTooltip>
         ) : (
           <IconTooltip label="Send message" shortcut="Enter" disabled={!canSend}
-            disabledReason={props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : files.busy ? 'attaching files' : 'type a message first'}>
+            disabledReason={offline ? OFFLINE_REASON : props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : files.busy ? 'attaching files' : 'type a message first'}>
             <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
               <span className="codicon codicon-send" aria-hidden="true" />
             </button>
           </IconTooltip>
         )}
       </div>
+      {offline && <p className="chat-composer__limit" role="status">{OFFLINE_REASON}</p>}
       {tooLong && (
         <p className="chat-composer__limit" role="alert">
           {`Message is ${text.length.toLocaleString('en-US')} characters; the limit is ${props.maxLength?.toLocaleString('en-US')}. Shorten it to send.`}

@@ -1,7 +1,10 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act } from '@testing-library/react'
 import ChatComposer, { stepHistory } from './chatComposer'
+import { OFFLINE_REASON } from '../useConnection'
+import { setConnection } from '../ws.connection'
 
 afterEach(cleanup)
 
@@ -108,5 +111,27 @@ describe('ChatComposer', () => {
     rerender(<ChatComposer busy onSend={() => {}} onStop={onStop} />)
     fireEvent.keyDown(box(), { key: 'Escape' })
     expect(onStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('offline: Send is disabled with the reason, the draft stays editable and is kept for later', () => {
+    const onSend = vi.fn()
+    render(<ChatComposer busy={false} onSend={onSend} onStop={() => {}} />)
+    type('keep me')
+    act(() => setConnection({ phase: 'reconnecting' }))
+    const send = screen.getByLabelText('Send message') as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(onSend).not.toHaveBeenCalled()
+    fireEvent.keyDown(document, { key: 'Tab' }) // keyboard modality: focus opens the tooltip
+    expect(tipOf(send.parentElement!)).toBe(`Send message (${OFFLINE_REASON}) Enter`)
+    expect(screen.getByText(OFFLINE_REASON)).toBeTruthy()
+    expect(box().disabled).toBe(false)
+    type('keep me too')
+    expect(box().value).toBe('keep me too')
+    act(() => setConnection({ phase: 'connected' }))
+    expect(screen.queryByText(OFFLINE_REASON)).toBeNull()
+    expect((screen.getByLabelText('Send message') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(onSend).toHaveBeenCalledWith('keep me too', [])
   })
 })

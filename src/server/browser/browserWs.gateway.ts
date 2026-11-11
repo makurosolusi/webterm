@@ -9,6 +9,7 @@ import { createSerialQueue } from './browserWs.backpressure'
 import type { SerialQueue } from './browserWs.backpressure'
 import type { GatewayHost, Viewer, ViewerHub, ViewerSink } from './browserWs.viewers'
 import { BrowserError, TargetGoneError } from './browserHost.targets'
+import { WS_HEARTBEAT_MS } from '../terminalSocket'
 
 const log = createLogger('browser.ws')
 /** Kode penutupan WS untuk fitur mati (policy violation). */
@@ -81,9 +82,24 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
   }
   const reject = (id: string, code: BrowserErrorCode) => sink.sendJson({ t: 'error', id, code })
 
+  // Heartbeat, as on /ws (terminalSocket.ts): a client that vanished without a close (sleep, Wi-Fi
+  // drop) misses a pong and is terminated, so its screencast and viewers are released.
+  let alive = true
+  ws.on('pong', () => { alive = true })
+  const heartbeat = setInterval(() => {
+    if (!alive) {
+      log.warn('browser.ws', 'client missed a heartbeat; terminating', { intervalMs: WS_HEARTBEAT_MS })
+      ws.terminate()
+      return
+    }
+    alive = false
+    ws.ping()
+  }, WS_HEARTBEAT_MS)
+
   const cleanup = () => {
     if (closed) return
     closed = true
+    clearInterval(heartbeat)
     for (const id of attached) {
       hub.leave(id, viewer).catch((err) => log.warn('browser.ws', 'detach on close failed', { ids: { nodeId: id }, error: err instanceof Error ? err.name : typeof err }))
     }

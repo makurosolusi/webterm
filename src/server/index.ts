@@ -3,6 +3,7 @@ import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH } from '../shared/protocol'
 import { serveTerminalSocket } from './terminalSocket'
+import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
 import { sweepTrashOnBoot } from './fsBoot'
@@ -124,6 +125,8 @@ if (process.env.NODE_ENV !== 'test') {
 const API_PREFIX = '/api/'
 /** Vite's outDir, relative to this file (src/server), not the cwd: `bun src/server/index.ts` runs from anywhere. */
 const DIST_DIR = join(import.meta.dirname, '../../dist')
+/** bootId + build: sent as the socket `hello` and by GET /api/health (health.api.ts). */
+const identity = createServerIdentity({ distDir: DIST_DIR, dev })
 
 function reqUrl(req: http.IncomingMessage): URL {
   return new URL(req.url || '/', 'http://x')
@@ -197,6 +200,7 @@ function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL)
   if (refuseProxyOnMain(req, res)) return true // 404: the proxy has its own origin (proxy.routes.ts)
   if (uiAuthRoute(req, res, url)) return true // before the gate: this is how a browser gets a credential
   if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(res); return true }
+  if (healthRoute(req, res, url.pathname, identity)) return true
   if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'), onTokenInstalled)) return true
   return telegramHot.handleApi(req, res) || handleApi(req, res) // root-only, after the gate: per-node tokens never reach it
 }
@@ -278,7 +282,7 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 // Terminal socket dispatch, heartbeat and backpressure live in terminalSocket.ts.
-wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
+wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, identity, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
 
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {

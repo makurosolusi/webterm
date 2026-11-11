@@ -4,6 +4,7 @@
 // useAgentChatControls. One reducer per mounted view; the stream closes on unmount.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import ChatComposer from '../chat/chatComposer'
+import { useDisconnected } from '../useConnection'
 import type { ComposerImage } from '../chat/chatAttach'
 import { agentChatAttach } from './agentChatAttach'
 import { IconButton } from '@/components/ui/icon-button'
@@ -157,6 +158,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
   }, [state, atBottom])
 
   const busy = isBusyStatus(state.status)
+  const offline = useDisconnected() // Retry below re-sends; the composer under it says why (OFFLINE_REASON)
   useEffect(() => { onBusy?.(busy) }, [busy, onBusy])
   const send = (text: string, images: ComposerImage[] = []): void => {
     if (!branch.editing && controls.intercept(text, images.length > 0)) return
@@ -252,7 +254,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
         <div className="chat-error" role="alert">
           <span className="codicon codicon-error" aria-hidden="true" />
           <span>{`Not sent${sendError.images.length ? ` (with ${sendError.images.length} image${sendError.images.length === 1 ? '' : 's'})` : ''}: ${sendError.message}`}</span>
-          <Button variant="secondary" size="xs" disabled={sending} onClick={() => send(sendError.text, sendError.images)}>Retry</Button>
+          <Button variant="secondary" size="xs" disabled={sending || offline} onClick={() => send(sendError.text, sendError.images)}>Retry</Button>
           <IconButton label="Dismiss error" size="icon-xs" onClick={() => setSendError(null)}>
             <span className="codicon codicon-close" aria-hidden="true" />
           </IconButton>

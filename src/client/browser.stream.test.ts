@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodeFrame } from '../shared/browser.wire'
 import { createBrowserStream } from './browser.stream'
 import type { BrowserListener } from './browser.stream'
+import { setConnection } from './ws.connection'
 
 class FakeWs {
   static all: FakeWs[] = []
@@ -29,7 +30,7 @@ const listener = (): BrowserListener & { frames: Array<[number, number]>; msgs: 
   return l as never
 }
 
-beforeEach(() => { FakeWs.all = []; vi.useFakeTimers() })
+beforeEach(() => { FakeWs.all = []; vi.useFakeTimers(); setConnection({ phase: 'connecting', attempt: 0 }) })
 afterEach(() => { vi.useRealTimers() })
 
 const make = () => createBrowserStream(() => new FakeWs() as unknown as WebSocket)
@@ -113,5 +114,39 @@ describe('browser.stream', () => {
     ws.close()
     vi.advanceTimersByTime(5000)
     expect(FakeWs.all).toHaveLength(1)
+  })
+
+  it('reconnect mundur (backoff jitter, plafon), jeda selama offline/auth, langsung sambung saat connected', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.999) // delay = plafon tiap percobaan
+    try {
+      const s = make()
+      const a = listener()
+      s.subscribe('a', a); s.attach('a', VP)
+      FakeWs.all[0].close() // gagal sebelum open
+      vi.advanceTimersByTime(998)
+      expect(FakeWs.all).toHaveLength(1)
+      vi.advanceTimersByTime(2)
+      expect(FakeWs.all).toHaveLength(2) // percobaan 0: ~1 dtk
+      FakeWs.all[1].close()
+      vi.advanceTimersByTime(1500)
+      expect(FakeWs.all).toHaveLength(2) // percobaan 1: ~2 dtk, bukan 1 dtk lagi
+      vi.advanceTimersByTime(500)
+      expect(FakeWs.all).toHaveLength(3)
+
+      setConnection({ phase: 'offline', attempt: 3 })
+      FakeWs.all[2].close()
+      vi.advanceTimersByTime(60_000)
+      expect(FakeWs.all).toHaveLength(3) // offline: tidak ada percobaan
+      s.send({ t: 'copy', id: 'a' }) // input saat mati tetap dibuang
+      expect(a.up.at(-1)).toBe(false) // dan node tahu ia terputus
+
+      setConnection({ phase: 'connected', attempt: 0 })
+      expect(FakeWs.all).toHaveLength(4) // server kembali: sambung seketika
+      FakeWs.all[3].open()
+      expect(FakeWs.all[3].msgs()).toEqual([{ t: 'attach', id: 'a', ...VP }])
+      s.reset()
+    } finally {
+      vi.restoreAllMocks()
+    }
   })
 })

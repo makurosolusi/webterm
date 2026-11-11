@@ -30,6 +30,8 @@ export interface WorkspaceSaverDeps {
   applyRef: RefObject<((ws: Workspace) => void) | null>
   /** App's workspace list: fed with every locked payload and every board the server answers. */
   setWorkspaces: Dispatch<SetStateAction<Workspace[]>>
+  /** A save answered 401/403 (UI session gone): App shows sign-in; the unsaved board stays queued. */
+  onAuthRequired?: () => void
 }
 
 export interface WorkspaceSaver {
@@ -51,7 +53,7 @@ export interface WorkspaceSaver {
  * 400ms itu (`onSelect`/`onCreateWorkspace`/`onDeleteWorkspace` memanggil `applyWorkspace`), dan
  * membaca ref saat itu menulis board BARU ke id workspace LAMA.
  */
-export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces }: WorkspaceSaverDeps): WorkspaceSaver {
+export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces, onAuthRequired }: WorkspaceSaverDeps): WorkspaceSaver {
   // Fungsi tulis yang payload-nya sudah tertangkap. Satu-satunya sumber `flushSave`. Disimpan di
   // ref, bukan di state: menembakkannya tidak boleh memicu render.
   const pending = useRef<(() => void) | null>(null)
@@ -67,12 +69,15 @@ export function useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef
 
   const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
   const names = useRef(new Map<string, string>()) // board id -> name, for the save-failed notice
+  const authRef = useRef(onAuthRequired)
+  authRef.current = onAuthRequired
   const store = useCallback((ws: Workspace) => setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w))), [setWorkspaces])
 
   // Refused saves: the unsaved local layout is dropped, never merged or re-applied silently.
   const [queue] = useState(() => createSaveQueue({
     onSaved: (saved, superseded) => { if (!superseded) store(saved) },
     onState: setSaveState,
+    onAuth: () => authRef.current?.(),
     onStale: (current) => {
       store(current)
       if (activeWsRef.current?.id !== current.id) {

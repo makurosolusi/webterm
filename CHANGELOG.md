@@ -100,6 +100,7 @@ Operator notes:
 - Tab layout only changes how nodes are shown. Cables, node positions, sizes and the viewport are not touched, so switching back to canvas restores the board exactly as it was. Terminals, editors and browsers are not reloaded when you switch: scrollback, unsaved editor changes and the page in a browser node are kept. A terminal that was scrolled to the bottom is still at the bottom afterwards.
 - The dock hides the zoom, fit view and view lock buttons in tab layout, since they only apply to the canvas. The bottom panel (Inbox, Chat, Problems, Output) takes its own space below the active tab instead of covering it.
 - Terminals show a banner while the connection to the webterm server is lost: "Connection to the webterm server lost. Reconnecting in 5s… Typing is paused." with a "Retry now" button. Reconnect attempts back off from 1 to 10 seconds.
+- One connection status for the whole app, at the top of the window: "Reconnecting… retrying in 5s" with a countdown and "Retry now", "You're offline. Changes are kept and will sync when you're back." while the network is gone, a notice when webterm restarted, "A new version is available" with Reload after an update, and the sign-in screen when your login has expired. Terminals keep only a small "input paused" note.
 - The Inbox shows its items a page at a time, with a "Load more" button at the end of the list.
 - If the app fails to load at startup, an error screen says what went wrong and offers Retry, instead of a blank page.
 - Signing in without setup: the first start opens your default browser already signed in, through a one-time code (single use, 60 s) in a file only you can read. The browser keeps an HttpOnly session cookie for 30 days of inactivity, and a restart opens nothing and keeps open tabs working.
@@ -318,6 +319,12 @@ Operator notes:
 - A spawn approval nobody answered now ends that agent instead of leaving it waiting forever.
 - Control panel Status: figures refresh by themselves, budget bars follow the theme, and the level text is honest when approvals are skipped.
 - Skills proposed by Central now reach review; active skills can be rolled back; proposals can be rejected; the approval phrase is checked on the server.
+- A connection left half-open after the computer slept or switched Wi-Fi is now detected by a heartbeat and reconnected, instead of looking connected while nothing arrives.
+- webterm reconnects right away when the computer wakes, the tab comes back or the network returns, instead of waiting out the backoff.
+- Board saves are no longer retried forever when the server refuses your sign-in: the changes are kept until you sign in again, and a save that failed while the server was unreachable is sent as soon as the connection is back.
+- Agent Chat: a send or fork retried after a dropped connection no longer goes through twice.
+- The browser node's stream, Activity, Output, chat and app live updates back off with a random delay and wait while the server is unreachable, instead of hammering a server that is down, then reconnect as soon as it is back without missing or repeating anything.
+- Send buttons are disabled while you are offline, and what you typed is kept.
 
 ### Removed
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

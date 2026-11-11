@@ -5,6 +5,7 @@ import {
   openChatStream, sendMessage,
 } from './chatApi'
 import type { ChatEvent } from './chat/chatTypes'
+import { STREAM_REOPEN_JITTER_MS, setConnection } from './ws.connection'
 
 const TOKEN_KEY = 'webterm.token'
 const TOKEN = 'tkn-chat-test'
@@ -77,6 +78,7 @@ class FakeEventSource {
 }
 
 beforeEach(() => {
+  setConnection({ phase: 'connected', attempt: 0 })
   sessionStorage.clear()
   FakeEventSource.instances = []
   fetchMock = vi.fn()
@@ -240,6 +242,44 @@ describe('chat SSE client', () => {
     expect(statuses[statuses.length - 1]).toBe('closed')
     vi.advanceTimersByTime(60_000)
     expect(FakeEventSource.instances).toHaveLength(1)
+  })
+
+  it('waits for the shared socket while it is offline and resumes from the last applied seq', () => {
+    vi.useFakeTimers()
+    const { events } = open(4)
+    const first = FakeEventSource.instances[0]
+    first.open()
+    first.emit('part.delta', 5, { text: 'a' })
+    setConnection({ phase: 'offline' })
+    first.fail()
+    vi.advanceTimersByTime(10 * 60_000)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    setConnection({ phase: 'connected' })
+    vi.advanceTimersByTime(STREAM_REOPEN_JITTER_MS)
+    const second = FakeEventSource.instances[1]
+    expect(second.url).toBe(`${CHAT_PATH}/conversations/central%3Aglobal/stream?after=5`)
+    second.emit('part.delta', 5, { text: 'a' }) // replay of the applied frame: still deduped
+    expect(events.map((event) => event.seq)).toEqual([5])
+  })
+
+  it('uses the jittered backoff, and close() cancels a retry waiting for the socket', () => {
+    vi.useFakeTimers()
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const a = open(4)
+    FakeEventSource.instances[0].fail()
+    vi.advanceTimersByTime(499)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    expect(FakeEventSource.instances).toHaveLength(2)
+    a.stream.close()
+
+    setConnection({ phase: 'reconnecting' })
+    const b = open(4)
+    FakeEventSource.instances[2].fail()
+    b.stream.close()
+    setConnection({ phase: 'connected' })
+    vi.advanceTimersByTime(60_000)
+    expect(FakeEventSource.instances).toHaveLength(3)
   })
 })
 

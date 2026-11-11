@@ -3,11 +3,12 @@ import {
   LOG_CLIENT_CAP, clearLogStream, getLogStreamState, setLogStreamLevel, subscribeLogStream,
 } from './logStreamStore'
 import { FakeEventSource, installFakeLogServer, makeEntry } from './outputTestKit'
+import { STREAM_REOPEN_JITTER_MS, setConnection } from '../ws.connection'
 
 const settle = async (): Promise<void> => { await vi.advanceTimersByTimeAsync(0) }
 
 let unsubscribe: (() => void) | null = null
-beforeEach(() => { vi.useFakeTimers() })
+beforeEach(() => { vi.useFakeTimers(); setConnection({ phase: 'connected', attempt: 0 }) })
 afterEach(() => {
   unsubscribe?.()
   unsubscribe = null
@@ -117,5 +118,47 @@ describe('logStreamStore', () => {
     await settle()
     expect(FakeEventSource.instances).toHaveLength(1)
     second()
+  })
+
+  it('schedules no retry while the shared socket is offline, then reopens from the same cursor', async () => {
+    const server = installFakeLogServer([makeEntry(1), makeEntry(2)])
+    await open()
+    setConnection({ phase: 'offline' })
+    FakeEventSource.last().fail()
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    const backfills = server.calls.length
+    setConnection({ phase: 'connected' })
+    await vi.advanceTimersByTimeAsync(STREAM_REOPEN_JITTER_MS)
+    expect(server.calls.length).toBe(backfills + 1)
+    expect(server.calls.at(-1)?.url).toBe('/api/logs?afterSeq=2&limit=2000')
+    expect(FakeEventSource.last().url).toBe('/api/logs/stream?afterSeq=2')
+    expect(getLogStreamState().entries.map((entry) => entry.seq)).toEqual([1, 2])
+  })
+
+  it('uses the jittered backoff', async () => {
+    installFakeLogServer([makeEntry(1)])
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    await open()
+    FakeEventSource.last().fail()
+    await vi.advanceTimersByTimeAsync(499)
+    expect(FakeEventSource.instances).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(FakeEventSource.instances).toHaveLength(2)
+    vi.mocked(Math.random).mockRestore()
+  })
+
+  it('the last unsubscribe cancels a retry still waiting for the socket', async () => {
+    const server = installFakeLogServer([makeEntry(1)])
+    await open()
+    setConnection({ phase: 'reconnecting' })
+    FakeEventSource.last().fail()
+    unsubscribe?.()
+    unsubscribe = null
+    const calls = server.calls.length
+    setConnection({ phase: 'connected' })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(server.calls.length).toBe(calls)
+    expect(FakeEventSource.instances).toHaveLength(1)
   })
 })
