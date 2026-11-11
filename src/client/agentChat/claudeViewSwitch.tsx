@@ -91,14 +91,10 @@ export function ClaudeViewButton({ nodeId, to, busy }: { nodeId: string; to: Cla
   const icon = switching ? 'loading codicon-modifier-spin' : to === 'chat' ? 'comment-discussion' : 'terminal'
   return (
     <>
-      {/* vscode-toolbar-button has no `disabled`: aria-disabled + the guard below, like Maximize. The
-          strings are explicit: React writes `true` on a custom element as "", which ARIA reads as false.
-          Dimmed inline, not with pointer-events off, so the busy tooltip still shows on hover. */}
       <ToolbarButton
         className="nodrag" label={CLAUDE_VIEW_TEXT[to]} title={tip} data-title={tip} data-claude-view={to}
-        aria-disabled={off ? 'true' : undefined} aria-busy={switching ? 'true' : undefined}
-        style={off ? { opacity: 0.4 } : undefined}
-        onClick={() => { if (!off) run() }}
+        disabled={off} aria-busy={switching ? 'true' : undefined}
+        onClick={run}
       ><span className={cn('codicon', `codicon-${icon}`)} aria-hidden="true" /></ToolbarButton>
       {error && (
         <VscodeNotification id={`claude-view-${nodeId}`} severity="warning" title={CLAUDE_VIEW_TEXT.failedTitle} message={error} onClose={dismiss} />
