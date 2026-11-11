@@ -31,6 +31,10 @@ describe('tool labels', () => {
     }
   })
 
+  it('labels the health tools', () => {
+    for (const n of ['health.summary', 'health.findings', 'health.scan']) expect(TOOL_LABELS[n]?.title, n).toBeTruthy()
+  })
+
   it('an unknown tool falls back to its name and server summary', () => {
     expect(toolLabel('x.y', 'Raw summary.')).toEqual({ title: 'x.y', text: 'Raw summary.' })
   })

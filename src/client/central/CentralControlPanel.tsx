@@ -9,13 +9,15 @@ import LevelPanel from './LevelPanel'
 import AbilitiesView from './AbilitiesView'
 import SkillReview from './SkillReview'
 import MemoryView from './MemoryView'
+import HealthView from './health/HealthView'
+import { HL } from './health/healthModel'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import { type CentralTab, useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
 import './central.css'
 
-type TabId = CentralTab | 'memory'
+type TabId = CentralTab | 'memory' | 'health'
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
 const TABS: { id: TabId; label: string }[] = [
@@ -24,6 +26,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'agents', label: CL.tabAgents },
   { id: 'skills', label: CL.tabSkills },
   { id: 'memory', label: CL.tabMemory },
+  { id: 'health', label: HL.tab },
 ]
 
 /** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Status. */
@@ -74,6 +77,7 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
           {tab === 'skills' && <SkillReview client={client} />}
           {tab === 'abilities' && <AbilitiesView client={client} />}
           {tab === 'memory' && <MemoryView client={client} />}
+          {tab === 'health' && <HealthView visible={visible} />}
         </div>
       </div>
     </div>
