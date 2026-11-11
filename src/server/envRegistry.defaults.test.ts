@@ -32,7 +32,6 @@ const budget = (k: 'tokens' | 'spawns' | 'costMicros') => (): string => String(b
 
 /** [kunci, pembaca nyata pada env kosong, lokasi pembaca]. */
 const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
-  ['WEBTERM_CHANNELS', () => 'on', 'channels/channelsMasterGate.ts (kunci TIDAK dibaca lagi: kanal ikut kemampuan telegram; nilai = default registry legacy)'],
   ['WEBTERM_TELEGRAM', () => onOff(telegramChannelEnabled(E)), 'channels/channelsRuntime.ts:94'],
   ['WEBTERM_CENTRAL', () => onOff(centralEnabled('')), 'central/centralModel.ts:67'],
   ['WEBTERM_CENTRAL_RUNTIME', () => centralRuntimeKind(''), 'central/runtime/runtimeFlag.ts:18'],
@@ -70,15 +69,11 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_LEDGER', () => 'off', 'ledger/ledgerRuntime.ts:ledgerMode (kunci lama TIDAK dibaca lagi: ledger selalu hidup, KE-1; nilai = default registry legacy)'],
   ['WEBTERM_LOG_LEVEL', () => 'info', 'logs/logger.ts:34 (`?? DEFAULT_LOG_LEVEL`)'],
   ['WEBTERM_LOG_FILE', () => 'on', "logs/logger.ts:108 (`?? 'on'`)"],
-  ['WEBTERM_CENTRAL_TOOLS', () => 'read', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_BROWSER_COOKIE_TTL_DAYS', () => '7', 'browser/browser.runtime.ts:68 (`ttl > 0 ? ttl : DEFAULT_COOKIE_TTL_DAYS`)'],
 ]
 
 /** Pembaca `flagOn(env[KEY])`: env kosong = off. [kunci, lokasi]. */
 const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
-  ['WEBTERM_CENTRAL_TELEGRAM', 'channels/telegramCentralBridge.ts:16'],
-  ['WEBTERM_CENTRAL_CHAT', 'centralChatApi.ts:49'],
-  ['WEBTERM_CENTRAL_PLANNER', 'shared/featureCapabilities.ts (linked by the Worker orchestrator card; no Central chat reader since K7)'],
   ['WEBTERM_CENTRAL_MEMORY', 'central/chat/turnService.ts:123'],
   ['WEBTERM_CENTRAL_SKILLS', 'central/ca2Boot.ts:132'],
   ['WEBTERM_CENTRAL_SKILL_PROPOSE', 'central/ca2Boot.ts:132'],

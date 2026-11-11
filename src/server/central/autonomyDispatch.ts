@@ -9,7 +9,7 @@ const log = createLogger('central')
 
 /** `WEBTERM_CENTRAL_RELIABILITY=on` switches autonomy to dispatch/wake/breaker mode; anything else keeps the legacy loop. */
 export const RELIABILITY_ENV = 'WEBTERM_CENTRAL_RELIABILITY'
-/** Optional override of the global worker cap, read at boot. */
+/** Optional override of the global worker cap, re-read on every dispatch (Settings edit process.env). */
 export const MAX_INFLIGHT_ENV = 'WEBTERM_CENTRAL_MAX_INFLIGHT'
 /** Global cap of workers started by autonomy at once (the 3-per-project cap lives in `caps.ts`). */
 export const DEFAULT_MAX_INFLIGHT_WORKERS = 3
@@ -31,7 +31,8 @@ export interface DispatchResult { ok: boolean; code?: string }
 export type StartResult = 'started' | 'saturated' | 'duplicate' | 'breaker_open'
 
 export interface DispatcherDeps {
-  maxInflight?: number
+  /** Global cap; a function is re-read on every `start`, so a lowered cap only blocks new jobs. */
+  maxInflight?: number | (() => number)
   /** Persistent breaker (WS-07); keyed `item:<projectId>:<itemId>`. Absent = no breaker. */
   breaker?: SyncBreaker
   /** Called once per job when its worker promise settles; `breakerOpened` marks a doom-loop trip. */
@@ -59,7 +60,10 @@ function tripItem(breaker: SyncBreaker, key: `item:${string}`, code: string): bo
 
 /** Builds the bounded, breaker-aware dispatcher. */
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
-  const capacity = Math.max(1, deps.maxInflight ?? DEFAULT_MAX_INFLIGHT_WORKERS)
+  const capacity = (): number => {
+    const cap = typeof deps.maxInflight === 'function' ? deps.maxInflight() : deps.maxInflight
+    return Math.max(1, cap ?? DEFAULT_MAX_INFLIGHT_WORKERS)
+  }
   const inflight = new Map<string, Promise<void>>()
 
   function settle(job: DispatchJob, result: DispatchResult): void {
@@ -85,7 +89,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     start(job, exec) {
       const key = jobKey(job)
       if (inflight.has(key)) return 'duplicate'
-      if (inflight.size >= capacity) return 'saturated'
+      if (inflight.size >= capacity()) return 'saturated'
       if (deps.breaker && !deps.breaker.allow(`item:${key}`).allowed) return 'breaker_open'
       const promise = Promise.resolve()
         .then(exec)
@@ -96,7 +100,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     },
     has: (job) => inflight.has(jobKey(job)),
     get size() { return inflight.size },
-    capacity,
+    get capacity() { return capacity() },
     async drain() {
       while (inflight.size > 0) await Promise.all([...inflight.values()])
     },

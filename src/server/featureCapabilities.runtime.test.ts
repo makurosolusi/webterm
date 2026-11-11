@@ -76,16 +76,15 @@ describe('legacyToCapabilities', () => {
 
   it('anak/sub tanpa induk aktif diabaikan; dengan induk tidak', () => {
     const orphan = legacy.legacyToCapabilities({
-      WEBTERM_FILES_WATCH: 'on', WEBTERM_CENTRAL_CHAT: 'on', WEBTERM_RUN_REQUIRE_APPROVAL: 'on', WEBTERM_AGENT_MAIL: '1',
+      WEBTERM_FILES_WATCH: 'on', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_RUN_REQUIRE_APPROVAL: 'on', WEBTERM_AGENT_MAIL: '1',
     })
     expect(orphan.set.size).toBe(0)
     expect(orphan.ignored.sort()).toEqual(
-      ['WEBTERM_AGENT_MAIL', 'WEBTERM_CENTRAL_CHAT', 'WEBTERM_FILES_WATCH', 'WEBTERM_RUN_REQUIRE_APPROVAL'])
+      ['WEBTERM_AGENT_MAIL', 'WEBTERM_CENTRAL_MEMORY', 'WEBTERM_FILES_WATCH', 'WEBTERM_RUN_REQUIRE_APPROVAL'])
     const ok = legacy.legacyToCapabilities({ WEBTERM_FILES_VIEWERS: 'on', WEBTERM_FILES_WATCH: 'on' })
     expect(ok.ignored).toEqual([])
-    // CENTRAL_TELEGRAM butuh central DAN telegram.
-    expect(legacy.legacyToCapabilities({ WEBTERM_TELEGRAM: 'on', WEBTERM_CENTRAL_TELEGRAM: 'on' }).ignored)
-      .toEqual(['WEBTERM_CENTRAL_TELEGRAM'])
+    // A Telegram child without Telegram on is ignored.
+    expect(legacy.legacyToCapabilities({ WEBTERM_CENTRAL_BOTS: 'on' }).ignored).toEqual(['WEBTERM_CENTRAL_BOTS'])
   })
 
   it('anak bernilai off tanpa induk tidak dianggap diabaikan', () => {

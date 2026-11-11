@@ -30,6 +30,8 @@ const HOT_PROOF: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_DAILY_COST_MICROS: 'central/guard/budgetStore.ts',
   WEBTERM_CENTRAL_CONTEXT_WINDOW: 'central/context/rotationPolicy.ts',
   WEBTERM_AGENT_IDLE_DONE_MS: 'orchestrator/workerSignal.ts',
+  // Re-read on every dispatch: centralAutonomyBoot passes `() => maxInflightFromEnv(env[...])` to the dispatcher.
+  WEBTERM_CENTRAL_MAX_INFLIGHT: 'central/autonomyDispatch.ts',
   // Turunan Central: tool baca didaftarkan saat Central menyala (ca2Boot onCapabilityChange) dan `def.flag` dicek
   // per panggilan (toolTypes defEnabled). Nama kuncinya diturunkan, bukan literal: lihat DERIVED_KEY_SOURCE.
   WEBTERM_CENTRAL_READ_TOOLS: 'central/tools/defs/read.shared.ts',
@@ -85,11 +87,9 @@ describe('paritas default registry vs pembaca', () => {
 })
 
 describe('HOT_PROOF: hot:true hanya untuk pembaca yang membaca env saat dipakai', () => {
-  it('kunci hot CA2 = persis peta HOT_PROOF; MAX_INFLIGHT tetap boot', () => {
+  it('kunci hot CA2 = persis peta HOT_PROOF', () => {
     expect(CA2_ENV_SPECS.filter((s) => s.restart === 'hot').map((s) => s.key).sort()).toEqual(Object.keys(HOT_PROOF).sort())
     for (const k of Object.keys(HOT_PROOF)) expect(specFor(k), k).toMatchObject({ restart: 'hot', restartRequired: false })
-    // MAX_INFLIGHT dibaca sekali ke closure centralAutonomyBoot.
-    expect(specFor('WEBTERM_CENTRAL_MAX_INFLIGHT')).toMatchObject({ restart: 'boot', restartRequired: true })
   })
   it.each(Object.entries(HOT_PROOF))('%s: pembaca ada dan memuat nama kunci', (key, file) => {
     const path = join(SERVER_DIR, file)

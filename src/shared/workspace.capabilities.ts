@@ -93,7 +93,7 @@ export const hasClaudeHookSettings = (id: AgentId): boolean =>
 
 /** Mode permission yang dipakai sesi agent saat START. Pengguna masih bisa memutar mode saat
  *  runtime dengan Shift+Tab — ini hanya menentukan keadaan awal, persis seperti flag
- *  `--permission-mode`. `manual` = tidak ada flag yang dikirim. */
+ *  `--permission-mode`. `manual` dikirim sebagai `--permission-mode default`. */
 export type AgentPermissionMode = 'manual' | 'auto' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
 const PERMISSION_MODES: readonly AgentPermissionMode[] = [

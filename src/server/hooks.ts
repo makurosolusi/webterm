@@ -48,16 +48,19 @@ export function hookEnv(nodeId: string, _opts?: { hookReplyApprovals?: boolean }
 }
 
 /**
- * Flag `--permission-mode` untuk sebuah mode. `manual` tidak menghasilkan flag, jadi perintahnya
- * tetap polos — persis perintah yang webterm kirim sebelum setting ini ada.
+ * Flag `--permission-mode` untuk sebuah mode, dengan nama CLI yang sama dengan Agent Chat
+ * (`agentChatPermissionMode`): `manual` → `default`. Mode SELALU dikirim eksplisit — sejak Claude
+ * Code v2.1.283 mode awal bawaan adalah `auto`, jadi perintah polos tidak lagi berarti "tanya".
+ * Bila `auto` tidak tersedia (model/plan/org), CLI sendiri jatuh ke `default`
+ * (code.claude.com/docs/en/permission-modes).
  *
  * Mode divalidasi ULANG di sini meski parameternya bertipe: `AgentPermissionMode` hanya janji
  * compile-time, sedangkan nilainya datang dari settings yang bisa diedit tangan / lewat HTTP
- * sebelum diinterpolasikan ke baris perintah shell.
+ * sebelum diinterpolasikan ke baris perintah shell. Absen/asing = tanpa flag.
  */
 export function permissionModeFlag(mode: AgentPermissionMode | undefined): string {
-  if (!isPermissionMode(mode) || mode === 'manual') return ''
-  return `--permission-mode ${mode}`
+  if (!isPermissionMode(mode)) return ''
+  return `--permission-mode ${mode === 'manual' ? 'default' : mode}`
 }
 
 /**

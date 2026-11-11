@@ -22,21 +22,21 @@ describe('buildEffectiveConfig', () => {
   })
 
   it('tells default, shell env, .env, Settings and capability sources apart', () => {
-    const stored = JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_CHAT: 'on', WEBTERM_LOG_BUFFER: '900' })
+    const stored = JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_LOG_BUFFER: '900' })
     const { row } = build({ WEBTERM_LEDGER: 'shadow', WEBTERM_LOG_LEVEL: 'debug' }, stored, ['WEBTERM_LOG_LEVEL'])
     expect(row('WEBTERM_FILES_LIST_MAX')).toMatchObject({ source: 'default', modified: false, reason: 'Code default.', envOnly: false, ui: CONTROL_WHERE, editable: true })
     expect(row('WEBTERM_LEDGER')).toMatchObject({ source: 'env', value: 'shadow', modified: true })
     expect(row('WEBTERM_LOG_LEVEL')).toMatchObject({ source: '.env', value: 'debug', reason: 'From the .env file in the server folder.' })
     expect(row('WEBTERM_CENTRAL')).toMatchObject({ source: 'settings', value: 'on', ui: 'Settings › Capabilities › Central agent', envOnly: false })
     expect(row('WEBTERM_CENTRAL').reason).toBe('Set in Settings › Capabilities › Central agent.')
-    expect(row('WEBTERM_CENTRAL_CHAT')).toMatchObject({ source: 'capability', reason: 'Derived from the Central agent card (Central agent on).' })
+    expect(row('WEBTERM_CENTRAL_MEMORY')).toMatchObject({ source: 'capability', reason: 'Derived from the Central agent card (Central agent on).' })
     expect(row('WEBTERM_LOG_BUFFER').reason).toBe(`Set in ${CONTROL_WHERE}.`)
   })
 
   it('derived row names the card it follows (Worker card)', () => {
-    const { row } = build({}, JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_TOOLS: 'write' }))
-    expect(row('WEBTERM_CENTRAL_TOOLS')).toMatchObject({ source: 'capability', value: 'write' })
-    expect(row('WEBTERM_CENTRAL_TOOLS').reason).toContain('Worker orchestrator card (Worker orchestrator on)')
+    const { row } = build({}, JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' }))
+    expect(row('WEBTERM_CENTRAL_AGENTS')).toMatchObject({ source: 'capability', value: 'propose' })
+    expect(row('WEBTERM_CENTRAL_AGENTS').reason).toContain('Worker orchestrator card (Central agent autonomy off, Worker orchestrator on)')
   })
 
   it('secrets and bootstrap keys carry set/unset only, never a value', () => {
@@ -80,7 +80,7 @@ describe('Central Agent section keys', () => {
     }
     expect(row('WEBTERM_CENTRAL_DAILY_COST_MICROS').ui).toBe('Settings › Central Agent › Daily spending limit')
     // Derived keys keep following their card.
-    expect(row('WEBTERM_CENTRAL_CHAT').ui).toBe('Settings › Capabilities › Central agent (derived)')
+    expect(row('WEBTERM_CENTRAL_MEMORY').ui).toBe('Settings › Capabilities › Central agent (derived)')
   })
 
   it('Central labels avoid internal jargon', () => {

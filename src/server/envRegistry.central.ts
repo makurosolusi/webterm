@@ -9,10 +9,6 @@ const RUNTIME_MODEL = { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', ''], n
 
 export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL', 'central', { ...C, audience: 'user', hot: true, label: 'Central Agent', description: 'Turns the Central Agent on: an assistant that knows all your projects and nodes.' }),
-  flag('WEBTERM_CENTRAL_CHAT', 'central', {
-    ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
-    label: 'Central chat', description: 'Lets you talk to Central in the side bar and over Telegram. Follows the Central Agent switch.',
-  }),
   enumOf('WEBTERM_CENTRAL_RUNTIME', 'central', ['claude', 'mock', 'off'], DEFAULT_RUNTIME_KIND, {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
     label: 'Central agent engine',
@@ -23,15 +19,6 @@ export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
   text('WEBTERM_CENTRAL_MODEL', 'central', {
     ...C, audience: 'advanced', hot: true, requires: [RUNTIME_MODEL], unsetLabel: 'Runtime default',
     label: 'Model override', description: 'Use this model for Central instead of the automatic choice. Empty = automatic. Applies from the next reply.',
-  }),
-  flag('WEBTERM_CENTRAL_PLANNER', 'central', {
-    ...C, audience: 'user', hot: true, requires: [CENTRAL_ON, { key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'], note: 'The planner needs write tools.' }],
-    label: 'Let Central plan work', description: 'Central may propose a plan of tasks for you to approve. Follows the Worker orchestrator card.',
-  }),
-  enumOf('WEBTERM_CENTRAL_TOOLS', 'central', ['read', 'write'], 'read', {
-    ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
-    label: 'What Central may change', description: 'Read only, or also change projects and tasks. Follows the Worker orchestrator card.',
-    optionLabels: { read: 'Read only', write: 'Can write' },
   }),
   flag('WEBTERM_CENTRAL_MEMORY', 'central', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],

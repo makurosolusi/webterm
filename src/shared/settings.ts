@@ -49,7 +49,6 @@ export interface Settings extends TerminalSettings, AgentSettings {
   gridSize: number
   /** Snap saat drag: selagi ON, menggeser node membulatkan posisinya ke grid. */
   snapToGrid: boolean
-  accent: string
   /** Ukuran default (px) untuk node terminal/agent BARU. Node yang sudah ada tetap memakai ukuran
    *  yang tersimpan bersamanya. */
   defaultNodeWidth: number
@@ -133,7 +132,6 @@ export const DEFAULT_SETTINGS: Settings = {
   // 10.000 baris — angka yang dipakai xterm hari ini (dan clamp nodeterm), jadi mengangkatnya ke
   // settings tidak mengubah perilaku. Lihat doc kuncinya.
   scrollbackLines: 10_000,
-  defaultAgent: 'claude',
   agentLaunchCommands: {},
   claudeLaunchProfiles: [],
   defaultClaudeProfileId: 'default',
@@ -148,7 +146,6 @@ export const DEFAULT_SETTINGS: Settings = {
   projectModels: {},
   gridSize: 24,
   snapToGrid: false,
-  accent: '#0a84ff',
   defaultNodeWidth: 640,
   defaultNodeHeight: 440,
   canvasDots: true,

@@ -73,7 +73,7 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
       label="Daily spending limit"
       htmlFor="st-costLimit"
       field="central.costLimit"
-      hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% only Haiku runs."
+      hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% Central pauses until tomorrow (UTC) or until you raise the limit."
     >
       <span className="st-unit">$</span>
       <SettingsCombobox id="st-costLimit" fieldId={COST_CAP_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"

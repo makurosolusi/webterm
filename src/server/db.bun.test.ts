@@ -56,9 +56,9 @@ test('getSettings returns defaults before anything is saved', () => {
 
 test('saveSettings persists a patch and leaves untouched keys at their default', () => {
   const db = freshDb()
-  db.saveSettings({ fontSize: 17, accent: '#ff0000' })
+  db.saveSettings({ fontSize: 17, edgeColor: '#ff0000' })
   expect(db.getSettings().fontSize).toBe(17)
-  expect(db.getSettings().accent).toBe('#ff0000')
+  expect(db.getSettings().edgeColor).toBe('#ff0000')
   expect(db.getSettings().gridSize).toBe(DEFAULT_SETTINGS.gridSize)
 })
 

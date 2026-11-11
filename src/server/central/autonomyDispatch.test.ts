@@ -91,6 +91,20 @@ describe('dispatch mode', () => {
     await autonomy.drain()
   })
 
+  it('re-reads a function cap on every dispatch (Settings change applies without restart)', async () => {
+    const g = gate()
+    let cap = 1
+    const { deps } = setup(['p1', 'p2', 'p3'], { run: g.run, dispatch: { maxInflight: () => cap } })
+    const autonomy = createCentralAutonomy(deps)
+    expect(await autonomy.tick()).toMatchObject({ ran: true, dispatched: 1 })
+    expect(await autonomy.tick()).toEqual({ ran: false, reason: 'saturated' })
+    cap = 3
+    expect(await autonomy.tick()).toMatchObject({ ran: true, dispatched: 2 })
+    expect(autonomy.inflight).toBe(3)
+    g.release(); g.release(); g.release()
+    await autonomy.drain()
+  })
+
   it('defaults the cap to 3 workers', async () => {
     const g = gate()
     const { deps } = setup(['p1', 'p2', 'p3', 'p4'], { run: g.run, dispatch: {} })

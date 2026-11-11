@@ -102,7 +102,7 @@ describe('Telegram hot-apply', () => {
 
 describe('registry kanal', () => {
   it('kunci channels yang hot-apply tidak berlabel boot dan tidak butuh ledger', () => {
-    for (const key of ['WEBTERM_CHANNELS', 'WEBTERM_TELEGRAM', TOKEN_ENV]) {
+    for (const key of ['WEBTERM_TELEGRAM', TOKEN_ENV]) {
       expect(CHANNEL_ENV_SPECS.find((s) => s.key === key)?.restart).toBe('hot')
     }
     const telegramLike = CHANNEL_ENV_SPECS.filter((s) => s.owner === 'channels')

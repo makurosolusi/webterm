@@ -43,10 +43,10 @@ export interface AutonomyAuditEvent {
   failures?: number
 }
 
-/** Opt-in reliability mode (non-blocking dispatch, persistent breaker, wake + sweep). Absent = legacy loop. */
+/** Non-blocking dispatch (bounded workers, wake + sweep, optional persistent breaker). Absent = legacy loop. */
 export interface AutonomyDispatchConfig {
-  /** Global worker cap; default `DEFAULT_MAX_INFLIGHT_WORKERS`. */
-  maxInflight?: number
+  /** Global worker cap; default `DEFAULT_MAX_INFLIGHT_WORKERS`. A function is re-read per dispatch. */
+  maxInflight?: number | (() => number)
   breaker?: SyncBreaker
   /** Replaces `intervalMs` as the safety net in this mode; default 60 s. */
   sweepMs?: number

@@ -56,7 +56,7 @@ describe('toggle', () => {
     const h = harness()
     const r = await toggle(h.ctx, 'autonomy', true)
     expect(r.status).toBe(200)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_CENTRAL_CHAT: 'on' })
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_CENTRAL_MEMORY: 'on' })
     expect(viewIn(r.body, 'autonomy')?.alsoTurnsOn).toEqual(['central', 'workers'])
     expect(h.audits).toEqual([{ capability: 'autonomy', action: 'grant', detail: 'central,workers,autonomy' }])
   })

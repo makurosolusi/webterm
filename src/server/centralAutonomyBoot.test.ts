@@ -100,11 +100,32 @@ describe('centralAutonomyBoot', () => {
     let release!: () => void
     const run = vi.fn(() => new Promise<{ ok: boolean }>((resolve) => { release = () => resolve({ ok: true }) }))
     const { c } = boot(ON, run)
-    const pending = c.tick()
+    expect(await c.tick()).toMatchObject({ ran: true, ok: true })
     c.stop()
     expect(c.running).toBe(false)
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+    expect(c.inflight).toBe(1)
     release()
-    expect(await pending).toMatchObject({ ran: true, ok: true })
+    await c.drain()
+    expect(c.inflight).toBe(0)
+  })
+
+  it('honours WEBTERM_CENTRAL_MAX_INFLIGHT without reliability mode and re-reads it live', async () => {
+    const releases: (() => void)[] = []
+    const run = vi.fn(() => new Promise<{ ok: boolean }>((resolve) => { releases.push(() => resolve({ ok: true })) }))
+    const env: Record<string, string | undefined> = { ...ON, WEBTERM_CENTRAL_MAX_INFLIGHT: '1' }
+    const c = startCentralAutonomyBoot({
+      runtime: FAKE_RUNTIME, env, warn: () => undefined, log: () => undefined,
+      overrides: { projects: () => [{ id: 'p1', status: 'active' }, { id: 'p2', status: 'active' }], plan: () => PLAN, run },
+    })
+    live.push(c)
+    expect(await c.tick()).toMatchObject({ ran: true, dispatched: 1 })
+    expect(await c.tick()).toEqual({ ran: false, reason: 'saturated' })
+    env.WEBTERM_CENTRAL_MAX_INFLIGHT = '2'
+    expect(await c.tick()).toMatchObject({ ran: true, dispatched: 1 })
+    expect(c.inflight).toBe(2)
+    for (const r of releases) r()
+    await c.drain()
   })
 
   it('a throwing start is caught and warned, not thrown', () => {

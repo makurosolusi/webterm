@@ -26,7 +26,7 @@ const AGENTS_ON = { key: 'WEBTERM_CENTRAL_AGENTS', oneOf: ['propose', 'auto'], n
 
 export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
-    ...C, dangerNote: 'Central can run real workers (shell, file edits) on the server machine; auto runs without a per-action approval card.', requires: [{ key: 'WEBTERM_CENTRAL_TOOLS', oneOf: ['write'] }, { key: 'WEBTERM_CENTRAL_PLANNER' }, { key: 'WEBTERM_ORCHESTRATOR_RUN' }],
+    ...C, dangerNote: 'Central can run real workers (shell, file edits) on the server machine; auto runs without a per-action approval card.', requires: [{ key: 'WEBTERM_ORCHESTRATOR_RUN' }],
     label: 'Workers Central may start',
     description: 'Set by the Worker orchestrator card (Central asks you to approve each worker) and the Autonomy card (Central starts workers on its own within its limits). A value in .env or the shell still wins.',
     dangerous: true,
@@ -38,7 +38,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily spending limit', description: 'Central stops for the day (UTC) once it has spent this many dollars. 0 = no limit (default). Stored in millionths of a dollar (1,000,000 = $1). Separately, once total spend today passes $10, webterm shows one notice for the day; that notice never stops work.' }),
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central use skills', description: 'Central may use the skills you have reviewed and approved.' }),
   flag('WEBTERM_CENTRAL_SKILL_PROPOSE', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Suggest new skills', description: 'Central may draft new skills for you to review. A draft is never used until you approve it.' }),
-  flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }, { key: 'WEBTERM_CHANNELS', oneOf: ['on'] }], label: 'Bot per project', description: 'One bot with a topic per project (needs Telegram and WEBTERM_CHANNELS).' }),
+  flag('WEBTERM_CENTRAL_BOTS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Bot per project', description: 'One bot with a topic per project (needs Telegram).' }),
   flag('WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'telegram', { ...TGC, requires: [{ key: 'WEBTERM_TELEGRAM' }], label: 'Telegram approval buttons', description: 'Approve once / Deny buttons on Telegram approval cards are processed (on by default; needs Telegram). Off ignores button presses; /approve still works.' }, 'on'),
   flag('WEBTERM_KNOWLEDGE', 'central', { ...C, label: 'Project knowledge index', description: 'Central keeps a searchable index of your project files so it can find code faster.' }),
   num('WEBTERM_AGENT_IDLE_DONE_MS', 'central', 1000, 3_600_000, DEFAULT_AGENT_IDLE_DONE_MS, {
@@ -47,8 +47,8 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Idle time before a worker counts as done',
     description: 'A worker that is not Claude Code and has been quiet this long, with file changes, is treated as probably done. In milliseconds.',
   }),
-  flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_AUTONOMY' }], label: 'Reliable autonomy', description: 'When Central works on its own, it runs several workers side by side and stops retrying a task that keeps failing (needs autonomy).' }),
-  num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, unit: 'workers', label: 'Workers at once', description: 'How many workers Central may run at the same time when it works on its own. Applies after a restart.' }),
+  flag('WEBTERM_CENTRAL_RELIABILITY', 'central', { ...C, requires: [{ key: 'WEBTERM_CENTRAL_AUTONOMY' }], label: 'Reliable autonomy', description: 'When Central works on its own, it stops retrying a task that keeps failing the same way and tidies up workers left from before a restart (needs autonomy).' }),
+  num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, hot: true, unit: 'workers', label: 'Workers at once', description: 'How many workers Central may run at the same time when it works on its own. Applies to the next worker it starts.' }),
   flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Messages to workers', description: 'Central may send messages to workers it started (needs the Worker orchestrator).' }),
   flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central look at projects', description: 'Central may read your projects, nodes and tasks. Follows the Central Agent switch.' }),
   num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once. Central starts a fresh session at 70%, carrying over a summary. Applies from the next reply.' }),

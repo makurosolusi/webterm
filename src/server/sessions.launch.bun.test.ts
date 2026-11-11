@@ -97,8 +97,9 @@ test('launchLine sends the configured permission mode and nothing when unset', (
   expect(launchLine(msg, 9999, { permissionMode: 'acceptEdits' })).toContain(
     '--permission-mode acceptEdits'
   )
-  // `manual` dan "belum disambungkan" sama-sama berarti perintah polos — tanpa flag.
-  expect(launchLine(msg, 9999, { permissionMode: 'manual' })).not.toContain('--permission-mode')
+  // `manual` is explicit (`default`): a bare launch starts in `auto` on current Claude Code.
+  expect(launchLine(msg, 9999, { permissionMode: 'manual' })).toContain('--permission-mode default')
+  expect(launchLine(msg, 9999, { permissionMode: 'auto' })).toContain('--permission-mode auto')
   expect(launchLine(msg, 9999)).not.toContain('--permission-mode')
 })
 

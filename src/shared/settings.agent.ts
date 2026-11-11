@@ -1,4 +1,4 @@
-// Agent slice of `Settings` (quick-add agent, launch commands/profiles, custom agents,
+// Agent slice of `Settings` (launch commands/profiles, custom agents,
 // permissions). Merged into `Settings` in `settings.ts`; defaults live in `DEFAULT_SETTINGS` there.
 
 import type { CustomAgent } from './customAgent.schema'
@@ -8,8 +8,6 @@ import type { ProjectModelOverride } from './settings.projectModels'
 
 export interface AgentSettings {
   // --- Agent -----------------------------------------------------------------------------------
-  /** Agent yang diluncurkan tombol quick-add. */
-  defaultAgent: AgentId
   /** Legacy Claude launch override (the only builtin; keys of retired builtins are dropped on load).
    *  Superseded by `claudeLaunchProfiles` (a stored `claude` entry is seeded once as the "Custom"
    *  profile); still read for back-compat by paths not yet routed through `server/claudeLauncher`. */
