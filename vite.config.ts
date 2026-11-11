@@ -84,6 +84,10 @@ export default defineConfig({
   test: {
     // Temp WEBTERM_DATA_DIR + HOME for the whole run (see the file's header).
     globalSetup: [path.resolve(process.cwd(), 'src/testIsolation.setup.ts')],
+    // Unmount + longer findBy timeout in jsdom files (see the file's header).
+    setupFiles: [path.resolve(process.cwd(), 'src/testDom.setup.ts')],
+    // Threads (still isolated per file) instead of the default forks: ~40% faster on this suite.
+    pool: 'threads',
     include: ['**/*.test.{ts,tsx}', '../shared/**/*.test.{ts,tsx}', '../server/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.bun.test.ts', '../**/*.bun.test.ts'],
   }
