@@ -10,6 +10,8 @@
     "build:binary": "bun run build && bun build --compile --define \"process.env.NODE_ENV='production'\" --no-compile-autoload-bunfig --external vite --outfile webterm src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:related": "vitest related --run",
+    "test:changed": "vitest --changed --run",
     "test:bun": "HOME=$(mktemp -d \"${TMPDIR:-/tmp}/webterm-home.XXXXXX\") bun test --no-env-file $(find src/server scripts -name '*.bun.test.ts' ! -name '*.real.bun.test.ts' | sort) && R=$(find src/server -name '*.real.bun.test.ts' | sort) && { [ -z \"$R\" ] || bun test --no-env-file $R; }"
   },
   "overrides": {
