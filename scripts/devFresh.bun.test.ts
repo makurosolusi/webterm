@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
+import { fakeSecurity } from './devFresh.testutil'
 import {
   RESERVED_PORTS, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, freshSetupCodePath, makeFreshRoot, parseFreshArgs,
   pathWithout, removeFreshRoot, startFresh, waitForHttp,
@@ -52,7 +53,8 @@ test('the fresh tmux socket is never the real one', () => {
 })
 
 test('flags parse; bad input throws', () => {
-  expect(parseFreshArgs(['--port', '8800', '--keep', '--no-claude', '--with-provider-env'])).toEqual({ port: 8800, keep: true, noClaude: true, withProviderEnv: true })
+  expect(parseFreshArgs(['--port', '8800', '--keep', '--no-claude', '--with-provider-env'])).toEqual({ port: 8800, keep: true, noClaude: true, withProviderEnv: true, clean: false })
+  expect(parseFreshArgs(['--clean']).clean).toBe(true)
   expect(thrown(() => parseFreshArgs(['--port', 'x']))).toMatch('--port needs a port')
   expect(thrown(() => parseFreshArgs(['--nope']))).toMatch('unknown flag')
 })
@@ -87,8 +89,13 @@ afterAll(async () => { for (const s of stops) await s() })
 const smoke = process.env.CI && !findOnPath('tmux') ? 'skip' : 'run'
 test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token, stop deletes the root', async () => {
   if (smoke === 'skip') return
-  const fresh = await startFresh({ keep: false, noClaude: false, withProviderEnv: false }, 'pipe')
-  stops.push(fresh.stop)
+  const fakeBin = mkdtempSync(join(tmpdir(), 'devfresh-bin-'))
+  const calls = fakeSecurity(fakeBin)
+  const savedPath = process.env.PATH
+  process.env.PATH = `${fakeBin}:${savedPath}` // stop() deletes keychain items: never the real `security` in tests
+  const fresh = await startFresh({ keep: false, noClaude: false, withProviderEnv: false, clean: false }, 'pipe')
+    .finally(() => stops.push(async () => { process.env.PATH = savedPath; rmSync(fakeBin, { recursive: true, force: true }) }))
+  stops.unshift(fresh.stop) // stop (fake `security` still on PATH) before PATH is restored
   expect(RESERVED_PORTS).not.toContain(fresh.port)
   expect(fresh.paths.root.startsWith(realpathSync(tmpdir()) + '/webterm-fresh-')).toBe(true)
   await waitForHttp(`${fresh.url}/api/health`, 60_000, fresh.child)
@@ -98,4 +105,5 @@ test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token
   expect(existsSync(freshSetupCodePath(fresh.paths))).toBe(true) // the banner names this file: a fresh install has no account
   await fresh.stop()
   expect(existsSync(fresh.paths.root)).toBe(false)
+  expect(calls()).toContain(`-s Claude Code-credentials-`)
 }, 90_000)

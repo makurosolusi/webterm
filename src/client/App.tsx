@@ -23,6 +23,7 @@ import { useAppCommands } from './commandRegistry.defaults'
 import { useCommandKeybindings } from './commandRegistry'
 import { useKeybindingsSync } from './keybindings.store'
 import { usePresencePing } from './presencePing'
+import { connectEagerly } from './ws'
 import OutputPanelHost from './output/outputPanelHost'
 import { TASK_BOARD_STATUS_ITEM } from './central/work/taskBoardView'
 import { usePortsStatusItems } from './PortsChip'
@@ -211,6 +212,7 @@ export default function App() {
   useKeybindingsSync(settings.keybindings, settingsHydrated, update)
   useCommandKeybindings()
   usePresencePing(!authRequired)
+  useEffect(() => { if (!authRequired) connectEagerly() }, [authRequired]) // App mounts only signed in (appBoot.tsx)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // SignInScreen tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.

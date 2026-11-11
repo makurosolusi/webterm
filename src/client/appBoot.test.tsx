@@ -52,6 +52,17 @@ describe('bootView', () => {
     expect(urls.filter((u) => u.startsWith('/api/'))).toEqual([])
   })
 
+  it('signed out or setup pending -> the shared socket is never opened (it would 403 and flip to auth)', async () => {
+    const socket = vi.fn()
+    vi.stubGlobal('WebSocket', socket)
+    setupRequired = true
+    signedIn = true
+    expect(await bootView()).toBe('sign-in')
+    render(<TooltipProvider><SignedOut /></TooltipProvider>)
+    await act(async () => { await vi.advanceTimersByTimeAsync(SIGN_IN_POLL_MS * 3) })
+    expect(socket).not.toHaveBeenCalled()
+  })
+
   it('an unreachable server -> the sign-in page (it keeps polling), with the failure named', async () => {
     signedIn = 'fail'
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
