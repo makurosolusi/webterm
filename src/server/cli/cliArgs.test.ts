@@ -53,3 +53,14 @@ describe('suggestOption', () => {
     expect(suggestOption('--port')).toBeUndefined()
   })
 })
+
+describe('--reset-password', () => {
+  it('takes a required username, as a separate arg or =value', () => {
+    expect(parseArgs(['--reset-password', 'alice'])).toEqual({ kind: 'reset-password', username: 'alice' })
+    expect(parseArgs(['--reset-password=alice'])).toEqual({ kind: 'reset-password', username: 'alice' })
+    expect(parseArgs(['--reset-password'])).toEqual({ kind: 'error', message: "option '--reset-password' needs a value" })
+    expect(parseArgs(['--reset-password='])).toEqual({ kind: 'error', message: "option '--reset-password' needs a value" })
+    expect(parseArgs(['--help', '--reset-password', 'alice'])).toEqual({ kind: 'help' })
+    expect(suggestOption('--reset-pasword')).toBe('--reset-password')
+  })
+})

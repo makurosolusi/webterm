@@ -18,8 +18,13 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
+- Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
+- Accounts: on first run you create the owner account (username and a password of at least 12 characters) from the computer running webterm, or from another device with the setup code in `<data dir>/secrets/SETUP_CODE`. After that you sign in with that username and password; the sign-in screen counts down after too many wrong tries and brings you back to the page you asked for.
+- Settings > Account (`?settings=account`, also the account button in the title bar): change your username or password (a password change signs every other session out), see each browser signed in to your account with when it was last active, sign any of them out or all others at once, and Sign out.
+- `webterm --reset-password <username>` sets a new password without starting the server and signs that account out everywhere.
+- Boards, Settings sections, Central tabs and bottom-panel tabs keep their place on reload and work with Back/Forward: each has its own address (`/w/<board>?settings=agent`, `?ctab=memory`, `?panel=problems`) you can bookmark or share. Opening Settings returns to the section you last used.
 - `webterm --help`, `--version`, `--readme` and `--docs [topic]`: the server binary answers these without starting, and a mistyped option now stops with a suggestion (exit 2) instead of starting the server.
 - `bun run dev:fresh` starts a second, isolated webterm that behaves like a first run on a new machine (own temp data dir, home, Claude config, ports and tmux socket), next to your normal one; Ctrl+C stops it and deletes everything it wrote.
 - Link previews (Open Graph / Twitter cards with a 1200x630 image) when a webterm link is shared, using the address the link was opened from.
@@ -141,7 +146,14 @@ Operator notes:
 - Central now records every task it hands to an agent: who was asked, what, since when and how it is going, with new task tools for planning and assigning work.
 - Central notices when an assigned agent starts late, goes quiet, needs input, or disappears, nudges it, and resumes an Agent Chat once; each automatic step is recorded with its rule.
 
+- Central project health: deterministic scans of each project look for files over the size limits, modules nothing imports, TODOs without context and empty `catch` blocks. Every finding carries its file, line, evidence, the rule it comes from and how sure it is; a finding with no project rule behind it is a suggestion, not a violation. Unreferenced-module findings are only ever medium confidence, since dynamic entry points can escape the import graph.
+- Central panel › Health: filter findings by status, severity, rule and origin (scan or deep analysis), dismiss one with a reason, reopen it, or run Scan now. Projects are also scanned automatically once a day (only files tracked by git).
+- When a task reaches review, its changed files are checked (a new file without a test, a file pushed over the size limit, a new TODO without context or empty `catch`) and the results show on the task card.
+- Central checks in by itself when a scan finds a new high-severity problem, and raises a dismissed finding again only when its evidence changes. Dismissals and their reasons are remembered in Central's memory.
+- Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
+- Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- The access token is now for automation only (scripts, MCP clients, agents): Settings > Capabilities shows it as "Automation token" and shows the new value itself after Enable or Rotate. People sign in with their account; once it exists, pasting the token or opening a `/?token=` link no longer signs a browser in. The phone view (`/m`) signs in with the same username and password.
 - Central's context management is on by default, and a full conversation rotates to a fresh session instead of being refused.
 - Central saves its state before its context is compacted and restores it afterwards.
 - Central can correct or forget its own wrong claims; facts you confirmed stay yours.

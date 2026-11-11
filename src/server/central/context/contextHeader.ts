@@ -5,7 +5,7 @@ import type { Database } from 'bun:sqlite'
 import { getRow } from '../../ledger/ledgerCore'
 import { livePortfolio, projectWorkspace } from '../workspaceLookup'
 import { scopeFromConversationId } from '../conversationModel'
-import { MAX_OPEN_ASSIGNMENTS, openWork } from './contextHeaderWork'
+import { MAX_OPEN_ASSIGNMENTS, healthLine, openWork } from './contextHeaderWork'
 
 /** Hard cap of the header text. */
 export const HEADER_MAX_CHARS = 4000
@@ -47,7 +47,7 @@ export function headerClock(now: number, timeZone = Intl.DateTimeFormat().resolv
 
 /**
  * Renders the header for a conversation scope and shrinks it to the cap in a fixed order: long project list,
- * open assignments, the rest of the project list, per-project work. `time`, `needsYou` and `viewing` always stay.
+ * open assignments, the rest of the project list, per-project work. `time`, `needsYou`, `health` and `viewing` always stay.
  * Every canvas workspace is listed even in a project chat (Telegram binds one): `scope` names the bound one.
  */
 export function buildStateHeader(db: Database, conversationId: string, now = Date.now(), timeZone?: string): string {
@@ -57,10 +57,12 @@ export function buildStateHeader(db: Database, conversationId: string, now = Dat
   const projects = page.items.map((p) => ({ approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status }))
   const work = openWork(db, now)
   const time = headerClock(now, timeZone)
+  const health = healthLine(db, scope.kind === 'project' ? scope.projectId : null, now)
   const size = { list: projects.length, open: MAX_OPEN_ASSIGNMENTS, work: work.projects.length }
   const render = (): string => `State: ${JSON.stringify({
     time,
     needsYou: work.needsYou,
+    health,
     work: work.projects.slice(0, size.work).map((p) => ({ ...p, open: p.open.slice(0, size.open) })),
     projectTotal: page.total,
     projects: projects.slice(0, size.list),

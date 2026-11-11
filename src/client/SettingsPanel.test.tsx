@@ -49,7 +49,7 @@ describe('SettingsPanel VS Code layout', () => {
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
     const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations',
-      'Spending', 'Canvas', 'Canvas background', 'Capabilities', 'Health', 'Developer']
+      'Spending', 'Canvas', 'Canvas background', 'Account', 'Capabilities', 'Health', 'Developer']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
@@ -69,7 +69,7 @@ describe('SettingsPanel VS Code layout', () => {
       ['Terminal', 'Interaction', 'Shell & buffer'],
       ['Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations', 'Spending'],
       ['Canvas', 'Canvas background'],
-      ['Capabilities', 'Health', 'Developer'],
+      ['Account', 'Capabilities', 'Health', 'Developer'],
     ])
     expect(within(groups[1]!).getByRole('button', { name: 'Rules & approvals' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
     expect(SETTINGS_GROUPS).toEqual(['Editor', 'Agents', 'Workspace', 'System'])

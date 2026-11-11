@@ -5,6 +5,7 @@ import type { AssignmentView, TaskCard as TaskCardData, WorkEventView } from '..
 import type { TaskBoardClient } from './taskBoardApi'
 import { TL } from './taskBoardLabels'
 import { actorWords, eventWords, outcomeText, ruleWords, verificationVerdict } from './taskBoardModel'
+import { TaskHealth } from './taskHealth'
 import { useTaskDetail } from './useTaskDetail'
 
 export interface TaskDetailProps {
@@ -45,7 +46,7 @@ function HistoryRow({ ev }: { ev: WorkEventView }): React.JSX.Element {
   )
 }
 
-/** Side panel with a task's contract, attempts, verification and full history. */
+/** Side panel with a task's contract, attempts, verification, review checks and full history. */
 export function TaskDetail({ client, taskId, refreshTick, onClose }: TaskDetailProps): React.JSX.Element {
   const { page, error, loadingMore, loadMore, retry } = useTaskDetail(client, taskId, refreshTick)
   const headingRef = useRef<HTMLHeadingElement>(null)
@@ -83,6 +84,7 @@ export function TaskDetail({ client, taskId, refreshTick, onClose }: TaskDetailP
               : <ul className="task-detail__list">{page.assignments.map((a) => <Attempt key={a.id} a={a} nodeName={(a.id === page.task.assignment?.id ? page.task.nodeName : null) ?? a.nodeId} />)}</ul>}
             <h4>{TL.verification}</h4>
             <Verification task={page.task} />
+            {(page.task.column === 'needs_review' || page.task.column === 'done') && <TaskHealth client={client} taskId={taskId} refreshTick={refreshTick} />}
             <h4>{TL.history}</h4>
             {page.timeline.length === 0
               ? <p className="task-card__meta">{TL.noHistory}</p>

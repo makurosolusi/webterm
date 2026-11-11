@@ -37,42 +37,17 @@ import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
+import { toSettingsRouteSection } from './appRoute'
+import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { AccountSection } from './AccountSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
 import './settings-sections.css'
 
-/** Sidebar group headings, in display order. */
-export const SETTINGS_GROUPS = ['Editor', 'Agents', 'Workspace', 'System'] as const
+export { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 
-/** Settings sections: nav entry + page header, one place, listed in group order. `icon` is a codicon name; `description` says what is inside. */
-export const SETTINGS_SECTIONS = [
-  { id: 'terminal', group: 'Editor', label: 'Terminal', icon: 'terminal', description: 'Font, colors, cursor, scrollback' },
-  { id: 'interaction', group: 'Editor', label: 'Interaction', icon: 'keyboard', description: 'Copy & paste, shortcuts, selection' },
-  { id: 'shell', group: 'Editor', label: 'Shell & buffer', icon: 'server-process', description: 'Which shell to start, replay buffer' },
-  { id: 'agent', group: 'Agents', label: 'Agent', icon: 'hubot', description: 'Permissions, custom agents, profiles' },
-  { id: 'central', group: 'Agents', label: 'Central Agent', icon: 'comment-discussion', description: 'Autonomy, spending, abilities' },
-  { id: 'rules', group: 'Agents', label: 'Rules & approvals', icon: 'shield', description: 'What agents may do without asking' },
-  { id: 'memory', group: 'Agents', label: 'Memory', icon: 'book', description: 'What agents remember and share' },
-  { id: 'automations', group: 'Agents', label: 'Automations', icon: 'clock', description: 'Routines that run agents for you' },
-  { id: 'spending', group: 'Agents', label: 'Spending', icon: 'credit-card', description: 'Spending and limits that pause work' },
-  { id: 'canvas', group: 'Workspace', label: 'Canvas', icon: 'layout', description: 'Grid, new node size, search engine' },
-  { id: CANVAS_BG_SECTION, group: 'Workspace', label: 'Canvas background', icon: 'paintcan', description: 'Color, gradient or image behind nodes' },
-  { id: 'capabilities', group: 'System', label: 'Capabilities', icon: 'extensions', description: 'Turn features on or off' },
-  { id: 'health', group: 'System', label: 'Health', icon: 'pulse', description: 'Is everything working on this machine' },
-  { id: 'developer', group: 'System', label: 'Developer', icon: 'tools', description: 'Every raw value, for troubleshooting' },
-] as const satisfies ReadonlyArray<{ id: string; group: (typeof SETTINGS_GROUPS)[number]; label: string; icon: string; description: string }>
-
-export type SectionId = (typeof SETTINGS_SECTIONS)[number]['id']
-
-/** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
-const LEGACY_SECTION: Readonly<Record<string, SectionId>> = {
-  env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
-}
-
-/** Section for an id from a link or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Terminal. */
-export function toSectionId(id: string): SectionId {
-  return LEGACY_SECTION[id] ?? SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
-}
+/** Section for an id from a link or a saved tab (legacy ids mapped, unknown -> Terminal); lives with the URL whitelist. */
+export const toSectionId: (id: string) => SectionId = toSettingsRouteSection
 
 /** What `renderSection` gets: the panel's state and callbacks. */
 interface SectionCtx {
@@ -105,6 +80,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
     <CapabilitiesSection projectId={c.projectId} query={c.query} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
       onVisibleCount={c.onCapabilityHits} onSettingsChange={c.onChange} onOpenCentral={() => c.navigate({ section: 'central' })} />
   ),
+  account: () => <AccountSection />,
   health: () => <HealthSection />,
   developer: (c) => <DeveloperSection query={c.query} />,
 }
@@ -117,15 +93,20 @@ interface PanelProps {
   projectId?: string
   /** Section shown first (e.g. 'central' from the Central card's "Edit launch profile"). */
   initialSection?: string
+  /** Controlled section (the URL's `?settings=`); with it, section changes go to `onSectionChange`. */
+  section?: string
+  onSectionChange?: (id: SectionId) => void
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal' }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
-  const [activeRaw, setActive] = useState<string>(initialSection)
+  const [ownRaw, setOwnRaw] = useState<string>(initialSection)
+  const activeRaw = section ?? ownRaw
+  const setActive = (id: string): void => { setOwnRaw(id); onSectionChange?.(toSectionId(id)) }
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [capabilityHits, setCapabilityHits] = useState(0)

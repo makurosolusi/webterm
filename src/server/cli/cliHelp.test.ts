@@ -13,7 +13,7 @@ describe('buildHelp', () => {
   const help = buildHelp()
 
   it('lists every flag', () => {
-    for (const o of CLI_OPTIONS) expect(help).toContain(`${o.short}, ${o.long}`)
+    for (const o of CLI_OPTIONS) expect(help).toContain(o.short ? `${o.short}, ${o.long}` : o.long)
   })
 
   it('lists every bootstrap key and every user-facing registry key, not advanced ones', () => {

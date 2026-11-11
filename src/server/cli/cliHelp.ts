@@ -33,7 +33,7 @@ function formatEnv(lines: readonly EnvLine[]): string {
 
 /** `webterm --help`: usage, options, startup + user-facing env vars, examples. */
 export function buildHelp(): string {
-  const flags = CLI_OPTIONS.map((o) => `${o.short}, ${o.long}${o.arg ? ` ${o.arg}` : ''}`)
+  const flags = CLI_OPTIONS.map((o) => `${o.short ? `${o.short}, ` : '    '}${o.long}${o.arg ? ` ${o.arg}` : ''}`)
   const width = Math.max(...flags.map((f) => f.length))
   return [
     'webterm - node-based terminal manager in the browser',
@@ -58,6 +58,7 @@ export function buildHelp(): string {
     '  PORT=9000 webterm        Start on another port',
     '  webterm --docs           List documentation topics',
     `  webterm --docs ${ENV_TOPIC}       Full environment reference`,
+    '  webterm --reset-password alice   Set a new password for alice (prompts twice)',
     '',
   ].join('\n')
 }

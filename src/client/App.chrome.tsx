@@ -74,7 +74,7 @@ export default function AppDock({
 }
 
 export interface AppWorkspaceBarProps
-  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect' | 'onLogout' | 'showLogout'> {
+  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect' | 'onLogout' | 'showLogout' | 'onOpenAccount'> {
   liveNodes: WorkspaceBarProps['liveActiveNodes']
   onNewProject: WorkspaceBarProps['onNewWorkspace']
   onRenameWorkspace: (id: string, name: string) => Promise<unknown>

@@ -55,6 +55,8 @@ export interface WorkspaceBarProps {
   onLogout?: () => void
   /** This browser holds a UI session (the `wt_ui` cookie), so there is something to sign out of. */
   showLogout?: boolean
+  /** Settings › Account (username, password, sessions, Sign out): the title-bar account button. */
+  onOpenAccount?: () => void
   /** File > Settings…: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
   onOpenSettings?: () => void
   /** Help > Keyboard Shortcuts Reference: membuka overlay Help. */
@@ -81,6 +83,7 @@ export default function WorkspaceBar({
   onDeleteWorkspace,
   onLogout,
   showLogout,
+  onOpenAccount,
   onOpenSettings,
   onOpenHelp,
   onNewFiles,
@@ -161,7 +164,8 @@ export default function WorkspaceBar({
     )
   }
   if (onOpenSettings) fileItems.push({ type: 'separator' }, { id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
-  if (showLogout && onLogout) fileItems.push({ type: 'separator' }, { id: 'logout', label: 'Logout', onSelect: onLogout })
+  if (showLogout && onOpenAccount) fileItems.push({ type: 'separator' }, { id: 'account', label: 'Account…', onSelect: onOpenAccount })
+  if (showLogout && onLogout) fileItems.push(...(onOpenAccount ? [] : [{ type: 'separator' } as const]), { id: 'logout', label: 'Sign out', onSelect: onLogout })
 
   const viewItems: VscodeMenuEntry[] = [
     ...(onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: layoutKey ?? undefined, disabled: !activeGroup, onSelect: onToggleLayout }] : []),
@@ -240,14 +244,14 @@ export default function WorkspaceBar({
         <div className="app-titlebar__actions">
           {titleActions}
           {showLogout && (
-            <IconTooltip label="Log out and return to the login screen">
+            <IconTooltip label={onOpenAccount ? 'Account: username, password, sessions, sign out' : 'Sign out and return to the sign-in screen'}>
               <button
                 type="button"
                 className="titlebar__action"
-                aria-label="Logout"
-                onClick={onLogout}
+                aria-label={onOpenAccount ? 'Account' : 'Sign out'}
+                onClick={onOpenAccount ?? onLogout}
               >
-                <span className="codicon codicon-sign-out" aria-hidden />
+                <span className={`codicon ${onOpenAccount ? 'codicon-account' : 'codicon-sign-out'}`} aria-hidden />
               </button>
             </IconTooltip>
           )}

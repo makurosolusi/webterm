@@ -82,6 +82,11 @@ export const RETENTION: Record<string, RetentionEntry> = {
     deleteBatch(ctx, 'central_reminder', "status != 'pending' AND created_at < ?", limit, now - SETTLED_RETENTION_MS)),
   central_checkin_reason: sweep('delivered 30+ days ago; an overdue row stays with its task so the task never fires twice', (ctx, now, limit) =>
     deleteBatch(ctx, 'central_checkin_reason', "sent_at IS NOT NULL AND sent_at < ? AND kind != 'task_overdue'", limit, now - SETTLED_RETENTION_MS)),
+  central_finding: sweep('fixed 30+ days ago; open findings and dismissed ones (the human reason stops repeats) stay', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_finding', "status = 'fixed' AND fixed_at < ?", limit, now - SETTLED_RETENTION_MS)),
+  central_health_scan: sweep('started 30+ days ago and not the latest run of its project and origin (lastScanAt reads it)', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_health_scan', `started_at < ? AND EXISTS (SELECT 1 FROM central_health_scan n
+      WHERE n.project_id = central_health_scan.project_id AND n.origin = central_health_scan.origin AND n.started_at > central_health_scan.started_at)`, limit, now - SETTLED_RETENTION_MS)),
   agent_mail: sweep('expired (24 h TTL set at send)', (ctx, now, limit) => deleteBatch(ctx, 'agent_mail', 'expires_at <= ?', limit, now)),
   cost_usage: sweep('responses 400+ days old (caps only read today and the current dag)', (ctx, now, limit) =>
     deleteBatch(ctx, 'cost_usage', 'ts < ?', limit, now - USAGE_RETENTION_MS)),

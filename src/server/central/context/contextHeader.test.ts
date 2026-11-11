@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.testutil'
 import { registerWorkspaceLookup, type WorkspaceRecord } from '../workspaceLookup'
 import { createWorkStore } from '../work/workStore'
+import { createHealthStore } from '../health/healthStore'
 import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace } from './contextHeader'
 
 let f: Fixture
@@ -30,7 +31,7 @@ describe('state header: viewing', () => {
     active = 'ws-wibu' // a workspace whose project livePortfolio creates with id = workspace id
     const text = buildStateHeader(f.db, 'central:global')
     expect(parse(text).viewing).toEqual({ projectId: 'ws-wibu', name: 'wibu' })
-    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['time', 'needsYou', 'work', 'projectTotal', 'projects', 'scope', 'viewing'])
+    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['time', 'needsYou', 'health', 'work', 'projectTotal', 'projects', 'scope', 'viewing'])
     active = 'w-p1' // an older project linked to its workspace under a different id
     expect(parse(buildStateHeader(f.db, 'central:global')).viewing).toEqual({ projectId: 'p1', name: 'laya-api' })
   })
@@ -153,5 +154,43 @@ describe('state header: time and open work', () => {
     expect(header.work).toHaveLength(3)
     expect(new Set(header.work.map((w) => w.open.length)).size).toBe(1)
     expect(buildStateHeader(f.db, 'central:global', NOW).length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
+  })
+})
+
+describe('state header: health line', () => {
+  const NOW = 1_700_000_000_000 // test-only fixed clock
+  const HOUR = 60 * 60_000
+  const health = (conv: string): unknown => (JSON.parse(buildStateHeader(f.db, conv, NOW).slice('State: '.length)) as { health: unknown }).health
+  const scan = (projectId: string, severities: Array<'high' | 'medium' | 'low'>, at: number): void => {
+    const store = createHealthStore(f.db, () => at)
+    const s = store.startScan(projectId, 'scan')
+    store.finishScan(s.id, {
+      drafts: severities.map((severity, i) => ({ rule: 'file_size', severity, confidence: 'high', file: `f${i}.ts`, line: 1, title: 't', evidence: 'e', source: 'Rule 8', suggestion: 's', fingerprint: `${projectId}-${i}` })),
+      rules: ['file_size'], filesScanned: severities.length, truncated: false,
+    })
+  }
+
+  it('a project chat shows its counts and last scan age, or that it was never scanned', () => {
+    expect(health('central:project:p1')).toBe('never scanned')
+    scan('p1', ['high', 'low', 'low'], NOW - 2 * HOUR)
+    expect(health('central:project:p1')).toBe('3 open (1 high, 2 low) · last scan 2h ago')
+    scan('p1', [], NOW - 5 * 60_000)
+    expect(health('central:project:p1')).toBe('0 open · last scan 5m ago')
+  })
+
+  it('the global chat names only projects with open high findings', () => {
+    expect(health('central:global')).toBe('no open high findings')
+    scan('p1', ['high', 'high', 'low'], NOW - 3 * 24 * HOUR)
+    scan('p2', ['medium'], NOW)
+    scan('p3', ['high'], NOW)
+    expect(health('central:global')).toBe('3 open high in 2 project(s): laya-api 2, Gamma 1')
+  })
+
+  it('stays under the cap when the header shrinks', () => {
+    scan('p1', ['high'], NOW)
+    workspaces = Array.from({ length: 60 }, (_, i) => ({ id: `ws-${i}`, name: `${'n'.repeat(55)}${i}`, nodes: [] }))
+    const text = buildStateHeader(f.db, 'central:project:p1', NOW)
+    expect(text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
+    expect(text).toContain('"health":"1 open (1 high) · last scan 0m ago"')
   })
 })

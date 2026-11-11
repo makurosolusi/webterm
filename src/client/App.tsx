@@ -50,6 +50,7 @@ import { useAppTabs } from './App.tabs'
 import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds } from './App.hooks'
+import { useAppUrlState, useWorkspaceUrlSync } from './App.route'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
 
@@ -72,10 +73,8 @@ export default function App() {
   const [nodes, setNodes] = useState<Node[]>([])
   const [edges, setEdges] = useState<Edge[]>([])
   const [statuses, setStatuses] = useState<Record<string, AgentStatus>>({})
-  const [board, setBoard] = useState(false)
   const [picker, setPicker] = useState<{ onPick: (p: string) => void } | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
-  const [showHelp, setShowHelp] = useState(false)
+  const { route, actions: routeActions, board, setBoard, setShowSettings, showHelp, setShowHelp } = useAppUrlState() // overlays live in the URL (./appRoute)
   const [locked, setLocked] = useState(false)
   // Di App, bukan di dalam side bar: ikon view-nya (Layers/Sessions/History) ada di Dock.
   const sideBar = useAppSideBar()
@@ -139,8 +138,9 @@ export default function App() {
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-      activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit,
+      activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, urlWorkspaceId: route.workspaceId,
     })
+  useWorkspaceUrlSync({ urlWorkspaceId: route.workspaceId, activeId, hydrated, workspaces, onSelect, goWorkspace: routeActions.goWorkspace })
 
   // Notification click → `onFocus`, which switches workspace when the node lives on another board
   // (found in `workspaces`, kept current by every save and switch).
@@ -222,7 +222,7 @@ export default function App() {
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onAddFiles, omni, setShowSettings, setShowHelp }} />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
@@ -267,9 +267,9 @@ export default function App() {
           <AppBottomPanel
             problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
             onFocus={(id) => void onFocus(id)}
-            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} />
+            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} panel={route.panel} />
           {/* Chat & Central di kanan (ala Copilot Chat): kolom grid `aux`, canvas menyempit, tidak ditutupi. */}
-          <SecondarySideBar centralEnabled={centralEnabled} />
+          <SecondarySideBar centralEnabled={centralEnabled} ctab={route.ctab} setCentralTab={routeActions.setCentralTab} />
           <OutputPanelHost />
           {tasks.menu}
           <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
@@ -286,7 +286,7 @@ export default function App() {
       {cleanView && <CleanViewHint />}
       <ConnectionStatus onAuthRequired={requireSignIn} />{/* one app-wide surface; `auth` reuses the boot gate above */}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
+      <SettingsHost section={route.settings} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (
         <Omnibox

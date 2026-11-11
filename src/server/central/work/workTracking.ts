@@ -11,6 +11,9 @@ import { resolveChatService } from '../../centralChatHandlers'
 import { appendCentralNotice } from '../chat/conversationNotice'
 import { centralRuntimeKind } from '../runtime/runtimeFlag'
 import { createLogger } from '../../logs'
+import { createHealthReview } from '../health/healthReview'
+import { healthServiceFor } from '../health/healthService'
+import { createHealthStore } from '../health/healthStore'
 import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
 import { readAutoDone } from './workSettings'
 import { createWorkStore, onWorkMove } from './workStore'
@@ -78,7 +81,15 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     notice: (key, text, conversationId) => { appendCentralNotice(db, { key, text, conversationId, now }) },
   })
   onWorkMove(db, checkin.onMove)
-  const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now, afterTick: checkin.tick })
+  const cwdOf = (projectId: string): string | null => projectRepo(db, projectId)
+  onWorkMove(db, createHealthReview({ db, store: createHealthStore(db, now), now, cwdOf }).onMove)
+  const health = healthServiceFor(db, now)
+  const afterTick = async (at: number): Promise<void> => {
+    // Beside the check-in pass, not before it: a scan takes seconds and must not hold the liveness tick; it never throws.
+    void health.autoScanDue(at)
+    await checkin.tick(at)
+  }
+  const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now, afterTick })
   return {
     start() {
       verifier.recoverInterrupted()

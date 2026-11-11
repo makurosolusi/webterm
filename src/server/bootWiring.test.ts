@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeTokenToEnv } from './auth'
-import { bootWiring, onListenError, refuseRequest } from './bootWiring'
+import { announceSetup, bootWiring, onListenError, refuseRequest, setupLine } from './bootWiring'
 import { getTokenState, setTokenState } from './tokenBootstrap'
 
 // Logger dipalsukan: sink konsol/file tak terjamin aktif di vitest, yang diuji adalah apa yang DIKIRIM ke logger.
@@ -49,15 +49,24 @@ describe('bootWiring', () => {
     expect(getTokenState()).toMatchObject({ source: 'file', created: true })
   })
 
-  it('TTY: one line names the token file path, never the value; every boot', () => {
+  it('TTY: the token is for machines, so the terminal no longer points humans at it; never the value', () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true })
     bootWiring({ PORT: '9000' }, dir)
     bootWiring({ PORT: '9000' }, dir)
     const token = getTokenState().token as string
     expect(getTokenState().created).toBe(false)
-    expect(written.match(new RegExp(join(dir, 'data', 'secrets', 'WEBTERM_TOKEN'), 'g'))).toHaveLength(2)
+    expect(written).not.toContain('WEBTERM_TOKEN')
     expect(written + JSON.stringify(logged)).not.toContain(token)
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true })
+  })
+
+  it('announceSetup: one line naming the setup-code file while no account exists, nothing after', () => {
+    announceSetup(() => '/data/secrets/SETUP_CODE')
+    expect(written).toBe(`webterm: ${setupLine('/data/secrets/SETUP_CODE')}\n`)
+    expect(written).toContain('No account yet')
+    written = ''
+    announceSetup(() => null)
+    expect(written).toBe('')
   })
 
   it('non-loopback non-TTY: token dibuat, log memuat path+panjang tapi bukan nilai token', () => {

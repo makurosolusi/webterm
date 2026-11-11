@@ -9,22 +9,22 @@ import LevelPanel from './LevelPanel'
 import AbilitiesView from './AbilitiesView'
 import SkillReview from './SkillReview'
 import MemoryView from './MemoryView'
+import HealthView from './health/HealthView'
+import { HL } from './health/healthModel'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
-import { type CentralTab, useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
+import { useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
+import { CENTRAL_PANEL_TABS, type CentralPanelTab } from './centralTabs'
 import './central.css'
 
-type TabId = CentralTab | 'memory'
+type TabId = CentralPanelTab
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'status', label: CL.tabStatus },
-  { id: 'abilities', label: CL.tabAbilities },
-  { id: 'agents', label: CL.tabAgents },
-  { id: 'skills', label: CL.tabSkills },
-  { id: 'memory', label: CL.tabMemory },
-]
+const TAB_LABELS: Record<TabId, string> = {
+  status: CL.tabStatus, abilities: CL.tabAbilities, agents: CL.tabAgents, skills: CL.tabSkills, memory: CL.tabMemory, health: HL.tab,
+}
+const TABS = CENTRAL_PANEL_TABS.map((id) => ({ id, label: TAB_LABELS[id] }))
 
 /** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Status. */
 export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'status'
@@ -35,20 +35,26 @@ export interface CentralControlPanelProps {
   client?: CentralControlClient
   /** Host toolbar slot; the embedded refresh action is portaled here. */
   actionsHost?: HTMLElement | null
+  /** Controlled tab (the URL's `?ctab=`); with it, tab changes go to `onTabChange`. */
+  tab?: TabId
+  onTabChange?: (tab: TabId) => void
 }
 
-export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost }: CentralControlPanelProps) {
+export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost, tab: tabProp, onTabChange }: CentralControlPanelProps) {
   const enabled = useCentralControlEnabled(enabledProp)
   // A Central chat command (`/status`, `/halt`) may pick the tab, also before this lazy panel mounted.
   const request = useCentralTabRequest()
   // The side bar keeps this panel mounted behind Chat, so "shown" is its view, not whether it is mounted.
   const sideBar = useSideBar()
   const visible = sideBar.open && sideBar.view === 'central'
-  const [tab, setTab] = useState<TabId>(knownTab(request?.tab))
+  const [ownTab, setOwnTab] = useState<TabId>(knownTab(request?.tab))
+  const tab = tabProp ?? ownTab
+  const setTab = (id: TabId): void => { setOwnTab(id); onTabChange?.(id) }
   const [askHalt, setAskHalt] = useState(false)
   useEffect(() => {
     if (!request) return
-    setTab(knownTab(request.tab))
+    // Own state only: `openCentralTab` already wrote the URL, and a remount must not replay an old request into it.
+    setOwnTab(knownTab(request.tab))
     if (request.halt && request.seq > haltSeen) { haltSeen = request.seq; setAskHalt(true) }
   }, [request])
   const [status, setStatus] = useState<StatusView | null>(null)
@@ -74,6 +80,7 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
           {tab === 'skills' && <SkillReview client={client} />}
           {tab === 'abilities' && <AbilitiesView client={client} />}
           {tab === 'memory' && <MemoryView client={client} />}
+          {tab === 'health' && <HealthView visible={visible} />}
         </div>
       </div>
     </div>

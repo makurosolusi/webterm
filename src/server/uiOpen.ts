@@ -27,8 +27,9 @@ const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})$/
 export type OpenFile = (path: string) => Promise<void>
 
 export interface UiOpener {
-  /** Mint a code (replacing any pending one), write the redirect file, hand its path to the opener. */
-  open(hostHeader?: string): Promise<void>
+  /** Mint a code (replacing any pending one), write the redirect file, hand its path to the opener.
+   *  `next`: a path already passed through safeNext; `/auth/open` re-validates it anyway. */
+  open(hostHeader?: string, next?: string): Promise<void>
   /** Spend `candidate`: true exactly once for the pending, unexpired code. */
   consume(candidate: string | null): boolean
 }
@@ -80,10 +81,11 @@ export function createUiOpener(o: { runDir: string; bindHost: string; port: numb
     rmSync(file, { force: true })
   }
   return {
-    async open(hostHeader) {
+    async open(hostHeader, next) {
       const code = randomBytes(CODE_BYTES).toString('base64url')
+      const nextQuery = next && next !== '/' ? `&next=${encodeURIComponent(next)}` : ''
       try {
-        writeRedirectFile(o.runDir, file, redirectHtml(`${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}`))
+        writeRedirectFile(o.runDir, file, redirectHtml(`${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}${nextQuery}`))
       } catch (err) {
         throw new Error(`cannot write the sign-in file in ${o.runDir}`, { cause: err })
       }

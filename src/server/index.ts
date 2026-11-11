@@ -30,12 +30,14 @@ import { bootCa2 } from './central/ca2Boot'
 import { registerCanvasBroadcast, registerCanvasTeardown } from './canvas/canvasPush.runtime'
 import { createCanvasTeardown } from './canvas/canvasTeardown'
 import { initEnvSettings } from './envSettings.runtime'
-import { bootWiring, onListenError, refuseRequest } from './bootWiring'
+import { announceSetup, bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { uiSessions } from './uiSession'
+import { uiUsers } from './uiUser'
+import { ensureSetupCode } from './setupCode'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
 import { requestOrigin } from './staticAssets.origin'
 import { onUnhandledRejection } from './processCrash'
@@ -193,7 +195,8 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
 const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT })
-const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, opener: uiOpener, token: () => getTokenState().token })
+const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, users: uiUsers, opener: uiOpener, token: () => getTokenState().token, dataDir })
+announceSetup(() => ensureSetupCode(dataDir())) // no account yet: one line naming the setup-code file
 const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
 
 /** Every non-asset route, shared by dev and prod; true = the request is answered. */
