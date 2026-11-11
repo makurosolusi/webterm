@@ -54,6 +54,7 @@ import { backgroundsDir } from './canvasBackground.store'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
+import { viteCacheDir } from './serverConfig'
 import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 import { activeAgentChatPool } from './agentChat/agentChat.pool'
@@ -215,7 +216,7 @@ if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
   // live on one origin — no separate dev server, no CORS, no proxy.
   const { createServer: createViteServer } = await import('vite')
-  const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
+  const vite = await createViteServer({ appType: 'spa', cacheDir: viteCacheDir(process.env), server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
     if (!routeApp(req, res, reqUrl(req))) vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
