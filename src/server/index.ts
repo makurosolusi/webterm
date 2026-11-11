@@ -1,8 +1,11 @@
+// Must stay the first import: CLI flags (--help, --version, ...) exit before any side effect below.
+import './cli/cliGate'
 import http from 'node:http'
 import { basename, join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH } from '../shared/protocol'
 import { serveTerminalSocket } from './terminalSocket'
+import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
 import { sweepTrashOnBoot } from './fsBoot'
@@ -34,6 +37,7 @@ import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { uiSessions } from './uiSession'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
+import { requestOrigin } from './staticAssets.origin'
 import { onUnhandledRejection } from './processCrash'
 import { closeStores } from './shutdown'
 import { upgradeRoute } from './upgradeRouting'
@@ -52,6 +56,7 @@ import { backgroundsDir } from './canvasBackground.store'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
+import { viteCacheDir } from './serverConfig'
 import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 import { activeAgentChatPool } from './agentChat/agentChat.pool'
@@ -123,6 +128,8 @@ if (process.env.NODE_ENV !== 'test') {
 const API_PREFIX = '/api/'
 /** Vite's outDir, relative to this file (src/server), not the cwd: `bun src/server/index.ts` runs from anywhere. */
 const DIST_DIR = join(import.meta.dirname, '../../dist')
+/** bootId + build: sent as the socket `hello` and by GET /api/health (health.api.ts). */
+const identity = createServerIdentity({ distDir: DIST_DIR, dev })
 
 function reqUrl(req: http.IncomingMessage): URL {
   return new URL(req.url || '/', 'http://x')
@@ -196,6 +203,7 @@ function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL)
   if (refuseProxyOnMain(req, res)) return true // 404: the proxy has its own origin (proxy.routes.ts)
   if (uiAuthRoute(req, res, url)) return true // before the gate: this is how a browser gets a credential
   if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(res); return true }
+  if (healthRoute(req, res, url.pathname, identity)) return true
   if (tokenAccessRoute(req, res, url.pathname, join(dataDir(), 'secrets'), onTokenInstalled)) return true
   return telegramHot.handleApi(req, res) || handleApi(req, res) // root-only, after the gate: per-node tokens never reach it
 }
@@ -210,7 +218,7 @@ if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
   // live on one origin — no separate dev server, no CORS, no proxy.
   const { createServer: createViteServer } = await import('vite')
-  const vite = await createViteServer({ appType: 'spa', server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
+  const vite = await createViteServer({ appType: 'spa', cacheDir: viteCacheDir(process.env), server: { middlewareMode: true, hmr: { server, clientPort: PORT } } })
   server.on('request', (req, res) => {
     if (!routeApp(req, res, reqUrl(req))) vite.middlewares(req, res, () => { res.statusCode = 404; res.end('not found') })
   })
@@ -223,7 +231,7 @@ if (dev) {
     if (routeApp(req, res, url)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
-    void serveAsset(res, hit, req.headers['accept-encoding']) // never rejects: a missing file is a 404 for this request only
+    void serveAsset(res, hit, req.headers['accept-encoding'], requestOrigin(req.headers)) // never rejects: a missing file is a 404 for this request only
   })
 }
 
@@ -277,7 +285,7 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 // Terminal socket dispatch, heartbeat and backpressure live in terminalSocket.ts.
-wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
+wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, identity, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
 
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {

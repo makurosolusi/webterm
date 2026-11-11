@@ -5,6 +5,7 @@
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useSaveLifecycle } from './workspaceSave.lifecycle'
+import { setConnection } from './ws.connection'
 
 function setup(unsaved: boolean) {
   const deps = { flushSave: vi.fn(), retrySave: vi.fn(), hasUnsaved: vi.fn(() => unsaved) }
@@ -50,5 +51,21 @@ describe('useSaveLifecycle', () => {
     window.dispatchEvent(new Event('pagehide'))
     expect(retrySave).toHaveBeenCalledTimes(1)
     expect(flushSave).not.toHaveBeenCalled()
+  })
+
+  it('retries when the socket enters connected from another phase, not on every connected update', () => {
+    setConnection({ phase: 'reconnecting', attempt: 1 })
+    const { retrySave, view } = setup(false)
+    setConnection({ phase: 'connected', attempt: 0 })
+    expect(retrySave).toHaveBeenCalledTimes(1)
+    setConnection({ phase: 'connected', attempt: 0, bootId: 'b2' }) // same phase, new hello data
+    expect(retrySave).toHaveBeenCalledTimes(1)
+    setConnection({ phase: 'auth', attempt: 0 })
+    setConnection({ phase: 'connected', attempt: 0 })
+    expect(retrySave).toHaveBeenCalledTimes(2)
+    view.unmount()
+    setConnection({ phase: 'offline', attempt: 0 })
+    setConnection({ phase: 'connected', attempt: 0 })
+    expect(retrySave).toHaveBeenCalledTimes(2)
   })
 })

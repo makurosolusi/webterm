@@ -37,6 +37,7 @@ import { SettingsSearchProvider, normalizeQuery } from './SettingsFields'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
+import { toSettingsRouteSection } from './appRoute'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
 import './settings-sections.css'
@@ -64,15 +65,8 @@ export const SETTINGS_SECTIONS = [
 
 export type SectionId = (typeof SETTINGS_SECTIONS)[number]['id']
 
-/** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
-const LEGACY_SECTION: Readonly<Record<string, SectionId>> = {
-  env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
-}
-
-/** Section for an id from a link or a saved tab; unknown ids (e.g. legacy `preview`) fall back to Terminal. */
-export function toSectionId(id: string): SectionId {
-  return LEGACY_SECTION[id] ?? SETTINGS_SECTIONS.find((section) => section.id === id)?.id ?? 'terminal'
-}
+/** Section for an id from a link or a saved tab (legacy ids mapped, unknown -> Terminal); lives with the URL whitelist. */
+export const toSectionId: (id: string) => SectionId = toSettingsRouteSection
 
 /** What `renderSection` gets: the panel's state and callbacks. */
 interface SectionCtx {
@@ -117,15 +111,20 @@ interface PanelProps {
   projectId?: string
   /** Section shown first (e.g. 'central' from the Central card's "Edit launch profile"). */
   initialSection?: string
+  /** Controlled section (the URL's `?settings=`); with it, section changes go to `onSectionChange`. */
+  section?: string
+  onSectionChange?: (id: SectionId) => void
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal' }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
-  const [activeRaw, setActive] = useState<string>(initialSection)
+  const [ownRaw, setOwnRaw] = useState<string>(initialSection)
+  const activeRaw = section ?? ownRaw
+  const setActive = (id: string): void => { setOwnRaw(id); onSectionChange?.(toSectionId(id)) }
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [capabilityHits, setCapabilityHits] = useState(0)

@@ -4,6 +4,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>webterm</title>
+    <meta name="description" content="Real shells as draggable terminal nodes on a pan/zoom canvas." />
+    <meta name="color-scheme" content="dark light" />
+    <!-- titleBar.activeBackground of Light/Dark Modern (vscode/vscode-theme.*.css); appTheme defaults to 'auto' -->
+    <meta name="theme-color" content="#f8f8f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#181818" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/m/apple-touch-icon.png" />
+    <!-- Link previews. https://webterm.invalid is replaced with the request's origin when served
+         (src/server/staticAssets.origin.ts): crawlers need absolute URLs and the host varies per install. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="webterm" />
+    <meta property="og:title" content="webterm" />
+    <meta property="og:description" content="Real shells as draggable terminal nodes on a pan/zoom canvas." />
+    <meta property="og:image" content="https://webterm.invalid/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="webterm: real terminals on a pan/zoom canvas" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="webterm" />
+    <meta name="twitter:description" content="Real shells as draggable terminal nodes on a pan/zoom canvas." />
+    <meta name="twitter:image" content="https://webterm.invalid/og-image.png" />
     <style>
       html, body, #root { margin: 0; height: 100%; width: 100%; }
     </style>

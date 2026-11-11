@@ -25,7 +25,9 @@ class FakeWS {
 }
 
 ;(globalThis as any).WebSocket = FakeWS
-;(globalThis as any).location = { protocol: 'http:', host: 'localhost', href: 'http://localhost/' }
+;(globalThis as any).location = { protocol: 'http:', host: 'localhost', hostname: 'localhost', href: 'http://localhost/' }
+// The auth probe after a failed connect: unreachable, so the backoff keeps going.
+;(globalThis as any).fetch = () => Promise.reject(new TypeError('Failed to fetch'))
 
 async function fresh() {
   vi.resetModules()
@@ -35,7 +37,7 @@ async function fresh() {
 const last = () => FakeWS.instances[FakeWS.instances.length - 1]
 
 beforeEach(() => { vi.useFakeTimers() })
-afterEach(() => { vi.useRealTimers() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 test('a reconnect asks only for what came after the last drawn chunk; the server reset clears the xterm', async () => {
   const { subscribe, send, RECONNECT_BASE_MS } = await fresh()
@@ -129,12 +131,13 @@ test('a failed open is not replayed on reconnect (A1); a live sibling is, and an
   expect(second.msgs().filter((m) => m.t === 'open').map((m) => m.id)).toEqual(['tl', 'tf'])
 })
 
-test('backoff doubles up to the cap; the banner state says reconnecting; Retry now skips the wait', async () => {
+test('backoff ceiling doubles up to the cap; the banner state says reconnecting; Retry now skips the wait', async () => {
   const { subscribe, getConnection, reconnectNow, RECONNECT_BASE_MS, RECONNECT_MAX_MS } = await fresh()
+  vi.spyOn(Math, 'random').mockReturnValue(1) // top of the jitter range = the old deterministic ladder
   subscribe('t7', () => {}, () => {})
   expect(getConnection().phase).toBe('connecting')
   last().up()
-  expect(getConnection()).toEqual({ phase: 'connected' })
+  expect(getConnection()).toMatchObject({ phase: 'connected', attempt: 0, retryAt: undefined })
 
   const delays: number[] = []
   for (let i = 0; i < 6; i++) {
@@ -154,4 +157,27 @@ test('backoff doubles up to the cap; the banner state says reconnecting; Retry n
   expect(FakeWS.instances.length).toBe(sockets + 1) // the cancelled timer does not open a second one
   last().up()
   expect(getConnection().phase).toBe('connected')
+})
+
+test('a reconnect timer that outlives its DOM does not throw, and the test reset leaves no timer', async () => {
+  const { subscribe, __resetWsForTests, RECONNECT_MAX_MS } = await fresh()
+  subscribe('t8', () => {}, () => {})
+  last().up()
+  last().drop() // reconnect scheduled
+  const loc = (globalThis as any).location
+  delete (globalThis as any).location // what a torn-down jsdom env leaves behind
+  try {
+    const sockets = FakeWS.instances.length
+    expect(() => vi.advanceTimersByTime(RECONNECT_MAX_MS)).not.toThrow()
+    expect(FakeWS.instances.length).toBe(sockets) // no socket without an origin
+  } finally {
+    ;(globalThis as any).location = loc
+  }
+
+  subscribe('t9', () => {}, () => {})
+  last().up() // heartbeat interval running
+  last().drop() // and a reconnect timer
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  __resetWsForTests()
+  expect(vi.getTimerCount()).toBe(0)
 })

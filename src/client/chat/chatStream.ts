@@ -9,10 +9,8 @@
 import type { ChatEvent, ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
-
-/** Reconnect backoff; capped so a long outage keeps retrying without hammering the server. */
-const RETRY_BASE_MS = 1_000
-const RETRY_MAX_MS = 10_000
+import { afterPageLoad } from '../pageLoad'
+import { scheduleStreamRetry } from '../ws.connection'
 
 /** What differs between SSE feeds: the URL, the `event:` names and the frame parser. */
 export interface SseFeed<E extends { seq: number }> {
@@ -33,7 +31,8 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
   let lastSeq = opts.after !== undefined && opts.after > 0 ? opts.after : 0
   let attempts = 0
   let closed = false
-  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let cancelRetry = (): void => {}
+  let cancelStart = (): void => {}
 
   const status = (next: ChatStreamStatus): void => {
     if (!closed) opts.onStatus(next)
@@ -58,8 +57,8 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
 
   const close = (final: ChatStreamStatus): void => {
     closed = true
-    if (retryTimer !== null) clearTimeout(retryTimer)
-    retryTimer = null
+    cancelStart()
+    cancelRetry()
     cleanup()
     opts.onStatus(final)
   }
@@ -82,15 +81,15 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
   const reconnect = (): void => {
     if (closed) return
     cleanup()
-    const delay = Math.min(RETRY_BASE_MS * 2 ** attempts, RETRY_MAX_MS)
+    cancelRetry()
+    // Jittered backoff, and no timer at all while the shared socket says the server is unreachable.
+    cancelRetry = scheduleStreamRetry(attempts, connect)
     attempts += 1
     status('reconnecting')
-    retryTimer = setTimeout(connect, delay)
   }
 
   const connect = (): void => {
     if (closed) return
-    retryTimer = null
     status(attempts === 0 ? 'connecting' : 'reconnecting')
     let next: ChatEventSource
     try {
@@ -127,7 +126,7 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
     }
   }
 
-  connect()
+  cancelStart = afterPageLoad(connect)
   return { close: () => close('closed') }
 }
 

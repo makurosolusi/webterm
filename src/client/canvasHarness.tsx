@@ -16,7 +16,9 @@ import { vi } from 'vitest'
 // Elemen `vscode-*` memakai ElementInternals form API yang jsdom belum lengkapi. Satu patch di
 // harness ini menutup semua test canvas yang kini merender chrome VS Code (tombol editor, dsb).
 import './vscode/test-setup'
-import App from './App'
+import { MemoryRouter, useLocation, useNavigate, type NavigateFunction } from 'react-router'
+import AppRoutes from './App.routes'
+import { __resetWsForTests } from './ws'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -154,6 +156,28 @@ export interface CanvasFixture {
   browserStatus?: BrowserStatusResp
   /** Keys merged over `DEFAULT_SETTINGS` in `GET /api/settings` (e.g. a canvas background). */
   settings?: Partial<Settings>
+  /** URL the app boots at (path + search, e.g. `/w/ws-2?settings=canvas`). Default `/`. */
+  url?: string
+  /** Capability ids answered `on` by `GET /api/capabilities` (e.g. `['central']`). Without it the route 404s. */
+  capabilitiesOn?: string[]
+}
+
+/** The URL the mounted app is at now (path + search), as its router sees it. */
+export let harnessUrl = '/'
+/** The mounted app's router `navigate` (Back = `harnessNavigate(-1)`); null before mount. */
+export let harnessNavigate: NavigateFunction | null = null
+
+function UrlProbe(): null {
+  const { pathname, search } = useLocation()
+  harnessUrl = pathname + search
+  harnessNavigate = useNavigate()
+  return null
+}
+
+/** The real route table + App under an in-memory router starting at `url`. */
+function routedApp(url = '/'): React.JSX.Element {
+  harnessUrl = url
+  return <MemoryRouter initialEntries={[url]}><UrlProbe /><AppRoutes /></MemoryRouter>
 }
 
 export const HARNESS_WS_ID = 'ws-harness'
@@ -200,6 +224,7 @@ function routeFetch(fx: CanvasFixture) {
       return reply(all.find((w) => w.id === id) ?? ws)
     }
     if (path === '/api/browser/status' && fx.browserStatus) return reply(fx.browserStatus)
+    if (path === '/api/capabilities' && fx.capabilitiesOn) return reply({ capabilities: fx.capabilitiesOn.map((id) => ({ id, status: 'on' })), advanced: {} })
     if (path === '/api/active') return reply({ id: fx.blank ? null : HARNESS_WS_ID })
     if (path === '/api/fs/list') return reply(fx.dirs[arg] ?? [])
     if (path === '/api/fs/read') return reply({ content: fx.files?.[arg] ?? '' })
@@ -219,7 +244,7 @@ function routeFetch(fx: CanvasFixture) {
 export async function mountCanvas(fx: CanvasFixture): Promise<ReturnType<typeof render>> {
   installCanvasDom()
   vi.stubGlobal('fetch', routeFetch(fx))
-  const view = render(<App />)
+  const view = render(routedApp(fx.url))
   await waitFor(() => {
     if (!document.querySelector('.react-flow__pane')) throw new Error('canvas not hydrated yet')
   })
@@ -261,7 +286,7 @@ export function mountHeld(fx: CanvasFixture): () => Promise<void> {
     await gate
     return inner(input)
   }))
-  render(<App />)
+  render(routedApp(fx.url))
   return async () => {
     open()
     // Dua giliran: rantai request boot (`/api/workspaces` → `/api/workspaces/:id`) plus timer
@@ -288,6 +313,9 @@ export function renderedViewport(): Viewport {
  *  `screen` menemukan dua canvas. */
 export function unmountCanvas(): void {
   cleanup()
+  // The shared socket's reconnect/heartbeat timers are module-level: left running they fire after
+  // this file's jsdom env is torn down (`location is not defined`).
+  __resetWsForTests()
   vi.unstubAllGlobals()
 }
 

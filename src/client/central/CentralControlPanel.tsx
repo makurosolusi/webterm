@@ -38,20 +38,26 @@ export interface CentralControlPanelProps {
   client?: CentralControlClient
   /** Host toolbar slot; the embedded refresh action is portaled here. */
   actionsHost?: HTMLElement | null
+  /** Controlled tab (the URL's `?ctab=`); with it, tab changes go to `onTabChange`. */
+  tab?: TabId
+  onTabChange?: (tab: TabId) => void
 }
 
-export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost }: CentralControlPanelProps) {
+export default function CentralControlPanel({ open, enabled: enabledProp, client = centralControlApi, actionsHost, tab: tabProp, onTabChange }: CentralControlPanelProps) {
   const enabled = useCentralControlEnabled(enabledProp)
   // A Central chat command (`/status`, `/halt`) may pick the tab, also before this lazy panel mounted.
   const request = useCentralTabRequest()
   // The side bar keeps this panel mounted behind Chat, so "shown" is its view, not whether it is mounted.
   const sideBar = useSideBar()
   const visible = sideBar.open && sideBar.view === 'central'
-  const [tab, setTab] = useState<TabId>(knownTab(request?.tab))
+  const [ownTab, setOwnTab] = useState<TabId>(knownTab(request?.tab))
+  const tab = tabProp ?? ownTab
+  const setTab = (id: TabId): void => { setOwnTab(id); onTabChange?.(id) }
   const [askHalt, setAskHalt] = useState(false)
   useEffect(() => {
     if (!request) return
-    setTab(knownTab(request.tab))
+    // Own state only: `openCentralTab` already wrote the URL, and a remount must not replay an old request into it.
+    setOwnTab(knownTab(request.tab))
     if (request.halt && request.seq > haltSeen) { haltSeen = request.seq; setAskHalt(true) }
   }, [request])
   const [status, setStatus] = useState<StatusView | null>(null)

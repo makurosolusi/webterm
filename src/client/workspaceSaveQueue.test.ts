@@ -135,4 +135,35 @@ describe('createSaveQueue', () => {
     expect(srv.sent).toEqual([10, 11]) // 'a' in flight, then only the newest ('c')
     expect(srv.get()?.name).toBe('c')
   })
+
+  it('a 401/403 stops automatic retry, keeps the payload, reports auth once, and a manual retry resends it', async () => {
+    vi.useFakeTimers()
+    try {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      let refuse = true
+      const save = vi.fn(async (ws: Workspace) => {
+        if (refuse) throw httpError(403)
+        return { ...ws, updatedAt: ws.updatedAt + 1 }
+      })
+      const onAuth = vi.fn()
+      const q = createSaveQueue({ onStale: vi.fn(), onMissing: vi.fn(), onAuth }, { save, retryDelay: () => 1000 })
+      await q.enqueue(board(10, 'kept'))
+      expect(q.getState()).toMatchObject({ kind: 'error', auth: true, retryAt: 0 })
+      expect(q.isDirty()).toBe(true)
+      await vi.advanceTimersByTimeAsync(60_000) // no timer: a 403 is not retried on its own
+      expect(save).toHaveBeenCalledTimes(1)
+      await q.retry() // still refused: no second auth report
+      expect(save).toHaveBeenCalledTimes(2)
+      expect(onAuth).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledTimes(1)
+      refuse = false // signed in again
+      await q.retry()
+      expect(save.mock.calls.at(-1)?.[0]).toMatchObject({ name: 'kept' })
+      expect(q.isDirty()).toBe(false)
+      expect(q.getState()).toEqual({ kind: 'idle' })
+      warn.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

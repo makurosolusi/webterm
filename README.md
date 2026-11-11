@@ -75,6 +75,16 @@ The channel runtime (webhook, binding API, reply sender) follows the Telegram ca
 
 The file manager API lives under `/api/fs/<verb>` and uses the same token gate as the rest of `/api`. GET verbs: `list`, `list-v2`, `read`, `read-binary`, `exists`, `stat`, `capabilities`, plus `raw` (needs `WEBTERM_FILES_VIEWERS`), `git-status` (`WEBTERM_FILES_GIT_STATUS`), and `search` (`WEBTERM_FILES_QUICK_OPEN`). POST verbs: `create`, `write`, `mkdir`, plus `delete`, `restore`, `rename`, `copy` (`WEBTERM_FILES_MUTATE`) and `upload` (`WEBTERM_FILES_UPLOAD`). A verb whose flag is off answers `501` with code `EDISABLED`. Design decisions and known limits: `docs/decisions/files-manager.md`.
 
+### Testing a fresh install
+
+```sh
+bun run dev:fresh
+```
+
+Starts a second, throwaway webterm that behaves like the first run on a machine that never had webterm, next to your normal one (which it never touches). It gets its own temp root (`$TMPDIR/webterm-fresh-*` with its own data dir, `HOME`, `CLAUDE_CONFIG_DIR` and Vite cache), its own port (first free from `8710`; never `8700`/`8701`) and proxy port, and its own tmux socket, so it cannot see or re-adopt your sessions. It drops `WEBTERM_*`, `NODETERM_*`, `TMUX*`, `XDG_*`, `ANTHROPIC_*` and `CLAUDE_CODE_*` from its environment and does not load `.env`. The banner prints the URL, the temp root and the token file path. Ctrl+C stops it and deletes the temp root.
+
+Flags: `--port <n>`, `--keep` (keep the temp root), `--no-claude` (remove every `PATH` directory holding a `claude` executable), `--with-provider-env` (keep `ANTHROPIC_*`/`CLAUDE_CODE_*` and load `.env`). It still uses this machine's OS, tmux, git and bun, and the same macOS login keychain (Claude Code keys its keychain entry by `CLAUDE_CONFIG_DIR`, so the fresh instance starts signed out; a sign-in there leaves a keychain entry behind).
+
 ## Signing in
 
 Nothing to configure. On the first `bun run dev` webterm opens your default browser already signed in: it writes a one-time code (single use, 60 s) into a `600` file in `<data dir>/run/` and opens that file, so the code never appears in a terminal, a URL you share, or `ps`. The browser keeps an HttpOnly `wt_ui` session cookie for 30 days of inactivity. A restart opens nothing; open tabs keep working.
@@ -132,6 +142,17 @@ bun run build:binary   # emits ./webterm
 ./webterm              # runs from any directory; reads HOST / PORT (and a .env) from the cwd
 ```
 
+### Command-line options
+
+The server entry (`./webterm` or `bun src/server/index.ts`) handles these before it opens the database or binds a port; with no options it starts the server.
+
+- `-h, --help` — usage, options and the main environment variables.
+- `-v, --version` — version and build id.
+- `-r, --readme` — this README, built into the binary (paged through `less` on a terminal).
+- `-d, --docs [topic]` — list topics (this README's sections plus `env`, the full environment reference), or print one.
+
+An unknown option prints a suggestion and exits with status 2.
+
 ## Tests
 
 Split by runtime:
@@ -151,6 +172,8 @@ The vitest run now also covers `src/shared` (assembleCmd / agent config).
 Workspaces + layout are persisted in `bun:sqlite` (`src/server/db.ts`) as the source of truth, served over a small REST API under `/api` (`src/server/api.ts`); a node may be a terminal or an agent — an agent node spawns a CLI command via the login shell (`cmd` on the open message) instead of an interactive shell. When `tmux` is installed, each node's session lives on a webterm-owned tmux server (`-L webterm`) and is re-attached after a server restart; without it a restart reloads workspace + node definitions from the DB and respawns fresh PTYs.
 
 Live agent status comes from Claude hooks, delivered as a settings file (`claude --settings <path>`) rather than an inline blob, that POST each lifecycle event to `/api/agent-status`; the server maps those events to working/waiting/blocked/done and broadcasts them over the WebSocket as a `StatusMsg`. A pre-set session UUID (`--session-id`) lets a finished Claude session be continued with `--resume`. The Board is a read-only client overlay over the same node data, and the folder picker is served by `GET /api/fs`.
+
+Screens are URL-addressable (React Router, `src/client/appRoute.ts`): the open board is `/w/<workspace id>`, and Settings, the Central tab and the bottom-panel tab are search params (`?settings=agent`, `?ctab=memory`, `?panel=problems`). A reload or a pasted link lands on the same screen, and Back/Forward close and reopen them. Unknown values are dropped; in production every such path serves `index.html`.
 
 The ledger is always on, so the server also exposes read-only inbox, memory, and orchestrator projections, plus a human approval surface under `/api/approvals/*`. That surface is not capability-authorized. It accepts only the webterm page in a browser and refuses agent credentials, so an agent cannot approve its own action. The P3-P5 work behind these routes is still partial. Central proposal MVP, Telegram bridge logic, and memory retrieval have additional limits documented in `RND/14-CENTRAL-AGENT-S0.md`.
 

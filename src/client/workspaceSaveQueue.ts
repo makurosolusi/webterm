@@ -10,6 +10,8 @@
 // - any other failure (offline, 5xx, 413, server restarting) keeps the payload DIRTY: it is
 //   retried with backoff, on `retry()` (the Retry button, a socket reconnect) and on the next
 //   edit, VS Code "Failed to save … Retry" style.
+// - 401/403 = this browser lost its UI session: retrying cannot help, so the automatic retry stops
+//   (payload kept dirty), `onAuth` fires once, and only `retry()` / the next edit tries again.
 // - a server push (`absorb`, nodes/cables the server added or nodes it removed) is folded into every
 //   payload already locked, and when it sits on a version this window knew, its version becomes the next base.
 import type { CanvasMsg } from '../shared/protocol'
@@ -20,12 +22,17 @@ import { reconnectDelay } from './ws.connection'
 
 const HTTP_NOT_FOUND = 404
 const HTTP_CONFLICT = 409
+const HTTP_UNAUTHORIZED = 401
+const HTTP_FORBIDDEN = 403
+/** Shown instead of the raw HTTP error when the server refused our credential. */
+export const SAVE_AUTH_MESSAGE = 'Your sign-in expired. Sign in again; the changes are kept until then.'
 
 export type SaveState =
   | { kind: 'idle' }
   | { kind: 'saving' }
-  /** A save failed and is kept dirty; `retryAt` = epoch ms of the next automatic attempt. */
-  | { kind: 'error'; workspaceId: string; message: string; retryAt: number }
+  /** A save failed and is kept dirty; `retryAt` = epoch ms of the next automatic attempt (0 = none:
+   *  `auth` means the server refused our credential, so only a manual retry is attempted). */
+  | { kind: 'error'; workspaceId: string; message: string; retryAt: number; auth?: true }
   /** The last refused save was dropped because another window changed the board (409). */
   | { kind: 'conflict'; workspaceId: string }
 
@@ -37,6 +44,8 @@ export interface SaveQueueHooks {
   /** The server stored `saved` (its answer, with the new version). `superseded` = a newer local
    *  payload for the same board is still queued, so `saved` is already older than the canvas. */
   onSaved?: (saved: Workspace, superseded: boolean) => void
+  /** The server answered 401/403: the UI session is gone; fired once per auth stop. */
+  onAuth?: () => void
   /** Every save-state transition. */
   onState?: (state: SaveState) => void
 }
@@ -74,9 +83,10 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
   const epochs = new Map<string, number>() // board id -> bumped on every refused save
   const gone = new Set<string>() // board ids the server answered 404 for
   let running: Promise<void> | null = null
-  let failure: { workspaceId: string; message: string; retryAt: number } | null = null
+  let failure: { workspaceId: string; message: string; retryAt: number; auth?: true } | null = null
   let conflict: string | null = null
   let attempt = 0 // failed attempts in a row; reset by a confirmed save
+  let authStopped = false // a 401/403 was reported and no save has been confirmed since
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   let state: SaveState = { kind: 'idle' }
 
@@ -108,6 +118,17 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
     retryTimer = setTimeout(() => { retryTimer = null; void retry() }, delay)
   }
 
+  /** Credential refused: no timer (it would loop on 403 forever), the payload stays dirty. */
+  const authStop = (id: string): void => {
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = null
+    failure = { workspaceId: id, message: SAVE_AUTH_MESSAGE, retryAt: 0, auth: true }
+    if (authStopped) return
+    authStopped = true
+    console.warn(`[webterm] saving workspace ${id} refused (sign-in required), keeping it unsaved`)
+    hooks.onAuth?.()
+  }
+
   /** Send one board; false = stop the pump (the save failed and stays dirty). */
   const send = async (id: string, entry: Entry): Promise<boolean> => {
     const drop = (): void => { if (dirty.get(id) === entry) dirty.delete(id) }
@@ -121,6 +142,7 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
       drop()
       conflict = null
       attempt = 0
+      authStopped = false
       hooks.onSaved?.(saved, dirty.has(id))
       return true
     } catch (err) {
@@ -143,7 +165,8 @@ export function createSaveQueue(hooks: SaveQueueHooks, opts: SaveQueueOptions = 
         hooks.onMissing(id)
         return true
       }
-      fail(id, err)
+      if (status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN) authStop(id)
+      else fail(id, err)
       return false
     } finally {
       inflight = null

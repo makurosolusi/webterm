@@ -1,12 +1,15 @@
 // Places App nodes: when an agent publishes an MCP Apps view (`mcpapp.published` on the events SSE
 // stream, /api/events/stream?kind=…), claims the apps of this canvas and adds each one, once, to the right
 // of the agent that opened it. Claims on mount and on every (re)connect too, so a view published while
-// no tab was open still lands. If the stream is unavailable (ledger off -> 503) it falls back to a slow
-// poll. Must render inside <ReactFlow> (uses its store); nodes enter through `addNodes`, which the board
+// no tab was open still lands. A dropped stream reopens via `scheduleStreamRetry` (jittered, waits for
+// the shared socket while the server is down); a refused one (ledger off -> 503) falls back to a slow
+// poll that skips its ticks while the shared socket is down. Must render inside <ReactFlow> (uses its store); nodes enter through `addNodes`, which the board
 // saves as an 'add' change (App.board onNodesChange).
 import { useEffect } from 'react'
 import { useReactFlow, type Node } from '@xyflow/react'
 import { claimApps } from './mcpApp.api'
+import { afterPageLoad } from '../pageLoad'
+import { scheduleStreamRetry, streamPaused } from '../ws.connection'
 
 export const APP_NODE_KIND = 'app'
 /** Must match APP_PUBLISHED_EVENT in src/server/mcpapps/mcpApp.publish.ts. */
@@ -46,15 +49,34 @@ export default function McpAppsWatcher() {
       }
     }
     let poll: ReturnType<typeof setInterval> | null = null
-    const source = typeof EventSource === 'undefined' ? null : new EventSource(APP_STREAM_URL)
-    if (source) {
-      source.onopen = () => void claim()
-      source.addEventListener('sense', () => void claim())
-      // CONNECTING = the browser retries by itself; CLOSED = refused (non-200), so poll slowly instead.
-      source.onerror = () => { if (source.readyState === EventSource.CLOSED && !poll) poll = setInterval(() => void claim(), APP_FALLBACK_POLL_MS) }
-    } else poll = setInterval(() => void claim(), APP_FALLBACK_POLL_MS)
+    let source: EventSource | null = null
+    let attempts = 0
+    let cancelRetry = (): void => {}
+    // A tick while the server is unreachable would only fail; the reconnect's onopen claims anyway.
+    const startPoll = (): void => {
+      poll ??= setInterval(() => { if (!streamPaused()) void claim() }, APP_FALLBACK_POLL_MS)
+    }
+    const open = (): void => {
+      const next = new EventSource(APP_STREAM_URL)
+      source = next
+      next.onopen = () => { attempts = 0; void claim() }
+      next.addEventListener('sense', () => void claim())
+      // CLOSED = refused (non-200): poll slowly. Otherwise the browser would retry on its own fixed
+      // interval, unjittered and blind to the socket; close it and reopen on the shared schedule.
+      next.onerror = () => {
+        const refused = next.readyState === EventSource.CLOSED
+        next.close()
+        source = null
+        if (refused) { startPoll(); return }
+        cancelRetry()
+        cancelRetry = scheduleStreamRetry(attempts++, open)
+      }
+    }
+    let cancelStart = (): void => {}
+    if (typeof EventSource !== 'undefined') cancelStart = afterPageLoad(open)
+    else startPoll()
     void claim()
-    return () => { source?.close(); if (poll) clearInterval(poll) }
+    return () => { cancelStart(); cancelRetry(); source?.close(); if (poll) clearInterval(poll) }
   }, [rf])
   return null
 }

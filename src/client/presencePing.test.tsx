@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { cleanup, renderHook } from '@testing-library/react'
 import { FOCUS_PING_GAP_MS, PRESENCE_PING_MS, focusedNodeId, usePresencePing } from './presencePing'
 import { writeNotifyPrefs } from './osNotify.prefs'
+import { setConnection } from './ws.connection'
 
 let visibility: DocumentVisibilityState = 'visible'
 let fetchMock: ReturnType<typeof vi.fn>
@@ -21,8 +22,10 @@ beforeEach(() => {
   fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
   vi.stubGlobal('fetch', fetchMock)
   localStorage.clear()
+  setConnection({ phase: 'connected', attempt: 0 })
 })
 afterEach(() => {
+  cleanup() // a hook left mounted would keep pinging into the next test
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
@@ -84,4 +87,40 @@ test('404 (Telegram off) is silent; other failures warn', async () => {
   await vi.advanceTimersByTimeAsync(PRESENCE_PING_MS)
   expect(warn).toHaveBeenCalledTimes(1)
   warn.mockRestore()
+})
+
+test('offline: skips ticks, warns once per outage, pings again the moment the socket is back', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const { unmount } = renderHook(() => usePresencePing(true))
+  await vi.advanceTimersByTimeAsync(0) // a good first ping: any earlier outage is over
+  fetchMock.mockImplementation(async () => { throw new TypeError('Failed to fetch') })
+  await vi.advanceTimersByTimeAsync(PRESENCE_PING_MS * 2)
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+  expect(warn).toHaveBeenCalledTimes(1) // two failures, one warning
+
+  setConnection({ phase: 'reconnecting', attempt: 1 })
+  vi.advanceTimersByTime(PRESENCE_PING_MS * 3)
+  expect(fetchMock).toHaveBeenCalledTimes(3) // no ticks while the server is unreachable
+
+  fetchMock.mockImplementation(async () => new Response(null, { status: 204 }))
+  setConnection({ phase: 'connected', attempt: 0 })
+  expect(fetchMock).toHaveBeenCalledTimes(4) // immediate ping on reconnect
+  await vi.advanceTimersByTimeAsync(0)
+  fetchMock.mockImplementation(async () => { throw new TypeError('Failed to fetch') })
+  vi.advanceTimersByTime(PRESENCE_PING_MS)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(warn).toHaveBeenCalledTimes(2) // a new outage after a success warns again
+  unmount()
+  warn.mockRestore()
+})
+
+test('a board whose socket never opened (no terminal: stays `connecting`) still pings; offline skips', async () => {
+  setConnection({ phase: 'connecting', attempt: 0 })
+  const { unmount } = renderHook(() => usePresencePing(true))
+  await vi.advanceTimersByTimeAsync(PRESENCE_PING_MS)
+  expect(fetchMock).toHaveBeenCalledTimes(2) // mount + one tick
+  setConnection({ phase: 'offline', attempt: 0 })
+  vi.advanceTimersByTime(PRESENCE_PING_MS * 3)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  unmount()
 })

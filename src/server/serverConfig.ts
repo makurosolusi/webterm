@@ -25,3 +25,13 @@ export function resolveHostPort(env: NodeJS.ProcessEnv): { host: string; port: n
   const host = env.HOST || env.WEBTERM_HOST || DEFAULT_HOST
   return { host, port: parsePort(env.PORT) }
 }
+
+/** Env override for Vite's dep-optimizer cache (dev only); empty = Vite's default `node_modules/.vite`.
+ *  A second instance from the same checkout (`bun run dev:fresh`) sets it so the two dev servers never
+ *  rewrite one shared cache under each other. */
+export const VITE_CACHE_DIR_KEY = 'WEBTERM_VITE_CACHE_DIR'
+
+/** `cacheDir` for the dev Vite server, or undefined to keep Vite's default. */
+export function viteCacheDir(env: NodeJS.ProcessEnv): string | undefined {
+  return env[VITE_CACHE_DIR_KEY]?.trim() || undefined
+}

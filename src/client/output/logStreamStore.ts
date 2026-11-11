@@ -5,6 +5,8 @@
 // Reconnect is manual (like chat/chatStream) so every attempt re-runs the backfill from the last
 // seen seq: that closes gaps and also detects a server restart (seq went backwards).
 import { LOG_LEVELS, type LogChannelInfo, type LogEntry, type LogLevel, type LogQueryResult } from '../../shared/logEntry'
+import { afterPageLoad } from '../pageLoad'
+import { scheduleStreamRetry } from '../ws.connection'
 
 export type LogConnection = 'connecting' | 'open' | 'closed'
 
@@ -22,8 +24,6 @@ export const LOG_CLIENT_CAP = 5000
 const BACKFILL_LIMIT = 2000
 /** Backfill pages per connect attempt: enough to drain one full ring. */
 const BACKFILL_MAX_PAGES = Math.ceil(LOG_CLIENT_CAP / BACKFILL_LIMIT) + 1
-const RETRY_BASE_MS = 1_000
-const RETRY_MAX_MS = 10_000
 const LOGS_PATH = '/api/logs'
 
 const initial = (): LogStreamState => ({
@@ -37,7 +37,8 @@ let generation = 0
 let lastSeq = 0
 let attempts = 0
 let source: EventSource | null = null
-let retryTimer: ReturnType<typeof setTimeout> | null = null
+let cancelRetry = (): void => {}
+let cancelStart = (): void => {}
 let channelCounts = new Map<string, number>()
 
 const emit = (patch: Partial<LogStreamState>): void => {
@@ -126,10 +127,11 @@ async function backfill(): Promise<LogLevel> {
 function scheduleRetry(gen: number): void {
   if (gen !== generation) return
   closeSource()
-  const delay = Math.min(RETRY_BASE_MS * 2 ** attempts, RETRY_MAX_MS)
+  cancelRetry()
+  // Jittered backoff; while the shared socket is down the retry waits for it instead of a timer.
+  cancelRetry = scheduleStreamRetry(attempts, () => void connect(gen))
   attempts += 1
   emit({ connection: 'closed' })
-  retryTimer = setTimeout(() => void connect(gen), delay)
 }
 
 function closeSource(): void {
@@ -141,7 +143,6 @@ function closeSource(): void {
 }
 
 async function connect(gen: number): Promise<void> {
-  retryTimer = null
   emit({ connection: 'connecting' })
   try {
     const level = await backfill()
@@ -172,13 +173,14 @@ async function connect(gen: number): Promise<void> {
 function start(): void {
   generation += 1
   attempts = 0
-  void connect(generation)
+  const gen = generation
+  cancelStart = afterPageLoad(() => void connect(gen))
 }
 
 function stop(): void {
   generation += 1
-  if (retryTimer !== null) clearTimeout(retryTimer)
-  retryTimer = null
+  cancelStart()
+  cancelRetry()
   closeSource()
   lastSeq = 0
   channelCounts = new Map()

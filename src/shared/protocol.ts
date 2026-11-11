@@ -17,7 +17,10 @@ export interface DetachMsg { t: 'detach'; id: string }
 // Langganan perubahan direktori untuk node files (flag WEBTERM_FILES_WATCH). `dir` absolut/`~`.
 export interface FsWatchMsg { t: 'fswatch'; dir: string }
 export interface FsUnwatchMsg { t: 'fsunwatch'; dir: string }
-export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg | DetachMsg | FsWatchMsg | FsUnwatchMsg
+// App-level heartbeat: the server answers `pong` with the same `id`. Browsers cannot see ws-level
+// pings, so this is how a tab detects a half-open socket (no pong in time = reconnect).
+export interface PingMsg { t: 'ping'; id: string }
+export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg | DetachMsg | FsWatchMsg | FsUnwatchMsg | PingMsg
 
 // `seq` = nomor urut potongan dari `OutputLog`. Additif dan opsional supaya server lama/client lama
 // tetap saling bicara; kehadirannya membuat client bisa tahu ada potongan yang hilang saat re-attach.
@@ -57,6 +60,11 @@ export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?
 export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
 // The workspace list changed on the server (Central's `workspace.create`): each window adds the boards it lacks.
 export interface WorkspacesMsg { t: 'workspaces' }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg
+export interface PongMsg { t: 'pong'; id: string }
+// First frame on every connection: `bootId` changes per server process start, `build` per release/rebuild.
+export interface HelloMsg { t: 'hello'; bootId: string; build: string }
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | PongMsg | HelloMsg
 
 export const WS_PATH = '/ws'
+/** `{bootId, build}` behind the /api gate: lets a failing socket tell "server down" from "credential refused". */
+export const HEALTH_PATH = '/api/health'
