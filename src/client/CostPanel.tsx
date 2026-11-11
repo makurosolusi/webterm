@@ -98,7 +98,7 @@ export function CostPanel(): React.JSX.Element {
   const s: SpendSummary | undefined = data?.[range]
   const day = data?.caps.find((c) => c.scope === 'day')
   return (
-    <section aria-label={COST_TEXT.title} data-testid="cost-panel">
+    <section aria-label={COST_TEXT.title} data-testid="cost-panel" data-field="cost-panel">
       <div className="flex items-center gap-2">
         <Segmented label={COST_TEXT.period} value={range} onChange={(v) => setRange(v === 'week' ? 'week' : 'today')}
           options={[{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]} />

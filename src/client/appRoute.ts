@@ -1,6 +1,6 @@
 // The desktop client's URL contract: which board is open (`/w/:workspaceId`) plus the overlays shown
 // on top of it as search params, so a reload (or a shared link) lands on the same screen:
-//   ?settings=<section>  ?ctab=<Central tab>  ?panel=<bottom panel view>  ?view=kanban  ?help=1
+//   ?settings=<section>[&field=<setting>]  ?ctab=<Central tab>  ?panel=<bottom panel view>  ?view=kanban  ?help=1
 //   ?setup=1 (first-run wizard, resume) | ?setup=<step>
 // The canvas stays mounted under every overlay. Values outside the whitelists below are dropped.
 // Opening an overlay pushes a history entry (Back closes it, like VS Code web / GitHub modals);
@@ -11,6 +11,7 @@ import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackgrou
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
+import { toSettingsFieldId, type SettingsFieldId } from './settings.link'
 
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
  *  loaded Settings panel stays out of the start-up chunk. */
@@ -43,6 +44,8 @@ export type SetupRoute = SetupStep | 'resume'
 export interface AppRoute {
   workspaceId: string | null
   settings: SettingsRouteSection | null
+  /** The setting revealed in the open section (`&field=`); only with `settings`, cleared by any other section change. */
+  field: SettingsFieldId | null
   ctab: CentralRouteTab | null
   panel: BottomPanelRouteId | null
   view: AppRouteView | null
@@ -50,7 +53,7 @@ export interface AppRoute {
   setup: SetupRoute | null
 }
 
-export const EMPTY_APP_ROUTE: AppRoute = { workspaceId: null, settings: null, ctab: null, panel: null, view: null, help: false, setup: null }
+export const EMPTY_APP_ROUTE: AppRoute = { workspaceId: null, settings: null, field: null, ctab: null, panel: null, view: null, help: false, setup: null }
 
 const WORKSPACE_PATH = /^\/w\/([^/]+)\/?$/
 const OVERLAY_KEYS = ['settings', 'ctab', 'panel', 'view', 'help', 'setup'] as const
@@ -72,9 +75,11 @@ export function parseAppRoute(pathname: string, search: string): AppRoute {
     }
   }
   const q = new URLSearchParams(search)
+  const settings = pick(SETTINGS_ROUTE_SECTIONS, q.get('settings'))
   return {
     workspaceId,
-    settings: pick(SETTINGS_ROUTE_SECTIONS, q.get('settings')),
+    settings,
+    field: settings ? toSettingsFieldId(q.get('field')) : null,
     ctab: pick(CENTRAL_ROUTE_TABS, q.get('ctab')),
     panel: pick(BOTTOM_PANEL_ROUTE_IDS, q.get('panel')),
     view: pick(APP_ROUTE_VIEWS, q.get('view')),
@@ -88,6 +93,7 @@ export function buildAppHref(route: AppRoute): string {
   const path = route.workspaceId ? `/w/${encodeURIComponent(route.workspaceId)}` : '/'
   const q = new URLSearchParams()
   if (route.settings) q.set('settings', route.settings)
+  if (route.settings && route.field) q.set('field', route.field)
   if (route.ctab) q.set('ctab', route.ctab)
   if (route.panel) q.set('panel', route.panel)
   if (route.view) q.set('view', route.view)
@@ -105,8 +111,9 @@ export function navigationMode(from: AppRoute, to: AppRoute): 'push' | 'replace'
 
 /** URL setters; every one is a no-op when the URL would not change. */
 export interface AppRouteActions {
-  /** Open Settings on `section` (default Terminal); already open → switch section in place. */
-  openSettings: (section?: SettingsRouteSection) => void
+  /** Open Settings on `section` (default Terminal) revealing `field`; already open → switch in place.
+   *  No `field` clears the one in the URL (a later in-section move is not that link any more). */
+  openSettings: (section?: SettingsRouteSection, field?: SettingsFieldId | null) => void
   closeSettings: () => void
   /** `replace` records what is already on screen (a side bar or panel restored at boot) without a Back step. */
   setCentralTab: (tab: CentralRouteTab | null, opts?: { replace?: boolean }) => void
@@ -137,8 +144,8 @@ function makeActions(latest: { current: { route: AppRoute; navigate: NavigateFun
     pendingRoute = to
   }
   return {
-    openSettings: (section = 'terminal') => change({ settings: section }),
-    closeSettings: () => change({ settings: null }),
+    openSettings: (section = 'terminal', field = null) => change({ settings: section, field }),
+    closeSettings: () => change({ settings: null, field: null }),
     setCentralTab: (ctab, opts) => change({ ctab }, opts?.replace === true),
     setPanel: (panel, opts) => change({ panel }, opts?.replace === true),
     setView: (view) => change({ view }),

@@ -280,7 +280,7 @@ export default function App() {
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
       {/* `hydrated` too: the wizard must never cover BootScreen (a failed boot and its Retry). */}
       <AppSetup settings={settings} update={update} hydrated={settingsHydrated && hydrated} />
-      <SettingsHost section={route.settings} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
+      <SettingsHost section={route.settings} field={route.field} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (
         <Omnibox

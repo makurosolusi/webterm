@@ -64,7 +64,7 @@ describe('LevelPanel', () => {
     render(<LevelPanel client={fakeClient()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Change in Central settings' }))
     window.removeEventListener('webterm:open-settings', on)
-    expect(seen).toEqual([{ section: 'central' }])
+    expect(seen).toEqual([{ section: 'central', field: 'central.level' }])
   })
 
   it('says approvals are skipped when the setting is on, and "Change" opens Settings › Agent', async () => {
@@ -75,7 +75,7 @@ describe('LevelPanel', () => {
     expect(screen.getByText(/Approvals: skipped — Central acts without asking/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Change in Agent settings' }))
     window.removeEventListener('webterm:open-settings', on)
-    expect(seen).toEqual([{ section: 'agent' }])
+    expect(seen).toEqual([{ section: 'agent', field: 'skipApprovals' }])
   })
 
   it('shows no approvals line when the setting is off', async () => {

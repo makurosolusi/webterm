@@ -23,6 +23,7 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '../shared/settings'
+import type { SettingsFieldId } from './settings.link'
 import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
 
@@ -98,6 +99,7 @@ export function Field({
   block,
   inline,
   setting,
+  field,
   lock,
   children,
 }: {
@@ -110,6 +112,8 @@ export function Field({
   inline?: boolean
   /** Kunci Settings yang diwakili; mengaktifkan penanda "Modified" dan Reset Setting. */
   setting?: keyof Settings
+  /** Deep-link id (`data-field`, ./settings.link) when it is not `setting`. */
+  field?: SettingsFieldId
   /** Locked by another setting: the hint stays, a reason line (+ fix) follows; the control must be
    *  disabled with `aria-describedby={lockReasonId(htmlFor)}` (SelectField/ToggleField/StepperField do it). */
   lock?: Lock
@@ -128,6 +132,7 @@ export function Field({
     <div
       className={'st-field' + (block ? ' st-field--block' : '') + (modified ? ' is-modified' : '')}
       data-slot="settings-field"
+      data-field={field ?? setting}
     >
       <div className="st-title">
         {category ? <span className="st-category">{category}: </span> : null}

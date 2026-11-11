@@ -121,7 +121,7 @@ function MemoryBody({ client, project, projectId, status, onStatus }: BodyProps)
     return (
       <div className="ccp-off" data-central-off="memory">
         <p>{CL.memoryOff}</p>
-        <Button type="button" size="sm" variant="secondary" onClick={openCentralSettings}>{CL.memoryOpenSettings}</Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => openCentralSettings('central')}>{CL.memoryOpenSettings}</Button>
       </div>
     )
   }

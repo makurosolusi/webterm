@@ -68,7 +68,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
         if (view.id === 'central') return showCentral ? <CentralSummaryRow key="central" view={view} onOpen={onOpenCentral} /> : null
         if (CENTRAL_IDS.includes(view.id) || !show(view.id)) return null
         return view.id === 'telegram' ? (
-          <div key={view.id} data-capability="telegram"><TelegramCard projectId={projectId} /></div>
+          <div key={view.id} data-capability="telegram" data-field="capability.telegram"><TelegramCard projectId={projectId} /></div>
         ) : (
           <CapabilityCard key={view.id} view={view} all={all} busy={api.busyId === view.id}
             onToggle={(on) => void api.toggle(view.id, on)}

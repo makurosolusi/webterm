@@ -12,7 +12,7 @@ export function SpendingSection({ onNavigate }: { onNavigate: (to: CentralLinkTa
       <CostPanel />
       <p className="flex items-center gap-1">
         {SPENDING_TEXT.centralLimit} →
-        <Button size="sm" variant="link" className="h-auto p-0" onClick={() => onNavigate({ section: 'central' })}>{SPENDING_TEXT.centralLink}</Button>
+        <Button size="sm" variant="link" className="h-auto p-0" onClick={() => onNavigate({ section: 'central', field: 'central.costLimit' })}>{SPENDING_TEXT.centralLink}</Button>
       </p>
     </div>
   )

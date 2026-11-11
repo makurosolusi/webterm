@@ -27,7 +27,7 @@ function Off() {
   return (
     <div className="ccp-off" data-central-off="health">
       <p>{HL.off}</p>
-      <Button type="button" size="sm" variant="secondary" onClick={openCentralSettings}>{HL.openSettings}</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => openCentralSettings('central')}>{HL.openSettings}</Button>
     </div>
   )
 }

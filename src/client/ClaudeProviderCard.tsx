@@ -174,7 +174,7 @@ export function ClaudeProviderCard({ connection, commitRef }: { connection?: Con
   })
 
   return (
-    <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2">
+    <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2" data-field="claude-provider">
       <h3>{PROVIDER_TEXT.title}</h3>
       <p className="text-xs opacity-70">{PROVIDER_TEXT.why}</p>
       {state === null && error === null ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.loading}</p> : null}

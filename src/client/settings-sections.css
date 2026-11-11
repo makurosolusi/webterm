@@ -8,3 +8,20 @@
   letter-spacing: 0.04em;
   color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-descriptionForeground, var(--text-muted)));
 }
+
+/* A setting revealed by a deep link (`?settings=…&field=…`, settingsPanel.reveal.ts): a ~1.5 s pulse,
+   a still outline for the same time when motion is reduced. */
+.st-reveal {
+  border-radius: 4px;
+  animation: st-reveal 1.5s ease-out;
+}
+@keyframes st-reveal {
+  0%, 40% {
+    outline: 1px solid var(--vscode-focusBorder, var(--accent));
+    background: var(--vscode-editor-findMatchHighlightBackground, color-mix(in srgb, var(--vscode-focusBorder, var(--accent)) 25%, transparent));
+  }
+  100% { outline: 1px solid transparent; background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-reveal { animation: none; outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+}
