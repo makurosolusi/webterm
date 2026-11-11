@@ -37,7 +37,7 @@ describe('Settings purpose sections', () => {
     render(<SpendingSection onNavigate={onNavigate} />)
     expect(screen.getByText(/Central's own limit/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Central Agent' }))
-    expect(onNavigate).toHaveBeenCalledWith({ section: 'central' })
+    expect(onNavigate).toHaveBeenCalledWith({ section: 'central', field: 'central.costLimit' })
   })
 
   it('the Central Agent cost report link lands on Spending', async () => {

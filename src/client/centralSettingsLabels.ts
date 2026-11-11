@@ -16,7 +16,6 @@ export const CENTRAL_TEXT = {
   offReason: 'Turn on Central Agent first.',
   workersOffReason: 'Choose "Propose work" or "Work on its own" first.',
   autonomyOffReason: 'Choose "Work on its own" first.',
-  engineFailed: 'Could not change the engine. Try again in a moment.',
   unavailable: 'Not available on this server.',
   locked: 'Locked by the server environment.',
   loading: 'Loading…',

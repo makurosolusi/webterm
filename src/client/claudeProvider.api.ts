@@ -1,7 +1,9 @@
-// Client side of /api/claude-provider (server: claudeProvider/claudeProvider.api.ts) plus the one settings
-// write the "Custom command" mode needs: the command lives in a Claude launch profile (single source of truth).
-import { settingsUrl } from './useSettings'
+// Client side of /api/claude-provider (server: claudeProvider/claudeProvider.api.ts) plus the launch
+// profile writes (the "Custom command" mode's command lives in a Claude launch profile, the single source
+// of truth). Each write re-reads settings into useSettings so Settings › Agent never edits a stale list.
+import { reloadSettings, settingsUrl } from './useSettings'
 import { randomId } from './randomId'
+import type { ProfileInUse } from '../shared/settings.patch'
 import { CLAUDE_PROFILE_LIMITS, normalizeClaudeProfiles, type ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 
 export type Mode = 'login' | 'apiKey' | 'custom' | 'command'
@@ -43,9 +45,19 @@ async function settingsCall(method: 'GET' | 'PUT', body?: unknown): Promise<Reco
     method, cache: 'no-store',
     ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   })
-  if (!res.ok) throw new Error(`http_${res.status}`)
   const data: unknown = await res.json().catch(() => ({}))
-  return data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  if (res.status === 409 && typeof obj.reason === 'string') throw new ProfileInUseError(obj.reason as ProfileInUse)
+  if (!res.ok) throw new Error(`http_${res.status}`)
+  return obj
+}
+
+/** The server kept the profile (`SettingsConflictError` there); `reason` says why. */
+export class ProfileInUseError extends Error {
+  constructor(readonly reason: ProfileInUse) {
+    super(`profile_in_use:${reason}`)
+    this.name = 'ProfileInUseError'
+  }
 }
 
 /** Saved launch profiles (the built-in Default is not stored, so it is not listed). */
@@ -56,7 +68,8 @@ export async function loadLaunchProfiles(): Promise<ClaudeLaunchProfile[]> {
 /**
  * Create the profile (`id` unknown) or update it in place, on top of a FRESH read so edits made elsewhere
  * are not overwritten. Awaited, unlike the coalesced settings save, because the provider PUT that follows
- * resolves the profile on the server. Returns the id and the whole list for the caller to sync.
+ * resolves the profile on the server. Only this profile is sent (the server merges by id). Returns the
+ * id and the stored list.
  */
 export async function upsertLaunchProfile(draft: { id: string | null; name: string; command: string }): Promise<{ id: string; profiles: ClaudeLaunchProfile[] }> {
   const list = await loadLaunchProfiles()
@@ -65,7 +78,17 @@ export async function upsertLaunchProfile(draft: { id: string | null; name: stri
   const old = list.find((p) => p.id === draft.id)
   const id = old ? old.id : randomId()
   if (old && old.name === name && old.command === command) return { id, profiles: list }
-  const profiles = old ? list.map((p) => (p.id === id ? { id, name, command } : p)) : [...list, { id, name, command }]
-  await settingsCall('PUT', { claudeLaunchProfiles: profiles })
-  return { id, profiles }
+  const saved = await settingsCall('PUT', { claudeLaunchProfiles: [{ id, name, command }] })
+  await reloadSettings()
+  return { id, profiles: normalizeClaudeProfiles(saved.claudeLaunchProfiles) }
+}
+
+/**
+ * Delete profile `id`, moving the pointers in `reset` in the same write (the server refuses to delete a
+ * profile the default or Central would still point at). Awaited so a refusal (`ProfileInUseError`, e.g. the
+ * provider runs it) reaches the caller instead of a background save.
+ */
+export async function deleteLaunchProfile(id: string, reset: { defaultClaudeProfileId?: string; centralClaudeProfileId?: string } = {}): Promise<void> {
+  await settingsCall('PUT', { claudeLaunchProfiles: [{ id, deleted: true }], ...reset })
+  await reloadSettings()
 }

@@ -310,7 +310,10 @@ describe('Basics step', () => {
     const opened = vi.fn()
     window.addEventListener('webterm:open-settings', opened)
     click(SETUP_TEXT.basics.telegramLater)
-    expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ section: 'capabilities' })
+    expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ section: 'capabilities', field: 'capability.telegram' })
+    click(SETUP_TEXT.changeLater(SETUP_TEXT.basics.where)) // the "Change later" hint is a link to the setting
+    expect((opened.mock.calls[1][0] as CustomEvent).detail).toEqual({ section: 'terminal', field: 'appTheme' })
+    window.removeEventListener('webterm:open-settings', opened)
     expect(screen.getByRole('button', { name: SETUP_TEXT.finish })).toBeTruthy()
     expect(await screen.findByText(/In use:/)).toBeTruthy()
   })

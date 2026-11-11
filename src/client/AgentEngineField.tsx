@@ -1,56 +1,86 @@
-// Butir "Mesin agen" di Lanjutan dan di tawaran Agent Pusat (pola sama dengan ChromiumPathField): pilihan mesin,
-// status jujur (terdeteksi / belum terpasang / belum login), dan "Periksa lagi" (Orca AgentsPane: Refresh =
-// "Re-read your shell PATH and re-detect installed agents"; di sini deteksi berjalan ulang di tiap GET).
-import { useState } from 'react'
-import type { CapabilitiesResponse } from '../shared/featureCapabilities'
+// "Engine" row of Central Agent (Settings › Central Agent, Capabilities › Advanced, the Central offer).
+// Claude is the only engine (others are retired; on/off is the Central switch), so there is no picker:
+// one status line from the REAL launch test Central uses (token-free: --version + auth status), and
+// "Check again" = re-detect on the server, then the same test, with busy, result time and failure + Retry.
+import { useEffect, useRef, useState } from 'react'
+import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ADVANCED_TEXT, ENGINE_OPTIONS, engineName } from './advancedLabels'
-import { CentralLaunchStatus } from './claudeLauncher/CentralLaunchStatus'
-
-type Engine = CapabilitiesResponse['advanced']['agentEngine']
+import { ADVANCED_TEXT } from './advancedLabels'
+import { CENTRAL_LAUNCH_TEXT } from './claudeLauncher/CentralLaunchStatus'
+import { openLaunchProfileSettings, testClaudeLaunch, type LaunchStep, type LaunchTest } from './claudeLauncher/claudeLaunch.client'
+import { CONNECTION_TEXT, CopyLine } from './claudeLauncher/ConnectionTest'
+import type { CapabilitiesLoad } from './useCapabilities'
 
 export interface AgentEngineFieldProps {
-  engine: Engine
-  /** Mesin siap (terpasang + login) menurut server; undefined = belum diperiksa (Agent Pusat mati). */
-  ready?: boolean
-  save(value: Engine['value']): Promise<void>
-  /** Muat ulang dari server; deteksi berjalan ulang di tiap GET. */
-  redetect(): Promise<void>
+  /** Reload capabilities with fresh detection; its outcome is reported on the button's result line. */
+  redetect(): Promise<CapabilitiesLoad>
+  /** False while hidden (a closed Advanced section): the automatic first check waits until shown. */
+  active?: boolean
 }
 
-/** Kalimat status: hanya yang benar-benar diketahui dari deteksi server. */
-const statusText = (engine: Engine): string =>
-  engine.detected === 'off' ? ADVANCED_TEXT.engineMissing : ADVANCED_TEXT.engineDetected(engineName(engine.detected))
+/** "claude 2.1.3 (Claude Code)" from the CLI stage, or '' when the probe did not read a version. */
+const claudeVersion = (t: LaunchTest): string => {
+  const m = t.steps.find((s) => s.stage === 'claude' && s.ok)?.message ?? ''
+  return m.startsWith('claude ') && m !== 'claude found' ? m.slice('claude '.length) : ''
+}
+const failing = (t: LaunchTest): LaunchStep | undefined => t.steps.find((s) => !s.ok)
 
-/** Pilihan mesin agen + status + periksa ulang. */
-export function AgentEngineField({ engine, ready, save, redetect }: AgentEngineFieldProps): React.JSX.Element {
-  const [checking, setChecking] = useState(false)
-  const [checks, setChecks] = useState(0)
-  const recheck = async (): Promise<void> => {
-    setChecking(true)
-    try { await redetect() } finally { setChecking(false); setChecks((n) => n + 1) }
-  }
+/** How to fix the failing stage: hint, install commands, sign-in command, and the launch profile link. */
+function FixSteps({ step }: { step: LaunchStep | undefined }): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5 pl-5">
+      {step?.hint ? <span className="opacity-70">{step.hint}</span> : null}
+      {step?.install ? <>
+        <CopyLine label={CONNECTION_TEXT.install} command={step.install.installCommand} />
+        <CopyLine label={CONNECTION_TEXT.npm} command={step.install.npmCommand} />
+        <a className="underline" href={step.install.docsUrl} target="_blank" rel="noreferrer">{CONNECTION_TEXT.docs}</a>
+      </> : null}
+      {step?.signIn?.command ? <CopyLine label={CONNECTION_TEXT.signIn} command={step.signIn.command} /> : null}
+      <Button size="xs" variant="link" className="self-start px-0" onClick={openLaunchProfileSettings}>{CENTRAL_LAUNCH_TEXT.edit}</Button>
+    </div>
+  )
+}
+
+/** Engine status + Check again. Checks once when first shown (quietly), and again on every press. */
+export function AgentEngineField({ redetect, active = true }: AgentEngineFieldProps): React.JSX.Element {
+  const [test, setTest] = useState<LaunchTest | null>(null)
+  const pressed = useRef(false)
+  const action = useAction(async () => {
+    if (pressed.current) {
+      setTest(null) // a failed redetect must not show the previous test's fix steps
+      const r = await redetect()
+      if (!r.ok) throw new Error(r.error)
+    }
+    pressed.current = true // the first (mount) run skips the redetect: the section just loaded fresh data
+    const t = await testClaudeLaunch({ central: true })
+    if (!Array.isArray(t.steps)) throw new Error('the server sent an unexpected answer') // boundary: never render a partial result
+    setTest(t)
+    return t
+  }, {
+    label: ADVANCED_TEXT.engineCheckLabel,
+    ok: (t) => t.ok,
+    success: (t) => (t.ok ? ADVANCED_TEXT.engineRuns(claudeVersion(t)) : ADVANCED_TEXT.engineCannotStart(failing(t)?.message ?? t.failed ?? '')),
+    failure: (e) => ADVANCED_TEXT.engineCheckFailed(errorCause(e)),
+  })
+  const { run } = action
+  const checked = action.result !== null
+  useEffect(() => { if (active && !checked) void run({ quiet: true }) }, [run, active, checked])
+
   return (
     <div className="flex flex-col gap-1 py-2" data-field="agentEngine">
-      <Label>{ADVANCED_TEXT.engineLabel}</Label>
-      <Select value={engine.value} onValueChange={(v) => void save(v as Engine['value'])}>
-        <SelectTrigger aria-label={ADVANCED_TEXT.engineLabel}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {ENGINE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-        </SelectContent>
-      </Select>
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Not ready = Claude (the only engine) cannot start: show the launch profile's failing stage. */}
-        {ready === false ? <CentralLaunchStatus version={checks} />
-          : <p role="status" className="m-0 text-xs opacity-70">{statusText(engine)}</p>}
-        <IconTooltip label={ADVANCED_TEXT.engineRecheckHint} disabled={checking} disabledReason={ADVANCED_TEXT.engineChecking}>
-          <Button size="xs" variant="ghost" disabled={checking}
-            onClick={() => void recheck()}>{checking ? ADVANCED_TEXT.engineChecking : ADVANCED_TEXT.engineRecheck}</Button>
-        </IconTooltip>
-      </div>
+      <span className="text-[13px]">{ADVANCED_TEXT.engineLabel}</span>
+      {test?.profile?.name ? <p className="m-0 text-xs opacity-70">{CENTRAL_LAUNCH_TEXT.using(test.profile.name)}</p> : null}
+      {action.result ? (
+        <ActionResult action={action} stamp={ADVANCED_TEXT.engineStamp}>
+          {!action.result.ok ? <FixSteps step={test && !test.ok ? failing(test) : undefined} /> : null}
+        </ActionResult>
+      ) : <p role="status" className="m-0 text-xs opacity-70">{ADVANCED_TEXT.engineFirstCheck}</p>}
+      <IconTooltip label={ADVANCED_TEXT.engineRecheckHint} disabled={action.busy} disabledReason={ADVANCED_TEXT.engineChecking}>
+        <ActionButton size="xs" variant="ghost" className="self-start" action={action} busyLabel={ADVANCED_TEXT.engineChecking}>
+          {ADVANCED_TEXT.engineRecheck}
+        </ActionButton>
+      </IconTooltip>
     </div>
   )
 }

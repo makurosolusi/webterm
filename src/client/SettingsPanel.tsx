@@ -38,6 +38,8 @@ import { SettingsItemScopeProvider } from './settingsContext'
 import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
 import { toSettingsRouteSection } from './appRoute'
+import type { SettingsFieldId } from './settings.link'
+import { revealSettingsField } from './settingsPanel.reveal'
 import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { AccountSection } from './AccountSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
@@ -78,7 +80,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   ),
   capabilities: (c) => (
     <CapabilitiesSection projectId={c.projectId} query={c.query} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-      onVisibleCount={c.onCapabilityHits} onSettingsChange={c.onChange} onOpenCentral={() => c.navigate({ section: 'central' })} />
+      onVisibleCount={c.onCapabilityHits} onOpenCentral={() => c.navigate({ section: 'central', field: 'central.central' })} />
   ),
   account: () => <AccountSection />,
   health: () => <HealthSection />,
@@ -95,28 +97,33 @@ interface PanelProps {
   initialSection?: string
   /** Controlled section (the URL's `?settings=`); with it, section changes go to `onSectionChange`. */
   section?: string
-  onSectionChange?: (id: SectionId) => void
+  /** Setting to reveal in the section (the URL's `&field=`): scrolled to, focused and flashed once it renders. */
+  field?: SettingsFieldId
+  /** `field` = the setting a cross-link names (undefined = a plain section change, which clears it). */
+  onSectionChange?: (id: SectionId, field?: SettingsFieldId) => void
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, onSectionChange }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, field, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [ownRaw, setOwnRaw] = useState<string>(initialSection)
   const activeRaw = section ?? ownRaw
-  const setActive = (id: string): void => { setOwnRaw(id); onSectionChange?.(toSectionId(id)) }
+  const setActive = (id: string, to?: SettingsFieldId): void => { setOwnRaw(id); onSectionChange?.(toSectionId(id), to) }
   const active = toSectionId(activeRaw)
   const [found, setFound] = useState(0)
   const [capabilityHits, setCapabilityHits] = useState(0)
   const mainRef = useRef<HTMLElement>(null)
-  // A link from one section into another (Central Agent -> Agent › Models): switch, then scroll to the anchor.
-  const [anchor, setAnchor] = useState<string | undefined>()
+  // A link from one section into another (Central Agent -> Agent › Models): switch and reveal its field.
+  // Uncontrolled (no `section` prop) the panel keeps the field itself; controlled it comes back as `field`.
+  const [ownField, setOwnField] = useState<SettingsFieldId | undefined>()
+  const target = section === undefined ? ownField : field
   const navigate = (to: CentralLinkTarget): void => {
     setQuery('')
-    setActive(to.section)
-    setAnchor(to.anchor)
+    setOwnField(to.field)
+    setActive(to.section, to.field)
   }
 
   // Hitungan "N setting ditemukan": Field dibaca dari DOM (menyaring dirinya sendiri, jadi tak bisa
@@ -131,20 +138,8 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     if (mainRef.current) mainRef.current.scrollTop = 0
   }, [active, normalized])
 
-  // The anchor may render after an async load (capability cards): retry for a moment, then give up.
-  useEffect(() => {
-    if (!anchor) return
-    let tries = 0
-    const timer = window.setInterval(() => {
-      const el = mainRef.current?.querySelector<HTMLElement>(anchor)
-      if (el || ++tries > 20) {
-        el?.scrollIntoView?.({ block: 'start' })
-        window.clearInterval(timer)
-        setAnchor(undefined)
-      }
-    }, 50)
-    return () => window.clearInterval(timer)
-  }, [anchor, active])
+  // Reveal the linked setting once its section has rendered it (after this effect's scrollTop reset).
+  useEffect(() => (target ? revealSettingsField(() => mainRef.current, target) : undefined), [target, active])
 
   const renderSection = (id: SectionId): React.JSX.Element =>
     SECTION_BODY[id]({ s, onChange, navigate, query: normalized, projectId, activeRaw, onCapabilityHits: setCapabilityHits })
@@ -253,6 +248,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
                       aria-labelledby={`st-nav-${section.id}`}
                       aria-describedby={`st-nav-${section.id}-desc`}
                       onClick={() => {
+                        setOwnField(undefined)
                         setActive(section.id)
                         setQuery('')
                       }}

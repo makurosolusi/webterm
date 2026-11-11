@@ -48,7 +48,7 @@ export function ModelsSettings({ settings: s, onChange }: { settings: Settings; 
 
   return (
     <>
-      <Field label="Models" block
+      <Field label="Models" block field="model-ladder"
         hint="A model ladder picks the model and effort for each task, steps up after a failure, and moves to cheaper models near your spending limit.">
         <table className="st-table" aria-label="Model ladder defaults">
           <thead><tr><th>Model</th><th>Effort</th><th>Used for</th></tr></thead>

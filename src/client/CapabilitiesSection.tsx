@@ -2,7 +2,6 @@
 // Kartu Telegram diganti alur tempel-token. Pencarian: judul bagian, atau judul + blurb + kata kunci kartu
 // (pola indeks pencarian Orca `settings/search/settings-search.ts`: title + description + keywords).
 import { useEffect, useState } from 'react'
-import type { Settings } from '../shared/settings'
 import { CAPABILITIES } from '../shared/featureCapabilities'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { AdvancedSection } from './AdvancedSection'
@@ -28,8 +27,6 @@ export interface CapabilitiesSectionProps {
   sectionTitle: string
   /** Melaporkan jumlah kartu/butir yang tampil (untuk hitungan hasil pencarian). */
   onVisibleCount?(count: number): void
-  /** Settings patches (the Claude provider card adds a launch profile; keep the panel's copy in step). */
-  onSettingsChange?(patch: Partial<Settings>): void
   /** Opens Settings › Central Agent (the Central, worker and autonomy switches live there). */
   onOpenCentral?(): void
 }
@@ -38,7 +35,7 @@ export interface CapabilitiesSectionProps {
 const CENTRAL_IDS: readonly CapabilityId[] = ['central', 'workers', 'autonomy']
 
 /** Isi tab Kemampuan; memuat dari server dan menunggu server pada tiap perubahan. */
-export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleCount, onSettingsChange, onOpenCentral }: CapabilitiesSectionProps): React.JSX.Element {
+export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleCount, onOpenCentral }: CapabilitiesSectionProps): React.JSX.Element {
   const api = useCapabilities()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const all = api.data?.capabilities ?? []
@@ -71,7 +68,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
         if (view.id === 'central') return showCentral ? <CentralSummaryRow key="central" view={view} onOpen={onOpenCentral} /> : null
         if (CENTRAL_IDS.includes(view.id) || !show(view.id)) return null
         return view.id === 'telegram' ? (
-          <div key={view.id} data-capability="telegram"><TelegramCard projectId={projectId} /></div>
+          <div key={view.id} data-capability="telegram" data-field="capability.telegram"><TelegramCard projectId={projectId} /></div>
         ) : (
           <CapabilityCard key={view.id} view={view} all={all} busy={api.busyId === view.id}
             onToggle={(on) => void api.toggle(view.id, on)}
@@ -79,7 +76,7 @@ export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleC
             onStep={(kind) => onStep(view.id, kind)} />
         )
       })}
-      {query === '' || matchesSearch(`${sectionTitle} ${PROVIDER_TEXT.title} ${PROVIDER_TEXT.why} anthropic api key proxy gateway custom command envman wrapper`, query) ? <ClaudeProviderCard onProfiles={onSettingsChange ? (claudeLaunchProfiles) => onSettingsChange({ claudeLaunchProfiles }) : undefined} /> : null}
+      {query === '' || matchesSearch(`${sectionTitle} ${PROVIDER_TEXT.title} ${PROVIDER_TEXT.why} anthropic api key proxy gateway custom command envman wrapper`, query) ? <ClaudeProviderCard /> : null}
       {show('token') ? <TokenAccessCard /> : null}
       {api.data && show('advanced') ? (
         <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} onRecheck={api.recheck} open={advancedOpen} onOpenChange={setAdvancedOpen} />

@@ -100,7 +100,7 @@ describe('CapabilityOffer', () => {
     expect(JSON.parse(f.mock.calls[1][1].body)).toEqual({ enabled: true })
   })
 
-  it('langkah agentEngine tanpa onStep: pilihan mesin + tahap gagal profil peluncuran; Check again memuat ulang; onDone hanya saat on', async () => {
+  it('langkah agentEngine tanpa onStep: engine status from the launch test (no picker) + fix hint; Check again memuat ulang; onDone hanya saat on', async () => {
     const caps = vi.fn()
       .mockResolvedValueOnce(new Response(central('needs-step')))
       .mockResolvedValueOnce(new Response(central('needs-step'))) // Check again #1: masih belum siap
@@ -114,10 +114,12 @@ describe('CapabilityOffer', () => {
     const onDone = vi.fn()
     render(<CapabilityOffer id="central" onDone={onDone} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Claude Code' }))
-    expect(screen.getByLabelText('Central Agent engine')).toBeTruthy()
+    expect(screen.getByText('Engine')).toBeTruthy()
+    expect(screen.queryByRole('combobox')).toBeNull()
     expect(await screen.findByText('Launch profile: Default')).toBeTruthy()
-    expect(screen.getByRole('list', { name: 'Launch test result' }).textContent).toContain('Claude Code is not signed in.')
-    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Claude cannot start: Claude Code is not signed in.')
+    expect(screen.getByText('Run "claude auth login" on the server.')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Check again' }))
     await waitFor(() => expect(caps).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(launch).toHaveBeenCalledTimes(2)) // the stage check re-runs too
     expect(onDone).not.toHaveBeenCalled()

@@ -144,7 +144,9 @@ describe('ClaudeProviderCard', () => {
       render(<ClaudeProviderCard />)
       const clean = await screen.findByRole('button', { name: PROVIDER_TEXT.clean }) as HTMLButtonElement
       expect(clean.disabled).toBe(true)
-      expect(clean.title).toBe(PROVIDER_TEXT.noChanges)
+      expect(clean.parentElement?.getAttribute('data-slot')).toBe('icon-tooltip-disabled') // hint, not a native title
+      fireEvent.pointerMove(clean.parentElement!, { pointerType: 'mouse' })
+      expect((await screen.findByRole('tooltip')).textContent).toContain(PROVIDER_TEXT.noChanges)
       typeKey()
       expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
       fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.modes.login }))

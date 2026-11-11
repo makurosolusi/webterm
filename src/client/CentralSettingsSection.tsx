@@ -9,7 +9,6 @@ import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
 import { DEFAULT_CLAUDE_PROFILE, claudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { AgentEngineField } from './AgentEngineField'
-import { callCapabilities } from './capabilitiesApi'
 import { CAPABILITY_STATUS_LABEL } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { useCheckinSettings, type CheckinApi } from './centralSettings.checkin'
@@ -20,7 +19,7 @@ import { CENTRAL_GROUP_TITLE, CENTRAL_TEXT } from './centralSettingsLabels'
 import { SettingsSelect } from './SettingsControls'
 import { CostLimitField } from './SettingsCostLimit'
 import { Field, matchesSearch, useSettingsSearch } from './SettingsFields'
-import { capabilityErrorMessage, useCapabilities, type CapabilitiesApi } from './useCapabilities'
+import { useCapabilities, type CapabilitiesApi } from './useCapabilities'
 
 export interface CentralSettingsSectionProps {
   settings: Settings
@@ -72,28 +71,15 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
   const checkin = useCheckinSettings()
   const query = useSettingsSearch()
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [engineError, setEngineError] = useState<string | null>(null)
   const view = (id: CapabilityId): CapabilityView | undefined => api.data?.capabilities.find((v) => v.id === id)
   const central = view('central')
-
-  const saveEngine = async (agentEngine: string): Promise<void> => {
-    try {
-      await callCapabilities('/advanced', 'PUT', { agentEngine })
-      setEngineError(null)
-      await api.refresh()
-    } catch (e) {
-      setEngineError(capabilityErrorMessage(e, CENTRAL_TEXT.engineFailed))
-    }
-  }
 
   // The engine row is AgentEngineField itself (it has its own label, status and Check again).
   const engine = (): React.ReactNode => {
     if (!api.data) return null
-    const ready = central?.status === 'needs-step' && central.step?.kind === 'agentEngine' ? false : undefined
     return (
-      <div key="engine" className="px-3.5" data-central-field="engine">
-        <AgentEngineField engine={api.data.advanced.agentEngine} ready={ready} save={saveEngine} redetect={api.recheck} />
-        {engineError ? <p role="alert" className="st-hint">{engineError}</p> : null}
+      <div key="engine" className="px-3.5" data-central-field="engine" data-field="central.engine">
+        <AgentEngineField redetect={api.recheck} />
       </div>
     )
   }
@@ -172,14 +158,14 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     const src = field.source
     const err = src.kind === 'env' && env.saveError?.key === src.key ? env.saveError.message : null
     return (
-      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined}>
+      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined} field={`central.${field.id}`}>
         <div className="flex flex-wrap items-center gap-2" data-central-field={field.id}>
           {control(field, id, reason)}
           {src.kind === 'env' && env.savingKey === src.key ? <span role="status" className="st-hint">{CENTRAL_TEXT.saving}</span> : null}
           {reason && field.control !== 'status' ? <span className="st-hint" data-reason>{reason}</span> : null}
           {field.control === 'status' && src.kind === 'capability' && src.id !== 'central'
             ? <Button size="xs" variant="link" className="px-0" aria-label={`${CENTRAL_TEXT.open} ${field.label}`}
-                onClick={() => onNavigate({ section: 'capabilities', anchor: `[data-capability="${src.id}"]` })}>{CENTRAL_TEXT.open} →</Button>
+                onClick={() => onNavigate({ section: 'capabilities', field: `capability.${src.id}` })}>{CENTRAL_TEXT.open} →</Button>
             : null}
           {err ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(err)}</span> : null}
           {field.id === 'checkin' && checkin.saveError ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(checkin.saveError)}</span> : null}

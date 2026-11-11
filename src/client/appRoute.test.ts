@@ -10,7 +10,7 @@ import { knownTab } from './central/CentralControlPanel'
 describe('parseAppRoute', () => {
   it('reads the board and every overlay', () => {
     expect(parseAppRoute('/w/ws-1', '?settings=canvas&ctab=skills&panel=problems&view=kanban&help=1')).toEqual({
-      workspaceId: 'ws-1', settings: 'canvas', ctab: 'skills', panel: 'problems', view: 'kanban', help: true, setup: null,
+      workspaceId: 'ws-1', settings: 'canvas', field: null, ctab: 'skills', panel: 'problems', view: 'kanban', help: true, setup: null,
     })
     expect(parseAppRoute('/', '')).toEqual(EMPTY_APP_ROUTE)
   })
@@ -33,6 +33,16 @@ describe('parseAppRoute', () => {
     expect(buildAppHref({ ...EMPTY_APP_ROUTE, setup: 'resume' })).toBe('/?setup=1')
   })
 
+  it('reads `&field=` only with a section and only for a known setting id', () => {
+    expect(parseAppRoute('/', '?settings=central&field=central.profile').field).toBe('central.profile')
+    expect(parseAppRoute('/', '?settings=agent&field=skipApprovals').field).toBe('skipApprovals')
+    expect(parseAppRoute('/', '?settings=capabilities&field=capability.telegram').field).toBe('capability.telegram')
+    expect(parseAppRoute('/', '?settings=central&field=nope').field).toBeNull()
+    expect(parseAppRoute('/', '?settings=central&field="]x').field).toBeNull() // never reaches a CSS selector
+    expect(parseAppRoute('/', '?field=central.profile')).toEqual(EMPTY_APP_ROUTE)
+    expect(buildAppHref({ ...EMPTY_APP_ROUTE, field: 'skipApprovals' })).toBe('/') // no section, no field
+  })
+
   it('decodes the workspace id and accepts a trailing slash', () => {
     expect(parseAppRoute('/w/a%20b/', '').workspaceId).toBe('a b')
   })
@@ -40,9 +50,9 @@ describe('parseAppRoute', () => {
 
 describe('buildAppHref', () => {
   it('round-trips through parse with a fixed param order', () => {
-    const route: AppRoute = { workspaceId: 'a b', settings: 'health', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true, setup: 'browser' }
+    const route: AppRoute = { workspaceId: 'a b', settings: 'central', field: 'central.profile', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true, setup: 'browser' }
     const href = buildAppHref(route)
-    expect(href).toBe('/w/a%20b?settings=health&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
+    expect(href).toBe('/w/a%20b?settings=central&field=central.profile&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
     const [path, search] = href.split('?')
     expect(parseAppRoute(path, `?${search}`)).toEqual(route)
     expect(buildAppHref(parseAppRoute('/', '?help=1&settings=shell'))).toBe('/?settings=shell&help=1')
@@ -61,6 +71,8 @@ describe('navigationMode', () => {
   })
   it('changing or closing an open overlay replaces', () => {
     expect(navigationMode(at({ settings: 'terminal' }), at({ settings: 'canvas' }))).toBe('replace')
+    expect(navigationMode(at({ settings: 'central', field: 'central.level' }), at({ settings: 'central' }))).toBe('replace')
+    expect(navigationMode(at({}), at({ settings: 'central', field: 'central.level' }))).toBe('push')
     expect(navigationMode(at({ settings: 'terminal' }), at({}))).toBe('replace')
     expect(navigationMode(at({ ctab: 'status' }), at({ ctab: 'agents' }))).toBe('replace')
   })

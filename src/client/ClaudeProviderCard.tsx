@@ -4,8 +4,8 @@
 // until Save and is cleared right after; it is never logged or put in an error message.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
@@ -86,7 +86,7 @@ export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null
 /** The Claude provider card; loads from the server and waits for it on every change. `connection`: the host
  *  owns the Test connection and shows it (setup wizard's single status), so the card only starts it.
  *  `commitRef`: the host saves through it (wizard Continue), so the card hides its own Save. */
-export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
+export function ClaudeProviderCard({ connection, commitRef }: { connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
@@ -174,7 +174,7 @@ export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onPr
   })
 
   return (
-    <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2">
+    <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2" data-field="claude-provider">
       <h3>{PROVIDER_TEXT.title}</h3>
       <p className="text-xs opacity-70">{PROVIDER_TEXT.why}</p>
       {state === null && error === null ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.loading}</p> : null}
@@ -189,7 +189,7 @@ export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onPr
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
           {mode === 'command' && p ? (
-            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles}
+            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest}
               onError={(m) => setToast({ seq: ++seq.current, severity: 'error', title: m })} pending={commandCommit} hideSave={!!commitRef} />
           ) : null}
           {mode === 'custom' ? (
@@ -208,8 +208,13 @@ export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onPr
             </>
           ) : null}
           {mode !== 'command' ? <div className="flex items-center gap-2">
-            {commitRef ? null : <Button size="sm" disabled={busy || !dirty} aria-busy={saving} title={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}
-              onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>}
+            {commitRef ? null : (
+              <IconTooltip label={saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean} disabled={busy || !dirty}
+                disabledReason={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}>
+                <Button size="sm" disabled={busy || !dirty} aria-busy={saving}
+                  onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>
+              </IconTooltip>
+            )}
             <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testLabel}</Button>
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
           </div> : null}

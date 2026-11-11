@@ -145,7 +145,7 @@ describe('Central not ready: the Chat tab offers it', () => {
     const opened = vi.fn()
     window.addEventListener('webterm:open-settings', opened)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit launch profile' }))
-    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'central' })
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'central', field: 'central.profile' })
     window.removeEventListener('webterm:open-settings', opened)
   })
 

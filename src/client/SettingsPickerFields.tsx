@@ -4,7 +4,8 @@ import type { ReactNode } from 'react'
 import type { Settings } from '../shared/settings'
 import { SETTING_RANGES, type RangedKey } from '../shared/settings.ranges'
 import { SettingsSelect } from './SettingsControls'
-import { Field } from './SettingsFields'
+import { Field, lockReasonId } from './SettingsFields'
+import type { Lock } from '@/components/ui/disabled-reason'
 import { SettingsCombobox, type SettingsComboboxProps } from './SettingsCombobox'
 import './settings-pickers.css'
 
@@ -19,16 +20,17 @@ const roundTo = (v: number, step: number): number => {
 const bounds = (range: RangedKey) => SETTING_RANGES[range]
 
 /** − value + buttons; arrow keys on the value step too. */
-export function StepperField({ id, label, hint, setting, range, value, unit, onChange }: Base & {
-  range: RangedKey; value: number; unit?: string; onChange(v: number): void
+export function StepperField({ id, label, hint, setting, range, value, unit, onChange, lock }: Base & {
+  range: RangedKey; value: number; unit?: string; onChange(v: number): void; lock?: Lock
 }): React.JSX.Element | null {
   const { min, max, step } = bounds(range)
-  const set = (v: number): void => { const n = roundTo(Math.min(max, Math.max(min, v)), step); if (n !== value) onChange(n) }
+  const set = (v: number): void => { const n = roundTo(Math.min(max, Math.max(min, v)), step); if (!lock && n !== value) onChange(n) }
+  const describedBy = lock ? lockReasonId(id) : undefined
   return (
-    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting} lock={lock}>
       <span className="st-stepper" data-control="stepper">
-        <button type="button" className="st-button" aria-label={`Decrease ${label}`} disabled={value <= min} onClick={() => set(value - step)}>−</button>
-        <span id={id} role="spinbutton" tabIndex={0} className="st-stepper-value" aria-label={label}
+        <button type="button" className="st-button" aria-label={`Decrease ${label}`} aria-describedby={describedBy} disabled={!!lock || value <= min} onClick={() => set(value - step)}>−</button>
+        <span id={id} role="spinbutton" tabIndex={0} className="st-stepper-value" aria-label={label} aria-disabled={lock ? true : undefined} aria-describedby={describedBy}
           aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} aria-valuetext={unit ? `${value} ${unit}` : String(value)}
           onKeyDown={(e) => {
             const d = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 }[e.key]
@@ -36,7 +38,7 @@ export function StepperField({ id, label, hint, setting, range, value, unit, onC
             else if (e.key === 'Home') { e.preventDefault(); set(min) }
             else if (e.key === 'End') { e.preventDefault(); set(max) }
           }}>{value}</span>
-        <button type="button" className="st-button" aria-label={`Increase ${label}`} disabled={value >= max} onClick={() => set(value + step)}>+</button>
+        <button type="button" className="st-button" aria-label={`Increase ${label}`} aria-describedby={describedBy} disabled={!!lock || value >= max} onClick={() => set(value + step)}>+</button>
         {unit ? <span className="st-unit">{unit}</span> : null}
       </span>
     </Field>

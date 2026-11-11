@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 import { COMMAND_TEXT, commandName } from './ClaudeProviderCommand'
 import { CONNECTION_TEXT } from './claudeLauncher/ConnectionTest'
+import { applySettingsPatch } from '../shared/settings.patch'
 
 type Call = { url: string; method: string; body?: any }
 let calls: Call[] = []
@@ -29,7 +30,7 @@ function serve(w: World = {}): void {
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined
     calls.push({ url, method, body })
     if (url.startsWith('/api/settings')) {
-      if (method === 'PUT') profiles = body.claudeLaunchProfiles
+      if (method === 'PUT') profiles = applySettingsPatch({ claudeLaunchProfiles: profiles }, body).claudeLaunchProfiles // the server merges by id
       return json({ claudeLaunchProfiles: profiles })
     }
     if (url === '/api/claude-provider/detect') return json({ wrappers: w.wrappers ?? [] })
@@ -91,15 +92,15 @@ describe('Claude provider: Custom command', () => {
     expect(puts[1]!.body).toEqual({ mode: 'command', profileId: saved.id })
   })
 
-  it('reports new profiles to the host so the Settings panel copy stays in step', async () => {
-    serve()
-    const onProfiles = vi.fn()
-    render(<ClaudeProviderCard onProfiles={onProfiles} />)
+  it('a new profile is sent alone (the server merges by id), so profiles this card never loaded survive', async () => {
+    serve({ profiles: [{ id: 'other', name: 'Other', command: 'claude' }] })
+    render(<ClaudeProviderCard />)
     await open()
-    fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
+    fireEvent.click(await screen.findByRole('button', { name: COMMAND_TEXT.newCommand }))
+    fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
-    await waitFor(() => expect(onProfiles).toHaveBeenCalledTimes(1))
-    expect(onProfiles.mock.calls[0]![0]).toMatchObject([{ command: CMD }])
+    await screen.findByText(new RegExp(PROVIDER_TEXT.saved))
+    expect(PUTS()[0]!.body.claudeLaunchProfiles).toEqual([expect.objectContaining({ command: CMD })])
   })
 
   it('a custom name is kept; a saved profile is remembered and refills the command when picked again', async () => {
@@ -246,7 +247,9 @@ describe('Claude provider: Custom command', () => {
     render(<ClaudeProviderCard />)
     const clean = await screen.findByRole('button', { name: COMMAND_TEXT.clean }) as HTMLButtonElement
     expect(clean.disabled).toBe(true)
-    expect(clean.title).toBe(COMMAND_TEXT.noChanges)
+    expect(clean.parentElement?.getAttribute('data-slot')).toBe('icon-tooltip-disabled') // hint, not a native title
+    fireEvent.pointerMove(clean.parentElement!, { pointerType: 'mouse' })
+    expect((await screen.findByRole('tooltip')).textContent).toContain(COMMAND_TEXT.noChanges)
     fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: `${CMD} --verbose` } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     expect((await screen.findByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).getAttribute('role')).toBe('status')

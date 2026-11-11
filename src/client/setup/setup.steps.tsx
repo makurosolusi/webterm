@@ -10,7 +10,7 @@ import type { SettingsPatch } from '../../shared/settings.patch'
 import type { SetupStep } from '../../shared/settings.setup'
 import type { AppTheme } from '../../shared/settings.terminal'
 import { CentralLaunchStatus } from '../claudeLauncher/CentralLaunchStatus'
-import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
+import { openSettingsAt } from '../settings.link'
 import { useNotifyPrefs, writeNotifyPrefs } from '../osNotify.prefs'
 import { useCapabilities } from '../useCapabilities'
 import { ProjectsFolderSetting } from '../workspaceCreate/ProjectsFolderSetting'
@@ -40,7 +40,7 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
       <div className="flex flex-col gap-3" data-setup-step="central">
         <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
         {error ? <Button size="sm" variant="outline" className="self-start" onClick={() => void refresh()}>{SETUP_TEXT.retry}</Button> : null}
-        <StepFooter nav={nav} where={T.where} disabled />
+        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} disabled />
       </div>
     )
   }
@@ -55,7 +55,7 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
       <p className="m-0 text-sm">{T.intro}</p>
       <Tiles<CentralLevel> label={T.pick} options={LEVELS} names={T.modes} help={T.help} value={level} onChange={setLevel} />
       {level !== 'off' ? <CentralLaunchStatus /> : null}
-      <StepFooter nav={nav} where={T.where} commit={commit} />
+      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} commit={commit} />
     </div>
   )
 }
@@ -80,9 +80,7 @@ export function BasicsStep({ nav, settings, update }: StepProps & { settings: Se
       void Notification.requestPermission().then(() => rerender((n) => n + 1))
     }
   }
-  const openCapabilities = (): void => {
-    window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'capabilities' } }))
-  }
+  const openCapabilities = (): void => openSettingsAt('capabilities', 'capability.telegram')
   return (
     <div className="flex flex-col gap-3" data-setup-step="basics">
       <Tiles label={T.theme} options={THEMES} names={T.themes} value={settings.appTheme} onChange={(appTheme) => update({ appTheme })} />
@@ -99,7 +97,7 @@ export function BasicsStep({ nav, settings, update }: StepProps & { settings: Se
         <Button size="xs" variant="link" className="px-0" onClick={openCapabilities}>{T.telegramLater}</Button>
       </p>
       <p className="m-0 text-xs opacity-70">{T.telemetry}</p>
-      <StepFooter nav={nav} where={T.where} />
+      <StepFooter nav={nav} where={T.where} at={{ section: 'terminal', field: 'appTheme' }} />
     </div>
   )
 }

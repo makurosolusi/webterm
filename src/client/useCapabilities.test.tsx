@@ -83,4 +83,18 @@ describe('useCapabilities', () => {
     await act(async () => { await result.current.refresh() })
     expect(result.current.data?.capabilities[0].status).toBe('on')
   })
+
+  it('recheck returns the outcome so a button can report it: data on success, the user message on failure', async () => {
+    const f = vi.fn().mockResolvedValueOnce(json(200, state('off'))).mockResolvedValueOnce(json(200, state('on'))).mockResolvedValueOnce(json(403, { error: 'forbidden' }))
+    vi.stubGlobal('fetch', f)
+    const { result } = renderHook(() => useCapabilities())
+    await waitFor(() => expect(result.current.data).not.toBeNull())
+    let ok: unknown
+    await act(async () => { ok = await result.current.recheck() })
+    expect(ok).toMatchObject({ ok: true, data: { capabilities: [{ status: 'on' }] } })
+    let failed: unknown
+    await act(async () => { failed = await result.current.recheck() })
+    expect(failed).toEqual({ ok: false, error: CAPABILITY_TEXT.forbidden })
+    expect(result.current.error).toBe(CAPABILITY_TEXT.forbidden)
+  })
 })

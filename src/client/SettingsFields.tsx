@@ -9,7 +9,7 @@
 // Pencarian: `SettingsSearchProvider` membawa query yang sudah dinormalisasi, dan `Field`
 // menyembunyikan dirinya sendiri ketika label + hint tidak cocok. Itu membuat filter bekerja
 // untuk semua section sekaligus tanpa daftar indeks terpisah yang bisa basi.
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useId, useState, type ReactNode } from 'react'
 // Here, not in the lazily loaded SettingsPanel: these fields also render outside it (canvas background,
 // projects folder), and their `.st-*` styles must not wait for the panel's first open.
 import './settings.css'
@@ -18,10 +18,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { DisabledReason, type Lock } from '@/components/ui/disabled-reason'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '../shared/settings'
+import type { SettingsFieldId } from './settings.link'
 import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
 
@@ -87,6 +89,9 @@ export function SettingsSearchProvider({
   return <SearchContext.Provider value={query}>{children}</SearchContext.Provider>
 }
 
+/** id of a field's lock reason line, for the control's `aria-describedby`. */
+export const lockReasonId = (controlId: string): string => `${controlId}-lock`
+
 export function Field({
   label,
   hint,
@@ -94,6 +99,8 @@ export function Field({
   block,
   inline,
   setting,
+  field,
+  lock,
   children,
 }: {
   label: string
@@ -105,19 +112,27 @@ export function Field({
   inline?: boolean
   /** Kunci Settings yang diwakili; mengaktifkan penanda "Modified" dan Reset Setting. */
   setting?: keyof Settings
+  /** Deep-link id (`data-field`, ./settings.link) when it is not `setting`. */
+  field?: SettingsFieldId
+  /** Locked by another setting: the hint stays, a reason line (+ fix) follows; the control must be
+   *  disabled with `aria-describedby={lockReasonId(htmlFor)}` (SelectField/ToggleField/StepperField do it). */
+  lock?: Lock
   children: ReactNode
 }): React.JSX.Element | null {
   const query = useSettingsSearch()
   const { category, settings, onChange } = useSettingsItemScope()
   const [confirming, setConfirming] = useState<string | null>(null)
-  if (!matchesSearch(`${label} ${hintText(hint)}`, query)) return null
+  const autoId = useId()
+  if (!matchesSearch(`${label} ${hintText(hint)} ${lock?.reason ?? ''}`, query)) return null
 
   const modified = setting !== undefined && settings !== undefined && isModified(settings, setting)
-  const description = hint ? <p className="st-hint">{hint}</p> : null
+  const reason = lock ? <DisabledReason id={htmlFor ? lockReasonId(htmlFor) : autoId} {...lock} /> : null
+  const description = hint || lock ? <>{hint ? <p className="st-hint">{hint}</p> : null}{reason}</> : null
   return (
     <div
       className={'st-field' + (block ? ' st-field--block' : '') + (modified ? ' is-modified' : '')}
       data-slot="settings-field"
+      data-field={field ?? setting}
     >
       <div className="st-title">
         {category ? <span className="st-category">{category}: </span> : null}
@@ -213,6 +228,7 @@ export function SelectField<T extends string>({
   options,
   onChange,
   disabled,
+  lock,
 }: {
   id: string
   label: string
@@ -222,10 +238,11 @@ export function SelectField<T extends string>({
   options: readonly { value: T; label: string }[]
   onChange: (v: T) => void
   disabled?: boolean
+  lock?: Lock
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
-      <SettingsSelect id={id} value={value} options={options} onChange={onChange} disabled={disabled} />
+    <Field label={label} hint={hint} htmlFor={id} setting={setting} lock={lock}>
+      <SettingsSelect id={id} value={value} options={options} onChange={onChange} disabled={disabled || lock !== undefined} describedBy={lock ? lockReasonId(id) : undefined} />
     </Field>
   )
 }
@@ -237,6 +254,7 @@ export function ToggleField({
   setting,
   value,
   onChange,
+  lock,
 }: {
   id: string
   label: string
@@ -244,10 +262,11 @@ export function ToggleField({
   setting?: keyof Settings
   value: boolean
   onChange: (v: boolean) => void
+  lock?: Lock
 }): React.JSX.Element | null {
   return (
-    <Field label={label} hint={hint} htmlFor={id} setting={setting} inline>
-      <SettingsCheckbox id={id} checked={value} onChange={onChange} />
+    <Field label={label} hint={hint} htmlFor={id} setting={setting} inline lock={lock}>
+      <SettingsCheckbox id={id} checked={value} onChange={onChange} disabled={lock !== undefined} describedBy={lock ? lockReasonId(id) : undefined} />
     </Field>
   )
 }

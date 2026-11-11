@@ -5,6 +5,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { CLAUDE_PROFILE_LIMITS, type ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { normalizeClaudeCommand, splitLaunch } from '../shared/claudeLaunch/claudeLaunch.normalize'
@@ -61,8 +62,6 @@ export interface ClaudeProviderCommandProps {
   commit(profileId: string): Promise<boolean>
   /** Probe the saved provider (no save first: this form already saved). */
   test(): Promise<void>
-  /** The profile list changed: keep the Settings panel's in-memory copy in step. */
-  onProfiles?(profiles: ClaudeLaunchProfile[]): void
   /** A save failed here (the profile write): the card toasts it. */
   onError?(message: string): void
   /** Filled with this form's save while it has unsaved edits, null when clean (wizard Continue). */
@@ -117,7 +116,6 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
     try {
       const r = await upsertLaunchProfile({ id: selected === NEW ? null : selected, name: shownName.trim() || COMMAND_TEXT.fallbackName, command })
       setProfiles(r.profiles); setSelected(r.id); setName(r.profiles.find((x) => x.id === r.id)?.name ?? ''); setNameTouched(true)
-      p.onProfiles?.(r.profiles)
       return await p.commit(r.id)
     } catch (e) {
       const message = COMMAND_TEXT.saveFailed(e instanceof Error ? e.message : 'error')
@@ -164,8 +162,13 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       {provider.mode === 'command' && provider.commandWarning === 'looks_like_secret' ? <p role="status" className="text-xs text-amber-600">{COMMAND_TEXT.secret}</p> : null}
       <p className="text-xs opacity-70">{COMMAND_TEXT.note}</p>
       <div className="flex items-center gap-2">
-        {p.hideSave ? null : <Button size="sm" disabled={disabled || command.trim() === '' || clean} aria-busy={working} title={clean && !working ? COMMAND_TEXT.noChanges : undefined}
-          onClick={() => void saveDraft()}>{working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</Button>}
+        {p.hideSave ? null : (
+          <IconTooltip label={working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save} disabled={disabled || command.trim() === '' || clean}
+            disabledReason={clean && !working ? COMMAND_TEXT.noChanges : undefined}>
+            <Button size="sm" disabled={disabled || command.trim() === '' || clean} aria-busy={working}
+              onClick={() => void saveDraft()}>{working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</Button>
+          </IconTooltip>
+        )}
         <Button variant="outline" size="sm" disabled={disabled || command.trim() === ''} onClick={() => void runTest()}>{p.testLabel}</Button>
       </div>
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}

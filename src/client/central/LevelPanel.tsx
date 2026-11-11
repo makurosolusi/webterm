@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
-import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
+import { openSettingsAt, type CentralFieldId } from '../settings.link'
 import { useLiveSettings } from '../useSettings'
 import { CL, LEVEL_MEANING, LEVEL_NAMES } from './centralLabels'
 import { centralControlApi } from './centralControlApi'
@@ -47,16 +47,12 @@ export function budgetMeters(b: BudgetView) {
 
 /** Settings section id of the Central Agent section. */
 export const CENTRAL_SETTINGS_SECTION = 'central'
-/** Opens Settings › Central Agent, the one place the level is set. */
-export const openCentralSettings = (): void => {
-  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: CENTRAL_SETTINGS_SECTION } }))
-}
+/** Opens Settings › Central Agent (the one place the level is set) revealing the `field` row. */
+export const openCentralSettings = (field: CentralFieldId): void => openSettingsAt(CENTRAL_SETTINGS_SECTION, `central.${field}`)
 
 /** Settings section id of the Agent section, where Skip approvals lives. */
 export const AGENT_SETTINGS_SECTION = 'agent'
-const openAgentSettings = (): void => {
-  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: AGENT_SETTINGS_SECTION } }))
-}
+const openAgentSettings = (): void => openSettingsAt(AGENT_SETTINGS_SECTION, 'skipApprovals')
 
 /** Below L2 Central cannot change anything, so skipping approvals does not alter what the level means. */
 const skipApplies = (level: ControlView['effective']): boolean => level !== 'off' && level !== 'observe'
@@ -113,7 +109,7 @@ export default function LevelPanel({ client = centralControlApi, visible = true,
           {c.global.level !== c.effective && <p className="ccp-row__meta">{CL.limited}</p>}
         </div>
       )}
-      <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
+      <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={() => openCentralSettings('level')}>{CL.change}</Button>
       {skipApprovals && (
         <p className="ccp-row__meta">
           {!skipped && <>{CL.approvalsSkipped}{' '}</>}
