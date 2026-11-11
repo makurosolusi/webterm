@@ -36,7 +36,7 @@ export async function claudeLaunchRoute(req: IncomingMessage, url: URL, deps: La
   const launch = central === true ? centralClaudeLaunch() : resolveClaudeLaunch(profileId as string)
   if (central !== true && launch.missingId) return { status: 404, body: { error: 'unknown_profile' } }
   if (central === true) deps.refreshCentral()
-  // Central's env (claudeChildEnv: provider keys stripped), so an env credential must come from the wrapper.
+  // Central's env (claudeChildEnv: only the named provider vars), so a server-env proxy counts as signed in.
   const result = await (deps.probe ?? probeClaudeLaunch)(launch, { env: claudeChildEnv(process.env), provider: providerView() })
   return { status: 200, body: { ...result, warnings: launch.warnings } }
 }

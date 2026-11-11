@@ -30,7 +30,7 @@ const log = createLogger('central')
 /** Only the tail of stderr is kept, in memory, for the failure reason. */
 const MAX_STDERR_CHARS = 8 * 1024
 /** Child env names whose values are redacted out of the stderr reason. */
-const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH/i
+const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASSWORD|AUTH|HEADERS/i
 /** How long a finished query waits for its child's stdio to close, so the stderr tail is complete. */
 const CHILD_CLOSE_WAIT_MS = 1_000
 
@@ -246,7 +246,7 @@ export class ClaudeRuntime implements CentralRuntime {
     const profile = exe ? null : centralClaudeLaunch()
     const resolved = profile ?? { argv: [exe as string], bin: exe as string }
     const launch = { argv0: basename(resolved.argv[0] as string), profileId: profile?.profile.id ?? 'executable-override' }
-    // Claude provider (Settings > Capabilities) on top of the allowlist, which drops every ANTHROPIC_* var.
+    // Claude provider (Settings > Capabilities) on top of the allowlist (named provider vars only): the card wins over server env.
     // The cache env goes in first: claudeEnv applies the provider last, so it can never be clobbered.
     const env = claudeEnv({ ...claudeChildEnv(this.options.env ?? process.env), ...input.cacheEnv })
     const secrets = Object.entries(env).filter(([name, value]) => SECRET_ENV_NAME.test(name) && typeof value === 'string').map(([, value]) => value as string)
