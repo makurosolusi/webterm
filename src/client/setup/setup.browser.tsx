@@ -43,7 +43,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
       <div className="flex flex-col gap-3" data-setup-step="browser">
         <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
         {error ? <Button size="sm" variant="outline" className="self-start" onClick={() => void refresh()}>{SETUP_TEXT.retry}</Button> : null}
-        <StepFooter nav={nav} where={T.where} disabled />
+        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} disabled />
       </div>
     )
   }
@@ -113,7 +113,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
           </div>
         </div>
       ) : null}
-      <StepFooter nav={nav} where={T.where} commit={commit} disabled={!canContinue} />
+      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} commit={commit} disabled={!canContinue} />
     </div>
   )
 }

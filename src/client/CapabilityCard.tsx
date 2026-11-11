@@ -52,7 +52,7 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
     onSub?.(s.key, next)
   }
   return (
-    <section aria-label={view.title} aria-busy={busy} data-capability={view.id} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
+    <section aria-label={view.title} aria-busy={busy} data-capability={view.id} data-field={`capability.${view.id}`} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={switchId} className="text-[13px] font-semibold">{view.title}</Label>
         <div className="flex items-center gap-2">
@@ -81,7 +81,7 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
 /** Capabilities › Central Agent: status + a link; its switches are in Settings › Central Agent. */
 export function CentralSummaryRow({ view, onOpen }: { view: CapabilityView; onOpen?(): void }): React.JSX.Element {
   return (
-    <section aria-label={CENTRAL_TEXT.summaryTitle} data-capability="central" className="flex items-center justify-between gap-2 border-b border-(--vscode-widget-border,transparent) py-3">
+    <section aria-label={CENTRAL_TEXT.summaryTitle} data-capability="central" data-field="capability.central" className="flex items-center justify-between gap-2 border-b border-(--vscode-widget-border,transparent) py-3">
       <span className="text-[13px] font-semibold">{CENTRAL_TEXT.summaryTitle}</span>
       <div className="flex items-center gap-2">
         <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>

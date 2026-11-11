@@ -91,7 +91,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     if (!api.data) return null
     const ready = central?.status === 'needs-step' && central.step?.kind === 'agentEngine' ? false : undefined
     return (
-      <div key="engine" className="px-3.5" data-central-field="engine">
+      <div key="engine" className="px-3.5" data-central-field="engine" data-field="central.engine">
         <AgentEngineField engine={api.data.advanced.agentEngine} ready={ready} save={saveEngine} redetect={api.recheck} />
         {engineError ? <p role="alert" className="st-hint">{engineError}</p> : null}
       </div>
@@ -172,14 +172,14 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     const src = field.source
     const err = src.kind === 'env' && env.saveError?.key === src.key ? env.saveError.message : null
     return (
-      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined}>
+      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined} field={`central.${field.id}`}>
         <div className="flex flex-wrap items-center gap-2" data-central-field={field.id}>
           {control(field, id, reason)}
           {src.kind === 'env' && env.savingKey === src.key ? <span role="status" className="st-hint">{CENTRAL_TEXT.saving}</span> : null}
           {reason && field.control !== 'status' ? <span className="st-hint" data-reason>{reason}</span> : null}
           {field.control === 'status' && src.kind === 'capability' && src.id !== 'central'
             ? <Button size="xs" variant="link" className="px-0" aria-label={`${CENTRAL_TEXT.open} ${field.label}`}
-                onClick={() => onNavigate({ section: 'capabilities', anchor: `[data-capability="${src.id}"]` })}>{CENTRAL_TEXT.open} →</Button>
+                onClick={() => onNavigate({ section: 'capabilities', field: `capability.${src.id}` })}>{CENTRAL_TEXT.open} →</Button>
             : null}
           {err ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(err)}</span> : null}
           {field.id === 'checkin' && checkin.saveError ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(checkin.saveError)}</span> : null}

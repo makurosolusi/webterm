@@ -22,6 +22,7 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '../shared/settings'
+import type { SettingsFieldId } from './settings.link'
 import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
 import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
 
@@ -94,6 +95,7 @@ export function Field({
   block,
   inline,
   setting,
+  field,
   children,
 }: {
   label: string
@@ -105,6 +107,8 @@ export function Field({
   inline?: boolean
   /** Kunci Settings yang diwakili; mengaktifkan penanda "Modified" dan Reset Setting. */
   setting?: keyof Settings
+  /** Deep-link id (`data-field`, ./settings.link) when it is not `setting`. */
+  field?: SettingsFieldId
   children: ReactNode
 }): React.JSX.Element | null {
   const query = useSettingsSearch()
@@ -118,6 +122,7 @@ export function Field({
     <div
       className={'st-field' + (block ? ' st-field--block' : '') + (modified ? ' is-modified' : '')}
       data-slot="settings-field"
+      data-field={field ?? setting}
     >
       <div className="st-title">
         {category ? <span className="st-category">{category}: </span> : null}

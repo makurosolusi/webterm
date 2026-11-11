@@ -3,7 +3,7 @@
 // what a tool may do is decided by the level, set in Settings › Central Agent.
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
-import { OPEN_SETTINGS_EVENT } from '../claudeLauncher/claudeLaunch.client'
+import { openSettingsSection } from '../settings.link'
 import { InboxApiError } from '../inboxTypes'
 import { Segmented } from '../centralSettings.controls'
 import { AB, CL, LEVEL_NAMES } from './centralLabels'
@@ -15,7 +15,7 @@ import { toolLabel } from './toolLabels'
 
 /** Settings section with the allow / ask / deny rules. */
 export const RULES_SETTINGS_SECTION = 'rules'
-const openRules = (): void => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: RULES_SETTINGS_SECTION } })) }
+const openRules = (): void => openSettingsSection(RULES_SETTINGS_SECTION)
 
 /** With Central fully off every /api/central path is 404: that is the off state, not an error. */
 const CENTRAL_OFF: ToolsView = { level: 'off', tools: [] }
@@ -87,7 +87,7 @@ export default function AbilitiesView({ client = centralControlApi }: { client?:
           {data.level === 'off' && (
             <div className="ccp-off" data-central-off="level">
               <p>{AB.levelOff}</p>
-              <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={openCentralSettings}>{CL.change}</Button>
+              <Button type="button" size="sm" variant="secondary" aria-label={CL.changeLabel} onClick={() => openCentralSettings('level')}>{CL.change}</Button>
             </div>
           )}
           {data.tools.length === 0 ? (data.level !== 'off' && <p>{AB.noTools}</p>) : (

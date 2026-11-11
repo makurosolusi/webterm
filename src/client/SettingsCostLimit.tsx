@@ -72,6 +72,7 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
     <Field
       label="Daily spending limit"
       htmlFor="st-costLimit"
+      field="central.costLimit"
       hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% only Haiku runs."
     >
       <span className="st-unit">$</span>

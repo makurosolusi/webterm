@@ -1,5 +1,6 @@
 // Client side of POST /api/claude-launch/test (server/claudeLauncher/claudeLauncher.api.ts).
 import { flushSettingsSaves } from '../useSettings'
+import { openSettingsAt } from '../settings.link'
 
 /** `install`: on a claude-missing row, the official install commands (server `CLAUDE_INSTALL`).
  *  `signIn`: on a wrapper that is not signed in, the sign-in command it suggested (server `WrapperSignIn`). */
@@ -13,12 +14,9 @@ export interface LaunchTest {
   warnings: string[]
 }
 
-/** Event that opens Settings on a section (App listens); `detail.section` = SettingsPanel section id. */
-export const OPEN_SETTINGS_EVENT = 'webterm:open-settings'
-/** Lands on Settings › Central Agent (Status & setup): Central's profile pick, with a link to the profile list. */
-export const openLaunchProfileSettings = (): void => {
-  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'central' } }))
-}
+export { OPEN_SETTINGS_EVENT } from '../settings.link'
+/** Reveals Settings › Central Agent › Claude launch profile (Central's pick; the row links to the profile list). */
+export const openLaunchProfileSettings = (): void => openSettingsAt('central', 'central.profile')
 
 /** Probe a saved profile, or the one Central uses. Throws with the server's error code. */
 export async function testClaudeLaunch(target: { profileId: string } | { central: true }): Promise<LaunchTest> {

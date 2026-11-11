@@ -7,12 +7,13 @@ import type { Settings } from '../shared/settings'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
 import { CENTRAL_FIELD_TEXT, CENTRAL_TEXT, LEVEL_TEXT, MODEL_TEXT, UNIT_TEXT, tokensLabel } from './centralSettingsLabels'
 import { COST_CAP_KEY } from './SettingsCostLimit'
+import type { SettingsFieldId } from './settings.link'
 
 export const CENTRAL_GROUPS = ['status', 'autonomy', 'cost', 'abilities', 'telegram', 'advanced'] as const
 export type CentralGroup = (typeof CENTRAL_GROUPS)[number]
 export type CentralControl = 'switch' | 'segmented' | 'stepper' | 'select' | 'combobox' | 'link' | 'status'
-/** Where a link lands: a Settings section id, plus a CSS selector to scroll to inside it. */
-export interface CentralLinkTarget { section: string; anchor?: string }
+/** Where a link lands: a Settings section id, plus the setting revealed in it (`data-field`, ./settings.link). */
+export interface CentralLinkTarget { section: string; field: SettingsFieldId }
 export type CentralSource =
   | { kind: 'capability'; id: CapabilityId; sub?: string }
   /** `scale` = stored value per shown unit (ms per second). */
@@ -44,14 +45,14 @@ export interface CentralField {
 
 const tokens = (ns: readonly number[]): CentralOption[] => ns.map((n) => ({ value: String(n), label: tokensLabel(n) }))
 const f = (id: CentralField['id'], rest: Omit<CentralField, 'id' | 'label' | 'hint'>): CentralField => ({ id, ...CENTRAL_FIELD_TEXT[id], ...rest })
-const link = (section: string, anchor?: string): CentralSource => ({ kind: 'link', to: { section, anchor } })
+const link = (section: string, field: SettingsFieldId): CentralSource => ({ kind: 'link', to: { section, field } })
 const env = (key: string, extra: { unit?: string; scale?: number } = {}): CentralSource => ({ kind: 'env', key, ...extra })
 
 export const CENTRAL_FIELDS: readonly CentralField[] = [
   f('central', { group: 'status', control: 'switch', source: { kind: 'capability', id: 'central' }, always: true }),
   f('engine', { group: 'status', control: 'status', source: { kind: 'capability', id: 'central' }, always: true }),
   f('profile', { group: 'status', control: 'select', source: { kind: 'setting', key: 'centralClaudeProfileId' } }),
-  f('profiles', { group: 'status', control: 'link', source: link('agent', '[data-card="claude-launch-profiles"]'), always: true }),
+  f('profiles', { group: 'status', control: 'link', source: link('agent', 'claudeLaunchProfiles'), always: true }),
 
   f('level', {
     group: 'autonomy', control: 'segmented', source: { kind: 'capability', id: 'autonomy' },
@@ -67,8 +68,8 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
   f('checkinLimit', { group: 'autonomy', control: 'select', source: { kind: 'checkin', key: 'dailyLimit' }, options: CHECKIN_DAILY_LIMITS.map((n) => ({ value: String(n), label: String(n) })) }),
 
   f('costLimit', { group: 'cost', control: 'combobox', source: env(COST_CAP_KEY, { unit: '$' }) }),
-  f('ladder', { group: 'cost', control: 'link', source: link('agent', '[aria-label="Model ladder defaults"]'), always: true }),
-  f('report', { group: 'cost', control: 'link', source: link('spending', '[data-testid="cost-panel"]'), always: true }),
+  f('ladder', { group: 'cost', control: 'link', source: link('agent', 'model-ladder'), always: true }),
+  f('report', { group: 'cost', control: 'link', source: link('spending', 'cost-panel'), always: true }),
 
   f('skills', { group: 'abilities', control: 'switch', source: { kind: 'capability', id: 'central', sub: 'centralSkills' } }),
   f('skillPropose', { group: 'abilities', control: 'switch', source: { kind: 'capability', id: 'central', sub: 'centralSkillPropose' } }),
