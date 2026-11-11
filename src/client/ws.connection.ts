@@ -87,3 +87,52 @@ export function setRetryHandler(fn: () => void): void {
 export function retryNow(): void {
   retryHandler()
 }
+
+/** Upper bound of the spread when many streams reopen together on the transition to connected. */
+export const STREAM_REOPEN_JITTER_MS = 500
+
+/**
+ * Phases in which a stream (SSE) retry waits: the shared socket is the liveness signal, so while it
+ * is down, lost or refused, an SSE retry would only hammer the same dead server. `connecting` does
+ * not pause: the socket opens lazily (first terminal or send), so on a board without one it may
+ * never leave `connecting`, and a stream must still recover on its own backoff there.
+ */
+const STREAM_PAUSED: ReadonlySet<ConnectionPhase> = new Set(['reconnecting', 'offline', 'auth'])
+
+/** True while stream retries and polls should wait for the shared socket (see `STREAM_PAUSED`). */
+export function streamPaused(): boolean {
+  return STREAM_PAUSED.has(state.phase)
+}
+
+/**
+ * Schedule one stream reopen (`fn`). While the socket is up: full-jitter backoff for `attempt`.
+ * While it is paused: no timer at all; `fn` runs right after the next transition to connected,
+ * spread by up to `STREAM_REOPEN_JITTER_MS` so the streams do not reopen in one burst. Returns cancel.
+ */
+export function scheduleStreamRetry(
+  attempt: number,
+  fn: () => void,
+  opts: { capMs?: number; random?: () => number } = {},
+): () => void {
+  const random = opts.random ?? Math.random
+  let timer: ReturnType<typeof setTimeout> | null = null
+  let stopWaiting = (): void => {}
+  const waitForSocket = (): void => {
+    stopWaiting = whenConnected(() => { arm(Math.floor(random() * STREAM_REOPEN_JITTER_MS)) })
+  }
+  // The phase can drop while the backoff runs: re-check when it fires instead of reopening blind.
+  const arm = (ms: number): void => {
+    timer = setTimeout(() => {
+      timer = null
+      if (streamPaused()) waitForSocket()
+      else fn()
+    }, ms)
+  }
+  if (streamPaused()) waitForSocket()
+  else arm(reconnectDelay(attempt, { capMs: opts.capMs, random }))
+  return () => {
+    stopWaiting()
+    if (timer !== null) clearTimeout(timer)
+    timer = null
+  }
+}

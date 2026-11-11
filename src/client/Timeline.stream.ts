@@ -1,18 +1,20 @@
 // Live feed for the Activity timeline: newest history page, then SSE from the last seen seq.
 // Resume follows the server contract (`?afterSeq=<n>`, events/eventsApi.ts): on any stream error
 // the source is closed and reopened after a backoff with the highest seq received, so nothing is
-// replayed twice and nothing is missed. Same reconnect shape as output/logStreamStore.ts.
+// replayed twice and nothing is missed. Same reconnect shape as output/logStreamStore.ts; the wait
+// is `scheduleStreamRetry` (ws.connection.ts): jittered, and paused while the shared socket is down.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeEvents, type TimelineEvent } from './Timeline.model'
 import { getJson } from './Timeline.status'
 import { afterPageLoad } from './pageLoad'
+import { scheduleStreamRetry } from './ws.connection'
 
 export const STREAM_URL = '/api/events/stream'
 export const HISTORY_URL = '/api/events/history'
 export const PAGE_SIZE = 100
 /** Client-side cap; the oldest rows drop off (they stay reachable via "Load older"). */
 export const CLIENT_CAP = 5000
-const RETRY_BASE_MS = 1000
+/** Backoff ceiling for this feed (longer than the socket's: the timeline is not urgent). */
 const RETRY_MAX_MS = 30_000
 
 export type Connection = 'connecting' | 'open' | 'closed'
@@ -54,7 +56,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
     if (!enabled) return
     let stopped = false
     let source: EventSource | null = null
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let cancelRetry = (): void => {}
     let attempts = 0
     let lastSeq = 0
     let loaded = false
@@ -68,11 +70,11 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
       source?.close()
       source = null
       setConnection('closed')
-      timer = setTimeout(connect, Math.min(RETRY_BASE_MS * 2 ** attempts, RETRY_MAX_MS))
+      cancelRetry()
+      cancelRetry = scheduleStreamRetry(attempts, () => void connect(), { capMs: RETRY_MAX_MS })
       attempts += 1
     }
     async function connect(): Promise<void> {
-      timer = null
       setConnection('connecting')
       try {
         if (!loaded) {
@@ -104,7 +106,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
     return () => {
       stopped = true
       cancelStart()
-      if (timer) clearTimeout(timer)
+      cancelRetry()
       source?.close()
     }
   }, [enabled])
