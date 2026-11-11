@@ -5,17 +5,19 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import type * as Monaco from 'monaco-editor'
 import { loadMonaco } from './lazyMonaco'
 import { currentMonacoTheme } from './monacoTheme'
+import type { WrapTarget } from './editorWrap'
 
 /** Model URIs must be unique per Monaco instance: two Diff nodes on one file would collide. */
 let modelSeq = 0
 
 export interface DiffSides { path: string; original: string; modified: string }
 
-export function useDiffEditor(host: RefObject<HTMLDivElement | null>, sides: DiffSides | null, notedLines: readonly number[]): { line: number; error: string } {
+export function useDiffEditor(host: RefObject<HTMLDivElement | null>, sides: DiffSides | null, notedLines: readonly number[]): { line: number; error: string; wrapTarget: WrapTarget | null } {
   const decoRef = useRef<Monaco.editor.IEditorDecorationsCollection | null>(null)
   const [line, setLine] = useState(1)
   const [error, setError] = useState('')
   const [ready, setReady] = useState(0) // bumps once the async editor exists, so decorations apply
+  const [wrapTarget, setWrapTarget] = useState<WrapTarget | null>(null)
 
   useEffect(() => {
     const el = host.current
@@ -34,8 +36,9 @@ export function useDiffEditor(host: RefObject<HTMLDivElement | null>, sides: Dif
       editor.setModel({ original, modified })
       decoRef.current = editor.getModifiedEditor().createDecorationsCollection()
       setReady((n) => n + 1)
+      setWrapTarget({ monaco: m, options: editor, code: [editor.getOriginalEditor(), editor.getModifiedEditor()] })
       const sub = editor.getModifiedEditor().onDidChangeCursorPosition((e) => setLine(e.position.lineNumber))
-      cleanup = () => { sub.dispose(); editor.dispose(); original.dispose(); modified.dispose(); decoRef.current = null }
+      cleanup = () => { sub.dispose(); editor.dispose(); original.dispose(); modified.dispose(); decoRef.current = null; setWrapTarget(null) }
     }, (e: unknown) => setError(`Could not load the diff editor: ${e instanceof Error ? e.message : String(e)}`))
     return () => { disposed = true; cleanup() }
   }, [host, sides])
@@ -47,5 +50,5 @@ export function useDiffEditor(host: RefObject<HTMLDivElement | null>, sides: Dif
     })))
   }, [notedLines, ready])
 
-  return { line, error }
+  return { line, error, wrapTarget }
 }

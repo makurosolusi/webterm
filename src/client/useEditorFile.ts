@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import type { FsResult, FsVersion, ReadEncoding, ReadMeta } from '../shared/fsContract'
-import { loadMonaco } from './lazyMonaco'
+import { loadMonaco, type MonacoApi } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
 import { loadRefusal, opensInPreview } from './editorFile'
 import { setEditorDirty } from './editorDirty'
@@ -62,6 +62,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
   // TERPISAH dari `loadError` dengan sengaja: gagal BACA menolak merender editor, gagal SIMPAN harus
   // MEMPERTAHANKAN editor — editan yang belum tersimpan hanya hidup di dalam instance Monaco.
   const [saveError, setSaveError] = useState('')
+  /** The mounted editor (null until Monaco is up), for options and actions owned by the node. */
+  const [live, setLive] = useState<{ monaco: MonacoApi; editor: MonacoEditor.IStandaloneCodeEditor } | null>(null)
 
   const togglePreview = () => {
     if (!enabled || !loadedRef.current) return
@@ -201,6 +203,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
         themeObserver = new MutationObserver(() => m.editor.setTheme(currentMonacoTheme()))
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
         editorRef.current = editor
+        setLive({ monaco: m, editor })
         savedRef.current = meta.content
         versionRef.current = meta.version
         loadedRef.current = true
@@ -238,6 +241,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
       // keluar dari tree, dan model yang tertinggal menahan worker bahasanya (lihat tsWorkerReaper).
       model?.dispose()
       editorRef.current = null
+      setLive(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) yang memuat ulang
   }, [enabled])
@@ -249,5 +253,5 @@ export function useEditorFile(a: UseEditorFileArgs) {
   }, [id, dirty])
   useEffect(() => () => setEditorDirty(id, false), [id])
 
-  return { dirty, preview, previewSource, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
+  return { live, dirty, preview, previewSource, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }

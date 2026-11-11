@@ -41,6 +41,7 @@ function cleanNode(n: Record<string, unknown>): WsNode {
   const node = { ...n } as unknown as WsNode
   if (n.diffNotes !== undefined) node.diffNotes = validDiffNotes(n.diffNotes)
   if (n.expanded !== undefined) node.expanded = validExpanded(n.expanded)
+  if (n.wordWrap !== undefined && typeof n.wordWrap !== 'boolean') delete node.wordWrap
   if (n.plan !== undefined) {
     const plan = validPlanData(n.plan)
     if (plan) node.plan = plan

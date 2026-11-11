@@ -1,7 +1,7 @@
 // The only place NodeResizer is used (nodeResizePolicy.test.ts enforces it). Handles show only
 // while the node is in resize mode, which the user enters on purpose with NodeResizeToggle or the
 // "Node: Resize Focused Node" command; selecting or clicking a node never shows them.
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
 import { nodeIdOf } from '../nodeRoot'
 import { IconButton } from '@/components/ui/icon-button'
@@ -18,13 +18,17 @@ const targetNodeId = (t: EventTarget | null): string | undefined => (t instanceo
 export interface NodeLayoutResizerProps extends Omit<NodeResizerProps, 'isVisible' | 'nodeId'> {
   /** A collapsed node cannot be resized; collapsing ends resize mode. */
   collapsed?: boolean
+  /** Double-clicking the right edge in resize mode runs this (auto-fit the width, like a column). */
+  onFitWidth?: () => void
 }
 
 /** NodeResizer shown only in this node's resize mode; ends the mode on Esc, outside press, typing, collapse or removal. */
-export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProps) {
+export function NodeLayoutResizer({ collapsed, onFitWidth, ...props }: NodeLayoutResizerProps) {
   const id = useNodeId()
   const { editingId } = useNodeResizeState()
   const editing = id !== null && editingId === id && !collapsed
+  const fitRef = useRef(onFitWidth)
+  fitRef.current = onFitWidth
 
   useEffect(() => { if (collapsed && id) exitNodeResize(id) }, [collapsed, id])
   const minWidth = props.minWidth ?? RESIZER_DEFAULT_MIN
@@ -42,6 +46,10 @@ export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProp
     // Capture phase: surfaces like xterm or Monaco stop their keys before they bubble.
     // A press on the handles is inside the node, so dragging them keeps the mode.
     const onPointerDown = (e: PointerEvent): void => { if (targetNodeId(e.target) !== id) exitNodeResize(id) }
+    const onDoubleClick = (e: MouseEvent): void => {
+      const t = e.target
+      if (fitRef.current && t instanceof Element && t.closest('.react-flow__resize-control.line.right') && targetNodeId(t) === id) fitRef.current()
+    }
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') return exitNodeResize(id)
       // Chords (the resize shortcut itself, copy) are not typing; neither are header controls.
@@ -50,7 +58,9 @@ export function NodeLayoutResizer({ collapsed, ...props }: NodeLayoutResizerProp
     }
     document.addEventListener('pointerdown', onPointerDown, true)
     document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('dblclick', onDoubleClick, true)
     return () => {
+      document.removeEventListener('dblclick', onDoubleClick, true)
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown, true)
     }

@@ -11,14 +11,16 @@ vi.mock('./DiffNode.api', () => api)
 const ws = vi.hoisted(() => ({ send: vi.fn(), getStatus: vi.fn(() => undefined), subscribeStatus: vi.fn(() => () => {}) }))
 vi.mock('./ws', () => ws)
 const monaco = vi.hoisted(() => {
-  const ed = { createDecorationsCollection: () => ({ set: () => {} }), onDidChangeCursorPosition: () => ({ dispose: () => {} }) }
+  const ed = { createDecorationsCollection: () => ({ set: () => {} }), onDidChangeCursorPosition: () => ({ dispose: () => {} }), addAction: () => ({ dispose: () => {} }) }
   return {
     created: 0,
+    wrap: [] as string[],
     m: {
       Uri: { parse: (s: string) => s },
+      KeyMod: { Alt: 512 }, KeyCode: { KeyZ: 56 },
       editor: {
         createModel: () => ({ dispose: () => {} }),
-        createDiffEditor: () => { monaco.created++; return { setModel: () => {}, getModifiedEditor: () => ed, dispose: () => {} } },
+        createDiffEditor: () => { monaco.created++; return { setModel: () => {}, getModifiedEditor: () => ed, getOriginalEditor: () => ed, updateOptions: (o: { wordWrap: string }) => monaco.wrap.push(o.wordWrap), dispose: () => {} } },
       },
     },
   }
@@ -31,7 +33,7 @@ import DiffNode from './DiffNode'
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
 })
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); ws.getStatus.mockReturnValue(undefined); monaco.created = 0 })
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); ws.getStatus.mockReturnValue(undefined); monaco.created = 0; monaco.wrap.length = 0 })
 
 const LIST = {
   root: '/repo', total: 3, nextOffset: null,
@@ -106,6 +108,18 @@ describe('DiffNode', () => {
     expect(posts[0].body.body).toContain('File: a.ts\nLine: 1\nUser comment: "why y?"')
     expect(ws.send).not.toHaveBeenCalled() // nothing typed from the client any more
     expect(saved()).toEqual([])
+  })
+
+  it('word wrap: off for code by default, toggled live and stored on the node', async () => {
+    api.fetchDiffList.mockResolvedValue(LIST)
+    api.fetchFileDiff.mockResolvedValue(A_TS)
+    const { container } = mount({ cwd: '/repo' })
+    fireEvent.click(await screen.findByText('a.ts'))
+    await waitFor(() => expect(monaco.wrap).toEqual(['off']))
+    fireEvent.click(container.querySelector('vscode-toolbar-button[data-title^="Toggle word wrap"]')!)
+    await waitFor(() => expect(monaco.wrap.at(-1)).toBe('on'))
+    expect((latest.find((n) => n.id === 'd1')?.data as { wordWrap?: boolean }).wordWrap).toBe(true)
+    expect(monaco.created).toBe(1)
   })
 
   it('keeps the notes and shows the reason when the outbox refuses', async () => {

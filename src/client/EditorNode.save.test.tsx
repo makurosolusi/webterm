@@ -34,6 +34,7 @@ const fake = vi.hoisted(() => {
             bindings.push(...added)
             return { dispose: () => added.forEach((b) => remove(b).dispose()) }
           },
+          updateOptions: () => {},
           dispose: () => {},
         }
         return editor
@@ -88,7 +89,7 @@ describe('EditorNode Cmd+S per editor', () => {
 
   it('removes its keybinding when the node unmounts', async () => {
     const { unmount } = render(<ReactFlowProvider>{node('n1', '/x/a.ts').el}</ReactFlowProvider>)
-    await waitFor(() => expect(fake.bindings).toHaveLength(1))
+    await waitFor(() => expect(fake.bindings).toHaveLength(2)) // save + word wrap
     unmount()
     expect(fake.bindings).toHaveLength(0)
   })
