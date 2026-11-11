@@ -1,6 +1,5 @@
 // Settings fields that avoid typing: stepper, slider, number select, and the combobox field (presets
 // + remembered values) for what still needs free input. Bounds come from `SETTING_RANGES`.
-import type { ReactNode } from 'react'
 import type { Settings } from '../shared/settings'
 import { SETTING_RANGES, type RangedKey } from '../shared/settings.ranges'
 import { SettingsSelect } from './SettingsControls'
@@ -9,7 +8,7 @@ import type { Lock } from '@/components/ui/disabled-reason'
 import { SettingsCombobox, type SettingsComboboxProps } from './SettingsCombobox'
 import './settings-pickers.css'
 
-interface Base { id: string; label: string; hint?: ReactNode; setting?: keyof Settings }
+interface Base { id: string; label: string; hint?: string; setting?: keyof Settings }
 
 /** Rounds away float noise from repeated `step` additions (0.1 + 0.2). */
 const roundTo = (v: number, step: number): number => {

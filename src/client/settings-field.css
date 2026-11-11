@@ -1,0 +1,57 @@
+/* Field anatomy (settings overhaul): modified dot, visible Reset, inline save status. */
+
+.st-modified-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--st-modified-indicator, var(--vscode-focusBorder, var(--accent)));
+}
+
+.st-reset {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, var(--accent));
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.st-reset:hover {
+  background: var(--vscode-toolbar-hoverBackground, var(--raised));
+}
+
+.st-reset:focus-visible,
+.st-save-retry:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: 1px;
+}
+
+.st-save {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 0;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.st-save--error {
+  color: var(--vscode-errorForeground, var(--destructive, #f14c4c));
+}
+
+.st-save-retry {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, var(--accent));
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}

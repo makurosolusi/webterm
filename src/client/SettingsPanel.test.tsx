@@ -213,12 +213,12 @@ describe('SettingsPanel persistence', () => {
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: false })
   })
 
-  it('shows the category prefix, marks a modified item and resets it through the gear', () => {
+  it('outside search: no page prefix, a modified dot and a visible Reset that resets the item', () => {
     const { onChange } = renderPanel({ cursorBlink: false })
 
     const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).getByText('(Modified)')).toBeTruthy()
-    expect(field.querySelector('.st-category')?.textContent).toBe('Terminal: ')
+    expect(field.querySelector('.st-category')).toBeNull() // the prefix belongs to search results only
 
     fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Cursor blink' }))
 
