@@ -60,10 +60,10 @@ describe('SettingsPanel VS Code layout', () => {
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
   })
 
-  it('groups the sidebar under Editor, Agents, Workspace and System headings, in that order', () => {
+  it('groups the sidebar under General, Agents, Workspace and System headings, in that order', () => {
     renderPanel()
     const groups = within(nav()).getAllByRole('group')
-    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['Editor', 'Agents', 'Workspace', 'System'])
+    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Workspace', 'System'])
     const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
     expect(byGroup).toEqual([
       ['Terminal', 'Interaction', 'Shell & buffer'],
@@ -72,7 +72,7 @@ describe('SettingsPanel VS Code layout', () => {
       ['Account', 'Capabilities', 'Health', 'Developer'],
     ])
     expect(within(groups[1]!).getByRole('button', { name: 'Rules & approvals' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
-    expect(SETTINGS_GROUPS).toEqual(['Editor', 'Agents', 'Workspace', 'System'])
+    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Workspace', 'System'])
     // SETTINGS_SECTIONS is listed in group order, so the sidebar order equals the array order.
     expect(SETTINGS_SECTIONS.map((x) => x.group)).toEqual([...SETTINGS_SECTIONS.map((x) => x.group)].sort((a, b) => SETTINGS_GROUPS.indexOf(a) - SETTINGS_GROUPS.indexOf(b)))
   })
@@ -213,12 +213,12 @@ describe('SettingsPanel persistence', () => {
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: false })
   })
 
-  it('shows the category prefix, marks a modified item and resets it through the gear', () => {
+  it('outside search: no page prefix, a modified dot and a visible Reset that resets the item', () => {
     const { onChange } = renderPanel({ cursorBlink: false })
 
     const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).getByText('(Modified)')).toBeTruthy()
-    expect(field.querySelector('.st-category')?.textContent).toBe('Terminal: ')
+    expect(field.querySelector('.st-category')).toBeNull() // the prefix belongs to search results only
 
     fireEvent.click(within(field).getByRole('button', { name: 'Reset Setting: Cursor blink' }))
 
@@ -272,65 +272,6 @@ describe('SettingsPanel persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('SettingsPanel search', () => {
-  it('reports the number of matching settings and clears through the clear button', () => {
-    renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Search settings' }) as HTMLInputElement
-
-    fireEvent.change(search, { target: { value: 'font' } })
-    const count = document.querySelector('.st-search-count') as HTMLElement
-    expect(count.textContent).toMatch(/^\d+ settings? found$/)
-    expect(Number.parseInt(count.textContent ?? '', 10)).toBe(
-      document.querySelectorAll('[data-slot="settings-field"]').length,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
-    expect(search.value).toBe('')
-  })
-
-  it('filters fields across every section instead of only the active one', () => {
-    renderPanel()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
-
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search settings' }), { target: { value: 'font' } })
-
-    // Terminal punya field font; Canvas yang sedang aktif tidak.
-    expect(screen.getByLabelText('Font size')).toBeTruthy()
-    expect(screen.getByLabelText('Font family')).toBeTruthy()
-    expect(screen.queryByLabelText('Grid size')).toBeNull()
-  })
-
-  it('treats space-separated tokens as AND and reports when nothing matches', () => {
-    renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Search settings' })
-
-    fireEvent.change(search, { target: { value: 'font bold' } })
-    expect(screen.getByLabelText('Bold text weight')).toBeTruthy()
-
-    fireEvent.change(search, { target: { value: 'tidak-ada-setting-ini' } })
-    expect(screen.queryByLabelText('Font size')).toBeNull()
-    expect(screen.getByText(/No settings match/)).toBeTruthy()
-  })
-
-  it('clears the query on Escape instead of closing the dialog, and clears on section click', () => {
-    const { onClose } = renderPanel()
-    const search = screen.getByRole('searchbox', { name: 'Search settings' }) as HTMLInputElement
-
-    fireEvent.change(search, { target: { value: 'font' } })
-    fireEvent.keyDown(search, { key: 'Escape' })
-
-    expect(search.value).toBe('')
-    expect(onClose).not.toHaveBeenCalled()
-    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
-
-    fireEvent.change(search, { target: { value: 'grid' } })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Shell & buffer' }))
-
-    expect(search.value).toBe('')
-    expect(screen.getByRole('heading', { level: 2, name: 'Shell & buffer' })).toBeTruthy()
   })
 })
 

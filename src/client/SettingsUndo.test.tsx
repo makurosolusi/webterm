@@ -44,15 +44,16 @@ async function mount() {
 const z = (el: Element, shift = false) => fireEvent.keyDown(el, { key: shift ? 'Z' : 'z', metaKey: true, shiftKey: shift })
 
 describe('Settings undo', () => {
-  it('a change shows "Changed …" with Undo, and Undo restores the value (and persists it)', async () => {
+  it('a change shows "Changed …" with Undo once the server accepted it, and Undo restores the value (and persists it)', async () => {
     const { box, before } = await mount()
     fireEvent.click(box)
-    expect(box.checked).toBe(!before)
-    expect(screen.getByText(/^Changed /)).toBeTruthy()
+    expect(box.checked).toBe(!before) // the pick shows at once
+    expect(screen.queryByText(/^Changed /)).toBeNull() // the toast waits for the server
+    expect(await screen.findByText(/^Changed /, {}, { timeout: 2000 })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(before)
-    expect(screen.getByText(/^Undid change to /)).toBeTruthy()
+    expect(await screen.findByText(/^Undid change to /, {}, { timeout: 2000 })).toBeTruthy()
     // The undo goes through the same coalesced PUT as an edit.
     await waitFor(() => expect(puts.length).toBeGreaterThan(0), { timeout: 2000 })
     const last = puts[puts.length - 1] as Record<string, unknown>

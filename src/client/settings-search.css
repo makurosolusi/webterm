@@ -1,0 +1,26 @@
+/* Settings shell: search result rows and the narrow (dropdown) layout. Loaded by SettingsPanel only. */
+/* Search results (./settings.search): one row per entry, "Page › Label" + hint, the row opens it. */
+.st-results { margin: 0; padding: 0; list-style: none; }
+.st-result { padding: 4px 14px 6px; }
+.st-result:hover, .st-result:focus-within { background: var(--st-row-hover); }
+.st-result-go {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, var(--accent));
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: left;
+  cursor: pointer;
+}
+.st-result-go:hover { text-decoration: underline; }
+.st-result-go:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
+.st-result-path { color: var(--vscode-descriptionForeground, var(--muted)); font-weight: 400; }
+
+/* Narrow (< 720px, SettingsPanel NARROW_QUERY): section dropdown on top, content full width. */
+.st-body.is-narrow { flex-direction: column; }
+.st-section-picker { flex: none; padding: 8px 14px; border-bottom: 1px solid var(--vscode-sideBar-border, var(--border)); }
+.st-section-picker .st-select-wrap, .st-section-picker .st-select { width: 100%; }
+.st-body.is-narrow .st-main { padding: 0 0 48px; }

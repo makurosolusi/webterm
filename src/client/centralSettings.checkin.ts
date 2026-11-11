@@ -1,5 +1,5 @@
 // Settings › Central Agent: the self-started check-in switch and daily limit, read and written live.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { CheckinSettings } from '../shared/centralWork'
 import { CENTRAL_API } from './central/centralControlApi'
 import { centralErrorMessage } from './central/centralLoad'
@@ -7,6 +7,8 @@ import { isAbortError } from './inboxApi'
 import { request } from './inboxTransport'
 import { InboxApiError } from './inboxTypes'
 import { CENTRAL_TEXT } from './centralSettingsLabels'
+import { createSaveStates, type FieldSave } from './settingsSave'
+import { reloadSettings } from './useSettings'
 
 const PATH = `${CENTRAL_API}/checkin-settings`
 
@@ -21,17 +23,24 @@ export interface CheckinApi {
   data: CheckinSettings | null
   error: string | null
   saving: boolean
-  saveError: string | null
+  /** Saving… / Saved / error + Retry of one key. */
+  saveState(key: 'enabled' | 'dailyLimit'): FieldSave | undefined
   save(patch: Partial<Pick<CheckinSettings, 'enabled' | 'dailyLimit'>>): Promise<void>
   reload(): void
 }
 
-/** Loads `/api/central/checkin-settings`; a save shows what the server accepted, one at a time. */
+/** Loads `/api/central/checkin-settings`; a save shows the pick at once, then what the server accepted (the old
+ *  value + an inline error on failure), one at a time. The values live in the settings row, so a save also
+ *  re-reads settings: the panel's copy must not go stale. */
 export function useCheckinSettings(): CheckinApi {
   const [data, setData] = useState<CheckinSettings | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saves] = useState(createSaveStates)
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => saves.subscribe(rerender), [saves])
+  const latest = useRef<CheckinSettings | null>(null)
+  latest.current = data
   const inFlight = useRef(false)
   const [tick, setTick] = useState(0)
 
@@ -45,22 +54,27 @@ export function useCheckinSettings(): CheckinApi {
     return () => ac.abort()
   }, [tick])
 
-  const save: CheckinApi['save'] = useCallback(async (patch) => {
+  const save: CheckinApi['save'] = useCallback(async function save(patch) {
     if (inFlight.current) return
     inFlight.current = true
     setSaving(true)
-    setSaveError(null)
+    const before = latest.current
+    if (before) setData({ ...before, ...patch })
+    const settle = saves.start(Object.keys(patch))
     try {
       const reply = await request<unknown>(PATH, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
       setData(parse(reply))
+      settle({ ok: true })
+      void reloadSettings()
     } catch (err) {
-      setSaveError(centralErrorMessage(err, CENTRAL_TEXT.checkinFailed))
+      setData(before)
+      settle({ ok: false, message: centralErrorMessage(err, CENTRAL_TEXT.checkinFailed), retry: () => { void save(patch) } })
     } finally {
       inFlight.current = false
       setSaving(false)
     }
-  }, [])
+  }, [saves])
 
   const reload = useCallback(() => setTick((t) => t + 1), [])
-  return { data, error, saving, saveError, save, reload }
+  return { data, error, saving, saveState: saves.get, save, reload }
 }
