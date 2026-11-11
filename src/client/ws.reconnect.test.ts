@@ -158,3 +158,26 @@ test('backoff ceiling doubles up to the cap; the banner state says reconnecting;
   last().up()
   expect(getConnection().phase).toBe('connected')
 })
+
+test('a reconnect timer that outlives its DOM does not throw, and the test reset leaves no timer', async () => {
+  const { subscribe, __resetWsForTests, RECONNECT_MAX_MS } = await fresh()
+  subscribe('t8', () => {}, () => {})
+  last().up()
+  last().drop() // reconnect scheduled
+  const loc = (globalThis as any).location
+  delete (globalThis as any).location // what a torn-down jsdom env leaves behind
+  try {
+    const sockets = FakeWS.instances.length
+    expect(() => vi.advanceTimersByTime(RECONNECT_MAX_MS)).not.toThrow()
+    expect(FakeWS.instances.length).toBe(sockets) // no socket without an origin
+  } finally {
+    ;(globalThis as any).location = loc
+  }
+
+  subscribe('t9', () => {}, () => {})
+  last().up() // heartbeat interval running
+  last().drop() // and a reconnect timer
+  expect(vi.getTimerCount()).toBeGreaterThan(0)
+  __resetWsForTests()
+  expect(vi.getTimerCount()).toBe(0)
+})

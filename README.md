@@ -75,6 +75,16 @@ The channel runtime (webhook, binding API, reply sender) follows the Telegram ca
 
 The file manager API lives under `/api/fs/<verb>` and uses the same token gate as the rest of `/api`. GET verbs: `list`, `list-v2`, `read`, `read-binary`, `exists`, `stat`, `capabilities`, plus `raw` (needs `WEBTERM_FILES_VIEWERS`), `git-status` (`WEBTERM_FILES_GIT_STATUS`), and `search` (`WEBTERM_FILES_QUICK_OPEN`). POST verbs: `create`, `write`, `mkdir`, plus `delete`, `restore`, `rename`, `copy` (`WEBTERM_FILES_MUTATE`) and `upload` (`WEBTERM_FILES_UPLOAD`). A verb whose flag is off answers `501` with code `EDISABLED`. Design decisions and known limits: `docs/decisions/files-manager.md`.
 
+### Testing a fresh install
+
+```sh
+bun run dev:fresh
+```
+
+Starts a second, throwaway webterm that behaves like the first run on a machine that never had webterm, next to your normal one (which it never touches). It gets its own temp root (`$TMPDIR/webterm-fresh-*` with its own data dir, `HOME`, `CLAUDE_CONFIG_DIR` and Vite cache), its own port (first free from `8710`; never `8700`/`8701`) and proxy port, and its own tmux socket, so it cannot see or re-adopt your sessions. It drops `WEBTERM_*`, `NODETERM_*`, `TMUX*`, `XDG_*`, `ANTHROPIC_*` and `CLAUDE_CODE_*` from its environment and does not load `.env`. The banner prints the URL, the temp root and the token file path. Ctrl+C stops it and deletes the temp root.
+
+Flags: `--port <n>`, `--keep` (keep the temp root), `--no-claude` (remove every `PATH` directory holding a `claude` executable), `--with-provider-env` (keep `ANTHROPIC_*`/`CLAUDE_CODE_*` and load `.env`). It still uses this machine's OS, tmux, git and bun, and the same macOS login keychain (Claude Code keys its keychain entry by `CLAUDE_CONFIG_DIR`, so the fresh instance starts signed out; a sign-in there leaves a keychain entry behind).
+
 ## Signing in
 
 Nothing to configure. On the first `bun run dev` webterm opens your default browser already signed in: it writes a one-time code (single use, 60 s) into a `600` file in `<data dir>/run/` and opens that file, so the code never appears in a terminal, a URL you share, or `ps`. The browser keeps an HttpOnly `wt_ui` session cookie for 30 days of inactivity. A restart opens nothing; open tabs keep working.

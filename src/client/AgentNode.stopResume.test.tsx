@@ -4,7 +4,7 @@
 // Stop then Resume (agent-211-A5) and the sticky failed bar (A1/A2) on a real canvas (canvasHarness).
 // The terminal socket is a fake: the test plays the server's status/exit frames.
 import { fireEvent, waitFor, act } from '@testing-library/react'
-import { afterEach, beforeAll, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { AGENT_FAILED_TEXT } from './AgentFailedBar'
 import type { WsNode } from '../shared/workspace'
@@ -45,7 +45,9 @@ async function openMenu(): Promise<void> {
   await waitFor(() => expect(menu()).not.toBeNull())
 }
 
-beforeAll(() => { vi.stubGlobal('WebSocket', FakeWS); installCanvasDom() })
+beforeAll(installCanvasDom)
+// Per test: unmountCanvas unstubs globals and resets the shared socket, so each test opens its own.
+beforeEach(() => { vi.stubGlobal('WebSocket', FakeWS) })
 afterEach(() => { unmountCanvas(); vi.restoreAllMocks() })
 
 it('Stop leaves the node stopped and Resume session is offered with its sid', async () => {
