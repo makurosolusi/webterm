@@ -1,7 +1,6 @@
 // Klien REST tipis untuk /api/settings/token (server: tokenAccess.api.ts). Token transport hanya di header;
 // nilai token baru hanya dikembalikan ke pemanggil, tidak pernah ditulis ke log atau pesan galat.
 import { TOKEN_TEXT } from './tokenAccessLabels'
-import { TOKEN_PARAM } from './transportToken'
 
 const PATH = '/api/settings/token'
 
@@ -47,9 +46,6 @@ async function mint(suffix: string): Promise<string> {
 export const enableToken = (): Promise<string> => mint('/enable')
 /** Ganti token berbasis berkas; nilai token keluar sekali. */
 export const rotateToken = (): Promise<string> => mint('/rotate')
-
-/** One-time sign-in link; transportToken.exchangeLandingToken trades its `?token=` for the session cookie. */
-export const tokenLink = (origin: string, token: string): string => `${origin}/?${TOKEN_PARAM}=${encodeURIComponent(token)}`
 
 /** Kode galat -> kalimat jujur untuk pengguna. */
 export function tokenErrorText(err: unknown): string {

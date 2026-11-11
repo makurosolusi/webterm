@@ -1,17 +1,18 @@
 // /m shell: four tabs (Brief, Inbox, Agents, Timeline) chosen by the URL hash, so a notification
-// tap (`/m/#inbox`) lands on the right screen. A token-protected server answering 401/403 shows the
-// sign-in field: the token is traded once for the `wt_ui` session cookie (POST /auth/login), which
-// an installed PWA keeps across launches.
+// tap (`/m/#inbox`) lands on the right screen. A server answering 401/403 shows the account sign-in
+// (username + password, POST /auth/login -> the `wt_ui` session cookie an installed PWA keeps across
+// launches); before the first account exists it says to create it on the computer first.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import { MobileAgents } from './MobileAgents'
 import { MobileBrief, MobileTimeline } from './MobileFeeds'
 import { MobileInbox } from './MobileInbox'
 import { MobilePushCard } from './MobilePushCard'
-import { loginWithToken, logout } from '../transportToken'
+import { LoginForm } from '../SignInForms'
+import { SIGN_IN_TEXT } from '../signInLabels'
+import { fetchMe, logout } from '../transportToken'
 
 export const TABS = [
   { id: 'brief', label: 'Brief' },
@@ -25,26 +26,22 @@ export const tabFromHash = (hash: string): TabId => TABS.find((t) => `#${t.id}` 
 
 type Auth = 'checking' | 'ok' | 'needed'
 
-function SignIn(): React.JSX.Element {
-  const [token, setToken] = useState('')
+/** Sign-in for /m: the desktop's LoginForm, or the "create it on the computer" handoff before setup. */
+function SignIn({ reload }: { reload: () => void }): React.JSX.Element {
+  const [setup, setSetup] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const submit = async () => {
-    let status: number
-    try {
-      status = await loginWithToken(token.trim())
-    } catch (err) {
+  useEffect(() => {
+    fetchMe().then((m) => setSetup(m.setupRequired), (err: unknown) => {
       setError(`Could not reach the server: ${err instanceof Error ? err.message : String(err)}`)
-      return
-    }
-    if (status !== 204) { setError(status === 403 ? 'That token was not accepted.' : `Sign-in failed (HTTP ${status}).`); return }
-    location.reload()
-  }
+      setSetup(false) // still offer the form: it reports its own failure if the server stays away
+    })
+  }, [])
   return (
     <main className="m-signin">
       <h1>webterm</h1>
-      <p>This server needs its access token. Open the sign-in link from the desktop, or paste the token here.</p>
-      <Input type="password" autoComplete="off" aria-label="Access token" value={token} onChange={(e) => setToken(e.target.value)} />
-      <Button type="button" className="m-btn m-primary" disabled={!token.trim()} onClick={() => void submit()}>Sign in</Button>
+      {setup === null ? <p role="status">{SIGN_IN_TEXT.loading}</p>
+        : setup ? <p>{SIGN_IN_TEXT.mobileSetup}</p>
+          : <><p>{SIGN_IN_TEXT.intro}</p><LoginForm idPrefix="m-signin" onDone={reload} /></>}
       {error && <p className="m-error" role="alert">{error}</p>}
     </main>
   )
@@ -59,7 +56,10 @@ async function signOut(): Promise<void> {
   location.reload()
 }
 
-export function MobileApp(): React.JSX.Element {
+const reloadPage = (): void => location.reload()
+
+/** The /m shell; `reload` (after sign-in) is replaced by tests. */
+export function MobileApp({ reload = reloadPage }: { reload?: () => void } = {}): React.JSX.Element {
   const [tab, setTab] = useState<TabId>(() => tabFromHash(location.hash))
   const [auth, setAuth] = useState<Auth>('checking')
 
@@ -75,7 +75,7 @@ export function MobileApp(): React.JSX.Element {
     })
   }, [])
 
-  if (auth === 'needed') return <SignIn />
+  if (auth === 'needed') return <SignIn reload={reload} />
   if (auth === 'checking') return <main className="m-app" aria-busy="true" />
 
   return (

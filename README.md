@@ -24,14 +24,14 @@ bun run dev
 
 Serves http://127.0.0.1:8700.
 
-Features are switched in Settings > **Capabilities**: seven cards (Central Agent, Worker orchestrator, Central Agent autonomy, Browser on canvas, Files, Edit and upload files, Telegram), each one on/off switch that applies immediately, with no restart, plus an **Access token** card (enable or rotate the access token; no switch). A capability also turns on what it needs: workers need Central, autonomy needs workers, file writes need file viewing. The per-feature variables below are no longer the main path; they are still read as legacy input (a child key whose parent capability is off is ignored, with one warning per key). Changing settings or capabilities needs the signed-in webterm page (see [Signing in](#signing-in)); scripts send the root token in `x-webterm-token`. Design and limits: `docs/decisions/envsimple.md`; changes: `docs/changelog/envsimple.md`.
+Features are switched in Settings > **Capabilities**: seven cards (Central Agent, Worker orchestrator, Central Agent autonomy, Browser on canvas, Files, Edit and upload files, Telegram), each one on/off switch that applies immediately, with no restart, plus an **Automation token** card (enable or rotate the root token used by scripts and agents; no switch). A capability also turns on what it needs: workers need Central, autonomy needs workers, file writes need file viewing. The per-feature variables below are no longer the main path; they are still read as legacy input (a child key whose parent capability is off is ignored, with one warning per key). Changing settings or capabilities needs the signed-in webterm page (see [Signing in](#signing-in)); scripts send the root token in `x-webterm-token`. Design and limits: `docs/decisions/envsimple.md`; changes: `docs/changelog/envsimple.md`.
 
 Environment variables:
 
 - `PORT` — listen port (default `8700`); a bad value aborts startup.
 - `WEBTERM_PROXY_PORT` — port of the separate-origin dev-server proxy (`/proxy/<port>`), default `PORT+1` on the same host; if it is busy the OS picks one. Read once at boot.
 - `HOST` — bind address (default `127.0.0.1`); `WEBTERM_HOST` is an accepted fallback.
-- `WEBTERM_TOKEN` — the root access token, required on `/api` and `/ws` on every bind, loopback included. Without this variable, webterm reads `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`) or generates it there on first start; a TTY prints the file path, never the value. Scripts send it in the `x-webterm-token` header; it is never accepted in a URL query. Rotate it from Settings > Capabilities > Access token, which signs every other browser out. The `/ws` and `/ws/browser` WebSockets on the browser cookie also need the page's same-origin `Origin` header; clients without one get `403 origin_required`.
+- `WEBTERM_TOKEN` — the root access token, required on `/api` and `/ws` on every bind, loopback included. Without this variable, webterm reads `<data dir>/secrets/WEBTERM_TOKEN` (mode `600`) or generates it there on first start; a TTY prints the file path, never the value. Scripts send it in the `x-webterm-token` header; it is never accepted in a URL query. Rotate it from Settings > Capabilities > Automation token, which signs every other browser out. The `/ws` and `/ws/browser` WebSockets on the browser cookie also need the page's same-origin `Origin` header; clients without one get `403 origin_required`.
 - `NODE_ENV` — defaults to dev; set `production` to serve the built `dist/` statically.
 - `WEBTERM_DATA_DIR` — data directory for the SQLite store (`webterm.db`), default `~/.webterm-server`. It also holds the `webterm` CLI (`bin/webterm`) and the Claude provider settings (`claude-provider/`, mode `600`). Ledger migrations (up to v22) run automatically on start.
 - `WEBTERM_AGENT_SANDBOX` — default `on`. Claude agents run shell commands in the Claude Code sandbox (macOS), so they cannot read webterm secrets or other nodes' tokens. Applies on the next agent launch; also in Settings > Control.
@@ -87,11 +87,13 @@ Flags: `--port <n>`, `--keep` (keep the temp root), `--no-claude` (remove every 
 
 ## Signing in
 
-Nothing to configure. On the first `bun run dev` webterm opens your default browser already signed in: it writes a one-time code (single use, 60 s) into a `600` file in `<data dir>/run/` and opens that file, so the code never appears in a terminal, a URL you share, or `ps`. The browser keeps an HttpOnly `wt_ui` session cookie for 30 days of inactivity. A restart opens nothing; open tabs keep working.
+Nothing to configure. On the first `bun run dev` webterm opens your default browser on a **Create your webterm account** form (username, a password of at least 12 characters): it writes a one-time code (single use, 60 s) into a `600` file in `<data dir>/run/` and opens that file, so the code never appears in a terminal, a URL you share, or `ps`. The browser keeps an HttpOnly `wt_ui` session cookie for 30 days of inactivity. A restart opens nothing; open tabs keep working.
 
-- A signed-out tab shows a sign-in screen: "Open signed-in window" opens a new signed-in window on the computer running webterm (at most one per 10 s), or paste the access token from `<data dir>/secrets/WEBTERM_TOKEN`.
-- Headless or remote: paste the token on that screen, or open `http://<host>:<port>/?token=<token>` once. The page trades the token for the cookie and removes it from the address bar; the server never accepts a token from a URL otherwise.
-- Sign out from the workspace bar. Rotating the token signs every other browser out.
+- There is one account, created on first run. Creating it needs proof that you are on the computer running webterm: the window webterm opened (or "Open setup window on this computer"), or, from another device, the setup code in `<data dir>/secrets/SETUP_CODE` ("Setting up from another device?" on the setup screen).
+- A signed-out tab asks for the username and password and returns to the page you asked for. "Open signed-in window" still opens a signed-in window on the computer running webterm without a password (at most one per 10 s). Repeated wrong passwords are slowed down (the screen counts down), never locked out.
+- Settings > **Account** (`?settings=account`, or the account button in the title bar): change the username or password (a password change signs every other session out), see the browsers signed in to your account and sign any of them out, and Sign out here.
+- Forgot the password: run `webterm --reset-password <username>` (see [Command-line options](#command-line-options)).
+- The access token no longer signs people in once the account exists: it is the automation token for scripts, MCP clients and agents (Settings > Capabilities > Automation token). A `/?token=` link is ignored then. Rotating the token signs every other browser out.
 - Scripts and agents never use the cookie: scripts send the root token in `x-webterm-token`, and agent sessions use their own node token (the `webterm` CLI reads it from the node's header file).
 
 ## Agent Chat node
@@ -150,6 +152,7 @@ The server entry (`./webterm` or `bun src/server/index.ts`) handles these before
 - `-v, --version` — version and build id.
 - `-r, --readme` — this README, built into the binary (paged through `less` on a terminal).
 - `-d, --docs [topic]` — list topics (this README's sections plus `env`, the full environment reference), or print one.
+- `--reset-password <username>` — set a new password for an account and sign it out everywhere, without starting the server. It asks twice on a terminal (no echo), or reads the first line of stdin. Exit status 0 on success, 1 when the account (or the database) does not exist, 2 on a usage error or a password shorter than 12 characters.
 
 An unknown option prints a suggestion and exits with status 2.
 

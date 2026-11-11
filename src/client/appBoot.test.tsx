@@ -9,17 +9,19 @@ import { SIGN_IN_POLL_MS, SIGN_IN_TEXT } from './SignInScreen'
 import { AUTH_ME_PATH } from './transportToken'
 
 let signedIn: boolean | 'fail' = false
+let setupRequired = false
 let urls: string[] = []
 
 beforeEach(() => {
   vi.useFakeTimers()
   signedIn = false
+  setupRequired = false
   urls = []
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     urls.push(url)
     if (url !== AUTH_ME_PATH) return new Response(null, { status: 403 })
     if (signedIn === 'fail') throw new TypeError('network down')
-    return new Response(JSON.stringify({ signedIn }), { status: 200 })
+    return new Response(JSON.stringify({ signedIn, setupRequired }), { status: 200 })
   }))
 })
 afterEach(() => {
@@ -33,6 +35,12 @@ describe('bootView', () => {
   it('signed in -> the app', async () => {
     signedIn = true
     expect(await bootView()).toBe('app')
+  })
+
+  it('a session without an account yet (setup pending) -> the sign-in page, which shows the setup form', async () => {
+    signedIn = true
+    setupRequired = true
+    expect(await bootView()).toBe('sign-in')
   })
 
   it('signed out -> the sign-in page, and only /auth/me is asked while it shows', async () => {

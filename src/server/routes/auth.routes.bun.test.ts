@@ -14,6 +14,8 @@ process.env.WEBTERM_DATA_DIR = dataDir // before ../uiSession -> ../db opens
 const { createUiAuthRoute, OPEN_INTERVAL_MS, revokeOtherSessions } = await import('./auth.routes')
 const { CODE_TTL_MS, autoOpenAtBoot, createUiOpener } = await import('../uiOpen')
 const { SESSION_IDLE_MS, createUiSessionStore } = await import('../uiSession')
+const { createUserStore } = await import('../uiUser')
+const { createLoginThrottle } = await import('../loginThrottle')
 const { UI_SESSION_COOKIE } = await import('../auth')
 
 const ROOT_TOKEN = 'root-token-test-only-0123456789abcdef' // test-only
@@ -22,10 +24,12 @@ let clock = 1_000_000
 const now = () => clock
 let mem = new Database(':memory:')
 let store = createUiSessionStore(mem, now)
+let users = createUserStore(mem, now)
 let opened: string[] = []
 let token: string | undefined = ROOT_TOKEN
 const opener = createUiOpener({ runDir, bindHost: '127.0.0.1', port: 1, now, openFile: async (p) => { opened.push(p) } })
-let route = createUiAuthRoute({ sessions: () => store, opener, token: () => token, now })
+const deps = () => ({ sessions: () => store, users: () => users, opener, token: () => token, dataDir: () => dataDir, throttle: createLoginThrottle(now), now })
+let route = createUiAuthRoute(deps())
 
 const server = http.createServer((req, res) => {
   if (!route(req, res, new URL(req.url ?? '/', 'http://x'))) { res.statusCode = 404; res.end() }
@@ -39,9 +43,10 @@ beforeEach(() => {
   clock += OPEN_INTERVAL_MS + CODE_TTL_MS // fresh rate-limit window, any earlier code expired
   mem = new Database(':memory:')
   store = createUiSessionStore(mem, now)
+  users = createUserStore(mem, now)
   opened = []
   token = ROOT_TOKEN
-  route = createUiAuthRoute({ sessions: () => store, opener, token: () => token, now })
+  route = createUiAuthRoute(deps())
 })
 
 interface Reply { status: number; headers: http.IncomingHttpHeaders; body: string }
@@ -110,11 +115,12 @@ describe('GET /auth/open: one-time code -> HttpOnly cookie', () => {
 
 describe('GET /auth/me and session lifetime', () => {
   test('signedIn follows a live cookie; 30 days idle ends it', async () => {
-    expect(JSON.parse((await call('GET', '/auth/me')).body)).toEqual({ signedIn: false })
+    const out = { signedIn: false, setupRequired: true, user: null, tokenSignIn: true }
+    expect(JSON.parse((await call('GET', '/auth/me')).body)).toEqual(out)
     const raw = store.create()
-    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ signedIn: true })
+    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ ...out, signedIn: true })
     clock += SESSION_IDLE_MS + 1
-    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ signedIn: false })
+    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual(out)
     expect(store.count()).toBe(0)
   })
 
@@ -145,6 +151,35 @@ describe('POST /auth/request-open: the server opens the window, the code never l
     expect(Number(again.headers['retry-after'])).toBeGreaterThan(0)
     expect(opened.length).toBe(1)
     expect((await call('GET', `/auth/open?code=${code}`)).status).toBe(303)
+  })
+
+  /** Request a window with `body`, then follow the redirect file's link: where does the browser land? */
+  async function landing(body?: string): Promise<{ link: string; location: string | undefined }> {
+    clock += OPEN_INTERVAL_MS // each call is its own rate-limit window
+    expect((await call('POST', '/auth/request-open', SAME, body)).status).toBe(202)
+    const link = /url=(\/?[^"]*\/auth\/open\?[^"]+)"/.exec(readFileSync(opened.at(-1)!, 'utf8'))![1]!.replace(/&amp;/g, '&')
+    const u = new URL(link)
+    return { link, location: (await call('GET', u.pathname + u.search)).headers.location }
+  }
+
+  test('`next` rides into the redirect file URL-encoded and is where the window lands', async () => {
+    const next = '/w/abc?tab=central&q=a b#x'
+    const r = await landing(JSON.stringify({ next }))
+    expect(r.link).toContain(`&next=${encodeURIComponent(next)}`)
+    expect(r.location).toBe(next)
+  })
+
+  test('unsafe, missing or malformed `next` lands on `/`, never off-origin', async () => {
+    for (const next of ['//evil.test', 'https://evil.test', '/\\evil.test', '/\u0000x']) {
+      const r = await landing(JSON.stringify({ next }))
+      expect(r.link).not.toContain('next=')
+      expect(r.location).toBe('/')
+    }
+    for (const body of [undefined, '', '{', '[]', JSON.stringify({ next: 42 })]) {
+      const r = await landing(body)
+      expect(r.link).not.toContain('next=')
+      expect(r.location).toBe('/')
+    }
   })
 
   test('a cross-site page cannot drive it', async () => {

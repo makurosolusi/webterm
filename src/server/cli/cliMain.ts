@@ -1,4 +1,5 @@
-// Runs a parsed CLI action. Fully synchronous (writeSync, spawnSync for the pager) so cliGate.ts can
+// Runs a parsed CLI action. Fully synchronous (writeSync, spawnSync for the pager, sync hashing for
+// --reset-password) so cliGate.ts can
 // exit before index.ts evaluates its next import: no DB, port, tmux or ledger is touched for a flag.
 import { spawnSync } from 'node:child_process'
 import { writeSync } from 'node:fs'
@@ -10,6 +11,7 @@ import { childEnv } from '../childEnv'
 import { createServerIdentity } from '../health.api'
 import { parseArgs } from './cliArgs'
 import { buildHelp, buildTopicList, buildVersion, docsTopic, topicSlugs } from './cliHelp'
+import type * as ResetPassword from './cliResetPassword'
 
 export const EXIT_OK = 0
 export const EXIT_USAGE = 2
@@ -53,6 +55,12 @@ export function runCli(argv: readonly string[]): number | 'serve' {
       const { build } = createServerIdentity({ distDir: join(import.meta.dirname, '../../../dist'), dev: process.env.NODE_ENV !== 'production' })
       writeAll(STDOUT, buildVersion(pkg.version, build))
       return EXIT_OK
+    }
+    case 'reset-password': {
+      // Loaded only for this flag: its import chain (db.ts and friends) creates the data dir, and the
+      // other flags must leave no trace. require() stays synchronous and is bundled by `--compile`.
+      const { runResetPassword } = require('./cliResetPassword') as typeof ResetPassword
+      return runResetPassword(action.username, { writeErr: (t) => writeAll(STDERR, t), writeOut: (t) => writeAll(STDOUT, t) })
     }
     case 'readme':
       page(readme)

@@ -6,16 +6,13 @@
 // changes inside an open overlay and closing it replace the entry.
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
-import type { SectionId } from './SettingsPanel'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
+import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 
-/** `?settings=` values: the ids of `SETTINGS_SECTIONS` (a test keeps both lists equal). Listed here,
- *  not imported, so the lazily loaded Settings panel stays out of the start-up chunk. */
-export const SETTINGS_ROUTE_SECTIONS = [
-  'terminal', 'interaction', 'shell', 'agent', 'central', 'rules', 'memory', 'automations', 'spending',
-  'canvas', 'background', 'capabilities', 'health', 'developer',
-] as const satisfies readonly SectionId[]
+/** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
+ *  loaded Settings panel stays out of the start-up chunk. */
+export const SETTINGS_ROUTE_SECTIONS: readonly SectionId[] = SETTINGS_SECTIONS.map((s) => s.id)
 /** Retired ids and where they land now: `env`/`channels` -> Capabilities, the old Control mega page -> Health. */
 const LEGACY_SETTINGS_SECTION: Readonly<Record<string, SettingsRouteSection>> = {
   env: 'capabilities', channels: 'capabilities', control: 'health', [CANVAS_BG_WORKSPACE_SECTION]: CANVAS_BG_SECTION,
@@ -33,7 +30,7 @@ export const BOTTOM_PANEL_ROUTE_IDS = ['problems', 'activity', 'output', 'tasks'
 /** `?view=` values: full-screen views over the board. */
 export const APP_ROUTE_VIEWS = ['kanban'] as const
 
-export type SettingsRouteSection = (typeof SETTINGS_ROUTE_SECTIONS)[number]
+export type SettingsRouteSection = SectionId
 export type CentralRouteTab = (typeof CENTRAL_ROUTE_TABS)[number]
 export type BottomPanelRouteId = (typeof BOTTOM_PANEL_ROUTE_IDS)[number]
 export type AppRouteView = (typeof APP_ROUTE_VIEWS)[number]

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
 import {
-  RESERVED_PORTS, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, makeFreshRoot, parseFreshArgs,
+  RESERVED_PORTS, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, freshSetupCodePath, makeFreshRoot, parseFreshArgs,
   pathWithout, removeFreshRoot, startFresh, waitForHttp,
 } from './devFresh'
 
@@ -95,6 +95,7 @@ test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token
   expect((await fetch(`${fresh.url}/api/health`)).status).toBe(403)
   expect(existsSync(join(fresh.paths.data, 'webterm.db'))).toBe(true)
   expect(existsSync(join(fresh.paths.data, 'secrets', 'WEBTERM_TOKEN'))).toBe(true)
+  expect(existsSync(freshSetupCodePath(fresh.paths))).toBe(true) // the banner names this file: a fresh install has no account
   await fresh.stop()
   expect(existsSync(fresh.paths.root)).toBe(false)
 }, 90_000)

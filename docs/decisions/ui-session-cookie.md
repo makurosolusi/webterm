@@ -47,6 +47,38 @@ own actions or enabled a token it then knew (sec-208-1). Tokens in URLs also end
    reachable, but every credential (the token file, the browser profile that holds the cookie, other
    nodes' token files) is outside what the sandbox may read, and `webterm.db` holds only cookie hashes.
 
+## Accounts (2026-11-11)
+
+Code: `src/server/uiUser.ts`, `src/server/setupCode.ts`, `src/server/loginThrottle.ts`,
+`src/server/routes/auth.routes.ts`, `src/server/routes/auth.account.routes.ts`, `src/server/bootWiring.ts`.
+
+Humans now sign in with a username and password; the root token stays for machines.
+
+1. **First account.** `POST /auth/setup` creates the only account and needs proof that the caller is
+   on this machine: a live `wt_ui` session (token era, or a window the server opened) OR the setup code
+   in `<data dir>/secrets/SETUP_CODE` (0600). Boot prints one line naming that file, never the value. A
+   local process that can only reach the port cannot claim a fresh install. Setup calls are serialised,
+   so two at once give one 201 and one 409. Success clears the code and revokes every earlier session.
+2. **Fresh session on every sign-in.** Login, setup and token sign-in revoke the cookie the caller sent
+   and set a new one (no session fixation). Sessions store the User-Agent (200 chars) for the list.
+3. **Throttle.** Failed logins and failed password checks back off per account and per socket peer
+   (`req.socket.remoteAddress`; `X-Forwarded-For` is ignored because the client sets it). 429 carries
+   `Retry-After`. There is no permanent lockout. `auth.login_failed` logs no username.
+4. **Token sign-in for humans ends at the first account.** `POST /auth/login { token }` answers 409
+   `token_sign_in_disabled` once an account exists. The token still works in `x-webterm-token`, and
+   `/api` and the WebSockets keep accepting cookie, token or node token as before. Rotate stays.
+5. **`/auth/open` stays passwordless.** A window the server opens on this machine (a one-time code
+   in a 0600 file) still signs in without a password, bound to the account when exactly one exists.
+   Whoever can read the data dir can already read the token, so a password adds nothing there.
+   `next=` is followed only for a same-origin path (`/x`; not `//x`, `/\x`, a scheme or a control character).
+6. **Own sessions only.** `/auth/sessions` lists and revokes the caller's sessions (token-era sessions
+   when no account exists). A password change revokes every other session of the user.
+
+References: code-server (password login -> session cookie), OWASP ASVS 3.2/3.3 (new session on login,
+logout elsewhere on password change), NIST 800-63B (length rules, throttling without lockout).
+
+Locks: `src/server/routes/auth.account.routes.bun.test.ts`, `src/server/routes/auth.routes.bun.test.ts`.
+
 ## References
 
 - Jupyter Server: a token printed to the terminal and a 0600 redirect file opened in the browser
@@ -65,8 +97,8 @@ own actions or enabled a token it then knew (sec-208-1). Tokens in URLs also end
   enforced. Every boot now enforces one, so it could never switch on; it was removed (2026-11-06). DNS
   rebinding stays closed by the credential: a rebinding page has no root token header and no `wt_ui`
   cookie for this origin, so it gets 403.
-- There is no `webterm open` operator command. Headless setups paste the token from the file the boot
-  line names; its value is never printed.
+- There is no `webterm open` operator command. A headless setup creates the account with the setup code
+  from the file the boot line names (before accounts: pasted the token); neither value is ever printed.
 
 Locks: `src/server/boot.zeroenv.bun.test.ts` (every `/api` path and `/ws` refuses no credential and
 `?token=`, and the token is never logged), `src/server/routes/route.uiOnly.policy.bun.test.ts` (forged
