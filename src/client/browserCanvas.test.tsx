@@ -4,7 +4,7 @@
 // Chromium dan server tidak ada: fetch dan WebSocket dipalsukan.
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { BrowserStatusResp } from '../shared/browser.contract'
+import { BROWSER_WS_PATH, type BrowserStatusResp } from '../shared/browser.contract'
 import { resetBrowserStatusCache } from './browser.feature'
 import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { resetCapabilitiesCache } from './useCapabilities'
@@ -15,6 +15,9 @@ import { MENU_LABELS } from './canvasMenu.model'
 const OUTSIDE_SIDE_BAR = { ignore: 'script, style, .sessions-sidebar *' }
 
 const urls: string[] = []
+// The app also opens the shared terminal socket /ws eagerly at start; these tests are about the
+// browser socket only.
+const browserUrls = () => urls.filter((u) => new URL(u).pathname === BROWSER_WS_PATH)
 class FakeWs {
   binaryType = ''
   readyState = 0
@@ -48,7 +51,7 @@ describe('flag browser mati (default)', () => {
     fireEvent.contextMenu(document.querySelector('.react-flow__pane') as HTMLElement, { clientX: 50, clientY: 50 })
     await screen.findByText(MENU_LABELS.terminal, OUTSIDE_SIDE_BAR)
     expect(screen.queryByText(MENU_LABELS.browser)).not.toBeNull()
-    expect(urls).toEqual([])
+    expect(browserUrls()).toEqual([])
     // Satu-satunya request browser dari klien: probe status (404 => fitur tak ada).
     expect(fetched().filter((u) => u.startsWith('/api/browser/'))).toEqual(['/api/browser/status'])
   })
@@ -117,9 +120,8 @@ describe('flag browser menyala', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Browser' }))
 
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
-    await waitFor(() => expect(urls).toHaveLength(1))
-    expect(urls[0]).toContain('/ws/browser')
-    expect(new URL(urls[0]).searchParams.get('workspaceId')).toBe(HARNESS_WS_ID)
+    await waitFor(() => expect(browserUrls()).toHaveLength(1))
+    expect(new URL(browserUrls()[0]).searchParams.get('workspaceId')).toBe(HARNESS_WS_ID)
     expect(screen.getByRole('toolbar', { name: TOOLBAR_TEXT.group })).not.toBeNull()
   })
 
