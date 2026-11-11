@@ -32,3 +32,9 @@
 /* Label dan tombol satu baris (tidak menyusut/membungkus); hanya input yang boleh melebar. */
 .welcome__empty > label, .welcome__empty > button { flex: none; white-space: nowrap; }
 .welcome__empty > input { flex: 1 1 160px; min-width: 0; }
+/* "Finish setup" card above the columns: a bordered block so it reads as the next thing to do. */
+.welcome__setup {
+  margin-bottom: 24px; padding: 12px 16px; max-width: 420px;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border)); border-radius: 4px;
+}
+.welcome__setup-cta { margin-top: 8px; }

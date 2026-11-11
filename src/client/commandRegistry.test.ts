@@ -3,6 +3,9 @@ import {
   chordLabel, commandForChord, effectiveKey, eventChord, findConflicts, listCommands, normalizeChord, registerCommands, type Command,
 } from './commandRegistry'
 import { FIXED_COMMANDS, appCommands } from './commandRegistry.defaults'
+import { openSetup } from './setup/setup.open'
+
+vi.mock('./setup/setup.open', () => ({ openSetup: vi.fn() }))
 
 const key = (k: Partial<KeyboardEvent>) => ({ key: '', code: '', metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...k })
 
@@ -81,6 +84,16 @@ describe('registry', () => {
 })
 
 describe('diff command', () => {
+  it('"Setup: Open" opens the setup wizard', () => {
+    const base = {
+      openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(),
+      newTerminal: vi.fn(), newFiles: vi.fn(), fitView: vi.fn(), toggleMaximizeNode: vi.fn(), toggleSessions: vi.fn(), toggleChat: vi.fn(), toggleSecondarySideBar: vi.fn(), toggleBoard: vi.fn(),
+    }
+    const cmd = appCommands(base).find((c) => c.label === 'Setup: Open')
+    cmd?.run?.()
+    expect(openSetup).toHaveBeenCalledOnce()
+  })
+
   it('exists only when the board wires newDiff, and runs it', () => {
     const base = {
       openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(),

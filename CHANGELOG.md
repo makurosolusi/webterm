@@ -21,6 +21,8 @@ Operator notes:
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
+- First-run setup after sign-in: connect Claude, set up the browser node, Central Agent and the basics; each step can be skipped, closing keeps progress, and Help › Set up webterm… (or `Setup: Open` in ⌘K) reopens it.
+- Welcome screen: a "Finish setup" checklist showing which setup steps are done, skipped or not set; click one to jump to it.
 - Accounts: on first run you create the owner account (username and a password of at least 12 characters) from the computer running webterm, or from another device with the setup code in `<data dir>/secrets/SETUP_CODE`. After that you sign in with that username and password; the sign-in screen counts down after too many wrong tries and brings you back to the page you asked for.
 - Settings > Account (`?settings=account`, also the account button in the title bar): change your username or password (a password change signs every other session out), see each browser signed in to your account with when it was last active, sign any of them out or all others at once, and Sign out.
 - `webterm --reset-password <username>` sets a new password without starting the server and signs that account out everywhere.
@@ -153,6 +155,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Welcome no longer lists "Connect over SSH…", which never worked; with no workspace open the title bar hides the layout and workspace-options buttons instead of showing them disabled.
 - The access token is now for automation only (scripts, MCP clients, agents): Settings > Capabilities shows it as "Automation token" and shows the new value itself after Enable or Rotate. People sign in with their account; once it exists, pasting the token or opening a `/?token=` link no longer signs a browser in. The phone view (`/m`) signs in with the same username and password.
 - Central's context management is on by default, and a full conversation rotates to a fresh session instead of being refused.
 - Central saves its state before its context is compacted and restores it afterwards.

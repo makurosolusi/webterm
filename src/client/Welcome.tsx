@@ -7,6 +7,9 @@ import { sessionLabel } from './sessionList'
 import type { ClosedEntry } from './closedHistory'
 import { confirmReopen, ReopenConfirmHost } from './reopenConfirm'
 import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
+import { SetupChecklist } from './Welcome.setup'
+import { openSetup } from './setup/setup.open'
+import type { SetupState } from '../shared/settings'
 import './welcome.css'
 
 interface Props {
@@ -14,25 +17,23 @@ interface Props {
   onCreateEmpty: (name: string) => void
   closedSessions?: ClosedEntry[]
   onReopen?: (id: string) => void
+  /** Hydrated setup state; absent (settings still loading) = no setup card, so it never flashes. */
+  setup?: SetupState
 }
 
-function StartLink({ icon, label, onClick, disabled }: { icon: string; label: string; onClick?: () => void; disabled?: boolean }) {
-  const link = (
-    <Button type="button" variant="link" className="welcome__link" disabled={disabled} onClick={disabled ? undefined : onClick}>
-      <span className={`codicon codicon-${icon}`} aria-hidden />
-      <span>{label}</span>
-    </Button>
-  )
-  // The text already names an enabled link; only a disabled one needs a hint (why).
+function StartLink({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
     <li>
-      {disabled ? <IconTooltip label={label} disabled disabledReason="not available in webterm yet">{link}</IconTooltip> : link}
+      <Button type="button" variant="link" className="welcome__link" onClick={onClick}>
+        <span className={`codicon codicon-${icon}`} aria-hidden />
+        <span>{label}</span>
+      </Button>
     </li>
   )
 }
 
 /** Layar Welcome tanpa workspace: daftar Start (link biru) dan Recently closed, seperti editor Welcome VS Code. */
-export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, onReopen }: Props) {
+export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, onReopen, setup }: Props) {
   const [name, setName] = useState('')
   const closed = closedSessions ?? []
 
@@ -48,6 +49,8 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
         <h1 className="welcome__title">webterm</h1>
         <div className="welcome__subtitle">A canvas of terminals. Start a project to begin.</div>
 
+        {setup && <SetupChecklist setup={setup} onOpen={openSetup} />}
+
         <div className="welcome__columns">
           <section className="welcome__section" aria-labelledby="welcome-start">
             <h2 id="welcome-start" className="welcome__heading">Start</h2>
@@ -55,7 +58,6 @@ export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, o
               <StartLink icon="new-folder" label="New project" onClick={() => openWorkspaceCreate('project')} />
               <StartLink icon="folder-opened" label="Open folder…" onClick={() => onNewProject()} />
               <StartLink icon="repo-clone" label="Clone repo…" onClick={() => openWorkspaceCreate('clone')} />
-              <StartLink icon="remote" label="Connect over SSH…" disabled />
             </ul>
             {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}
             <div className="welcome__empty">

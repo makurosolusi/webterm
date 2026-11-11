@@ -4,6 +4,7 @@
 // the Keyboard Shortcuts overlay is generated from one list and conflicts are checked against them.
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
+import { openSetup } from './setup/setup.open'
 
 export const FIXED_COMMANDS: Command[] = [
   { id: 'editor.save', label: 'File: Save (editor node)', defaultKey: 'Mod+S', scope: 'editor', fixed: true },
@@ -70,6 +71,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'workbench.findInFiles', label: 'Search: Find in Files', defaultKey: 'Mod+Shift+F', run: d.openFindInFiles },
     { id: 'workbench.keybindings', label: 'Preferences: Keyboard Shortcuts', run: d.openShortcuts },
     { id: 'workbench.settings', label: 'Preferences: Open Settings', defaultKey: 'Mod+,', run: d.openSettings },
+    { id: 'workbench.setup', label: 'Setup: Open', run: () => openSetup() },
     { id: 'terminal.new', label: 'Terminal: New Terminal', defaultKey: 'Ctrl+Shift+`', run: d.newTerminal },
     { id: 'files.new', label: 'Explorer: New Files Node', run: d.newFiles },
     ...(d.newBrowser ? [{ id: 'browser.new', label: 'Browser: New Browser Node', run: d.newBrowser }] : []),

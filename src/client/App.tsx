@@ -4,6 +4,7 @@ import '@xyflow/react/dist/style.css'
 import AppDock, { AppWorkspaceBar } from './App.chrome'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
+import AppSetup from './App.setup'
 import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
 import ConnectionStatus from './ConnectionStatus'
@@ -230,10 +231,8 @@ export default function App() {
       <div className="app-main">
         {!hydrated ? <BootScreen boot={boot} onRetry={retryBoot} /> : noWorkspaces ? (
           <Welcome
-            onNewProject={onNewProject}
-            onCreateEmpty={(name) => void onCreateReported(name)}
-            closedSessions={closedSessions}
-            onReopen={(id) => void reopenClosed(id, reopenDeps)}
+            onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateReported(name)} setup={settingsHydrated ? settings.setup : undefined}
+            closedSessions={closedSessions} onReopen={(id) => void reopenClosed(id, reopenDeps)}
           />
         ) : (
           <BoardHost
@@ -286,6 +285,7 @@ export default function App() {
       {cleanView && <CleanViewHint />}
       <ConnectionStatus onAuthRequired={requireSignIn} />{/* one app-wide surface; `auth` reuses the boot gate above */}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
+      <AppSetup settings={settings} update={update} hydrated={settingsHydrated} />
       <SettingsHost section={route.settings} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (
