@@ -60,6 +60,8 @@ export interface WorkspaceLifecycleDeps {
   rf: RefObject<ReactFlowInstance | null>
   /** "View: Fit Canvas" (`canvasViewport.onFit`), for the central agent's `canvas.show` with `fit`. */
   onFit: () => void
+  /** Board named by the URL at boot (`/w/:id`), see `useWorkspaceBoot`. */
+  urlWorkspaceId?: string | null
 }
 
 export interface WorkspaceLifecycle {
@@ -82,10 +84,10 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   const {
     workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
     setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-    activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit,
+    activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, urlWorkspaceId,
   } = deps
 
-  const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired })
+  const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired, urlWorkspaceId })
   useCanvasPush({ activeWsRef, nodesRef, edgesRef, setNodes, setEdges, recordClosed })
 
   // Save yang menggantung ditulis oleh `applyWorkspace` (flush, lihat `useWorkspaceSaver`) SEBELUM

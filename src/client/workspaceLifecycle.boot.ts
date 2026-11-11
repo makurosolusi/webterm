@@ -6,7 +6,7 @@
 // The board is fetched COMPLETE before any state is committed: React Flow reads `defaultViewport`
 // only at mount, so committing the id first would mount the canvas with the default viewport and
 // no nodes, the stored board arriving one render later.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { fetchWorkspaces, getActive, getWorkspace, setActive } from './api'
 import { bootWorkspaceId } from './workspaceMenu'
@@ -27,6 +27,13 @@ export interface WorkspaceBootDeps {
   setHydrated: Dispatch<SetStateAction<boolean>>
   /** Raised when the boot fetch answers 403: this browser has no UI session → App renders SignInScreen. */
   setAuthRequired: Dispatch<SetStateAction<boolean>>
+  /** Board named by the URL (`/w/:id`): wins over the server's active board when it exists. */
+  urlWorkspaceId?: string | null
+}
+
+/** Board to open at boot: the URL's id when it is a workspace, else the server's active one, else the first. */
+export function pickBootWorkspace(ids: string[], urlId: string | null | undefined, active: string | null): string | null {
+  return bootWorkspaceId(ids, urlId && ids.includes(urlId) ? urlId : active)
 }
 
 export interface WorkspaceBoot {
@@ -35,7 +42,10 @@ export interface WorkspaceBoot {
   retryBoot: () => void
 }
 
-export function useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired }: WorkspaceBootDeps): WorkspaceBoot {
+export function useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired, urlWorkspaceId }: WorkspaceBootDeps): WorkspaceBoot {
+  // Read when a run starts, not an effect dep: after boot the URL follows the board (`App.route`), it must not re-run boot.
+  const urlId = useRef(urlWorkspaceId)
+  urlId.current = urlWorkspaceId
   const [boot, setBoot] = useState<BootState>({ kind: 'loading' })
   const [run, setRun] = useState({ n: 0, failures: 0 }) // a new `n` re-runs the effect
   const retryBoot = useCallback(() => setRun((r) => ({ n: r.n + 1, failures: r.failures })), [])
@@ -47,9 +57,9 @@ export function useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, s
     void (async () => {
       try {
         const [list, active] = await Promise.all([fetchWorkspaces(), getActive()])
-        const id = bootWorkspaceId(list.map((w) => w.id), active)
+        const id = pickBootWorkspace(list.map((w) => w.id), urlId.current, active)
         const ws = id ? await getWorkspace(id) : null
-        if (id && id !== active) await setActive(id)
+        if (id && id !== active) await setActive(id) // a URL-chosen board becomes the server's active one, so a bare `/` reopens it
         if (stale) return
         setWorkspaces(list.map((w) => (w.id === ws?.id ? ws : w)))
         if (ws) applyWorkspace(ws)
