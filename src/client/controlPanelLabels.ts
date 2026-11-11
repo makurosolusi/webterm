@@ -44,12 +44,6 @@ export const HEALTH_TEXT = {
   partly: (kind: string, why: string): string => `Partly protected — ${kind}${why ? `: ${why}` : ''}`,
 } as const
 
-/** Settings › Spending: the pointer to Central's own limit. */
-export const SPENDING_TEXT = {
-  centralLimit: "Central's own limit",
-  centralLink: 'Central Agent',
-} as const
-
 /** Settings › Developer: the eval cases disclosure. */
 export const DEVELOPER_TEXT = { evalCases: 'Show eval cases' } as const
 

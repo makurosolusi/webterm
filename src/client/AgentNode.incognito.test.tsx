@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 // The agent node's right-click menu carries the incognito switch (F5-a follow-up, F5-b): the row sends the
-// same PUT as Settings › Memory and its label follows the shared incognito state. Real canvas (canvasHarness).
+// same PUT as Control › Memory and its label follows the shared incognito state. Real canvas (canvasHarness).
 import { fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { MEMORY_TEXT } from './AgentMemory'

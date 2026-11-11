@@ -23,8 +23,7 @@ const EXEMPT: Record<string, string> = {
   'App.tsx': 'Account menu item: the Account page as a whole',
   'App.route.ts': 'gear / Mod+, (Preferences: Open Settings): reopens the last section',
   'canvasBackground.open.ts': 'Canvas background section scoped to the workspace: the scope is the target',
-  'central/AbilitiesView.tsx': 'Rules section: the whole allow/ask/deny list',
-  'central/centralChatCommands.ts': '/memory: the whole Memory section',
+  'central/AbilitiesView.tsx': 'Rules & secrets section: the whole allow/ask/deny list',
 }
 
 /** Calls that open Settings without naming a field. */

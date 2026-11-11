@@ -1,10 +1,12 @@
-// Secrets part of Settings › Rules & approvals: the secret broker's names, add/replace, delete and usage log
+// Secrets part of Settings › Rules & secrets: the secret broker's names, add/replace, delete and usage log
 // (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a
 // password manager field, the list shows names only and the input is cleared after a save.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { prefillRule, secretRule, whoText } from './policyPresets'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { secretRule, whoText } from './policyPresets'
+import { createRule } from './policyRules.api'
 
 export const SECRETS_PATH = '/api/secrets'
 
@@ -14,12 +16,12 @@ interface SecretsView { secrets: SecretEntry[]; usage: SecretUse[] | null }
 
 export const SECRETS_TEXT = {
   title: 'Secrets',
-  intro: 'Agents ask before using a secret. Allow it in Rules & approvals.',
+  intro: 'Agents ask before using a secret, unless you allow it here.',
   detail: 'An agent never sees the value: it goes into one command and is hidden in that command\'s output.',
   loading: 'Loading secrets…',
   loadFailed: 'Cannot load secrets.',
   empty: 'No secrets yet.',
-  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete', allow: 'Allow an agent to use this',
+  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete', allow: 'Allow agents to use this', allowing: 'Allowing…', allowed: (name: string) => `Agents may now use ${name}. Revoke it under Rules.`,
   neverUsed: 'never used', lastUsed: (at: number) => `last used ${new Date(at).toLocaleString()}`,
   colWhen: 'When', colName: 'Secret', colWho: 'Used by', colCommand: 'Command', colResult: 'Result',
   ok: 'OK', exitFailed: (code: number) => `Failed (exit ${code})`, noResult: 'Unknown',
@@ -39,6 +41,18 @@ async function secretsRequest(method: string, path = SECRETS_PATH, body?: unknow
 }
 
 const isView = (v: unknown): v is SecretsView => !!v && Array.isArray((v as SecretsView).secrets)
+
+/** "Allow agents to use this": makes the rule (any agent, any command, forever) right here, with its result. */
+function AllowSecret({ name }: { name: string }): React.JSX.Element {
+  const allow = useAction(() => createRule({ subject: 'node:*', ...secretRule(name), effect: 'allow' }),
+    { label: `${SECRETS_TEXT.allow}: ${name}`, success: () => SECRETS_TEXT.allowed(name), toast: 'always' })
+  return (
+    <span className="flex flex-col gap-0.5">
+      <ActionButton size="sm" variant="outline" action={allow} busyLabel={SECRETS_TEXT.allowing}>{SECRETS_TEXT.allow}</ActionButton>
+      <ActionResult action={allow} />
+    </span>
+  )
+}
 
 export function SecretsPanel(): React.JSX.Element {
   const [view, setView] = useState<SecretsView | null>(null)
@@ -85,7 +99,7 @@ export function SecretsPanel(): React.JSX.Element {
             <li key={s.name} data-secret={s.name} className="flex items-center gap-2">
               <code className="flex-1">{s.name}</code>
               <span className="opacity-70">{s.lastUsedAt === null ? SECRETS_TEXT.neverUsed : SECRETS_TEXT.lastUsed(s.lastUsedAt)}</span>
-              <Button size="sm" variant="outline" onClick={() => prefillRule(secretRule(s.name))}>{SECRETS_TEXT.allow}</Button>
+              <AllowSecret name={s.name} />
               <Button size="sm" variant="secondary" onClick={() => void remove(s.name)}>{SECRETS_TEXT.delete}</Button>
             </li>
           ))}

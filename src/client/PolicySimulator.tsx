@@ -1,8 +1,8 @@
-// Settings › Rules & approvals: the F4-d classifier switches (default off, always shown) and the policy
-// simulator (collapsed), which replays the last 7 days of decisions against a proposed rule and shows what
-// would have changed. Nothing runs while simulating.
+// Settings › Rules & secrets › Advanced: the policy simulator, which replays the last 7 days of decisions against
+// a proposed rule and shows what would have changed. Nothing runs while simulating. The F4-d small-model
+// switches are no longer here: Settings › Claude's approval level sets them (server setClassifierSwitch).
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Switch } from '@/components/ui/switch'
 import { Segmented } from './centralSettings.controls'
 import { SettingsSelect } from './SettingsControls'
@@ -22,12 +22,6 @@ export interface SimReport {
 }
 
 export const SIM_TEXT = {
-  title: 'Auto-approval',
-  intro: 'A small model can approve low-risk actions instead of you. Deleting things, pushing code, removing branches, using secrets, touching files outside the project and changing rules always ask you. Off until you turn it on.',
-  central: 'Let a small model approve low-risk actions for Central',
-  permissions: 'Let a small model approve low-risk Claude Code prompts',
-  switchFailed: (why: string) => `Could not change the switch: ${why}`,
-  switchMissing: 'Auto-approval is unavailable while the ledger is off.',
   simTitle: 'Try a rule on the last 7 days',
   simIntro: 'See what a rule would have changed. Nothing runs and nothing is saved.',
   subject: 'Who', capability: 'What', scope: 'Where', effect: 'Effect',
@@ -56,58 +50,29 @@ type SimRuleEffect = (typeof EFFECTS)[number]['value']
 const ROWS: SimEffect[] = ['allow', 'ask', 'deny', 'classifier']
 
 export function PolicySimulator(): React.JSX.Element {
-  const [sw, setSw] = useState<ClassifierSwitch | null>(null)
-  const [swError, setSwError] = useState<string | null>(null)
-  const [swMissing, setSwMissing] = useState(false)
   const [rule, setRule] = useState({ subject: 'node:*', capability: '', scope: '*', effect: 'allow' as SimRuleEffect })
   const [classifier, setClassifier] = useState(false)
   const [report, setReport] = useState<SimReport | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [simError, setSimError] = useState<string | null>(null)
 
+  // "Include the small model" starts at today's switch (set by the approval level); a read failure leaves it off.
   useEffect(() => {
     let live = true
     request('GET', POLICY_CLASSIFIER_PATH)
-      .then((v) => { if (live) { setSw(v as ClassifierSwitch); setClassifier((v as ClassifierSwitch).central || (v as ClassifierSwitch).permissions) } })
-      .catch(() => { if (live) setSwMissing(true) }) // ledger off or older server: a note, not an alert
+      .then((v) => { if (live) setClassifier((v as ClassifierSwitch).central || (v as ClassifierSwitch).permissions) })
+      .catch(() => {}) // ledger off or older server: the try below says so when run
     return () => { live = false }
   }, [])
 
-  const flip = async (key: keyof ClassifierSwitch, on: boolean): Promise<void> => {
-    if (!sw) return
-    try {
-      setSw((await request('PUT', POLICY_CLASSIFIER_PATH, { ...sw, [key]: on })) as ClassifierSwitch)
-      setSwError(null)
-    } catch (err) {
-      setSwError(SIM_TEXT.switchFailed(err instanceof Error ? err.message : String(err)))
-    }
-  }
-
-  const simulate = async (): Promise<void> => {
-    setBusy(true)
-    setSimError(null)
-    try {
-      const add = rule.capability.trim() ? [{ subject: rule.subject.trim(), capability: rule.capability.trim(), scope: rule.scope.trim() || '*', effect: rule.effect }] : []
-      setReport((await request('POST', POLICY_SIMULATE_PATH, { add, classifier })) as SimReport)
-    } catch (err) {
-      setSimError(SIM_TEXT.simFailed(err instanceof Error ? err.message : String(err)))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const simulate = useAction(async () => {
+    const add = rule.capability.trim() ? [{ subject: rule.subject.trim(), capability: rule.capability.trim(), scope: rule.scope.trim() || '*', effect: rule.effect }] : []
+    const out = (await request('POST', POLICY_SIMULATE_PATH, { add, classifier })) as SimReport
+    setReport(out)
+    return out
+  }, { label: SIM_TEXT.run, failure: (err) => SIM_TEXT.simFailed(err instanceof Error ? err.message : String(err)) })
+  const simError = simulate.result && !simulate.result.ok ? simulate.result.text : null
 
   return (
-    <section aria-label={SIM_TEXT.title} className="flex flex-col gap-2" data-testid="policy-simulator">
-      <h3 className="font-semibold">{SIM_TEXT.title}</h3>
-      <p className="text-xs opacity-80">{SIM_TEXT.intro}</p>
-      {(['central', 'permissions'] as const).map((k) => (
-        <label key={k} htmlFor={`cls-${k}`} className="flex items-center gap-2 text-xs">
-          <Switch id={`cls-${k}`} disabled={!sw} checked={sw?.[k] === true} onCheckedChange={(v) => { void flip(k, v) }} />{SIM_TEXT[k]}
-        </label>
-      ))}
-      {swMissing ? <p className="text-xs opacity-70">{SIM_TEXT.switchMissing}</p> : null}
-      {swError ? <p role="alert" className="text-xs text-destructive">{swError}</p> : null}
-
+    <section aria-label={SIM_TEXT.simTitle} className="flex flex-col gap-2" data-testid="policy-simulator">
       <details data-testid="policy-simulator-try">
         <summary className="cursor-default text-xs font-semibold">{SIM_TEXT.simTitle}</summary>
         <p className="text-xs opacity-70">{SIM_TEXT.simIntro}</p>
@@ -125,7 +90,7 @@ export function PolicySimulator(): React.JSX.Element {
           <label htmlFor="sim-classifier" className="flex items-center gap-1 text-xs">
             <Switch id="sim-classifier" checked={classifier} onCheckedChange={setClassifier} />{SIM_TEXT.classifierOn}
           </label>
-          <Button size="sm" disabled={busy} onClick={() => { void simulate() }}>{busy ? SIM_TEXT.running : SIM_TEXT.run}</Button>
+          <ActionButton size="sm" action={simulate} busyLabel={SIM_TEXT.running}>{SIM_TEXT.run}</ActionButton>
         </div>
         {simError ? <p role="alert" className="text-xs text-destructive">{simError}</p> : null}
         {report ? (

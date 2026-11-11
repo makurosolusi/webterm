@@ -151,7 +151,7 @@ describe('Central chat / menu', () => {
     await waitFor(() => expect(control.halt).toHaveBeenCalledTimes(1))
   })
 
-  it('/tools opens the Abilities tab; /memory opens Settings › Memory; neither is sent', async () => {
+  it('/tools opens the Abilities tab; /memory opens the Control › Memory tab; neither is sent', async () => {
     const { client } = await setup()
     await send('/tools')
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Abilities' }).getAttribute('aria-selected')).toBe('true'))
@@ -160,7 +160,8 @@ describe('Central chat / menu', () => {
     window.addEventListener('webterm:open-settings', on)
     await send('/memory')
     window.removeEventListener('webterm:open-settings', on)
-    expect(seen).toEqual([{ section: 'memory' }])
+    expect(seen).toEqual([]) // Memory is no longer a Settings page
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Memory' }).getAttribute('aria-selected')).toBe('true'))
     expect(client.sendMessage).not.toHaveBeenCalled()
   })
 

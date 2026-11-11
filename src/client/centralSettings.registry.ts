@@ -69,7 +69,6 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
 
   f('costLimit', { group: 'cost', control: 'combobox', source: env(COST_CAP_KEY, { unit: '$' }) }),
   f('ladder', { group: 'cost', control: 'link', source: link('agent', 'model-ladder'), always: true }),
-  f('report', { group: 'cost', control: 'link', source: link('spending', 'cost-panel'), always: true }),
 
   f('skills', { group: 'abilities', control: 'switch', source: { kind: 'capability', id: 'central', sub: 'centralSkills' } }),
   f('skillPropose', { group: 'abilities', control: 'switch', source: { kind: 'capability', id: 'central', sub: 'centralSkillPropose' } }),

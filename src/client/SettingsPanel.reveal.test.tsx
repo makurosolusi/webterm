@@ -69,7 +69,6 @@ describe('links inside Settings name the field they land on', () => {
   const cases: [string, string, SettingsFieldId][] = [
     ['Open Launch profiles', 'agent', 'claudeLaunchProfiles'],
     ['Open Model ladder & per-workspace overrides', 'agent', 'model-ladder'],
-    ['Open Spending report', 'spending', 'cost-panel'],
     ['Open Browser', 'capabilities', 'capability.browser'],
     ['Open Telegram', 'capabilities', 'capability.telegram'],
   ]
@@ -86,21 +85,18 @@ describe('links inside Settings name the field they land on', () => {
     await revealed('claudeLaunchProfiles')
   })
 
-  it('Spending → Central’s own limit, Capabilities → Central Agent row', async () => {
+  it('Capabilities → Central Agent row', async () => {
     const onSectionChange = vi.fn()
-    const { unmount } = panel('spending', undefined, onSectionChange)
-    fireEvent.click(await within(screen.getByRole('main', { name: 'Settings' })).findByRole('button', { name: 'Central Agent' }))
-    unmount()
     panel('capabilities', undefined, onSectionChange)
     const row = await waitFor(() => { expect(target('capability.central')).toBeTruthy(); return target('capability.central') })
     fireEvent.click(within(row).getByRole('button'))
-    expect(onSectionChange.mock.calls).toEqual([['central', 'central.costLimit'], ['central', 'central.central']])
+    expect(onSectionChange.mock.calls).toEqual([['central', 'central.central']])
   })
 
   it('a TOC click is a plain section change: the field is cleared', async () => {
     const onSectionChange = vi.fn()
     panel('central', 'central.profile', onSectionChange)
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Memory' }))
-    expect(onSectionChange).toHaveBeenCalledWith('memory', undefined)
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Rules & secrets' }))
+    expect(onSectionChange).toHaveBeenCalledWith('rules', undefined)
   })
 })

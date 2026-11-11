@@ -8,7 +8,7 @@ import { COMMAND_RESULT_LIMIT, rankCommands, type ComposerCompletion } from '../
 import { fuzzyFilter } from '../fuzzy'
 import type { CentralTab } from '../secondarySideBar.store'
 
-/** Chat-side actions; `approvals` expands the Needs-you strip, `memory` opens Settings › Memory (both work with the Central panel off). */
+/** Chat-side actions; `approvals` expands the Needs-you strip, `memory` opens Control › Memory (both work with the Central panel off). */
 export type ChatAction = 'new' | 'history' | 'help' | 'approvals' | 'memory'
 
 /** What a command does: a chat action, a Central panel tab, or a prompt sent to Central. */
@@ -76,7 +76,7 @@ const COMMAND = /^\s*\/([A-Za-z0-9._:-]+)(?:\s+([\s\S]*))?$/
 
 /** The commands on offer: panel shortcuts and `/memory` only while the Central panel is on, skills that do not shadow a command. */
 export function centralCommandList(centralEnabled: boolean, skills: readonly CentralSkill[] = []): CentralCommand[] {
-  // `/memory` shows Central's memory, which Settings only lists while Central is on.
+  // `/memory` shows Central's memory, which Control › Memory only lists while Central is on.
   const own = CENTRAL_COMMANDS.filter((c) => centralEnabled || (c.run.kind !== 'panel' && c.name !== 'memory'))
   const taken = new Set(own.map((c) => c.name))
   const skillRows = skills.filter((s) => !taken.has(s.name)).map((s): CentralCommand => ({

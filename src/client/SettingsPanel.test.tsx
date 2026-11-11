@@ -48,8 +48,7 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations',
-      'Spending', 'Canvas', 'Canvas background', 'Account', 'Capabilities', 'Health', 'Developer']
+    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Rules & secrets', 'Canvas', 'Canvas background', 'Account', 'Capabilities', 'Health', 'Developer']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
@@ -60,19 +59,20 @@ describe('SettingsPanel VS Code layout', () => {
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
   })
 
-  it('groups the sidebar under General, Agents, Workspace and System headings, in that order', () => {
+  it('groups the sidebar under General, Agents, Safety, Workspace and System headings, in that order', () => {
     renderPanel()
     const groups = within(nav()).getAllByRole('group')
-    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Workspace', 'System'])
+    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Safety', 'Workspace', 'System'])
     const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
     expect(byGroup).toEqual([
       ['Terminal', 'Interaction', 'Shell & buffer'],
-      ['Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations', 'Spending'],
+      ['Agent', 'Central Agent'],
+      ['Rules & secrets'],
       ['Canvas', 'Canvas background'],
       ['Account', 'Capabilities', 'Health', 'Developer'],
     ])
-    expect(within(groups[1]!).getByRole('button', { name: 'Rules & approvals' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
-    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Workspace', 'System'])
+    expect(within(groups[2]!).getByRole('button', { name: 'Rules & secrets' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
+    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Safety', 'Workspace', 'System'])
     // SETTINGS_SECTIONS is listed in group order, so the sidebar order equals the array order.
     expect(SETTINGS_SECTIONS.map((x) => x.group)).toEqual([...SETTINGS_SECTIONS.map((x) => x.group)].sort((a, b) => SETTINGS_GROUPS.indexOf(a) - SETTINGS_GROUPS.indexOf(b)))
   })

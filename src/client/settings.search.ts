@@ -11,14 +11,19 @@ import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
 import { CENTRAL_GROUP_TITLE, CENTRAL_TEXT } from './centralSettingsLabels'
-import { COST_TEXT } from './CostPanel'
 import type { SettingsFieldId } from './settings.link'
-import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import type { CentralTab } from './secondarySideBar.store'
 import { TOKEN_TEXT } from './tokenAccessLabels'
 
-/** One searchable item. No `field` = the page itself (or a block without a deep-link id). */
+/** Group of a result: a Settings page, or `control` for pages that moved to the Control side bar. */
+export type SearchGroupId = SectionId | 'control'
+
+/** One searchable item. No `field` = the page itself (or a block without a deep-link id). `ctab` = it lives
+ *  in the Control side bar now: "Go to" opens that tab instead of a Settings page. */
 export interface SettingsSearchEntry {
-  page: SectionId
+  page: SearchGroupId
+  ctab?: CentralTab
   field?: SettingsFieldId
   label: string
   hint?: string
@@ -36,10 +41,7 @@ const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   shell: 'zsh bash fish buffer folder',
   agent: 'claude permission approval profile model',
   central: 'assistant orchestrator autonomy check-in budget',
-  rules: 'secret secrets allow deny block approve permission policy safety',
-  memory: 'remember notes knowledge facts forget',
-  automations: 'routine routines schedule cron recurring timer job',
-  spending: 'cost budget money dollars usage bill report',
+  rules: 'secret secrets allow deny block approve approvals permission policy safety always',
   canvas: 'grid node cable edge',
   background: 'wallpaper image gradient color photo',
   account: 'password username user login session sessions device devices sign out logout',
@@ -101,8 +103,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('canvas', 'defaultNodeWidth', 'New node width', 'Existing nodes keep the size saved with them.', 'size'),
   e('canvas', 'defaultNodeHeight', 'New node height', undefined, 'size'),
   e('canvas', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
-  // Spending, Capabilities
-  e('spending', 'cost-panel', COST_TEXT.title, COST_TEXT.intro, 'cost money report usage'),
+  // Capabilities
   e('capabilities', 'capability.central', CENTRAL_TEXT.summaryTitle, CAPABILITIES.central.blurb, [...CAPABILITY_KEYWORDS.central, ...CAPABILITY_KEYWORDS.workers, ...CAPABILITY_KEYWORDS.autonomy].join(' ')),
   ...CARDS,
   e('capabilities', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'anthropic api key proxy gateway custom command envman wrapper'),
@@ -111,22 +112,26 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('capabilities', 'agentEngine', ADVANCED_TEXT.engineLabel, ADVANCED_TEXT.engineRecheckHint, 'claude install sign in'),
 ]
 
+/** Moved pages: found by name and keywords, opened in the Control side bar. */
+const MOVED: SettingsSearchEntry[] = MOVED_SETTINGS_PAGES.map((m) => ({ page: 'control', ctab: m.ctab, label: m.label, hint: m.description, keywords: kw(m.keywords) }))
+
 const CENTRAL = CENTRAL_FIELDS.map((f) => e('central', `central.${f.id}`, f.label, f.hint, CENTRAL_GROUP_TITLE[f.group].toLowerCase()))
 
 /** Every searchable entry, in sidebar order (a page first, then its settings). */
 export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = (() => {
   const all = [...ENTRIES_BY_HAND, ...CENTRAL]
-  return SETTINGS_SECTIONS.flatMap((s) => [...PAGES.filter((p) => p.page === s.id), ...all.filter((x) => x.page === s.id)])
+  return [...SETTINGS_SECTIONS.flatMap((s) => [...PAGES.filter((p) => p.page === s.id), ...all.filter((x) => x.page === s.id)]), ...MOVED]
 })()
 
 const haystack = (x: SettingsSearchEntry): string =>
-  [SETTINGS_SECTIONS.find((s) => s.id === x.page)?.label, x.label, x.hint, x.field, ...(x.keywords ?? [])].join(' ').toLowerCase()
+  [SETTINGS_SECTIONS.find((s) => s.id === x.page)?.label ?? (x.ctab ? 'control panel' : undefined), x.label, x.hint, x.field, ...(x.keywords ?? [])].join(' ').toLowerCase()
 const HAYSTACKS = new Map(SETTINGS_SEARCH_INDEX.map((x) => [x, haystack(x)]))
 
 /** Entries matching a normalized query (space-separated tokens, all must match), grouped by page in sidebar order. */
-export function searchSettings(query: string): { page: SectionId; entries: SettingsSearchEntry[] }[] {
+export function searchSettings(query: string): { page: SearchGroupId; entries: SettingsSearchEntry[] }[] {
   if (!query) return []
   const tokens = query.split(' ')
   const hits = SETTINGS_SEARCH_INDEX.filter((x) => tokens.every((t) => HAYSTACKS.get(x)!.includes(t)))
-  return SETTINGS_SECTIONS.map((s) => ({ page: s.id, entries: hits.filter((x) => x.page === s.id) })).filter((g) => g.entries.length)
+  const groups: SearchGroupId[] = [...SETTINGS_SECTIONS.map((s) => s.id), 'control']
+  return groups.map((page) => ({ page, entries: hits.filter((x) => x.page === page) })).filter((g) => g.entries.length)
 }

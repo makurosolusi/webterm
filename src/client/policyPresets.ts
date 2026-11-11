@@ -1,5 +1,5 @@
-// Shared vocabulary of Settings › Rules & approvals: the Who/What/Where choices offered when making or
-// trying a rule (PolicyRules, PolicySimulator) and the plain-words reading of a stored rule's patterns.
+// Shared vocabulary of Settings › Rules & secrets: the Who/What/Where choices offered when making or
+// trying a rule (PolicyRuleForm, PolicySimulator) and the plain-words reading of a stored rule's patterns.
 import type { ComboPreset } from './SettingsCombobox'
 
 /** Principal patterns (server policy.model.ts `Principal`). */
@@ -33,13 +33,11 @@ export const SCOPE_PRESETS: readonly ComboPreset[] = [
   { value: 'git status*', label: 'Commands starting with git status' },
 ]
 
-/** Window event a panel fires to pre-fill the add-rule row of PolicyRules. */
-export const PREFILL_RULE_EVENT = 'webterm:prefill-rule'
-export interface PrefillRule { capability: string; scope: string }
-export const prefillRule = (detail: PrefillRule): void => { window.dispatchEvent(new CustomEvent(PREFILL_RULE_EVENT, { detail })) }
+/** Capability + scope for "agents may use secret NAME" (server secret.broker.ts: `secret:<NAME>:<command>`). */
+export const secretRule = (name: string): { capability: string; scope: string } => ({ capability: 'secret.run', scope: `secret:${name}:*` })
 
-/** Capability + scope for "this agent may use secret NAME" (server secret.broker.ts: `secret:<NAME>:<command>`). */
-export const secretRule = (name: string): PrefillRule => ({ capability: 'secret.run', scope: `secret:${name}:*` })
+/** Claude Code tool prefix of a capability (server permission.model.ts `TOOL_CAPABILITY_PREFIX`). */
+export const TOOL_PREFIX = 'claude.tool:'
 
 const PREFIXES: Array<[string, string]> = [['node:', 'Agent'], ['routine:', 'Routine'], ['telegram:', 'Telegram chat']]
 
@@ -50,9 +48,15 @@ export function whoText(subject: string): string {
   return p ? `${p[1]} ${subject.slice(p[0].length)}` : subject
 }
 
+/** Plain words for a capability; an unknown Claude Code tool reads "Use the X tool", other unknowns stay as typed. */
 export function whatText(capability: string): string {
-  return CAPABILITY_PRESETS.find((c) => c.value === capability)?.label ?? capability
+  const known = CAPABILITY_PRESETS.find((c) => c.value === capability)?.label
+  if (known) return known
+  return capability.startsWith(TOOL_PREFIX) ? `Use the ${capability.slice(TOOL_PREFIX.length)} tool` : capability
 }
+
+/** The stored patterns, for a tooltip next to the plain words (who / what / where). */
+export const rawRuleText = (g: { subject: string; capability: string; scope: string }): string => `${g.subject} · ${g.capability} · ${g.scope}`
 
 /** "anywhere", "NPM_TOKEN, any command", "starting with npm test"; otherwise the pattern itself. */
 export function whereText(scope: string): string {

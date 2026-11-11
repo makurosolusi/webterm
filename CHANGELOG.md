@@ -158,6 +158,12 @@ Operator notes:
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
 
+- Memory, Automations and the Spending report moved out of Settings into tabs of the Control side bar. They work even when the Central Agent is off. Settings search still finds them and opens the right tab, and old `?settings=memory|automations|spending` links land there too.
+- Control › Memory is one place for everything agents remember. A filter switches between All, Suggested (waiting for your OK), Notes (the shared board) and Central (Central's own memory). Forget now asks before it deletes. `/memory` in Central chat opens this tab.
+- Control › Automations shows templates first. Run now reports "Started" or why the run was skipped. Delete asks first. Run status reads in plain words ("Skipped, made up for a missed run"). Event triggers are picked from a list of events in plain words, and "Message a wired agent" picks the agent from your boards instead of asking for a node id.
+- One daily spending limit: Settings › Central's "Daily spending limit" now also stops routines, plans and bake-offs. On first start, an old "Pause all work at $" limit that was lower than Central's (or set while Central had none) becomes Central's limit, and the old limit is cleared.
+- Settings › Rules & approvals is now Settings › Safety › Rules & secrets. Recent approval prompts can be turned into "Always allow" or "Always block" rules in one click. Rules read in plain words, with the raw pattern in a tooltip. The hand-made rule form and the "Try a rule on the last 7 days" simulator moved under Advanced. A secret's "Allow agents to use this" now makes the rule directly and confirms it.
+- The cache hit rate, prefix reuse and pricing details of spending moved to Settings › Developer.
 - Settings search results show as "Page › Setting" rows. Clicking one opens that page and highlights the setting.
 - Below 720px wide, the Settings sidebar becomes a section dropdown above full-width content.
 - The first Settings sidebar group is now called "General" (was "Editor"). Section links are unchanged.
@@ -373,6 +379,8 @@ Operator notes:
 - Send buttons are disabled while you are offline, and what you typed is kept.
 
 ### Removed
+- The separate "Pause all work when today's spend reaches" limit. Central's daily spending limit covers all work (see Changed).
+- The two "Let a small model approve…" switches in Rules. Settings › Claude's approval level sets them now.
 - Settings › Agent › "Agent default": the quick-add button always used the first enabled agent, so the choice did nothing. A stored value is dropped on load.
 - Unused settings and env keys that changed nothing: the `accent` setting, and `WEBTERM_CHANNELS`, `WEBTERM_CENTRAL_CHAT`, `WEBTERM_CENTRAL_TELEGRAM`, `WEBTERM_CENTRAL_TOOLS` and `WEBTERM_CENTRAL_PLANNER` (chat and the Telegram bridge follow the Central Agent and Telegram switches; proposal tools are always available). Stored values are kept but have no effect.
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

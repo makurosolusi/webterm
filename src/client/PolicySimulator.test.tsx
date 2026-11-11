@@ -26,19 +26,15 @@ function server() {
   return { writes }
 }
 
-describe('Policy simulator (Settings › Rules & approvals)', () => {
-  it('shows both auto-approval switches OFF by default, in plain words, and flips one through PUT', async () => {
+describe('Policy simulator (Settings › Rules & secrets › Advanced)', () => {
+  it('has no auto-approval switches any more (the approval level in Settings › Claude owns them) and never writes them', async () => {
     const { writes } = server()
     render(<PolicySimulator />)
-    const central = await screen.findByRole('switch', { name: 'Let a small model approve low-risk actions for Central' })
-    await waitFor(() => expect((central as HTMLButtonElement).disabled).toBe(false))
-    expect(central.getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('switch', { name: 'Let a small model approve low-risk Claude Code prompts' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/never-auto|classifier/i)
-    fireEvent.click(central)
-    await waitFor(() => expect(central.getAttribute('aria-checked')).toBe('true'))
-    expect(writes).toEqual([{ method: 'PUT', url: POLICY_CLASSIFIER_PATH, body: { central: true, permissions: false } }])
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }))
+    await screen.findByText('5 decisions replayed, 3 would change.')
+    // The only switch left is the try-out's own "Include the small model".
+    expect(screen.getAllByRole('switch').map((x) => x.getAttribute('id'))).toEqual(['sim-classifier'])
+    expect(writes.filter((w) => w.url === POLICY_CLASSIFIER_PATH)).toEqual([])
   })
 
   it('keeps the rule try-out collapsed until opened', async () => {

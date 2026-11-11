@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
-import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
 import { toSettingsFieldId, type SettingsFieldId } from './settings.link'
 
@@ -76,11 +76,13 @@ export function parseAppRoute(pathname: string, search: string): AppRoute {
   }
   const q = new URLSearchParams(search)
   const settings = pick(SETTINGS_ROUTE_SECTIONS, q.get('settings'))
+  // An old link to a page that moved to the Control side bar (`?settings=memory`) opens that tab instead.
+  const moved = MOVED_SETTINGS_PAGES.find((m) => m.id === q.get('settings'))?.ctab ?? null
   return {
     workspaceId,
     settings,
     field: settings ? toSettingsFieldId(q.get('field')) : null,
-    ctab: pick(CENTRAL_ROUTE_TABS, q.get('ctab')),
+    ctab: pick(CENTRAL_ROUTE_TABS, q.get('ctab')) ?? moved,
     panel: pick(BOTTOM_PANEL_ROUTE_IDS, q.get('panel')),
     view: pick(APP_ROUTE_VIEWS, q.get('view')),
     help: q.get('help') === '1',

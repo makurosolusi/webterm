@@ -86,6 +86,12 @@ describe('What agents remember: one list', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Edit' }), { target: { value: 'The cat is called Mochi' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     fireEvent.click(await row('m1').findByRole('button', { name: 'Forget' }))
+    // Forget asks first (no undo on the server); Cancel keeps it, the second Forget sends it.
+    const ask = row('m1').getByRole('alertdialog', { name: 'Forget this for good?' })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    expect(row('m1').queryByRole('alertdialog')).toBeNull()
+    fireEvent.click(row('m1').getByRole('button', { name: 'Forget' }))
+    fireEvent.click(within(row('m1').getByRole('alertdialog')).getByRole('button', { name: 'Forget' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Remember' }), { target: { value: ' Reply in Indonesian ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Remember' }))
     await waitFor(() => expect(writes.length).toBe(6))

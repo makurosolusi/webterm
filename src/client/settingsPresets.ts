@@ -69,7 +69,7 @@ export const EDGE_COLOR_PRESETS: readonly { label: string; color: string }[] = [
 ]
 export const NODE_HEIGHT_OPTIONS = [280, 360, 440, 520, 600, 720, 900, 1200].map((n) => ({ value: n, label: `${n} px` }))
 
-/** Cost cap suggestions in dollars; '' = no limit. The field id is Central's own limit (Settings › Central Agent); the Spending page's pause-all cap shares the presets but keeps its own history (PAUSE_ALL_FIELD_ID 'cost.pauseAllAt'). */
+/** Cost cap suggestions in dollars; '' = no limit. The field id is Central's daily limit (Settings › Central), the one daily limit for all work. */
 export const COST_CAP_FIELD_ID = 'central.dailyCostCap'
 export const COST_CAP_PRESETS: readonly ComboPreset[] = [
   { value: '', label: 'No limit' },

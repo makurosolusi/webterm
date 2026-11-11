@@ -123,7 +123,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 /** Tabs a Central chat command may open. */
-export type CentralTab = Extract<CentralPanelTab, 'status' | 'abilities' | 'agents' | 'skills'>
+export type CentralTab = Extract<CentralPanelTab, 'status' | 'abilities' | 'agents' | 'skills' | 'memory' | 'automations' | 'spending'>
 /** The last "show this Central tab" request; `seq` makes a repeat of the same tab a new request. */
 export interface CentralTabRequest { tab: CentralTab; seq: number; halt?: boolean }
 let centralRequest: CentralTabRequest | null = null
