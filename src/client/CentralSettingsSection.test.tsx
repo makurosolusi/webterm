@@ -155,12 +155,44 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(puts[4]).toEqual({ set: { WEBTERM_CENTRAL_DAILY_TOKENS: '0' }, unset: [] }))
   })
 
-  it('a failed write shows an error and keeps the old value', async () => {
+  it('a pick shows at once; a failed write reverts it and shows the error at that field with Retry', async () => {
     await open()
     putFails = true
+    const field = (): HTMLElement => screen.getByLabelText('Workers per day').closest('[data-slot="settings-field"]') as HTMLElement
     fireEvent.click(screen.getByRole('button', { name: 'Increase Workers per day' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Could not save')
+    expect(screen.getByLabelText('Workers per day').textContent).toBe('25 workers') // pending, before the server answers
+    const alert = await within(field()).findByRole('alert')
+    expect(alert.textContent).toContain('Could not save')
     expect(screen.getByLabelText('Workers per day').textContent).toBe('20 workers')
+    putFails = false
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(field().querySelector('[data-save]')?.textContent).toContain('Saved'))
+    expect(field().querySelector('[data-save]')?.getAttribute('role')).toBe('status')
+    expect(puts).toEqual([{ set: { WEBTERM_CENTRAL_DAILY_SPAWNS: '25' }, unset: [] }])
+  })
+
+  it('env-backed fields show the modified dot and a visible Reset only when they differ from the default', async () => {
+    await open()
+    const field = (): HTMLElement => screen.getByLabelText('Workers per day').closest('[data-slot="settings-field"]') as HTMLElement
+    expect(within(field()).queryByText('(Modified)')).toBeNull()
+    expect(within(field()).queryByRole('button', { name: /^Reset Setting/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Workers per day' }))
+    await waitFor(() => expect(within(field()).getByText('(Modified)')).toBeTruthy())
+    fireEvent.click(within(field()).getByRole('button', { name: 'Reset Setting: Workers per day' }))
+    await waitFor(() => expect(puts[1]).toEqual({ set: {}, unset: ['WEBTERM_CENTRAL_DAILY_SPAWNS'] }))
+    await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('20 workers'))
+    expect(within(field()).queryByText('(Modified)')).toBeNull()
+    // Every env-backed row gets the same anatomy (registry-driven, so no row can opt out).
+    fireEvent.click(screen.getByText('Advanced'))
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'opus' } })
+    const model = screen.getByLabelText('Model').closest('[data-slot="settings-field"]') as HTMLElement
+    await waitFor(() => expect(within(model).getByRole('button', { name: 'Reset Setting: Model' })).toBeTruthy())
+  })
+
+  it('the page title is not repeated as a prefix on its own field', async () => {
+    await open()
+    const master = screen.getByRole('switch', { name: 'Central Agent' }).closest('[data-slot="settings-field"]') as HTMLElement
+    expect(master.querySelector('.st-category')).toBeNull()
   })
 
   it('env load failure offers Retry', async () => {

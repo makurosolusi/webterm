@@ -132,20 +132,19 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     }
     if (src.kind !== 'env') return null
     const raw = env.value(src.key)
-    const busy = disabled || env.savingKey === src.key
     if (field.control === 'switch') {
-      return <Switch id={id} checked={raw.trim().toLowerCase() === 'on'} disabled={busy} onCheckedChange={(on) => void env.write(src.key, on ? 'on' : 'off')} />
+      return <Switch id={id} checked={raw.trim().toLowerCase() === 'on'} disabled={disabled} onCheckedChange={(on) => void env.write(src.key, on ? 'on' : 'off')} />
     }
     if (field.control === 'stepper') {
       const scale = src.scale ?? 1
       const n = Math.round((Number(raw) || 0) / scale)
       return <Stepper id={id} label={field.label} value={n} min={field.min ?? 0} max={field.max ?? Number.MAX_SAFE_INTEGER} step={field.step ?? 1}
-        unit={src.unit} disabled={busy} onChange={(v) => void env.write(src.key, String(v * scale))} />
+        unit={src.unit} disabled={disabled} onChange={(v) => void env.write(src.key, String(v * scale))} />
     }
     const opts = field.options ?? []
     const known = opts.some((o) => o.value === raw)
     return (
-      <SettingsSelect id={id} value={raw} disabled={busy} onChange={(v) => void env.write(src.key, v === '' ? null : v)}
+      <SettingsSelect id={id} value={raw} disabled={disabled} onChange={(v) => void env.write(src.key, v === '' ? null : v)}
         options={known ? opts : [...opts, { value: raw, label: raw }]} />
     )
   }
@@ -156,19 +155,20 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     const id = `st-central-${field.id}`
     const reason = reasonOf(field, api, env, checkin)
     const src = field.source
-    const err = src.kind === 'env' && env.saveError?.key === src.key ? env.saveError.message : null
+    // Env rows: modified = an override that differs from the registry default; Reset removes it.
+    const envKey = src.kind === 'env' ? src.key : null
+    const save = envKey ? env.saveState(envKey) : src.kind === 'checkin' ? checkin.saveState(src.key) : undefined
     return (
-      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined} field={`central.${field.id}`}>
+      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined} field={`central.${field.id}`}
+        save={save} modified={envKey ? env.modified(envKey) : undefined}
+        onReset={envKey && reason === null ? () => { void env.write(envKey, null) } : undefined}>
         <div className="flex flex-wrap items-center gap-2" data-central-field={field.id}>
           {control(field, id, reason)}
-          {src.kind === 'env' && env.savingKey === src.key ? <span role="status" className="st-hint">{CENTRAL_TEXT.saving}</span> : null}
           {reason && field.control !== 'status' ? <span className="st-hint" data-reason>{reason}</span> : null}
           {field.control === 'status' && src.kind === 'capability' && src.id !== 'central'
             ? <Button size="xs" variant="link" className="px-0" aria-label={`${CENTRAL_TEXT.open} ${field.label}`}
                 onClick={() => onNavigate({ section: 'capabilities', field: `capability.${src.id}` })}>{CENTRAL_TEXT.open} →</Button>
             : null}
-          {err ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(err)}</span> : null}
-          {field.id === 'checkin' && checkin.saveError ? <span role="alert" className="st-hint">{CENTRAL_TEXT.saveFailed(checkin.saveError)}</span> : null}
         </div>
       </Field>
     )

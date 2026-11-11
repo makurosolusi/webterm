@@ -253,7 +253,10 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
-
+- Settings no longer silently undo a change the server refused. Every field shows your pick at once, then "Saving…" and "Saved ✓" beside it, or reverts and says why right there with Retry. The "Changed …" undo toast appears only once the change is really saved, and two fields saving at once no longer clear each other's status (Central Agent steppers and selects included).
+- Settings fields that differ from their default show a dot and a visible Reset button instead of a gear that only appeared on hover. Central Agent's server-side settings (workers per day, reply limits, model, experiments…) now have them too.
+- Settings field titles no longer repeat the page name ("Central Agent: Central Agent"); the page prefix only shows in search results.
+- Changing Central check-ins in Settings keeps the rest of the panel up to date.
 - Settings search no longer loads every page in the background on the first keystroke. It now finds every page, including Rules, Memory, Automations, Spending and Health, by the words people type ("secret", "routine", "budget", "password") and by setting names. The count always matches the list, and an empty search shows one "No settings match" message.
 - Pressing Escape with a suggestions list open in Settings closes only that list. Before, it closed Settings.
 - Central Agent › Check again now shows that it is checking and what it found (or why it failed): "Checking…" while it runs, then "Runs on Claude · <version> · checked 10:42:05" from the same launch test Central uses (it costs no tokens), or the reason with the install or sign-in steps and a Retry notification. A repeated check shows the new time.

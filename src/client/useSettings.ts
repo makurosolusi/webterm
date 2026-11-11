@@ -10,6 +10,7 @@ import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settin
 import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '../shared/settings.patch'
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
+import { createSaveStates, responseError } from './settingsSave'
 
 export const SAVE_COALESCE_MS = 300
 
@@ -85,8 +86,13 @@ async function putSettings(patch: SettingsPatch): Promise<void> {
     body,
     keepalive: fitsKeepalive(body, SETTINGS_KEEPALIVE_MAX_BYTES),
   })
-  if (!res.ok) throw new Error(`PUT /api/settings -> ${res.status}`)
+  if (!res.ok) throw await responseError(res, 'PUT /api/settings')
 }
+
+/** Save state per settings key, for the `Field` showing that key (Saving… / Saved ✓ / error + Retry). */
+export const settingsSaves = createSaveStates()
+
+const causeOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /** Saves of the mounted useSettings; `flushSettingsSaves` waits for them. */
 const savers = new Set<Coalescer<SettingsPatch>>()
@@ -146,12 +152,33 @@ export interface SettingsUndo {
 export function useSettings(): UseSettings {
   const [settings, setSettings] = useState<Settings>(current)
   const [hydrated, setHydrated] = useState(false)
+  const [notice, setNotice] = useState<SettingsNotice | null>(null)
+  // The toast of the edit waiting in the coalescer: shown once the server accepted it, never before.
+  const queued = useRef<Omit<SettingsNotice, 'seq'> | null>(null)
   const saver = useRef<Coalescer<SettingsPatch> | null>(null)
   if (!saver.current) {
-    saver.current = createCoalescer(putSettings, {
+    const send = async (patch: SettingsPatch): Promise<void> => {
+      const shown = queued.current
+      queued.current = null
+      const settle = settingsSaves.start(Object.keys(patch))
+      try {
+        await putSettings(patch)
+      } catch (err) {
+        settle({
+          ok: false,
+          message: causeOf(err),
+          // Re-apply over the reloaded copy and send again; the toast follows that save.
+          retry: () => { queued.current = shown; current = applySettingsPatch(current, patch); setSettings(current); saver.current?.push(patch) },
+        })
+        throw err
+      }
+      settle({ ok: true })
+      if (shown) setNotice((prev) => ({ seq: (prev?.seq ?? 0) + 1, ...shown }))
+    }
+    saver.current = createCoalescer(send, {
       merge: mergeSettingsPatches, // entry keys keep both patches' entries
       // A refused save (e.g. 409: deleting a launch profile still in use) left the optimistic copy
-      // ahead of the server: re-read it so the UI shows what is really stored.
+      // ahead of the server: re-read it so the field reverts; its inline error says why, with Retry.
       onError: (err) => { console.error('settings save failed', err); void reloadSettings() },
     })
   }
@@ -202,9 +229,8 @@ export function useSettings(): UseSettings {
 
   const hist = useRef<SettingsHistory | null>(null)
   if (!hist.current) hist.current = createSettingsHistory()
-  const [notice, setNotice] = useState<SettingsNotice | null>(null)
-  const announce = useCallback((kind: SettingsNotice['kind'], change: SettingsChange | undefined) => {
-    if (change) setNotice((prev) => ({ seq: (prev?.seq ?? 0) + 1, kind, change }))
+  const queue = useCallback((kind: SettingsNotice['kind'], change: SettingsChange | undefined) => {
+    if (change) queued.current = { kind, change }
   }, [])
 
   const apply = useCallback((patch: SettingsPatch) => {
@@ -216,21 +242,21 @@ export function useSettings(): UseSettings {
   }, [])
 
   const update = useCallback((patch: SettingsPatch) => {
-    announce('changed', hist.current?.record(current, patch))
+    queue('changed', hist.current?.record(current, patch))
     apply(patch)
-  }, [apply, announce])
+  }, [apply, queue])
 
   const undo = useCallback(() => {
     const c = hist.current?.undo()
+    queue('undone', c)
     if (c) apply(c.before)
-    announce('undone', c)
-  }, [apply, announce])
+  }, [apply, queue])
 
   const redo = useCallback(() => {
     const c = hist.current?.redo()
+    queue('redone', c)
     if (c) apply(c.after)
-    announce('redone', c)
-  }, [apply, announce])
+  }, [apply, queue])
 
   const history: SettingsUndo = {
     undo, redo, notice, canUndo: hist.current.canUndo(), canRedo: hist.current.canRedo(),

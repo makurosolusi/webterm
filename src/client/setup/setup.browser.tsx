@@ -104,12 +104,12 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
       {choice === 'other' && pathError ? <p role="alert" className="m-0 text-xs text-destructive">{T.saveFailed}</p> : null}
       {choice !== 'off' ? (
         <div className="flex items-start gap-2">
-          <Switch id="setup-headless" checked={headlessOn} disabled={locked || env.load.status !== 'ready' || env.savingKey === headlessKey}
+          <Switch id="setup-headless" checked={headlessOn} disabled={locked || env.load.status !== 'ready' || env.saveState(headlessKey)?.status === 'saving'}
             onCheckedChange={(v) => void env.write(headlessKey, v ? 'on' : null)} />
           <div className="flex flex-col">
             <Label htmlFor="setup-headless">{T.headless}</Label>
             <span className="text-xs opacity-70">{locked ? T.headlessLocked : T.headlessHint}</span>
-            {env.saveError?.key === headlessKey ? <span role="alert" className="text-xs text-destructive">{T.saveFailed}</span> : null}
+            {env.saveState(headlessKey)?.status === 'error' ? <span role="alert" className="text-xs text-destructive">{T.saveFailed}</span> : null}
           </div>
         </div>
       ) : null}

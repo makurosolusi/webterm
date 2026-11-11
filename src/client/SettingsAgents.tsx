@@ -74,7 +74,8 @@ export function AgentSettings({
         id="st-skipApprovals"
         setting="skipApprovals"
         label="Skip approvals"
-        hint={s.skipApprovals ? <span style={{ color: 'var(--st-warning)' }}>{SKIP_APPROVALS_HINT}</span> : SKIP_APPROVALS_HINT}
+        hint={SKIP_APPROVALS_HINT}
+        tone={s.skipApprovals ? 'warning' : undefined}
         value={s.skipApprovals}
         onChange={(v) => onChange({ skipApprovals: v })}
       />
