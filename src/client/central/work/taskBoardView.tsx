@@ -53,7 +53,7 @@ export function useTaskBoardView(centralEnabled: boolean): BottomPanelView {
   const isOpen = useSyncExternalStore(subscribe, () => open, () => open)
   const shown = useShownBottomView() === TASK_BOARD_VIEW_ID
   return {
-    id: TASK_BOARD_VIEW_ID, label: TL.tab, tooltip: TL.tab, open: isOpen && centralEnabled, onClose: () => setTaskBoardOpen(false),
+    id: TASK_BOARD_VIEW_ID, label: TL.tab, tooltip: TL.tab, open: isOpen && centralEnabled, onClose: () => setTaskBoardOpen(false), onOpen: () => setTaskBoardOpen(true),
     render: () => <Suspense fallback={null}><TaskBoard visible={shown} /></Suspense>,
   }
 }

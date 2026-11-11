@@ -43,7 +43,7 @@ export interface TimelinePanelProps {
 /** Activity as a tab of the bottom panel (see App.bottomPanel). The toolbar lives in the body, so no actions slot. */
 export function useTimelineView(props: TimelinePanelProps): BottomPanelView {
   return {
-    id: 'activity', label: 'Activity', tooltip: 'Activity', open: useTimelineOpen(), onClose: () => setTimelineOpen(false),
+    id: 'activity', label: 'Activity', tooltip: 'Activity', open: useTimelineOpen(), onClose: () => setTimelineOpen(false), onOpen: () => setTimelineOpen(true),
     render: () => <Suspense fallback={null}><TimelinePanel {...props} /></Suspense>,
   }
 }
