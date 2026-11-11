@@ -20,9 +20,12 @@ import { loadMonaco } from './lazyMonaco'
 import { ShowInFilesButton } from './ShowInFilesButton'
 import './editor.css'
 import { NodeNameLabel } from './nodeName.label'
+import { WordWrapButton } from './editorWrap'
+import { useEditorView } from './EditorNode.view'
 
 // marked + DOMPurify load with the first preview, not with the board.
 const EditorMarkdownPreview = lazy(() => import('./EditorMarkdownPreview'))
+const MIN_WIDTH = 320
 
 export interface EditorNodeProps extends NodeProps {
   /** Isi teks + `version` + `encoding`; REJECT saat gagal baca. Default `fsClient.readMeta`. */
@@ -76,6 +79,7 @@ function EditorNode({
   // No language server for this file's language: say so, with the one command that fixes it.
   const lspLanguage = editable ? lspLanguageIdForExt(ext) : ''
   const lspHint = useLspHint(lspLanguage)
+  const view = useEditorView(id, filePath, ef.live, MIN_WIDTH)
 
   // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
@@ -140,14 +144,14 @@ function EditorNode({
 
   return (
     <>
-      <NodeLayoutResizer minWidth={320} minHeight={180} color={swatch} />
+      <NodeLayoutResizer minWidth={MIN_WIDTH} minHeight={180} color={swatch} onFitWidth={view.fit} />
       <div
         className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
         style={{ '--node-swatch': swatch } as CSSProperties}
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >
-        <div className="node-header">
+        <div className="node-header" onContextMenu={editable ? view.openMenu : undefined}>
           <span
             className="node-title editor-node__name"
             title={filePath}
@@ -172,6 +176,7 @@ function EditorNode({
                 >
                   <span className={`codicon codicon-${ef.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
                 </ToolbarButton>
+                <WordWrapButton on={view.wrap} onToggle={view.toggleWrap} />
                 {lspLanguage && (
                   <ToolbarButton label="Outline" title="Go to symbol in file (⇧⌘O)" data-title="Go to symbol in file (⇧⌘O)" onClick={() => void showOutline(id)}>
                     <span className="codicon codicon-symbol-class" aria-hidden="true" />
@@ -197,6 +202,7 @@ function EditorNode({
             </ToolbarButton>
           </ToolbarContainer>
         </div>
+        {view.menu}
         {/* Breadcrumb path file seperti di bawah tab editor VS Code: 3 segmen terakhir, statis. */}
         {filePath && (
           <VscodeBreadcrumbs

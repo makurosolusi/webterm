@@ -20,6 +20,8 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- Editor and diff nodes: Word wrap toggle (⌥Z), on by default for Markdown and text, remembered per node.
+- Fit width to content: in the node menu, or double-click the right edge while resizing.
 - Settings › Canvas: choose the color and thickness of the cables between nodes.
 - Goals now show above the Tasks board with progress, and you can activate or abandon them; Central's plans land on the board as ordered tasks with dependencies.
 - Central can set reminders and has due dates on tasks.

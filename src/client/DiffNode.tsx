@@ -24,6 +24,7 @@ import { getStatus, subscribeStatus } from './ws'
 const ScmPanel = lazy(() => import('./ScmPanel').then((m) => ({ default: m.ScmPanel })))
 import './DiffNode.css'
 import { NodeNameLabel } from './nodeName.label'
+import { effectiveWrap, useWordWrap, WordWrapButton } from './editorWrap'
 
 const STATUS_LETTER: Record<GitChangeStatus, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U' }
 const TURN_ENDED: readonly (AgentStatus | undefined)[] = ['waiting', 'done']
@@ -106,6 +107,10 @@ function DiffNode({ id, data, selected }: NodeProps) {
   const sides = useMemo(() => (file && !file.binary && !file.sensitive && !file.truncated ? { path: file.path, original: file.original, modified: file.modified } : null), [file])
   const notedLines = useMemo(() => notes.filter((n) => n.path === file?.path).map((n) => n.line), [notes, file])
   const editor = useDiffEditor(host, sides, notedLines)
+  const storedWrap = useStore((s) => (s.nodeLookup.get(id)?.data as { wordWrap?: unknown } | undefined)?.wordWrap)
+  const wrap = effectiveWrap(storedWrap, file?.path ?? '')
+  const toggleWrap = () => rf.updateNodeData(id, { wordWrap: !wrap })
+  useWordWrap(editor.wrapTarget, wrap, toggleWrap)
 
   const open = (path: string) => { setActive(path); void loadFile(path) }
   const onUndo = async (hunkId: string, header: string) => {
@@ -153,6 +158,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
           <span className="diff-node__spacer" />
           <NodeResizeToggle />
           <ToolbarContainer className="nodrag diff-node__actions">
+            {sides && <WordWrapButton on={wrap} onToggle={toggleWrap} />}
             <IconTooltip label={sendTip}>
               <VscodeButton secondary onClick={() => void onSend()}>
                 Send to agent ({notes.length})

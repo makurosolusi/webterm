@@ -128,6 +128,7 @@ export interface WsNode {
   comments?: Comment[]    // thread aktivitas/catatan per node
   dirPath?: string        // node 'files': direktori akar yang ditampilkan
   filePath?: string       // node 'editor': file yang dibuka
+  wordWrap?: boolean      // node 'editor'/'diff': word wrap chosen by the user; absent = by file type (editorWrap.tsx)
   viewOpts?: ViewOpts     // node 'files': opsi tampilan (hidden/sort); absen = default
   expanded?: string[]     // node 'files': expanded tree folders, paths relative to dirPath (validExpanded)
   panes?: Pane            // node 'terminal': pohon split pane; absen = satu terminal ber-id node

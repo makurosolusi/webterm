@@ -13,7 +13,8 @@ const fake = vi.hoisted(() => {
     getValue: () => state.value,
     setValue: (v: string) => { state.value = v; state.onChange() },
     onDidChangeModelContent: (cb: () => void) => { state.onChange = cb },
-    addAction: (d: { run: () => void }) => { state.save = d.run; return { dispose: () => {} } },
+    addAction: (d: { id: string; run: () => void }) => { if (d.id === 'webterm.editor.save') state.save = d.run; return { dispose: () => {} } },
+    updateOptions: () => {},
     dispose: () => {},
   }
   const monaco = {
