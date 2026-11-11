@@ -14,20 +14,17 @@ import { HL } from './health/healthModel'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
-import { type CentralTab, useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
+import { useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
+import { CENTRAL_PANEL_TABS, type CentralPanelTab } from './centralTabs'
 import './central.css'
 
-type TabId = CentralTab | 'memory' | 'health'
+type TabId = CentralPanelTab
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'status', label: CL.tabStatus },
-  { id: 'abilities', label: CL.tabAbilities },
-  { id: 'agents', label: CL.tabAgents },
-  { id: 'skills', label: CL.tabSkills },
-  { id: 'memory', label: CL.tabMemory },
-  { id: 'health', label: HL.tab },
-]
+const TAB_LABELS: Record<TabId, string> = {
+  status: CL.tabStatus, abilities: CL.tabAbilities, agents: CL.tabAgents, skills: CL.tabSkills, memory: CL.tabMemory, health: HL.tab,
+}
+const TABS = CENTRAL_PANEL_TABS.map((id) => ({ id, label: TAB_LABELS[id] }))
 
 /** A tab this panel has; anything else (a removed tab such as the old Approvals) opens Status. */
 export const knownTab = (tab: string | undefined): TabId => TABS.find((t) => t.id === tab)?.id ?? 'status'
