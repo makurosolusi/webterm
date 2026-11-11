@@ -1,6 +1,7 @@
 // The desktop client's URL contract: which board is open (`/w/:workspaceId`) plus the overlays shown
 // on top of it as search params, so a reload (or a shared link) lands on the same screen:
 //   ?settings=<section>  ?ctab=<Central tab>  ?panel=<bottom panel view>  ?view=kanban  ?help=1
+//   ?setup=1 (first-run wizard, resume) | ?setup=<step>
 // The canvas stays mounted under every overlay. Values outside the whitelists below are dropped.
 // Opening an overlay pushes a history entry (Back closes it, like VS Code web / GitHub modals);
 // changes inside an open overlay and closing it replace the entry.
@@ -9,6 +10,7 @@ import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION } from './canvasBackground.open'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
 
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
  *  loaded Settings panel stays out of the start-up chunk. */
@@ -34,6 +36,8 @@ export type SettingsRouteSection = SectionId
 export type CentralRouteTab = (typeof CENTRAL_ROUTE_TABS)[number]
 export type BottomPanelRouteId = (typeof BOTTOM_PANEL_ROUTE_IDS)[number]
 export type AppRouteView = (typeof APP_ROUTE_VIEWS)[number]
+/** `?setup=` value: a wizard step, or `resume` (`?setup=1`) = the first unfinished step. */
+export type SetupRoute = SetupStep | 'resume'
 
 /** Everything the URL says about the screen. */
 export interface AppRoute {
@@ -43,12 +47,13 @@ export interface AppRoute {
   panel: BottomPanelRouteId | null
   view: AppRouteView | null
   help: boolean
+  setup: SetupRoute | null
 }
 
-export const EMPTY_APP_ROUTE: AppRoute = { workspaceId: null, settings: null, ctab: null, panel: null, view: null, help: false }
+export const EMPTY_APP_ROUTE: AppRoute = { workspaceId: null, settings: null, ctab: null, panel: null, view: null, help: false, setup: null }
 
 const WORKSPACE_PATH = /^\/w\/([^/]+)\/?$/
-const OVERLAY_KEYS = ['settings', 'ctab', 'panel', 'view', 'help'] as const
+const OVERLAY_KEYS = ['settings', 'ctab', 'panel', 'view', 'help', 'setup'] as const
 
 const pick = <T extends string>(allowed: readonly T[], value: string | null): T | null =>
   value !== null && (allowed as readonly string[]).includes(value) ? (value as T) : null
@@ -74,6 +79,7 @@ export function parseAppRoute(pathname: string, search: string): AppRoute {
     panel: pick(BOTTOM_PANEL_ROUTE_IDS, q.get('panel')),
     view: pick(APP_ROUTE_VIEWS, q.get('view')),
     help: q.get('help') === '1',
+    setup: q.get('setup') === '1' ? 'resume' : pick(SETUP_STEPS, q.get('setup')),
   }
 }
 
@@ -86,6 +92,7 @@ export function buildAppHref(route: AppRoute): string {
   if (route.panel) q.set('panel', route.panel)
   if (route.view) q.set('view', route.view)
   if (route.help) q.set('help', '1')
+  if (route.setup) q.set('setup', route.setup === 'resume' ? '1' : route.setup)
   const qs = q.toString()
   return qs ? `${path}?${qs}` : path
 }
@@ -106,6 +113,8 @@ export interface AppRouteActions {
   setPanel: (panel: BottomPanelRouteId | null, opts?: { replace?: boolean }) => void
   setView: (view: AppRouteView | null) => void
   setHelp: (open: boolean) => void
+  /** Open the first-run wizard on a step (`resume` = first unfinished), or close it (null). */
+  setSetup: (setup: SetupRoute | null) => void
   /** Show board `id` (null = no board). `replace` for corrections that must not add a Back step. */
   goWorkspace: (id: string | null, opts?: { replace?: boolean }) => void
 }
@@ -126,6 +135,7 @@ function makeActions(latest: { current: { route: AppRoute; navigate: NavigateFun
     setPanel: (panel, opts) => change({ panel }, opts?.replace === true),
     setView: (view) => change({ view }),
     setHelp: (help) => change({ help }),
+    setSetup: (setup) => change({ setup }),
     goWorkspace: (workspaceId, opts) => change({ workspaceId }, opts?.replace === true),
   }
 }

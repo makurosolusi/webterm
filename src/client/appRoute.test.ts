@@ -10,7 +10,7 @@ import { knownTab } from './central/CentralControlPanel'
 describe('parseAppRoute', () => {
   it('reads the board and every overlay', () => {
     expect(parseAppRoute('/w/ws-1', '?settings=canvas&ctab=skills&panel=problems&view=kanban&help=1')).toEqual({
-      workspaceId: 'ws-1', settings: 'canvas', ctab: 'skills', panel: 'problems', view: 'kanban', help: true,
+      workspaceId: 'ws-1', settings: 'canvas', ctab: 'skills', panel: 'problems', view: 'kanban', help: true, setup: null,
     })
     expect(parseAppRoute('/', '')).toEqual(EMPTY_APP_ROUTE)
   })
@@ -26,6 +26,13 @@ describe('parseAppRoute', () => {
     expect(parseAppRoute('/w/%E0', '')).toEqual(EMPTY_APP_ROUTE)
   })
 
+  it('reads ?setup=1 as resume and ?setup=<step>; unknown steps are dropped', () => {
+    expect(parseAppRoute('/', '?setup=1').setup).toBe('resume')
+    expect(parseAppRoute('/', '?setup=central').setup).toBe('central')
+    expect(parseAppRoute('/', '?setup=keymap').setup).toBeNull()
+    expect(buildAppHref({ ...EMPTY_APP_ROUTE, setup: 'resume' })).toBe('/?setup=1')
+  })
+
   it('decodes the workspace id and accepts a trailing slash', () => {
     expect(parseAppRoute('/w/a%20b/', '').workspaceId).toBe('a b')
   })
@@ -33,9 +40,9 @@ describe('parseAppRoute', () => {
 
 describe('buildAppHref', () => {
   it('round-trips through parse with a fixed param order', () => {
-    const route: AppRoute = { workspaceId: 'a b', settings: 'health', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true }
+    const route: AppRoute = { workspaceId: 'a b', settings: 'health', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true, setup: 'browser' }
     const href = buildAppHref(route)
-    expect(href).toBe('/w/a%20b?settings=health&ctab=memory&panel=tasks&view=kanban&help=1')
+    expect(href).toBe('/w/a%20b?settings=health&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
     const [path, search] = href.split('?')
     expect(parseAppRoute(path, `?${search}`)).toEqual(route)
     expect(buildAppHref(parseAppRoute('/', '?help=1&settings=shell'))).toBe('/?settings=shell&help=1')
@@ -49,6 +56,8 @@ describe('navigationMode', () => {
     expect(navigationMode(at({}), at({ settings: 'terminal' }))).toBe('push')
     expect(navigationMode(at({}), at({ help: true }))).toBe('push')
     expect(navigationMode(at({}), at({ workspaceId: 'b' }))).toBe('push')
+    expect(navigationMode(at({}), at({ setup: 'resume' }))).toBe('push')
+    expect(navigationMode(at({ setup: 'claude' }), at({ setup: 'browser' }))).toBe('replace')
   })
   it('changing or closing an open overlay replaces', () => {
     expect(navigationMode(at({ settings: 'terminal' }), at({ settings: 'canvas' }))).toBe('replace')
