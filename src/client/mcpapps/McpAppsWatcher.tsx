@@ -7,6 +7,7 @@
 import { useEffect } from 'react'
 import { useReactFlow, type Node } from '@xyflow/react'
 import { claimApps } from './mcpApp.api'
+import { afterPageLoad } from '../pageLoad'
 
 export const APP_NODE_KIND = 'app'
 /** Must match APP_PUBLISHED_EVENT in src/server/mcpapps/mcpApp.publish.ts. */
@@ -46,15 +47,20 @@ export default function McpAppsWatcher() {
       }
     }
     let poll: ReturnType<typeof setInterval> | null = null
-    const source = typeof EventSource === 'undefined' ? null : new EventSource(APP_STREAM_URL)
-    if (source) {
-      source.onopen = () => void claim()
-      source.addEventListener('sense', () => void claim())
-      // CONNECTING = the browser retries by itself; CLOSED = refused (non-200), so poll slowly instead.
-      source.onerror = () => { if (source.readyState === EventSource.CLOSED && !poll) poll = setInterval(() => void claim(), APP_FALLBACK_POLL_MS) }
+    let source: EventSource | null = null
+    let cancelStart = (): void => {}
+    if (typeof EventSource !== 'undefined') {
+      cancelStart = afterPageLoad(() => {
+        const next = new EventSource(APP_STREAM_URL)
+        source = next
+        next.onopen = () => void claim()
+        next.addEventListener('sense', () => void claim())
+        // CONNECTING = the browser retries by itself; CLOSED = refused (non-200), so poll slowly instead.
+        next.onerror = () => { if (next.readyState === EventSource.CLOSED && !poll) poll = setInterval(() => void claim(), APP_FALLBACK_POLL_MS) }
+      })
     } else poll = setInterval(() => void claim(), APP_FALLBACK_POLL_MS)
     void claim()
-    return () => { source?.close(); if (poll) clearInterval(poll) }
+    return () => { cancelStart(); source?.close(); if (poll) clearInterval(poll) }
   }, [rf])
   return null
 }

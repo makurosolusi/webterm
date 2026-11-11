@@ -34,6 +34,7 @@ import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { uiSessions } from './uiSession'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
+import { requestOrigin } from './staticAssets.origin'
 import { onUnhandledRejection } from './processCrash'
 import { closeStores } from './shutdown'
 import { upgradeRoute } from './upgradeRouting'
@@ -223,7 +224,7 @@ if (dev) {
     if (routeApp(req, res, url)) return
     const hit = resolveAsset(url.pathname, assets)
     if (!hit) { res.statusCode = 404; res.end('not found'); return }
-    void serveAsset(res, hit, req.headers['accept-encoding']) // never rejects: a missing file is a 404 for this request only
+    void serveAsset(res, hit, req.headers['accept-encoding'], requestOrigin(req.headers)) // never rejects: a missing file is a 404 for this request only
   })
 }
 
