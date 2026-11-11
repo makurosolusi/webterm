@@ -19,7 +19,17 @@ export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv
 
 export type LaunchStage = 'wrapper' | 'claude' | 'auth'
 export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'claude_not_found' | 'auth_failed' | 'check_failed'
-export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string }
+/** `install`: on a claude-missing step, the official install commands for the UI to show with a copy button. */
+export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string; install?: ClaudeInstall }
+export interface ClaudeInstall { installCommand: string; npmCommand: string; docsUrl: string }
+
+/** Official Claude Code install (https://code.claude.com/docs/en/setup, checked 2026-11-11): native
+ *  installer for macOS/Linux/WSL (the server's platforms), npm as the alternative (Node.js 22+). */
+export const CLAUDE_INSTALL: ClaudeInstall = {
+  installCommand: 'curl -fsSL https://claude.ai/install.sh | bash',
+  npmCommand: 'npm install -g @anthropic-ai/claude-code',
+  docsUrl: 'https://code.claude.com/docs/en/setup',
+}
 export interface LaunchProbe {
   ok: boolean
   profile: { id: string; name: string }
@@ -53,7 +63,8 @@ export const PROBE_TEXT = {
   wrapperFailedHint: 'Run the same command in a terminal on the server to see the full error.',
   wrapperTimeout: (w: string): string => `${w} did not finish in time`,
   wrapperSpawn: (w: string): string => `${w} could not be started`,
-  claudeMissing: 'The claude CLI was not found on PATH. Install Claude Code and try again.',
+  claudeMissing: `The claude CLI was not found on PATH. Install Claude Code on the server (${CLAUDE_INSTALL.installCommand}) and try again.`,
+  claudeMissingHint: `Alternative: ${CLAUDE_INSTALL.npmCommand}. Afterwards open a new terminal so claude is on PATH.`,
   claudeMissingWrapped: (w: string): string => `${w} could not find claude`,
   claudeOk: (v: string): string => (v ? `claude ${v}` : 'claude found'),
   authOk: (m: string): string => (m === 'api_key' || m === 'oauth_token' ? `Signed in with a credential from the environment (${m})` : `Signed in${m ? ` (${m})` : ''}`),
@@ -124,7 +135,7 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
   const steps: StageResult[] = []
   const profile = { id: launch.profile.id, name: launch.profile.name }
   const fail = (stage: LaunchStage, failed: LaunchFailure, message: string, hint?: string): LaunchProbe => {
-    steps.push({ stage, ok: false, message, ...(hint ? { hint } : {}) })
+    steps.push({ stage, ok: false, message, ...(hint ? { hint } : {}), ...(failed === 'claude_not_found' ? { install: CLAUDE_INSTALL } : {}) })
     return { ok: false, profile, steps, failed }
   }
   const wrapped = launch.wrapper.length > 0
@@ -151,7 +162,7 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
     steps.push({ stage: 'wrapper', ok: true, message: PROBE_TEXT.wrapperOk(w) })
     steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk(firstLine(r.stdout).slice(0, 60)) })
   } else {
-    if (!onPath(launch.bin)) return fail('claude', 'claude_not_found', PROBE_TEXT.claudeMissing)
+    if (!onPath(launch.bin)) return fail('claude', 'claude_not_found', PROBE_TEXT.claudeMissing, PROBE_TEXT.claudeMissingHint)
     steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk('') })
   }
 

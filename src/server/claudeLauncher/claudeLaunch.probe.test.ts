@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { probeClaudeLaunch } from './claudeLaunch.probe'
+import { CLAUDE_INSTALL, probeClaudeLaunch } from './claudeLaunch.probe'
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { createClaudePreflight } from '../central/runtime/claudePreflight'
 import { registerClaudeLaunchSettings } from './claudeLauncher'
@@ -84,6 +84,20 @@ describe('probeClaudeLaunch (real fake bins)', () => {
     const r = await probeClaudeLaunch(profile('envman -e x -- claude'), { env: bin({ envman: FAKE_ENVMAN }), provider: login })
     expect(r).toMatchObject({ ok: false, failed: 'claude_not_found' })
     expect(r.steps.map((s) => [s.stage, s.ok])).toEqual([['wrapper', true], ['claude', false]])
+    expect(r.steps.at(-1)?.install).toEqual(CLAUDE_INSTALL)
+  })
+
+  it('claude missing (no wrapper): the step carries the official install commands for a copy button', async () => {
+    const r = await probeClaudeLaunch(profile(''), { env: bin({}), provider: login })
+    expect(r).toMatchObject({ ok: false, failed: 'claude_not_found' })
+    expect(r.steps).toEqual([{ stage: 'claude', ok: false, message: expect.stringContaining(CLAUDE_INSTALL.installCommand), hint: expect.stringContaining(CLAUDE_INSTALL.npmCommand), install: CLAUDE_INSTALL }])
+    expect(CLAUDE_INSTALL.installCommand).toBe('curl -fsSL https://claude.ai/install.sh | bash')
+    expect(CLAUDE_INSTALL.npmCommand).toBe('npm install -g @anthropic-ai/claude-code')
+  })
+
+  it('only the claude-missing step carries install commands', async () => {
+    const r = await probeClaudeLaunch(profile(''), { env: bin({ claude: FAKE_CLAUDE }), provider: login })
+    expect(r.steps.some((s) => s.install)).toBe(false)
   })
 
   it('a missing -- is normalised before running, so it still works', async () => {
