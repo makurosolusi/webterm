@@ -7,8 +7,8 @@ import { join, relative } from 'node:path'
 import { expect, it } from 'vitest'
 
 const CLIENT = __dirname
-/** Builds the landing link (TokenAccessCard) and trades it for the cookie; nothing else may. */
-const TOKEN_PARAM_OWNERS = ['transportToken.ts', 'tokenAccess.api.client.ts']
+/** Strips the legacy landing link (and trades it while no account exists); nothing else may. */
+const TOKEN_PARAM_OWNERS = ['transportToken.ts']
 const FORBIDDEN: [string, RegExp][] = [
   ['the removed token transport helpers', /\b(?:tokenQuery|peekToken|withToken|TOKEN_HEADER|TOKEN_KEY)\b/],
   ['a token header', /x-webterm-token/i],

@@ -1,59 +1,26 @@
-// What App shows when the server refuses this browser (the boot fetch answers 401/403): the way to
-// get the HttpOnly `wt_ui` session cookie (transportToken.ts). Two ways in, like Jupyter and VS Code
-// server: ask the server to open a signed-in window on its own machine (the one-time code travels
-// through a file only the user can read, never through this page), or paste the access token for
-// remote/headless use. While signed out and visible, the tab polls GET /auth/me and reloads once a
-// window elsewhere has signed this browser in.
+// What the desktop shows when this browser may not load the board: GET /auth/me picks the mode.
+//   setupRequired + signed in (a window the server opened, or a token-era session) -> the account form
+//   setupRequired, no proof -> "Open setup window on this computer", or the setup code from another device
+//   account exists, signed out -> username + password, or "Open signed-in window" (local, passwordless)
+// Pattern: code-server (password -> session cookie) plus Jupyter's redirect file for the local window.
+// While visible the tab polls /auth/me: a window elsewhere that signs this browser in reloads it, and a
+// setup window that signs it in shows the form here too. A reload keeps the path the user asked for.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import Brand from './Brand'
-import { fetchSignedIn, loginWithToken, requestOpen } from './transportToken'
+import { LoginForm, OpenWindowButton, SetupForm } from './SignInForms'
+import { SIGN_IN_TEXT } from './signInLabels'
+import { fetchMe, type AuthMe } from './transportToken'
 
+export { SIGN_IN_TEXT } from './signInLabels'
 export const SIGN_IN_POLL_MS = 2000
-const COUNTDOWN_TICK_MS = 1000
-const HTTP_NO_CONTENT = 204
-const HTTP_ACCEPTED = 202
-const HTTP_FORBIDDEN = 403
-const HTTP_CONFLICT = 409
-const HTTP_TOO_MANY = 429
-
-export const SIGN_IN_TEXT = {
-  loading: 'Checking sign-in…',
-  title: 'Sign in to webterm',
-  intro: 'This browser is not signed in. Open a signed-in window on the computer running webterm, or paste the access token.',
-  open: 'Open signed-in window',
-  opening: 'A signed-in webterm window is opening on the computer running webterm. This tab reloads by itself once you are signed in.',
-  rateLimited: (s: number) => `A window was just opened. You can ask again in ${s} s.`,
-  tokenLabel: 'Access token',
-  tokenPlaceholder: 'access token',
-  tokenHint: 'Found in the secrets folder of the webterm data directory (WEBTERM_TOKEN).',
-  showToken: 'Show token',
-  hideToken: 'Hide token',
-  signIn: 'Sign in',
-  wrongToken: 'That token was not accepted.',
-  noToken: 'This server has no access token. Use "Open signed-in window" instead.',
-  signedIn: 'Signed in. Loading webterm…',
-  offline: 'Cannot reach the server. Still checking every 2 s.',
-  stillRefused: 'This browser is signed in, but the server still refused to load the workspaces. Reload to try again.',
-  retry: 'Retry',
-  failed: (what: string, cause: string) => `${what} failed: ${cause}`,
-} as const
-
-type Phase =
-  | { kind: 'loading' }
-  | { kind: 'signedOut' }
-  | { kind: 'opening' }
-  | { kind: 'rateLimited'; until: number }
-  | { kind: 'error'; message: string; retry: () => void }
-  | { kind: 'signedIn' }
 
 /** Module-level so the default is one stable function: an inline default would re-run every effect that depends on it. */
 const reloadPage = (): void => location.reload()
 
 const causeOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+/** Signed in to an account: the board may load (a token-era session during setup is not enough). */
+const entered = (m: AuthMe): boolean => m.signedIn && !m.setupRequired
 
 export interface SignInScreenProps {
   /** Called once when this browser becomes signed in; tests replace it. */
@@ -61,39 +28,40 @@ export interface SignInScreenProps {
   now?: () => number
 }
 
+const MUTED = 'max-w-[440px] text-center text-xs text-[var(--vscode-descriptionForeground)]'
+
+/** The signed-out page: sign in, or create the first account. */
 export default function SignInScreen({ reload = reloadPage, now = Date.now }: SignInScreenProps) {
-  const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
+  const [me, setMe] = useState<AuthMe | null>(null)
+  const [fatal, setFatal] = useState<{ message: string; retry: () => void } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
-  const [token, setToken] = useState('')
-  const [showToken, setShowToken] = useState(false)
-  const [tokenError, setTokenError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-  const [, tick] = useState(0)
+  const [done, setDone] = useState(false)
   const reloaded = useRef(false)
 
   const signedIn = useCallback(() => {
-    setPhase({ kind: 'signedIn' })
+    setDone(true)
     if (!reloaded.current) { reloaded.current = true; reload() }
   }, [reload])
 
-  // Initial check. Already signed in here means the refusal is not about the cookie: say so, do
-  // not reload (a reload would only meet the same refusal, in a loop).
+  // Already in at mount means the refusal is not about the cookie: say so, never reload in a loop.
   const check = useCallback(() => {
-    setPhase({ kind: 'loading' })
-    fetchSignedIn().then(
-      (yes) => setPhase(yes ? { kind: 'error', message: SIGN_IN_TEXT.stillRefused, retry: reload } : { kind: 'signedOut' }),
-      (e: unknown) => setPhase({ kind: 'error', message: SIGN_IN_TEXT.failed('Checking sign-in', causeOf(e)), retry: check }),
+    setMe(null)
+    setFatal(null)
+    fetchMe().then(
+      (m) => { if (entered(m)) setFatal({ message: SIGN_IN_TEXT.stillRefused, retry: reload }); setMe(m) },
+      (e: unknown) => setFatal({ message: SIGN_IN_TEXT.failed('Checking sign-in', causeOf(e)), retry: check }),
     )
   }, [reload])
   useEffect(check, [check])
 
-  const polling = phase.kind === 'signedOut' || phase.kind === 'opening' || phase.kind === 'rateLimited'
+  const polling = me !== null && fatal === null && !done
   useEffect(() => {
     if (!polling) return
     const poll = () => {
       if (document.visibilityState !== 'visible') return
-      fetchSignedIn().then(
-        (yes) => { setOffline(false); if (yes) signedIn() },
+      fetchMe().then(
+        (m) => { setOffline(false); if (entered(m)) signedIn(); else setMe(m) },
         () => setOffline(true), // shown as the `offline` line; the next tick tries again
       )
     }
@@ -103,84 +71,44 @@ export default function SignInScreen({ reload = reloadPage, now = Date.now }: Si
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', poll) }
   }, [polling, signedIn])
 
-  const until = phase.kind === 'rateLimited' ? phase.until : 0
-  useEffect(() => {
-    if (until === 0) return
-    const timer = setInterval(() => {
-      if (now() >= until) setPhase((p) => (p.kind === 'rateLimited' ? { kind: 'signedOut' } : p))
-      else tick((n) => n + 1)
-    }, COUNTDOWN_TICK_MS)
-    return () => clearInterval(timer)
-  }, [until, now])
+  const alreadySetup = useCallback(() => { setNotice(SIGN_IN_TEXT.alreadySetup); check() }, [check])
 
-  const open = useCallback(() => {
-    setPending(true)
-    requestOpen().then(
-      ({ status, retryAfterS }) => {
-        if (status === HTTP_ACCEPTED) setPhase({ kind: 'opening' })
-        else if (status === HTTP_TOO_MANY) setPhase({ kind: 'rateLimited', until: now() + retryAfterS * 1000 })
-        else setPhase({ kind: 'error', message: SIGN_IN_TEXT.failed('Opening a signed-in window', `HTTP ${status}`), retry: open })
-      },
-      (e: unknown) => setPhase({ kind: 'error', message: SIGN_IN_TEXT.failed('Opening a signed-in window', causeOf(e)), retry: open }),
-    ).finally(() => setPending(false))
-  }, [now])
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const value = token.trim()
-    if (value === '' || pending) return
-    setPending(true)
-    setTokenError(null)
-    loginWithToken(value).then(
-      (status) => {
-        if (status === HTTP_NO_CONTENT) return signedIn()
-        if (status === HTTP_FORBIDDEN) setTokenError(SIGN_IN_TEXT.wrongToken)
-        else if (status === HTTP_CONFLICT) setTokenError(SIGN_IN_TEXT.noToken)
-        else setTokenError(SIGN_IN_TEXT.failed('Signing in', `HTTP ${status}`))
-      },
-      (err: unknown) => setTokenError(SIGN_IN_TEXT.failed('Signing in', causeOf(err))),
-    ).finally(() => setPending(false))
+  const shell = 'absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-auto bg-[var(--vscode-editor-background)] p-4 text-foreground'
+  if (done || (me === null && fatal === null)) {
+    return <div role="status" className={`${shell} text-[13px] text-[var(--vscode-descriptionForeground)]`}>{done ? SIGN_IN_TEXT.signedIn : SIGN_IN_TEXT.loading}</div>
   }
-
-  const shell = 'absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[var(--vscode-editor-background)] text-foreground'
-  const muted = 'max-w-[440px] text-center text-xs text-[var(--vscode-descriptionForeground)]'
-  if (phase.kind === 'loading' || phase.kind === 'signedIn') {
-    return <div role="status" className={`${shell} text-[13px] text-[var(--vscode-descriptionForeground)]`}>{phase.kind === 'loading' ? SIGN_IN_TEXT.loading : SIGN_IN_TEXT.signedIn}</div>
-  }
+  const setup = !fatal && me?.setupRequired === true
+  const proof = setup && me?.signedIn === true
   return (
     <div className={shell}>
       <Brand gradientId="signin-brand" />
-      <h1 className="text-[15px] font-semibold">{SIGN_IN_TEXT.title}</h1>
-      <p className={muted}>{SIGN_IN_TEXT.intro}</p>
-      {phase.kind === 'error' ? (
+      <h1 className="text-[15px] font-semibold">{setup ? SIGN_IN_TEXT.setupTitle : SIGN_IN_TEXT.title}</h1>
+      {fatal ? (
         <div role="alert" className="flex flex-col items-center gap-2">
-          <p className="max-w-[440px] text-center text-xs text-[var(--vscode-errorForeground)]">{phase.message}</p>
-          <Button type="button" variant="outline" onClick={phase.retry}>{SIGN_IN_TEXT.retry}</Button>
+          <p className="max-w-[440px] text-center text-xs text-[var(--vscode-errorForeground)]">{fatal.message}</p>
+          <Button type="button" variant="outline" onClick={fatal.retry}>{SIGN_IN_TEXT.retry}</Button>
         </div>
-      ) : null}
-      <Button type="button" disabled={pending || phase.kind === 'rateLimited'} onClick={open}>{SIGN_IN_TEXT.open}</Button>
-      {phase.kind === 'opening' ? <p role="status" className={muted}>{SIGN_IN_TEXT.opening}</p> : null}
-      {phase.kind === 'rateLimited' ? (
-        <p role="status" className={muted}>{SIGN_IN_TEXT.rateLimited(Math.max(1, Math.ceil((phase.until - now()) / 1000)))}</p>
-      ) : null}
+      ) : setup ? (
+        <>
+          <p className={MUTED}>{proof ? SIGN_IN_TEXT.setupIntroProof : SIGN_IN_TEXT.setupIntroNoProof}</p>
+          {proof ? <SetupForm withCode={false} onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /> : (
+            <>
+              <OpenWindowButton label={SIGN_IN_TEXT.openSetup} now={now} />
+              <details className="flex w-[300px] max-w-full flex-col items-stretch gap-2 text-[13px]">
+                <summary className="cursor-pointer text-center">{SIGN_IN_TEXT.otherDevice}</summary>
+                <div className="mt-3"><SetupForm withCode onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /></div>
+              </details>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {notice ? <p role="status" className={MUTED}>{notice}</p> : <p className={MUTED}>{SIGN_IN_TEXT.intro}</p>}
+          <LoginForm onDone={signedIn} now={now} />
+          <OpenWindowButton label={SIGN_IN_TEXT.open} variant="outline" now={now} />
+        </>
+      )}
       {offline ? <p role="status" className="text-xs text-[var(--vscode-errorForeground)]">{SIGN_IN_TEXT.offline}</p> : null}
-      <form onSubmit={submit} className="mt-2 flex flex-col items-center gap-2">
-        <Label htmlFor="signin-access-token" className="text-[13px] font-normal text-[var(--vscode-descriptionForeground)]">{SIGN_IN_TEXT.tokenLabel}</Label>
-        <div className="flex items-center gap-1">
-          <Input
-            id="signin-access-token" className="h-auto w-[260px] text-center focus-visible:ring-0"
-            type={showToken ? 'text' : 'password'} autoComplete="off" placeholder={SIGN_IN_TEXT.tokenPlaceholder}
-            value={token} disabled={pending} onChange={(e) => setToken(e.target.value)}
-          />
-          <IconButton
-            type="button" size="icon-sm" label={showToken ? SIGN_IN_TEXT.hideToken : SIGN_IN_TEXT.showToken}
-            aria-pressed={showToken} onClick={() => setShowToken((v) => !v)}
-          ><span className={`codicon ${showToken ? 'codicon-eye-closed' : 'codicon-eye'}`} aria-hidden="true" /></IconButton>
-        </div>
-        <p className={muted}>{SIGN_IN_TEXT.tokenHint}</p>
-        <Button type="submit" variant="outline" disabled={pending || token.trim() === ''}>{SIGN_IN_TEXT.signIn}</Button>
-        {tokenError ? <div role="alert" className="text-xs text-[var(--vscode-errorForeground)]">{tokenError}</div> : null}
-      </form>
     </div>
   )
 }

@@ -44,6 +44,27 @@ describe('File > New Files Node', () => {
   })
 })
 
+describe('Account and Sign out', () => {
+  it('the title-bar Account button opens Settings › Account; File has Account… and Sign out', () => {
+    const onOpenAccount = vi.fn()
+    const onLogout = vi.fn()
+    mount({ showLogout: true, onOpenAccount, onLogout })
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }))
+    expect(onOpenAccount).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(onLogout).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Account…' }))
+    expect(onOpenAccount).toHaveBeenCalledTimes(2)
+  })
+
+  it('hidden while this browser holds no session', () => {
+    mount({ showLogout: false, onOpenAccount: vi.fn(), onLogout: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull()
+  })
+})
+
 describe('View menu', () => {
   // Policy: the node tab strip moved into the Layers side bar, so its toggle is gone for good.
   it('has no Show Node Tabs item', () => {

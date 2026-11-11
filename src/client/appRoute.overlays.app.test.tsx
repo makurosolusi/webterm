@@ -38,6 +38,13 @@ describe('Settings section in the URL', () => {
     expect(currentSection()).toContain('Agent')
   })
 
+  it('a deep link `?settings=account` opens Settings on Account', async () => {
+    await mountCanvas(fx(`${BOARD}?settings=account`))
+    await screen.findByRole('button', { name: 'Close settings' })
+    expect(currentSection()).toContain('Account')
+    expect(await screen.findByRole('heading', { level: 2, name: /Account/ })).toBeTruthy()
+  })
+
   it('picking a section replaces the URL entry', async () => {
     await mountCanvas(fx(BOARD))
     await act(async () => { harnessNavigate!(`${BOARD}?settings=agent`) }) // a link pushes Settings

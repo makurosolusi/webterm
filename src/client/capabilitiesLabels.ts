@@ -33,7 +33,7 @@ export const CAPABILITY_KEYWORDS: Readonly<Record<CapabilityId | 'advanced' | 't
   files: ['file', 'folder', 'explorer'],
   filesWrite: ['file', 'upload', 'edit', 'delete', 'rename'],
   telegram: ['telegram', 'bot', 'token', 'chat', 'message'],
-  token: ['token', 'access', 'security', 'tunnel', 'password', 'login', 'other device', 'remote'],
+  token: ['token', 'access', 'security', 'tunnel', 'automation', 'script', 'mcp', 'api', 'remote'],
   advanced: ['advanced', 'chrome', 'chromium', 'location', 'engine', 'claude', 'data', 'reset'],
 }
 

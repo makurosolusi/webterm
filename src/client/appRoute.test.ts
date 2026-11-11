@@ -58,8 +58,9 @@ describe('navigationMode', () => {
 })
 
 describe('whitelists match the surfaces they open', () => {
-  it('settings sections = SETTINGS_SECTIONS ids', () => {
+  it('settings sections = SETTINGS_SECTIONS ids, Account included', () => {
     expect([...SETTINGS_ROUTE_SECTIONS]).toEqual(SETTINGS_SECTIONS.map((s) => s.id))
+    expect(parseAppRoute('/', '?settings=account').settings).toBe('account')
   })
   it('every Central tab is one the panel has', () => {
     for (const t of CENTRAL_ROUTE_TABS) expect(knownTab(t)).toBe(t)

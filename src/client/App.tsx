@@ -222,7 +222,7 @@ export default function App() {
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onAddFiles, omni, setShowSettings, setShowHelp }} />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
