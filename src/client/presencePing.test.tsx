@@ -114,7 +114,7 @@ test('offline: skips ticks, warns once per outage, pings again the moment the so
   warn.mockRestore()
 })
 
-test('a board whose socket never opened (no terminal: stays `connecting`) still pings; offline skips', async () => {
+test('the first connect attempt (`connecting`) does not pause pings; offline skips', async () => {
   setConnection({ phase: 'connecting', attempt: 0 })
   const { unmount } = renderHook(() => usePresencePing(true))
   await vi.advanceTimersByTimeAsync(PRESENCE_PING_MS)

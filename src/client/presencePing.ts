@@ -34,7 +34,7 @@ let warned = false
 
 function ping(): void {
   // Server tak terjangkau (socket bersama reconnecting/offline/auth): detak pasti gagal, lewati saja.
-  // Bukan `!== 'connected'`: socket dibuka malas, board tanpa terminal tetap `connecting` selamanya.
+  // Bukan `!== 'connected'`: selama percobaan pertama (`connecting`) detak tetap jalan, server bisa saja sudah hidup.
   if (streamPaused()) return
   const visible = document.visibilityState === 'visible'
   const body = { visible, muted: readNotifyPrefs().muted, nodeId: visible ? focusedNodeId() : null }

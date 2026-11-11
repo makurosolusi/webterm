@@ -94,8 +94,8 @@ export const STREAM_REOPEN_JITTER_MS = 500
 /**
  * Phases in which a stream (SSE) retry waits: the shared socket is the liveness signal, so while it
  * is down, lost or refused, an SSE retry would only hammer the same dead server. `connecting` does
- * not pause: the socket opens lazily (first terminal or send), so on a board without one it may
- * never leave `connecting`, and a stream must still recover on its own backoff there.
+ * not pause: it is the page's first attempt (App opens the socket at sign-in, `connectEagerly`), and
+ * a stream that fails during that first second must still recover on its own backoff.
  */
 const STREAM_PAUSED: ReadonlySet<ConnectionPhase> = new Set(['reconnecting', 'offline', 'auth'])
 
