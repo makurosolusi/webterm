@@ -5,6 +5,7 @@
 // Reconnect is manual (like chat/chatStream) so every attempt re-runs the backfill from the last
 // seen seq: that closes gaps and also detects a server restart (seq went backwards).
 import { LOG_LEVELS, type LogChannelInfo, type LogEntry, type LogLevel, type LogQueryResult } from '../../shared/logEntry'
+import { afterPageLoad } from '../pageLoad'
 
 export type LogConnection = 'connecting' | 'open' | 'closed'
 
@@ -38,6 +39,7 @@ let lastSeq = 0
 let attempts = 0
 let source: EventSource | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
+let cancelStart = (): void => {}
 let channelCounts = new Map<string, number>()
 
 const emit = (patch: Partial<LogStreamState>): void => {
@@ -172,11 +174,13 @@ async function connect(gen: number): Promise<void> {
 function start(): void {
   generation += 1
   attempts = 0
-  void connect(generation)
+  const gen = generation
+  cancelStart = afterPageLoad(() => void connect(gen))
 }
 
 function stop(): void {
   generation += 1
+  cancelStart()
   if (retryTimer !== null) clearTimeout(retryTimer)
   retryTimer = null
   closeSource()

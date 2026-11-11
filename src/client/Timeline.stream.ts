@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeEvents, type TimelineEvent } from './Timeline.model'
 import { getJson } from './Timeline.status'
+import { afterPageLoad } from './pageLoad'
 
 export const STREAM_URL = '/api/events/stream'
 export const HISTORY_URL = '/api/events/history'
@@ -99,9 +100,10 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
       })
       next.onerror = retry
     }
-    void connect()
+    const cancelStart = afterPageLoad(() => void connect())
     return () => {
       stopped = true
+      cancelStart()
       if (timer) clearTimeout(timer)
       source?.close()
     }

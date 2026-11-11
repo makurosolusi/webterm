@@ -9,6 +9,7 @@
 import type { ChatEvent, ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
+import { afterPageLoad } from '../pageLoad'
 
 /** Reconnect backoff; capped so a long outage keeps retrying without hammering the server. */
 const RETRY_BASE_MS = 1_000
@@ -34,6 +35,7 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
   let attempts = 0
   let closed = false
   let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let cancelStart = (): void => {}
 
   const status = (next: ChatStreamStatus): void => {
     if (!closed) opts.onStatus(next)
@@ -58,6 +60,7 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
 
   const close = (final: ChatStreamStatus): void => {
     closed = true
+    cancelStart()
     if (retryTimer !== null) clearTimeout(retryTimer)
     retryTimer = null
     cleanup()
@@ -127,7 +130,7 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
     }
   }
 
-  connect()
+  cancelStart = afterPageLoad(connect)
   return { close: () => close('closed') }
 }
 
