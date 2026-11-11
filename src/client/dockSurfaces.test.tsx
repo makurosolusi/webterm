@@ -5,6 +5,7 @@
 // (not merely open ones). Real AppDock + AppBottomPanel + SecondarySideBar.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useRef } from 'react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Node } from '@xyflow/react'
 import AppDock from './App.chrome'
@@ -44,7 +45,10 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); reloadSideBarFromStorage() })
 
-function App() {
+/** The surfaces under a router, as in the app (they may read the URL contract, `./appRoute`). */
+const App = () => <MemoryRouter><Surfaces /></MemoryRouter>
+
+function Surfaces() {
   const nodesRef = useRef<Node[]>([])
   const problems = useProblems('ws1')
   const outputItems = useOutputStatusItems()

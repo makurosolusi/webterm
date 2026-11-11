@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- Boards, Settings sections, Central tabs and bottom-panel tabs keep their place on reload and work with Back/Forward: each has its own address (`/w/<board>?settings=agent`, `?ctab=memory`, `?panel=problems`) you can bookmark or share. Opening Settings returns to the section you last used.
 - `webterm --help`, `--version`, `--readme` and `--docs [topic]`: the server binary answers these without starting, and a mistyped option now stops with a suggestion (exit 2) instead of starting the server.
 - `bun run dev:fresh` starts a second, isolated webterm that behaves like a first run on a new machine (own temp data dir, home, Claude config, ports and tmux socket), next to your normal one; Ctrl+C stops it and deletes everything it wrote.
 - Link previews (Open Graph / Twitter cards with a 1200x630 image) when a webterm link is shared, using the address the link was opened from.

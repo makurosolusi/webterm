@@ -9,6 +9,8 @@ import { InboxPanelSurface } from './inboxPanelSurface'
 import { setSideBar, toggleSideBar, useNarrowWindow, useSideBar, type SideBarView } from './secondarySideBar.store'
 import { LazyPaneFallback } from './lazyPaneFallback'
 import { CapabilityOffer } from './CapabilityOffer'
+import { useCentralTabUrlSync } from './secondarySideBar.route'
+import type { AppRouteActions, CentralRouteTab } from './appRoute'
 import './secondarySideBar.css'
 
 // The views load when the side bar first opens; its chrome (tabs, actions) stays in the start-up chunk.
@@ -26,7 +28,17 @@ export function shownSideBarView(view: SideBarView, centralEnabled: boolean): Si
   return view === 'central' && !centralEnabled ? 'chat' : view
 }
 
-export default function SecondarySideBar({ centralEnabled }: { centralEnabled: boolean }): React.JSX.Element | null {
+export interface SecondarySideBarProps {
+  centralEnabled: boolean
+  /** The URL's `?ctab=` and its setter (App); without them the Central tab is local state. */
+  ctab?: CentralRouteTab | null
+  setCentralTab?: AppRouteActions['setCentralTab']
+}
+
+const NO_URL: AppRouteActions['setCentralTab'] = () => {}
+
+export default function SecondarySideBar({ centralEnabled, ctab = null, setCentralTab }: SecondarySideBarProps): React.JSX.Element | null {
+  useCentralTabUrlSync(ctab, setCentralTab ?? NO_URL, centralEnabled && setCentralTab !== undefined)
   const { open, view } = useSideBar()
   const narrow = useNarrowWindow()
   const [slot, setSlot] = useState<HTMLElement | null>(null)
@@ -55,7 +67,8 @@ export default function SecondarySideBar({ centralEnabled }: { centralEnabled: b
       {centralEnabled && (
         <div className="vscode-bottom-panel__pane" hidden={shown !== 'central'}>
           <Suspense fallback={<LazyPaneFallback />}>
-            <CentralControlPanel open enabled actionsHost={shown === 'central' ? slot : null} />
+            <CentralControlPanel open enabled actionsHost={shown === 'central' ? slot : null}
+              {...(setCentralTab ? { tab: ctab ?? undefined, onTabChange: setCentralTab } : {})} />
           </Suspense>
         </div>
       )}

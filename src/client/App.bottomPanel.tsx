@@ -22,6 +22,8 @@ export interface AppBottomPanelProps {
   activeId?: string | null
   /** Central capability is on; the Tasks tab exists only then. */
   centralEnabled?: boolean
+  /** The URL's `?panel=` (which tab shows); omitted in component tests. */
+  panel?: string | null
 }
 
 export default function AppBottomPanel(props: AppBottomPanelProps): React.JSX.Element | null {
@@ -29,7 +31,7 @@ export default function AppBottomPanel(props: AppBottomPanelProps): React.JSX.El
   const views: BottomPanelView[] = [
     {
       id: 'problems', label: 'Problems', open: problems.open && problems.workspaceId !== null,
-      badge: problems.list.length, onClose: () => problems.setOpen(false),
+      badge: problems.list.length, onClose: () => problems.setOpen(false), onOpen: () => problems.setOpen(true),
       render: (actionsHost) => (
         <ProblemsPanel problems={problems} root={props.root} nodes={props.nodes} nodesRef={props.nodesRef}
           addFlowNode={props.addFlowNode} onFocus={props.onFocus} actionsHost={actionsHost} />
@@ -39,5 +41,5 @@ export default function AppBottomPanel(props: AppBottomPanelProps): React.JSX.El
     useOutputView(),
     useTaskBoardView(props.centralEnabled === true),
   ]
-  return <BottomPanelHost views={views} />
+  return <BottomPanelHost views={views} panel={props.panel} />
 }
