@@ -224,7 +224,8 @@ export class Db {
    *  ke ujung — lihat catatan di `settingsStore.ts` soal kenapa tidak ada rantai tulis. */
   saveSettings(patch: unknown): Settings {
     const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null
-    const next = nextSettingsDocument(row ? row.value : null, patch)
+    // The provider's command-mode profile lives in its own config, so the store is told which id it holds.
+    const next = nextSettingsDocument(row ? row.value : null, patch, { providerProfileId: commandProfileOverride() })
     this.d.query(
       "INSERT INTO app (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
     ).run(JSON.stringify(next.doc))
