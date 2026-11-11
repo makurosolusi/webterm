@@ -6,6 +6,7 @@ import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
+import ConnectionStatus from './ConnectionStatus'
 import SessionsPanel from './SessionsPanel'
 import SideBar from './sideBar/SideBar'
 import { useAppSideBar, useSessionsAttention } from './sideBar/useAppSideBar'
@@ -61,8 +62,9 @@ export default function App() {
   // "Belum tahu" vs "memang tidak ada": sebelum fetch pertama selesai keduanya sama-sama daftar
   // kosong, dan `Welcome` yang dirender atas dasar itu selalu berkelebat sekejap.
   const [hydrated, setHydrated] = useState(false)
-  // Dinaikkan saat boot fetch menjawab 403 (lihat workspaceLifecycle): render SignInScreen, bukan board.
+  // Dinaikkan saat boot fetch / simpanan board / socket menjawab 401/403: render SignInScreen, bukan board.
   const [authRequired, setAuthRequired] = useState(false)
+  const requireSignIn = useCallback(() => setAuthRequired(true), [])
   const [activeWs, setActiveWs] = useState<Workspace | null>(null)
   // Diturunkan, bukan state sendiri: id dan board-nya pernah di-commit terpisah, dan tiap jeda
   // antara keduanya adalah satu render dengan canvas yang sudah pindah tapi datanya belum ada.
@@ -101,7 +103,7 @@ export default function App() {
   // workspace dalam 400ms debounce. Lihat `useWorkspaceSaver` — termasuk kenapa `flushSave` wajib
   // dipanggil `applyWorkspace` sebelum board baru dipasang.
   const applyRef = useRef<((ws: Workspace) => void) | null>(null) // set below, once `applyWorkspace` exists
-  const { scheduleSave, flushSave, cancelSave, saveStatusItems } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces })
+  const { scheduleSave, flushSave, cancelSave, saveStatusItems } = useWorkspaceSaver({ activeWsRef, nodesRef, edgesRef, viewportRef, saveTimer, applyRef, setWorkspaces, onAuthRequired: requireSignIn })
 
   // Simpanan yang masih menggantung dibatalkan saat unmount: tanpa ini `setTimeout` di atas tetap
   // menembakkan satu PUT setelah App-nya tidak ada lagi. Di produksi App tak pernah unmount, tapi
@@ -129,7 +131,6 @@ export default function App() {
   applyRef.current = applyWorkspace // a save another window beat reloads the stored board through it
   // Every node gets its unique name ("Mango") here, whichever path created it. See `./nodeNames.board`.
   useBoardNodeNames(nodes, onNodesChange)
-
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
@@ -281,9 +282,9 @@ export default function App() {
           {paneMenu}
         </>
       )}
-      {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tidak digerbangi apa pun, jadi
-          petunjuk jalan keluarnya juga tidak boleh. */}
+      {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tak digerbangi, petunjuk keluarnya juga tidak. */}
       {cleanView && <CleanViewHint />}
+      <ConnectionStatus onAuthRequired={requireSignIn} />{/* one app-wide surface; `auth` reuses the boot gate above */}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
       <SettingsHost open={showSettings} setOpen={setShowSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
