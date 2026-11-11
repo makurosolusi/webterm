@@ -20,7 +20,7 @@ test('full route order snapshot', () => {
     'logs', 'events', 'timeline',
     'workspaces', 'session-history',
     'browser', 'agent-chat', 'claude-view',
-    'env-settings', 'env-import', 'capabilities', 'agent-protection', 'custom-agents-preview', 'settings', 'canvas-background', 'canvas-shot',
+    'env-settings', 'env-import', 'capabilities', 'agent-protection', 'custom-agents-preview', 'shells', 'settings', 'canvas-background', 'canvas-shot',
     'fs-verbs', 'hygiene',
     'git-info', 'git-diff', 'checkpoint', 'git-scm',
     'brief', 'handoff',
