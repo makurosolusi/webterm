@@ -252,3 +252,45 @@ test('whenConnected runs now when connected, else once on the next connect; canc
   expect(early).toHaveBeenCalledTimes(1)
   expect(now).toHaveBeenCalledTimes(1)
 })
+
+describe('connectEagerly (signed-in app, no terminal yet)', () => {
+  test('opens the socket with no subscriber and reaches connected; a later subscribe reuses it', async () => {
+    const { connectEagerly, subscribe, send, getConnection } = await fresh()
+    connectEagerly()
+    expect(FakeWS.instances).toHaveLength(1)
+    expect(getConnection().phase).toBe('connecting')
+    last().up()
+    expect(getConnection().phase).toBe('connected')
+    expect(last().msgs()).toEqual([]) // nothing to replay: an idle socket only answers hello/ping
+    connectEagerly()
+    subscribe('a', () => {}, () => {})
+    expect(FakeWS.instances).toHaveLength(1)
+    send({ t: 'open', id: 'a', cols: 80, rows: 24 })
+    expect(last().msgs()).toEqual([{ t: 'open', id: 'a', cols: 80, rows: 24 }])
+  })
+
+  test('a first connect lost to an offline browser resumes on online with no subscriber', async () => {
+    const { connectEagerly, getConnection } = await fresh()
+    connectEagerly()
+    online = false
+    fire(window, 'offline')
+    last().drop()
+    expect(getConnection().phase).toBe('offline')
+    online = true
+    fire(window, 'online')
+    expect(FakeWS.instances).toHaveLength(2)
+    last().up()
+    expect(getConnection().phase).toBe('connected')
+  })
+
+  test('a refused credential still stops in auth (signed-out state is reported, not looped)', async () => {
+    const { connectEagerly, getConnection } = await fresh()
+    fetchMock.mockResolvedValue({ status: 403 })
+    connectEagerly()
+    last().drop()
+    await flush()
+    expect(getConnection().phase).toBe('auth')
+    connectEagerly()
+    expect(FakeWS.instances).toHaveLength(1)
+  })
+})

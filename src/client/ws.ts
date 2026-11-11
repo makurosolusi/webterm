@@ -67,6 +67,8 @@ let probing = false
 let uninstallTriggers: (() => void) | null = null
 /** Build of the first `hello` this page met: what its bundle was served with. */
 let pageBuild: string | undefined
+/** `connectEagerly()` ran: the app wants the socket even with no terminal subscribed. */
+let eager = false
 
 const isOpen = (): boolean => ws !== null && ws.readyState === WebSocket.OPEN
 const waitingPhase = (): ConnectionPhase => (everConnected ? 'reconnecting' : 'connecting')
@@ -110,7 +112,7 @@ setRetryHandler(reconnectNow)
 function wake(): void {
   if (authStopped) return
   if (isOpen()) heartbeat.probe()
-  else if (!ws && (subs.size > 0 || everConnected)) { clearTimer(); connect() }
+  else if (!ws && (eager || subs.size > 0 || everConnected)) { clearTimer(); connect() }
 }
 
 function wentOffline(): void {
@@ -224,6 +226,17 @@ function connect() {
   ws.onerror = () => ws?.close()
 }
 
+/**
+ * Open the shared socket now, not on the first terminal subscribe (App calls it once signed in).
+ * Like VS Code connecting its remote at once: heartbeat, `hello` (restart / new build), broadcasts
+ * and the auth probe then run on every screen, and a board with no terminal (Welcome) reaches
+ * `connected` instead of sitting in `connecting` with no attempt behind it.
+ */
+export function connectEagerly(): void {
+  eager = true
+  if (!ws && !reconnectTimer && !authStopped) connect()
+}
+
 /** Test teardown: drop the socket, every timer, the window listeners and all per-page state. */
 export function __resetWsForTests(): void {
   clearTimer()
@@ -231,7 +244,7 @@ export function __resetWsForTests(): void {
   uninstallTriggers?.(); uninstallTriggers = null
   if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); ws = null }
   subs.clear(); queue.clear(); closedByUs.clear()
-  everConnected = opened = authStopped = probing = false; attempts = 0; pageBuild = undefined
+  everConnected = opened = authStopped = probing = eager = false; attempts = 0; pageBuild = undefined
   setConnection({ phase: 'connecting', attempt: 0, bootId: undefined, build: undefined, serverRestartedAt: undefined, buildChanged: false })
 }
 
