@@ -60,6 +60,7 @@ export const PROVIDER_TEXT = {
   model: 'Default model (optional)',
   save: 'Save',
   saved: 'Saved.',
+  savedCheckFailed: 'Saved, but the check failed — new sessions will fail until this is fixed.',
   test: 'Test connection',
   testing: 'Testing…',
   loading: 'Loading…',
@@ -73,8 +74,9 @@ export const PROVIDER_TEXT = {
   resetFailed: (code: string): string => `Could not reset (${code}). Try again.`,
 }
 
-/** The Claude provider card; loads from the server and waits for it on every change. */
-export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void } = {}): React.JSX.Element {
+/** The Claude provider card; loads from the server and waits for it on every change. `onTested`: the host
+ *  shows the result itself (setup wizard's live check), so the card hides its own and reports each test. */
+export function ClaudeProviderCard({ onProfiles, onTested }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; onTested?(): void } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -135,7 +137,7 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
       setState((prev) => (prev ? { ...prev, lastTest: r } : prev))
     } catch (e) {
       setError(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
-    } finally { setBusy(false); setTesting(false) }
+    } finally { setBusy(false); setTesting(false); onTested?.() }
   }
   const test = async (): Promise<void> => {
     if (dirty && !(await save())) return
@@ -181,12 +183,15 @@ export function ClaudeProviderCard({ onProfiles }: { onProfiles?(profiles: Claud
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
           </div> : null}
           {testing ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.testing}</p> : null}
-          {!testing && state.lastTest ? (
+          {!testing && state.lastTest && !onTested ? (
             <p role="status" className={state.lastTest.ok ? 'text-xs' : 'text-xs text-destructive'}>
               <span className={`codicon ${state.lastTest.ok ? 'codicon-pass' : 'codicon-error'}`} aria-hidden="true" /> {state.lastTest.message}
             </p>
           ) : null}
-          {notice ? <p role="status" className="text-xs">{notice} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
+          {/* Save clears the server's lastTest, so a failed one here is a test of what was just saved. */}
+          {notice && state.lastTest?.ok === false ? <p role="status" className="text-xs text-(--vscode-editorWarning-foreground)">
+            <span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.savedCheckFailed}</p>
+          : notice ? <p role="status" className="text-xs">{notice} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
           {!notice && state.restartNeeded > 0 ? <p className="text-xs opacity-70">{PROVIDER_TEXT.restart(state.restartNeeded)}</p> : null}
         </>
       ) : null}
