@@ -1,5 +1,6 @@
 // First-run setup mount for App: the wizard shows itself from `?setup=`; this opens it once per
-// page load while setup is unfinished (settings hydrated first, so an existing install never sees it).
+// page load while setup is unfinished, once settings AND workspaces are loaded (an existing install
+// never sees it, and it never covers the boot-error screen; after a Retry succeeds it opens then).
 import { useEffect } from 'react'
 import SetupDialog from './setup/SetupDialog'
 import { openSetup } from './setup/setup.open'
@@ -14,7 +15,7 @@ export function resetSetupAutoOpen(): void {
   autoOpened = false
 }
 
-/** Mounts the setup wizard and auto-opens it once when `hydrated` and setup is not completed. */
+/** Mounts the setup wizard and auto-opens it once when `hydrated` (settings + workspaces booted) and setup is not completed. */
 export default function AppSetup({ settings, update, hydrated }: { settings: Settings; update: (patch: SettingsPatch) => void; hydrated: boolean }) {
   const incomplete = hydrated && settings.setup.completedAt == null
   useEffect(() => {

@@ -278,7 +278,8 @@ export default function App() {
       {cleanView && <CleanViewHint />}
       <ConnectionStatus onAuthRequired={requireSignIn} />{/* one app-wide surface; `auth` reuses the boot gate above */}
       {picker && <FolderPicker onPick={(p) => { picker.onPick(p); setPicker(null) }} onClose={() => setPicker(null)} />}
-      <AppSetup settings={settings} update={update} hydrated={settingsHydrated} />
+      {/* `hydrated` too: the wizard must never cover BootScreen (a failed boot and its Retry). */}
+      <AppSetup settings={settings} update={update} hydrated={settingsHydrated && hydrated} />
       <SettingsHost section={route.settings} onOpen={routeActions.openSettings} onClose={routeActions.closeSettings} settings={settings} onChange={update} projectId={activeId ?? undefined} history={settingsHistory} />
       {showHelp && <Suspense fallback={null}><HelpOverlay onClose={() => setShowHelp(false)} /></Suspense>}
       {omni.state && (

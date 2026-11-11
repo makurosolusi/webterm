@@ -7,6 +7,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountHeld, unmountCanvas } from './canvasHarness'
 import { BOOT_FAILED_TITLE } from './BootScreen'
+import { SETUP_TEXT } from './setup/setup.labels'
+import { resetSetupAutoOpen } from './App.setup'
 
 const boot = vi.hoisted(() => ({ failures: 0, calls: 0 }))
 vi.mock('./api', async (importOriginal) => {
@@ -22,7 +24,7 @@ vi.mock('./api', async (importOriginal) => {
 })
 
 beforeAll(installCanvasDom)
-afterEach(() => { unmountCanvas(); vi.restoreAllMocks(); boot.calls = 0; boot.failures = 0 })
+afterEach(() => { unmountCanvas(); resetSetupAutoOpen(); vi.restoreAllMocks(); boot.calls = 0; boot.failures = 0 })
 
 /** Automatic retry after the first failure is `reconnectDelay(0)`; generous for a loaded CI machine. */
 const WAIT = { timeout: 10_000 }
@@ -49,5 +51,17 @@ describe('workspace boot failure (real App)', () => {
     expect(await screen.findByText(BOOT_FAILED_TITLE)).toBeTruthy()
     await waitFor(canvasMounted, WAIT)
     expect(boot.calls).toBe(2)
+  })
+
+  it('keeps the first-run wizard off the boot error, and opens it once Retry loads the board', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    boot.failures = 1
+    const wizard = () => screen.queryByRole('dialog', { name: SETUP_TEXT.title })
+    await mountHeld({ nodes: [], dirs: {}, settings: { setup: { completedAt: null, steps: {} } } })() // test-only: unfinished setup
+    expect(await screen.findByText(BOOT_FAILED_TITLE)).toBeTruthy()
+    expect(wizard()).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(canvasMounted, WAIT)
+    await waitFor(() => expect(wizard()).not.toBeNull(), WAIT)
   })
 })

@@ -215,7 +215,8 @@ function routeFetch(fx: CanvasFixture) {
     const url = new URL(String(input), 'http://localhost')
     const path = url.pathname
     const arg = url.searchParams.get('path') ?? ''
-    if (path === '/api/settings') return reply({ ...DEFAULT_SETTINGS, ...fx.settings })
+    // test-only: setup finished by default, so the first-run wizard does not cover unrelated App tests.
+    if (path === '/api/settings') return reply({ ...DEFAULT_SETTINGS, setup: { completedAt: 1, steps: {} }, ...fx.settings })
     if (path === '/api/workspaces') return reply(all)
     if (path.startsWith('/api/workspaces/')) {
       // Dicari per id, bukan selalu fixture utama: test pindah-board membaca board KEDUA dari sini,
