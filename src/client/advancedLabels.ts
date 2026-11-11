@@ -1,16 +1,16 @@
 // Teks bagian "Lanjutan" di tab Kemampuan (Rule 15). Tanpa nama env var dan tanpa istilah teknis internal.
-import type { CapabilitiesResponse } from '../shared/featureCapabilities'
-
-type Engine = CapabilitiesResponse['advanced']['agentEngine']['value']
-
 export const ADVANCED_TEXT = {
   summary: 'Advanced',
-  engineLabel: 'Central Agent engine',
-  engineDetected: (name: string): string => `Detected: ${name}`,
-  engineMissing: 'Set up Claude: add or pick a profile in Settings › Agent › Claude launch profiles, press Test, then check again.',
+  engineLabel: 'Engine',
+  engineRuns: (version: string): string => (version ? `Runs on Claude · ${version}` : 'Runs on Claude'),
+  engineCannotStart: (reason: string): string => `Claude cannot start: ${reason}`,
+  engineCheckFailed: (cause: string): string => `Could not check Claude: ${cause}`,
+  engineFirstCheck: 'Checking how Central starts Claude…',
+  engineStamp: 'checked',
+  engineCheckLabel: 'Check Claude',
   engineRecheck: 'Check again',
   engineChecking: 'Checking…',
-  engineRecheckHint: 'Re-detect installed agent engines',
+  engineRecheckHint: 'Re-detect Claude and test how Central starts it (no tokens used)',
   chromiumLabel: 'Chromium location',
   chromiumPlaceholder: 'Path to the Chromium app',
   chromiumAuto: (path: string): string => `Automatic: ${path}`,
@@ -38,17 +38,6 @@ export const DOWNLOAD_TEXT = {
   done: 'Chromium is downloaded and in use:',
   unreachable: 'Could not reach the webterm server. Try again.',
 } as const
-
-/** Picker label adds what the engine can do; `name` is the bare engine name used in status sentences. */
-export const ENGINE_OPTIONS: ReadonlyArray<{ value: Engine; label: string; name: string }> = [
-  { value: 'auto', label: 'Automatic', name: 'Automatic' },
-  { value: 'claude', label: 'Claude', name: 'Claude' },
-]
-
-/** Nama mesin hasil deteksi otomatis; `off` = tidak ada CLI yang ditemukan. */
-export const engineName = (kind: string): string =>
-  kind === 'off' ? 'none (set up Claude)'
-    : ENGINE_OPTIONS.find((o) => o.value === kind)?.name ?? kind
 
 export const SECTION_TEXT = {
   loading: 'Loading capabilities…',

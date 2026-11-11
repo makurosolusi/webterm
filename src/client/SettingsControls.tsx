@@ -9,6 +9,8 @@ interface SelectProps<T extends string> {
   onChange: (value: T) => void
   disabled?: boolean
   ariaLabel?: string
+  /** id of the line that says why it is disabled (Field `lock`). */
+  describedBy?: string
 }
 
 /** Satu-satunya gaya dropdown di Settings: 26px, token dropdown, chevron codicon, teks panjang di-ellipsis. */
@@ -19,6 +21,7 @@ export function SettingsSelect<T extends string>({
   onChange,
   disabled,
   ariaLabel,
+  describedBy,
 }: SelectProps<T>): React.JSX.Element {
   return (
     <span className="st-select-wrap">
@@ -26,6 +29,7 @@ export function SettingsSelect<T extends string>({
         id={id}
         className="st-select"
         aria-label={ariaLabel}
+        aria-describedby={describedBy}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as T)}
@@ -44,12 +48,15 @@ export function SettingsCheckbox({
   onChange,
   disabled,
   ariaLabel,
+  describedBy,
 }: {
   id?: string
   checked: boolean
   onChange: (checked: boolean) => void
   disabled?: boolean
   ariaLabel?: string
+  /** id of the line that says why it is disabled (Field `lock`). */
+  describedBy?: string
 }): React.JSX.Element {
   return (
     <span className="st-checkbox">
@@ -57,6 +64,7 @@ export function SettingsCheckbox({
         id={id}
         type="checkbox"
         aria-label={ariaLabel}
+        aria-describedby={describedBy}
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}

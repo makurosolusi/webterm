@@ -12,7 +12,7 @@ export const DOWNLOAD_POLL_MS = 500
 
 export interface ChromiumDownloadProps {
   /** Called once a download this view watched finishes (reload capabilities). */
-  onDone(): Promise<void> | void
+  onDone(): Promise<unknown> | void
   /** Every status the view shows (the wizard enables Continue on `done`). */
   onStatus?(status: ChromiumDownloadStatus): void
 }

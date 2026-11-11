@@ -27,7 +27,6 @@ const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }
 
 const SKIP_APPROVALS_HINT = 'Central and every Claude agent act without asking you first. Fastest, but nothing stops a wrong action before it runs. Hard stops still apply: Stop Central, paused projects, budgets and your deny rules. Agents already running keep their current mode.'
 const PERMISSION_HINT = 'Used by Claude sessions at START — passed as --permission-mode at launch. Shift+Tab can still cycle modes at runtime.'
-const SKIPPED_PERMISSION_HINT = 'Skip approvals is on, so every agent runs without prompts.'
 
 export function AgentSettings({
   settings: s,
@@ -92,10 +91,10 @@ export function AgentSettings({
         id="st-claudePermissionMode"
         setting="claudePermissionMode"
         label="Claude permission mode"
-        hint={s.skipApprovals ? SKIPPED_PERMISSION_HINT : PERMISSION_HINT}
+        hint={PERMISSION_HINT}
         value={s.claudePermissionMode}
         options={PERMISSION_OPTIONS}
-        disabled={s.skipApprovals}
+        lock={s.skipApprovals ? { reason: 'Skip approvals is on, so agents start without asking.', fix: { label: 'Turn off Skip approvals to choose', run: () => onChange({ skipApprovals: false }) } } : undefined}
         onChange={(v) => onChange({ claudePermissionMode: v })}
       />
       <ToggleField

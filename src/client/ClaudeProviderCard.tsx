@@ -4,6 +4,7 @@
 // until Save and is cleared right after; it is never logged or put in an error message.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
@@ -207,8 +208,13 @@ export function ClaudeProviderCard({ connection, commitRef }: { connection?: Con
             </>
           ) : null}
           {mode !== 'command' ? <div className="flex items-center gap-2">
-            {commitRef ? null : <Button size="sm" disabled={busy || !dirty} aria-busy={saving} title={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}
-              onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>}
+            {commitRef ? null : (
+              <IconTooltip label={saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean} disabled={busy || !dirty}
+                disabledReason={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}>
+                <Button size="sm" disabled={busy || !dirty} aria-busy={saving}
+                  onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>
+              </IconTooltip>
+            )}
             <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testLabel}</Button>
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
           </div> : null}

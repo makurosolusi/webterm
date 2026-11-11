@@ -19,11 +19,16 @@ describe('AgentSettings skip approvals', () => {
     expect(onChange).toHaveBeenCalledWith({ skipApprovals: !DEFAULT_SETTINGS.skipApprovals })
   })
 
-  it('when on, the permission mode select is disabled and says why', () => {
-    render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, skipApprovals: true }} onChange={vi.fn()} />)
+  it('when on, the permission mode select is disabled, keeps its own description, says why and links to the fix', () => {
+    const onChange = vi.fn()
+    render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, skipApprovals: true }} onChange={onChange} />)
     expect((screen.getByLabelText('Skip approvals') as HTMLInputElement).checked).toBe(true)
     expect(modeSelect().disabled).toBe(true)
-    expect(screen.getByText('Skip approvals is on, so every agent runs without prompts.')).toBeTruthy()
+    expect(screen.getByText(/passed as --permission-mode at launch/)).toBeTruthy()
+    const reason = document.getElementById(modeSelect().getAttribute('aria-describedby') ?? '')
+    expect(reason?.textContent).toContain('Skip approvals is on, so agents start without asking.')
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off Skip approvals to choose' }))
+    expect(onChange).toHaveBeenCalledWith({ skipApprovals: false })
     expect(screen.getByText(/nothing stops a wrong action/).getAttribute('style')).toContain('--st-warning')
   })
 
@@ -31,7 +36,9 @@ describe('AgentSettings skip approvals', () => {
     const onChange = vi.fn()
     render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, skipApprovals: false }} onChange={onChange} />)
     expect(modeSelect().disabled).toBe(false)
-    expect(screen.queryByText('Skip approvals is on, so every agent runs without prompts.')).toBeNull()
+    expect(modeSelect().getAttribute('aria-describedby')).toBeNull()
+    expect(screen.queryByText('Skip approvals is on, so agents start without asking.')).toBeNull()
+    expect(screen.getByText(/passed as --permission-mode at launch/)).toBeTruthy()
     fireEvent.click(screen.getByLabelText('Skip approvals'))
     expect(onChange).toHaveBeenCalledWith({ skipApprovals: true })
   })

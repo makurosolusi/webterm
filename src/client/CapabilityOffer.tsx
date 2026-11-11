@@ -39,7 +39,7 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
     acted.current = true
     if (!(await toggle(id, true))) acted.current = false
   }
-  const saveAdvanced = async (body: { chromiumPath: string } | { agentEngine: string }): Promise<void> => {
+  const saveAdvanced = async (body: { chromiumPath: string }): Promise<void> => {
     try {
       await callCapabilities('/advanced', 'PUT', body)
       setStepError(null)
@@ -63,7 +63,7 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
           <ChromiumPathField chromium={data.advanced.chromiumPath} save={(chromiumPath) => saveAdvanced({ chromiumPath })} redetect={refresh} />
         ) : openStep === 'agentEngine' && data ? (
           // Masih needs-step = mesin belum siap; begitu siap status jadi `on`, tawaran hilang dan onDone jalan.
-          <AgentEngineField engine={data.advanced.agentEngine} ready={false} save={(agentEngine) => saveAdvanced({ agentEngine })} redetect={recheck} />
+          <AgentEngineField redetect={recheck} />
         ) : (
           <Button size="sm" variant="secondary" className="self-start" disabled={busy} onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
         )
