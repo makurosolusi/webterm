@@ -211,8 +211,13 @@ export class Db {
   /** Settings hidup sebagai SATU baris JSON di tabel `app` yang sudah ada (kunci `'settings'`),
    *  jadi mengangkatnya ke persistensi butuh nol migrasi skema. */
   getSettings(): Settings {
+    return parseStored(this.storedSettingsJson())
+  }
+
+  /** The raw stored settings row (null = never written); boot backfills inspect stored keys with it. */
+  storedSettingsJson(): string | null {
     const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null
-    return parseStored(row ? row.value : null)
+    return row ? row.value : null
   }
 
   /** Patch the RAW stored document (`nextSettingsDocument`), write it, return the normalized view. Sinkron dari ujung

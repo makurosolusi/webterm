@@ -24,7 +24,7 @@ function mount(props: { onAuthRequired?: () => void; reload?: () => void } = {})
   )
 }
 
-const strip = (): HTMLElement => screen.getByRole('status')
+const strip = (): HTMLElement => screen.getByRole('status', { name: CONNECTION_TEXT.label })
 
 beforeEach(() => {
   vi.useFakeTimers()

@@ -6,10 +6,21 @@ import { useOutputStatusItems } from './output/outputStatusItem'
 import { resolveTerminalTheme } from './themes'
 import { toggleTimeline } from './Timeline'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
-import { subscribeStatus } from './ws'
+import { connectEagerly, subscribeStatus } from './ws'
+import { useCommandKeybindings } from './commandRegistry'
+import { useKeybindingsSync } from './keybindings.store'
+import { usePresencePing } from './presencePing'
 import { fetchSignedIn, isAbortError, logout } from './transportToken'
 import type { Settings } from '../shared/settings'
 import type { AgentStatus } from '../shared/workspace'
+
+/** Signed-in session plumbing: keybindings sync + chords, presence ping, and the eager shared socket. */
+export function useAppSession(signedIn: boolean, settings: Pick<Settings, 'keybindings'>, hydrated: boolean, update: (patch: Partial<Settings>) => void) {
+  useKeybindingsSync(settings.keybindings, hydrated, update)
+  useCommandKeybindings()
+  usePresencePing(signedIn)
+  useEffect(() => { if (signedIn) connectEagerly() }, [signedIn]) // App mounts only signed in (appBoot.tsx)
+}
 
 /** Mengalirkan status agent dari WebSocket ke state `statuses`. */
 export function useStatusSubscription(setStatuses: Dispatch<SetStateAction<Record<string, AgentStatus>>>) {

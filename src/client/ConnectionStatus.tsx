@@ -14,6 +14,7 @@ export const RESTART_NOTICE_MS = 6000
 const TICK_MS = 1000
 
 export const CONNECTION_TEXT = {
+  label: 'Connection status',
   connecting: 'Connecting…',
   reconnecting: (secs: number) => (secs > 0 ? `Reconnecting… retrying in ${secs}s` : 'Reconnecting…'),
   retry: 'Retry now',
@@ -95,7 +96,7 @@ export default function ConnectionStatus({ onAuthRequired, reload = reloadPage }
 
   return (
     // Always mounted: a live region must exist before its text changes or screen readers miss it.
-    <div role="status" aria-live="polite" className="connection-status pointer-events-none fixed left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1 top-[calc(var(--tabbar-h,36px)+8px)]">
+    <div role="status" aria-live="polite" aria-label={CONNECTION_TEXT.label} className="connection-status pointer-events-none fixed left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1 top-[calc(var(--tabbar-h,36px)+8px)]">
       {line}
       {restarted && (
         <Row icon="info" text={CONNECTION_TEXT.restarted}>

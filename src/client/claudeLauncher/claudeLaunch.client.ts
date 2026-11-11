@@ -1,7 +1,9 @@
 // Client side of POST /api/claude-launch/test (server/claudeLauncher/claudeLauncher.api.ts).
 import { flushSettingsSaves } from '../useSettings'
 
-export interface LaunchStep { stage: 'wrapper' | 'claude' | 'auth'; ok: boolean; message: string; hint?: string }
+/** `install`: on a claude-missing row, the official install commands (server `CLAUDE_INSTALL`). */
+export interface LaunchStep { stage: 'wrapper' | 'claude' | 'auth'; ok: boolean; message: string; hint?: string; install?: ClaudeInstall }
+export interface ClaudeInstall { installCommand: string; npmCommand: string; docsUrl: string }
 export interface LaunchTest {
   ok: boolean
   profile: { id: string; name: string }

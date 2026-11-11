@@ -96,6 +96,10 @@ Nothing to configure. On the first `bun run dev` webterm opens your default brow
 - The access token no longer signs people in once the account exists: it is the automation token for scripts, MCP clients and agents (Settings > Capabilities > Automation token). A `/?token=` link is ignored then. Rotating the token signs every other browser out.
 - Scripts and agents never use the cookie: scripts send the root token in `x-webterm-token`, and agent sessions use their own node token (the `webterm` CLI reads it from the node's header file).
 
+### First run
+
+After you sign in for the first time, a short setup opens: **Claude** (how agents reach Claude), **Browser** (the browser node), **Central Agent** and **Basics**. Each step can be finished or skipped, and closing keeps your progress. Until setup is done, the Welcome screen shows a **Finish setup** checklist; click a step to jump to it. Reopen setup any time from Help › **Set up webterm…** or the command `Setup: Open` (⌘K / Ctrl+K), or with `?setup=1` in the address.
+
 ## Agent Chat node
 
 An Agent Chat node runs Claude Code without a terminal and shows it as a chat: streamed Markdown, tool cards, permission prompts (Allow once, Always allow, Deny), questions, plan review, a mode picker, Stop, and the cost of the last turn. It sits next to the terminal agent node, which is unchanged. Add one from the Dock, "Add node" > Agent Chat, the canvas menu, the tab-layout "+" menu, or "Agent Chat: New Agent Chat" in ⌘K. It is offered while Claude is enabled and needs no configuration: it uses the installed `claude`, the node's launch profile and the default permission mode, like a terminal agent; while Settings › Agents › Skip approvals is on (the default), it launches with no permission prompts.

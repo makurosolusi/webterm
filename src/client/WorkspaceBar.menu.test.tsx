@@ -7,7 +7,10 @@ import './vscode/test-setup'
 import WorkspaceBar, { type WorkspaceBarProps } from './WorkspaceBar'
 import { registerCommands } from './commandRegistry'
 import { isMacPlatform } from './terminalKeys'
+import { openSetup } from './setup/setup.open'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
+
+vi.mock('./setup/setup.open', () => ({ openSetup: vi.fn() }))
 
 const ws: Workspace = { id: 'w1', name: 'Proj', cwd: '/proj', viewport: DEFAULT_VIEWPORT, nodes: [], bridges: [], updatedAt: 0 } // test-only
 
@@ -85,5 +88,30 @@ describe('title bar command center', () => {
     expect(search.querySelector('.kbd')?.textContent).toBe(isMacPlatform() ? '⌘K' : 'Ctrl+K')
     fireEvent.click(search)
     expect(onOpenPalette).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Help > Set up webterm…', () => {
+  it('opens the setup wizard', () => {
+    vi.mocked(openSetup).mockClear()
+    mount({ onOpenHelp: vi.fn() })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Help' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Set up webterm…' }))
+    expect(openSetup).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('tab-row actions without a workspace', () => {
+  const labels = ['Toggle tab layout', 'Workspace options']
+
+  it('hides layout and workspace options (not disabled); keeps +, search and Account', () => {
+    mount({ workspaces: [], activeId: null, liveActiveNodes: null, onToggleLayout: vi.fn(), onOpenPalette: vi.fn(), showLogout: true, onOpenAccount: vi.fn() })
+    for (const name of labels) expect(screen.queryByRole('button', { name })).toBeNull()
+    for (const name of ['New workspace', 'Search', 'Account']) expect(screen.getByRole('button', { name })).toBeTruthy()
+  })
+
+  it('shows both, enabled, with a workspace open', () => {
+    mount({ onToggleLayout: vi.fn() })
+    for (const name of labels) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

@@ -53,6 +53,8 @@ import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureC
 import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
+import { backfillSetup } from './setupBackfill'
+import { providerSaved } from './claudeProvider/claudeProvider.store'
 import { pruneCanvasBackgrounds } from './canvasBackground.gc'
 import { backgroundsDir } from './canvasBackground.store'
 import { guardWorkspaceRepos } from './repoHygiene'
@@ -88,6 +90,12 @@ const ledgerRuntime = startLedgerRuntime()
 // Workspaces live in webterm.db, never the ledger file: project chats, node.list, browser tools and
 // project.discover resolve them through this store.
 registerWorkspaceLookup((id) => db.get(id), () => db.list())
+// Upgrade path for the first-run wizard: an install already in use is marked set up (once, see setupBackfill.ts).
+try {
+  backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() })
+} catch (e) {
+  log.warn('settings.setup.backfill_failed', 'Cannot backfill first-run setup state at boot', { cause: e instanceof Error ? e.message : String(e) })
+}
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
   startLedgerReaper(ledgerRuntime.ledger)

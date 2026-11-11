@@ -12,8 +12,7 @@
 // layar.
 //
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
-// bawahnya): tombol `+` adalah jalan masuk yang sama, dan chrome yang baru muncul setelah
-// workspace pertama menggeser canvas tepat saat pengguna menekan tombol.
+// bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout & kebab DISEMBUNYIKAN.
 import { useMemo, useState, type ReactNode } from 'react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
@@ -32,6 +31,7 @@ import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import { openWorkspaceCanvasBackground } from './canvasBackground.open'
+import { openSetup } from './setup/setup.open'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -180,7 +180,7 @@ export default function WorkspaceBar({
     menus.push({
       id: 'help',
       label: 'Help',
-      items: [{ id: 'shortcuts', label: 'Keyboard Shortcuts Reference', onSelect: onOpenHelp }],
+      items: [{ id: 'shortcuts', label: 'Keyboard Shortcuts Reference', onSelect: onOpenHelp }, { id: 'setup', label: 'Set up webterm…', onSelect: () => openSetup() }],
     })
   }
 
@@ -266,26 +266,24 @@ export default function WorkspaceBar({
           ariaLabel="Workspaces"
         />
         <div className="app-tabs__actions">
-          {onToggleLayout && (
-            <IconTooltip label={layoutMode === 'tabs' ? 'Switch to canvas layout' : 'Switch to tab layout'} commandId="view.layout.toggle" disabled={!activeGroup} disabledReason="no workspace open">
+          {onToggleLayout && activeGroup && (
+            <IconTooltip label={layoutMode === 'tabs' ? 'Switch to canvas layout' : 'Switch to tab layout'} commandId="view.layout.toggle">
               <button
                 type="button"
                 className="app-tabs__action"
                 aria-label="Toggle tab layout"
                 aria-pressed={layoutMode === 'tabs'}
-                disabled={!activeGroup}
                 onClick={onToggleLayout}
               >
                 <span className={layoutMode === 'tabs' ? 'codicon codicon-graph' : 'codicon codicon-layout'} aria-hidden />
               </button>
             </IconTooltip>
           )}
-          <IconTooltip label="Workspace options: rename, delete or set the canvas background of the active workspace" disabled={!activeGroup} disabledReason="no workspace open">
+          {activeGroup && <IconTooltip label="Workspace options: rename, delete or set the canvas background of the active workspace">
             <button
               type="button"
               className="app-tabs__action"
               aria-label="Workspace options"
-              disabled={!activeGroup}
               onClick={(e) => {
                 // Klik kebab tidak berpindah workspace; menu ini bekerja pada workspace aktif.
                 const r = e.currentTarget.getBoundingClientRect()
@@ -294,7 +292,7 @@ export default function WorkspaceBar({
             >
               <span className="codicon codicon-ellipsis" aria-hidden />
             </button>
-          </IconTooltip>
+          </IconTooltip>}
           <IconTooltip label="New workspace: open a folder, clone a repository or create a project">
             <button
               type="button"

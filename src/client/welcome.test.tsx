@@ -2,19 +2,25 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Welcome from './Welcome'
+import { openSetup } from './setup/setup.open'
+import type { SetupState } from '../shared/settings'
+
+vi.mock('./setup/setup.open', () => ({ openSetup: vi.fn() }))
 
 afterEach(cleanup)
 
 const noop = () => {}
 
 describe('Welcome', () => {
-  it('menampilkan brand, tagline, dan empat kartu aksi', () => {
+  it('menampilkan brand, tagline, dan tiga kartu aksi tanpa entri SSH mati', () => {
     render(<Welcome onNewProject={noop} onCreateEmpty={noop} />)
     expect(screen.getByText('webterm')).toBeTruthy()
     expect(screen.getByText('A canvas of terminals. Start a project to begin.')).toBeTruthy()
-    for (const label of ['New project', 'Open folder…', 'Clone repo…', 'Connect over SSH…']) {
-      expect(screen.getByText(label)).toBeTruthy()
+    for (const label of ['New project', 'Open folder…', 'Clone repo…']) {
+      expect(screen.getByText(label).closest('button')?.disabled).toBe(false)
     }
+    expect(screen.queryByText('Connect over SSH…')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Create empty' })).toBeTruthy()
   })
 
   it('klik "Open folder…" memanggil onNewProject (pemilih folder)', () => {
@@ -25,11 +31,35 @@ describe('Welcome', () => {
   })
 
   // New project / Clone membuka dialognya: lihat workspaceCreate/workspaceCreate.test.tsx.
-  it('hanya kartu SSH yang disabled (belum ada backend webterm)', () => {
-    render(<Welcome onNewProject={noop} onCreateEmpty={noop} />)
-    expect(screen.getByText('Clone repo…').closest('button')?.disabled).toBe(false)
-    expect(screen.getByText('Connect over SSH…').closest('button')?.disabled).toBe(true)
-    expect(screen.getByText('New project').closest('button')?.disabled).toBe(false)
+  describe('Finish setup card', () => {
+    const mixed: SetupState = { completedAt: null, steps: { claude: 'done', browser: 'skipped' } } // test-only
+
+    it('lists every step with done / skipped / not set and counts done steps', () => {
+      render(<Welcome onNewProject={noop} onCreateEmpty={noop} setup={mixed} />)
+      expect(screen.getByRole('heading', { name: 'Finish setup · 1 of 4' })).toBeTruthy()
+      const row = (label: string) => screen.getByText(label).closest('button')!.textContent
+      expect(row('Claude')).toBe('Claudedone')
+      expect(row('Browser')).toBe('Browserskipped')
+      expect(row('Central Agent')).toBe('Central Agentnot set')
+      expect(row('Basics')).toBe('Basicsnot set')
+    })
+
+    it('a row opens setup at that step; the button resumes', () => {
+      vi.mocked(openSetup).mockClear()
+      render(<Welcome onNewProject={noop} onCreateEmpty={noop} setup={mixed} />)
+      fireEvent.click(screen.getByText('Central Agent'))
+      expect(openSetup).toHaveBeenLastCalledWith('central')
+      fireEvent.click(screen.getByRole('button', { name: 'Set up webterm' }))
+      expect(openSetup).toHaveBeenLastCalledWith()
+    })
+
+    it('is hidden once setup is completed, and while settings are not hydrated', () => {
+      render(<Welcome onNewProject={noop} onCreateEmpty={noop} setup={{ completedAt: 1, steps: {} }} />)
+      expect(screen.queryByText(/Finish setup/)).toBeNull()
+      cleanup()
+      render(<Welcome onNewProject={noop} onCreateEmpty={noop} />)
+      expect(screen.queryByText(/Finish setup/)).toBeNull()
+    })
   })
 
   describe('Recently closed', () => {

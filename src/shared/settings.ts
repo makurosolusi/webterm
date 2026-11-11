@@ -29,9 +29,11 @@ import type { AgentSettings } from './settings.agent'
 import { normalizeKeybindings } from './settings.keybindings'
 import { normalizeProjectModels } from './settings.projectModels'
 import { normalizeInputHistory } from './settings.inputHistory'
+import { DEFAULT_SETUP, normalizeSetup, type SetupState } from './settings.setup'
 
 export type { TerminalCursorStyle, TerminalCursorInactiveStyle, TerminalShortcutPolicy, TerminalGpuRendering, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
+export { SETUP_STEPS, type SetupStep, type SetupStepState, type SetupState } from './settings.setup'
 
 // `CustomAgent` (BYO CLI) hidup di `customAgent.schema.ts`; `baseAgent` membuatnya MEWARISI
 // kapabilitas harness builtin lewat `capabilityAgentId` (tanpa itu hanya spawn + judul terminal).
@@ -96,6 +98,10 @@ export interface Settings extends TerminalSettings, AgentSettings {
   /** Values typed into settings comboboxes, per field id, most recent first (`settings.inputHistory.ts`).
    *  Shown as "Recent" suggestions on every device; never holds secrets. */
   inputHistory: Record<string, string[]>
+
+  // --- First run -------------------------------------------------------------------------------
+  /** First-run wizard progress (`settings.setup.ts`); `completedAt` null = wizard not finished. */
+  setup: SetupState
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -157,6 +163,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keybindings: {},
   defaultProjectsFolder: '',
   inputHistory: {},
+  setup: DEFAULT_SETUP,
 }
 
 
@@ -217,6 +224,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
   out.projectModels = normalizeProjectModels(src.projectModels)
   out.inputHistory = normalizeInputHistory(src.inputHistory)
+  out.setup = normalizeSetup(src.setup)
   // Enum: shape matching lets any string through, so an unknown preset falls back to the default.
   if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
   if (out.edgeColor !== 'default' && !HEX_COLOR.test(out.edgeColor)) out.edgeColor = DEFAULT_SETTINGS.edgeColor
