@@ -4,19 +4,25 @@ import { send, type ApiRoute } from './route.core'
 
 export const claudeProviderRoutes: ApiRoute[] = [
   {
-    name: 'claude-provider',
-    match: (c) => c.path === '/api/claude-provider' || c.path === '/api/claude-provider/test' || c.path === '/api/claude-provider/detect' || c.path === '/api/claude-provider/reset',
+    name: 'claude-provider-test',
+    match: (c) => c.path === '/api/claude-provider/test',
     handle: async (c) => {
-      const [{ providerRoute }, { isValidNodeToken }, { sessions }, { freshClaudePreflight }] = await Promise.all([
-        import('../claudeProvider/claudeProvider.api'), import('../hooksTokens'), import('../sessions'), import('../centralChatHealth'),
+      const [{ streamProviderTest }, { isValidNodeToken }, { freshClaudePreflight }] = await Promise.all([
+        import('../claudeProvider/claudeProvider.connectionStream'), import('../hooksTokens'), import('../centralChatHealth'),
+      ])
+      return streamProviderTest(c.req, c.res, c.url, { isNodeToken: isValidNodeToken, refreshCentral: () => { freshClaudePreflight() } })
+    },
+  },
+  {
+    name: 'claude-provider',
+    match: (c) => c.path === '/api/claude-provider' || c.path === '/api/claude-provider/detect' || c.path === '/api/claude-provider/reset',
+    handle: async (c) => {
+      const [{ providerRoute }, { isValidNodeToken }, { sessions }] = await Promise.all([
+        import('../claudeProvider/claudeProvider.api'), import('../hooksTokens'), import('../sessions'),
       ])
       return send(c.res, await providerRoute(c.req, c.url, {
         isNodeToken: isValidNodeToken,
         sessionsBefore: (t) => sessions.claudeSessionsStartedBefore(t),
-        loginReady: async () => {
-          const r = await freshClaudePreflight()()
-          return r.ok ? { ok: true } : { ok: false, hint: r.hint }
-        },
       }))
     },
   },

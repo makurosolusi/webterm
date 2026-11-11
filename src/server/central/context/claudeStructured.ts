@@ -48,6 +48,16 @@ export interface StructuredOptions {
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0)
 
+/** Usage of one parsed `claude -p --output-format json` result: tokens, the CLI's cost, the model that ran. */
+export function parseUsage(o: { total_cost_usd?: unknown; usage?: Record<string, unknown>; modelUsage?: unknown }, requestedModel: string): HelperUsage {
+  const u = o.usage ?? {}
+  const cost = typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) ? Math.round(o.total_cost_usd * USD_TO_MICROS) : null
+  return {
+    input: num(u['input_tokens']), output: num(u['output_tokens']), cacheRead: num(u['cache_read_input_tokens']),
+    cacheWrite: num(u['cache_creation_input_tokens']), costMicros: cost, model: mainModel(o.modelUsage) ?? requestedModel,
+  }
+}
+
 /** `claude -p --output-format json` stdout -> structured output + usage; throws on anything but success. */
 export function parseStructuredAnswer(stdout: string, requestedModel: string = SUMMARY_MODEL): StructuredAnswer {
   const o = JSON.parse(stdout) as {
@@ -57,24 +67,16 @@ export function parseStructuredAnswer(stdout: string, requestedModel: string = S
   if (o.subtype !== 'success' || o.is_error || o.structured_output === undefined || o.structured_output === null) {
     throw new Error(`no structured output (${o.subtype ?? 'unknown'})`)
   }
-  const u = o.usage ?? {}
-  const cost = typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) ? Math.round(o.total_cost_usd * USD_TO_MICROS) : null
-  return {
-    output: o.structured_output,
-    usage: {
-      input: num(u['input_tokens']), output: num(u['output_tokens']), cacheRead: num(u['cache_read_input_tokens']),
-      cacheWrite: num(u['cache_creation_input_tokens']), costMicros: cost, model: mainModel(o.modelUsage) ?? requestedModel,
-    },
-  }
+  return { output: o.structured_output, usage: parseUsage(o, requestedModel) }
 }
 
-/** `model: null` passes no `--model` (the provider's own model applies). */
-export function structuredArgv(schema: object, opts: { model?: string | null; effort?: EffortLevel } = {}): string[] {
+/** `model: null` passes no `--model` (the provider's own model applies); `schema: null` = plain text answer. */
+export function structuredArgv(schema: object | null, opts: { model?: string | null; effort?: EffortLevel; maxTurns?: number } = {}): string[] {
   const model = opts.model === undefined ? SUMMARY_MODEL : opts.model
-  return ['-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema), ...(model === null ? [] : ['--model', model]),
+  return ['-p', '--output-format', 'json', ...(schema === null ? [] : ['--json-schema', JSON.stringify(schema)]), ...(model === null ? [] : ['--model', model]),
     '--effort', opts.effort ?? HELPER_EFFORT,
     '--tools', '', '--strict-mcp-config', '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
-    '--max-turns', String(MAX_TURNS), '--max-budget-usd', String(SUMMARY_BUDGET_USD)]
+    '--max-turns', String(opts.maxTurns ?? MAX_TURNS), '--max-budget-usd', String(SUMMARY_BUDGET_USD)]
 }
 
 /** The `claude -p` runner for helper `kind`; the hourly cap is per runner. */
@@ -110,7 +112,7 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
 }
 
 /** Books one helper answer in the active ledger (none in tests/before boot). Lazy imports keep bun:sqlite out of node-env tests. */
-async function bookInLedger(kind: HelperKind, usage: HelperUsage): Promise<void> {
+export async function bookInLedger(kind: HelperKind, usage: HelperUsage): Promise<void> {
   const [{ activeLedgerRuntime }, { recordHelperUsage }] = await Promise.all([
     import('../../ledger/ledgerRuntimeState'), import('../../cost/costCapture'),
   ])
