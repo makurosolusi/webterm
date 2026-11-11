@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 import { COMMAND_TEXT, commandName } from './ClaudeProviderCommand'
+import { CONNECTION_TEXT } from './claudeLauncher/ConnectionTest'
 
 type Call = { url: string; method: string; body?: any }
 let calls: Call[] = []
@@ -34,7 +35,8 @@ function serve(w: World = {}): void {
     if (url === '/api/claude-provider/detect') return json({ wrappers: w.wrappers ?? [] })
     if (url === '/api/claude-provider/test') {
       await w.testDelay
-      return json({ test: w.test ?? { outcome: 'ok', ok: true, message: 'Claude answered through your command.', at: 1 } })
+      const t = (w.test ?? { ok: true, message: 'Claude answered through your command.' }) as { ok: boolean; message: string }
+      return new Response(`${JSON.stringify({ result: t.ok ? 'ok' : 'failed', summary: t.message, ms: 1, via: 'envman' })}\n`, { status: 200 })
     }
     if (method === 'PUT') {
       const profile = profiles.find((x) => x.id === body.profileId)
@@ -187,30 +189,31 @@ describe('Claude provider: Custom command', () => {
     expect((await screen.findByRole('button', { name: 'Other' })).getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('Test connection saves first, shows Testing… while it runs, then the server message', async () => {
+  it('Test connection saves first, shows Testing… while it runs, then the server summary', async () => {
     let release = (): void => undefined
     serve({ testDelay: new Promise<void>((r) => { release = r }) })
     render(<ClaudeProviderCard />)
     await open()
     fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
-    fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.test }))
-    const busy = await screen.findByRole('button', { name: COMMAND_TEXT.testing }) as HTMLButtonElement
+    fireEvent.click(screen.getByRole('button', { name: CONNECTION_TEXT.button.idle }))
+    const busy = await screen.findByRole('button', { name: CONNECTION_TEXT.button.running }) as HTMLButtonElement
     expect(busy.disabled).toBe(true)
-    expect(screen.getAllByRole('status').some((s) => s.textContent?.includes(PROVIDER_TEXT.testing))).toBe(true)
+    expect(screen.getAllByRole('status').some((s) => s.textContent?.startsWith('Testing…'))).toBe(true)
     release()
     expect(await screen.findByText('Claude answered through your command.')).toBeTruthy()
     expect(calls.filter((c) => c.method !== 'GET').map((c) => c.url.split('?')[0])).toEqual(['/api/settings', '/api/claude-provider', '/api/claude-provider/test'])
     expect(screen.getAllByRole('status').some((s) => s.querySelector('.codicon-pass'))).toBe(true)
   })
 
-  it('shows a failing test as the static server message with an error icon', async () => {
-    serve({ test: { outcome: 'command_not_found', ok: false, message: 'The command was not found on the server.', at: 1 } })
+  it('shows a failing test as the server summary in an alert with an error icon', async () => {
+    serve({ test: { ok: false, message: 'The command was not found on the server.' } })
     render(<ClaudeProviderCard />)
     await open()
     fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: 'nope -- claude' } })
-    fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.test }))
+    fireEvent.click(screen.getByRole('button', { name: CONNECTION_TEXT.button.idle }))
     const msg = await screen.findByText('The command was not found on the server.')
     expect(msg.closest('p')?.className).toContain('text-destructive')
+    expect(msg.closest('p')?.getAttribute('role')).toBe('alert')
     expect(msg.closest('p')?.querySelector('.codicon-error')).toBeTruthy()
   })
 

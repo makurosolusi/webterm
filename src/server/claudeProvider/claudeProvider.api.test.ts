@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { handleProviderApi, lastProviderTest, PROVIDER_PATH, RESET_PATH, type ProviderApiDeps } from './claudeProvider.api'
+import { handleProviderApi, lastProviderTest, PROVIDER_PATH, rememberProviderTest, RESET_PATH, type ProviderApiDeps } from './claudeProvider.api'
 import { BACKUP_KEY, providerDir } from './claudeProvider.store'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
@@ -30,8 +30,6 @@ function deps(extra: Partial<ProviderApiDeps> = {}): ProviderApiDeps {
   return {
     isNodeToken: (t) => t === NODE_TOKEN,
     sessionsBefore: () => 2,
-    loginReady: async () => ({ ok: true }),
-    fetch: (async () => new Response(JSON.stringify({ id: 'msg_1' }), { status: 200 })) as unknown as typeof fetch,
     now: () => 1000,
     ...extra,
   }
@@ -65,10 +63,10 @@ describe('claude provider API', () => {
     expect(existsSync(join(providerDir(), 'CONFIG'))).toBe(false)
   })
 
-  it('POST /test probes the saved provider and keeps the result for the Doctor', async () => {
+  it('a finished test is kept for GET and the Doctor until the provider changes', async () => {
     await put({ mode: 'apiKey', secret: KEY })
-    const r = await handleProviderApi(ui('POST'), url(`${PROVIDER_PATH}/test`), '', deps())
-    expect(r.body).toMatchObject({ test: { outcome: 'ok', ok: true, at: 1000 } })
+    rememberProviderTest({ ok: true, message: 'Connection works' }, () => 1000)
+    expect((await handleProviderApi(ui('GET'), url(), '', deps())).body).toMatchObject({ lastTest: { ok: true, message: 'Connection works', at: 1000 } })
     expect(lastProviderTest()).toMatchObject({ ok: true })
     await put({ mode: 'apiKey' }) // a change clears the stale result
     expect(lastProviderTest()).toBeNull()
@@ -83,10 +81,5 @@ describe('claude provider API', () => {
     expect(r.status).toBe(200)
     expect((r.body as { provider: Record<string, unknown> }).provider).toEqual({ mode: 'login', secretSet: true, ready: true })
     expect(readFileSync(join(providerDir(), BACKUP_KEY), 'utf8')).toBe('{broken')
-  })
-
-  it('login mode tests Claude Code login readiness', async () => {
-    const r = await handleProviderApi(ui('POST'), url(`${PROVIDER_PATH}/test`), '', deps({ loginReady: async () => ({ ok: false, hint: 'Not signed in.' }) }))
-    expect(r.body).toMatchObject({ test: { ok: false, message: 'Not signed in.' } })
   })
 })

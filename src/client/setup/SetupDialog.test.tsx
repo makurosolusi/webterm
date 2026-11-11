@@ -86,7 +86,8 @@ describe('SetupDialog', () => {
     mount('/?setup=claude')
     click(SETUP_TEXT.next)
     await waitFor(() => expect(patches).toEqual([{ setup: { steps: { claude: 'done' } } }]))
-    expect(heading()).toBe(SETUP_TEXT.steps.browser)
+    // Route navigation (setSetup) settles after the patch, so the heading is awaited too.
+    await waitFor(() => expect(heading()).toBe(SETUP_TEXT.steps.browser))
   })
 
   it('Escape closes, keeps progress, and clears ?setup=', async () => {

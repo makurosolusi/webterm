@@ -2,40 +2,37 @@
 // secret broker (secret.api.ts): an agent credential or a non-browser caller gets 403.
 //   GET  /api/claude-provider       config view (secret: set/unset only), last test, sessions to restart
 //   PUT  /api/claude-provider       { mode, baseUrl?, credential?, model?, secret? }; never echoes secret
-//   POST /api/claude-provider/test  probe the SAVED provider (login mode: `claude auth status`;
-//                                   command mode: run the launch profile headless, claudeProvider.commandProbe.ts)
+//   POST /api/claude-provider/test  staged Test connection of the SAVED provider, NDJSON (claudeProvider.connectionStream.ts)
 //   GET  /api/claude-provider/detect  { wrappers: [{ name, installed, version? }] } for the command-mode card
 //   POST /api/claude-provider/reset back to the login; a damaged config is kept as CONFIG_BAK (view.configError)
 import type { IncomingMessage } from 'node:http'
 import { AGENT_CANNOT_APPROVE, uiOnlyDenial } from '../approvalAuth'
 import { readCappedRequestBody } from '../cappedRequestBody'
-import { resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { claudeChildEnv } from '../central/runtime/claudeOptions'
 import type { RunFn } from '../claudeLauncher/claudeLaunch.probe'
-import { probeCommand } from './claudeProvider.commandProbe'
 import { detectWrappers } from './claudeProvider.detect'
 import { parseUpdate } from './claudeProvider.model'
-import { probeProvider, type ProbeResult } from './claudeProvider.probe'
-import { loadConfig, loadSecret, providerView, resetProviderConfig, saveProvider } from './claudeProvider.store'
+import type { ConnStage } from './claudeProvider.connectionTest'
+import { providerView, resetProviderConfig, saveProvider } from './claudeProvider.store'
 
 export const PROVIDER_PATH = '/api/claude-provider'
 export const DETECT_PATH = `${PROVIDER_PATH}/detect`
 export const RESET_PATH = `${PROVIDER_PATH}/reset`
 const BODY_MAX_BYTES = 16 * 1024
 
-export type LastTest = ProbeResult & { at: number }
+/** A finished Test connection: `message` is its summary line, `stage` where it failed. */
+export interface LastTest { ok: boolean; message: string; stage?: ConnStage; at: number }
 let lastTest: LastTest | null = null
 /** Last "Test connection" result of this process (Doctor reads it). */
 export const lastProviderTest = (): LastTest | null => lastTest
+/** Keeps a finished test (the stream calls it); GET returns it until the provider changes. */
+export const rememberProviderTest = (t: Omit<LastTest, 'at'>, now: () => number = Date.now): void => { lastTest = { ...t, at: now() } }
 
 export interface ProviderApiDeps {
   isNodeToken(token: string): boolean
   /** Live Claude sessions started before `t` (they keep the old provider until restarted). */
   sessionsBefore(t: number): number
-  /** Login-mode test: Claude Code's own `auth status`. */
-  loginReady(): Promise<{ ok: boolean; hint?: string }>
-  fetch?: typeof fetch
-  /** Command-mode process runner / PATH lookup / env (tests inject fakes; default: real spawn, Central's scrubbed env). */
+  /** Wrapper detection's process runner / PATH lookup / env (tests inject fakes; default: real spawn, Central's scrubbed env). */
   run?: RunFn
   onPath?: (name: string) => boolean
   env?: NodeJS.ProcessEnv
@@ -74,30 +71,12 @@ export async function handleProviderApi(req: IncomingMessage, url: URL, raw: str
     const wrappers = await detectWrappers({ env: deps.env ?? claudeChildEnv(process.env), ...(deps.run ? { run: deps.run } : {}), ...(deps.onPath ? { onPath: deps.onPath } : {}) })
     return { status: 200, body: { wrappers } }
   }
-  if (url.pathname === `${PROVIDER_PATH}/test` && method === 'POST') {
-    const c = loadConfig()
-    let r: ProbeResult
-    if (c.mode === 'login') {
-      const ready = await deps.loginReady()
-      r = ready.ok
-        ? { outcome: 'ok', ok: true, message: 'Claude Code is installed and logged in.' }
-        : { outcome: 'auth_rejected', ok: false, message: ready.hint ?? 'Claude Code is not logged in.' }
-    } else if (c.mode === 'command') {
-      r = await probeCommand(resolveClaudeLaunch(c.profileId), {
-        env: deps.env ?? claudeChildEnv(process.env), ...(deps.run ? { run: deps.run } : {}), ...(deps.onPath ? { onPath: deps.onPath } : {}),
-      })
-    } else {
-      r = await probeProvider(c, loadSecret(), deps.fetch)
-    }
-    lastTest = { ...r, at: now() }
-    return { status: 200, body: { test: lastTest } }
-  }
   return { status: 405, body: { error: 'method_not_allowed' } }
 }
 
 /** Route entry for api.ts: false = not ours. */
 export async function providerRoute(req: IncomingMessage, url: URL, deps: ProviderApiDeps): Promise<Result | null> {
-  if (url.pathname !== PROVIDER_PATH && url.pathname !== `${PROVIDER_PATH}/test` && url.pathname !== DETECT_PATH && url.pathname !== RESET_PATH) return null
+  if (url.pathname !== PROVIDER_PATH && url.pathname !== DETECT_PATH && url.pathname !== RESET_PATH) return null
   let raw = ''
   if (req.method === 'PUT' || req.method === 'POST') {
     const read = await readCappedRequestBody(req, BODY_MAX_BYTES)

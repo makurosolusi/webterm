@@ -4,12 +4,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
-import type { LaunchTest } from '../claudeLauncher/claudeLaunch.client'
 import { resetCapabilitiesCache } from '../useCapabilities'
 import { BrowserStep } from './setup.browser'
-import { claudeCheckState, ClaudeStep } from './setup.claude'
+import { ClaudeStep } from './setup.claude'
+import { CONNECTION_TEXT } from '../claudeLauncher/ConnectionTest'
 import { DOWNLOAD_TEXT } from '../advancedLabels'
-import { capabilityWrites, DL_IDLE, fakeServer, NOT_FOUND, READY, WRAPPER_SIGNED_OUT, type FakeServer } from './setup.fakeServer'
+import { capabilityWrites, CONN_NOT_FOUND, CONN_OK, CONN_WRAPPER_SIGNED_OUT, DL_IDLE, fakeServer, type FakeServer } from './setup.fakeServer'
 import { PROVIDER_TEXT } from '../ClaudeProviderCard'
 import { SETUP_TEXT } from './setup.labels'
 import { BasicsStep, CentralStep } from './setup.steps'
@@ -26,74 +26,82 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Claude step', () => {
-  it('maps every probe outcome to a state', () => {
-    const fail = (failed: string): LaunchTest => ({ ...NOT_FOUND, failed })
-    expect(claudeCheckState(null, false)).toBe('checking')
-    expect(claudeCheckState(READY, false)).toBe('ready')
-    expect(claudeCheckState(NOT_FOUND, false)).toBe('notFound')
-    expect(claudeCheckState(fail('auth_failed'), false)).toBe('notSignedIn')
-    expect(claudeCheckState(fail('wrapper_failed'), false)).toBe('wrapperFailed')
-    expect(claudeCheckState(fail('wrapper_signed_out'), false)).toBe('wrapperSignedOut')
-    expect(claudeCheckState(fail('wrapper_not_found'), false)).toBe('wrapperFailed')
-    expect(claudeCheckState(fail('check_failed'), false)).toBe('checkFailed')
-    expect(claudeCheckState(null, true)).toBe('checkFailed')
-  })
+  const test = CONNECTION_TEXT.button
+  const probes = (s: FakeServer): number => s.calls.filter((c) => c.url === '/api/claude-provider/test').length
 
-  it('ready: says so, probes the profile Central uses, shows the provider card', async () => {
+  const rows = (): string[] => [...document.querySelectorAll('[data-stage]')].map((r) => `${(r as HTMLElement).dataset.stage}:${(r as HTMLElement).dataset.state}`)
+
+  it('on open: the check without the request (no tokens) is the single status; request stays pending, no "works" claim', async () => {
     const s = fakeServer()
     render(<ClaudeStep nav={nav} />)
-    expect(screen.getByText(SETUP_TEXT.claude.checking)).toBeTruthy()
-    expect(await screen.findByText(SETUP_TEXT.claude.ready)).toBeTruthy()
-    expect(s.calls.find((c) => c.url === '/api/claude-launch/test')?.body).toEqual({ central: true })
+    expect(await screen.findByText(/^Ready to test — the last check sends one small request$/)).toBeTruthy()
+    expect(rows()).toEqual(['wrapper:skipped', 'cli:ok', 'auth:ok', 'request:pending'])
+    expect(screen.getByText(/Not tested yet — press Test connection to send a test request/)).toBeTruthy()
+    expect(screen.queryByText(/Connection works/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(s.calls.filter((c) => c.url === '/api/claude-provider/test').map((c) => c.body)).toEqual([{ request: false }])
+    expect(document.querySelectorAll('[data-connection-test]')).toHaveLength(1)
+    expect(s.calls.some((c) => c.url === '/api/claude-launch/test')).toBe(false)
+  })
+
+  it('Test connection runs all four stages, request included; success names what passed', async () => {
+    const s = fakeServer()
+    render(<ClaudeStep nav={nav} />)
+    await screen.findByText(/^Ready to test/)
+    click(test.idle)
+    expect(await screen.findByText(/^Connection works — Claude answered in 1.4 s via Claude Code login$/)).toBeTruthy()
+    expect(rows()).toEqual(['wrapper:skipped', 'cli:ok', 'auth:ok', 'request:ok'])
+    expect(s.calls.filter((c) => c.url === '/api/claude-provider/test').map((c) => c.body)).toEqual([{ request: false }, { request: true }])
+    expect(screen.getByRole('button', { name: test.again })).toBeTruthy()
+    expect(s.calls.some((c) => c.url === '/api/claude-launch/test')).toBe(false)
     expect(screen.getByText(SETUP_TEXT.claude.intro)).toBeTruthy()
     expect(await screen.findByRole('region', { name: 'Claude provider' })).toBeTruthy()
     expect(screen.getByText(SETUP_TEXT.changeLater(SETUP_TEXT.claude.where))).toBeTruthy()
   })
 
-  it('not found: both install commands copy, docs link, Check again probes again', async () => {
-    const s = fakeServer({ launch: NOT_FOUND })
+  it('not found: fails at Claude CLI with both install commands to copy and the guide; Test again re-runs the same test', async () => {
+    const s = fakeServer({ connection: CONN_NOT_FOUND })
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     render(<ClaudeStep nav={nav} />)
-    expect(await screen.findByText(SETUP_TEXT.claude.notFound)).toBeTruthy()
-    click(`${SETUP_TEXT.claude.copy}: ${SETUP_TEXT.claude.install}`)
-    click(`${SETUP_TEXT.claude.copy}: ${SETUP_TEXT.claude.npm}`)
-    expect(writeText.mock.calls).toEqual([[NOT_FOUND.steps[0].install?.installCommand], [NOT_FOUND.steps[0].install?.npmCommand]])
-    expect(await screen.findAllByText(SETUP_TEXT.claude.copied)).toHaveLength(2)
-    expect(screen.getByRole('link', { name: SETUP_TEXT.claude.docs }).getAttribute('href')).toBe('https://code.claude.com/docs/en/setup')
-    s.launch = READY
-    click(SETUP_TEXT.claude.checkAgain)
-    expect(await screen.findByText(SETUP_TEXT.claude.ready)).toBeTruthy()
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed at Claude CLI: The claude CLI was not found on PATH.')
+    click(`${CONNECTION_TEXT.copy}: ${CONNECTION_TEXT.install}`)
+    click(`${CONNECTION_TEXT.copy}: ${CONNECTION_TEXT.npm}`)
+    expect(writeText.mock.calls).toEqual([['curl -fsSL https://claude.ai/install.sh | bash'], ['npm install -g @anthropic-ai/claude-code']])
+    expect(await screen.findAllByText(CONNECTION_TEXT.copied)).toHaveLength(2)
+    expect(screen.getByRole('link', { name: CONNECTION_TEXT.docs }).getAttribute('href')).toBe('https://code.claude.com/docs/en/setup')
+    s.connection = CONN_OK
+    click(test.again)
+    expect(await screen.findByText(/^Connection works/)).toBeTruthy()
+    expect(probes(s)).toBe(2)
+    expect(s.calls.filter((c) => c.url === '/api/claude-provider/test')[1]!.body).toEqual({ request: true })
   })
 
-  it('wrapper not signed in: one failure surface with the sign-in command to copy; Test connection re-runs the check', async () => {
+  it('wrapper not signed in: one failure surface with the sign-in command to copy; the card\'s Test re-runs it and shows nothing of its own', async () => {
     const cardFailure = 'The launch command exited with code 1 before Claude Code started.'
     const s = fakeServer({
-      launch: WRAPPER_SIGNED_OUT,
+      connection: CONN_WRAPPER_SIGNED_OUT,
       provider: { provider: { mode: 'apiKey', secretSet: true, ready: true }, lastTest: { ok: false, message: cardFailure, at: 1 }, restartNeeded: 0 },
-      providerTest: { ok: false, message: cardFailure, at: 2 },
     })
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     render(<ClaudeStep nav={nav} />)
-    expect(await screen.findByText(SETUP_TEXT.claude.wrapperSignedOut)).toBeTruthy()
-    expect(screen.getByText(WRAPPER_SIGNED_OUT.steps[0].hint as string)).toBeTruthy()
-    click(`${SETUP_TEXT.claude.copy}: ${SETUP_TEXT.claude.signIn}`)
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed at Wrapper')
+    expect(screen.getByText('envman is not signed in for the user webterm runs as. Sign in, then Check again.')).toBeTruthy()
+    click(`${CONNECTION_TEXT.copy}: ${CONNECTION_TEXT.signIn}`)
     expect(writeText.mock.calls).toEqual([['envman login <server> --token <token>']])
-    await screen.findByRole('button', { name: PROVIDER_TEXT.test })
-    const probes = (): number => s.calls.filter((c) => c.url === '/api/claude-launch/test').length
-    const before = probes()
-    click(PROVIDER_TEXT.test)
-    await waitFor(() => expect(probes()).toBe(before + 1))
-    await screen.findByText(SETUP_TEXT.claude.wrapperSignedOut)
+    const before = probes(s)
+    click(test.again)
+    await waitFor(() => expect(probes(s)).toBe(before + 1))
+    expect(await screen.findAllByRole('alert')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-connection-test]')).toHaveLength(1)
     expect(screen.queryByText(new RegExp(cardFailure))).toBeNull()
-    expect(screen.queryByText(/see the full error/)).toBeNull()
   })
 
   it('no separate Save: Continue with nothing changed just moves on', async () => {
     const s = fakeServer()
     render(<ClaudeStep nav={nav} />)
-    await screen.findByRole('button', { name: PROVIDER_TEXT.test })
+    await screen.findByText(/^Ready to test/)
     expect(screen.queryByRole('button', { name: new RegExp(`^(${PROVIDER_TEXT.save}|${PROVIDER_TEXT.clean})$`) })).toBeNull()
     click(SETUP_TEXT.next)
     await waitFor(() => expect(nav.next).toHaveBeenCalledTimes(1))
@@ -117,23 +125,22 @@ describe('Claude step', () => {
   })
 
   it('a failed copy says so instead of claiming success', async () => {
-    fakeServer({ launch: NOT_FOUND })
+    fakeServer({ connection: CONN_NOT_FOUND })
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn(async () => { throw new Error('denied') }) } })
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     render(<ClaudeStep nav={nav} />)
-    await screen.findByText(SETUP_TEXT.claude.notFound)
-    click(`${SETUP_TEXT.claude.copy}: ${SETUP_TEXT.claude.install}`)
-    expect(await screen.findByText(SETUP_TEXT.claude.copyFailed)).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: `${CONNECTION_TEXT.copy}: ${CONNECTION_TEXT.install}` }))
+    expect(await screen.findByText(CONNECTION_TEXT.copyFailed)).toBeTruthy()
   })
 
-  it('check failed: Retry runs the probe again', async () => {
-    const s = fakeServer({ launch: 'error' })
+  it('a test that cannot run says so; Test again runs it again', async () => {
+    const s = fakeServer({ connection: 'error' })
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     render(<ClaudeStep nav={nav} />)
-    expect(await screen.findByText(SETUP_TEXT.claude.checkFailed)).toBeTruthy()
-    s.launch = READY
-    click(SETUP_TEXT.retry)
-    expect(await screen.findByText(SETUP_TEXT.claude.ready)).toBeTruthy()
+    expect(await screen.findByText(CONNECTION_TEXT.couldNotRun('probe_failed'))).toBeTruthy()
+    s.connection = CONN_OK
+    click(test.again)
+    expect(await screen.findByText(/^Connection works/)).toBeTruthy()
   })
 })
 

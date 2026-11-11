@@ -28,8 +28,6 @@ export const COMMAND_TEXT = {
   saving: 'Saving…',
   clean: 'Saved',
   noChanges: 'No changes to save',
-  test: 'Test connection',
-  testing: 'Testing…',
   loadFailed: 'Could not load the saved commands.',
   saveFailed: (code: string): string => `Could not save the command (${code}).`,
   fallbackName: 'Custom command',
@@ -57,7 +55,8 @@ export function commandName(command: string): string {
 export interface ClaudeProviderCommandProps {
   provider: ProviderView
   busy: boolean
-  testing: boolean
+  /** Test connection / Testing… / Test again (the card owns the test). */
+  testLabel: string
   /** Point the provider at the profile (the card's PUT); true = saved. */
   commit(profileId: string): Promise<boolean>
   /** Probe the saved provider (no save first: this form already saved). */
@@ -167,7 +166,7 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       <div className="flex items-center gap-2">
         {p.hideSave ? null : <Button size="sm" disabled={disabled || command.trim() === '' || clean} aria-busy={working} title={clean && !working ? COMMAND_TEXT.noChanges : undefined}
           onClick={() => void saveDraft()}>{working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</Button>}
-        <Button variant="outline" size="sm" disabled={disabled || command.trim() === ''} onClick={() => void runTest()}>{p.testing ? COMMAND_TEXT.testing : COMMAND_TEXT.test}</Button>
+        <Button variant="outline" size="sm" disabled={disabled || command.trim() === ''} onClick={() => void runTest()}>{p.testLabel}</Button>
       </div>
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
     </div>

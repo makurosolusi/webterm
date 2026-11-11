@@ -1,29 +1,34 @@
 // Command mode end to end through the API with REAL child processes: fake `claude` scripts, no network,
 // no real claude/envman. The fake prints secret-looking text so every case also proves it never leaks.
+// POST /test is the NDJSON Test connection stream (claudeProvider.connectionStream.ts).
 import { TEST_UI_COOKIE } from '../uiSession.testutil'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { handleProviderApi, PROVIDER_PATH, type ProviderApiDeps } from './claudeProvider.api'
+import { handleProviderApi, lastProviderTest, PROVIDER_PATH, type ProviderApiDeps } from './claudeProvider.api'
+import type { ProviderTestDeps } from './claudeProvider.connectionStream'
+import { postTest, uiPost } from './claudeProvider.connectionStream.testutil'
+import type { ConnEvent, FinalEvent } from './claudeProvider.connectionTest'
 import { registerClaudeLaunchSettings } from '../claudeLauncher/claudeLauncher'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 
 const LEAK = 'sk-ant-LEAKLEAKLEAKLEAK1234' // test-only
 const FAKE = `#!/bin/sh
 echo "$*" >> "$FAKE_LOG"
-V=0; case " $* " in *" --version "*) V=1 ;; esac
+case " $* " in *" --version "*) [ "$FAKE_MODE" = verfail ] && { echo "boom ${LEAK}" >&2; exit 3; }; echo 2.1.0; exit 0 ;; esac
+[ "$1" = auth ] && { echo '{"loggedIn":true,"authMethod":"claude.ai"}'; exit 0; }
 case "$FAKE_MODE" in
-  signedout) echo "need auth to fetch x — not logged in: run 'claude login ${LEAK}'" >&2; exit 1 ;;
-  verfail) echo "boom ${LEAK}" >&2; echo "${LEAK}"; exit 3 ;;
-  nonjson) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; echo "not json ${LEAK}"; exit 0 ;;
-  pingerror) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; echo '{"is_error":true,"result":"${LEAK}"}'; exit 0 ;;
-  pingexit) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; echo "${LEAK}"; exit 1 ;;
-  hang) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; sleep 5; exit 0 ;;
+  nonjson) echo "not json ${LEAK}"; exit 0 ;;
+  e401) echo '{"type":"result","is_error":true,"result":"API Error: 401 invalid x-api-key ${LEAK}"}'; exit 1 ;;
+  e404) echo '{"type":"result","is_error":true,"result":"API Error: 404 not_found_error model ${LEAK}"}'; exit 1 ;;
+  e429) echo '{"type":"result","is_error":true,"result":"API Error: 429 rate_limit_error ${LEAK}"}'; exit 1 ;;
+  dns) echo "getaddrinfo ENOTFOUND gw.invalid ${LEAK}" >&2; exit 1 ;;
+  hang) sleep 5; exit 0 ;;
+  slow) sleep 0.3 ;;
 esac
-[ "$V" = 1 ] && { echo 2.1.0; exit 0; }
-echo '{"type":"result","is_error":false,"result":"${LEAK}"}'
+echo '{"type":"result","subtype":"success","is_error":false,"result":"${LEAK}","total_cost_usd":0.001,"usage":{"input_tokens":5,"output_tokens":1},"modelUsage":{"claude-haiku-4-5":{"costUSD":0.001}}}'
 `
 let dir = ''
 let prev: string | undefined
@@ -50,15 +55,22 @@ const setProfiles = (claudeLaunchProfiles: { id: string; name: string; command: 
 const ui = (method: string): IncomingMessage =>
   ({ method, headers: { host: 'localhost:8700', origin: 'http://localhost:8700', 'sec-fetch-site': 'same-origin', cookie: TEST_UI_COOKIE } }) as unknown as IncomingMessage
 const deps = (mode = 'ok', extra: Partial<ProviderApiDeps> = {}): ProviderApiDeps => ({
-  isNodeToken: () => false, sessionsBefore: () => 0, loginReady: async () => ({ ok: true }), now: () => 1000,
+  isNodeToken: () => false, sessionsBefore: () => 0, now: () => 1000,
   env: { PATH: process.env.PATH ?? '/usr/bin:/bin', FAKE_MODE: mode, FAKE_LOG: log }, ...extra,
 })
 const url = (p = PROVIDER_PATH) => new URL(`http://localhost:8700${p}`)
 const put = (body: unknown) => handleProviderApi(ui('PUT'), url(), JSON.stringify(body), deps())
-const test = async (mode = 'ok', extra: Partial<ProviderApiDeps> = {}) => {
-  const r = await handleProviderApi(ui('POST'), url(`${PROVIDER_PATH}/test`), '', deps(mode, extra))
-  return { r, test: (r.body as { test: Record<string, unknown> }).test }
+const testDeps = (mode: string, extra: Partial<ProviderTestDeps> = {}): ProviderTestDeps => ({
+  isNodeToken: () => false, env: { PATH: process.env.PATH ?? '/usr/bin:/bin', FAKE_MODE: mode, FAKE_LOG: log }, book: () => undefined, ...extra,
+})
+const test = async (mode = 'ok', extra: Partial<ProviderTestDeps> = {}, body?: unknown) => {
+  const call = postTest(testDeps(mode, extra), uiPost(body))
+  await call.done
+  const final = call.events[call.events.length - 1] as FinalEvent
+  const failed = call.events.find((e): e is Extract<ConnEvent, { state: string }> => 'state' in e && e.state === 'failed')
+  return { call, final, failed }
 }
+const logLines = (): string[] => { try { return readFileSync(log, 'utf8').trim().split('\n') } catch { return [] } } // no file = nothing ran
 
 describe('PUT / GET command mode', () => {
   it('saves only the profile id, resolves it in the view, ignores credential fields and keeps a stored secret', async () => {
@@ -97,57 +109,108 @@ describe('PUT / GET command mode', () => {
   })
 })
 
-describe('POST /test in command mode', () => {
-  it('ok: --version first (flags before it), then the minimal -p ping; nothing from the output is returned', async () => {
+describe('POST /test in command mode (NDJSON stream)', () => {
+  it('ok: --version, auth status, then one -p request through the profile; streams every stage; books the cost; keeps the result', async () => {
     await put({ mode: 'command', profileId: 'p' })
-    const { r, test: t } = await test('ok')
-    expect(t).toEqual({ outcome: 'ok', ok: true, message: expect.stringContaining('Connected'), at: 1000 })
-    expect(readFileSync(log, 'utf8').trim().split('\n')).toEqual(['--model opus --version', '--model opus -p . --output-format json'])
-    expect(JSON.stringify(r.body)).not.toContain(LEAK)
+    const book = vi.fn()
+    const { call, final } = await test('ok', { book })
+    expect(call.status).toBe(200)
+    expect(call.contentType).toBe('application/x-ndjson')
+    expect(call.events.map((e) => ('state' in e ? `${e.stage}:${e.state}` : 'final'))).toEqual(
+      ['wrapper:skipped', 'cli:running', 'cli:ok', 'auth:running', 'auth:ok', 'request:running', 'request:ok', 'final'])
+    expect(final).toMatchObject({ result: 'ok', model: 'claude-haiku-4-5', via: 'custom command' })
+    const lines = logLines()
+    expect(lines.slice(0, 2)).toEqual(['--version', 'auth status'])
+    expect(lines[2]).toMatch(/^--model opus -p --output-format json --model haiku .*--max-turns 1 .*Reply with OK$/)
+    expect(book).toHaveBeenCalledWith('connection_test', expect.objectContaining({ model: 'claude-haiku-4-5', costMicros: 1000 }))
+    expect(call.body).not.toContain(LEAK)
+    expect(lastProviderTest()).toMatchObject({ ok: true, message: final.summary })
   })
 
-  it('ENOENT / not on PATH -> command_not_found, naming the missing binary', async () => {
+  it('{ request: false } stops before the request: no -p spawn, result "ready", not kept as a test result', async () => {
+    await put({ mode: 'command', profileId: 'p' })
+    const { call, final } = await test('ok', {}, { request: false })
+    expect(call.events.map((e) => ('state' in e ? `${e.stage}:${e.state}` : 'final'))).toEqual(
+      ['wrapper:skipped', 'cli:running', 'cli:ok', 'auth:running', 'auth:ok', 'request:pending', 'final'])
+    expect(final.result).toBe('ready')
+    expect(logLines()).toEqual(['--version', 'auth status'])
+    expect(lastProviderTest()?.message).not.toBe(final.summary)
+  })
+
+  it('a full test never joins a running check without the request', async () => {
+    await put({ mode: 'command', profileId: 'p' })
+    const quick = postTest(testDeps('slow'), uiPost({ request: false }))
+    const full = postTest(testDeps('slow'))
+    await Promise.all([quick.done, full.done])
+    expect((full.events[full.events.length - 1] as FinalEvent).result).toBe('ok')
+    expect((quick.events[quick.events.length - 1] as FinalEvent).result).toBe('ready')
+  })
+
+  it('a wrapper not on PATH fails at Wrapper, naming it; nothing later runs', async () => {
     setProfiles([{ id: 'e', name: 'E', command: 'definitely-missing-envman -e x -- claude' }])
     await put({ mode: 'command', profileId: 'e' })
-    const { test: t } = await test('ok')
-    expect(t).toMatchObject({ outcome: 'command_not_found', ok: false })
-    expect(t.message).toMatch(/^definitely-missing-envman was not found on PATH/)
+    const { call, final } = await test('ok')
+    expect(final).toMatchObject({ result: 'failed', stage: 'wrapper', failed: 'wrapper_not_found' })
+    expect(final.summary).toBe('Failed at Wrapper: definitely-missing-envman not found on PATH')
+    expect(call.events.filter((e) => 'state' in e && e.state === 'skipped').map((e) => (e as { stage: string }).stage)).toEqual(['cli', 'auth', 'request'])
+    expect(logLines()).toEqual([])
   })
 
-  it('a deleted profile is not_configured and spawns nothing', async () => {
+  it('a deleted profile fails before anything spawns', async () => {
     await put({ mode: 'command', profileId: 'gone' })
-    expect((await test('ok')).test).toMatchObject({ outcome: 'not_configured', ok: false })
+    const { final } = await test('ok')
+    expect(final).toMatchObject({ result: 'failed', summary: 'The selected launch profile no longer exists. Pick another one.' })
+    expect(logLines()).toEqual([])
   })
 
   it.each([
-    ['verfail', 3],
-    ['pingexit', 1],
-    ['nonjson', undefined],
-    ['pingerror', undefined],
-  ])('%s -> command_failed with no stdout/stderr in the response', async (mode, exitCode) => {
+    ['verfail', 'cli', 'check_failed'],
+    ['nonjson', 'request', 'request_failed'],
+    ['e401', 'request', 'auth_rejected'],
+    ['e404', 'request', 'model_not_found'],
+    ['e429', 'request', 'rate_limited'],
+    ['dns', 'request', 'network'],
+  ])('%s -> fails at %s as %s, with no stdout/stderr in the stream', async (mode, stage, failed) => {
     await put({ mode: 'command', profileId: 'p' })
-    const { r, test: t } = await test(mode)
-    expect(t).toMatchObject({ outcome: 'command_failed', ok: false })
-    if (exitCode !== undefined) expect(t.exitCode).toBe(exitCode)
-    expect(JSON.stringify(r.body)).not.toContain(LEAK)
-    expect(JSON.stringify(r.body)).not.toContain('boom')
+    const { call, final } = await test(mode)
+    expect(final).toMatchObject({ result: 'failed', stage, failed })
+    expect(call.body).not.toContain(LEAK)
+    expect(call.body).not.toContain('boom')
   })
 
-  it('a wrapper that is not signed in says so, still without its output', async () => {
+  it('a hung request is killed at the timeout', async () => {
     await put({ mode: 'command', profileId: 'p' })
-    const { r, test: t } = await test('signedout')
-    expect(t).toMatchObject({ outcome: 'command_failed', ok: false, exitCode: 1, message: 'claude is not signed in for the user webterm runs as. Sign in on the server, then Test connection again.' })
-    expect(JSON.stringify(r.body)).not.toContain(LEAK)
-  })
-
-  it('a hung ping is killed at the timeout -> command_failed', async () => {
-    await put({ mode: 'command', profileId: 'p' })
-    const { probeCommand } = await import('./claudeProvider.commandProbe')
-    const { resolveClaudeLaunch } = await import('../claudeLauncher/claudeLauncher')
     const t0 = Date.now()
-    const t = await probeCommand(resolveClaudeLaunch('p'), { env: deps('hang').env as NodeJS.ProcessEnv, pingTimeoutMs: 300 })
-    expect(t).toMatchObject({ outcome: 'command_failed', ok: false })
+    const { final } = await test('hang', { requestTimeoutMs: 300 })
+    expect(final).toMatchObject({ result: 'failed', stage: 'request', failed: 'timeout' })
     expect(Date.now() - t0).toBeLessThan(4000)
+  })
+
+  it('one test at a time: a second request while one runs joins it (one -p spawn, same events for both)', async () => {
+    await put({ mode: 'command', profileId: 'p' })
+    const a = postTest(testDeps('slow'))
+    await new Promise((r) => setTimeout(r, 100))
+    const b = postTest(testDeps('slow'))
+    await Promise.all([a.done, b.done])
+    expect(b.events).toEqual(a.events)
+    expect(logLines().filter((l) => l.includes(' -p '))).toHaveLength(1)
+  })
+
+  it('Cancel (every watcher leaves) kills the running request and keeps no result', async () => {
+    await put({ mode: 'command', profileId: 'p' })
+    const t0 = Date.now()
+    const a = postTest(testDeps('hang'))
+    await vi.waitFor(() => expect(logLines().some((l) => l.includes(' -p '))).toBe(true), { timeout: 3000 })
+    a.leave()
+    // The next test starts fresh (the cancelled flight is gone) and finishes long before the hang would.
+    const { final } = await test('ok')
+    expect(final.result).toBe('ok')
+    expect(Date.now() - t0).toBeLessThan(4000)
+  })
+
+  it('agents and non-browser callers get 403; GET is 405', async () => {
+    expect(postTest(testDeps('ok'), { method: 'POST', headers: {} } as unknown as IncomingMessage).status).toBe(403)
+    expect(postTest(testDeps('ok'), { ...ui('GET') } as IncomingMessage).status).toBe(405)
   })
 
   it('does not use a shell: metacharacters in the command are plain arguments', async () => {
@@ -155,7 +218,7 @@ describe('POST /test in command mode', () => {
     await put({ mode: 'command', profileId: 'm' })
     await test('ok')
     expect(() => readFileSync(join(dir, 'pwned'))).toThrow()
-    expect(readFileSync(log, 'utf8')).toContain(`--x;touch ${join(dir, 'pwned')} --version`)
+    expect(readFileSync(log, 'utf8')).toContain(`--x;touch ${join(dir, 'pwned')} -p`)
   })
 })
 

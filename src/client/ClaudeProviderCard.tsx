@@ -10,7 +10,9 @@ import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
 import { SettingsCombobox } from './SettingsCombobox'
-import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State, type TestResult } from './claudeProvider.api'
+import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State } from './claudeProvider.api'
+import { ConnectionTest, testButtonLabel } from './claudeLauncher/ConnectionTest'
+import { useConnectionTest, type ConnectionTestHandle } from './claudeLauncher/connectionTest.client'
 
 const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom', 'command']
 const CREDENTIAL_LIST: Credential[] = ['authToken', 'apiKey']
@@ -67,8 +69,6 @@ export const PROVIDER_TEXT = {
   savedAt: (at: string): string => `at ${at}.`,
   savedToast: 'Claude provider saved',
   savedCheckFailed: 'Saved, but the check failed — new sessions will fail until this is fixed.',
-  test: 'Test connection',
-  testing: 'Testing…',
   loading: 'Loading…',
   loadFailed: 'Could not load the Claude provider.',
   saveFailed: (code: string): string => `Could not save (${code}).`,
@@ -83,19 +83,23 @@ export const PROVIDER_TEXT = {
 /** Saves the pending edits (resolves true when saved or nothing to save); filled in by the card. */
 export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null>
 
-/** The Claude provider card; loads from the server and waits for it on every change. `onTested`: the host
- *  shows the result itself (setup wizard's live check), so the card hides its own and reports each test.
+/** The Claude provider card; loads from the server and waits for it on every change. `connection`: the host
+ *  owns the Test connection and shows it (setup wizard's single status), so the card only starts it.
  *  `commitRef`: the host saves through it (wizard Continue), so the card hides its own Save. */
-export function ClaudeProviderCard({ onProfiles, onTested, commitRef }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; onTested?(): void; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
+export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
   const [saved, setSaved] = useState<{ seq: number; at: string } | null>(null)
   const [toast, setToast] = useState<{ seq: number; severity: VscodeNotificationSeverity; title: string } | null>(null)
   const seq = useRef(0)
-  const [busy, setBusy] = useState(false)
+  const [working, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
+  const own = useConnectionTest()
+  const conn = connection ?? own
+  const testing = conn.state.running
+  const testLabel = testButtonLabel(conn.state)
+  const busy = working || testing // a save while the test runs would test a provider that is gone
   const [mode, setMode] = useState<Mode>('login')
   const [baseUrl, setBaseUrl] = useState('')
   const [credential, setCredential] = useState<Credential>('authToken')
@@ -154,13 +158,9 @@ export function ClaudeProviderCard({ onProfiles, onTested, commitRef }: { onProf
     || (mode === 'custom' && (baseUrl !== (p.baseUrl ?? '') || credential !== (p.credential ?? 'authToken'))))
   // The server tests the SAVED provider, so unsaved edits are saved first: the result matches the form.
   const runTest = async (): Promise<void> => {
-    setBusy(true); setTesting(true); setError(null)
-    try {
-      const r = (await call(`${PATH}/test`, 'POST')).test as TestResult
-      setState((prev) => (prev ? { ...prev, lastTest: r } : prev))
-    } catch (e) {
-      setError(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
-    } finally { setBusy(false); setTesting(false); onTested?.() }
+    setError(null)
+    const f = await conn.start()
+    if (f) setState((prev) => (prev ? { ...prev, lastTest: { ok: f.result === 'ok', message: f.summary, at: Date.now() } } : prev))
   }
   const test = async (): Promise<void> => {
     if (dirty && !(await save())) return
@@ -189,7 +189,7 @@ export function ClaudeProviderCard({ onProfiles, onTested, commitRef }: { onProf
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
           {mode === 'command' && p ? (
-            <ClaudeProviderCommand provider={p} busy={busy} testing={testing} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles}
+            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles}
               onError={(m) => setToast({ seq: ++seq.current, severity: 'error', title: m })} pending={commandCommit} hideSave={!!commitRef} />
           ) : null}
           {mode === 'custom' ? (
@@ -210,11 +210,12 @@ export function ClaudeProviderCard({ onProfiles, onTested, commitRef }: { onProf
           {mode !== 'command' ? <div className="flex items-center gap-2">
             {commitRef ? null : <Button size="sm" disabled={busy || !dirty} aria-busy={saving} title={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}
               onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>}
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testing ? PROVIDER_TEXT.testing : PROVIDER_TEXT.test}</Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testLabel}</Button>
             {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
           </div> : null}
-          {testing ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.testing}</p> : null}
-          {!testing && state.lastTest && !onTested ? (
+          {connection ? null : <ConnectionTest test={conn} />}
+          {/* The previous result (before this page ran one), from the server. */}
+          {!connection && !testing && !conn.state.final && state.lastTest ? (
             <p role="status" className={state.lastTest.ok ? 'text-xs' : 'text-xs text-destructive'}>
               <span className={`codicon ${state.lastTest.ok ? 'codicon-pass' : 'codicon-error'}`} aria-hidden="true" /> {state.lastTest.message}
             </p>

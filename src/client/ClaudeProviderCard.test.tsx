@@ -4,6 +4,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClaudeProviderCard, PROVIDER_TEXT, validateGatewayUrl } from './ClaudeProviderCard'
+import { CONNECTION_TEXT } from './claudeLauncher/ConnectionTest'
+import { useConnectionTest } from './claudeLauncher/connectionTest.client'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
 type Call = { url: string; method: string; body?: string }
@@ -29,10 +31,15 @@ function serve(view: Record<string, unknown>, test = { ok: false, message: 'The 
       current = { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }
       return new Response(JSON.stringify(current), { status: 200 })
     }
-    if (method === 'POST') return new Response(JSON.stringify({ test }), { status: 200 })
+    if (method === 'POST') return ndjson(test)
     return new Response(JSON.stringify(current), { status: 200 })
   }))
 }
+
+/** The test stream's final line for a { ok, message } result. */
+const ndjson = (t: { ok: boolean; message: string }): Response =>
+  new Response(`${JSON.stringify({ result: t.ok ? 'ok' : 'failed', summary: t.message, ms: 1, via: 'x', ...(t.ok ? {} : { stage: 'request' }) })}\n`, { status: 200 })
+const TEST = CONNECTION_TEXT.button.idle
 
 beforeEach(() => { calls = []; resetFails = 0; putFails = 0; putGate = null })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
@@ -77,7 +84,7 @@ describe('ClaudeProviderCard', () => {
     fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.custom }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.baseUrl), { target: { value: 'https://gw.example.test' } })
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
-    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.test }))
+    fireEvent.click(screen.getByRole('button', { name: TEST }))
     expect(await screen.findByText('The endpoint rejected the credential.')).toBeTruthy()
     expect(calls.map((c) => c.method)).toEqual(['GET', 'PUT', 'POST'])
     expect(JSON.parse(calls[1]!.body!)).toMatchObject({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken', secret: KEY })
@@ -93,19 +100,23 @@ describe('ClaudeProviderCard', () => {
     render(<ClaudeProviderCard />)
     fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
-    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.test }))
+    fireEvent.click(screen.getByRole('button', { name: TEST }))
     expect(await screen.findByText('Connected.')).toBeTruthy()
     expect(screen.getByText(new RegExp(`^${PROVIDER_TEXT.saved} at .+ ${PROVIDER_TEXT.restart(1).slice(0, 30)}`))).toBeTruthy()
     expect(screen.queryByText(PROVIDER_TEXT.savedCheckFailed)).toBeNull()
   })
 
-  it('onTested (setup wizard): the card hides its own result and reports each test to the host', async () => {
+  it('connection (setup wizard): Test starts the host\'s test and the card shows no result of its own', async () => {
     serve({ mode: 'apiKey', secretSet: true, ready: true })
-    const onTested = vi.fn()
-    render(<ClaudeProviderCard onTested={onTested} />)
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.test }))
-    await waitFor(() => expect(onTested).toHaveBeenCalledTimes(1))
+    function Host(): React.JSX.Element {
+      const c = useConnectionTest()
+      return <><ClaudeProviderCard connection={c} /><output data-testid="host" data-summary={c.state.final?.summary ?? ''} /></>
+    }
+    render(<Host />)
+    fireEvent.click(await screen.findByRole('button', { name: TEST }))
+    await waitFor(() => expect(screen.getByTestId('host').dataset.summary).toBe('The endpoint rejected the credential.'))
     expect(screen.queryByText('The endpoint rejected the credential.')).toBeNull()
+    expect(screen.getByRole('button', { name: CONNECTION_TEXT.button.again })).toBeTruthy()
   })
 
   it('custom endpoint: base URL and model are comboboxes; a URL with a user or password is refused, the key stays a password box', async () => {
