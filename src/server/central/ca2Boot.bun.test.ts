@@ -103,7 +103,7 @@ describe('flags on', () => {
     expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.') || n.startsWith('state.') || n.startsWith('reminder.') || n.startsWith('health.'))).toBe(true)
     expect(added.filter((n) => n.startsWith('blackboard.'))).toEqual(['blackboard.read', 'blackboard.propose'])
     expect(added.filter((n) => n.startsWith('reminder.'))).toEqual(['reminder.set', 'reminder.list', 'reminder.cancel'])
-    expect(added.filter((n) => n.startsWith('health.'))).toEqual(['health.summary', 'health.findings', 'health.scan'])
+    expect(added.filter((n) => n.startsWith('health.'))).toEqual(['health.summary', 'health.findings', 'health.scan', 'health.analyze'])
   })
 
   it('agents/relay groups need their executor and mode', () => {

@@ -17,6 +17,7 @@ import { isWorkPath, workDispatch } from './ca2Routes.work'
 import { goalsDispatch, isGoalsPath } from './ca2Routes.goals'
 import { checkinDispatch, isCheckinPath } from './ca2Routes.checkin'
 import { healthDispatch, isHealthPath } from './ca2Routes.health'
+import { healthAnalyzeDispatch, isHealthAnalyzePath } from './ca2Routes.healthAnalyze'
 import { type ControlRequest, controlRoute } from './guard/haltApi'
 import { toolsView } from './toolsCatalog.api'
 
@@ -31,7 +32,7 @@ const log = createLogger('central.ca2')
 
 /** Whether `path` belongs to the CA2 panel families (used to answer 405 instead of falling through). */
 export const isCa2Path = (path: string): boolean =>
-  ['/status', '/agents', '/nodes', '/skills', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path) || isWorkPath(path) || isGoalsPath(path) || isMemoryPath(path) || isCheckinPath(path) || isHealthPath(path)
+  ['/status', '/agents', '/nodes', '/skills', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path) || isWorkPath(path) || isGoalsPath(path) || isMemoryPath(path) || isCheckinPath(path) || isHealthPath(path) || isHealthAnalyzePath(path)
 
 const notAllowed: RouteResult = { status: 405, body: { error: 'method_not_allowed' } }
 const decode = (s: string): string | null => { try { return decodeURIComponent(s) } catch { return null } }
@@ -46,6 +47,7 @@ export async function ca2Dispatch(
   if (isGoalsPath(path)) return goalsDispatch(h, req, actor)
   if (isCheckinPath(path)) return checkinDispatch(h, req, actor)
   if (isHealthPath(path)) return healthDispatch(h, req, actor)
+  if (isHealthAnalyzePath(path)) return healthAnalyzeDispatch(h, req, actor)
   if (isMemoryPath(path)) return memoryDispatch(h, req, actor)
   const reads: Record<string, () => RouteResult | Promise<RouteResult>> = {
     '/nodes': () => nodesView(h, query, board),

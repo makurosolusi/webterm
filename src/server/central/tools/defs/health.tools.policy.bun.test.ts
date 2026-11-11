@@ -26,9 +26,9 @@ function toolSources(): string[] {
   return [...local, ...imported]
 }
 
-test('the registered health tools are exactly the read and scan ones', () => {
+test('the registered health tools are exactly the read, scan and analyze ones', () => {
   const names = everyName()
-  expect(names.filter((n) => n.startsWith('health.')).sort()).toEqual(['health.findings', 'health.scan', 'health.summary'])
+  expect(names.filter((n) => n.startsWith('health.')).sort()).toEqual(['health.analyze', 'health.findings', 'health.scan', 'health.summary'])
   expect(names.filter((n) => /(dismiss|reopen|fix)/i.test(n) && /health|finding/i.test(n))).toEqual([])
 })
 

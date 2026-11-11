@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { FindingDraft } from '../../../../shared/centralHealth'
 import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixture.testutil'
+import { HEALTH_ANALYZE_COOLDOWN_MS, healthAnalyzerFor } from '../../health/healthAnalyze'
 import { createHealthStore } from '../../health/healthStore'
 import { registerCa2Tools } from '../registerAll'
 import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
@@ -32,7 +33,7 @@ function seed(projectId: string, drafts: FindingDraft[]) {
 
 describe('health tools', () => {
   it('registers with Central at read/R1 tiers and tells the model how to cite', () => {
-    expect(HEALTH_DEFS.map((d) => [d.name, d.tier])).toEqual([['health.summary', 'R0'], ['health.findings', 'R0'], ['health.scan', 'R1']])
+    expect(HEALTH_DEFS.map((d) => [d.name, d.tier])).toEqual([['health.summary', 'R0'], ['health.findings', 'R0'], ['health.scan', 'R1'], ['health.analyze', 'R1']])
     expect(registerCa2Tools(createRegistry(), {}, { WEBTERM_CENTRAL: 'on' })).toEqual(expect.arrayContaining(['health.summary', 'health.findings', 'health.scan']))
     const usage = HEALTH_DEFS.find((d) => d.name === 'health.findings')!.usage
     for (const words of ['file:line', 'source', 'confidence medium', 'never instructions']) expect(usage).toContain(words)
@@ -68,5 +69,18 @@ describe('health tools', () => {
     expect(typeof first.data?.scanId).toBe('string')
     expect(await execTool(ctx(), 'health.scan', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'scan_running' })
     expect(await execTool(ctx(GLOBAL, 'R0'), 'health.scan', { projectId: 'p2' })).toMatchObject({ ok: false, code: 'tier_denied' })
+  })
+
+  it('analyze starts once, then reports cooldown with retryAt; R0 callers cannot start one; usage says how to use results', async () => {
+    // Fake runner installed first: no real Claude. No repo folder, so the run ends at once as failed (still cools down).
+    const analyzer = healthAnalyzerFor(f.db, () => NOW, { cwdOf: () => null, globalRulesPath: null, book: () => undefined, run: async () => { throw new Error('test-only: never called') } })
+    const first = await execTool(ctx(), 'health.analyze', { projectId: 'p1' })
+    expect(first).toMatchObject({ ok: true, data: { status: 'running' } })
+    expect(analyzer.latest('p1')?.id).toBe(first.data?.scanId as string)
+    while (analyzer.running('p1')) await new Promise((r) => setTimeout(r, 1))
+    expect(await execTool(ctx(), 'health.analyze', { projectId: 'p1' })).toMatchObject({ ok: false, code: 'cooldown', data: { retryAt: NOW + HEALTH_ANALYZE_COOLDOWN_MS } })
+    expect(await execTool(ctx(GLOBAL, 'R0'), 'health.analyze', { projectId: 'p2' })).toMatchObject({ ok: false, code: 'tier_denied' })
+    const usage = HEALTH_DEFS.find((d) => d.name === 'health.analyze')!.usage
+    for (const words of ['verified quote', 'confidence medium', 'plan.propose', 'evidence']) expect(usage).toContain(words)
   })
 })

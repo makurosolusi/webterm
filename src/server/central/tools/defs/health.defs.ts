@@ -2,6 +2,7 @@
 // no tool here (or anywhere, see health.tools.policy.test.ts) dismisses or reopens a finding; that is the human's call.
 import type { FindingStatus, FindingView, HealthLevel, HealthRule } from '../../../../shared/centralHealth'
 import { obj, S } from '../../../capability/capability.schema'
+import { healthAnalyzerFor } from '../../health/healthAnalyze'
 import { healthServiceFor } from '../../health/healthService'
 import { createHealthStore } from '../../health/healthStore'
 import type { ToolDef, ToolResult } from '../toolTypes'
@@ -79,5 +80,22 @@ const scan: ToolDef = {
   },
 }
 
+const analyze: ToolDef = {
+  name: 'health.analyze', summary: 'Start a read-only deep analysis of a project\'s structure and tech debt by a sub-agent; results land as findings.', tier: 'R1',
+  auditKeys: ['scanId', 'status'],
+  usage: '{"projectId":"<id>"}. Costs model spend (at most $0.50) and takes minutes; at most once per hour per project. Read results with '
+    + 'health.findings rule ["analysis"]. Each result is a verified quote at file:line (the server drops claims it cannot find), confidence medium: '
+    + 'a judgement, not a measurement. Show the human the evidence before proposing a fix; only then turn the findings they accept into plan.propose.',
+  input: obj({}),
+  output: S.keys('scanId', 'status'),
+  validate: () => null,
+  handler(ctx, _input, projectId): ToolResult {
+    const started = healthAnalyzerFor(ctx.db, ctx.now).start(projectId as string) // `done` never rejects
+    if (started.ok) return { ok: true, data: { scanId: started.scan.id, status: 'running' } }
+    if (started.code === 'cooldown') return { ok: false, code: 'cooldown', data: { retryAt: started.retryAt, detail: 'An analysis of this project ran in the last hour.' } }
+    return { ok: false, code: 'analysis_running', data: { detail: 'An analysis of this project is already running.' } }
+  },
+}
+
 /** The health tools. */
-export const HEALTH_DEFS: readonly ToolDef[] = [summary, findings, scan]
+export const HEALTH_DEFS: readonly ToolDef[] = [summary, findings, scan, analyze]
