@@ -11,6 +11,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dataDir } from '../config'
+import { flagOn } from '../envFlag'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { BROWSER_COMMAND, CONTEXT_COMMAND, ESC_FN } from './cli.commands'
 import { buildEvalCommand } from './cli.eval'
@@ -191,7 +192,7 @@ ${cli} skills get ${CLI_SKILL_NAME}
  *  data-dir paths, so a second instance writing them would repoint the main install's skills at a temp dir. */
 export const SKIP_HOME_INSTALLS_ENV = 'WEBTERM_SKIP_HOME_INSTALLS'
 /** True when this instance must not write into HOME (only its own data dir). */
-export const skipHomeInstalls = (env: NodeJS.ProcessEnv = process.env): boolean => env[SKIP_HOME_INSTALLS_ENV] === '1'
+export const skipHomeInstalls = (env: NodeJS.ProcessEnv = process.env): boolean => flagOn(env[SKIP_HOME_INSTALLS_ENV])
 
 /** Write the launcher (0700), its guide, and the stub skill. Idempotent plain overwrite; `home` for tests. */
 export function installWebtermCli(home: string = homedir()): void {
