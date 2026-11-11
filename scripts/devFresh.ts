@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
+import { setupLine } from '../src/server/bootWiring'
 
 /** First port tried when `--port` is absent; well clear of the real instance's 8700/8701. */
 export const FRESH_DEFAULT_PORT = 8710
@@ -25,6 +26,9 @@ const STRIP_PREFIXES = ['WEBTERM_', 'NODETERM_', 'XDG_']
 const STRIP_KEYS = ['TMUX', 'TMUX_PANE', 'NODE_ENV', 'HOST', 'PORT', 'ZDOTDIR', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR']
 /** Provider credentials/config: a new machine has none, so dropped unless `--with-provider-env`. */
 const PROVIDER_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_']
+
+/** setupCode.ts `setupCodePath` (not imported: its module chain opens webterm.db at import time). */
+export const freshSetupCodePath = (p: FreshPaths): string => join(p.data, 'secrets', 'SETUP_CODE')
 
 export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; withProviderEnv: boolean }
 export interface FreshPaths { root: string; data: string; home: string; claude: string; vite: string }
@@ -176,7 +180,7 @@ async function main(): Promise<void> {
     '', `  webterm FRESH instance  ->  ${fresh.url}`,
     '  Isolated first-run install: own data dir, HOME, Claude config, ports and tmux socket.',
     `  Temp root:  ${fresh.paths.root}`,
-    `  Token file: ${join(fresh.paths.data, 'secrets', 'WEBTERM_TOKEN')}`,
+    `  ${setupLine(freshSetupCodePath(fresh.paths))}`,
     `  Flags: ${o.noClaude ? 'no-claude' + claudeNote : 'claude on PATH'}, ${o.withProviderEnv ? 'provider env + .env kept' : 'no provider env, no .env'}`,
     o.keep ? '  Ctrl+C to stop (temp root is KEPT).' : '  Ctrl+C to stop and delete.', '',
   ].join('\n') + '\n')

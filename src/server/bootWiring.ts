@@ -12,20 +12,28 @@ import { resolveHostPort } from './serverConfig'
 import { bootstrapToken, setTokenState, tokenFilePath, type TokenState } from './tokenBootstrap'
 
 const SECRETS_SUBDIR = 'secrets'
-const TOKEN_FILE_MODE_LABEL = '0600'
 const LISTEN_FAILED_EXIT_CODE = 1
 
 const log = createLogger('server')
 
-/** Where the access token lives: a new one is logged (path + length); a terminal gets one line naming
- *  its source on every boot (headless sign-in pastes it). The value itself is never printed or logged. */
+/** A new access token is logged (path + length, never the value). It is for machines (header,
+ *  MCP, scripts); humans sign in with an account, so the terminal no longer points them at it. */
 function announceToken(state: TokenState, secretsDir: string): void {
-  if (state.token === undefined) return
-  const path = tokenFilePath(secretsDir)
-  if (state.created) log.info('auth.token_created', 'Access token created', { path, len: state.token.length })
-  if (!process.stderr.isTTY) return
-  const where = state.source === 'env' ? 'the WEBTERM_TOKEN environment variable' : `${path} (${TOKEN_FILE_MODE_LABEL})`
-  process.stderr.write(`webterm: sign in through the window webterm opens, or paste the access token from ${where}\n`)
+  if (state.token === undefined || !state.created) return
+  log.info('auth.token_created', 'Access token created', { path: tokenFilePath(secretsDir), len: state.token.length })
+}
+
+/** Setup hint printed once at boot while no account exists. Exported for tests. */
+export const setupLine = (path: string): string =>
+  `No account yet — open webterm in a browser on this machine to create one, or use the setup code in ${path}`
+
+/**
+ * While no account exists, make sure a setup code exists and print ONE line naming its file (never the
+ * value). `ensure` is setupCode.ts `ensureSetupCode` bound to the data dir (injected: it opens webterm.db).
+ */
+export function announceSetup(ensure: () => string | null): void {
+  const path = ensure()
+  if (path !== null) process.stderr.write(`webterm: ${setupLine(path)}\n`)
 }
 
 /**

@@ -1,63 +1,55 @@
-// `/auth/*`: the entry points that hand the webterm UI its `wt_ui` session cookie. Routed BEFORE
-// the /api credential gate (index.ts) because they are how a browser gets a credential. Pattern: Jupyter (redirect file + token -> cookie) and VS Code server
-// (cookie set, then 303 to a clean URL). Secrets never appear in a response body or a log line.
-//   GET  /auth/open?code=   one-time code (uiOpen.ts) -> Set-Cookie + 303 `/`
-//   GET  /auth/me           { signedIn } (polled by a signed-out tab)
-//   POST /auth/request-open server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
-//   POST /auth/login        { token } root token -> Set-Cookie (remote / headless sign-in)
-//   POST /auth/logout       revokes the caller's session and clears the cookie
+// `/auth/*`: how a browser gets its `wt_ui` session cookie. Routed BEFORE the /api credential gate
+// (index.ts). Pattern: Jupyter (redirect file -> cookie), code-server (account login -> cookie). Every
+// sign-in mints a FRESH session (no fixation). Secrets never appear in a response body or a log line.
+//   GET  /auth/open?code=&next= one-time code (uiOpen.ts) -> Set-Cookie + 303 to a same-origin `next`
+//   GET  /auth/me               { signedIn, setupRequired, user, tokenSignIn }
+//   POST /auth/request-open     server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
+//   POST /auth/login            { username, password }, or { token } while no account exists
+//   POST /auth/logout           revokes the caller's session and clears the cookie
+//   /auth/setup, /auth/sessions*, /auth/account/*  -> auth.account.routes.ts
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { UI_SESSION_COOKIE, readCookie, sameOrigin, tokensMatch } from '../auth'
-import { readCappedRequestBody } from '../cappedRequestBody'
+import { sameOrigin, tokensMatch } from '../auth'
 import { firstHeader } from '../httpHeaders'
 import { createLogger } from '../logs'
-import type { UiOpener } from '../uiOpen'
+import { loginThrottle, throttleKeys } from '../loginThrottle'
+import { AuthError } from '../uiUser'
 import type { UiSessionStore } from '../uiSession'
+import { accountRoute, publicUser, setupAccount, signIn } from './auth.account.routes'
+import { callerSession, clearedCookie, readJsonBody, reply, replyText, safeNext, sessionCookie, str, userAgentOf, type UiAuthDeps } from './auth.http'
+
+export type { UiAuthDeps } from './auth.http'
 
 const log = createLogger('auth')
 
 export const AUTH_PREFIX = '/auth/'
 /** One server-opened window per this interval, whoever asks (the endpoint is unauthenticated). */
 export const OPEN_INTERVAL_MS = 10_000
-/** Browsers cap cookie lifetime at 400 days; the server's idle expiry (uiSession.ts) is what ends a session. */
-const COOKIE_MAX_AGE_S = 400 * 24 * 60 * 60
-const LOGIN_BODY_MAX_BYTES = 1024
-const NO_STORE = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } as const
 const INVALID_CODE_TEXT = 'This sign-in link is invalid or has expired. Open webterm again to get a new one.'
-
-export interface UiAuthDeps {
-  sessions: () => UiSessionStore
-  opener: UiOpener
-  /** Root token in force (every boot mints one; undefined only before boot, when /auth/login refuses). */
-  token: () => string | undefined
-  now?: () => number
-}
-
-function reply(res: ServerResponse, status: number, body?: unknown, headers: Record<string, string> = {}): void {
-  res.writeHead(status, { ...NO_STORE, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers })
-  res.end(body === undefined ? undefined : JSON.stringify(body))
-}
-
-/** `Secure` only when a TLS front says the browser is on https; plain http on loopback must keep the cookie. */
-function sessionCookie(req: IncomingMessage, value: string): string {
-  const secure = firstHeader(req.headers['x-forwarded-proto']) === 'https' ? '; Secure' : ''
-  return `${UI_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${COOKIE_MAX_AGE_S}${secure}`
-}
-
-const callerSession = (req: IncomingMessage): string | undefined => readCookie(firstHeader(req.headers.cookie), UI_SESSION_COOKIE)
 
 export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: ServerResponse, url: URL) => boolean {
   const now = d.now ?? Date.now
+  const throttle = d.throttle ?? loginThrottle
   let lastOpenAt = Number.NEGATIVE_INFINITY
+  // ponytail: in-process queue, enough for one server process; INSERT ... WHERE NOT EXISTS (uiUser.ts) is the backstop.
+  let setupQueue: Promise<unknown> = Promise.resolve()
 
   const open = (req: IncomingMessage, res: ServerResponse, url: URL): void => {
     // A navigation from the file:// redirect page is cross-site by fetch metadata: the code is the proof.
-    if (!d.opener.consume(url.searchParams.get('code'))) {
-      res.writeHead(403, { ...NO_STORE, 'Content-Type': 'text/plain; charset=utf-8' })
-      return void res.end(INVALID_CODE_TEXT)
-    }
-    log.info('auth.session_created', 'UI session created from a sign-in window', { via: 'open' })
-    reply(res, 303, undefined, { Location: '/', 'Set-Cookie': sessionCookie(req, d.sessions().create()) })
+    if (!d.opener.consume(url.searchParams.get('code'))) return replyText(res, 403, INVALID_CODE_TEXT)
+    // Local passwordless sign-in (decision, ui-session-cookie.md): bound to the account when there is exactly one.
+    const user = d.users().sole()
+    const raw = d.sessions().create({ userId: user?.id, ua: userAgentOf(req) })
+    log.info('auth.session_created', 'UI session created from a sign-in window', { via: 'open', userId: user?.id })
+    reply(res, 303, undefined, { Location: safeNext(url.searchParams.get('next')), 'Set-Cookie': sessionCookie(req, raw) })
+  }
+
+  const me = (req: IncomingMessage, res: ServerResponse): void => {
+    const raw = callerSession(req)
+    const signedIn = raw !== undefined && d.sessions().verify(raw)
+    const userId = signedIn ? d.sessions().userOf(raw) : null
+    const user = userId === null ? null : d.users().get(userId)
+    const setupRequired = d.users().count() === 0
+    reply(res, 200, { signedIn, setupRequired, user: user ? publicUser(user) : null, tokenSignIn: setupRequired })
   }
 
   const requestOpen = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -71,43 +63,59 @@ export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: Se
   }
 
   const login = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const read = await readCappedRequestBody(req, LOGIN_BODY_MAX_BYTES)
-    if (!read.ok) return reply(res, read.reason === 'too_large' ? 413 : 400, { error: read.reason })
-    const expected = d.token()
-    if (expected === undefined) return reply(res, 409, { error: 'token_not_enabled' })
-    let candidate: unknown
-    try {
-      candidate = (JSON.parse(read.body) as { token?: unknown }).token
-    } catch {
-      return reply(res, 400, { error: 'invalid_json' })
+    const read = await readJsonBody(req)
+    if (!read.ok) return reply(res, read.status, { error: read.error })
+    if ('token' in read.body) {
+      // The root token stays for machines (header); humans sign in with it only until the first account exists.
+      if (d.users().count() > 0) return reply(res, 409, { error: 'token_sign_in_disabled' })
+      const expected = d.token()
+      if (expected === undefined) return reply(res, 409, { error: 'token_not_enabled' })
+      const candidate = read.body.token
+      if (typeof candidate !== 'string' || !tokensMatch(expected, candidate)) return reply(res, 403, { error: 'invalid_token' })
+      return signIn(d, req, res, 204)
     }
-    if (typeof candidate !== 'string' || !tokensMatch(expected, candidate)) return reply(res, 403, { error: 'invalid_token' })
-    log.info('auth.session_created', 'UI session created from the access token', { via: 'login' })
-    reply(res, 204, undefined, { 'Set-Cookie': sessionCookie(req, d.sessions().create()) })
+    const username = str(read.body, 'username')
+    // Socket peer only: X-Forwarded-For is whatever the client says.
+    const keys = throttleKeys(username, req.socket.remoteAddress)
+    const verdict = throttle.check(keys)
+    if (!verdict.ok) return reply(res, 429, { error: 'rate_limited' }, { 'Retry-After': String(Math.ceil(verdict.retryAfterMs / 1000)) })
+    const user = await d.users().verifyLogin(username, str(read.body, 'password'))
+    if (!user) {
+      throttle.fail(keys)
+      log.warn('auth.login_failed', 'Sign-in refused: wrong username or password') // never the username (PII, enumeration)
+      return reply(res, 401, { error: 'invalid_credentials' })
+    }
+    throttle.succeed(keys)
+    signIn(d, req, res, 200, user)
   }
 
   const dispatch = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
     const route = `${req.method ?? 'GET'} ${url.pathname}`
     if (route === 'GET /auth/open') return open(req, res, url)
-    if (route === 'GET /auth/me') {
-      const raw = callerSession(req)
-      return reply(res, 200, { signedIn: raw !== undefined && d.sessions().verify(raw) })
-    }
+    if (route === 'GET /auth/me') return me(req, res)
+    if (route === 'GET /auth/sessions') return accountRoute(d, req, res, route, throttle)
     // State-changing entries: a hostile page must not drive them (cross-site Origin / fetch metadata).
     if (!sameOrigin(req.headers)) return reply(res, 403, { error: 'origin' })
     if (route === 'POST /auth/request-open') return requestOpen(req, res)
+    if (route === 'POST /auth/setup') {
+      const run = setupQueue.then(() => setupAccount(d, req, res))
+      setupQueue = run.catch(() => undefined) // only orders the queue; the error itself is handled by the caller below
+      return run
+    }
     if (route === 'POST /auth/login') return login(req, res)
     if (route === 'POST /auth/logout') {
       const raw = callerSession(req)
       if (raw !== undefined) d.sessions().revoke(raw)
-      return reply(res, 204, undefined, { 'Set-Cookie': sessionCookie(req, '').replace(/Max-Age=\d+/, 'Max-Age=0') })
+      return reply(res, 204, undefined, { 'Set-Cookie': clearedCookie(req) })
     }
-    reply(res, 404, { error: 'not_found' })
+    return accountRoute(d, req, res, route, throttle)
   }
 
   return (req, res, url) => {
     if (!url.pathname.startsWith(AUTH_PREFIX)) return false
     dispatch(req, res, url).catch((err: unknown) => {
+      // Another process created the account between our count() and INSERT.
+      if (err instanceof AuthError && err.code === 'already_setup' && !res.headersSent) return reply(res, 409, { error: 'already_setup' })
       log.error('auth.route_failed', `Auth route failed: ${req.method ?? 'GET'} ${url.pathname}`, { cause: err instanceof Error ? err.message : String(err) })
       if (!res.headersSent) reply(res, 500, { error: 'internal' })
     })

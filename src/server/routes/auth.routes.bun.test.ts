@@ -14,6 +14,8 @@ process.env.WEBTERM_DATA_DIR = dataDir // before ../uiSession -> ../db opens
 const { createUiAuthRoute, OPEN_INTERVAL_MS, revokeOtherSessions } = await import('./auth.routes')
 const { CODE_TTL_MS, autoOpenAtBoot, createUiOpener } = await import('../uiOpen')
 const { SESSION_IDLE_MS, createUiSessionStore } = await import('../uiSession')
+const { createUserStore } = await import('../uiUser')
+const { createLoginThrottle } = await import('../loginThrottle')
 const { UI_SESSION_COOKIE } = await import('../auth')
 
 const ROOT_TOKEN = 'root-token-test-only-0123456789abcdef' // test-only
@@ -22,10 +24,12 @@ let clock = 1_000_000
 const now = () => clock
 let mem = new Database(':memory:')
 let store = createUiSessionStore(mem, now)
+let users = createUserStore(mem, now)
 let opened: string[] = []
 let token: string | undefined = ROOT_TOKEN
 const opener = createUiOpener({ runDir, bindHost: '127.0.0.1', port: 1, now, openFile: async (p) => { opened.push(p) } })
-let route = createUiAuthRoute({ sessions: () => store, opener, token: () => token, now })
+const deps = () => ({ sessions: () => store, users: () => users, opener, token: () => token, dataDir: () => dataDir, throttle: createLoginThrottle(now), now })
+let route = createUiAuthRoute(deps())
 
 const server = http.createServer((req, res) => {
   if (!route(req, res, new URL(req.url ?? '/', 'http://x'))) { res.statusCode = 404; res.end() }
@@ -39,9 +43,10 @@ beforeEach(() => {
   clock += OPEN_INTERVAL_MS + CODE_TTL_MS // fresh rate-limit window, any earlier code expired
   mem = new Database(':memory:')
   store = createUiSessionStore(mem, now)
+  users = createUserStore(mem, now)
   opened = []
   token = ROOT_TOKEN
-  route = createUiAuthRoute({ sessions: () => store, opener, token: () => token, now })
+  route = createUiAuthRoute(deps())
 })
 
 interface Reply { status: number; headers: http.IncomingHttpHeaders; body: string }
@@ -110,11 +115,12 @@ describe('GET /auth/open: one-time code -> HttpOnly cookie', () => {
 
 describe('GET /auth/me and session lifetime', () => {
   test('signedIn follows a live cookie; 30 days idle ends it', async () => {
-    expect(JSON.parse((await call('GET', '/auth/me')).body)).toEqual({ signedIn: false })
+    const out = { signedIn: false, setupRequired: true, user: null, tokenSignIn: true }
+    expect(JSON.parse((await call('GET', '/auth/me')).body)).toEqual(out)
     const raw = store.create()
-    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ signedIn: true })
+    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ ...out, signedIn: true })
     clock += SESSION_IDLE_MS + 1
-    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual({ signedIn: false })
+    expect(JSON.parse((await call('GET', '/auth/me', withCookie(raw))).body)).toEqual(out)
     expect(store.count()).toBe(0)
   })
 
