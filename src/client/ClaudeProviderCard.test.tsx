@@ -76,9 +76,31 @@ describe('ClaudeProviderCard', () => {
     expect(await screen.findByText('The endpoint rejected the credential.')).toBeTruthy()
     expect(calls.map((c) => c.method)).toEqual(['GET', 'PUT', 'POST'])
     expect(JSON.parse(calls[1]!.body!)).toMatchObject({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken', secret: KEY })
-    expect(screen.getByText(new RegExp(PROVIDER_TEXT.restart(1).slice(0, 30)))).toBeTruthy()
+    // The test of what was just saved failed: no plain "Saved." success under it.
+    expect(screen.getByText(PROVIDER_TEXT.savedCheckFailed)).toBeTruthy()
+    expect(screen.queryByText(new RegExp(PROVIDER_TEXT.restart(1).slice(0, 30)))).toBeNull()
     await waitFor(() => expect((screen.getByLabelText(PROVIDER_TEXT.key) as HTMLInputElement).value).toBe(''))
     for (const s of spies) for (const c of s.mock.calls) expect(JSON.stringify(c)).not.toContain(KEY)
+  })
+
+  it('a passing test after Save keeps the plain "Saved." and the restart hint', async () => {
+    serve({ mode: 'login', secretSet: false, ready: true }, { ok: true, message: 'Connected.', at: 1 })
+    render(<ClaudeProviderCard />)
+    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
+    fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
+    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.test }))
+    expect(await screen.findByText('Connected.')).toBeTruthy()
+    expect(screen.getByText(new RegExp(`^${PROVIDER_TEXT.saved} ${PROVIDER_TEXT.restart(1).slice(0, 30)}`))).toBeTruthy()
+    expect(screen.queryByText(PROVIDER_TEXT.savedCheckFailed)).toBeNull()
+  })
+
+  it('onTested (setup wizard): the card hides its own result and reports each test to the host', async () => {
+    serve({ mode: 'apiKey', secretSet: true, ready: true })
+    const onTested = vi.fn()
+    render(<ClaudeProviderCard onTested={onTested} />)
+    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.test }))
+    await waitFor(() => expect(onTested).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('The endpoint rejected the credential.')).toBeNull()
   })
 
   it('custom endpoint: base URL and model are comboboxes; a URL with a user or password is refused, the key stays a password box', async () => {

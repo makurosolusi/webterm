@@ -1,14 +1,15 @@
 import { afterAll, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
 import { fakeSecurity } from './devFresh.testutil'
 import {
-  RESERVED_PORTS, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, freshSetupCodePath, makeFreshRoot, parseFreshArgs,
-  pathWithout, removeFreshRoot, startFresh, waitForHttp,
+  RESERVED_PORTS, SKIP_HOME_INSTALLS_ENV, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, freshSetupCodePath, makeFreshRoot, parseFreshArgs,
+  pathWithout, removeFreshRoot, startFresh, waitForHttp, withDotenv,
 } from './devFresh'
+import { SKIP_HOME_INSTALLS_ENV as SERVER_SKIP_ENV } from '../src/server/cli/cli.launcher'
 
 const paths = freshPaths('/tmp/st/webterm-fresh-1-abc') // test-only
 // test-only: a real-looking install leaking through the parent env.
@@ -20,26 +21,39 @@ const realEnv: NodeJS.ProcessEnv = {
 }
 /** Message of what `fn` throws ('' when it does not throw). */
 const thrown = (fn: () => unknown): string => { try { fn(); return '' } catch (e) { return e instanceof Error ? e.message : String(e) } }
-const build = (o: { withProviderEnv?: boolean; noClaude?: boolean } = {}) =>
-  buildFreshEnv(realEnv, { paths, port: 8710, proxyPort: 8711, noClaude: !!o.noClaude, withProviderEnv: !!o.withProviderEnv, has: (d) => d === '/b' })
+const build = (o: { emptyHome?: boolean; noClaude?: boolean } = {}) =>
+  buildFreshEnv(realEnv, { paths, port: 8710, proxyPort: 8711, noClaude: !!o.noClaude, emptyHome: !!o.emptyHome, has: (d) => d === '/b' })
+const STRIPPED = ['WEBTERM_DATA_DIR', 'WEBTERM_TOKEN', 'NODETERM_PORT', 'TMUX', 'TMUX_PANE', 'NODE_ENV', 'PORT', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR']
+const OWNED = { WEBTERM_DATA_DIR: paths.data, PORT: '8710', WEBTERM_PROXY_PORT: '8711', WEBTERM_VITE_CACHE_DIR: paths.vite }
 
-test('env: fresh dirs and ports are set, the real install is stripped', () => {
-  const env = build()
-  expect(env).toMatchObject({
-    WEBTERM_DATA_DIR: paths.data, HOME: paths.home, CLAUDE_CONFIG_DIR: paths.claude, WEBTERM_VITE_CACHE_DIR: paths.vite,
-    PORT: '8710', WEBTERM_PROXY_PORT: '8711', PATH: '/a:/b', SHELL: '/bin/zsh', LANG: 'en_US.UTF-8',
-  })
-  for (const k of ['WEBTERM_TOKEN', 'NODETERM_PORT', 'TMUX', 'TMUX_PANE', 'NODE_ENV', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL',
-    'CLAUDE_CODE_USE_BEDROCK', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR', 'ZDOTDIR', 'XDG_CONFIG_HOME']) expect(env[k]).toBe(undefined)
+test('env (default): the parent env exactly, minus what points at the real webterm, plus the fresh data dir/ports/cache', () => {
+  const expected: Record<string, string> = {}
+  for (const [k, v] of Object.entries(realEnv)) if (!STRIPPED.includes(k)) expected[k] = v as string
+  // HOME, CLAUDE_CONFIG_DIR, provider vars, XDG and ZDOTDIR are the user's own; home installs are skipped.
+  expect(build()).toEqual({ ...expected, ...OWNED, [SKIP_HOME_INSTALLS_ENV]: '1' })
+  expect(SKIP_HOME_INSTALLS_ENV).toBe(SERVER_SKIP_ENV)
 })
 
-test('env: --with-provider-env keeps ANTHROPIC_/CLAUDE_CODE_ but still strips webterm, tmux and the config dir', () => {
-  const env = build({ withProviderEnv: true })
-  expect(env.ANTHROPIC_API_KEY).toBe('k')
-  expect(env.CLAUDE_CODE_USE_BEDROCK).toBe('1')
-  expect(env.CLAUDE_CONFIG_DIR).toBe(paths.claude)
-  expect(env.WEBTERM_TOKEN).toBe(undefined)
-  expect(env.TMUX).toBe(undefined)
+test('env --empty-home: temp HOME + Claude config, no provider/XDG env, home installs allowed (they land in the temp HOME)', () => {
+  const env = build({ emptyHome: true })
+  expect(env).toMatchObject({ ...OWNED, HOME: paths.home, CLAUDE_CONFIG_DIR: paths.claude, PATH: '/a:/b', SHELL: '/bin/zsh' })
+  for (const k of [...STRIPPED.filter((x) => x !== 'WEBTERM_DATA_DIR' && x !== 'PORT'), 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK',
+    'ZDOTDIR', 'XDG_CONFIG_HOME', SKIP_HOME_INSTALLS_ENV]) expect(env[k]).toBe(undefined)
+})
+
+test('.env is loaded like `bun run dev` (caller wins, ${VAR} expanded) but cannot redirect the fresh data dir or port', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'devfresh-dotenv-'))
+  try {
+    // test-only values
+    writeFileSync(join(cwd, '.env'), 'WEBTERM_DATA_DIR=/Users/me/.webterm-server\nPORT=8700\nWEBTERM_TOKEN=x\nNODETERM_PORT=8700\nFROM_FILE=${LANG}-f\nLANG=file\n')
+    writeFileSync(join(cwd, '.env.local'), 'ANTHROPIC_BASE_URL=http://local\n')
+    const merged = withDotenv({ PATH: process.env.PATH, LANG: 'en_US.UTF-8', NODE_ENV: 'test' }, cwd)
+    expect(merged).toMatchObject({ FROM_FILE: 'en_US.UTF-8-f', LANG: 'en_US.UTF-8', ANTHROPIC_BASE_URL: 'http://local' })
+    const env = buildFreshEnv(merged, { paths, port: 8710, proxyPort: 8711, noClaude: false, emptyHome: false })
+    expect(env).toMatchObject({ ...OWNED, ANTHROPIC_BASE_URL: 'http://local', FROM_FILE: 'en_US.UTF-8-f' })
+    expect(env.WEBTERM_TOKEN).toBe(undefined)
+    expect(env.NODETERM_PORT).toBe(undefined)
+  } finally { rmSync(cwd, { recursive: true, force: true }) }
 })
 
 test('--no-claude drops every PATH dir holding claude', () => {
@@ -53,7 +67,9 @@ test('the fresh tmux socket is never the real one', () => {
 })
 
 test('flags parse; bad input throws', () => {
-  expect(parseFreshArgs(['--port', '8800', '--keep', '--no-claude', '--with-provider-env'])).toEqual({ port: 8800, keep: true, noClaude: true, withProviderEnv: true, clean: false })
+  expect(parseFreshArgs(['--port', '8800', '--keep', '--no-claude', '--empty-home'])).toEqual({ port: 8800, keep: true, noClaude: true, emptyHome: true, clean: false })
+  expect(parseFreshArgs([])).toEqual({ keep: false, noClaude: false, emptyHome: false, clean: false })
+  expect(thrown(() => parseFreshArgs(['--with-provider-env']))).toMatch('unknown flag') // its behaviour is the default now
   expect(parseFreshArgs(['--clean']).clean).toBe(true)
   expect(thrown(() => parseFreshArgs(['--port', 'x']))).toMatch('--port needs a port')
   expect(thrown(() => parseFreshArgs(['--nope']))).toMatch('unknown flag')
@@ -93,7 +109,8 @@ test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token
   const calls = fakeSecurity(fakeBin)
   const savedPath = process.env.PATH
   process.env.PATH = `${fakeBin}:${savedPath}` // stop() deletes keychain items: never the real `security` in tests
-  const fresh = await startFresh({ keep: false, noClaude: false, withProviderEnv: false, clean: false }, 'pipe')
+  // --empty-home keeps the smoke hermetic (no real HOME/.env/Claude login in a test run).
+  const fresh = await startFresh({ keep: false, noClaude: false, emptyHome: true, clean: false }, 'pipe')
     .finally(() => stops.push(async () => { process.env.PATH = savedPath; rmSync(fakeBin, { recursive: true, force: true }) }))
   stops.unshift(fresh.stop) // stop (fake `security` still on PATH) before PATH is restored
   expect(RESERVED_PORTS).not.toContain(fresh.port)

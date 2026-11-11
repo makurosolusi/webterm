@@ -4,7 +4,7 @@
 // Flags per code.claude.com/docs/en/cli-reference (`--version`, `-p`, `--output-format json`). The
 // command's stdout/stderr can carry secrets, so neither is ever returned: only the outcome.
 import { tmpdir } from 'node:os'
-import { defaultOnPath, spawnRun, type RunFn } from '../claudeLauncher/claudeLaunch.probe'
+import { defaultOnPath, spawnRun, wrapperSignIn, type RunFn } from '../claudeLauncher/claudeLaunch.probe'
 import type { ResolvedClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import type { ProbeResult } from './claudeProvider.probe'
 
@@ -51,7 +51,7 @@ export async function probeCommand(launch: ResolvedClaudeLaunch, d: CommandProbe
   if (launch.missingId) return fail('not_configured', 'The selected launch profile no longer exists. Pick another one.')
   if (!onPath(head)) return notFound
   // Fixed cwd: a throwaway directory, not whatever project webterm was started from.
-  const exec = async (args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; timedOut: boolean } | 'enoent' | 'error'> => {
+  const exec = async (args: string[], timeoutMs: number): Promise<{ code: number | null; stdout: string; stderr?: string; timedOut: boolean } | 'enoent' | 'error'> => {
     try { return await run(head, [...launch.argv.slice(1), ...args], { env: d.env, timeoutMs, cwd: tmpdir() }) } catch (err) { return isNotFound(err) ? 'enoent' : 'error' }
   }
 
@@ -59,6 +59,10 @@ export async function probeCommand(launch: ResolvedClaudeLaunch, d: CommandProbe
   if (v === 'enoent') return notFound
   if (v === 'error') return fail('command_failed', `${name} could not be started. ${FAILED_HINT}`)
   if (v.timedOut) return fail('command_failed', `${name} did not answer in time. ${FAILED_HINT}`)
+  // Only the outcome leaves this function: the wrapper's text is matched, never returned.
+  if (v.code !== 0 && wrapperSignIn(name, `${v.stderr ?? ''}\n${v.stdout}`)) {
+    return fail('command_failed', `${name} is not signed in for the user webterm runs as. Sign in on the server, then Test connection again.`, v.code)
+  }
   if (v.code !== 0) return fail('command_failed', `The launch command exited with code ${v.code ?? '?'} before Claude Code started. ${FAILED_HINT}`, v.code)
 
   const p = await exec(PING_ARGS, d.pingTimeoutMs ?? PING_TIMEOUT_MS)

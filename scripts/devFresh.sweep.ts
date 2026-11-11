@@ -153,7 +153,10 @@ export async function cleanRoot(root: string, o: { tmpBase: string; owner: Fresh
   assertFreshRoot(root, o.tmpBase)
   await stopPids(rootProcesses(o.procs ?? listProcs(), root, o.owner?.pgid))
   killTmuxServer(join(root, 'data'))
-  deleteClaudeKeychain(o.owner?.claudeConfigDir ?? join(root, 'claude'), o.keychain)
+  // Only a config dir inside this root (--empty-home): default runs use the real Claude login, whose
+  // keychain entries must never be deleted, whatever owner.json says.
+  const configDir = o.owner ? o.owner.claudeConfigDir : join(root, 'claude')
+  if (configDir.startsWith(`${root}/`)) deleteClaudeKeychain(configDir, o.keychain)
   if (o.remove) removeFreshRoot(root, o.tmpBase)
 }
 

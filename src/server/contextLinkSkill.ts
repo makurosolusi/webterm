@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dataDir } from './config'
-import { cliPath, installWebtermCli, shQuote, writeCliGuide } from './cli/cli.launcher'
+import { cliPath, installWebtermCli, shQuote, skipHomeInstalls, writeCliGuide } from './cli/cli.launcher'
 
 // --- alias + skill builders (pure strings; the installer below is the only fs part) ---
 
@@ -99,8 +99,9 @@ export function installContextLink(_token?: string): void {
   // or execute a path inside our data dir either.
   chmodSync(file, 0o700)
 
+  writeCliGuide(SKILL_NAME, buildContextLinkSkillBody(file))
+  if (skipHomeInstalls()) return
   const skillDir = join(homedir(), '.claude', 'skills', SKILL_NAME)
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildContextLinkSkillBody(file))
-  writeCliGuide(SKILL_NAME, buildContextLinkSkillBody(file))
 }

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
-import { buildWebtermCli, cliPath, cliSkillsDir, installWebtermCli } from './cli/cli.launcher'
+import { buildWebtermCli, cliPath, cliSkillsDir, installWebtermCli, SKIP_HOME_INSTALLS_ENV } from './cli/cli.launcher'
 
 let root: string
 const prevData = process.env.WEBTERM_DATA_DIR
@@ -106,6 +106,17 @@ describe('artifacts', () => {
     // The CLI it aliases is installed too, and `webterm skills get webterm-browser` serves the same guide.
     expect(statSync(cliPath()).mode & 0o777).toBe(0o700)
     expect(readFileSync(join(cliSkillsDir(), 'webterm-browser.md'), 'utf8')).toBe(first[1])
+  })
+})
+
+describe('WEBTERM_SKIP_HOME_INSTALLS (dev:fresh shares the real HOME)', () => {
+  it('writes the data-dir files but nothing under HOME', () => {
+    const home = join(root, 'home')
+    process.env[SKIP_HOME_INSTALLS_ENV] = '1'
+    try { installBrowserAgentShim(home) } finally { delete process.env[SKIP_HOME_INSTALLS_ENV] }
+    expect(existsSync(browserShimPath()) && existsSync(cliPath())).toBe(true)
+    expect(readFileSync(join(cliSkillsDir(), 'webterm-browser.md'), 'utf8')).toContain('webterm-browser')
+    expect(existsSync(home)).toBe(false)
   })
 })
 

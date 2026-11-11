@@ -15,6 +15,7 @@ const FAKE = `#!/bin/sh
 echo "$*" >> "$FAKE_LOG"
 V=0; case " $* " in *" --version "*) V=1 ;; esac
 case "$FAKE_MODE" in
+  signedout) echo "need auth to fetch x — not logged in: run 'claude login ${LEAK}'" >&2; exit 1 ;;
   verfail) echo "boom ${LEAK}" >&2; echo "${LEAK}"; exit 3 ;;
   nonjson) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; echo "not json ${LEAK}"; exit 0 ;;
   pingerror) [ "$V" = 1 ] && { echo 2.1.0; exit 0; }; echo '{"is_error":true,"result":"${LEAK}"}'; exit 0 ;;
@@ -130,6 +131,13 @@ describe('POST /test in command mode', () => {
     if (exitCode !== undefined) expect(t.exitCode).toBe(exitCode)
     expect(JSON.stringify(r.body)).not.toContain(LEAK)
     expect(JSON.stringify(r.body)).not.toContain('boom')
+  })
+
+  it('a wrapper that is not signed in says so, still without its output', async () => {
+    await put({ mode: 'command', profileId: 'p' })
+    const { r, test: t } = await test('signedout')
+    expect(t).toMatchObject({ outcome: 'command_failed', ok: false, exitCode: 1, message: 'claude is not signed in for the user webterm runs as. Sign in on the server, then Test connection again.' })
+    expect(JSON.stringify(r.body)).not.toContain(LEAK)
   })
 
   it('a hung ping is killed at the timeout -> command_failed', async () => {

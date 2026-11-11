@@ -58,6 +58,22 @@ test('keychain delete: exact -s names, not-found is silent, other OSes do nothin
   expect(linux.calls).toEqual([])
 })
 
+test('sweep never deletes keychain items of a config dir outside the root (the real Claude login)', async () => {
+  const own = mkdtempSync(join(base, 'kc-'))
+  const real = makeFreshRoot(own)
+  const blank = makeFreshRoot(own)
+  const empty = makeFreshRoot(own)
+  writeOwner(real.root, owner(real.root, { claudeConfigDir: '/Users/me/.claude' })) // test-only: a tampered/old owner.json
+  writeOwner(blank.root, owner(blank.root, { claudeConfigDir: '' })) // default mode: real HOME, no own config dir
+  writeOwner(empty.root, owner(empty.root, { claudeConfigDir: empty.claude })) // --empty-home
+  const k = recorder()
+  const r = await sweepStale({ tmpBase: own, keychain: k.run })
+  expect(r.cleaned.length).toBe(3)
+  const hashes = k.calls.map((c) => c.at(-1))
+  for (const s of claudeKeychainServices('/Users/me/.claude')) expect(hashes).not.toContain(s)
+  expect(hashes).toEqual(process.platform === 'darwin' ? claudeKeychainServices(empty.claude) : [])
+})
+
 test('process ownership: argv marker or Chromium profile; the group only when proven; never a sibling root', () => {
   const root = '/t/webterm-fresh-1-abc'
   const procs: Proc[] = [
@@ -147,7 +163,7 @@ test('--clean reports and removes a stale root, lists a live one and leaves it',
 const smoke = process.env.CI && !findOnPath('tmux') ? 'skip' : 'run'
 test(`SIGKILL of dev:fresh (${smoke}): its server stops by itself and cleans root + tmux server`, async () => {
   if (smoke === 'skip') return
-  const p = spawn(process.execPath, ['--no-env-file', script], { env: scriptEnv, stdio: ['ignore', 'pipe', 'pipe'] })
+  const p = spawn(process.execPath, ['--no-env-file', script, '--empty-home'], { env: scriptEnv, stdio: ['ignore', 'pipe', 'pipe'] })
   kids.push(p)
   let out = ''
   p.stdout!.on('data', (b) => { out += String(b) })

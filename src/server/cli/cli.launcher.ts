@@ -187,6 +187,12 @@ ${cli} skills get ${CLI_SKILL_NAME}
 `
 }
 
+/** Set by `dev:fresh` (it shares the real HOME): the ~/.claude/skills files embed this instance's
+ *  data-dir paths, so a second instance writing them would repoint the main install's skills at a temp dir. */
+export const SKIP_HOME_INSTALLS_ENV = 'WEBTERM_SKIP_HOME_INSTALLS'
+/** True when this instance must not write into HOME (only its own data dir). */
+export const skipHomeInstalls = (env: NodeJS.ProcessEnv = process.env): boolean => env[SKIP_HOME_INSTALLS_ENV] === '1'
+
 /** Write the launcher (0700), its guide, and the stub skill. Idempotent plain overwrite; `home` for tests. */
 export function installWebtermCli(home: string = homedir()): void {
   const file = cliPath()
@@ -194,6 +200,7 @@ export function installWebtermCli(home: string = homedir()): void {
   writeFileSync(file, buildWebtermCli())
   chmodSync(file, 0o700)
   writeCliGuide(CLI_SKILL_NAME, buildCliGuide(file))
+  if (skipHomeInstalls()) return
   const skillDir = join(home, '.claude', 'skills', CLI_SKILL_NAME)
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildCliSkillStub(file))

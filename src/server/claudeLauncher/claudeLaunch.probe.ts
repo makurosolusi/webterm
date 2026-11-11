@@ -18,9 +18,11 @@ export interface RunResult { code: number | null; stdout: string; stderr?: strin
 export type RunFn = (cmd: string, args: string[], opts: { env: NodeJS.ProcessEnv; timeoutMs: number; cwd?: string }) => Promise<RunResult>
 
 export type LaunchStage = 'wrapper' | 'claude' | 'auth'
-export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'claude_not_found' | 'auth_failed' | 'check_failed'
-/** `install`: on a claude-missing step, the official install commands for the UI to show with a copy button. */
-export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string; install?: ClaudeInstall }
+export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'wrapper_signed_out' | 'claude_not_found' | 'auth_failed' | 'check_failed'
+/** `install`: on a claude-missing step, the official install commands for the UI to show with a copy button.
+ *  `signIn`: on a wrapper that is not signed in, the sign-in command the wrapper itself suggested. */
+export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string; install?: ClaudeInstall; signIn?: WrapperSignIn }
+export interface WrapperSignIn { tool: string; hint: string; command?: string }
 export interface ClaudeInstall { installCommand: string; npmCommand: string; docsUrl: string }
 
 /** Official Claude Code install (https://code.claude.com/docs/en/setup, checked 2026-11-11): native
@@ -61,6 +63,7 @@ export const PROBE_TEXT = {
   wrapperOk: (w: string): string => `${w} runs claude`,
   wrapperFailed: (w: string, code: number | null, line: string): string => `${w} exited with code ${code ?? '?'}${line ? `: ${line}` : ''}`,
   wrapperFailedHint: 'Run the same command in a terminal on the server to see the full error.',
+  wrapperSignedOut: (w: string): string => `${w} is not signed in for the user webterm runs as. Sign in, then Check again.`,
   wrapperTimeout: (w: string): string => `${w} did not finish in time`,
   wrapperSpawn: (w: string): string => `${w} could not be started`,
   claudeMissing: `The claude CLI was not found on PATH. Install Claude Code on the server (${CLAUDE_INSTALL.installCommand}) and try again.`,
@@ -116,6 +119,21 @@ export function defaultOnPath(env: NodeJS.ProcessEnv): (name: string) => boolean
 const firstLine = (text = ''): string =>
   redactSecrets(text.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '').slice(0, MAX_SHOWN_CHARS)
 
+// Wrapper "please sign in" messages: envman ("not logged in", "need auth"), 1Password op ("not currently
+// signed in"), doppler ("you must provide a token"), and the common "login required"/"must log in".
+const SIGNED_OUT = /not (?:currently )?(?:logged|signed) in|need auth|login required|must (?:log|sign) ?in|must provide a token/i
+const QUOTED = /['"`]([^'"`\n]+)['"`]/g
+const SIGN_IN_VERB = /\b(?:login|signin|sign-in|auth)\b/
+
+/** The wrapper's own sign-in message -> structured hint; the suggested command is taken verbatim from a
+ *  quoted `<tool> login ...` in the (already redacted) output, never invented. null = not a sign-in failure. */
+export function wrapperSignIn(tool: string, text: string): WrapperSignIn | null {
+  if (!SIGNED_OUT.test(text)) return null
+  const command = [...text.matchAll(QUOTED)].map((m) => (m[1] as string).trim())
+    .find((c) => c.split(/\s+/)[0] === tool && SIGN_IN_VERB.test(c))
+  return { tool, hint: PROBE_TEXT.wrapperSignedOut(tool), ...(command ? { command: command.slice(0, MAX_SHOWN_CHARS) } : {}) }
+}
+
 /** `authMethod` only when it is one of the documented values (never free text from the CLI). */
 function readAuth(stdout: string): { loggedIn: boolean; method: string } | null {
   try {
@@ -157,7 +175,15 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
         steps.push({ stage: 'wrapper', ok: true, message: PROBE_TEXT.wrapperOk(w) })
         return fail('claude', 'claude_not_found', PROBE_TEXT.claudeMissingWrapped(w), PROBE_TEXT.claudeMissing)
       }
-      return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperFailed(w, r.code, line), PROBE_TEXT.wrapperFailedHint)
+      const output = redactSecrets(`${r.stderr ?? ''}\n${r.stdout}`).slice(0, MAX_OUTPUT_BYTES)
+      const signIn = wrapperSignIn(w, output)
+      if (signIn) {
+        steps.push({ stage: 'wrapper', ok: false, message: PROBE_TEXT.wrapperFailed(w, r.code, line), hint: signIn.hint, signIn })
+        return { ok: false, profile, steps, failed: 'wrapper_signed_out' }
+      }
+      // "See the full error" only when the shown line is not all of it (no output, capped, or more lines).
+      const more = !line || line.length >= MAX_SHOWN_CHARS || output.split('\n').filter((l) => l.trim() !== '').length > 1
+      return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperFailed(w, r.code, line), more ? PROBE_TEXT.wrapperFailedHint : undefined)
     }
     steps.push({ stage: 'wrapper', ok: true, message: PROBE_TEXT.wrapperOk(w) })
     steps.push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk(firstLine(r.stdout).slice(0, 60)) })

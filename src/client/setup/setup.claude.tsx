@@ -12,7 +12,7 @@ import { StepFooter, type StepProps } from './setup.ui'
 const T = SETUP_TEXT.claude
 
 /** What the probe says, as one of the states the step shows. */
-export type ClaudeCheck = 'checking' | 'ready' | 'notFound' | 'notSignedIn' | 'wrapperFailed' | 'checkFailed'
+export type ClaudeCheck = 'checking' | 'ready' | 'notFound' | 'notSignedIn' | 'wrapperSignedOut' | 'wrapperFailed' | 'checkFailed'
 
 /** Map a launch test (or its absence after an error) to the step's state. */
 export function claudeCheckState(r: LaunchTest | null, error: boolean): ClaudeCheck {
@@ -21,6 +21,7 @@ export function claudeCheckState(r: LaunchTest | null, error: boolean): ClaudeCh
   if (r.ok) return 'ready'
   if (r.failed === 'claude_not_found') return 'notFound'
   if (r.failed === 'auth_failed') return 'notSignedIn'
+  if (r.failed === 'wrapper_signed_out') return 'wrapperSignedOut'
   if (r.failed === 'wrapper_not_found' || r.failed === 'wrapper_failed') return 'wrapperFailed'
   return 'checkFailed'
 }
@@ -66,6 +67,7 @@ export function ClaudeStep({ nav }: StepProps): React.JSX.Element {
   }, [run])
   const state = claudeCheckState(result, error)
   const install = result?.steps.find((s) => s.install)?.install
+  const signInCommand = result?.steps.find((s) => s.signIn)?.signIn?.command
   const again = <Button size="sm" variant="outline" className="self-start" onClick={() => setRun((n) => n + 1)}>{state === 'checkFailed' ? SETUP_TEXT.retry : T.checkAgain}</Button>
 
   return (
@@ -83,9 +85,11 @@ export function ClaudeStep({ nav }: StepProps): React.JSX.Element {
             <a className="text-xs underline" href={install.docsUrl} target="_blank" rel="noreferrer">{T.docs}</a>
           </div>
         ) : null}
+        {state === 'wrapperSignedOut' && signInCommand ? <CopyLine label={T.signIn} command={signInCommand} /> : null}
         {state !== 'checking' && state !== 'ready' ? again : null}
       </div>
-      <ClaudeProviderCard />
+      {/* One status surface: the check above. The card's Test connection re-runs it instead of showing its own result. */}
+      <ClaudeProviderCard onTested={() => setRun((n) => n + 1)} />
       <StepFooter nav={nav} where={T.where} />
     </div>
   )

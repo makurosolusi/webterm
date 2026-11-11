@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { AGENT_SANDBOX_ENV, agentSandboxOn, claudeSandboxSupported } from './agentSandbox'
 import { binaryOnPath } from './binaryOnPath'
+import { skipHomeInstalls } from './cli/cli.launcher'
 import { BROWSER_SKILL_NAME, browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
 import { resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
 import { probeClaudeLaunch } from './claudeLauncher/claudeLaunch.probe'
@@ -54,7 +55,8 @@ function generated(env: NodeJS.ProcessEnv): GeneratedFile[] {
       { label: 'browser skill', path: join(skills, BROWSER_SKILL_NAME, 'SKILL.md'), expected: buildBrowserSkillBody(shim) },
     )
   }
-  return files
+  // Skills are not ours to check when this instance does not install them (dev:fresh shares the real HOME).
+  return skipHomeInstalls(env) ? files.filter((f) => !f.path.startsWith(skills)) : files
 }
 
 const privateDirs = (): string[] => PRIVATE_SUBDIRS.map((s) => join(dataDir(), s)).filter((p) => existsSync(p))

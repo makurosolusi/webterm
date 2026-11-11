@@ -1,9 +1,10 @@
-// `bun run dev:fresh`: a second webterm that behaves like the first run on a machine that never had
-// webterm (like VS Code / Chrome `--user-data-dir`), side by side with the real one. Everything it
-// writes lives in one temp root; ports, the tmux socket and the Vite cache are its own, so it never
-// sees or adopts the real instance's sessions. Ctrl+C stops it and deletes the root; a run that died
+// `bun run dev:fresh`: a second webterm that behaves like your own first `bun run dev` on THIS machine
+// (like VS Code / Chrome `--user-data-dir`), side by side with the real one. Only webterm's own state is
+// fresh (data dir, ports, tmux socket, Vite cache); HOME, the Claude login, `.env` and your tools are
+// the real ones. `--empty-home` / `--no-claude` simulate a different machine instead. Everything it
+// writes lives in one temp root, so it never sees or adopts the real instance's sessions. Ctrl+C stops it and deletes the root; a run that died
 // any other way is cleaned by the next start (devFresh.sweep.ts) or by its own server's watchdog.
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -19,38 +20,43 @@ export { ROOT_PREFIX, assertFreshRoot, removeFreshRoot } from './devFresh.sweep'
 export const FRESH_DEFAULT_PORT = 8710
 /** Env var naming this script's pid for the server's watchdog (literal repeated in devFresh.watchdog.ts). */
 export const PARENT_ENV = 'WEBTERM_FRESH_PARENT_PID'
+/** cli.launcher.ts `SKIP_HOME_INSTALLS_ENV` (not imported: its module chain loads the server config). */
+export const SKIP_HOME_INSTALLS_ENV = 'WEBTERM_SKIP_HOME_INSTALLS'
 /** Ports of the real dev instance (main + proxy): never handed to the fresh one. */
 export const RESERVED_PORTS: readonly number[] = [8700, 8701]
 const LOOPBACK = '127.0.0.1'
 const PORT_PROBE_SPAN = 100
 const STOP_GRACE_MS = 5000
 const REPO_ROOT = resolve(import.meta.dirname, '..')
-/** Prefixes/keys that would carry the real install into the child. */
-const STRIP_PREFIXES = ['WEBTERM_', 'NODETERM_', 'XDG_']
-const STRIP_KEYS = ['TMUX', 'TMUX_PANE', 'NODE_ENV', 'HOST', 'PORT', 'ZDOTDIR', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR']
-/** Provider credentials/config: a new machine has none, so dropped unless `--with-provider-env`. */
-const PROVIDER_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_']
+/** Prefixes/keys that would point the child at the real webterm instance (or mark it as running inside one). */
+const STRIP_PREFIXES = ['WEBTERM_', 'NODETERM_']
+const STRIP_KEYS = ['TMUX', 'TMUX_PANE', 'NODE_ENV', 'HOST', 'PORT', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR']
+/** `--empty-home` only: a brand-new OS user has no provider env, XDG dirs or zsh dotdir. */
+const EMPTY_HOME_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_', 'XDG_']
+const EMPTY_HOME_KEYS = ['ZDOTDIR', 'CLAUDE_CONFIG_DIR']
+/** Every scenario flag, for the banner: nothing to remember. */
+export const SCENARIO_FLAGS = '--empty-home (brand-new OS user: temp HOME + Claude config, no .env), --no-claude (claude not installed), --keep, --port <n>, --clean'
 
 /** setupCode.ts `setupCodePath` (not imported: its module chain opens webterm.db at import time). */
 export const freshSetupCodePath = (p: FreshPaths): string => join(p.data, 'secrets', 'SETUP_CODE')
 
-export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; withProviderEnv: boolean; clean: boolean }
+export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; emptyHome: boolean; clean: boolean }
 export interface FreshPaths { root: string; data: string; home: string; claude: string; vite: string }
 
 /** Parse CLI flags; unknown flags and bad ports throw instead of being ignored. */
 export function parseFreshArgs(argv: readonly string[]): FreshOptions {
-  const o: FreshOptions = { keep: false, noClaude: false, withProviderEnv: false, clean: false }
+  const o: FreshOptions = { keep: false, noClaude: false, emptyHome: false, clean: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--keep') o.keep = true
     else if (a === '--no-claude') o.noClaude = true
-    else if (a === '--with-provider-env') o.withProviderEnv = true
+    else if (a === '--empty-home') o.emptyHome = true
     else if (a === '--clean') o.clean = true
     else if (a === '--port') {
       const n = Number(argv[++i])
       if (!Number.isInteger(n) || n < 1 || n > 65535) throw new Error(`--port needs a port 1-65535, got "${argv[i] ?? ''}"`)
       o.port = n
-    } else throw new Error(`unknown flag "${a}" (use --port <n>, --keep, --no-claude, --with-provider-env, --clean)`)
+    } else throw new Error(`unknown flag "${a}" (use --port <n>, --keep, --no-claude, --empty-home, --clean)`)
   }
   return o
 }
@@ -65,21 +71,38 @@ export function pathWithout(pathEnv: string, bin: string, has: (dir: string, bin
   return pathEnv.split(delimiter).filter((d) => d !== '' && !has(d, bin)).join(delimiter)
 }
 
-/** Child env: the caller's env minus anything of the real install, plus the fresh dirs and ports. Pure. */
+/**
+ * Child env, pure. `base` = the caller's env (plus `.env`, see withDotenv) minus anything that points at
+ * the real webterm instance, plus the fresh data dir, ports and Vite cache. Default: HOME, CLAUDE_CONFIG_DIR,
+ * provider vars and XDG dirs stay the caller's, and the home installs (~/.claude/skills, which embed this
+ * instance's data-dir paths) are skipped. `emptyHome`: temp HOME + CLAUDE_CONFIG_DIR, no provider env.
+ */
 export function buildFreshEnv(
   base: NodeJS.ProcessEnv,
-  i: { paths: FreshPaths; port: number; proxyPort: number; noClaude: boolean; withProviderEnv: boolean; has?: (dir: string, bin: string) => boolean },
+  i: { paths: FreshPaths; port: number; proxyPort: number; noClaude: boolean; emptyHome: boolean; has?: (dir: string, bin: string) => boolean },
 ): Record<string, string> {
   const drop = (k: string) => STRIP_KEYS.includes(k) || STRIP_PREFIXES.some((p) => k.startsWith(p))
-    || (!i.withProviderEnv && PROVIDER_PREFIXES.some((p) => k.startsWith(p)))
+    || (i.emptyHome && (EMPTY_HOME_KEYS.includes(k) || EMPTY_HOME_PREFIXES.some((p) => k.startsWith(p))))
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(base)) if (v !== undefined && !drop(k)) env[k] = v
   Object.assign(env, {
-    WEBTERM_DATA_DIR: i.paths.data, HOME: i.paths.home, CLAUDE_CONFIG_DIR: i.paths.claude,
-    PORT: String(i.port), WEBTERM_PROXY_PORT: String(i.proxyPort), WEBTERM_VITE_CACHE_DIR: i.paths.vite,
-  })
+    WEBTERM_DATA_DIR: i.paths.data, PORT: String(i.port), WEBTERM_PROXY_PORT: String(i.proxyPort), WEBTERM_VITE_CACHE_DIR: i.paths.vite,
+  }, i.emptyHome ? { HOME: i.paths.home, CLAUDE_CONFIG_DIR: i.paths.claude } : { [SKIP_HOME_INSTALLS_ENV]: '1' })
   if (i.noClaude) env.PATH = pathWithout(env.PATH ?? '', 'claude', i.has)
   return env
+}
+
+/**
+ * `base` plus the `.env` files Bun would load in `cwd` for `bun run dev`, resolved by Bun itself (same
+ * files, order, `${VAR}` expansion; the caller's env wins). The values are piped back, never printed;
+ * buildFreshEnv then strips WEBTERM_ and friends from the result, so a `.env` WEBTERM_DATA_DIR or PORT
+ * cannot point the fresh instance at real data. The server then runs with `--no-env-file`.
+ */
+export function withDotenv(base: NodeJS.ProcessEnv, cwd: string = REPO_ROOT): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(Object.entries(base).filter(([k]) => k !== 'NODE_ENV')) // like `bun run dev`
+  const r = spawnSync(process.execPath, ['-e', 'process.stdout.write(JSON.stringify(process.env))'], { cwd, env, encoding: 'utf8' })
+  if (r.status !== 0) throw new Error(`reading .env in ${cwd} failed (bun exited ${r.status ?? r.signal})`) // stderr not shown: it may echo values
+  return JSON.parse(r.stdout) as NodeJS.ProcessEnv
 }
 
 /** Create `<tmp>/webterm-fresh-<timestamp>-XXXXXX` with data/home/claude subdirs. */
@@ -112,16 +135,16 @@ export async function startFresh(o: FreshOptions, stdio: 'inherit' | 'pipe' = 'i
   const port = o.port ?? (await findFreePort(FRESH_DEFAULT_PORT))
   const proxyPort = await findFreePort(port + 1, [port])
   const paths = makeFreshRoot()
-  const env = buildFreshEnv(process.env, { paths, port, proxyPort, noClaude: o.noClaude, withProviderEnv: o.withProviderEnv })
-  // Bun auto-loads a cwd `.env` (the real install's provider keys); a fresh machine has none.
+  const env = buildFreshEnv(o.emptyHome ? process.env : withDotenv(process.env), { paths, port, proxyPort, noClaude: o.noClaude, emptyHome: o.emptyHome })
+  // `.env` is already in `env` (default) or deliberately absent (--empty-home): Bun must not load it again unfiltered.
   // The watchdog stops the server when this script dies; ROOT_ARG lets the sweep prove the process is ours.
-  const args = [...(o.withProviderEnv ? [] : ['--no-env-file']), '--preload', join(import.meta.dirname, 'devFresh.watchdog.ts'),
+  const args = ['--no-env-file', '--preload', join(import.meta.dirname, 'devFresh.watchdog.ts'),
     'src/server/index.ts', `${ROOT_ARG}${paths.root}`]
   const child = spawn(process.execPath, args, { cwd: REPO_ROOT, env: { ...env, [PARENT_ENV]: String(process.pid) }, stdio, detached: true }) // own group: stop() kills shells too
   if (child.pid) {
     writeOwner(paths.root, {
       pid: process.pid, childPid: child.pid, pgid: child.pid, tmuxSocket: supervisorSocket(paths.data),
-      claudeConfigDir: paths.claude, createdAt: new Date().toISOString(), keep: o.keep,
+      claudeConfigDir: o.emptyHome ? paths.claude : '', createdAt: new Date().toISOString(), keep: o.keep,
     })
   }
   const exited = new Promise<void>((r) => child.once('exit', () => r()))
@@ -134,7 +157,7 @@ export async function startFresh(o: FreshOptions, stdio: 'inherit' | 'pipe' = 'i
       clearTimeout(t)
     }
     killTmuxServer(paths.data, env.PATH)
-    deleteClaudeKeychain(paths.claude)
+    if (o.emptyHome) deleteClaudeKeychain(paths.claude) // default mode uses the real login: never touched
     if (!o.keep) removeFreshRoot(paths.root)
   })())
   return { paths, port, url: `http://${LOOPBACK}:${port}`, env, child, stop }
@@ -185,10 +208,12 @@ async function main(): Promise<void> {
   const claudeNote = o.noClaude ? ` (claude still on PATH: ${findOnPath('claude', fresh.env.PATH) ? 'YES' : 'no'})` : ''
   process.stdout.write([
     '', `  webterm FRESH instance  ->  ${fresh.url}`,
-    '  Isolated first-run install: own data dir, HOME, Claude config, ports and tmux socket.',
+    o.emptyHome ? '  Brand-new OS user: own data dir, HOME, Claude config, ports and tmux socket; no .env.'
+      : '  First webterm run on this machine: own data dir, ports, tmux socket. Your HOME, tools, Claude login and .env are real.',
     `  Temp root:  ${fresh.paths.root}`,
     `  ${setupLine(freshSetupCodePath(fresh.paths))}`,
-    `  Flags: ${o.noClaude ? 'no-claude' + claudeNote : 'claude on PATH'}, ${o.withProviderEnv ? 'provider env + .env kept' : 'no provider env, no .env'}`,
+    `  Active: ${o.noClaude ? 'no-claude' + claudeNote : 'claude on PATH'}, ${o.emptyHome ? 'empty HOME' : 'real HOME'}`,
+    `  Scenario flags: ${SCENARIO_FLAGS}`,
     o.keep ? '  Ctrl+C to stop (temp root is KEPT).' : '  Ctrl+C to stop and delete.',
     '  Leftovers of crashed runs are removed at the next start; `bun run dev:fresh -- --clean` removes them now.', '',
   ].join('\n') + '\n')

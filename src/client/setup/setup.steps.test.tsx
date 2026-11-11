@@ -9,7 +9,8 @@ import { resetCapabilitiesCache } from '../useCapabilities'
 import { BrowserStep } from './setup.browser'
 import { claudeCheckState, ClaudeStep } from './setup.claude'
 import { DOWNLOAD_TEXT } from '../advancedLabels'
-import { capabilityWrites, DL_IDLE, fakeServer, NOT_FOUND, READY, type FakeServer } from './setup.fakeServer'
+import { capabilityWrites, DL_IDLE, fakeServer, NOT_FOUND, READY, WRAPPER_SIGNED_OUT, type FakeServer } from './setup.fakeServer'
+import { PROVIDER_TEXT } from '../ClaudeProviderCard'
 import { SETUP_TEXT } from './setup.labels'
 import { BasicsStep, CentralStep } from './setup.steps'
 import type { StepNav } from './setup.ui'
@@ -32,6 +33,7 @@ describe('Claude step', () => {
     expect(claudeCheckState(NOT_FOUND, false)).toBe('notFound')
     expect(claudeCheckState(fail('auth_failed'), false)).toBe('notSignedIn')
     expect(claudeCheckState(fail('wrapper_failed'), false)).toBe('wrapperFailed')
+    expect(claudeCheckState(fail('wrapper_signed_out'), false)).toBe('wrapperSignedOut')
     expect(claudeCheckState(fail('wrapper_not_found'), false)).toBe('wrapperFailed')
     expect(claudeCheckState(fail('check_failed'), false)).toBe('checkFailed')
     expect(claudeCheckState(null, true)).toBe('checkFailed')
@@ -62,6 +64,30 @@ describe('Claude step', () => {
     s.launch = READY
     click(SETUP_TEXT.claude.checkAgain)
     expect(await screen.findByText(SETUP_TEXT.claude.ready)).toBeTruthy()
+  })
+
+  it('wrapper not signed in: one failure surface with the sign-in command to copy; Test connection re-runs the check', async () => {
+    const cardFailure = 'The launch command exited with code 1 before Claude Code started.'
+    const s = fakeServer({
+      launch: WRAPPER_SIGNED_OUT,
+      provider: { provider: { mode: 'apiKey', secretSet: true, ready: true }, lastTest: { ok: false, message: cardFailure, at: 1 }, restartNeeded: 0 },
+      providerTest: { ok: false, message: cardFailure, at: 2 },
+    })
+    const writeText = vi.fn(async () => undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    render(<ClaudeStep nav={nav} />)
+    expect(await screen.findByText(SETUP_TEXT.claude.wrapperSignedOut)).toBeTruthy()
+    expect(screen.getByText(WRAPPER_SIGNED_OUT.steps[0].hint as string)).toBeTruthy()
+    click(`${SETUP_TEXT.claude.copy}: ${SETUP_TEXT.claude.signIn}`)
+    expect(writeText.mock.calls).toEqual([['envman login <server> --token <token>']])
+    await screen.findByRole('button', { name: PROVIDER_TEXT.test })
+    const probes = (): number => s.calls.filter((c) => c.url === '/api/claude-launch/test').length
+    const before = probes()
+    click(PROVIDER_TEXT.test)
+    await waitFor(() => expect(probes()).toBe(before + 1))
+    await screen.findByText(SETUP_TEXT.claude.wrapperSignedOut)
+    expect(screen.queryByText(new RegExp(cardFailure))).toBeNull()
+    expect(screen.queryByText(/see the full error/)).toBeNull()
   })
 
   it('a failed copy says so instead of claiming success', async () => {

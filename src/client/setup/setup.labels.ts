@@ -27,6 +27,8 @@ export const SETUP_TEXT = {
     notFound: 'Claude Code is not installed on the server.',
     notSignedIn: 'Claude Code is installed but not signed in. Run claude in a terminal and sign in, or pick another option below.',
     wrapperFailed: 'The custom command could not start Claude.',
+    wrapperSignedOut: 'The custom command could not start Claude: its wrapper is not signed in.',
+    signIn: 'Sign-in command (fill in your own values)',
     checkFailed: 'Could not check Claude Code.',
     install: 'Install command',
     npm: 'Or with npm (Node.js 22 or newer)',

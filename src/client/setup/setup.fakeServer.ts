@@ -19,6 +19,9 @@ export interface FakeServer {
   download: ChromiumDownloadStatus
   /** Next download request answers 500. */
   downloadFail: boolean
+  /** GET /api/claude-provider answer; POST .../test answers `{ test: providerTest }`. */
+  provider: Record<string, unknown>
+  providerTest: { ok: boolean; message: string; at: number }
 }
 
 export const DL_IDLE: ChromiumDownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null }
@@ -33,6 +36,17 @@ export const NOT_FOUND: LaunchTest = {
   steps: [{
     stage: 'claude', ok: false, message: 'The claude CLI was not found on PATH.',
     install: { installCommand: 'curl -fsSL https://claude.ai/install.sh | bash', npmCommand: 'npm install -g @anthropic-ai/claude-code', docsUrl: 'https://code.claude.com/docs/en/setup' },
+  }],
+}
+
+/** The real envman message for a machine where `envman login` never ran (test-only). */
+export const WRAPPER_SIGNED_OUT: LaunchTest = {
+  ok: false, profile: { id: 'p', name: 'envman' }, warnings: [], failed: 'wrapper_signed_out',
+  steps: [{
+    stage: 'wrapper', ok: false,
+    message: "envman exited with code 1: need auth to fetch claude:x — not logged in: run 'envman login <server> --token <token>'",
+    hint: 'envman is not signed in for the user webterm runs as. Sign in, then Check again.',
+    signIn: { tool: 'envman', hint: 'envman is not signed in for the user webterm runs as. Sign in, then Check again.', command: 'envman login <server> --token <token>' },
   }],
 }
 
@@ -55,7 +69,10 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 
 /** Install the fake as global `fetch`; returns its mutable state. */
 export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
-  const s: FakeServer = { calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false, ...over }
+  const s: FakeServer = {
+    calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false,
+    provider: { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }, providerTest: { ok: true, message: 'Connected.', at: 1 }, ...over,
+  }
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = String(input)
     const method = (init.method ?? 'GET').toUpperCase()
@@ -63,7 +80,8 @@ export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
     s.calls.push({ url, method, body })
     if (url.startsWith('/api/claude-launch/test')) return s.launch === 'error' ? json({ error: 'probe_failed' }, 500) : json(s.launch)
     if (url.startsWith('/api/claude-provider/detect')) return json({ wrappers: [] })
-    if (url.startsWith('/api/claude-provider')) return json({ provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 })
+    if (url === '/api/claude-provider/test') return json({ test: s.providerTest })
+    if (url.startsWith('/api/claude-provider')) return json(s.provider)
     if (url.startsWith('/api/settings/env')) return json(method === 'GET' ? { entries: [{ key: 'WEBTERM_BROWSER_HEADLESS', kind: 'flag', group: 'browser', label: 'Headless mode', value: '', default: 'off' }], locked: false } : {})
     if (url.startsWith('/api/capabilities/chromium-download')) {
       if (s.downloadFail) { s.downloadFail = false; return json({ error: 'boom' }, 500) }

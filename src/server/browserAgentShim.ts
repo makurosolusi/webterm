@@ -5,7 +5,7 @@ import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { dataDir } from './config'
-import { CLI_NAME, cliPath, installWebtermCli, shQuote, writeCliGuide } from './cli/cli.launcher'
+import { CLI_NAME, cliPath, installWebtermCli, shQuote, skipHomeInstalls, writeCliGuide } from './cli/cli.launcher'
 
 /** Skill directory + front-matter `name`. */
 export const BROWSER_SKILL_NAME = 'webterm-browser'
@@ -102,8 +102,9 @@ export function installBrowserAgentShim(home: string = homedir()): void {
   mkdirSync(join(dataDir(), 'browser-agent'), { recursive: true })
   writeFileSync(file, buildBrowserShim())
   chmodSync(file, 0o700)
+  writeCliGuide(BROWSER_SKILL_NAME, buildBrowserSkillBody(file))
+  if (skipHomeInstalls()) return
   const skillDir = join(home, '.claude', 'skills', BROWSER_SKILL_NAME)
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildBrowserSkillBody(file))
-  writeCliGuide(BROWSER_SKILL_NAME, buildBrowserSkillBody(file))
 }
