@@ -78,7 +78,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   ),
   capabilities: (c) => (
     <CapabilitiesSection projectId={c.projectId} query={c.query} sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-      onVisibleCount={c.onCapabilityHits} onSettingsChange={c.onChange} onOpenCentral={() => c.navigate({ section: 'central' })} />
+      onVisibleCount={c.onCapabilityHits} onOpenCentral={() => c.navigate({ section: 'central' })} />
   ),
   account: () => <AccountSection />,
   health: () => <HealthSection />,

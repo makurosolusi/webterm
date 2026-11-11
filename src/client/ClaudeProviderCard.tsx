@@ -5,7 +5,6 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { ClaudeLaunchProfile } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
@@ -86,7 +85,7 @@ export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null
 /** The Claude provider card; loads from the server and waits for it on every change. `connection`: the host
  *  owns the Test connection and shows it (setup wizard's single status), so the card only starts it.
  *  `commitRef`: the host saves through it (wizard Continue), so the card hides its own Save. */
-export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onProfiles?(profiles: ClaudeLaunchProfile[]): void; connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
+export function ClaudeProviderCard({ connection, commitRef }: { connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
@@ -189,7 +188,7 @@ export function ClaudeProviderCard({ onProfiles, connection, commitRef }: { onPr
           <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
           {mode === 'command' && p ? (
-            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest} onProfiles={onProfiles}
+            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest}
               onError={(m) => setToast({ seq: ++seq.current, severity: 'error', title: m })} pending={commandCommit} hideSave={!!commitRef} />
           ) : null}
           {mode === 'custom' ? (

@@ -96,6 +96,17 @@ const savers = new Set<Coalescer<SettingsPatch>>()
  *  300 ms save window. */
 export const flushSettingsSaves = async (): Promise<void> => { await Promise.all([...savers].map((c) => c.flush())) }
 
+/** Refetch of each mounted useSettings. */
+const reloaders = new Set<() => Promise<void>>()
+
+/** Re-read stored settings into every mounted useSettings (pending edits are sent first). For writers
+ *  that PUT settings directly (the Claude provider card, the setup wizard) and after a refused save, so
+ *  the in-memory copy never goes stale and a later edit is not built on a list missing their entries. */
+export const reloadSettings = async (): Promise<void> => {
+  await flushSettingsSaves()
+  await Promise.all([...reloaders].map((r) => r()))
+}
+
 // Snapshot modul supaya resolver `baseAgent` di bawah bisa dibaca sinkron dari luar React.
 let current: Settings = DEFAULT_SETTINGS
 
@@ -139,12 +150,17 @@ export function useSettings(): UseSettings {
   if (!saver.current) {
     saver.current = createCoalescer(putSettings, {
       merge: mergeSettingsPatches, // entry keys keep both patches' entries
+      // A refused save (e.g. 409: deleting a launch profile still in use) left the optimistic copy
+      // ahead of the server: re-read it so the UI shows what is really stored.
+      onError: (err) => { console.error('settings save failed', err); void reloadSettings() },
     })
   }
 
   useEffect(() => {
     let alive = true
-    fetch(settingsUrl())
+    // ponytail: an edit made while this GET is in flight shows the server's older value until the next
+    // reload (the edit itself is saved); replay edits made since the fetch if that ever matters.
+    const load = (): Promise<void> => fetch(settingsUrl(), { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error(`GET /api/settings -> ${res.status}`)
         return res.json()
@@ -158,10 +174,12 @@ export function useSettings(): UseSettings {
       })
       .catch((err) => {
         // Default yang bisa dipakai lebih baik daripada canvas kosong; jangan telan diam-diam.
-        console.error('settings load failed, using defaults', err)
+        console.error('settings load failed, using the last known settings', err)
         if (alive) setHydrated(true)
       })
-    return () => { alive = false }
+    void load()
+    reloaders.add(load)
+    return () => { alive = false; reloaders.delete(load) }
   }, [])
 
   // Reload/close/hide inside the coalesce window must not drop the last edit. `pagehide` and

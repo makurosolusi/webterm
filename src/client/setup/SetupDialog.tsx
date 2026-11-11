@@ -9,6 +9,7 @@ import type { Settings } from '../../shared/settings'
 import type { SettingsPatch } from '../../shared/settings.patch'
 import { SETUP_STEPS, type SetupStep, type SetupStepState } from '../../shared/settings.setup'
 import { listCommands } from '../commandRegistry'
+import { reloadSettings } from '../useSettings'
 import { resumeStep, useSetupRoute } from './setup.open'
 import { SETUP_TEXT } from './setup.labels'
 import { SetupStepBody } from './setup.steps'
@@ -57,7 +58,8 @@ export default function SetupDialog({ settings, update }: SetupDialogProps): Rea
   if (route.step === null) return null
   const current: SetupStep = route.step === 'resume' ? resumeStep(settings.setup) : route.step
   const index = SETUP_STEPS.indexOf(current)
-  const close = (): void => { setDone(false); route.close() }
+  // The steps write some settings straight to the server (the provider card's launch profile): re-read them on close.
+  const close = (): void => { setDone(false); route.close(); void reloadSettings() }
 
   const answer = (state: SetupStepState): void => {
     const last = index === SETUP_STEPS.length - 1
