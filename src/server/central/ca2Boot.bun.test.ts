@@ -96,13 +96,14 @@ describe('flags on', () => {
     expect(registerCa2Tools(a, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_READ_TOOLS: 'on' })).toEqual([])
   })
 
-  it('memory flag registers the memory, state and reminder defs and the shared blackboard (F5-b) only', () => {
+  it('memory flag registers the memory, state, reminder and health defs and the shared blackboard (F5-b) only', () => {
     const r = coreRegistry()
     const added = registerCa2Tools(r, {}, { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MEMORY: 'on' })
     expect(added.length).toBeGreaterThan(0)
-    expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.') || n.startsWith('state.') || n.startsWith('reminder.'))).toBe(true)
+    expect(added.every((n) => n.startsWith('memory.') || n.startsWith('blackboard.') || n.startsWith('state.') || n.startsWith('reminder.') || n.startsWith('health.'))).toBe(true)
     expect(added.filter((n) => n.startsWith('blackboard.'))).toEqual(['blackboard.read', 'blackboard.propose'])
     expect(added.filter((n) => n.startsWith('reminder.'))).toEqual(['reminder.set', 'reminder.list', 'reminder.cancel'])
+    expect(added.filter((n) => n.startsWith('health.'))).toEqual(['health.summary', 'health.findings', 'health.scan'])
   })
 
   it('agents/relay groups need their executor and mode', () => {
