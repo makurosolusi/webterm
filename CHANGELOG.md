@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- Settings › Canvas: choose the color and thickness of the cables between nodes.
 - Goals now show above the Tasks board with progress, and you can activate or abandon them; Central's plans land on the board as ordered tasks with dependencies.
 - Central can set reminders and has due dates on tasks.
 - Central can check in by itself when something needs a decision (a task stalls or fails, a reminder or due date arrives), limited per day; turn it off or set the limit in Settings › Central Agent. Each check-in is labelled and recorded.
