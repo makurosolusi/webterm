@@ -1,7 +1,8 @@
 import type { TerminalShortcutPolicy } from '../shared/settings'
 import { SETTING_RANGES } from '../shared/settings.ranges'
-import { isOutputToggleChord } from './output/outputChord'
-import { isTabLayoutChord } from './tabLayout.keys'
+import { eventChord, listCommands, normalizeChord } from './commandRegistry'
+import { keybindingOverrides, type KeybindingOverrides } from './keybindings.store'
+import { isAppChord } from './keybindings.resolve'
 import { hostPlatform, isMacPlatform, type KeyPlatform } from './terminalKeys.platform'
 
 export { isMacPlatform, isWindowsPlatform, type KeyPlatform } from './terminalKeys.platform'
@@ -107,20 +108,6 @@ export function isPasteShortcut(e: TerminalKeyEvent, isWindows: boolean): boolea
 }
 
 /**
- * ⌘/Ctrl + digit: satu-satunya famili chord yang `terminalShortcutPolicy` nodeterm benar-benar
- * gerbangi di dalam handler key terminal (`terminalShortcutPolicy() !== 'terminal-first' &&
- * liveProjectJumpTarget(e)` di TerminalNode.tsx:3484) — lompat ke workspace ke-N, plus ⌘0.
- *
- * Positional (`e.code`), bukan `e.key`, supaya AZERTY sepakat dengan canvas soal digit mana yang
- * ditekan. Shift ditolak: ⌘⇧1 chord lain.
- */
-function isDigitChord(e: TerminalKeyEvent, isMac: boolean): boolean {
-  if (e.type !== 'keydown' || e.altKey || e.shiftKey) return false
-  const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-  return primary && /^Digit[0-9]$/.test(e.code)
-}
-
-/**
  * ⌘. (macOS) / Ctrl+. — satu-satunya chord app yang DIJAMIN lolos dari xterm ke window. Ia jalan
  * keluar dari clean view: di sana semua chrome disembunyikan, jadi keyboard adalah satu-satunya
  * jalan pulang, dan fokus hampir selalu di dalam xterm yang menelan hampir semua tombol.
@@ -128,7 +115,7 @@ function isDigitChord(e: TerminalKeyEvent, isMac: boolean): boolean {
  * BUKAN Ctrl+\ — di terminal itu SIGQUIT dan akan membunuh proses foreground pengguna.
  *
  * Diekspor supaya listener window clean view memakai predikat yang SAMA; dua definisi chord yang
- * terpisah pasti menyimpang. Positional (`e.code`) seperti `isDigitChord`, modifier primer per
+ * terpisah pasti menyimpang. Positional (`e.code`), modifier primer per
  * platform saja (Ctrl+. di macOS adalah tombol yang dikirim orang ke shell), Shift/Alt ditolak
  * supaya aturannya tidak melebar ke bentuk chord lain.
  */
@@ -157,20 +144,20 @@ export type TerminalKeyAction = 'pass' | 'bubble' | 'native' | 'copy' | 'shift-e
 /**
  * Keputusan tunggal untuk `attachCustomKeyEventHandler`.
  *
- * `policy` = `settings.terminalShortcutPolicy`. `app-first` (default) membiarkan chord app menyala
- * di atas xterm; `terminal-first` menyimpan setiap chord SELAIN milik terminal sendiri (copy,
- * Shift+Enter) untuk shell/TUI. Perbedaan yang teramati di webterm hari ini tepat satu famili —
- * ⌘/Ctrl+digit — karena webterm belum punya registry perintah; menambah chord app lain berarti
- * menambahnya ke `isDigitChord` bersama perintahnya, bukan melebarkan aturan ke bentuk chord lain
- * (Ctrl+Shift+<huruf> di shell polos masih berarti Ctrl+<huruf>, jadi memb-bubble-kan semuanya
- * akan mencuri tombol yang hari ini dipakai orang).
+ * `policy` = `settings.terminalShortcutPolicy`. Chord yang di-bubble-kan tidak lagi daftar tetap:
+ * `isAppChord` membaca chord EFEKTIF setiap perintah global di registry (`list` + `overrides`),
+ * jadi rebinding langsung berlaku di dalam terminal — chord lama kembali ke shell, chord baru ke
+ * app. `app-first` membubble-kan semua chord yang terikat kecuali Ctrl+huruf polos di luar mac
+ * (tombol readline) yang tidak diikat pengguna sendiri; `terminal-first` hanya jalan keluar darurat.
  *
- * `platform` di-inject hanya oleh test; runtime memakai `navigator`.
+ * `platform`, `list`, `overrides` di-inject oleh test; runtime memakai `navigator` dan registry.
  */
 export function terminalKeyAction(
   e: TerminalKeyEvent,
   policy: TerminalShortcutPolicy,
   platform: KeyPlatform = hostPlatform(),
+  list = listCommands(),
+  overrides: KeybindingOverrides = keybindingOverrides(),
 ): TerminalKeyAction {
   if (
     e.type === 'keydown' &&
@@ -186,15 +173,10 @@ export function terminalKeyAction(
   // terminal sendiri" di `terminal-first`.
   if (isCopyShortcut(e)) return 'copy'
   if (isPasteShortcut(e, platform.isWindows)) return 'native'
-  // SENGAJA tidak digerbangi `policy`, beda dari ⌘+digit: jalan keluar darurat tidak boleh bisa
-  // dimatikan lewat setting, kalau tidak `terminal-first` mengunci pengguna di clean view tanpa
-  // chrome untuk kembali.
+  // SENGAJA tidak bergantung pada registry maupun `policy`: jalan keluar darurat tidak boleh bisa
+  // dimatikan, kalau tidak `terminal-first` mengunci pengguna di clean view tanpa chrome untuk kembali.
   if (isCleanViewChord(e, platform.isMac)) return 'bubble'
-  // Toggle Output, same reasoning: without this Ctrl+Shift+U reaches the shell as Ctrl+U.
-  if (isOutputToggleChord(e, platform.isMac)) return 'bubble'
-  // Tab-layout chords (toggle, prev/next, close): same reasoning, Ctrl+Shift+L would reach the shell as Ctrl+L.
-  if (isTabLayoutChord(e, platform.isMac)) return 'bubble'
-  if (policy === 'app-first' && isDigitChord(e, platform.isMac)) return 'bubble'
+  if (isAppChord(e, policy, list, overrides, platform)) return 'bubble'
   return 'pass'
 }
 
@@ -234,6 +216,32 @@ export function terminalFontZoomChord(
   if (e.key === '-' || e.code === 'NumpadSubtract') return 'decrease'
   if (!e.shiftKey && (e.code === 'Digit0' || (e.code === 'Numpad0' && e.key === '0'))) return 'reset'
   return null
+}
+
+const ZOOM_COMMANDS: Record<TerminalFontZoomAction, string> = {
+  increase: 'terminal.fontZoomIn',
+  decrease: 'terminal.fontZoomOut',
+  reset: 'terminal.fontZoomReset',
+}
+
+/**
+ * Aksi zoom untuk keydown, mengikuti registry: perintah yang di-rebind pengguna dicocokkan pada
+ * chord barunya (`null` mematikannya); yang tidak, pada bentuk default `terminalFontZoomChord`
+ * (yang lebih luas dari satu chord: ⇧=, numpad).
+ */
+export function terminalZoomAction(
+  e: TerminalKeyEvent,
+  overrides: KeybindingOverrides = keybindingOverrides(),
+  isMac: boolean = isMacPlatform(),
+): TerminalFontZoomAction | null {
+  if (e.type !== 'keydown') return null
+  const chord = eventChord(e, isMac)
+  for (const [action, id] of Object.entries(ZOOM_COMMANDS) as [TerminalFontZoomAction, string][]) {
+    const k = overrides[id]
+    if (k && chord && normalizeChord(k) === chord) return action
+  }
+  const def = terminalFontZoomChord(e, isMac)
+  return def && !Object.hasOwn(overrides, ZOOM_COMMANDS[def]) ? def : null
 }
 
 /**

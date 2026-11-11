@@ -20,8 +20,8 @@ import {
   guardMiddleClickPaste,
   nextTerminalFontSize,
   optionArrowSeq,
-  terminalFontZoomChord,
   terminalKeyAction,
+  terminalZoomAction,
 } from './terminalKeys'
 import { installPointerScaleFix } from './terminalScale'
 import { useLiveSettings } from './useSettings'
@@ -222,7 +222,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     term.attachCustomKeyEventHandler((e) => {
       const s = live.current.settings
       if (s.terminalFontZoomKeys) {
-        const zoom = terminalFontZoomChord(e)
+        const zoom = terminalZoomAction(e)
         if (zoom) {
           e.preventDefault()
           setFontZoom((cur) => nextTerminalFontSize(zoom, cur, live.current.settings.fontSize))

@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { ReactFlow, ReactFlowProvider, useNodesState, useStoreApi, type Node, type NodeProps } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
+import './commandRegistry.defaults' // registers Toggle Word Wrap (Alt+Z), as App does
 
 const ALT_Z = 512 | 56
 const fake = vi.hoisted(() => {

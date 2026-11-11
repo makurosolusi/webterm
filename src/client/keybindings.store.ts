@@ -22,9 +22,14 @@ function save(next: Record<string, string | null>): void {
 }
 
 export const keybindingOverrides = (): KeybindingOverrides => current
-/** Bind `commandId` to `chord`; `null` removes its keybinding. */
+/**
+ * Bind `commandId` to `chord`; `null` removes its keybinding. The key moves to the end, so key
+ * order is write order: the dispatcher lets the most recent override win a conflict.
+ */
 export function setKeybinding(commandId: string, chord: string | null): void {
-  save({ ...current, [commandId]: chord })
+  const rest = { ...current }
+  delete rest[commandId]
+  save({ ...rest, [commandId]: chord })
 }
 /** Back to the command's default keybinding. */
 export function resetKeybinding(commandId: string): void {
@@ -38,6 +43,23 @@ export function connectKeybindings(value: KeybindingOverrides, write: ((next: Re
   current = value
   persist = write
   emit()
+}
+
+/** Command ids that were renamed; an override under the old id moves to the new one. */
+export const RENAMED_COMMAND_IDS: Readonly<Record<string, string>> = {
+  'output.toggle.key': 'output.toggle',
+  'view.cleanView.key': 'view.cleanView',
+}
+
+/** `value` with renamed ids moved (an existing override under the new id wins), or null when none apply. */
+export function migrateCommandIds(value: KeybindingOverrides): Record<string, string | null> | null {
+  if (!Object.keys(value).some((k) => Object.hasOwn(RENAMED_COMMAND_IDS, k))) return null
+  const out: Record<string, string | null> = {}
+  for (const [k, v] of Object.entries(value)) {
+    const id = RENAMED_COMMAND_IDS[k] ?? k
+    if (id === k || !Object.hasOwn(value, id)) out[id] = v
+  }
+  return out
 }
 
 /** Legacy localStorage overrides, or null when there are none / storage is unreadable. */
@@ -57,7 +79,8 @@ export function takeLegacyKeybindings(): Record<string, string | null> | null {
 
 /**
  * Keeps the store in step with server settings. After the first load, legacy localStorage
- * overrides are merged under the server ones (server wins a clash) and written back once.
+ * overrides are merged under the server ones (server wins a clash), renamed command ids are moved,
+ * and the result is written back once.
  */
 export function useKeybindingsSync(value: Settings['keybindings'], hydrated: boolean, update: (patch: Partial<Settings>) => void): void {
   useEffect(() => {
@@ -67,11 +90,14 @@ export function useKeybindingsSync(value: Settings['keybindings'], hydrated: boo
   useEffect(() => {
     if (!hydrated) return
     const legacy = takeLegacyKeybindings()
-    if (legacy && Object.keys(legacy).length) save({ ...legacy, ...current })
+    const merged = legacy && Object.keys(legacy).length ? { ...legacy, ...current } : null
+    const next = migrateCommandIds(merged ?? current) ?? merged
+    if (next) save(next)
     // Only `hydrated` as dep: the migration runs once, on first load; `current` is the value
     // the effect above just connected.
   }, [hydrated])
 }
 
-const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
-export const useKeybindingOverrides = (): KeybindingOverrides => useSyncExternalStore(subscribe, keybindingOverrides)
+/** Calls `l` whenever the overrides change; returns the unsubscribe. */
+export const subscribeKeybindings = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+export const useKeybindingOverrides = (): KeybindingOverrides => useSyncExternalStore(subscribeKeybindings, keybindingOverrides)

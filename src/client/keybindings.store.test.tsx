@@ -3,7 +3,7 @@
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { KEYBINDINGS_STORAGE_KEY, connectKeybindings, keybindingOverrides, resetKeybinding, setKeybinding, useKeybindingsSync } from './keybindings.store'
+import { KEYBINDINGS_STORAGE_KEY, connectKeybindings, keybindingOverrides, migrateCommandIds, resetKeybinding, setKeybinding, useKeybindingsSync } from './keybindings.store'
 import { nextSettings } from '../server/settingsStore'
 import type { Settings } from '../shared/settings'
 
@@ -37,6 +37,24 @@ describe('keybindings in server settings', () => {
     expect(localStorage.getItem(KEYBINDINGS_STORAGE_KEY)).toBeNull()
     rerender(<Sync value={{ 'view.fit': 'Mod+L', 'view.chat': null }} hydrated update={update} />)
     expect(update).toHaveBeenCalledTimes(1) // no second migration
+  })
+
+  it('renames old command ids once (an override already under the new id wins)', () => {
+    const update = vi.fn()
+    const value = { 'output.toggle.key': 'Mod+Alt+O', 'view.cleanView.key': 'Mod+Alt+.', 'view.fit': 'Mod+L' }
+    const { rerender } = render(<Sync value={value} hydrated update={update} />)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledWith({ keybindings: { 'output.toggle': 'Mod+Alt+O', 'view.cleanView': 'Mod+Alt+.', 'view.fit': 'Mod+L' } })
+    rerender(<Sync value={keybindingOverrides()} hydrated update={update} />)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(migrateCommandIds({ 'output.toggle.key': 'Mod+1', 'output.toggle': 'Mod+2' })).toEqual({ 'output.toggle': 'Mod+2' })
+    expect(migrateCommandIds({ 'view.fit': 'Mod+L' })).toBeNull()
+  })
+
+  it('keeps overrides in write order, so a re-bound command becomes the most recent', () => {
+    connectKeybindings({ a: 'Mod+1', b: 'Mod+2' }, null)
+    setKeybinding('a', 'Mod+3')
+    expect(Object.keys(keybindingOverrides())).toEqual(['b', 'a'])
   })
 
   it('no legacy overrides: nothing is written on load', () => {

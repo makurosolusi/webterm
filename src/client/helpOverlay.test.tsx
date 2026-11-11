@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import HelpOverlay, { HELP_TEXT } from './HelpOverlay'
 import { registerCommands, type Command } from './commandRegistry'
-import { FIXED_COMMANDS } from './commandRegistry.defaults'
+import { FIXED_COMMANDS, SURFACE_COMMANDS } from './commandRegistry.defaults'
 import { connectKeybindings, keybindingOverrides } from './keybindings.store'
 
 const open = vi.fn()
@@ -33,7 +33,7 @@ describe('HelpOverlay', () => {
     expect(screen.getByRole('dialog', { name: HELP_TEXT.title })).not.toBeNull()
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Command', 'Keybinding'])
     // App commands registered here + the surface-owned shortcuts registered on import, + header row.
-    expect(screen.getAllByRole('row')).toHaveLength(REGISTRY.length + FIXED_COMMANDS.length + 1)
+    expect(screen.getAllByRole('row')).toHaveLength(REGISTRY.length + FIXED_COMMANDS.length + SURFACE_COMMANDS.length + 1)
     expect(chips('Search: Find in Files')).toEqual(['Ctrl', 'Shift', 'F'])
   })
 

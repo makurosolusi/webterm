@@ -2,12 +2,14 @@
 // Keyboard Shortcuts overlay. Imitates VS Code: a command has an id, a label ("Category: Action"),
 // a default keybinding, and `keybindings.json`-style user overrides (here `keybindings.store.ts`).
 // Commands owned by another surface (Monaco save, terminal Shift+Enter, ...) are registered as
-// `fixed`: listed and conflict-checked, never dispatched from here.
+// `fixed`: listed and conflict-checked, never dispatched from here. Scoped commands without `run`
+// (Toggle Console, Toggle Word Wrap, ...) are rebindable but dispatched by their own surface, which
+// asks `commandMatches` (`keybindings.resolve.ts`) whether a keydown is the command's live chord.
 import { useEffect, useSyncExternalStore } from 'react'
-import { isMacPlatform } from './terminalKeys'
+import { isMacPlatform } from './terminalKeys.platform'
 import { useKeybindingOverrides, type KeybindingOverrides } from './keybindings.store'
 
-/** Where a keybinding is live; conflicts only count inside one scope (VS Code `when`). */
+/** Where a keybinding is live (VS Code `when`); a global chord fires alongside every scope. */
 export type CommandScope = 'global' | 'editor' | 'terminal' | 'files' | 'canvas' | 'browser'
 
 export interface Command {
@@ -19,6 +21,10 @@ export interface Command {
   /** Non-key trigger shown in the overlay, e.g. "Double-click edge". */
   gesture?: string
   scope?: CommandScope
+  /** Plain-English condition under which the binding fires ("Browser node focused"). */
+  when?: string
+  /** Settings key that must be on for the binding to fire (`terminalFontZoomKeys`). */
+  setting?: string
   /** Handled by its own surface: shown and conflict-checked, not dispatched or rebindable. */
   fixed?: boolean
   /** Hidden from the palette (still in the overlay). */
@@ -42,9 +48,10 @@ export function registerCommands(list: Command[]): () => void {
 }
 
 export const listCommands = (): readonly Command[] => commands
-const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+/** Calls `l` whenever the command list changes; returns the unsubscribe. */
+export const subscribeCommands = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
 /** Live command list. */
-export const useCommands = (): readonly Command[] => useSyncExternalStore(subscribe, listCommands)
+export const useCommands = (): readonly Command[] => useSyncExternalStore(subscribeCommands, listCommands)
 /** Registers `list` while mounted (memoise it: a new array re-registers). */
 export function useRegisterCommands(list: Command[]): void {
   useEffect(() => registerCommands(list), [list])
@@ -71,14 +78,17 @@ export function normalizeChord(chord: string): string {
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta'])
 
-// Shift turns `key` into { } and |, so these are read by physical code.
-const BRACKETS: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Backslash: '\\' }
+// Shift turns `key` into { } | ~ + and so on, and ⌥ on macOS into ≠ – …, so punctuation is read by physical code.
+const PUNCTUATION: Record<string, string> = {
+  BracketLeft: '[', BracketRight: ']', Backslash: '\\', Backquote: '`', Minus: '-', Equal: '=',
+  Comma: ',', Period: '.', Slash: '/', Semicolon: ';', Quote: "'",
+}
 
 /** Chord of a keydown, platform resolved (`Mod` = ⌘ on macOS, Ctrl elsewhere); '' for a bare modifier. */
 export function eventChord(e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, isMac: boolean): string {
   if (MODIFIER_KEYS.has(e.key)) return ''
-  // Letters/digits/brackets by physical code: Alt/Shift change `key` (⌥P = π) but not the chord.
-  const key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : BRACKETS[e.code] ?? e.key
+  // Letters/digits/punctuation by physical code: Alt/Shift change `key` (⌥P = π) but not the chord.
+  const key = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : PUNCTUATION[e.code] ?? e.key
   const mods = [
     (isMac ? e.metaKey : e.ctrlKey) && 'Mod',
     isMac && e.ctrlKey && 'Ctrl',
@@ -122,10 +132,38 @@ export function findConflicts(list: readonly Command[], overrides: KeybindingOve
   return out
 }
 
-/** The global, dispatchable command bound to `chord`, if any (first registered wins a conflict). */
-export function commandForChord(chord: string, list: readonly Command[], overrides: KeybindingOverrides): Command | undefined {
+const warned = new Set<string>()
+
+/**
+ * The dispatchable command bound to `chord`. A scoped command beats a global one while its scope
+ * is in `activeScopes`; inside one tier the most recent user override wins (override keys are kept
+ * in write order), then the first registered. A real tie is warned about once per chord.
+ */
+export function commandForChord(
+  chord: string, list: readonly Command[], overrides: KeybindingOverrides, activeScopes: readonly CommandScope[] = [],
+): Command | undefined {
   if (!chord) return undefined
-  return list.find((c) => !c.fixed && c.run && (c.scope ?? 'global') === 'global' && effectiveKey(c, overrides) === chord)
+  const hits = list.filter((c) => !c.fixed && c.run && effectiveKey(c, overrides) === chord && (!c.scope || c.scope === 'global' || activeScopes.includes(c.scope)))
+  if (hits.length < 2) return hits[0]
+  const order = Object.keys(overrides)
+  const tier = (c: Command): number => (!c.scope || c.scope === 'global' ? 0 : 1)
+  const top = hits.filter((c) => tier(c) === Math.max(...hits.map(tier)))
+  const win = top.reduce((a, b) => (order.indexOf(b.id) > order.indexOf(a.id) ? b : a))
+  const note = `${chord}|${top.map((c) => c.id).join(',')}`
+  if (top.length > 1 && !warned.has(note)) {
+    warned.add(note)
+    console.warn(`keybindings: ${chord} is bound to ${top.map((c) => c.id).join(', ')}; running ${win.id}`)
+  }
+  return win
+}
+
+/** Scopes declared by `data-command-scope` on the target and its ancestors. */
+function scopesAt(t: EventTarget | null): CommandScope[] {
+  const out: CommandScope[] = []
+  for (let el = t instanceof Element ? t.closest('[data-command-scope]') : null; el; el = el.parentElement?.closest('[data-command-scope]') ?? null) {
+    out.push(el.getAttribute('data-command-scope') as CommandScope)
+  }
+  return out
 }
 
 const isEditable = (t: EventTarget | null): boolean =>
@@ -144,7 +182,7 @@ export function useCommandKeybindings(): void {
       const chord = eventChord(e, isMacPlatform())
       // Plain keys belong to whatever text field has focus; only chords with a modifier reach commands there.
       if (isEditable(e.target) && !/^(Mod|Ctrl|Meta|Alt)\+/.test(chord)) return
-      const cmd = commandForChord(chord, listCommands(), overrides)
+      const cmd = commandForChord(chord, listCommands(), overrides, scopesAt(e.target))
       if (!cmd) return
       e.preventDefault()
       e.stopPropagation()

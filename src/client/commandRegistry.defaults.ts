@@ -1,17 +1,15 @@
 // webterm's built-in commands. Labels and default keys follow VS Code where a counterpart exists
 // (Go to File ⌘P, Find in Files ⇧⌘F, Open Settings ⌘,, New Terminal ⌃⇧`). `FIXED_COMMANDS` are
-// shortcuts other surfaces own (Monaco, xterm, React Flow, cleanView, Output): they live here so
-// the Keyboard Shortcuts overlay is generated from one list and conflicts are checked against them.
+// shortcuts other surfaces own and that cannot be rebound (Monaco save, xterm, React Flow, Clean
+// View); `SURFACE_COMMANDS` are rebindable but dispatched by their own surface through
+// `commandMatches`. Both live here so the overlay is generated from one list and conflicts are
+// checked against them.
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
 import { openSetup } from './setup/setup.open'
 
 export const FIXED_COMMANDS: Command[] = [
   { id: 'editor.save', label: 'File: Save (editor node)', defaultKey: 'Mod+S', scope: 'editor', fixed: true },
-  { id: 'editor.togglePreview', label: 'Markdown: Toggle Preview (hovered editor node)', defaultKey: 'Mod+M', scope: 'editor', fixed: true },
-  { id: 'terminal.fontZoomIn', label: 'Terminal: Zoom In Font (needs "Zoom font via keyboard")', defaultKey: 'Mod+=', scope: 'terminal', fixed: true },
-  { id: 'terminal.fontZoomOut', label: 'Terminal: Zoom Out Font', defaultKey: 'Mod+-', scope: 'terminal', fixed: true },
-  { id: 'terminal.fontZoomReset', label: 'Terminal: Reset Font Size', defaultKey: 'Mod+0', scope: 'terminal', fixed: true },
   { id: 'terminal.newline', label: 'Terminal: Insert Newline Without Sending', defaultKey: 'Shift+Enter', scope: 'terminal', fixed: true },
   { id: 'browser.focusUrl', label: 'Browser: Focus Address Bar (focused browser node)', defaultKey: 'Mod+L', scope: 'browser', fixed: true },
   { id: 'browser.reload', label: 'Browser: Reload', defaultKey: 'Mod+R', scope: 'browser', fixed: true },
@@ -23,19 +21,28 @@ export const FIXED_COMMANDS: Command[] = [
   { id: 'browser.zoomReset', label: 'Browser: Reset Page Zoom', defaultKey: 'Mod+0', scope: 'browser', fixed: true },
   { id: 'browser.zoomPinch', label: 'Browser: Zoom Page', gesture: 'Ctrl+scroll or pinch', scope: 'browser', fixed: true },
   { id: 'browser.stop', label: 'Browser: Stop Loading (while loading)', defaultKey: 'Escape', scope: 'browser', fixed: true },
-  { id: 'browser.toggleConsole', label: 'Browser: Toggle Console (focused browser node)', defaultKey: 'Mod+Alt+J', scope: 'browser', fixed: true },
   { id: 'files.quickOpen', label: 'Files: Go to File in This Folder (focused Files node)', defaultKey: 'Mod+P', scope: 'files', fixed: true },
-  { id: 'output.toggle.key', label: 'View: Toggle Output', defaultKey: 'Mod+Shift+U', fixed: true, hidden: true },
-  { id: 'view.cleanView.key', label: 'View: Toggle Clean View', defaultKey: 'Mod+.', fixed: true, hidden: true },
+  // Escape hatch out of a chrome-less screen: fixed, so no setting or rebinding can lock the user in.
+  { id: 'view.cleanView', label: 'View: Toggle Clean View', defaultKey: 'Mod+.', fixed: true, hidden: true },
   { id: 'canvas.deleteSelection', label: 'Canvas: Delete Selected Nodes or Edges', defaultKey: 'Backspace', scope: 'canvas', fixed: true },
   { id: 'canvas.deleteSelection.alt', label: 'Canvas: Delete Selected Nodes or Edges', defaultKey: 'Delete', scope: 'canvas', fixed: true },
   { id: 'canvas.unlinkEdge', label: 'Canvas: Remove Context Link', gesture: 'Double-click edge', scope: 'canvas', fixed: true },
   { id: 'workbench.closeOverlay', label: 'Close Overlay, Settings, or Filter', defaultKey: 'Escape', scope: 'canvas', fixed: true },
 ]
 
+/** Rebindable, scoped; the surface named in `when` matches its keydowns via `commandMatches`. */
+export const SURFACE_COMMANDS: Command[] = [
+  { id: 'editor.togglePreview', label: 'Markdown: Toggle Preview', defaultKey: 'Mod+M', scope: 'editor', when: 'Pointer over a Markdown editor node' },
+  { id: 'editor.toggleWordWrap', label: 'View: Toggle Word Wrap', defaultKey: 'Alt+Z', scope: 'editor', when: 'Editor or diff node focused' },
+  { id: 'terminal.fontZoomIn', label: 'Terminal: Zoom In Font', defaultKey: 'Mod+=', scope: 'terminal', when: 'Terminal focused', setting: 'terminalFontZoomKeys' },
+  { id: 'terminal.fontZoomOut', label: 'Terminal: Zoom Out Font', defaultKey: 'Mod+-', scope: 'terminal', when: 'Terminal focused', setting: 'terminalFontZoomKeys' },
+  { id: 'terminal.fontZoomReset', label: 'Terminal: Reset Font Size', defaultKey: 'Mod+0', scope: 'terminal', when: 'Terminal focused', setting: 'terminalFontZoomKeys' },
+  { id: 'browser.toggleConsole', label: 'Browser: Toggle Console', defaultKey: 'Mod+Alt+J', scope: 'browser', when: 'Browser node focused' },
+]
+
 // Static facts, not tied to App's lifetime: registered once on import so the overlay lists them
 // even where App is not mounted (and an App unmount cannot drop them).
-registerCommands(FIXED_COMMANDS)
+registerCommands([...FIXED_COMMANDS, ...SURFACE_COMMANDS])
 
 /** Figma's ⇧⌘\ (show/hide UI) for the left side bar (Layers + Sessions). */
 export const SIDE_BAR_KEY = 'Mod+Shift+\\'

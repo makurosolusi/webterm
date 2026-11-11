@@ -14,10 +14,10 @@ export function useOutputStatusItems(): VscodeStatusItem[] {
   const { counts } = useOutputPanelState()
   return useMemo<VscodeStatusItem[]>(() => {
     return [
-      { id: 'output-errors', label: String(counts.error), icon: codicon('error'), commandId: 'output.toggle.key',
+      { id: 'output-errors', label: String(counts.error), icon: codicon('error'), commandId: 'output.toggle',
         tooltip: `${plural(counts.error, 'error')} in the log — toggle Output`,
         ariaLabel: `Toggle Output, ${plural(counts.error, 'error')}`, onClick: toggleOutput },
-      { id: 'output-warnings', label: String(counts.warn), icon: codicon('warning'), commandId: 'output.toggle.key',
+      { id: 'output-warnings', label: String(counts.warn), icon: codicon('warning'), commandId: 'output.toggle',
         tooltip: `${plural(counts.warn, 'warning')} in the log — toggle Output`,
         ariaLabel: `Toggle Output, ${plural(counts.warn, 'warning')}`, onClick: toggleOutput },
     ]

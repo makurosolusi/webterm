@@ -22,6 +22,13 @@ import './editor.css'
 import { NodeNameLabel } from './nodeName.label'
 import { WordWrapButton } from './editorWrap'
 import { useEditorView } from './EditorNode.view'
+import { chordLabel, useCommands } from './commandRegistry'
+import { useKeybindingOverrides } from './keybindings.store'
+import { commandKey, commandMatches } from './keybindings.resolve'
+import { isMacPlatform } from './terminalKeys.platform'
+
+/** Registry command (`commandRegistry.defaults`) for the hover-gated Markdown preview toggle. */
+const PREVIEW_COMMAND_ID = 'editor.togglePreview'
 
 // marked + DOMPurify load with the first preview, not with the board.
 const EditorMarkdownPreview = lazy(() => import('./EditorMarkdownPreview'))
@@ -80,6 +87,9 @@ function EditorNode({
   const lspLanguage = editable ? lspLanguageIdForExt(ext) : ''
   const lspHint = useLspHint(lspLanguage)
   const view = useEditorView(id, filePath, ef.live, MIN_WIDTH)
+  const previewChord = commandKey(PREVIEW_COMMAND_ID, useCommands(), useKeybindingOverrides())
+  const previewKey = previewChord ? chordLabel(previewChord, isMacPlatform()) : ''
+  const previewTitle = previewKey ? `Toggle markdown preview (${previewKey})` : 'Toggle markdown preview'
 
   // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
@@ -89,11 +99,12 @@ function EditorNode({
     snapshot: ef.snapshot, reload: ef.reload, flagConflict: ef.flagConflict
   })
 
-  // ⌘M / Ctrl+M menukar preview saat node ini di-hover — gerbang hover yang sama dengan nodeterm
-  // (`canvasOwnsMarkdownChord`), supaya satu chord tidak menyalakan setiap node editor di board.
+  // Markdown: Toggle Preview (default ⌘M / Ctrl+M, rebindable via the registry) menukar preview
+  // saat node ini di-hover — gerbang hover yang sama dengan nodeterm (`canvasOwnsMarkdownChord`),
+  // supaya satu chord tidak menyalakan setiap node editor di board.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!hoveredRef.current || e.key.toLowerCase() !== 'm' || !(e.metaKey || e.ctrlKey)) return
+      if (!hoveredRef.current || !commandMatches(e, PREVIEW_COMMAND_ID)) return
       e.preventDefault()
       ef.toggleRef.current()
     }
@@ -131,7 +142,7 @@ function EditorNode({
           <div className="editor-node__md nodrag nowheel">
             <div className="editor-node__md-bar">
               <span>Preview</span>
-              <span className="editor-node__md-hint">⌘M to edit</span>
+              {previewKey && <span className="editor-node__md-hint">{previewKey} to edit</span>}
             </div>
             <Suspense fallback={null}>
               <EditorMarkdownPreview source={ef.previewSource} filePath={filePath} nodeId={id} />
@@ -170,7 +181,7 @@ function EditorNode({
               <>
                 <ToolbarButton
                   label={ef.preview ? 'Edit' : 'Preview'}
-                  title="Toggle markdown preview (⌘M)" data-title="Toggle markdown preview (⌘M)"
+                  title={previewTitle} data-title={previewTitle}
                   toggleable checked={ef.preview}
                   onClick={ef.togglePreview}
                 >

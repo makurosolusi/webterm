@@ -13,10 +13,11 @@ import HelpOverlay from '../HelpOverlay'
 import WorkspaceBar from '../WorkspaceBar'
 import { isMacPlatform, terminalKeyAction } from '../terminalKeys'
 import type { TerminalKeyEvent } from '../terminalKeys'
-import { isOutputToggleChord, outputShortcutLabel } from './outputChord'
+import { listCommands, useCommandKeybindings } from '../commandRegistry'
+import { outputShortcutLabel } from './outputChord'
 import {
   OUTPUT_OPEN_KEY, outputPaletteCommands, publishOutputCounts, resetOutputStateForTest,
-  useOutputPanelState, useOutputToggleHotkey,
+  useOutputPanelState,
 } from './outputCommands'
 import { useOutputStatusItems } from './outputStatusItem'
 import OutputPanelHost, { useOutputView } from './outputPanelHost'
@@ -49,17 +50,15 @@ function Probe() {
   return <span data-testid="open">{String(open)}</span>
 }
 function StatusHarness() {
-  useOutputToggleHotkey()
+  useCommandKeybindings()
   return <><Probe /><VscodeStatusBar left={[]} right={useOutputStatusItems()} /></>
 }
 
 describe('output shortcut', () => {
-  it('matches Shift+Cmd+U on mac and Shift+Ctrl+U elsewhere, and nothing else', () => {
-    expect(isOutputToggleChord(chord({ metaKey: true }), true)).toBe(true)
-    expect(isOutputToggleChord(chord({ ctrlKey: true }), false)).toBe(true)
-    expect(isOutputToggleChord(chord({ ctrlKey: true }), true)).toBe(false)
-    expect(isOutputToggleChord(chord({ metaKey: true, altKey: true }), true)).toBe(false)
-    expect(isOutputToggleChord(chord({ metaKey: true, shiftKey: false }), true)).toBe(false)
+  it('is a registry command on Mod+Shift+U (Shift+Cmd+U on mac, Shift+Ctrl+U elsewhere)', () => {
+    const cmd = listCommands().find((c) => c.id === 'output.toggle')
+    expect(cmd?.defaultKey).toBe('Mod+Shift+U')
+    expect(cmd?.run).toBeTypeOf('function')
     expect(outputShortcutLabel(true)).toBe('⇧⌘U')
     expect(outputShortcutLabel(false)).toBe('Ctrl+Shift+U')
   })
@@ -69,21 +68,21 @@ describe('output shortcut', () => {
     const mac = { isMac: true, isWindows: false }
     expect(terminalKeyAction(chord({ ctrlKey: true }), 'app-first', linux)).toBe('bubble')
     expect(terminalKeyAction(chord({ metaKey: true }), 'app-first', mac)).toBe('bubble')
-    // Not gated by the policy: the chord is ours either way (like Clean View).
-    expect(terminalKeyAction(chord({ ctrlKey: true }), 'terminal-first', linux)).toBe('bubble')
+    // terminal-first keeps it for the shell: only the Clean View escape hatch bubbles there.
+    expect(terminalKeyAction(chord({ ctrlKey: true }), 'terminal-first', linux)).toBe('pass')
+    // A rebinding follows: the old chord goes back to the shell.
+    expect(terminalKeyAction(chord({ ctrlKey: true }), 'app-first', linux, listCommands(), { 'output.toggle': 'Mod+Alt+O' })).toBe('pass')
   })
 
-  it('toggles the panel from the window and persists the choice', () => {
+  it('toggles the panel through the command dispatcher and persists the choice', () => {
     render(<StatusHarness />)
     const isMac = /Mac/i.test(navigator.platform)
     const init = isMac ? { metaKey: true } : { ctrlKey: true }
-    fireEvent.keyDown(window, { key: 'U', code: 'KeyU', shiftKey: true, ...init })
+    fireEvent.keyDown(document.body, { key: 'U', code: 'KeyU', shiftKey: true, ...init })
     expect(screen.getByTestId('open').textContent).toBe('true')
     expect(localStorage.getItem(OUTPUT_OPEN_KEY)).toBe('1')
-    fireEvent.keyDown(window, { key: 'U', code: 'KeyU', shiftKey: true, ...init })
+    fireEvent.keyDown(document.body, { key: 'U', code: 'KeyU', shiftKey: true, ...init })
     expect(screen.getByTestId('open').textContent).toBe('false')
-    fireEvent.keyDown(window, { key: 'U', code: 'KeyU', shiftKey: true, repeat: true, ...init })
-    expect(screen.getByTestId('open').textContent).toBe('false') // key repeat is ignored
   })
 
   it('is listed in the Keyboard Shortcuts table', () => {
@@ -139,7 +138,7 @@ describe('command palette', () => {
   // The app's real palette path: `useOmnibox` with the Output commands as extra commands.
   function PaletteHarness({ onFocus }: { onFocus: (id: string) => void }) {
     const nodesRef = useRef<Node[]>([])
-    const extraCommands = useMemo(() => outputPaletteCommands(false), [])
+    const extraCommands = useMemo(() => outputPaletteCommands(), [])
     const omni = useOmnibox({ nodes: [], nodesRef, settings: DEFAULT_SETTINGS, extraCommands, addFlowNode: vi.fn(), onFocus, onAddAgent: vi.fn() })
     return (
       <>
