@@ -249,6 +249,9 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.
+- "Max workers at once" for Central now applies whenever Central works on its own (not only with Steadier autonomy) and takes effect for the next worker it starts, without a restart.
+- The daily spending limit hint now says what happens at 100%: Central pauses until the next UTC day or until you raise the limit.
 - Central Agent › Check again now shows that it is checking and what it found (or why it failed): "Checking…" while it runs, then "Runs on Claude · <version> · checked 10:42:05" from the same launch test Central uses (it costs no tokens), or the reason with the install or sign-in steps and a Retry notification. A repeated check shows the new time.
 - Settings › Agent › Claude permission mode keeps its description when Skip approvals is on; a line under it says why it is locked, with a button to turn off Skip approvals.
 - Editing Claude launch profiles in Settings no longer deletes the command chosen in setup. Profiles are saved one by one, and a profile the Claude provider still runs cannot be deleted (the row says why).
@@ -360,6 +363,8 @@ Operator notes:
 - Send buttons are disabled while you are offline, and what you typed is kept.
 
 ### Removed
+- Settings › Agent › "Agent default": the quick-add button always used the first enabled agent, so the choice did nothing. A stored value is dropped on load.
+- Unused settings and env keys that changed nothing: the `accent` setting, and `WEBTERM_CHANNELS`, `WEBTERM_CENTRAL_CHAT`, `WEBTERM_CENTRAL_TELEGRAM`, `WEBTERM_CENTRAL_TOOLS` and `WEBTERM_CENTRAL_PLANNER` (chat and the Telegram bridge follow the Central Agent and Telegram switches; proposal tools are always available). Stored values are kept but have no effect.
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).
 - The unused per-reply token limit setting.
 - OpenCode as a Central runtime and as the fallback worker: Central and workers run on Claude only; without Claude they ask you to set it up.
