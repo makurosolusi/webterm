@@ -18,6 +18,7 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
+- Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
 - Boards, Settings sections, Central tabs and bottom-panel tabs keep their place on reload and work with Back/Forward: each has its own address (`/w/<board>?settings=agent`, `?ctab=memory`, `?panel=problems`) you can bookmark or share. Opening Settings returns to the section you last used.
@@ -142,6 +143,12 @@ Operator notes:
 - Central now records every task it hands to an agent: who was asked, what, since when and how it is going, with new task tools for planning and assigning work.
 - Central notices when an assigned agent starts late, goes quiet, needs input, or disappears, nudges it, and resumes an Agent Chat once; each automatic step is recorded with its rule.
 
+- Central project health: deterministic scans of each project look for files over the size limits, modules nothing imports, TODOs without context and empty `catch` blocks. Every finding carries its file, line, evidence, the rule it comes from and how sure it is; a finding with no project rule behind it is a suggestion, not a violation. Unreferenced-module findings are only ever medium confidence, since dynamic entry points can escape the import graph.
+- Central panel › Health: filter findings by status, severity, rule and origin (scan or deep analysis), dismiss one with a reason, reopen it, or run Scan now. Projects are also scanned automatically once a day (only files tracked by git).
+- When a task reaches review, its changed files are checked (a new file without a test, a file pushed over the size limit, a new TODO without context or empty `catch`) and the results show on the task card.
+- Central checks in by itself when a scan finds a new high-severity problem, and raises a dismissed finding again only when its evidence changes. Dismissals and their reasons are remembered in Central's memory.
+- Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
+- Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
 - Central's context management is on by default, and a full conversation rotates to a fresh session instead of being refused.
 - Central saves its state before its context is compacted and restores it afterwards.
