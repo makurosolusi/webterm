@@ -2,6 +2,8 @@
 // persis yang dipakai Settings editor VS Code) dan checkbox 18x18. Native dipertahankan supaya
 // label association, keyboard, dan popup OS tidak perlu ditiru ulang.
 
+const SELECT_TEXT = { notInList: (value: string): string => `${value} (not in list)` } as const
+
 interface SelectProps<T extends string> {
   id?: string
   value: T
@@ -23,6 +25,9 @@ export function SettingsSelect<T extends string>({
   ariaLabel,
   describedBy,
 }: SelectProps<T>): React.JSX.Element {
+  // A stored value outside the list (old preset, deleted profile) would render a blank native select:
+  // show it as a disabled first option so the control says what is really stored.
+  const known = options.some((o) => o.value === value)
   return (
     <span className="st-select-wrap">
       <select
@@ -34,6 +39,7 @@ export function SettingsSelect<T extends string>({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value as T)}
       >
+        {known ? null : <option value={value} disabled>{SELECT_TEXT.notInList(value)}</option>}
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
       <span className="codicon codicon-chevron-down st-select-chevron" aria-hidden="true" />

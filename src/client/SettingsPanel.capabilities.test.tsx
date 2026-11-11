@@ -114,25 +114,20 @@ describe('tab Kemampuan (D8)', () => {
     await waitFor(() => expect(calls).toContain('POST /api/capabilities/reset'))
   })
 
-  it('pencarian mencocokkan judul bagian, judul, blurb, dan kata kunci kartu', async () => {
-    const main = await openCapabilities()
+  it('search finds cards by title, blurb and keywords from the index, without mounting the tab', async () => {
+    await openCapabilities()
     const search = screen.getByRole('searchbox', { name: 'Search settings' })
-    const hits = (q: string): string[] => {
+    const rows = (q: string): string[] => {
       fireEvent.change(search, { target: { value: q } })
-      return [...main.querySelectorAll('[data-capability]')].map((el) => el.getAttribute('data-capability') ?? '')
+      const group = document.querySelector('[aria-labelledby="st-group-capabilities"]')
+      return group ? [...group.querySelectorAll('.st-result-go')].map((el) => el.textContent ?? '').filter((t) => t.includes('›')) : [] // rows of settings, not the page row
     }
-    expect(hits('Telegram')).toEqual(['telegram'])
-    // + the Telegram row of Settings › Central Agent
-    expect(document.querySelector('.st-search-count')?.textContent).toBe('2 settings found')
-    expect(hits('chrome')).toEqual(['browser'])
-    expect(main.querySelector('details')).not.toBeNull() // Lanjutan (lokasi Chrome) ikut tampil
-    expect(hits('cookie')).toEqual(['browser'])
-    expect(hits('localhost')).toEqual(['browser'])
-    expect(hits('token')).toEqual(['telegram'])
-    expect(hits('upload')).toEqual(['filesWrite'])
-    expect(hits('zzz-nothing')).toEqual([])
-    expect(hits('capabilities')).toHaveLength(CAPABILITY_IDS.length - 2) // judul bagian: semua tampil (Central = 1 ringkasan)
-    expect(hits('autonomy')).toEqual(['central'])
+    expect(rows('Telegram')).toEqual([`Capabilities › ${CAPABILITIES.telegram.title}`])
+    expect(document.querySelector('[data-capability]')).toBeNull() // the tab is not mounted while searching
+    expect(rows('cookie')).toEqual([`Capabilities › ${CAPABILITIES.browser.title}`])
+    expect(rows('chrome')).toEqual([`Capabilities › ${CAPABILITIES.browser.title}`, 'Capabilities › Chromium location'])
+    expect(rows('upload')).toEqual([`Capabilities › ${CAPABILITIES.filesWrite.title}`])
+    expect(rows('zzz-nothing')).toEqual([])
   })
 
   it('Central menunggu mesin agen: ringkasan bilang begitu, tanpa toggle/reset (langkahnya di Central Agent)', async () => {

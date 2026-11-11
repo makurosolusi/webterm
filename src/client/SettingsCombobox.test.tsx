@@ -72,6 +72,16 @@ describe('SettingsCombobox', () => {
     expect(outer).not.toHaveBeenCalled()
   })
 
+  it('marks itself data-settings-escape only while the list is open (the Settings dialog then leaves Escape to it)', () => {
+    const { input } = setup()
+    const marked = (): boolean => input.closest('[data-settings-escape]') !== null
+    expect(marked()).toBe(false)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(marked()).toBe(true)
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(marked()).toBe(false)
+  })
+
   it('a custom value commits trimmed on Enter and on blur, and is remembered most-recent-first without duplicates', async () => {
     const { onCommit, input, type } = setup({}, ['old'])
     type('  custom-1  ')
