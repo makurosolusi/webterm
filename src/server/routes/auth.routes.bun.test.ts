@@ -153,6 +153,35 @@ describe('POST /auth/request-open: the server opens the window, the code never l
     expect((await call('GET', `/auth/open?code=${code}`)).status).toBe(303)
   })
 
+  /** Request a window with `body`, then follow the redirect file's link: where does the browser land? */
+  async function landing(body?: string): Promise<{ link: string; location: string | undefined }> {
+    clock += OPEN_INTERVAL_MS // each call is its own rate-limit window
+    expect((await call('POST', '/auth/request-open', SAME, body)).status).toBe(202)
+    const link = /url=(\/?[^"]*\/auth\/open\?[^"]+)"/.exec(readFileSync(opened.at(-1)!, 'utf8'))![1]!.replace(/&amp;/g, '&')
+    const u = new URL(link)
+    return { link, location: (await call('GET', u.pathname + u.search)).headers.location }
+  }
+
+  test('`next` rides into the redirect file URL-encoded and is where the window lands', async () => {
+    const next = '/w/abc?tab=central&q=a b#x'
+    const r = await landing(JSON.stringify({ next }))
+    expect(r.link).toContain(`&next=${encodeURIComponent(next)}`)
+    expect(r.location).toBe(next)
+  })
+
+  test('unsafe, missing or malformed `next` lands on `/`, never off-origin', async () => {
+    for (const next of ['//evil.test', 'https://evil.test', '/\\evil.test', '/\u0000x']) {
+      const r = await landing(JSON.stringify({ next }))
+      expect(r.link).not.toContain('next=')
+      expect(r.location).toBe('/')
+    }
+    for (const body of [undefined, '', '{', '[]', JSON.stringify({ next: 42 })]) {
+      const r = await landing(body)
+      expect(r.link).not.toContain('next=')
+      expect(r.location).toBe('/')
+    }
+  })
+
   test('a cross-site page cannot drive it', async () => {
     expect((await call('POST', '/auth/request-open', { origin: 'http://evil.test', 'sec-fetch-site': 'cross-site' })).status).toBe(403)
     expect((await call('POST', '/auth/request-open', { origin: `http://127.0.0.1:${port + 1}` })).status).toBe(403)

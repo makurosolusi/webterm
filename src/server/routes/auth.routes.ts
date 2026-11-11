@@ -3,7 +3,7 @@
 // sign-in mints a FRESH session (no fixation). Secrets never appear in a response body or a log line.
 //   GET  /auth/open?code=&next= one-time code (uiOpen.ts) -> Set-Cookie + 303 to a same-origin `next`
 //   GET  /auth/me               { signedIn, setupRequired, user, tokenSignIn }
-//   POST /auth/request-open     server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
+//   POST /auth/request-open     { next? } server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
 //   POST /auth/login            { username, password }, or { token } while no account exists
 //   POST /auth/logout           revokes the caller's session and clears the cookie
 //   /auth/setup, /auth/sessions*, /auth/account/*  -> auth.account.routes.ts
@@ -58,7 +58,10 @@ export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: Se
       return reply(res, 429, { error: 'too_many_requests' }, { 'Retry-After': String(Math.ceil((OPEN_INTERVAL_MS - (t - lastOpenAt)) / 1000)) })
     }
     lastOpenAt = t
-    await d.opener.open(firstHeader(req.headers.host))
+    // Optional `{ next }`: the page to land on. No/invalid body is not an error, it just lands on `/`.
+    const read = await readJsonBody(req)
+    const next = read.ok && typeof read.body.next === 'string' ? safeNext(read.body.next) : '/'
+    await d.opener.open(firstHeader(req.headers.host), next)
     reply(res, 202, { opening: true })
   }
 
