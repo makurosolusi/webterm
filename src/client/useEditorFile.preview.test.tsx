@@ -30,13 +30,13 @@ afterEach(() => { fake.state.value = ''; fake.state.onChange = () => {} })
 
 const meta = (content: string, version = 'v1') => ({ content, version, encoding: 'utf8' }) as ReadMeta
 
-function mount(over: { openMarkdownPreview?: boolean; writeChecked?: WriteChecked; id?: string } = {}) {
+function mount(over: { openMarkdownPreview?: boolean; writeChecked?: WriteChecked; id?: string; onPreviewChange?: (p: boolean) => void } = {}) {
   const readMeta = vi.fn((_p: string) => Promise.resolve(meta('# One')))
   const writeChecked = vi.fn(over.writeChecked ?? (() => Promise.resolve({ ok: true, version: 'v2' } as never)))
   const hostRef = { current: document.createElement('div') }
   const r = renderHook(() => useEditorFile({
     id: over.id ?? 'n1', filePath: '/repo/a.md', fileName: 'a.md', ext: 'md', enabled: true,
-    openMarkdownPreview: over.openMarkdownPreview ?? true, hostRef, readMeta, writeChecked, setLoadError: () => {},
+    openMarkdownPreview: over.openMarkdownPreview ?? true, onPreviewChange: over.onPreviewChange, hostRef, readMeta, writeChecked, setLoadError: () => {},
   }))
   return { ...r, readMeta, writeChecked }
 }
@@ -69,6 +69,17 @@ describe('useEditorFile preview source', () => {
     act(() => result.current.togglePreview())
     expect(result.current.preview).toBe(true)
     expect(result.current.previewSource).toBe('# Edited')
+  })
+
+  it('the user\'s Preview/Edit toggle is reported, so the next Markdown file opens the same way', async () => {
+    const onPreviewChange = vi.fn()
+    const { result } = mount({ onPreviewChange })
+    await waitFor(() => expect(result.current.preview).toBe(true))
+    expect(onPreviewChange).not.toHaveBeenCalled() // opening is not a choice
+    act(() => result.current.togglePreview())
+    expect(onPreviewChange).toHaveBeenLastCalledWith(false)
+    act(() => result.current.togglePreview())
+    expect(onPreviewChange).toHaveBeenLastCalledWith(true)
   })
 
   it('reload (external change) refreshes the visible preview', async () => {

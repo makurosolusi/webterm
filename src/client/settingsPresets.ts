@@ -1,10 +1,9 @@
 // Preset lists for Settings pickers (selects and combobox suggestions). Every value stays inside the
 // key's `SETTING_RANGES` bounds; `settingsPresets.test.ts` pins that.
 import { DEFAULT_SETTINGS } from '../shared/settings'
+import { SETTING_RANGES } from '../shared/settings.ranges'
+import { firstFamily, isFontInstalled, renderedFamily } from './fontDetect'
 import type { ComboPreset } from './SettingsCombobox'
-
-const KIB = 1024
-const MIB = 1024 * KIB
 
 export const FONT_FAMILY_PRESETS: readonly ComboPreset[] = [
   { value: DEFAULT_SETTINGS.fontFamily, label: 'Menlo (default)' },
@@ -19,6 +18,18 @@ export const FONT_FAMILY_PRESETS: readonly ComboPreset[] = [
   { value: 'monospace', label: 'System monospace' },
 ]
 
+/**
+ * Font presets installed on this computer: the default first, named after the font it really renders
+ * ("Menlo (default)" on macOS, the fallback elsewhere), then each other preset whose font is present.
+ */
+export function installedFontPresets(): ComboPreset[] {
+  const [, ...others] = FONT_FAMILY_PRESETS
+  return [
+    { value: DEFAULT_SETTINGS.fontFamily, label: `${renderedFamily(DEFAULT_SETTINGS.fontFamily)} (default)` },
+    ...others.filter((p) => isFontInstalled(firstFamily(p.value))),
+  ]
+}
+
 const WEIGHT_NAMES: Record<number, string> = {
   100: 'Thin', 200: 'Extra light', 300: 'Light', 400: 'Normal', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Extra bold', 900: 'Black',
 }
@@ -29,10 +40,15 @@ export const SCROLLBACK_PRESETS: readonly ComboPreset[] = [1_000, 5_000, 10_000,
   label: `${n.toLocaleString('en-US')} lines${n === DEFAULT_SETTINGS.scrollbackLines ? ' (default)' : ''}`,
 }))
 
-export const REPLAY_BUFFER_OPTIONS = [64 * KIB, 256 * KIB, MIB, 4 * MIB, 16 * MIB, 64 * MIB].map((n) => ({
-  value: n,
-  label: `${n >= MIB ? `${n / MIB} MiB` : `${n / KIB} KiB`}${n === DEFAULT_SETTINGS.scrollbackBytes ? ' (default)' : ''}`,
-}))
+/**
+ * Server replay buffer for a terminal history length: History length is ONE control for both buffers.
+ * Proportional to the defaults (10,000 lines <-> 256 KiB), so the default stays exactly the default.
+ */
+export function replayBytesFor(lines: number): number {
+  const { min, max, step } = SETTING_RANGES.scrollbackBytes
+  const bytes = Math.ceil((lines * DEFAULT_SETTINGS.scrollbackBytes) / DEFAULT_SETTINGS.scrollbackLines / step) * step
+  return Math.min(max, Math.max(min, bytes))
+}
 
 /** Word separators always contain a space (stored history is trimmed, so a picked value gets it back). */
 export const withSpace = (v: string): string => (v.includes(' ') ? v : ` ${v}`)
@@ -43,16 +59,13 @@ export const WORD_SEPARATOR_PRESETS: readonly ComboPreset[] = [
   { value: `${DEFAULT_SETTINGS.terminalWordSeparator}/.:-_`, label: 'Also split at / . : - _' },
 ]
 
-// ponytail: fixed list; a server endpoint reading /etc/shells would show only installed shells.
-export const SHELL_PRESETS: readonly ComboPreset[] = [
+/** Default shell choices: the system default, then the shells this machine has (GET /api/settings/shells). */
+export const shellPresets = (installed: readonly string[]): ComboPreset[] => [
   { value: '', label: 'System default shell' },
-  { value: '/bin/zsh' },
-  { value: '/bin/bash' },
-  { value: '/bin/sh' },
+  ...installed.map((value) => ({ value })),
 ]
 
 export const GRID_SIZE_OPTIONS = [8, 12, 16, 20, 24, 32, 40, 48].map((n) => ({ value: n, label: `${n} px` }))
-export const NODE_WIDTH_OPTIONS = [400, 480, 560, 640, 800, 960, 1200, 1600].map((n) => ({ value: n, label: `${n} px` }))
 export const EDGE_WIDTH_OPTIONS = [1, 1.5, 2, 3, 4].map((n) => ({
   value: n, label: `${n} px${n === DEFAULT_SETTINGS.edgeWidth ? ' (default)' : ''}`,
 }))
@@ -67,7 +80,6 @@ export const EDGE_COLOR_PRESETS: readonly { label: string; color: string }[] = [
   { label: 'Pink', color: '#ec4899' },
   { label: 'Purple', color: '#8b5cf6' },
 ]
-export const NODE_HEIGHT_OPTIONS = [280, 360, 440, 520, 600, 720, 900, 1200].map((n) => ({ value: n, label: `${n} px` }))
 
 /** Cost cap suggestions in dollars; '' = no limit. The field id is Central's own limit (Settings › Central Agent); the Spending page's pause-all cap shares the presets but keeps its own history (PAUSE_ALL_FIELD_ID 'cost.pauseAllAt'). */
 export const COST_CAP_FIELD_ID = 'central.dailyCostCap'

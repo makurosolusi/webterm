@@ -13,8 +13,9 @@ export const CAPABILITY_TEXT = {
   offerQuestion: 'Turn it on now?',
   offerAction: 'Turn on',
   offerTitle: (title: string): string => `Turn on ${title}`,
-  confirmDangerous: (label: string): string =>
-    `${label}?\n\nThis gives agents more control over this computer and the accounts you are signed in to. Only turn it on if you trust the agents that run.`,
+  confirmTitle: (label: string): string => `Turn on ${label}?`,
+  confirmBody: 'This gives agents more control over this computer and the accounts you are signed in to. Only turn it on if you trust the agents that run.',
+  confirmCancel: 'Cancel',
   loadFailed: 'Could not load capabilities. Try again in a moment.',
   changeFailed: 'The change did not go through. Try again in a moment.',
   // 403 from the settings guard = no live UI session; a reload lands on the sign-in screen (appBoot).

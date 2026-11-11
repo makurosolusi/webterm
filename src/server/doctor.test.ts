@@ -54,6 +54,16 @@ describe('runDoctor', () => {
     expect((await byId(deps({ telegram: async () => ({ state: 'unreachable' }) }))).telegram.status).toBe('warn')
   })
 
+  it('"where to fix it" is a structured Settings field, not a path in the text', async () => {
+    const c = await byId(deps({ telegram: async () => ({ state: 'unset' }) }))
+    expect(c.telegram.go).toEqual({ field: 'capability.telegram' })
+    expect(c.telegram.detail).not.toContain('›')
+    const p = await byId(deps({ claudeProvider: () => ({ view: { mode: 'apiKey', secretSet: false, ready: false }, lastTest: null }) }))
+    expect(p.claude.go).toEqual({ field: 'claude-provider' })
+    expect(p.claude.detail).not.toContain('›')
+    expect((await byId(deps())).ripgrep.go).toBeUndefined()
+  })
+
   it('a shell-locked sandbox explains the lock and offers no fix', async () => {
     const c = await byId(deps({ sandbox: () => ({ on: false, supported: true, lockReason: 'Set in the shell environment.' }) }))
     expect(c.sandbox.fix).toBeUndefined()

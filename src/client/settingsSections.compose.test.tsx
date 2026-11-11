@@ -25,11 +25,16 @@ describe('Settings purpose sections', () => {
     ['Automations', 'automations-section', ['routines-panel']],
     ['Spending', 'spending-section', ['cost-panel']],
     ['Health', 'health-section', ['doctor']],
-    ['Developer', 'developer-section', ['control-panel']],
   ])('%s mounts its panels', async (label, section, panels) => {
     open(label)
     const root = await screen.findByTestId(section)
     for (const id of panels) expect(await within(root).findByTestId(id), id).toBeTruthy()
+  })
+
+  it('Developer (opened by link; the nav hides it outside developer mode) mounts its panels', async () => {
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} initialSection="developer" />)
+    const root = await screen.findByTestId('developer-section')
+    expect(await within(root).findByTestId('control-panel')).toBeTruthy()
   })
 
   it('Spending links to the Central Agent section for Central\'s own limit', () => {

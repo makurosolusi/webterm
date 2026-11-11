@@ -115,3 +115,28 @@ describe('tab-row actions without a workspace', () => {
     for (const name of labels) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
+
+describe('Workspace menu', () => {
+  it('Mute Notifications mutes this workspace and the row then offers Unmute', async () => {
+    const { readNotifyPrefs, setWorkspaceMuted } = await import('./osNotify.prefs')
+    setWorkspaceMuted('w1', false)
+    mount()
+    fireEvent.click(screen.getByLabelText('Workspace options'))
+    fireEvent.click(await screen.findByText('Mute Notifications'))
+    expect(readNotifyPrefs().muted).toContain('w1')
+    fireEvent.click(screen.getByLabelText('Workspace options'))
+    fireEvent.click(await screen.findByText('Unmute Notifications'))
+    expect(readNotifyPrefs().muted).not.toContain('w1')
+  })
+
+  it('Canvas Background… opens Settings › Appearance on the canvas background', async () => {
+    const { OPEN_SETTINGS_EVENT } = await import('./settings.link')
+    const seen = vi.fn()
+    window.addEventListener(OPEN_SETTINGS_EVENT, seen)
+    mount()
+    fireEvent.click(screen.getByLabelText('Workspace options'))
+    fireEvent.click(await screen.findByText('Canvas Background…'))
+    expect((seen.mock.calls[0][0] as CustomEvent).detail).toEqual({ section: 'appearance', field: 'canvasBackground' })
+    window.removeEventListener(OPEN_SETTINGS_EVENT, seen)
+  })
+})

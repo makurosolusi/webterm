@@ -17,6 +17,8 @@ export interface DoctorCheck {
   detail: string
   /** Label of the safe one-click fix, when there is one. */
   fix?: string
+  /** The Settings field where the user fixes it (a `data-field` id); the client links to it. */
+  go?: { field: string }
 }
 
 /** A file webterm generates (shim, skill, house rules): `expected` is what the current build writes. */
@@ -47,8 +49,11 @@ export interface DoctorDeps {
 const hostOf = (url: string | undefined): string => { try { return new URL(url ?? '').host } catch { return '(no URL)' } }
 
 type Probe = (d: DoctorDeps) => Promise<DoctorCheck> | DoctorCheck
-const check = (id: DoctorId, title: string, status: DoctorStatus, detail: string, fix?: string): DoctorCheck =>
-  ({ id, title, status, detail, ...(fix ? { fix } : {}) })
+const check = (id: DoctorId, title: string, status: DoctorStatus, detail: string, fix?: string, go?: DoctorCheck['go']): DoctorCheck =>
+  ({ id, title, status, detail, ...(fix ? { fix } : {}), ...(go ? { go } : {}) })
+/** Settings fields the checks point at (client `settings.link` ids). */
+const GO_PROVIDER = { field: 'claude-provider' }
+const GO_TELEGRAM = { field: 'capability.telegram' }
 
 const PROBES: Record<DoctorId, Probe> = {
   async claude(d) {
@@ -56,12 +61,12 @@ const PROBES: Record<DoctorId, Probe> = {
     const r = await d.claudeReady()
     const via = r.via ? ` Launch: ${r.via}.` : ''
     if (!r.ok && r.missing) return check('claude', t, 'warn', `${r.reason || 'The claude command is not on PATH.'} Claude agent nodes and the Claude engine cannot start until it is found.${via}`)
-    // Active Claude provider (Settings › Capabilities): a key/endpoint replaces the login, so it is checked instead.
+    // Active Claude provider: a key/endpoint replaces the login, so it is checked instead.
     const { view: v, lastTest } = d.claudeProvider?.() ?? { view: { mode: 'login', secretSet: false, ready: true }, lastTest: null }
     if (v.mode !== 'login') {
       const what = v.mode === 'apiKey' ? 'Anthropic API key' : `custom endpoint ${hostOf(v.baseUrl)}`
-      if (!v.ready) return check('claude', t, 'fail', `Installed; provider ${what} is selected but no key is saved, so Claude cannot start. Add it in Settings › Capabilities › Claude provider.`)
-      if (!lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in Settings › Capabilities › Claude provider.`)
+      if (!v.ready) return check('claude', t, 'fail', `Installed; provider ${what} is selected but no key is saved, so Claude cannot start. Add it in the Claude provider settings.`, undefined, GO_PROVIDER)
+      if (!lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in the Claude provider settings.`, undefined, GO_PROVIDER)
       return check('claude', t, lastTest.ok ? 'ok' : 'fail', `Installed; provider ${what}: ${lastTest.message}`)
     }
     return r.ok ? check('claude', t, 'ok', `Installed and logged in.${via}`)
@@ -76,7 +81,7 @@ const PROBES: Record<DoctorId, Probe> = {
   async telegram(d) {
     const t = 'Telegram bot'
     const p = await d.telegram()
-    if (p.state === 'unset') return check('telegram', t, 'off', 'No bot token. Connect a bot in Settings › Capabilities › Telegram.')
+    if (p.state === 'unset') return check('telegram', t, 'off', 'No bot token. Connect a bot in the Telegram settings.', undefined, GO_TELEGRAM)
     if (p.state === 'ok') return check('telegram', t, 'ok', `Token accepted by Telegram${p.name ? ` (${p.name})` : ''}.`)
     return p.state === 'rejected'
       ? check('telegram', t, 'fail', 'Telegram rejected the bot token. Create a new token with BotFather and connect it again.')

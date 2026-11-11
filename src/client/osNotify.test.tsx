@@ -5,7 +5,7 @@
  * mocked `Notification`. Workspaces come from a mocked `fetchWorkspaces`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('./api', () => ({
   fetchWorkspaces: vi.fn(async () => [
@@ -210,21 +210,36 @@ describe('tab badge', () => {
   })
 })
 
-describe('Settings rows', () => {
-  it('re-enabling with undecided permission asks the browser; mute row per workspace persists', async () => {
+describe('Settings › Notifications', () => {
+  it('undecided permission: reads off until the browser grants it; turning on asks, and only a grant saves on', async () => {
     vi.useRealTimers()
     FakeNotification.permission = 'default'
+    FakeNotification.requestPermission.mockImplementationOnce(async () => { FakeNotification.permission = 'denied'; return 'denied' })
     const { readNotifyPrefs } = await load()
-    const { NotificationRows } = await import('./osNotify.settings')
-    render(<NotificationRows />)
+    const { NotificationsSection, NOTIFY_TEXT } = await import('./osNotify.settings')
+    render(<NotificationsSection />)
+    const toggle = screen.getByLabelText('Desktop notifications') as HTMLInputElement
+    expect(toggle.checked).toBe(false) // stored "on" but never granted: shown as it really is
+    fireEvent.click(toggle)
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(readNotifyPrefs().enabled).toBe(false))
+    // Refused: locked, with how to allow it.
+    expect(await screen.findByText(NOTIFY_TEXT.blocked)).toBeTruthy()
+    expect((screen.getByLabelText('Desktop notifications') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('granted: the switch is the saved choice; sound is its own switch', async () => {
+    vi.useRealTimers()
+    FakeNotification.permission = 'granted'
+    const { readNotifyPrefs } = await load()
+    const { NotificationsSection } = await import('./osNotify.settings')
+    render(<NotificationsSection />)
     const toggle = screen.getByLabelText('Desktop notifications') as HTMLInputElement
     expect(toggle.checked).toBe(true)
     fireEvent.click(toggle)
     expect(readNotifyPrefs().enabled).toBe(false)
-    expect(FakeNotification.requestPermission).not.toHaveBeenCalled()
-    fireEvent.click(toggle)
-    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1)
-    fireEvent.click(await screen.findByLabelText('Mute notifications: Beta'))
-    expect(readNotifyPrefs().muted).toEqual(['wsB'])
+    fireEvent.click(screen.getByLabelText('Notification sound')) // beforeEach stores sound off
+    expect(readNotifyPrefs().sound).toBe(true)
+    expect(screen.queryByText(/Mute notifications:/)).toBeNull() // per-workspace mute is in the workspace menu
   })
 })

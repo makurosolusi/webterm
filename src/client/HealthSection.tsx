@@ -1,10 +1,14 @@
 // Settings › Health: is everything working on this machine. The demo-mode banner (a simulated runtime), the
-// agent protection summary in plain lines, and the Doctor checks with their one-click fixes.
+// agent protection summary in plain lines, the Doctor checks with their one-click fixes, where the data
+// lives, and the switch that shows Settings › Developer (developer mode, ./developerMode).
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { AGENT_PROTECTION_PATH, controlRequest, getJson, isConfig, isProtection, type AgentProtection } from './ControlPanel'
 import { ControlPanelDoctor } from './ControlPanelDoctor'
 import { CONTROL_TEXT, HEALTH_TEXT } from './controlPanelLabels'
+import { useDeveloperMode, writeDeveloperMode } from './developerMode'
+import { ToggleField } from './SettingsFields'
+import { useCapabilities } from './useCapabilities'
 
 /** One line when every agent is protected, else one line per agent that is only partly protected. */
 function protectionLines(list: readonly AgentProtection[]): string[] {
@@ -17,6 +21,8 @@ export function HealthSection(): React.JSX.Element {
   const [mockKeys, setMockKeys] = useState<string[]>([])
   // undefined = loading, null = endpoint absent or unreadable (rendered as "not available yet").
   const [protection, setProtection] = useState<AgentProtection[] | null | undefined>(undefined)
+  const dataDir = useCapabilities().data?.advanced.dataDir
+  const developer = useDeveloperMode()
 
   useEffect(() => {
     let live = true
@@ -45,6 +51,14 @@ export function HealthSection(): React.JSX.Element {
         ) : null}
       </section>
       <ControlPanelDoctor />
+      {dataDir ? (
+        <section aria-label={HEALTH_TEXT.dataDir} className="flex flex-col gap-1">
+          <h3 className="font-semibold">{HEALTH_TEXT.dataDir}</h3>
+          <code className="text-xs break-all" data-testid="data-dir">{dataDir}</code>
+        </section>
+      ) : null}
+      <ToggleField id="st-developerMode" label={HEALTH_TEXT.developerMode} value={developer}
+        hint={HEALTH_TEXT.developerModeHint} onChange={writeDeveloperMode} />
     </div>
   )
 }

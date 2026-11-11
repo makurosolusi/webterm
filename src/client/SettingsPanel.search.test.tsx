@@ -32,7 +32,7 @@ describe('SettingsPanel search', () => {
     renderPanel()
     fireEvent.change(search(), { target: { value: 'font' } })
     const count = document.querySelector('.st-search-count') as HTMLElement
-    expect(rows()).toContain('Terminal › Font size')
+    expect(rows()).toContain('Appearance › Font size')
     expect(count.textContent).toBe(`${rows().length} settings found`)
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(search().value).toBe('')
@@ -67,7 +67,7 @@ describe('SettingsPanel search', () => {
     renderPanel()
     fireEvent.change(search(), { target: { value: 'font bold' } })
     expect(rows()).toContain('Terminal › Bold text weight')
-    expect(rows()).not.toContain('Terminal › Font size')
+    expect(rows()).not.toContain('Appearance › Font size')
 
     fireEvent.change(search(), { target: { value: 'tidak-ada-setting-ini' } })
     expect(rows()).toEqual([])
@@ -79,10 +79,10 @@ describe('SettingsPanel search', () => {
     const onSectionChange = vi.fn()
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} onSectionChange={onSectionChange} initialSection="canvas" />)
     fireEvent.change(search(), { target: { value: 'font size' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Terminal › Font size' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance › Font size' }))
     expect(search().value).toBe('')
-    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
-    expect(onSectionChange).toHaveBeenLastCalledWith('terminal', 'fontSize')
+    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
+    expect(onSectionChange).toHaveBeenLastCalledWith('appearance', 'fontSize')
     await waitFor(() => expect(document.querySelector('[data-field="fontSize"]')?.classList.contains('st-reveal')).toBe(true))
   })
 
@@ -93,18 +93,18 @@ describe('SettingsPanel search', () => {
 
     expect(search().value).toBe('')
     expect(onClose).not.toHaveBeenCalled()
-    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
 
     fireEvent.change(search(), { target: { value: 'grid' } })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Shell & buffer' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
 
     expect(search().value).toBe('')
-    expect(screen.getByRole('heading', { level: 2, name: 'Shell & buffer' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
   })
 
   it('Escape with an open combobox list closes only the list; the next Escape closes Settings', () => {
     const { onClose } = renderPanel()
-    const font = screen.getByRole('combobox', { name: 'Font family' })
+    const font = screen.getByRole('combobox', { name: 'Font' })
     fireEvent.keyDown(font, { key: 'ArrowDown' })
     expect(font.getAttribute('aria-expanded')).toBe('true')
 
@@ -127,8 +127,9 @@ describe('SettingsPanel narrow layout', () => {
     renderPanel()
     expect(screen.queryByRole('navigation', { name: 'Section settings' })).toBeNull()
     const picker = screen.getByRole('combobox', { name: 'Settings section' }) as HTMLSelectElement
-    expect(picker.value).toBe('terminal')
+    expect(picker.value).toBe('appearance')
     expect([...picker.querySelectorAll('optgroup')].map((g) => g.label)).toEqual([...SETTINGS_GROUPS])
+    expect([...picker.options].map((o) => o.value)).not.toContain('developer') // developer mode off
     fireEvent.change(picker, { target: { value: 'canvas' } })
     expect(screen.getByRole('heading', { level: 2, name: 'Canvas' })).toBeTruthy()
   })

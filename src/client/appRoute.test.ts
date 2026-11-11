@@ -55,7 +55,7 @@ describe('buildAppHref', () => {
     expect(href).toBe('/w/a%20b?settings=central&field=central.profile&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
     const [path, search] = href.split('?')
     expect(parseAppRoute(path, `?${search}`)).toEqual(route)
-    expect(buildAppHref(parseAppRoute('/', '?help=1&settings=shell'))).toBe('/?settings=shell&help=1')
+    expect(buildAppHref(parseAppRoute('/', '?help=1&settings=canvas'))).toBe('/?settings=canvas&help=1')
     expect(buildAppHref(EMPTY_APP_ROUTE)).toBe('/')
   })
 })
@@ -93,11 +93,16 @@ describe('whitelists match the surfaces they open', () => {
 })
 
 describe('toSettingsRouteSection', () => {
-  it('maps legacy ids, keeps known ones, sends the rest to Terminal', () => {
-    expect(toSettingsRouteSection('background:workspace')).toBe('background')
+  it('maps legacy ids, keeps known ones, sends the rest to Appearance (the first page)', () => {
+    expect(toSettingsRouteSection('background:workspace')).toBe('appearance')
+    expect(toSettingsRouteSection('background')).toBe('appearance')
+    expect(toSettingsRouteSection('interaction')).toBe('terminal')
+    expect(toSettingsRouteSection('shell')).toBe('terminal')
+    expect(toSettingsRouteSection('terminal')).toBe('terminal')
+    expect(toSettingsRouteSection('canvas-background')).toBe('appearance')
     expect(toSettingsRouteSection('env')).toBe('capabilities')
     expect(toSettingsRouteSection('control')).toBe('health')
     expect(toSettingsRouteSection('memory')).toBe('memory')
-    expect(toSettingsRouteSection('preview')).toBe('terminal')
+    expect(toSettingsRouteSection('preview')).toBe('appearance')
   })
 })

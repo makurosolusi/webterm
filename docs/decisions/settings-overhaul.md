@@ -47,6 +47,14 @@ override per workspace pindah ke menu workspace), context window (dari model), b
 model), token budget harian (cukup batas dolar), skill on/off (selalu menyala), baris info Browser/Telegram/Report/Ladder,
 duplikat scrollback, dua Sign out, flag env turunan yang tidak dibaca runtime (verifikasi dulu).
 
+## Catatan pelaksanaan W2b
+
+- Theme "System" = nilai `auto`, kini mengikuti `prefers-color-scheme` OS (deviasi sadar dari nodeterm, yang
+  `auto`-nya mengikuti tema terminal; di nodeterm tidak ada mode developer — referensi lokal `nodeterm-web`).
+- Developer mode: `localStorage` per browser (`client/developerMode.ts`), dinyalakan dari Health › "Show developer
+  tools" atau `?dev=1` (`?dev=0` mematikan). Tautan langsung ke `?settings=developer` tetap membuka halamannya.
+- Doctor memberi `go: { field }` terstruktur; klien mencari halamannya di indeks pencarian.
+
 ## Keputusan terbuka
 
 - Default izin agent (3 level): Never ask (= sekarang) / Ask for risky things (rekomendasi) / Ask every time — menunggu user.

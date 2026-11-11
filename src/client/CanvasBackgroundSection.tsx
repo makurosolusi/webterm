@@ -1,5 +1,6 @@
-// Settings section "Canvas background": edits the global wallpaper or, for the active workspace,
-// either "Same as global" or its own override. Changes apply live (canvas + preview box).
+// Canvas background in Settings › Appearance: edits the wallpaper of all workspaces; with a workspace
+// open, ONE choice "This workspace: Same as all workspaces / Custom" decides whether the controls edit
+// the shared wallpaper or this workspace's own. Changes apply live (canvas + preview box).
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
@@ -9,34 +10,27 @@ import { removeCanvasImage, uploadCanvasImage } from './canvasBackground.api'
 import { needsContrastWarning } from './canvasBackground.style'
 import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import { ColorControls, GradientControls, ImageControls } from './CanvasBackgroundControls'
-import { Field, useSettingsSearch } from './SettingsFields'
+import { Field } from './SettingsFields'
 import { SettingsSelect } from './SettingsControls'
 import './canvasBackground.css'
 
-export { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, openWorkspaceCanvasBackground } from './canvasBackground.open'
-
 const MODE_LABELS: Record<CanvasBackgroundMode, string> = { default: 'Default', color: 'Solid color', gradient: 'Gradient', image: 'Image' }
-type Scope = 'global' | 'workspace'
 
 interface Props {
   settings: Settings
   onChange: (patch: SettingsPatch) => void
-  /** Active workspace; without one only the global background can be edited. */
+  /** Active workspace; without one only the shared background can be edited. */
   projectId?: string
-  initialScope?: Scope
 }
 
 /** The Canvas background editor. */
-export function CanvasBackgroundSection({ settings: s, onChange, projectId, initialScope = 'global' }: Props): React.JSX.Element {
-  const [scope, setScope] = useState<Scope>(projectId ? initialScope : 'global')
+export function CanvasBackgroundSection({ settings: s, onChange, projectId }: Props): React.JSX.Element {
   const [error, setError] = useState('')
-  const ws = scope === 'workspace' && projectId ? projectId : null
-  const own = ws ? s.canvasBackgroundByWorkspace[ws] : undefined
+  const own = projectId ? s.canvasBackgroundByWorkspace[projectId] : undefined
+  // Custom = this workspace's own entry is edited; otherwise the shared one.
+  const ws = own !== undefined && projectId ? projectId : null
   const bg = own ?? s.canvasBackground
-  const editable = !ws || own !== undefined
   const wallpaper = useWallpaper(bg)
-  // While searching, only matching fields show; the preview and actions would be noise.
-  const searching = useSettingsSearch() !== ''
 
   // Workspace scope sends ONLY its own entry (`settings.patch.ts`; null = back to global), so a tab
   // with a stale copy of the map never overwrites other workspaces' overrides.
@@ -56,60 +50,47 @@ export function CanvasBackgroundSection({ settings: s, onChange, projectId, init
     await dropImage()
     write(DEFAULT_CANVAS_BACKGROUND)
   })
-  const setInherit = (inherit: boolean): void => {
-    if (!ws) return
-    // Starts as a copy of global; a shared image id is safe (the server deletes only unreferenced files).
-    if (!inherit) { write({ ...s.canvasBackground }); return }
+  const setCustom = (custom: boolean): void => {
+    if (!projectId || custom === (own !== undefined)) return
+    // Starts as a copy of the shared one; a shared image id is safe (the server deletes only unreferenced files).
+    if (custom) { onChange({ canvasBackgroundByWorkspace: { [projectId]: { ...s.canvasBackground } } }); return }
     attempt(async () => {
-      await dropImage()
-      write(null)
+      if (own?.imageId) await removeCanvasImage(projectId)
+      onChange({ canvasBackgroundByWorkspace: { [projectId]: null } })
     })
   }
 
   return (
-    <>
+    <div data-field="canvasBackground" className="cbg-section">
+      <h3 className="st-group-title">Canvas background</h3>
       {projectId && (
-        <Field label="Edit background for" htmlFor="cbg-scope" hint="A workspace can follow the global background or have its own.">
-          <SettingsSelect<Scope> id="cbg-scope" value={scope} onChange={setScope}
-            options={[{ value: 'global', label: 'All workspaces' }, { value: 'workspace', label: 'This workspace' }]} />
+        <Field label="This workspace" htmlFor="cbg-scope" hint="Same as all workspaces, or a background of its own. The controls below edit the one in use.">
+          <SettingsSelect id="cbg-scope" value={own ? 'custom' : 'same'} onChange={(v) => setCustom(v === 'custom')}
+            options={[{ value: 'same', label: 'Same as all workspaces' }, { value: 'custom', label: 'Custom' }]} />
         </Field>
       )}
-      {ws && (
-        <Field label="This workspace uses" htmlFor="cbg-inherit">
-          <SettingsSelect id="cbg-inherit" value={own ? 'own' : 'inherit'} onChange={(v) => setInherit(v === 'inherit')}
-            options={[{ value: 'inherit', label: 'Same as global' }, { value: 'own', label: 'Its own background' }]} />
-        </Field>
+      <div className="cbg-preview" data-testid="canvas-background-preview">
+        <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
+        <div className="cbg-preview__dots" style={{ backgroundImage: `radial-gradient(${wallpaper.dotColor} 1.2px, transparent 1.2px)` }} />
+        <div className="cbg-preview__node">Preview</div>
+      </div>
+      <Field label="Background style" htmlFor="cbg-mode" hint="Default keeps the theme's canvas color. Changes apply immediately.">
+        <SettingsSelect id="cbg-mode" value={bg.mode} onChange={(mode) => set({ mode })}
+          options={CANVAS_BG_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }))} />
+      </Field>
+      {bg.mode === 'color' && <ColorControls bg={bg} onChange={set} />}
+      {bg.mode === 'gradient' && <GradientControls bg={bg} onChange={set} />}
+      {bg.mode === 'image' && (
+        <ImageControls bg={bg} onChange={set}
+          onUpload={async (file) => fromServer(await uploadCanvasImage(file, ws))}
+          onRemove={async () => fromServer(await removeCanvasImage(ws))}
+          missing={wallpaper.imageStatus === 'missing'}
+          lowContrast={needsContrastWarning(bg, wallpaper.imageLuminance)} />
       )}
-      {!searching && (
-        <div className="cbg-preview" data-testid="canvas-background-preview">
-          <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
-          <div className="cbg-preview__dots" style={{ backgroundImage: `radial-gradient(${wallpaper.dotColor} 1.2px, transparent 1.2px)` }} />
-          <div className="cbg-preview__node">Preview</div>
-        </div>
-      )}
-      {editable && (
-        <>
-          <Field label="Background style" htmlFor="cbg-mode" hint="Default keeps the theme's canvas color. Changes apply immediately.">
-            <SettingsSelect id="cbg-mode" value={bg.mode} onChange={(mode) => set({ mode })}
-              options={CANVAS_BG_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }))} />
-          </Field>
-          {bg.mode === 'color' && <ColorControls bg={bg} onChange={set} />}
-          {bg.mode === 'gradient' && <GradientControls bg={bg} onChange={set} />}
-          {bg.mode === 'image' && (
-            <ImageControls bg={bg} onChange={set}
-              onUpload={async (file) => fromServer(await uploadCanvasImage(file, ws))}
-              onRemove={async () => fromServer(await removeCanvasImage(ws))}
-              missing={wallpaper.imageStatus === 'missing'}
-              lowContrast={needsContrastWarning(bg, wallpaper.imageLuminance)} />
-          )}
-          {!searching && (
-            <div className="cbg-actions">
-              <Button type="button" variant="secondary" size="sm" onClick={reset}>Reset to default</Button>
-            </div>
-          )}
-        </>
-      )}
+      <div className="cbg-actions">
+        <Button type="button" variant="secondary" size="sm" onClick={reset}>Reset to default</Button>
+      </div>
       {error && <p className="cbg-notice cbg-notice--error" role="alert">{error}</p>}
-    </>
+    </div>
   )
 }

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Kartu kemampuan: satu switch, status, langkah, "Also turns on/off", sub-opsi hanya saat aktif.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilityView } from '../shared/featureCapabilities'
 import { CapabilityCard } from './CapabilityCard'
@@ -59,46 +59,57 @@ describe('CapabilityCard', () => {
     expect(onSub).toHaveBeenCalledWith('K', false)
   })
 
-  it('sub berbahaya: menyalakan minta konfirmasi (batal = tidak berubah), mematikan tidak pernah ditanya', () => {
+  // The app AlertDialog asks; Cancel leaves it off, "Turn on" goes through. window.confirm is never used.
+  const dialog = () => screen.getByRole('alertdialog')
+  const answer = (name: 'Cancel' | 'Turn on') => fireEvent.click(within(dialog()).getByRole('button', { name }))
+
+  it('dangerous sub: turning on asks in the app dialog (Cancel = unchanged), turning off never asks', () => {
     const label = 'Let agents drive the browser'
     const sub = (on: boolean) => [{ key: 'browserAgent', label, on, dangerous: true }]
     const onSub = vi.fn()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const confirm = vi.spyOn(window, 'confirm')
     const { rerender } = render(<CapabilityCard view={view({ id: 'browser', status: 'on', subs: sub(false) })} onToggle={() => undefined} onSub={onSub} />)
     fireEvent.click(screen.getByRole('checkbox', { name: label }))
-    expect(confirm).toHaveBeenCalledTimes(1)
-    expect(confirm.mock.calls[0][0]).toContain(label)
+    expect(dialog().textContent).toContain(label)
+    answer('Cancel')
     expect(onSub).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('checkbox', { name: label }))
+    answer('Turn on')
     expect(onSub).toHaveBeenCalledWith('browserAgent', true)
     rerender(<CapabilityCard view={view({ id: 'browser', status: 'on', subs: sub(true) })} onToggle={() => undefined} onSub={onSub} />)
     fireEvent.click(screen.getByRole('checkbox', { name: label }))
     expect(onSub).toHaveBeenLastCalledWith('browserAgent', false)
-    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(confirm).not.toHaveBeenCalled()
     confirm.mockRestore()
   })
 
-  it('Otonomi: menyalakan (sakelar atau langkah fixChain) minta konfirmasi; mematikan tidak', () => {
+  it('Autonomy: turning on (switch or fixChain step) asks in the dialog; turning off does not', () => {
     const onToggle = vi.fn()
     const onStep = vi.fn()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true).mockReturnValueOnce(false)
     const otonomi = (o: Partial<CapabilityView>) => view({ id: 'autonomy', title: 'Central Agent autonomy', ...o })
     const { rerender } = render(<CapabilityCard view={otonomi({})} onToggle={onToggle} />)
     fireEvent.click(screen.getByRole('switch'))
+    expect(dialog().textContent).toContain('Central Agent autonomy')
+    answer('Cancel')
     expect(onToggle).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('switch'))
+    answer('Turn on')
     expect(onToggle).toHaveBeenCalledWith(true)
-    expect(confirm.mock.calls[0][0]).toContain('Central Agent autonomy')
     rerender(<CapabilityCard view={otonomi({ status: 'needs-step', step: { kind: 'fixChain', label: 'Turn on what’s needed' } })} onToggle={onToggle} onStep={onStep} />)
     fireEvent.click(screen.getByRole('button', { name: 'Turn on what’s needed' }))
+    answer('Cancel')
     expect(onStep).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('switch')) // needs-step tampil nyala: klik = matikan, tanpa tanya
+    fireEvent.click(screen.getByRole('switch')) // needs-step shows on: a click turns it off, no question
     expect(onToggle).toHaveBeenLastCalledWith(false)
-    rerender(<CapabilityCard view={otonomi({ status: 'on' })} onToggle={onToggle} />)
-    fireEvent.click(screen.getByRole('switch'))
-    expect(onToggle).toHaveBeenLastCalledWith(false)
-    expect(confirm).toHaveBeenCalledTimes(3)
-    confirm.mockRestore()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+  })
+
+  it('a sub-option slot (Files › Edit files) shows only while the card is on', () => {
+    const { rerender } = render(<CapabilityCard view={view({ id: 'files' })} onToggle={() => undefined}><span>Edit and upload files</span></CapabilityCard>)
+    expect(screen.queryByText('Edit and upload files')).toBeNull()
+    rerender(<CapabilityCard view={view({ id: 'files', status: 'on' })} onToggle={() => undefined}><span>Edit and upload files</span></CapabilityCard>)
+    expect(screen.getByText('Edit and upload files')).toBeTruthy()
   })
 
   it('kartu biasa menyala tanpa konfirmasi', () => {

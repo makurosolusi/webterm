@@ -64,7 +64,7 @@ export function GradientControls({ bg, onChange }: { bg: CanvasBackground; onCha
         <div className="cbg-swatches">
           {GRADIENT_PRESETS.map((p) => (
             <Swatch key={p.label} label={p.label} background={gradientCss(p.gradient)}
-              selected={bg.gradient.from === p.gradient.from && bg.gradient.to === p.gradient.to} onClick={() => set(p.gradient)} />
+              selected={bg.gradient.from === p.gradient.from && bg.gradient.to === p.gradient.to && bg.gradient.angle === p.gradient.angle} onClick={() => set(p.gradient)} />
           ))}
         </div>
       </Field>

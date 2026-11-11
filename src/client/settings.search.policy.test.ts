@@ -34,8 +34,8 @@ function reachable(): Map<string, string> {
 }
 
 const ID = /(?<![\w-])(?:data-field|field|setting)="([^"$]+)"/g
-/** Capability cards Settings renders on their own (Workers and Autonomy fold into the Central row). */
-const CARD_IDS = CAPABILITY_IDS.filter((id) => id !== 'workers' && id !== 'autonomy')
+/** Capability cards Settings › Features renders (Central, Workers and Autonomy are switched in Central Agent). */
+const CARD_IDS = CAPABILITY_IDS.filter((id) => id !== 'central' && id !== 'workers' && id !== 'autonomy')
 
 const files = reachable()
 const literal = [...files].flatMap(([file, text]) => [...text.matchAll(ID)].map((m) => ({ file, id: m[1], at: m.index })))
