@@ -242,6 +242,7 @@ Operator notes:
 
 ### Fixed
 - The connection strip no longer shows "Connecting…" forever on a board with no terminal (e.g. the Welcome screen): the app now connects to the server as soon as you are signed in.
+- `bun run dev:fresh` no longer leaves things behind when it does not exit through Ctrl+C: closing the terminal stops it cleanly, a killed or crashed run's server stops by itself, and the next start removes leftover temp folders, tmux servers and that instance's Claude keychain items. `bun run dev:fresh -- --clean` does the cleanup on demand.
 - The node toolbar's Maximize button now shows and announces when it is unavailable.
 - The desktop tab icon now loads reliably from a static `/favicon.svg`, and the page has a description, theme colours and an apple-touch icon.
 - The browser tab no longer shows a loading spinner forever after webterm opens: live updates now connect once the page has finished loading.

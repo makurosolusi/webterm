@@ -1,22 +1,26 @@
 // `bun run dev:fresh`: a second webterm that behaves like the first run on a machine that never had
 // webterm (like VS Code / Chrome `--user-data-dir`), side by side with the real one. Everything it
 // writes lives in one temp root; ports, the tmux socket and the Vite cache are its own, so it never
-// sees or adopts the real instance's sessions. Ctrl+C stops it and deletes the root.
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+// sees or adopts the real instance's sessions. Ctrl+C stops it and deletes the root; a run that died
+// any other way is cleaned by the next start (devFresh.sweep.ts) or by its own server's watchdog.
+import { spawn, type ChildProcess } from 'node:child_process'
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, delimiter, dirname, join, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
 import { setupLine } from '../src/server/bootWiring'
+import { ROOT_ARG, ROOT_PREFIX, deleteClaudeKeychain, killTmuxServer, removeFreshRoot, sweepStale, writeOwner, type SweepResult } from './devFresh.sweep'
+
+export { ROOT_PREFIX, assertFreshRoot, removeFreshRoot } from './devFresh.sweep'
 
 /** First port tried when `--port` is absent; well clear of the real instance's 8700/8701. */
 export const FRESH_DEFAULT_PORT = 8710
+/** Env var naming this script's pid for the server's watchdog (literal repeated in devFresh.watchdog.ts). */
+export const PARENT_ENV = 'WEBTERM_FRESH_PARENT_PID'
 /** Ports of the real dev instance (main + proxy): never handed to the fresh one. */
 export const RESERVED_PORTS: readonly number[] = [8700, 8701]
-/** Temp root basename prefix; cleanup refuses any directory without it. */
-export const ROOT_PREFIX = 'webterm-fresh-'
 const LOOPBACK = '127.0.0.1'
 const PORT_PROBE_SPAN = 100
 const STOP_GRACE_MS = 5000
@@ -30,22 +34,23 @@ const PROVIDER_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_']
 /** setupCode.ts `setupCodePath` (not imported: its module chain opens webterm.db at import time). */
 export const freshSetupCodePath = (p: FreshPaths): string => join(p.data, 'secrets', 'SETUP_CODE')
 
-export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; withProviderEnv: boolean }
+export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; withProviderEnv: boolean; clean: boolean }
 export interface FreshPaths { root: string; data: string; home: string; claude: string; vite: string }
 
 /** Parse CLI flags; unknown flags and bad ports throw instead of being ignored. */
 export function parseFreshArgs(argv: readonly string[]): FreshOptions {
-  const o: FreshOptions = { keep: false, noClaude: false, withProviderEnv: false }
+  const o: FreshOptions = { keep: false, noClaude: false, withProviderEnv: false, clean: false }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--keep') o.keep = true
     else if (a === '--no-claude') o.noClaude = true
     else if (a === '--with-provider-env') o.withProviderEnv = true
+    else if (a === '--clean') o.clean = true
     else if (a === '--port') {
       const n = Number(argv[++i])
       if (!Number.isInteger(n) || n < 1 || n > 65535) throw new Error(`--port needs a port 1-65535, got "${argv[i] ?? ''}"`)
       o.port = n
-    } else throw new Error(`unknown flag "${a}" (use --port <n>, --keep, --no-claude, --with-provider-env)`)
+    } else throw new Error(`unknown flag "${a}" (use --port <n>, --keep, --no-claude, --with-provider-env, --clean)`)
   }
   return o
 }
@@ -75,22 +80,6 @@ export function buildFreshEnv(
   })
   if (i.noClaude) env.PATH = pathWithout(env.PATH ?? '', 'claude', i.has)
   return env
-}
-
-/** Throw unless `root` is a `webterm-fresh-*` dir directly inside `tmpBase` (both resolved through symlinks). */
-export function assertFreshRoot(root: string, tmpBase: string = tmpdir()): void {
-  const base = realpathSync(tmpBase)
-  const dir = resolve(root)
-  const real = join(realpathSync(dirname(dir)), basename(dir))
-  if (dirname(real) !== base || !basename(real).startsWith(ROOT_PREFIX)) {
-    throw new Error(`refusing to delete ${root}: not a ${ROOT_PREFIX}* directory directly inside ${base}`)
-  }
-}
-
-/** Delete a temp root created by `makeFreshRoot`; anything else throws. */
-export function removeFreshRoot(root: string, tmpBase: string = tmpdir()): void {
-  assertFreshRoot(root, tmpBase)
-  rmSync(root, { recursive: true, force: true })
 }
 
 /** Create `<tmp>/webterm-fresh-<timestamp>-XXXXXX` with data/home/claude subdirs. */
@@ -125,8 +114,16 @@ export async function startFresh(o: FreshOptions, stdio: 'inherit' | 'pipe' = 'i
   const paths = makeFreshRoot()
   const env = buildFreshEnv(process.env, { paths, port, proxyPort, noClaude: o.noClaude, withProviderEnv: o.withProviderEnv })
   // Bun auto-loads a cwd `.env` (the real install's provider keys); a fresh machine has none.
-  const args = [...(o.withProviderEnv ? [] : ['--no-env-file']), 'src/server/index.ts']
-  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, env, stdio, detached: true }) // own group: stop() kills shells too
+  // The watchdog stops the server when this script dies; ROOT_ARG lets the sweep prove the process is ours.
+  const args = [...(o.withProviderEnv ? [] : ['--no-env-file']), '--preload', join(import.meta.dirname, 'devFresh.watchdog.ts'),
+    'src/server/index.ts', `${ROOT_ARG}${paths.root}`]
+  const child = spawn(process.execPath, args, { cwd: REPO_ROOT, env: { ...env, [PARENT_ENV]: String(process.pid) }, stdio, detached: true }) // own group: stop() kills shells too
+  if (child.pid) {
+    writeOwner(paths.root, {
+      pid: process.pid, childPid: child.pid, pgid: child.pid, tmuxSocket: supervisorSocket(paths.data),
+      claudeConfigDir: paths.claude, createdAt: new Date().toISOString(), keep: o.keep,
+    })
+  }
   const exited = new Promise<void>((r) => child.once('exit', () => r()))
   let stopped: Promise<void> | undefined
   const stop = () => (stopped ??= (async () => {
@@ -136,7 +133,8 @@ export async function startFresh(o: FreshOptions, stdio: 'inherit' | 'pipe' = 'i
       await exited
       clearTimeout(t)
     }
-    killTmuxServer(env, paths.data)
+    killTmuxServer(paths.data, env.PATH)
+    deleteClaudeKeychain(paths.claude)
     if (!o.keep) removeFreshRoot(paths.root)
   })())
   return { paths, port, url: `http://${LOOPBACK}:${port}`, env, child, stop }
@@ -146,14 +144,6 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
   try { process.kill(-pid, sig) } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ESRCH') throw new Error(`cannot send ${sig} to process group ${pid}`, { cause: e })
   }
-}
-
-/** The fresh tmux server (socket derived from ITS data dir, never `webterm`) outlives the child by design; end it. */
-function killTmuxServer(env: Record<string, string>, dataDir: string): void {
-  const tmux = findOnPath('tmux', env.PATH) ?? findOnPath('tmux')
-  if (!tmux) return
-  const r = spawnSync(tmux, ['-L', supervisorSocket(dataDir), 'kill-server'], { env, stdio: 'ignore' })
-  if (r.error) process.stderr.write(`dev:fresh: tmux kill-server failed (${r.error.message})\n`)
 }
 
 /** Resolve once `url` answers any HTTP status (the server is listening). */
@@ -166,13 +156,30 @@ export async function waitForHttp(url: string, timeoutMs: number, child?: ChildP
   throw new Error(`fresh server did not answer on ${url} within ${timeoutMs} ms`)
 }
 
+/** Lines `--clean` prints: what was removed, and live instances it left alone. */
+export function cleanReport(r: SweepResult): string[] {
+  return [
+    `cleaned ${r.cleaned.length} stale fresh instance(s)`,
+    ...r.kept.map((x) => `  stopped, files kept (--keep; delete by hand): ${x}`),
+    ...r.failed.map((x) => `  could not clean: ${x}`),
+    ...r.live.map((l) => `  live, left running: ${l.root} (dev:fresh pid ${l.pid})`),
+  ]
+}
+
 async function main(): Promise<void> {
   const o = parseFreshArgs(process.argv.slice(2))
+  if (o.clean) {
+    process.stdout.write(cleanReport(await sweepStale()).join('\n') + '\n')
+    return
+  }
+  const swept = await sweepStale()
+  if (swept.cleaned.length) process.stdout.write(`dev:fresh: cleaned ${swept.cleaned.length} stale fresh instance(s)\n`)
   const fresh = await startFresh(o)
   const shutdown = (code: number) => {
     fresh.stop().then(() => process.exit(code), (e: unknown) => { process.stderr.write(`dev:fresh: cleanup failed: ${String(e)}\n`); process.exit(1) })
   }
-  process.on('SIGINT', () => shutdown(130)).on('SIGTERM', () => shutdown(143))
+  // SIGHUP = the terminal window was closed.
+  process.on('SIGINT', () => shutdown(130)).on('SIGTERM', () => shutdown(143)).on('SIGHUP', () => shutdown(129))
   fresh.child.once('exit', (code) => shutdown(code ?? 1))
   try { await waitForHttp(`${fresh.url}/api/health`, 60_000, fresh.child) } catch (e) { await fresh.stop(); throw e }
   const claudeNote = o.noClaude ? ` (claude still on PATH: ${findOnPath('claude', fresh.env.PATH) ? 'YES' : 'no'})` : ''
@@ -182,7 +189,8 @@ async function main(): Promise<void> {
     `  Temp root:  ${fresh.paths.root}`,
     `  ${setupLine(freshSetupCodePath(fresh.paths))}`,
     `  Flags: ${o.noClaude ? 'no-claude' + claudeNote : 'claude on PATH'}, ${o.withProviderEnv ? 'provider env + .env kept' : 'no provider env, no .env'}`,
-    o.keep ? '  Ctrl+C to stop (temp root is KEPT).' : '  Ctrl+C to stop and delete.', '',
+    o.keep ? '  Ctrl+C to stop (temp root is KEPT).' : '  Ctrl+C to stop and delete.',
+    '  Leftovers of crashed runs are removed at the next start; `bun run dev:fresh -- --clean` removes them now.', '',
   ].join('\n') + '\n')
 }
 
