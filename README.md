@@ -159,6 +159,7 @@ Split by runtime:
 
 - `TMPDIR=/tmp/st npm run typecheck` — `tsc --noEmit` typecheck gate.
 - `TMPDIR=/tmp/st npm run test` — vitest. Node environment by default; the suites that mount the real canvas select jsdom per file through the `@vitest-environment` pragma.
+- `TMPDIR=/tmp/st npm run test:related -- <files>` / `npm run test:changed` — the fast loop: only the vitest files that import the given files, or the files touched since the last commit.
 - `TMPDIR=/tmp/st npm run test:bun` — every `src/server/**/*.bun.test.ts` suite, subfolders included (PTY round-trip / detach / scrollback replay, SQLite workspace store, ledger, workspaces API, fs operations, git info), all of which need a real PTY or `bun:sqlite` and are excluded from vitest. It runs with `--no-env-file` and a temporary `HOME`; the `*.real.bun.test.ts` real-browser suites run in a second pass. Found with `find`, not a list of names: an enumerated list goes stale the moment a file is added, and goes stale without ever turning red.
 
 The `TMPDIR` prefix is not optional on macOS: the tests bind unix sockets under `$TMPDIR`, and the default path blows past the 104-character `sun_path` limit, failing with `EINVAL`.
