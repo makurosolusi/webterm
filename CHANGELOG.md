@@ -246,6 +246,10 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Setup's Claude step shows one result: Test connection in the provider card re-runs the check at the top instead of printing a second, differently worded failure.
+- A launch command whose wrapper is not signed in (for example envman's "not logged in") now says so, shows the sign-in command the wrapper suggested with a Copy button, and no longer tells you to run the command in a terminal "to see the full error" when that error is already shown.
+- Saving the Claude provider no longer reads as plain success when its test failed: it says "Saved, but the check failed — new sessions will fail until this is fixed."
+- `bun run dev:fresh` now behaves like your own first `bun run dev` on this machine: only webterm's data, ports, tmux socket and Vite cache are fresh, while your HOME, tools, Claude login and `.env` are the real ones (it no longer showed a false "envman not signed in"), and it leaves the skills in `~/.claude/skills` alone. `--empty-home` simulates a brand-new OS user; `--with-provider-env` is gone because its behaviour is now the default.
 - The connection strip no longer shows "Connecting…" forever on a board with no terminal (e.g. the Welcome screen): the app now connects to the server as soon as you are signed in.
 - `bun run dev:fresh` no longer leaves things behind when it does not exit through Ctrl+C: closing the terminal stops it cleanly, a killed or crashed run's server stops by itself, and the next start removes leftover temp folders, tmux servers and that instance's Claude keychain items. `bun run dev:fresh -- --clean` does the cleanup on demand.
 - The node toolbar's Maximize button now shows and announces when it is unavailable.

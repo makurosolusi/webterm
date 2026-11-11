@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -291,6 +291,15 @@ describe('installContextLink', () => {
       expect(cli).toContain('-H "@$hdr"')
       // No literal header value of any kind.
       expect(shim + cli).not.toContain(`${TOKEN_HEADER}:`)
+    })
+  })
+
+  it('WEBTERM_SKIP_HOME_INSTALLS=1 (dev:fresh): shim and CLI in the data dir, no skill under HOME', () => {
+    withScratch(() => {
+      process.env.WEBTERM_SKIP_HOME_INSTALLS = '1'
+      try { installContextLink() } finally { delete process.env.WEBTERM_SKIP_HOME_INSTALLS }
+      expect(existsSync(contextShimPath()) && existsSync(cliPath())).toBe(true)
+      expect(existsSync(join(process.env.HOME as string, '.claude'))).toBe(false)
     })
   })
 })
