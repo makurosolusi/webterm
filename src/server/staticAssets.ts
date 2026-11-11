@@ -8,6 +8,7 @@ import zlib from 'node:zlib'
 import { promisify } from 'node:util'
 import type { ServerResponse } from 'node:http'
 import { createLogger, type Logger } from './logs'
+import { withRequestOrigin } from './staticAssets.origin'
 
 const log = createLogger('static')
 
@@ -154,12 +155,14 @@ const ASSET_READ_FAILED_STATUS = 500
 /**
  * Read `hit` from disk and answer it, compressed when the client accepts it. Never rejects: a missing
  * or unreadable file answers that one request with 404/500 plus a warning naming the file, instead of
- * an unhandled rejection that takes the whole server (and every open terminal) down.
+ * an unhandled rejection that takes the whole server (and every open terminal) down. An HTML page
+ * gets its share-URL placeholder swapped for `origin` (staticAssets.origin.ts) when one is given.
  */
-export async function serveAsset(res: ServerResponse, hit: AssetHit, acceptEncoding?: string): Promise<void> {
+export async function serveAsset(res: ServerResponse, hit: AssetHit, acceptEncoding?: string, origin?: string | null): Promise<void> {
   let buf: Buffer
   try {
     buf = Buffer.from(await Bun.file(hit.assetPath).arrayBuffer())
+    if (origin !== undefined && hit.contentType === 'text/html') buf = Buffer.from(withRequestOrigin(buf.toString('utf8'), origin))
   } catch (err) {
     const code = (err as { code?: unknown } | null)?.code
     const status = code === 'ENOENT' ? ASSET_MISSING_STATUS : ASSET_READ_FAILED_STATUS

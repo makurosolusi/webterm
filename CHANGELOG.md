@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 
 ### Added
+- Link previews (Open Graph / Twitter cards with a 1200x630 image) when a webterm link is shared, using the address the link was opened from.
 - Editor and diff nodes: Word wrap toggle (⌥Z), on by default for Markdown and text, remembered per node.
 - Fit width to content: in the node menu, or double-click the right edge while resizing.
 - Settings › Canvas: choose the color and thickness of the cables between nodes.
@@ -225,6 +226,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- The desktop tab icon now loads reliably from a static `/favicon.svg`, and the page has a description, theme colours and an apple-touch icon.
+- The browser tab no longer shows a loading spinner forever after webterm opens: live updates now connect once the page has finished loading.
 - A custom Claude proxy set in the server environment or `.env` (base URL, token and model variables) now reaches Central, its background helpers, workers and AI commit messages, not only terminals; Central no longer reports 'not signed in' when a proxy token is set.
 - Webterm no longer forces Claude model ids over a model you chose for your provider, so proxies with their own model names work in Central's helpers and workers; `WEBTERM_CENTRAL_MODEL` accepts proxy model names.
 - A browser node whose page got detached from Chromium no longer stays broken with a false "unexpected gateway failure" error in the log: webterm notices the lost page and reopens it the next time the node is shown.

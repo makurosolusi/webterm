@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Source of og-image.png (link-preview card). Regenerate: rsvg-convert -w 1200 -h 630 og-image.svg -o og-image.png -->
+  <rect width="1200" height="630" fill="#141414"/>
+  <!-- favicon artwork (osNotify.badge.ts faviconSvg(0)), 32-unit grid scaled 10x -->
+  <g transform="translate(110 155) scale(10)">
+    <rect x="1" y="3" width="28" height="26" rx="5" fill="#1e1e1e" stroke="#2b2b2b" stroke-width="0.3"/>
+    <path d="M7 12l5 4-5 4" stroke="#4fc1ff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <path d="M14 21h8" stroke="#ccc" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+  <text x="480" y="320" font-family="Helvetica, Arial, sans-serif" font-size="120" font-weight="700" fill="#ffffff">webterm</text>
+  <text x="484" y="395" font-family="Helvetica, Arial, sans-serif" font-size="40" fill="#cccccc">Real terminals on a pan/zoom canvas</text>
+  <rect x="484" y="430" width="120" height="8" rx="4" fill="#4fc1ff"/>
+</svg>
