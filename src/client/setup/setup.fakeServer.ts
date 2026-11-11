@@ -3,13 +3,17 @@
 import { vi } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS, closure, dependents, type CapabilitiesResponse, type CapabilityId, type ChromiumDownloadStatus } from '../../shared/featureCapabilities'
 import type { LaunchTest } from '../claudeLauncher/claudeLaunch.client'
+import type { FinalEvent, StageEvent } from '../claudeLauncher/connectionTest.client'
 
 export interface FakeServer {
   calls: { url: string; method: string; body?: unknown }[]
   on: Set<CapabilityId>
   candidates: string[]
   chromiumValue: string
+  /** POST /api/claude-launch/test answer (Central step's launch status). */
   launch: LaunchTest | 'error'
+  /** POST /api/claude-provider/test NDJSON lines (the wizard's and the card's Test connection); 'error' = 500. */
+  connection: (StageEvent | FinalEvent)[] | 'error'
   /** Capability GET answers 500 this many times. */
   capsFail: number
   /** Next capability POST answers 500. */
@@ -19,9 +23,8 @@ export interface FakeServer {
   download: ChromiumDownloadStatus
   /** Next download request answers 500. */
   downloadFail: boolean
-  /** GET /api/claude-provider answer; POST .../test answers `{ test: providerTest }`. */
+  /** GET /api/claude-provider answer. */
   provider: Record<string, unknown>
-  providerTest: { ok: boolean; message: string; at: number }
   /** Next provider PUT answers 500. */
   providerSaveFail: boolean
 }
@@ -33,24 +36,53 @@ export const READY: LaunchTest = {
   steps: [{ stage: 'claude', ok: true, message: 'claude found' }, { stage: 'auth', ok: true, message: 'Signed in' }],
 }
 
-export const NOT_FOUND: LaunchTest = {
-  ok: false, profile: { id: 'default', name: 'Default' }, warnings: [], failed: 'claude_not_found',
-  steps: [{
-    stage: 'claude', ok: false, message: 'The claude CLI was not found on PATH.',
+const via = 'Claude Code login'
+/** A passing Test connection (test-only). */
+export const CONN_OK: (StageEvent | FinalEvent)[] = [
+  { stage: 'wrapper', state: 'skipped', detail: 'No wrapper in the launch command' },
+  { stage: 'cli', state: 'ok', detail: 'claude 2.1.318 (Claude Code)', ms: 120 },
+  { stage: 'auth', state: 'ok', detail: 'Signed in (claude.ai)', ms: 80 },
+  { stage: 'request', state: 'ok', detail: 'claude-haiku-4-5 answered in 1.2 s', ms: 1200 },
+  { result: 'ok', summary: `Connection works — Claude answered in 1.4 s via ${via}`, ms: 1400, via, model: 'claude-haiku-4-5' },
+]
+
+export const CONN_NOT_FOUND: (StageEvent | FinalEvent)[] = [
+  { stage: 'wrapper', state: 'skipped', detail: 'No wrapper in the launch command' },
+  {
+    stage: 'cli', state: 'failed', detail: 'The claude CLI was not found on PATH.', ms: 1,
     install: { installCommand: 'curl -fsSL https://claude.ai/install.sh | bash', npmCommand: 'npm install -g @anthropic-ai/claude-code', docsUrl: 'https://code.claude.com/docs/en/setup' },
-  }],
-}
+  },
+  { stage: 'auth', state: 'skipped', detail: 'Skipped: Claude CLI failed' },
+  { stage: 'request', state: 'skipped', detail: 'Skipped: Claude CLI failed' },
+  { result: 'failed', stage: 'cli', failed: 'claude_not_found', summary: 'Failed at Claude CLI: The claude CLI was not found on PATH.', ms: 2, via },
+]
 
 /** The real envman message for a machine where `envman login` never ran (test-only). */
-export const WRAPPER_SIGNED_OUT: LaunchTest = {
-  ok: false, profile: { id: 'p', name: 'envman' }, warnings: [], failed: 'wrapper_signed_out',
-  steps: [{
-    stage: 'wrapper', ok: false,
-    message: "envman exited with code 1: need auth to fetch claude:x — not logged in: run 'envman login <server> --token <token>'",
-    hint: 'envman is not signed in for the user webterm runs as. Sign in, then Check again.',
-    signIn: { tool: 'envman', hint: 'envman is not signed in for the user webterm runs as. Sign in, then Check again.', command: 'envman login <server> --token <token>' },
-  }],
+const SIGNED_OUT_HINT = 'envman is not signed in for the user webterm runs as. Sign in, then Check again.'
+export const CONN_WRAPPER_SIGNED_OUT: (StageEvent | FinalEvent)[] = [
+  {
+    stage: 'wrapper', state: 'failed', ms: 300,
+    detail: "envman exited with code 1: need auth to fetch claude:x — not logged in: run 'envman login <server> --token <token>'",
+    hint: SIGNED_OUT_HINT, signIn: { tool: 'envman', hint: SIGNED_OUT_HINT, command: 'envman login <server> --token <token>' },
+  },
+  { stage: 'cli', state: 'skipped', detail: 'Skipped: Wrapper failed' },
+  { stage: 'auth', state: 'skipped', detail: 'Skipped: Wrapper failed' },
+  { stage: 'request', state: 'skipped', detail: 'Skipped: Wrapper failed' },
+  { result: 'failed', stage: 'wrapper', failed: 'wrapper_signed_out', summary: 'Failed at Wrapper: envman exited with code 1', ms: 300, via: 'envman' },
+]
+
+/** What the token-free check (`{ request: false }`) streams for a full run's lines: same up to the request, which stays pending. */
+export function withoutRequest(lines: (StageEvent | FinalEvent)[]): (StageEvent | FinalEvent)[] {
+  const final = lines[lines.length - 1] as FinalEvent
+  if (final.result === 'failed' && final.stage !== 'request') return lines
+  return [
+    ...lines.filter((l) => 'state' in l && l.stage !== 'request'),
+    { stage: 'request', state: 'pending', detail: 'Not tested yet — press Test connection to send a test request' },
+    { result: 'ready', summary: 'Ready to test — the last check sends one small request', ms: 200, via: final.via },
+  ]
 }
+
+const ndjson = (lines: unknown[]): Response => new Response(lines.map((l) => `${JSON.stringify(l)}\n`).join(''), { status: 200 })
 
 function capsView(s: FakeServer): CapabilitiesResponse {
   return {
@@ -72,8 +104,8 @@ const json = (body: unknown, status = 200): Response => new Response(JSON.string
 /** Install the fake as global `fetch`; returns its mutable state. */
 export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
   const s: FakeServer = {
-    calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false,
-    provider: { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }, providerTest: { ok: true, message: 'Connected.', at: 1 }, providerSaveFail: false, ...over,
+    calls: [], on: new Set(), candidates: ['/usr/bin/google-chrome'], chromiumValue: '', launch: READY, connection: CONN_OK, capsFail: 0, postFail: false, extras: {}, download: DL_IDLE, downloadFail: false,
+    provider: { provider: { mode: 'login', secretSet: false, ready: true }, lastTest: null, restartNeeded: 0 }, providerSaveFail: false, ...over,
   }
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = String(input)
@@ -82,7 +114,8 @@ export function fakeServer(over: Partial<FakeServer> = {}): FakeServer {
     s.calls.push({ url, method, body })
     if (url.startsWith('/api/claude-launch/test')) return s.launch === 'error' ? json({ error: 'probe_failed' }, 500) : json(s.launch)
     if (url.startsWith('/api/claude-provider/detect')) return json({ wrappers: [] })
-    if (url === '/api/claude-provider/test') return json({ test: s.providerTest })
+    if (url === '/api/claude-provider/test') return s.connection === 'error' ? json({ error: 'probe_failed' }, 500)
+      : ndjson((body as { request?: boolean } | undefined)?.request === false ? withoutRequest(s.connection) : s.connection)
     if (url.startsWith('/api/claude-provider') && method === 'PUT' && s.providerSaveFail) { s.providerSaveFail = false; return json({ error: 'write_failed' }, 500) }
     if (url.startsWith('/api/claude-provider')) return json(s.provider)
     if (url.startsWith('/api/settings/env')) return json(method === 'GET' ? { entries: [{ key: 'WEBTERM_BROWSER_HEADLESS', kind: 'flag', group: 'browser', label: 'Headless mode', value: '', default: 'off' }], locked: false } : {})
