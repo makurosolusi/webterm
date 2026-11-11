@@ -1,7 +1,8 @@
 import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react'
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
-import type { DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
+import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import ContextEdge from './ContextEdge'
+import { connectionLineStyle } from './canvasStyle'
 import './canvas-ui.css'
 import { nodeTypes } from './nodeTypes'
 import McpAppsWatcher from './mcpapps/McpAppsWatcher'
@@ -72,10 +73,13 @@ export default function BoardCanvas({
     <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
     <ReactFlow
       className={wallpaper.active ? 'canvas--wallpaper' : undefined}
+      // Cable + arrowhead color (EDGE_STROKE / `.react-flow__marker` read it); default = theme token.
+      style={settings.edgeColor === 'default' ? undefined : ({ '--edge-color': settings.edgeColor } as CSSProperties)}
       nodes={nodes}
       nodeTypes={nodeTypes}
       edges={edges}
       edgeTypes={edgeTypes}
+      connectionLineStyle={connectionLineStyle(settings.edgeWidth)}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}

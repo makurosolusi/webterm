@@ -60,6 +60,10 @@ export interface Settings extends TerminalSettings, AgentSettings {
    *  terminal, sehingga memilih tema terminal terang tidak menyisakan rangka hitam; `dark`/`light`
    *  memakunya. */
   appTheme: AppTheme
+  /** Cable (edge) color: `'default'` = theme color, otherwise `#rrggbb`. Normalized on load. */
+  edgeColor: string
+  /** Cable thickness in px (`SETTING_RANGES.edgeWidth`). */
+  edgeWidth: number
   /** Canvas wallpaper (default / color / gradient / image). See `canvasBackground.schema.ts`. */
   canvasBackground: CanvasBackground
   /** Per-workspace wallpaper overrides by workspace id; absent = same as global. */
@@ -144,6 +148,8 @@ export const DEFAULT_SETTINGS: Settings = {
   canvasDots: true,
   quickDrag: 'cmdCtrl',
   appTheme: 'auto',
+  edgeColor: 'default',
+  edgeWidth: 2,
   canvasBackground: DEFAULT_CANVAS_BACKGROUND,
   canvasBackgroundByWorkspace: {},
   openMarkdownPreview: true,
@@ -156,6 +162,8 @@ export const DEFAULT_SETTINGS: Settings = {
 
 /** Builtin ids before the Claude-first cut; only used to scrub stale settings keys. */
 const RETIRED_AGENT_IDS: readonly string[] = ['codex', 'gemini', 'opencode', 'grok', 'copilot', 'antigravity', 'cursor']
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
 
@@ -211,6 +219,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.inputHistory = normalizeInputHistory(src.inputHistory)
   // Enum: shape matching lets any string through, so an unknown preset falls back to the default.
   if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
+  if (out.edgeColor !== 'default' && !HEX_COLOR.test(out.edgeColor)) out.edgeColor = DEFAULT_SETTINGS.edgeColor
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

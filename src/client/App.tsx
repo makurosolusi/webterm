@@ -180,7 +180,7 @@ export default function App() {
 
   const liveNodes = useMemo(() => nodes.map(toWsNode), [nodes])
 
-  const displayEdges = useMemo(() => decorateEdges(edges, nodes), [edges, nodes])
+  const displayEdges = useMemo(() => decorateEdges(edges, nodes, settings.edgeWidth), [edges, nodes, settings.edgeWidth])
 
   const noWorkspaces = workspaces.length === 0
 

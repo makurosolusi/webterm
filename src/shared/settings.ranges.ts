@@ -30,6 +30,7 @@ export const SETTING_RANGES = {
   // atas batas atas xterm mengalokasikan `cols × 12 B` per baris per node, dan satu canvas memuat
   // banyak node.
   scrollbackLines: { min: 1_000, max: 100_000, step: 1_000 },
+  edgeWidth: { min: 1, max: 4, step: 0.5 },
   gridSize: { min: 4, max: 200, step: 1 },
   centralCheckinDailyLimit: { min: 5, max: 50, step: 1 },
   // Min = ukuran minimum `NodeResizer` semua jenis node.

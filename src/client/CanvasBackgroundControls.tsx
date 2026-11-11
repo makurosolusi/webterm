@@ -28,7 +28,7 @@ function Range({ id, label, value, range, unit, onChange }: {
   )
 }
 
-function Swatch({ label, background, selected, onClick }: { label: string; background: string; selected: boolean; onClick: () => void }): React.JSX.Element {
+export function Swatch({ label, background, selected, onClick }: { label: string; background: string; selected: boolean; onClick: () => void }): React.JSX.Element {
   return (
     <Button type="button" variant="outline" size="sm" aria-pressed={selected} className="cbg-swatch" onClick={onClick}>
       <span className="cbg-swatch__chip" style={{ background }} aria-hidden />

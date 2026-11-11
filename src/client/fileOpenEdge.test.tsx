@@ -11,7 +11,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, renderedEdgeIds, unmountCanvas } from './canvasHarness'
-import { EDGE_WIDTH, SELECTED_ARROW_STROKE } from './canvasStyle'
+import { EDGE_WIDTH, EDGE_WIDTH_EXTRA, SELECTED_ARROW_STROKE } from './canvasStyle'
 import type { WsNode } from '../shared/workspace'
 
 // Monaco adalah beberapa MB JS di balik dynamic import ber-suffix `?worker` milik Vite, dan node
@@ -79,7 +79,8 @@ describe('buka file dari node files', () => {
     expect(halos).toHaveLength(1)
     const halo = halos[0] as SVGPathElement
     const main = edgeEl.querySelector('.react-flow__edge-path') as SVGPathElement
-    expect(main.style.strokeWidth).toBe(`var(--edge-hover-width, ${EDGE_WIDTH}px)`)
+    expect(main.style.strokeWidth).toBe(`calc(${EDGE_WIDTH}px + var(--edge-hover-extra, 0px))`)
+    expect((document.querySelector('.react-flow') as HTMLElement).style.getPropertyValue('--edge-color')).toBe('')
     expect(halo.style.pointerEvents).toBe('none')
     expect(halo.getAttribute('d')).toBe(main.getAttribute('d'))
     expect(Number(halo.getAttribute('stroke-width'))).toBeGreaterThan(EDGE_WIDTH)
@@ -89,5 +90,20 @@ describe('buka file dari node files', () => {
     const ids = Array.from(document.querySelectorAll('.react-flow__arrowhead')).map((el) => el.closest('marker')?.id ?? '')
     expect(ids.length).toBeGreaterThan(0)
     for (const id of ids) expect(id).not.toContain(`strokeWidth=${SELECTED_ARROW_STROKE}`)
+  })
+
+  it('Settings cable color/thickness reach the rendered cable and its arrowheads', async () => {
+    await mountCanvas({ nodes: [filesNode], dirs: { [DIR]: LISTING }, settings: { edgeColor: '#14b8a6', edgeWidth: 4 } })
+    fireEvent.click(await screen.findByText('package.json'))
+    await waitFor(() => expect(fileOpenEdges()).toHaveLength(1))
+    const edgeEl = document.querySelector('.react-flow__edge') as Element
+    const main = edgeEl.querySelector('.react-flow__edge-path') as SVGPathElement
+    expect(main.style.strokeWidth).toBe('calc(4px + var(--edge-hover-extra, 0px))')
+    expect(main.style.stroke).toContain('var(--edge-color')
+    expect(Number((edgeEl.querySelector('.edge-halo') as SVGPathElement).getAttribute('stroke-width'))).toBeGreaterThan(4)
+    const root = document.querySelector('.react-flow') as HTMLElement
+    expect(root.style.getPropertyValue('--edge-color')).toBe('#14b8a6')
+    expect(root.contains(document.querySelector('.react-flow__marker'))).toBe(true)
+    expect(EDGE_WIDTH_EXTRA).toBeGreaterThan(0)
   })
 })
