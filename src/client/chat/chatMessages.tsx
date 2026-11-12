@@ -10,6 +10,7 @@ import { TurnMemoryChip } from '../central/turnMemoryChip'
 import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
+import { ToolCard, ToolGroup, threadRows, type Segment } from './chatToolGroup'
 import { splitProposalBlocks, type LegacyProposal } from './proposalBlocks'
 import { openSettingsAt } from '../settings.link'
 import './chatBubbles.css'
@@ -30,34 +31,6 @@ const UNAVAILABLE_LINK = 'Open Settings › Claude › Connection test'
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text
-}
-
-function summarize(value: unknown): string {
-  if (value === undefined) return ''
-  try {
-    const text = typeof value === 'string' ? value : JSON.stringify(value)
-    return clip(text, 240)
-  } catch {
-    return '[unreadable]'
-  }
-}
-
-function ToolCard(props: { part: Extract<ChatPart, { type: 'tool' }> }) {
-  const { part } = props
-  const summary = summarize(part.result ?? part.args)
-  return (
-    <div className="chat-tool" data-state={part.state}>
-      <span className="chat-tool__icon codicon codicon-tools" aria-hidden="true" />
-      <span className="chat-tool__name">{part.name}</span>
-      <span className={`chat-tool__state chat-tool__state--${part.state}`}>{part.state.replace('_', ' ')}</span>
-      {summary !== '' && (
-        <details className="chat-tool__detail">
-          <summary>{part.result !== undefined ? 'result' : 'arguments'}</summary>
-          <pre>{summary}</pre>
-        </details>
-      )}
-    </div>
-  )
 }
 
 /** Old history only: Central no longer writes these blocks, and nothing here can run one. */
@@ -162,7 +135,7 @@ function FailedNote(props: { text?: string; onRetry?: (() => void) | undefined }
   )
 }
 
-function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
+function MessageRow(props: { message: ChatMessage; segments: Segment[]; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
   const { message } = props
   if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} imageUrl={props.imageUrl} />
   const assistant = message.role === 'assistant' || message.role === 'tool'
@@ -182,9 +155,11 @@ function MessageRow(props: { message: ChatMessage; onRetry?: (() => void) | unde
         {message.usage && message.state !== 'streaming' && <ChatCostChip usage={message.usage} />}
         {message.usage && message.state !== 'streaming' && message.turnId && <TurnMemoryChip turnId={message.turnId} />}
       </div>
-      {message.parts.map((part, index) => (
-        <PartView key={`${message.id}-${index}`} part={part} assistant={assistant} />
-      ))}
+      {props.segments.map((seg, index) =>
+        seg.kind === 'tools'
+          ? <ToolGroup key={`group-${seg.tools[0]?.toolCallId ?? index}`} tools={seg.tools} />
+          : <PartView key={`${message.id}-${index}`} part={seg.part} assistant={assistant} />,
+      )}
       {message.state === 'failed' && !message.parts.some((part) => part.type === 'error') && (
         <div className="chat-error-inline">The reply failed before it finished.</div>
       )}
@@ -257,11 +232,12 @@ export default function ChatMessages(props: ChatMessagesProps) {
         {props.messages.length === 0 ? (
           <p className="chat-empty">No messages yet. Ask the central agent about a project.</p>
         ) : (
-          props.messages.map((message, index) => {
+          threadRows(props.messages).map(({ message, segments }) => {
+            const last = props.messages.length - 1
             // Only the newest message: retrying an old failure in the middle of the thread would be out of context.
-            const again = props.onRetry && !props.streaming && index === props.messages.length - 1 ? retryPayload(retrySource(props.messages, index)) : null
+            const again = props.onRetry && !props.streaming && message === props.messages[last] ? retryPayload(retrySource(props.messages, last)) : null
             const retry = props.onRetry
-            return <MessageRow key={message.id} message={message} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} />
+            return <MessageRow key={message.id} message={message} segments={segments} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} />
           })
         )}
       </div>
