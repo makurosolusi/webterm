@@ -448,3 +448,17 @@
   .chat-conversations { flex-basis: 112px; }
   .chat-thread, .chat-composer { padding-left: 12px; padding-right: 12px; }
 }
+
+/* ---- tool activity group: one collapsed row per run of tool calls ------------------------------- */
+.chat-tool-group { max-width: 100%; }
+.chat-tool-group__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  font-size: 12px;
+  cursor: default;
+}
+.chat-tool-group__summary:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
+.chat-tool-group__failed { color: var(--vscode-errorForeground, #f48771); }
+.chat-tool-group__body { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
