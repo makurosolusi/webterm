@@ -91,6 +91,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Canvas (SettingsCanvasSections.tsx)
   e('canvas', 'canvasDots', 'Grid', 'Off, dots, or dots that dragged nodes snap to.', 'dots snap align'),
   e('canvas', 'quickDrag', 'Quick move & resize', 'Hold the keys and drag anywhere on a node.', 'drag modifier'),
+  e('canvas', 'nodeStatusBar', 'Status bar', 'Show session and agent details at the bottom of each node, with warnings when something looks wrong.', 'footer statusline anomaly warning pid uptime context cost'),
   e('canvas', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
   e('canvas', 'gridSize', 'Grid size'),
   e('canvas', 'edgeColor', 'Cable color', 'Color of the cables between nodes.', 'edge line wire'),

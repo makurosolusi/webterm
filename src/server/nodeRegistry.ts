@@ -94,6 +94,8 @@ export class NodeRegistry {
   private statuses = new Map<string, NodeStatusEntry>()
   private transcripts = new Map<string, string>()
   private exits = new Map<string, NodeExit>()
+  /** When each node's current status began; a repeated write of the same status keeps it. */
+  private since = new Map<string, number>()
   /** Called after every status write, delete or sweep: the one hook the durable store needs (A4). */
   onStatusChange?: () => void
 
@@ -103,7 +105,9 @@ export class NodeRegistry {
     // turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
     const changed = this.statuses.get(id)?.status !== status
     this.statuses.set(id, { status, updatedAt: now })
+    if (changed) this.since.set(id, now)
     evictInsertionOrder(this.statuses, MAX_NODE_STATE)
+    evictInsertionOrder(this.since, MAX_NODE_STATE)
     if (changed) this.onStatusChange?.()
   }
 
@@ -116,6 +120,11 @@ export class NodeRegistry {
     const entry = this.statuses.get(id)
     // Salinan: pemanggil tidak boleh bisa memundurkan/memajukan jam lewat referensi.
     return entry ? { ...entry } : undefined
+  }
+
+  /** Start of the node's current status; undefined when unknown (no status, or restored from disk). */
+  statusSince(id: string): number | undefined {
+    return this.statuses.has(id) ? this.since.get(id) : undefined
   }
 
   deleteStatus(id: string): void {

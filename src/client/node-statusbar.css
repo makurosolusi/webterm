@@ -1,0 +1,48 @@
+/* Node status bar (NodeStatusBar.tsx): one thin muted monospace row at the bottom of a terminal /
+   agent node, items left, anomaly badges right. Colors are the theme's state tokens. */
+.node-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 20px;
+  padding: 0 6px;
+  border-top: 1px solid var(--nc-border);
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 20px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  overflow: hidden;
+  white-space: nowrap;
+}
+.node-statusbar[data-anomalies] { border-top-color: color-mix(in srgb, var(--state-warning) 45%, var(--nc-border)); }
+.node-statusbar__items { display: flex; gap: 10px; min-width: 0; overflow: hidden; flex: 1 1 auto; }
+.node-statusbar__badges { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; justify-content: flex-end; }
+.node-statusbar__item,
+.node-statusbar__badge {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.node-statusbar__item:hover,
+.node-statusbar__badge:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+.node-statusbar__item:focus-visible,
+.node-statusbar__badge:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.node-statusbar__badge { display: inline-flex; align-items: center; gap: 3px; max-width: 260px; flex: 0 1 auto; }
+.node-statusbar__badge .codicon { font-size: 12px; flex: none; }
+.node-statusbar__reason { overflow: hidden; text-overflow: ellipsis; }
+.node-statusbar__badge[data-level='warn'] { color: var(--state-warning); }
+.node-statusbar__badge[data-level='error'] { color: var(--state-attention); }
+
+.node-statusbar__pop { padding: 8px 10px; max-width: 420px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.node-statusbar__pop-anomalies { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.node-statusbar__pop-anomalies [data-level='warn'] { color: var(--state-warning); }
+.node-statusbar__pop-anomalies [data-level='error'] { color: var(--state-attention); }
+.node-statusbar__pop-fields { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.node-statusbar__pop-fields > div { display: contents; }
+.node-statusbar__pop-fields dt { color: var(--vscode-descriptionForeground, var(--muted)); font-family: var(--vscode-editor-font-family, ui-monospace, monospace); }
+.node-statusbar__pop-fields dd { margin: 0; overflow-wrap: anywhere; }
