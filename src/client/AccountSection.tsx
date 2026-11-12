@@ -9,8 +9,9 @@ import { ACCOUNT_TEXT, accountErrorText } from './accountLabels'
 import { AccountSessions } from './AccountSessions'
 import { PasswordField } from './PasswordField'
 import { charCount, PASSWORD_MIN, SIGN_IN_TEXT } from './signInLabels'
-import { fetchMe, logout, type AuthUser } from './transportToken'
+import { fetchMe, type AuthUser } from './transportToken'
 import { useAuthSubmit } from './useAuthSubmit'
+import { useSignOut } from './useSignOut'
 
 const causeOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -20,26 +21,18 @@ export interface AccountSectionProps {
   now?: () => number
 }
 
-const defaultReload = (): void => location.reload()
-
 /** The Account settings page. */
-export function AccountSection({ reload = defaultReload, now = Date.now }: AccountSectionProps): React.JSX.Element {
+export function AccountSection({ reload, now = Date.now }: AccountSectionProps): React.JSX.Element {
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sessionsKey, setSessionsKey] = useState(0)
-  const [signOutError, setSignOutError] = useState<string | null>(null)
+  const { signOut, busy: signingOut, error: signOutError } = useSignOut(reload)
 
   const load = useCallback(() => {
     setLoadError(null)
     fetchMe().then((m) => setUser(m.user), (e: unknown) => setLoadError(ACCOUNT_TEXT.loadFailed(causeOf(e))))
   }, [])
   useEffect(load, [load])
-
-  // Reload only on success: a refused sign-out keeps the page (and says so) rather than pretending.
-  const signOut = useCallback(() => {
-    setSignOutError(null)
-    logout().then(reload, (e: unknown) => setSignOutError(ACCOUNT_TEXT.failed('Signing out', causeOf(e))))
-  }, [reload])
 
   if (loadError) {
     return (
@@ -66,7 +59,7 @@ export function AccountSection({ reload = defaultReload, now = Date.now }: Accou
           <section aria-labelledby="account-signout-title" className="flex flex-col items-start gap-2">
             <h4 id="account-signout-title" className="text-[13px] font-semibold">{ACCOUNT_TEXT.signOutTitle}</h4>
             <p className="text-xs opacity-70">{ACCOUNT_TEXT.signOutIntro}</p>
-            <Button size="sm" variant="outline" onClick={signOut}>{ACCOUNT_TEXT.signOut}</Button>
+            <Button size="sm" variant="outline" onClick={signOut} disabled={signingOut}>{signingOut ? ACCOUNT_TEXT.working : ACCOUNT_TEXT.signOut}</Button>
           </section>
         </>
       )}
