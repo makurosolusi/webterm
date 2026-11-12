@@ -27,6 +27,31 @@ export interface NodeToolbarProps {
   extraAction?: { node: ReactNode; menuItem: VscodeMenuItem }
 }
 
+/** Rows of the node's "More Actions…" menu; tab mode reuses them for the editor actions and the tab context menu. */
+export function nodeMoreItems(props: NodeToolbarProps, overflow: VscodeMenuItem[] = []): VscodeMenuItem[] {
+  const count = props.commentCount ?? 0
+  const aiBusy = Boolean(props.aiNaming)
+  const broadcastOff = Boolean(props.broadcastDisabled)
+  return [
+    ...(overflow.length ? [...overflow, { type: 'separator' } as const] : []),
+    ...(props.onRefresh ? [{ type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh } as const] : []),
+    ...(props.onToggleMic
+      ? [{ type: 'item', id: 'mic', label: 'Dictate', checked: Boolean(props.micActive), onSelect: props.onToggleMic } as const]
+      : []),
+    ...(props.onAiName
+      ? [{ type: 'item', id: 'ai-name', label: 'Name with AI', disabled: aiBusy, onSelect: props.onAiName } as const]
+      : []),
+    { type: 'item', id: 'comments', label: count > 0 ? `Comments (${count})` : 'Comments', checked: props.commentsOpen, onSelect: props.onToggleComments },
+    ...(props.onBroadcast
+      ? [{ type: 'item', id: 'broadcast', label: 'Share live view', checked: Boolean(props.broadcastActive), disabled: broadcastOff, onSelect: props.onBroadcast } as const]
+      : []),
+    ...(props.onToggleHideLinks
+      ? [{ type: 'item', id: 'links', label: props.hideLinks ? 'Show links' : 'Hide links', onSelect: props.onToggleHideLinks } as const]
+      : []),
+    ...(props.extraMenuItems?.length ? [{ type: 'separator' } as const, ...props.extraMenuItems] : []),
+  ]
+}
+
 /**
  * Toolbar aksi node di header, memakai `vscode-toolbar-container`/`vscode-toolbar-button`.
  *
@@ -55,9 +80,6 @@ export interface NodeToolbarProps {
  */
 export default function NodeToolbar(props: NodeToolbarProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
-  const count = props.commentCount ?? 0
-  const aiBusy = Boolean(props.aiNaming)
-  const broadcastOff = Boolean(props.broadcastDisabled)
   const maximizeOff = Boolean(props.maximizeDisabled)
   const maxLabel = props.maximized ? 'Restore' : 'Maximize'
   const [groupRef, fit] = useFitCount()
@@ -90,24 +112,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
   ]
   const overflow = inline.slice(fit).map((a) => a.menuItem)
 
-  const moreItems: VscodeMenuItem[] = [
-    ...(overflow.length ? [...overflow, { type: 'separator' } as const] : []),
-    ...(props.onRefresh ? [{ type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh } as const] : []),
-    ...(props.onToggleMic
-      ? [{ type: 'item', id: 'mic', label: 'Dictate', checked: Boolean(props.micActive), onSelect: props.onToggleMic } as const]
-      : []),
-    ...(props.onAiName
-      ? [{ type: 'item', id: 'ai-name', label: 'Name with AI', disabled: aiBusy, onSelect: props.onAiName } as const]
-      : []),
-    { type: 'item', id: 'comments', label: count > 0 ? `Comments (${count})` : 'Comments', checked: props.commentsOpen, onSelect: props.onToggleComments },
-    ...(props.onBroadcast
-      ? [{ type: 'item', id: 'broadcast', label: 'Share live view', checked: Boolean(props.broadcastActive), disabled: broadcastOff, onSelect: props.onBroadcast } as const]
-      : []),
-    ...(props.onToggleHideLinks
-      ? [{ type: 'item', id: 'links', label: props.hideLinks ? 'Show links' : 'Hide links', onSelect: props.onToggleHideLinks } as const]
-      : []),
-    ...(props.extraMenuItems?.length ? [{ type: 'separator' } as const, ...props.extraMenuItems] : []),
-  ]
+  const moreItems = nodeMoreItems(props, overflow)
 
   return (
     <>

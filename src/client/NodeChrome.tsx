@@ -4,7 +4,9 @@ import type { AgentStatus, Comment } from '../shared/workspace'
 import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
-import NodeToolbar from './NodeToolbar'
+import { useNodeId } from '@xyflow/react'
+import NodeToolbar, { nodeMoreItems, type NodeToolbarProps } from './NodeToolbar'
+import TabNodeActions from './tabLayout.nodeActions'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
 import { NodeResizeToggle, useNodeResizeMenuItem } from './nodeResize/NodeLayoutResizer'
@@ -116,7 +118,8 @@ export default function NodeChrome(props: NodeChromeProps) {
   const titleRef = useRef<HTMLElement | null>(null)
   // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout. A
   // maximized node keeps its canvas layout too, so collapse/resize hide there as well.
-  const { inTab } = useNodeHost()
+  const { inTab, visible } = useNodeHost()
+  const nodeId = useNodeId()
   const max = useNodeMaximize()
   const fixedLayout = inTab || max.maximized
   const resizeMenuItem = useNodeResizeMenuItem()
@@ -142,6 +145,38 @@ export default function NodeChrome(props: NodeChromeProps) {
   }
 
   const chip = statusChip(props.status)
+  const toolbar: NodeToolbarProps = {
+    onRefresh: props.onRefresh,
+    searchOpen: props.searchOpen, onToggleSearch: props.onToggleSearch,
+    micActive: props.micActive, onToggleMic: props.onToggleMic,
+    commentsOpen, onToggleComments: () => setCommentsOpen((o) => !o), commentCount: props.comments.length,
+    maximized: max.maximized, onToggleMaximize: () => max.toggle?.(), hideMaximize: !max.toggle,
+    onClose: props.onClose,
+    onStop: props.onStop,
+    onAiName: props.onAiName, aiNaming: props.aiNaming,
+    onBroadcast: props.onBroadcast, broadcastActive: props.broadcastActive, broadcastDisabled: props.broadcastDisabled,
+    hideLinks: props.hideLinks, onToggleHideLinks: props.onToggleHideLinks,
+    extraMenuItems: props.menuItems,
+    extraAction: !props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined,
+  }
+  const comments = commentsOpen && (
+    <NodeComments comments={props.comments} onAdd={props.onAddComment} onClose={() => setCommentsOpen(false)} />
+  )
+
+  // Tab mode: the tab is the header (title, status dot, close). Its other actions move to the tab
+  // strip (editor actions + tab context menu); only the tab's × closes the node.
+  if (inTab) {
+    return (
+      <>
+        <TabNodeActions
+          id={nodeId} visible={visible} items={nodeMoreItems(toolbar)} onStop={props.onStop}
+          search={props.onToggleSearch ? { open: Boolean(props.searchOpen), toggle: props.onToggleSearch } : undefined}
+          extra={props.pill || props.extraHeader ? <>{props.pill}{props.extraHeader}</> : undefined}
+        />
+        {comments && <div className="node-tab-comments relative">{comments}</div>}
+      </>
+    )
+  }
 
   return (
     <div className="node-header relative" onDoubleClick={onHeaderDoubleClick}>
@@ -195,28 +230,9 @@ export default function NodeChrome(props: NodeChromeProps) {
       {props.pill}
       {props.extraHeader}
 
-      <NodeToolbar
-        onRefresh={props.onRefresh}
-        searchOpen={props.searchOpen} onToggleSearch={props.onToggleSearch}
-        micActive={props.micActive} onToggleMic={props.onToggleMic}
-        commentsOpen={commentsOpen} onToggleComments={() => setCommentsOpen((o) => !o)} commentCount={props.comments.length}
-        maximized={max.maximized} onToggleMaximize={() => max.toggle?.()} hideMaximize={!max.toggle}
-        onClose={props.onClose}
-        onStop={props.onStop}
-        onAiName={props.onAiName} aiNaming={props.aiNaming}
-        onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}
-        hideLinks={props.hideLinks} onToggleHideLinks={props.onToggleHideLinks}
-        extraMenuItems={props.menuItems}
-        extraAction={!props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined}
-      />
+      <NodeToolbar {...toolbar} />
 
-      {commentsOpen && (
-        <NodeComments
-          comments={props.comments}
-          onAdd={props.onAddComment}
-          onClose={() => setCommentsOpen(false)}
-        />
-      )}
+      {comments}
     </div>
   )
 }

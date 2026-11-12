@@ -25,21 +25,20 @@ const inTab = (ui: ReactNode) => <NodeHostContext.Provider value={{ inTab: true,
 afterEach(cleanup)
 
 describe('NodeChrome gating', () => {
-  it('canvas (default context): collapse, resize toggle and maximize are all there', () => {
+  it('canvas (default context): header with collapse, resize toggle, maximize and close', () => {
     const { container } = render(<NodeChrome {...props} />)
+    expect(container.querySelector('.node-header')).not.toBeNull()
+    expect(titles(container)).toContain('Close (ends the session)')
     expect(titles(container)).toEqual(expect.arrayContaining(['Collapse', 'Maximize']))
     expect(titles(container)).not.toContain('Full Screen')
     expect(container.querySelector('.node-resize-toggle')).not.toBeNull()
   })
 
-  it('tab: no collapse, resize toggle or maximize; search/close remain', () => {
+  it('tab: no node header at all (the tab is the header), so no collapse, maximize, search or close here', () => {
     const { container } = render(inTab(<NodeChrome {...props} />))
-    const t = titles(container)
-    expect(t).not.toContain('Collapse')
-    expect(t).not.toContain('Expand')
-    expect(t).not.toContain('Maximize')
+    expect(container.querySelector('.node-header')).toBeNull()
+    expect(titles(container)).toEqual([])
     expect(container.querySelector('.node-resize-toggle')).toBeNull()
-    expect(t).toEqual(expect.arrayContaining(['Search', 'Close (ends the session)']))
   })
 
   it('tab: a collapsed node shows no Expand button either', () => {
