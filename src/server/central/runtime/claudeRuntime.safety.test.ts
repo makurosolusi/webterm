@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +7,12 @@ import type { ClaudeReady, ClaudeRuntimeOptions } from './claudeOptions'
 import { initRecord, recorder, resultRecord, turnInput } from './claude.fakeBin'
 import { type FakeCall, type FakePlay, fakeQuery } from './claude.fakeQuery'
 import { createCentralMcpLink } from './claudeMcp'
+import { createClaudePreflight, type RunFn } from './claudePreflight'
+import { resolveProfileLaunch } from '../../../shared/claudeLaunch/claudeLaunch.profiles'
+import { logBus } from '../../logs/logBus'
+
+// test-only: a wrapped launch profile, so the probe has a wrapper stage
+const WRAPPED = () => resolveProfileLaunch({ claudeLaunchProfiles: [{ id: 'p1', name: 'Wrapped', command: 'wrap -- claude' }], defaultClaudeProfileId: 'p1', centralClaudeProfileId: '' })
 
 let dir = ''
 
@@ -149,13 +155,14 @@ describe('ClaudeRuntime child isolation', () => {
 })
 
 describe('ClaudeRuntime preflight', () => {
+  const failedLog = (turnId: string): Record<string, unknown> =>
+    (logBus.query({}).filter((e) => e.event === 'central.turn.failed' && (e.data as { turnId?: string }).turnId === turnId).pop()?.data ?? {}) as Record<string, unknown>
 
   it.each([
     ['claude_not_found', 'Claude Code is not installed on the server PATH'],
     ['claude_not_authenticated', 'Claude Code is not signed in: run "claude auth login" on the server machine'],
-    ['claude_check_failed', 'Claude Code could not be checked'],
-  ] as const)('%s fails the turn without spawning', async (code, message) => {
-    const preflight = async (): Promise<ClaudeReady> => ({ ok: false, code, hint: 'ignored' })
+  ] as const)('%s (definite) fails the turn without spawning', async (code, message) => {
+    const preflight = async (): Promise<ClaudeReady> => ({ ok: false, code, hint: '' })
     const { events, emit } = recorder()
     const rt = runtime(OK_RECORDS, { preflight })
     const result = await rt.turn(turnInput(), emit)
@@ -167,14 +174,55 @@ describe('ClaudeRuntime preflight', () => {
     expect(rt.calls).toHaveLength(0)
   })
 
-  it('treats a throwing preflight as "could not check" and does not start Claude', async () => {
-    const preflight = async (): Promise<ClaudeReady> => { throw new Error('boom with secret-detail') }
+  it('a blocked turn shows the probe sentence and profile, and logs stage, profile and timing', async () => {
+    const run: RunFn = async (_cmd, args) => (args.includes('--version') ? { code: 0, stdout: '2.1.0', timedOut: false } : { code: 1, stdout: '{"loggedIn":false}', timedOut: false })
+    let t = 0
+    const preflight = createClaudePreflight({ env: { PATH: '/x' }, run, onPath: () => true, now: () => (t += 40), launch: WRAPPED })
     const { events, emit } = recorder()
     const rt = runtime(OK_RECORDS, { preflight })
-    const result = await rt.turn(turnInput(), emit)
-    expect(result.errorCode).toBe('runtime_unavailable')
-    expect(JSON.stringify(events)).not.toContain('secret-detail')
+    await rt.turn(turnInput({ turnId: 't-auth' }), emit)
+    expect(events[0]).toMatchObject({ code: 'runtime_unavailable',
+      message: 'Claude Code is not ready for launch profile "Wrapped": Claude Code is not signed in. Run "claude auth login" on the server, or let the wrapper provide ANTHROPIC_API_KEY.' })
     expect(rt.calls).toHaveLength(0)
+    const data = failedLog('t-auth')
+    expect(data.profileId).toBe('p1')
+    expect(data.preflight).toMatchObject({ code: 'claude_not_authenticated', stage: 'auth', failed: 'auth_failed', profileId: 'p1', timedOut: false, elapsedMs: 40 })
+  })
+
+  it('a wrapper timeout is inconclusive: the turn runs, with a warning that carries the details', async () => {
+    const run: RunFn = async () => ({ code: null, stdout: '', timedOut: true })
+    const preflight = createClaudePreflight({ env: { PATH: '/x' }, run, onPath: () => true, launch: WRAPPED })
+    const rt = runtime(OK_RECORDS, { preflight })
+    const result = await rt.turn(turnInput({ turnId: 't-slow' }), recorder().emit)
+    expect(result.outcome).toBe('success')
+    expect(rt.calls).toHaveLength(1)
+    const warned = logBus.query({}).filter((e) => e.event === 'central.claude_preflight_inconclusive' && (e.data as { turnId?: string }).turnId === 't-slow')
+    expect(warned[0]?.level).toBe('warn')
+    expect(warned[0]?.data).toMatchObject({ code: 'claude_check_failed', stage: 'wrapper', failed: 'wrapper_failed', profileId: 'p1', timedOut: true })
+  })
+
+  it('a generic check_failed and a throwing preflight both let the turn run', async () => {
+    for (const preflight of [
+      async (): Promise<ClaudeReady> => ({ ok: false, code: 'claude_check_failed', hint: 'Checking Claude Code status failed.', failed: 'check_failed', stage: 'auth' }),
+      async (): Promise<ClaudeReady> => { throw new Error('boom with secret-detail') },
+    ]) {
+      const { events, emit } = recorder()
+      const rt = runtime(OK_RECORDS, { preflight })
+      expect((await rt.turn(turnInput(), emit)).outcome).toBe('success')
+      expect(JSON.stringify(events)).not.toContain('secret-detail')
+      expect(rt.calls).toHaveLength(1)
+    }
+  })
+
+  it('a failed check is not cached: the next turn (Retry) probes again and runs once Claude is ready', async () => {
+    let signedIn = false
+    const run = vi.fn<RunFn>(async () => (signedIn ? { code: 0, stdout: '{"loggedIn":true}', timedOut: false } : { code: 1, stdout: '{"loggedIn":false}', timedOut: false }))
+    const preflight = createClaudePreflight({ env: { PATH: '/x' }, run, onPath: () => true, executable: 'claude' })
+    const rt = runtime(OK_RECORDS, { preflight })
+    expect((await rt.turn(turnInput({ turnId: 'r1' }), recorder().emit)).errorCode).toBe('runtime_unavailable')
+    signedIn = true
+    expect((await rt.turn(turnInput({ turnId: 'r2' }), recorder().emit)).outcome).toBe('success')
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   it('starts Claude normally when the preflight is ok', async () => {

@@ -4,7 +4,7 @@ import type { RuntimeKind } from './central/runtime/centralRuntime'
 import {
   type ClaudeReady, type ClaudeRuntimeOptions, type ClaudeUnavailableCode, claudeChildEnv,
 } from './central/runtime/claudeOptions'
-import { createClaudePreflight } from './central/runtime/claudePreflight'
+import { createClaudePreflight, preflightLogFields } from './central/runtime/claudePreflight'
 import { createLogger } from './logs'
 
 const log = createLogger('central')
@@ -16,35 +16,41 @@ export interface RuntimeReadiness {
 
 type Preflight = () => Promise<ClaudeReady>
 
-/** Wraps a preflight so the first not-ready result is logged once (code only, no CLI output). */
+/** Wraps a preflight so a not-ready result is logged with its stage, profile and timing (the probe's
+ *  redacted message, no raw CLI output), once per distinct cause so health polling does not repeat it. */
 export function onceWarn(preflight: Preflight): Preflight {
-  let warned = false
+  let last = ''
   return async () => {
     const ready = await preflight()
-    if (!ready.ok && !warned) {
-      warned = true
-      log.warn('central.runtime_unready', 'central claude runtime is not ready', { code: ready.code })
+    if (ready.ok) { last = ''; return ready }
+    const fields = preflightLogFields(ready)
+    const key = JSON.stringify([fields['code'], fields['stage'], fields['failed'], fields['profileId'], fields['timedOut']])
+    if (key !== last) {
+      last = key
+      log.warn('central.runtime_unready', 'central claude runtime is not ready', fields)
     }
     return ready
   }
 }
 
 let shared: Preflight | null = null
+const current = (): Preflight => (shared ??= onceWarn(createClaudePreflight({ env: claudeChildEnv(process.env) })))
+/** Stable handle the long-lived Central runtime holds: it always reaches the current shared probe, so a
+ *  fresh check (Settings test, profile edit) is what the next turn sees too. */
+const sharedPreflight: Preflight = () => current()()
 
-/** Process-wide preflight (30 s cache inside); tests inject their own via `claudeOptions.preflight`. */
+/** Process-wide preflight (successes cached 30 s inside); tests inject their own via `claudeOptions.preflight`. */
 export function claudePreflightOf(options?: ClaudeRuntimeOptions): Preflight {
-  if (options?.preflight) return options.preflight
-  shared ??= onceWarn(createClaudePreflight({ env: claudeChildEnv(process.env) }))
-  return shared
+  return options?.preflight ?? sharedPreflight
 }
 
 /**
- * Explicit re-check ("Periksa lagi" after logging in): drop the cached claude probe so this call runs a new one.
- * The new result is cached as usual, so later polls see it too; normal polling never calls this.
+ * Explicit re-check (Check again after logging in): drop the cached claude probe so the next call runs a new one,
+ * for the health view and for Central's next turn alike; normal polling never calls this.
  */
 export function freshClaudePreflight(): Preflight {
   shared = null
-  return claudePreflightOf()
+  return sharedPreflight
 }
 
 /** `off` is never ready; `mock` (explicit only) needs no probe; `claude` runs its (cached) preflight. */

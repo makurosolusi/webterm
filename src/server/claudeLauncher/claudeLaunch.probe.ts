@@ -21,7 +21,9 @@ export type LaunchStage = 'wrapper' | 'claude' | 'auth'
 export type LaunchFailure = 'wrapper_not_found' | 'wrapper_failed' | 'wrapper_signed_out' | 'claude_not_found' | 'auth_failed' | 'check_failed'
 /** `install`: on a claude-missing step, the official install commands for the UI to show with a copy button.
  *  `signIn`: on a wrapper that is not signed in, the sign-in command the wrapper itself suggested. */
-export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string; install?: ClaudeInstall; signIn?: WrapperSignIn }
+export interface StageResult { stage: LaunchStage; ok: boolean; message: string; hint?: string; install?: ClaudeInstall; signIn?: WrapperSignIn
+  /** The stage was killed at its timeout: the result says nothing about the profile itself. */
+  timedOut?: true }
 export interface WrapperSignIn { tool: string; hint: string; command?: string }
 export interface ClaudeInstall { installCommand: string; npmCommand: string; docsUrl: string }
 
@@ -164,8 +166,8 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
   const steps: StageResult[] = []
   const push = (s: StageResult): void => { steps.push(s); d.onStep?.(s) }
   const profile = { id: launch.profile.id, name: launch.profile.name }
-  const fail = (stage: LaunchStage, failed: LaunchFailure, message: string, hint?: string): LaunchProbe => {
-    push({ stage, ok: false, message, ...(hint ? { hint } : {}), ...(failed === 'claude_not_found' ? { install: CLAUDE_INSTALL } : {}) })
+  const fail = (stage: LaunchStage, failed: LaunchFailure, message: string, hint?: string, timedOut = false): LaunchProbe => {
+    push({ stage, ok: false, message, ...(hint ? { hint } : {}), ...(failed === 'claude_not_found' ? { install: CLAUDE_INSTALL } : {}), ...(timedOut ? { timedOut: true as const } : {}) })
     return { ok: false, profile, steps, failed }
   }
   const wrapped = launch.wrapper.length > 0
@@ -180,7 +182,7 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
     if (!onPath(launch.wrapper[0] as string)) return fail('wrapper', 'wrapper_not_found', PROBE_TEXT.wrapperMissing(w), PROBE_TEXT.wrapperMissingHint)
     let r: RunResult
     try { r = await exec(['--version']) } catch { return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperSpawn(w), PROBE_TEXT.wrapperFailedHint) }
-    if (r.timedOut) return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperTimeout(w), PROBE_TEXT.wrapperFailedHint)
+    if (r.timedOut) return fail('wrapper', 'wrapper_failed', PROBE_TEXT.wrapperTimeout(w), PROBE_TEXT.wrapperFailedHint, true)
     if (r.code !== 0) {
       const line = firstLine(r.stderr) || firstLine(r.stdout)
       if (NOT_FOUND.test(line) && line.includes(baseName(launch.bin))) {
@@ -205,7 +207,7 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
     if (d.version) {
       let r: RunResult
       try { r = await exec(['--version']) } catch { return fail('claude', 'check_failed', PROBE_TEXT.claudeVersionFailed(null), PROBE_TEXT.wrapperFailedHint) }
-      if (r.timedOut || r.code !== 0) return fail('claude', 'check_failed', PROBE_TEXT.claudeVersionFailed(r.code), PROBE_TEXT.wrapperFailedHint)
+      if (r.timedOut || r.code !== 0) return fail('claude', 'check_failed', PROBE_TEXT.claudeVersionFailed(r.code), PROBE_TEXT.wrapperFailedHint, r.timedOut)
       version = firstLine(r.stdout).slice(0, 60)
     }
     push({ stage: 'claude', ok: true, message: PROBE_TEXT.claudeOk(version) })
@@ -224,7 +226,7 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
   const hint = wrapped ? PROBE_TEXT.authHintWrapped : PROBE_TEXT.authHint
   let r: RunResult
   try { r = await exec(['auth', 'status']) } catch { return fail('auth', 'check_failed', PROBE_TEXT.checkFailed) } // detail dropped: could echo paths/env
-  if (r.timedOut) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
+  if (r.timedOut) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed, undefined, true)
   if (r.code === EXIT_NOT_LOGGED_IN) return fail('auth', 'auth_failed', PROBE_TEXT.authMissing, hint)
   if (r.code !== 0) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
   const auth = readAuth(r.stdout)

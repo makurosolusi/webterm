@@ -52,17 +52,30 @@ describe('Central chat bubbles', () => {
 
   it('a failed reply shows its reason (long text clipped) and Retry resends the message that started it', () => {
     const onRetry = vi.fn()
-    const long = 'x'.repeat(400)
+    const long = 'x'.repeat(600)
     const failed = reply('a1', { state: 'failed', parts: [{ type: 'text', text: 'Part' }, { type: 'error', code: 'timeout', message: long }] })
     render(<ChatMessages messages={[human('h1', 'deploy main'), failed]} streaming={false} onRetry={onRetry} />)
     const agent = screen.getByLabelText('assistant message')
     expect(within(agent).getByText('failed')).toBeTruthy()
-    expect(within(agent).getByRole('note').textContent).toBe(`${'x'.repeat(300)}…`)
+    expect(within(agent).getByRole('note').textContent).toBe(`${'x'.repeat(500)}…`)
     fireEvent.click(within(agent).getByRole('button', { name: 'Retry' }))
     expect(onRetry).toHaveBeenCalledWith('deploy main', [])
     cleanup()
     render(<ChatMessages messages={[human('h1', 'deploy main'), failed, human('h2', 'next', { seq: 3 })]} streaming={false} onRetry={onRetry} />)
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull() // an older failure is not retried
+  })
+
+  it('a turn blocked by the Claude check shows the probe sentence and opens Settings › Claude › Connection test', () => {
+    const opened = vi.fn()
+    window.addEventListener('webterm:open-settings', opened as EventListener)
+    const message = 'Claude Code is not ready for launch profile "envman": envman not found on PATH. Install it on the server, or fix the command in the launch profile.'
+    const failed = reply('a1', { state: 'failed', parts: [{ type: 'error', code: 'runtime_unavailable', message }] })
+    render(<ChatMessages messages={[human('h1', 'hi'), failed]} streaming={false} />)
+    const note = within(screen.getByLabelText('assistant message')).getByRole('note')
+    expect(note.textContent).toContain(message)
+    fireEvent.click(within(note).getByRole('button', { name: 'Open Settings › Claude › Connection test' }))
+    window.removeEventListener('webterm:open-settings', opened as EventListener)
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'claude', field: 'claude-provider' })
   })
 
   it('a failed reply without a stored reason says so instead of a bare "failed"', () => {
