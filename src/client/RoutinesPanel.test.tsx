@@ -13,7 +13,7 @@ const TEMPLATE = {
 }
 
 /** Fake `/api/routines` + `/api/workspaces`: routines in memory, every write recorded. */
-function server(initial: RoutineView[], runs: RoutineRun[] = [], runStatus: RoutineRun['status'] = 'running') {
+function server(initial: RoutineView[], runs: RoutineRun[] = [], runStatus: RoutineRun['status'] = 'running', templates: unknown[] = [TEMPLATE]) {
   let routines = [...initial]
   const writes: { method: string; url: string; body?: Record<string, unknown> }[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
@@ -21,7 +21,7 @@ function server(initial: RoutineView[], runs: RoutineRun[] = [], runStatus: Rout
     if (url === '/api/workspaces') return new Response(JSON.stringify([{ id: 'w1', name: 'webterm', cwd: '/tmp/w1',
       nodes: [{ id: 'n-agent', kind: 'agent', title: 'brisk-otter' }, { id: 'n-term', kind: 'terminal', title: 'zsh' }] }]))
     if (method === 'GET' && url.includes('/runs')) return new Response(JSON.stringify({ runs }))
-    if (method === 'GET') return new Response(JSON.stringify({ routines, templates: [TEMPLATE] }))
+    if (method === 'GET') return new Response(JSON.stringify({ routines, templates }))
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined
     writes.push({ method, url, ...(body ? { body } : {}) })
     if (method === 'POST' && url === '/api/routines') routines = [...routines, { ...(body as unknown as RoutineView), id: 'r2', tier: 'R2', nextRunAt: null, lastRun: null }]
@@ -113,8 +113,8 @@ describe('Routines (Control › Automations)', () => {
     const { writes } = server([])
     render(<RoutinesPanel />)
     expect(await screen.findByText('No routines yet.')).toBeTruthy()
-    // Templates come first, each one click away.
-    fireEvent.click(within(screen.getByTestId('routine-templates')).getByRole('button', { name: 'Weekly: find missing tests' }))
+    // With no routines, the templates are the suggestions under the empty state, each one click away.
+    fireEvent.click(within(screen.getByTestId('routines-empty')).getByRole('button', { name: 'Use template: Weekly: find missing tests' }))
     const form = await screen.findByRole('form', { name: 'Routine' })
     expect((screen.getByLabelText('Schedule') as HTMLInputElement).value).toBe('0 9 * * 1')
     expect((screen.getByTestId('routine-more') as HTMLDetailsElement).open).toBe(true) // the template has a check command
@@ -123,7 +123,7 @@ describe('Routines (Control › Automations)', () => {
     fireEvent.submit(form)
     await waitFor(() => expect(writes[0]?.method).toBe('POST'))
     expect(writes[0]!.body).toMatchObject({ name: 'Weekly: find missing tests', workspaceId: 'w1', enabled: true, precheck: { command: 'true' }, budget: { maxRunsPerDay: 1 } })
-    expect(await screen.findByText('Weekly: find missing tests', { selector: 'strong' })).toBeTruthy()
+    expect(within(await screen.findByTestId('routines-list')).getByText('Weekly: find missing tests', { selector: 'strong' })).toBeTruthy()
   })
 
   it('a preset schedule shows in plain words; Edit picks another preset and saves its cron', async () => {
@@ -152,5 +152,99 @@ describe('Routines (Control › Automations)', () => {
     fireEvent.submit(screen.getByRole('form', { name: 'Routine' }))
     expect((await screen.findByRole('alert')).textContent).toContain('cron minute out of range')
     expect(screen.getByRole('form', { name: 'Routine' })).toBeTruthy() // form stays open
+  })
+
+  it('templates are stacked cards: title, description and a Use template action inside each', async () => {
+    server([], [], 'running', [TEMPLATE, { ...TEMPLATE, id: 'second', name: 'Daily summary', description: 'A long description that must wrap inside its card' }])
+    render(<RoutinesPanel />)
+    const list = await screen.findByRole('list', { name: 'Templates' })
+    expect(list.className).toMatch(/\blist-none\b/) // no browser list indent
+    expect(list.className).toMatch(/\bp-0\b/)
+    const cards = within(list).getAllByRole('listitem')
+    expect(cards.map((c) => c.getAttribute('data-template'))).toEqual(['weekly-missing-tests', 'second'])
+    const card = cards[1]!
+    expect(card.className).toMatch(/\bflex-col\b/) // stacked, never side by side with the button
+    expect(within(card).getByText('Daily summary').tagName).toBe('STRONG')
+    expect(within(card).getByText('A long description that must wrap inside its card').className).toMatch(/break-words/)
+    expect(within(card).getByRole('button', { name: 'Use template: Daily summary' }).textContent).toBe('Use template')
+  })
+
+  it('"New routine" is the primary action on the heading row', async () => {
+    server([routine])
+    render(<RoutinesPanel />)
+    const add = await screen.findByRole('button', { name: 'New routine' })
+    const heading = screen.getByTestId('routines-heading')
+    expect(heading.contains(add)).toBe(true)
+    expect(within(heading).getByRole('heading', { name: 'Routines' })).toBeTruthy()
+    expect(add.className).toMatch(/\bml-auto\b/)
+  })
+
+  it('no routines: a compact empty state with the templates as suggestions under it', async () => {
+    server([])
+    render(<RoutinesPanel />)
+    const empty = await screen.findByTestId('routines-empty')
+    expect(within(empty).getByText('No routines yet.')).toBeTruthy()
+    const text = empty.textContent ?? ''
+    expect(text.indexOf('No routines yet.')).toBeLessThan(text.indexOf('Weekly: find missing tests'))
+    expect(screen.queryByTestId('routine-templates-more')).toBeNull()
+  })
+
+  it('with routines: the list comes first, the templates collapsed under Templates below it', async () => {
+    server([routine])
+    render(<RoutinesPanel />)
+    const list = await screen.findByTestId('routines-list')
+    const more = screen.getByTestId('routine-templates-more') as HTMLDetailsElement
+    expect(more.open).toBe(false)
+    expect(list.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(more.querySelector('summary')?.textContent).toBe('Templates')
+    expect(screen.queryByTestId('routines-empty')).toBeNull()
+    expect(list.className).toMatch(/\blist-none\b/)
+  })
+
+  it('the intro is one short sentence; the details live in the (i) popover', async () => {
+    server([])
+    render(<RoutinesPanel />)
+    await screen.findByTestId('routines-empty')
+    const intro = screen.getByTestId('routines-intro').textContent ?? ''
+    expect(intro).toBe('Run an agent on a schedule, on an event, or from a script.')
+    expect(document.body.textContent).not.toMatch(/made up by a single run/)
+    fireEvent.click(screen.getByRole('button', { name: 'About routines' }))
+    const pop = await screen.findByRole('dialog', { name: 'About routines' })
+    expect(pop.textContent).toContain('check command')
+    expect(pop.textContent).toContain('made up by a single run')
+  })
+
+  it('a failed load says so with Retry, which loads again', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/workspaces') return new Response('[]')
+      if (fail) return new Response('{}', { status: 500 })
+      return new Response(JSON.stringify({ routines: [routine], templates: [] }))
+    }))
+    render(<RoutinesPanel />)
+    expect(screen.getByRole('status').textContent).toBe('Loading routines…')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Cannot load routines.')
+    fail = false
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Nightly tests')).toBeTruthy()
+  })
+
+  it('Save shows Saving… and is disabled while the create is in flight', async () => {
+    let release: () => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/workspaces') return new Response('[]')
+      if ((init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ routines: [], templates: [] }))
+      await new Promise<void>((r) => { release = r })
+      return new Response('{}', { status: 201 })
+    }))
+    render(<RoutinesPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New routine' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'x' } })
+    fireEvent.submit(screen.getByRole('form', { name: 'Routine' }))
+    const busy = await screen.findByRole('button', { name: 'Saving…' }) as HTMLButtonElement
+    expect(busy.disabled).toBe(true)
+    release()
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Routine' })).toBeNull())
   })
 })

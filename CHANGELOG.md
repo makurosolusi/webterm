@@ -180,6 +180,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Control › Automations › Routines: "New routine" sits on the heading row, your routines come first, templates are stacked cards with "Use template" (suggestions under "No routines yet", collapsed under "Templates" once you have routines), the intro is one sentence with details in an (i) popover, and the panel fits a 300px side bar without cut-off text.
 - Control › Memory: "Waiting for your OK" sits on top with a count and shrinks to one muted line when empty; long explanations moved into (i) popovers.
 - Control › Memory: a search box with a count ("1 of 3 shown"); adding is behind "+ Add memory".
 - Control › Memory: look-alike memories get one "2 memories look alike · Merge" line. Merge lets you edit the kept text, then forgets the other only after you confirm (it cannot be undone).
@@ -319,6 +320,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Control tab strip: the active tab (e.g. Automations) is fully visible when the panel opens, the tab changes or the side bar is resized, instead of being cut off at the edge; a fade marks the side with more tabs.
 - A Files node opened at the root folder shows just its name in the header again, without a trailing "· /". The browser start page's tile "⋮" and the disabled "Add shortcut" tile (at the shortcut limit) now show the app's tooltip instead of the slow native one.
 - Agent Chat and Central chat: the newest message is no longer hidden under the composer when the box, the status line or a panel below the list grows, or when a reply grows after it renders.
 - The Control side bar no longer scrolls sideways at narrow widths: its tab row stays pinned at the top while only the tab content scrolls, tabs that do not fit scroll inside the tab row (the active one is kept in view), and each Memory item shows its text at full width with its badge and Edit / Mute / Forget in one row underneath.

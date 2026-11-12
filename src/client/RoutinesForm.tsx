@@ -40,7 +40,7 @@ export const ROUTINE_FORM_TEXT = {
   prompt: 'Prompt', to: 'Agent', noAgents: 'No agent on any board yet. Add one, then pick it here.', pickAgent: 'Pick an agent', body: 'Message',
   maxRuns: 'Most runs per day', maxCost: 'Most spend per day (USD)', enabled: 'Enabled',
   seconds: (n: number) => `${n} s`, runs: (n: number) => `${n} run${n === 1 ? '' : 's'}`,
-  save: 'Save', cancel: 'Cancel',
+  save: 'Save', saving: 'Saving…', cancel: 'Cancel',
 } as const
 
 export const EMPTY_ROUTINE: RoutineDef = {
@@ -49,7 +49,7 @@ export const EMPTY_ROUTINE: RoutineDef = {
 }
 
 const T = ROUTINE_FORM_TEXT
-const field = 'flex flex-col gap-1'
+const field = 'flex min-w-0 flex-col gap-1'
 
 /** An agent on a board, for the "Message a wired agent" picker. */
 export interface RoutineAgentNode { id: string; title: string; workspaceId: string; workspaceName: string }
@@ -60,6 +60,8 @@ export function RoutinesForm(props: {
   /** Agent nodes across boards; the picker shows the routine's workspace only once one is chosen. */
   agents?: RoutineAgentNode[]
   onSave(def: RoutineDef): void
+  /** A save is in flight: Save says Saving… and is disabled. */
+  saving?: boolean
   onCancel(): void
 }): React.JSX.Element {
   const [d, setD] = useState<RoutineDef>(props.initial)
@@ -67,7 +69,7 @@ export function RoutinesForm(props: {
   const t = d.trigger
   const a = d.action
   return (
-    <form className="mt-2 flex flex-col gap-2 rounded border p-2 text-xs" aria-label="Routine" onSubmit={(e) => { e.preventDefault(); props.onSave(d) }}>
+    <form className="flex min-w-0 flex-col gap-2 rounded border p-2 text-xs" aria-label="Routine" onSubmit={(e) => { e.preventDefault(); props.onSave(d) }}>
       <label className={field}>{T.name}<Input value={d.name} onChange={(e) => set({ name: e.target.value })} /></label>
       <label className={field}>{T.workspace}
         <SettingsSelect value={d.workspaceId ?? ''} onChange={(v) => set({ workspaceId: v || null })}
@@ -138,7 +140,7 @@ export function RoutinesForm(props: {
       </details>
       <label className="flex items-center gap-1"><SettingsCheckbox checked={d.enabled} onChange={(enabled) => set({ enabled })} />{T.enabled}</label>
       <div className="flex gap-2">
-        <Button size="sm" type="submit" disabled={d.name.trim() === '' || (a.type === 'prreview' && !d.workspaceId) || (a.type === 'outbox' && !a.to)}>{T.save}</Button>
+        <Button size="sm" type="submit" disabled={props.saving === true || d.name.trim() === '' || (a.type === 'prreview' && !d.workspaceId) || (a.type === 'outbox' && !a.to)}>{props.saving ? T.saving : T.save}</Button>
         <Button size="sm" type="button" variant="secondary" onClick={props.onCancel}>{T.cancel}</Button>
       </div>
     </form>
