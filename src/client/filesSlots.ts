@@ -56,8 +56,8 @@ export interface FilesSlot {
   onKey?(e: KeyboardEvent, ctx: FilesSlotCtx): boolean
   /** `entry.name` is the path relative to cwd; the row renders only its last segment. */
   decorate?(entry: FileMeta, ctx: FilesSlotCtx): Decoration | undefined
-  /** Icon controls only (no visible text; filesToolbarPolicy.test locks this). Messages go to `ctx.notify`. */
-  toolbar?(ctx: FilesSlotCtx): ReactNode
+  /** Rows of the title bar's "…" overflow menu (labelled; filesToolbarPolicy.test locks this). Messages go to `ctx.notify`. */
+  overflow?(ctx: FilesSlotCtx): SlotMenuRow[]
   /** Rendered right-aligned in the node footer, after the notice/count text, in FILES_SLOTS order. */
   footer?(ctx: FilesSlotCtx): ReactNode
   /** Dirender di samping node (dialog/toast); komponen sendiri yang memutuskan kapan terlihat. */

@@ -53,13 +53,9 @@ export function useFilesTree({ id, cwd, version, view, root, initial }: Args) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on cwd change only
   }, [cwd])
 
-  // `total` = the same tree before view options (hidden dotfiles count): the footer's "N of total".
-  const { rows, total } = useMemo((): { rows: TreeRow[]; total: number } => {
+  const rows = useMemo((): TreeRow[] => {
     const children = new Map([...map].map(([rel, v]) => [rel, v.list]))
-    return {
-      rows: flattenTree(root, children, expanded, (level) => applyView(level, view)),
-      total: flattenTree(root, children, expanded).length,
-    }
+    return flattenTree(root, children, expanded, (level) => applyView(level, view))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `view` split into fields so object identity does not recompute
   }, [root, map, expanded, view.hidden, view.sortKey, view.sortDir])
 
@@ -99,7 +95,6 @@ export function useFilesTree({ id, cwd, version, view, root, initial }: Args) {
 
   return {
     rows,
-    total,
     expanded,
     setOpen,
     toggle: (rel: string) => setOpen(rel, !expanded.has(rel)),

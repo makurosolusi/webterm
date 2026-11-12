@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
-// Policy: a Files slot `toolbar()` renders icon controls only. Messages (progress, results, errors) belong
-// in the footer notice (`ctx.notify`), never as text in the toolbar. Every slot with a toolbar is checked
-// with all capabilities on, so a slot that later adds one is covered without editing this test.
+// Policy: a Files slot `overflow()` contributes labelled rows to the title bar's "…" menu (it never draws
+// its own toolbar icons). Messages (progress, results, errors) belong in the footer notice (`ctx.notify`).
+// Every slot with overflow rows is checked with all capabilities on, so a slot that adds one later is covered.
 import { act, cleanup, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -18,7 +18,7 @@ const ctx: FilesSlotCtx = {
 
 function Host({ slot }: { slot: FilesSlot }): ReactNode {
   slot.useSlot?.(ctx)
-  return <div data-id={ctx.nodeId}><div className="files-node"><span data-testid="tool">{slot.toolbar?.(ctx)}</span></div></div>
+  return <div data-id={ctx.nodeId}><div className="files-node" /></div>
 }
 
 beforeEach(() => {
@@ -27,19 +27,21 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-const withToolbar = FILES_SLOTS.filter((s) => s.toolbar)
+const withOverflow = FILES_SLOTS.filter((s) => s.overflow)
 
-it('at least one slot has a toolbar (the policy is not vacuous)', () => {
-  expect(withToolbar.map((s) => s.id)).toContain('upload')
+it('at least one slot has overflow rows (the policy is not vacuous)', () => {
+  expect(withOverflow.map((s) => s.id)).toContain('upload')
 })
 
-it.each(withToolbar.map((s) => [s.id, s] as const))('slot %s toolbar renders icon buttons only, no visible text', async (_id, slot) => {
+it.each(withOverflow.map((s) => [s.id, s] as const))('slot %s overflow rows each carry a label and an icon', async (_id, slot) => {
   const view = render(<Host slot={slot} />)
   await act(async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)) })
   view.rerender(<Host slot={slot} />)
-  const tool = view.getByTestId('tool')
-  const buttons = [...tool.querySelectorAll('button')]
-  expect(buttons.length).toBeGreaterThan(0)
-  expect(tool.textContent?.trim()).toBe('')
-  for (const b of buttons) expect(b.getAttribute('aria-label')?.trim()).toBeTruthy()
+  const rows = slot.overflow?.(ctx) ?? []
+  expect(rows.length).toBeGreaterThan(0)
+  for (const r of rows) {
+    if (!('label' in r)) continue
+    expect(r.label.trim()).toBeTruthy()
+    expect(r.icon).toBeTruthy()
+  }
 })

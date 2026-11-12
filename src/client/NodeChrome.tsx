@@ -21,6 +21,8 @@ export interface NodeChromeProps {
   icon?: string
   /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
   description?: string
+  /** Title tooltip (e.g. a Files node's full path); a click on the title still renames. */
+  titleHint?: string
   onRename: (t: string) => void
   collapsed: boolean; onToggleCollapse: () => void
   color: string; onColor: (c: string) => void
@@ -174,7 +176,7 @@ export default function NodeChrome(props: NodeChromeProps) {
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (
-        <span className="nodrag node-title" title="Rename" onClick={beginEdit}>
+        <span className="nodrag node-title" title={props.titleHint ? `${props.titleHint}\nClick to rename` : 'Rename'} onClick={beginEdit}>
           <NodeNameLabel name={props.name} label={props.name ? props.title : props.title || UNTITLED} />
         </span>
       )}
