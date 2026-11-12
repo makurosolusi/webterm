@@ -10,12 +10,19 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import TabOverflow, { useHiddenTabs } from './tabLayout.overflow'
-import { NodeNameLabel, withNodeName } from './nodeName.label'
+import { withNodeName } from './nodeName.label'
 import './tab-layout.css'
 
 /** `signal`: status dot, from the selector the Sessions side bar uses (`nodeTabSignal`). */
-/** `title` is the editable label (the rename draft); `name` is the node's fixed name, shown before it. */
-export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal }
+/**
+ * `title` is the editable label (the rename draft); `name` is the node's fixed name. The tab shows
+ * the name alone (VS Code: icon + name), the title (often the node type) goes in the tooltip.
+ */
+export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal; /** Node type label ("Browser"). */ kind?: string }
+
+/** Tooltip: `name · title`, plus the node type when the title is not already the type. */
+export const tabTooltip = (t: TabItem): string =>
+  withNodeName(t.name, t.title) + (t.kind && t.kind !== t.title ? ` · ${t.kind}` : '')
 
 export interface TabStripProps {
   items: TabItem[]
@@ -27,7 +34,9 @@ export interface TabStripProps {
   label?: string
   /** Full new order after a drop. */
   onReorder: (order: string[]) => void
-  /** Right-hand controls (new tab menu, panel toggle, back to canvas). */
+  /** Right-click, Shift+F10 or the ContextMenu key on a tab; `at` is the menu's viewport anchor. */
+  onContextMenu?: (id: string, at: { x: number; y: number }) => void
+  /** Right-hand controls (active tab's editor actions, new node menu, panel toggle). */
   children?: ReactNode
 }
 
@@ -49,7 +58,7 @@ export function movedOrder(order: readonly string[], from: string, to: string, s
   return rest
 }
 
-export default function TabStrip({ items, active, onActivate, onClose, onRename, onReorder, label = 'Open nodes', children }: TabStripProps) {
+export default function TabStrip({ items, active, onActivate, onClose, onRename, onReorder, onContextMenu, label = 'Open nodes', children }: TabStripProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const hidden = useHiddenTabs(listRef, items)
   const dragId = useRef<string | null>(null)
@@ -99,15 +108,28 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
             key={t.id} role="tab" aria-selected={t.id === active} tabIndex={t.id === (active ?? items[0]?.id) ? 0 : -1}
             className={cn('tabs-tab', t.id === active && 'tabs-tab--active')}
             data-active={t.id === active ? '' : undefined} data-tab-id={t.id} data-drop={drop?.id === t.id ? drop.side : undefined}
-            title={editing === t.id ? undefined : withNodeName(t.name, t.title)}
+            title={editing === t.id ? undefined : tabTooltip(t)}
             draggable={editing !== t.id}
             onClick={() => onActivate(t.id)}
+            // Mouse anchors at the pointer; the keyboard (and the ContextMenu key's 0,0 event) under the tab.
+            onContextMenu={(e) => {
+              if (!onContextMenu || editing === t.id) return
+              e.preventDefault()
+              const r = e.currentTarget.getBoundingClientRect()
+              onContextMenu(t.id, e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : { x: r.left, y: r.bottom })
+            }}
             // Middle button closes on mouseup (auxclick); mousedown would start browser autoscroll.
             onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
             onAuxClick={(e) => { if (e.button === 1 && editing !== t.id) { e.preventDefault(); onClose(t.id) } }}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return
               if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(t.id); return }
+              if (onContextMenu && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+                e.preventDefault()
+                const r = e.currentTarget.getBoundingClientRect()
+                onContextMenu(t.id, { x: r.left, y: r.bottom })
+                return
+              }
               const next = nextTabIndex(e.key, i, items.length)
               if (next < 0) return
               e.preventDefault()
@@ -126,7 +148,7 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
                 onClick={(e) => e.stopPropagation()} onFocus={(e) => e.currentTarget.select()}
               />
             ) : (
-              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}><NodeNameLabel name={t.name} label={t.title} /></span>
+              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}>{t.name || t.title}</span>
             )}
             {t.signal && (
               <span className={cn('tabs-tab__status', `tabs-tab__status--${t.signal.tone}`)} role="img" aria-label={t.signal.label} />

@@ -3,15 +3,20 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(`${process.cwd()}/src/client/tab-layout.css`, 'utf8')
 const rule = (sel: string) => new RegExp(`(?:^|\\n)${sel.replace(/\./g, '\\.')}\\s*\\{([^}]*)\\}`).exec(css)![1]
+const px = (name: string) => Number(new RegExp(`--${name}:\\s*(\\d+)px`).exec(rule('.tabs-strip'))![1])
 
-// Icon 16 + padding 12 + ~60px name + dot 8 + close 20 + gaps: below this a node name turns into "D…".
-const READABLE_MIN_PX = 112
+// VS Code "fit" tab sizing: content width clamped to 80-240px, never stretched to a fixed basis.
+describe('tab strip sizing', () => {
+  it('.tabs-tab sizes to its content between --tabs-tab-min-width and --tabs-tab-max-width', () => {
+    const tab = rule('.tabs-tab')
+    expect(tab).toMatch(/flex:\s*0 0 auto/)
+    expect(tab).toMatch(/min-width:\s*var\(--tabs-tab-min-width\)/)
+    expect(tab).toMatch(/max-width:\s*var\(--tabs-tab-max-width\)/)
+    expect(px('tabs-tab-min-width')).toBe(80)
+    expect(px('tabs-tab-max-width')).toBe(240)
+  })
 
-describe('tab strip minimum width', () => {
-  it('.tabs-tab min-width resolves via --tabs-tab-min-width to a readable px floor', () => {
-    expect(rule('.tabs-tab')).toMatch(/min-width:\s*var\(--tabs-tab-min-width\)/)
-    const px = Number(/--tabs-tab-min-width:\s*(\d+)px/.exec(rule('.tabs-strip'))![1])
-    expect(px).toBeGreaterThanOrEqual(READABLE_MIN_PX)
-    expect(px).not.toBe(72)
+  it('the label ellipsizes inside the max width', () => {
+    expect(rule('.tabs-tab__title')).toMatch(/text-overflow:\s*ellipsis/)
   })
 })

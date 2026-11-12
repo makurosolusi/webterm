@@ -1,21 +1,24 @@
-// Tab mode body (Orca layout): tab strip on top, below it [active tab | Files panel]. Every tab
+// Tab mode body (Orca layout): tab strip on top (the canvas/tabs switch lives once, in the
+// workspace bar, like VS Code's title-bar layout controls), below it [active tab | Files panel]. Every tab
 // node keeps a pane for its whole life; only the active pane is displayed, the others are
 // display:none so hosts (xterm, iframes) are never detached or re-created.
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentStatus, WsNode, WsNodeKind } from '../shared/workspace'
 import { isTabKind } from '../shared/tabLayout.schema'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { KIND_ICON, nodeRowLabel } from './nodeList'
+import { KIND_ICON, NODE_KIND_LABEL, nodeRowLabel } from './nodeList'
 import { parkNodeHost, placeNodeHost } from './tabLayout.dom'
-import { activateTab, reconcileWithNodes, reorderTabs, setMode, toggleFilesPanel, useTabLayout } from './tabLayout.store'
+import { activateTab, reconcileWithNodes, reorderTabs, toggleFilesPanel, useTabLayout } from './tabLayout.store'
 import { nodeTabSignal } from './sessionSignal'
 import { useUnreadIds } from './unread'
 import TabStrip, { type TabItem } from './tabLayout.strip'
 import FilesDock from './tabLayout.filesDock'
 import NewTabMenu, { type NewTabMenuProps } from './tabLayout.newMenu'
+import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
+import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 import './tab-layout.css'
 
 export interface TabsViewProps extends NewTabMenuProps {
@@ -64,22 +67,28 @@ export default function TabsView(p: TabsViewProps) {
 
   const items: TabItem[] = order.filter((id) => live.has(id)).map((id) => {
     const n = byId.get(id) as Node
-    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
+    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], kind: NODE_KIND_LABEL[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
   })
   const filesId = nodes.find((n) => kindOf(n) === 'files')?.id ?? null
+  // Tab context menu: the node's own "More Actions…" rows (published by its NodeChrome), then Close.
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: VscodeMenuItem[] } | null>(null)
+  const openTabMenu = (id: string, at: { x: number; y: number }) => {
+    const own = tabNodeMenuItems(id)
+    setMenu({ at, items: [...own, ...(own.length ? [{ type: 'separator' } as const] : []), { type: 'item', id: 'close', label: 'Close', onSelect: () => p.onCloseNode(id) }] })
+  }
 
   return (
     <div className="tabs-view">
-      <TabStrip items={items} active={active} onActivate={activateTab} onClose={p.onCloseNode} onRename={p.onRenameNode} onReorder={reorderTabs}>
+      <TabStrip items={items} active={active} onActivate={activateTab} onClose={p.onCloseNode} onRename={p.onRenameNode} onReorder={reorderTabs} onContextMenu={openTabMenu}>
+        {/* Active tab's editor actions (VS Code), portaled in by its NodeChrome. */}
+        <div ref={setEditorActionsSlot} className="tabs-strip__editor-actions" data-slot="tab-editor-actions" />
         <NewTabMenu {...p} />
         <IconButton
           label="Files panel" tooltip={filesPanel.open ? 'Hide Files panel' : 'Show Files panel'} side="bottom" size="icon-sm"
           aria-pressed={filesPanel.open} onClick={toggleFilesPanel}
         ><span className={cn('codicon', filesPanel.open ? 'codicon-layout-sidebar-right' : 'codicon-layout-sidebar-right-off')} aria-hidden="true" /></IconButton>
-        <IconButton label="Back to canvas" side="bottom" size="icon-sm" onClick={() => setMode('canvas')}>
-          <span className="codicon codicon-graph" aria-hidden="true" />
-        </IconButton>
       </TabStrip>
+      {menu && <VscodeMenu open anchor={menu.at} items={menu.items} onClose={() => setMenu(null)} ariaLabel="Tab actions" />}
       <div className="tabs-body">
         <div className="tabs-area">
           {paneIds.current.map((id) => <TabPane key={id} id={id} active={id === active} />)}
