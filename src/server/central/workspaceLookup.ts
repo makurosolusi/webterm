@@ -91,6 +91,13 @@ export type ProjectWorkspace =
   | { ok: true; workspaceId: string; name: string; nodes: unknown[] }
   | { ok: false; code: 'workspace_unavailable' | 'workspace_not_found' | 'workspace_corrupt' }
 
+/** Workspace id of a ledger project (its `workspace_id`); null = no project, or one not tied to a board. */
+export function projectWorkspaceId(ledger: Database, projectId: string | null | undefined): string | null {
+  if (!projectId) return null
+  const v = getRow(ledger, 'SELECT workspace_id FROM project WHERE id = ?', projectId)?.['workspace_id']
+  return v == null ? null : String(v)
+}
+
 /** The workspace of a ledger project: project row from the ledger, workspace from the registered store. */
 export function projectWorkspace(ledger: Database, projectId: string | undefined): ProjectWorkspace {
   if (!store) return { ok: false, code: 'workspace_unavailable' }

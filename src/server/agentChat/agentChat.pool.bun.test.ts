@@ -13,6 +13,7 @@ import {
 
 interface Opened { target: AgentChatTarget; resume?: string; canUseTool: CanUseTool; abort: AbortController; fq: FakeQuery }
 
+const AUTO_SETTINGS = { skipApprovals: false, claudePermissionMode: 'auto' as const }
 const tick = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 const workspace = (id: string, nodes: Array<Partial<WsNode> & { id: string }>, cwd?: string): Workspace => ({
@@ -80,8 +81,8 @@ describe('AgentChatPool', () => {
     const dir = tmpdir()
     const ws = workspace('w1', [{ id: 'a' }, { id: 'b', cwd: '/definitely/not/here', permissionMode: 'acceptEdits', claudeProfileId: 'p1' }], dir)
     const [a, b] = ws.nodes as [WsNode, WsNode]
-    expect(agentChatOpenConfig({ ws, node: a }, { port: 8700, mode: 'auto' })).toEqual({ nodeId: 'a', port: 8700, cwd: dir, profileId: undefined, mode: 'auto', workspaceId: 'w1' })
-    expect(agentChatOpenConfig({ ws, node: b }, { port: 8700, mode: 'auto' })).toMatchObject({ cwd: process.env.HOME || homedir(), profileId: 'p1', mode: 'acceptEdits' })
+    expect(agentChatOpenConfig({ ws, node: a }, { port: 8700, settings: AUTO_SETTINGS })).toEqual({ nodeId: 'a', port: 8700, cwd: dir, profileId: undefined, mode: 'auto', workspaceId: 'w1' })
+    expect(agentChatOpenConfig({ ws, node: b }, { port: 8700, settings: AUTO_SETTINGS })).toMatchObject({ cwd: process.env.HOME || homedir(), profileId: 'p1', mode: 'acceptEdits' })
   })
 
   test('over the cap the least recently active idle Query is suspended, resumable, never a busy one', async () => {

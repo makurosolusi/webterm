@@ -77,7 +77,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const BROWSER_TOOL_RE = /(^|[_.])browser([_.]|$)/i
 
 /** Event kinds the replay reads; the SQL filter in replay.sources.ts mirrors this. */
-export const APPROVAL_KINDS = ['permission.request', 'permission.decision', 'inbox.decision', 'policy.decision'] as const
+export const APPROVAL_KINDS = ['permission.request', 'permission.decision', 'permission.mode_change', 'inbox.decision', 'policy.decision'] as const
 
 /** Lane of a Senses event; null = not part of the replay. */
 export function laneOf(e: Pick<SenseEvent, 'kind' | 'payload'>): Lane | null {
@@ -95,9 +95,12 @@ export function laneOf(e: Pick<SenseEvent, 'kind' | 'payload'>): Lane | null {
 function eventText(e: SenseEvent): string {
   const p = rec(e.payload)
   const tool = str(p.toolName) || str(p.tool)
+  // The redacted, capped command or path the producer kept (events/producers.ts).
+  const on = str(p.input) ? ` ${str(p.input)}` : ''
   switch (e.kind) {
-    case 'hook.PreToolUse': return `Tool call: ${tool || 'tool'}`
-    case 'hook.PostToolUse': return `Tool done: ${tool || 'tool'}`
+    case 'hook.PreToolUse': return `Tool call: ${tool || 'tool'}${on}`
+    case 'hook.PostToolUse': return `Tool ${str(p.outcome) === 'error' ? 'failed' : 'done'}: ${tool || 'tool'}${on}`
+    case 'permission.mode_change': return `Permission mode ${str(p.from) || '?'} -> ${str(p.to) || '?'} (${str(p.scope) || 'global'})`
     case 'mcp.call': return `Receipt ${tool || 'tool'}: ${str(p.outcome)} (${str(p.detail)})`
     case 'permission.request': return `Approval asked: ${str(p.label) || tool}`
     case 'permission.decision': return `Approval ${str(p.behavior) || 'decided'}: ${str(p.label) || tool}`

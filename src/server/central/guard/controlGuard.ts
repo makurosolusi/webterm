@@ -40,7 +40,7 @@ export interface SyncControlGuard extends ControlGuard {
   readonly policy: Policy
   /** F4-d: classifies the approval card of a ladder ask (switch on, R2 at act_gated); null otherwise. */
   classifyLater?(req: ToolGuardRequest, decision: GuardDecision): Promise<GatedOutcome | null>
-  skipsApprovals(): boolean
+  skipsApprovals(projectId?: string | null): boolean
 }
 
 export interface GuardDeps {
@@ -55,8 +55,8 @@ export interface GuardDeps {
   classifier?: Classifier
   /** Classifier event sink; default the process event log. */
   record?: (e: AppendEventInput) => void
-  /** Settings > Skip approvals, read on every check. */
-  skipApprovals?: () => boolean
+  /** Danger level for a ledger project (null = global), read on every check. */
+  skipApprovals?: (projectId: string | null) => boolean
 }
 
 /** Guard action for a registry tool: worker-starting tools are judged as `spawn`. */
@@ -95,7 +95,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
   const policy = deps.policy ?? createPolicy({ db, now })
 
   const effectiveLevel = (projectId: string | null): ControlLevel => effectiveLevelOf(db, projectId, env())
-  const skipsApprovals = (): boolean => deps.skipApprovals?.() === true
+  const skipsApprovals = (projectId?: string | null): boolean => deps.skipApprovals?.(projectId ?? null) === true
 
   /** Counts this sighting of `digest`; true once it reaches the threshold inside the window. */
   const isDoomLoop = (digest: string): boolean => {
@@ -108,7 +108,10 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     return hits.length >= DOOM_THRESHOLD
   }
 
+  /** Id of the user `ask` rule behind the last judged needs_approval (audited when Danger skips it). */
+  let askRule: string | undefined
   const judge = (req: GuardRequest, level: ControlLevel): GuardDecision => {
+    askRule = undefined
     const deny = (code: GuardCode, reason: string): GuardDecision => ({ verdict: 'deny', level, code, reason })
     const globalLevel = readLevel(db, 'global')?.level ?? DEFAULT_GLOBAL_LEVEL
     if (globalLevel === 'off') return deny('halted', 'central is halted (global level off)')
@@ -148,7 +151,7 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     if (req.action !== 'turn') {
       const d = policy.decide(CENTRAL_PRINCIPAL, req.tool, req.projectId ? { resource: `project:${req.projectId}` } : {})
       if (d.effect === 'deny') return deny('policy_denied', d.reason)
-      if (d.effect === 'ask') return { verdict: 'needs_approval', level, tier }
+      if (d.effect === 'ask') { askRule = d.ruleId; return { verdict: 'needs_approval', level, tier } }
     }
     return ladder.verdict === 'needs_approval' ? { verdict: 'needs_approval', level, tier } : { verdict: 'allow', level }
   }
@@ -165,9 +168,9 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     check(req) {
       const level = effectiveLevel(req.projectId)
       const judged = judge(req, level)
-      const skipped = judged.verdict === 'needs_approval' && skipsApprovals()
+      const skipped = judged.verdict === 'needs_approval' && skipsApprovals(req.projectId)
       const decision: GuardDecision = skipped ? { verdict: 'allow', level } : judged
-      const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : skipped ? { skipped: true } : {}
+      const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : skipped ? { skipped: true, ...(askRule ? { rule: askRule } : {}) } : {}
       appendEvent({ db, now }, {
         actor: 'guard', kind: GUARD_AUDIT_KIND, ...projectRef(db, req.projectId),
         payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code },
@@ -194,9 +197,9 @@ export type ToolGuardVerdict = { ok: true } | { ok: false; code: string }
  * Adapts the guard to the registry's sync `check`. `approved` marks execution after a human approval
  * (needs_approval then passes); a guard exception denies with `guard_error` and is reported to `onError`.
  */
-export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean; onError?: (err: unknown) => void } = {}): { check(req: ToolGuardRequest): ToolGuardVerdict; skipsApprovals(): boolean } {
+export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean; onError?: (err: unknown) => void } = {}): { check(req: ToolGuardRequest): ToolGuardVerdict; skipsApprovals(projectId?: string | null): boolean } {
   return {
-    skipsApprovals: () => guard.skipsApprovals(),
+    skipsApprovals: (projectId) => guard.skipsApprovals(projectId),
     check(req) {
       try {
         const digest = createHash('sha256').update(`${req.tool}\n${canonical(req.input)}`).digest('hex').slice(0, 32)

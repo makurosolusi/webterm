@@ -142,13 +142,13 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       throw err
     }
   }
-  const skip = (): boolean => guard.skipsApprovals?.() === true
+  const skip = (projectId: string): boolean => guard.skipsApprovals?.(projectId) === true
   const snapshot = (a: AgentRecord, extra: Record<string, unknown> = {}): ToolResult => ({ ok: true, data: { ...agentView(a), ...extra } })
 
   async function gate(projectId: string, tool: string, tier: Tier, requireApproval = false): Promise<ToolResult | null> {
     const verdict = await guard.check({ action: tool === 'agent.spawn' ? 'spawn' : 'tool', projectId, tool, tier })
     if (verdict.verdict === 'deny') return { ok: false, code: verdict.code }
-    if (verdict.verdict === 'needs_approval' || (requireApproval && tier === 'R2' && !skip())) return { ok: false, code: 'approval_required' }
+    if (verdict.verdict === 'needs_approval' || (requireApproval && tier === 'R2' && !skip(projectId))) return { ok: false, code: 'approval_required' }
     return null
   }
 
@@ -257,7 +257,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const lapsed = approval?.status === 'approved' && approval.expiresAt !== null && approval.expiresAt <= now()
     const status = !approval || lapsed ? 'expired' : approval.status
     // Skip approvals: an open or lapsed card no longer holds the agent; the guard's denies still do.
-    if (skip() && (status === 'pending' || status === 'expired')) return (await gate(agent.projectId, 'agent.spawn', tier)) ?? launch(agent)
+    if (skip(agent.projectId) && (status === 'pending' || status === 'expired')) return (await gate(agent.projectId, 'agent.spawn', tier)) ?? launch(agent)
     if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
     if (status === 'rejected') return endPending(agent, 'rejected')
     if (status === 'expired') return pendApproval(agent)
@@ -311,7 +311,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return proceed(created.agent, created.verdict, input.requireApproval)
   }
 
-  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || (requireApproval && !skip()) ? pendApproval(agent) : launch(agent))
+  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || (requireApproval && !skip(agent.projectId)) ? pendApproval(agent) : launch(agent))
 
   const live = (a: AgentRecord): boolean => (a.runner === 'exec' ? handles.has(a.id) : !!a.nodeId && host.hasSession(a.nodeId))
 

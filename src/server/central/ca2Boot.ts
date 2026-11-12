@@ -32,6 +32,8 @@ import { createMailStore } from './agents/mailStore'
 import type { AgentRecord } from './contracts'
 import { type SyncControlGuard, createControlGuard } from './guard/controlGuard'
 import { activeCa2, setActiveCa2 } from './ca2Active'
+import { projectWorkspaceId } from './workspaceLookup'
+import { skipApprovalsFor } from '../../shared/settings.projectApprovalLevels'
 import { reconcileTurns } from './chat/turnReconciler'
 import { createSkillStore, type SkillAdminStore } from './skills/skillStore'
 import { defaultRegistry } from './tools/defaultRegistry'
@@ -127,7 +129,10 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   const db = opts.runtime.db
   const now = opts.now ?? Date.now
   const dir = opts.dataDirPath ?? dataDir()
-  const guard = createControlGuard({ db, now, env, skipApprovals: () => opts.settings?.().skipApprovals === true })
+  const guard = createControlGuard({ db, now, env, skipApprovals: (projectId) => {
+    const s = opts.settings?.()
+    return !!s && skipApprovalsFor(s, projectWorkspaceId(db, projectId)) // project level, else global
+  } })
   const userStore = createUserMemoryStore(createMemoryFilePort(userMemoryRoot(env, dir)))
   const sessions = createSessionsPort(opts.sessions)
   let kb: Database | null = null

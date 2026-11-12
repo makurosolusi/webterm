@@ -117,7 +117,7 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   const latest = cards[0]
   const expired = latest !== undefined && latest.status === 'pending' && latest.expiresAt !== null && latest.expiresAt <= now
   if (latest && !expired) {
-    if (latest.status === 'pending' && !c.guard.skipsApprovals()) return pendingReceipt(latest.id, latest.expiresAt)
+    if (latest.status === 'pending' && !c.guard.skipsApprovals(typeof args.projectId === 'string' ? args.projectId : null)) return pendingReceipt(latest.id, latest.expiresAt)
     if (latest.status === 'rejected') return receipt('denied', 'approval_rejected', { approvalId: latest.id }, 'the human rejected this exact call; do not retry it', { approvalId: latest.id, approvalStatus: 'rejected' })
     if (latest.status === 'approved' && latest.unused) {
       const digest = approvalDigest(approvalRequest(conversationId, tool, args))

@@ -89,10 +89,8 @@ export function createAgentChatPort(deps: AgentChatPortDeps): ChatPort {
     async setMode(workspaceId, nodeId, mode) {
       if (!target(workspaceId, nodeId)) return NOT_FOUND
       if (!isPermissionMode(mode)) return { ok: false, code: 'invalid_mode', hint: 'mode must be one of manual, auto, acceptEdits, plan, bypassPermissions.' }
-      const s = pool.session(nodeId)
-      if (!s) return NOT_FOUND
       try {
-        await s.setMode(mode)
+        if (!(await pool.setMode(nodeId, mode, 'central'))) return NOT_FOUND
       } catch (err) {
         return failed('mode_failed', err)
       }

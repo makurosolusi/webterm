@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
-import { APPROVAL_LEVELS, type ApprovalLevel } from '../shared/settings.approvalLevel'
+import { APPROVAL_LEVELS, APPROVAL_LEVEL_TEXT } from '../shared/settings.approvalLevel'
 import type { EffectiveClaudeLaunch } from '../shared/claudeLaunch/claudeLaunch.effective'
 import type { AgentPermissionMode } from '../shared/workspace'
 import { ClaudeProviderCard } from './ClaudeProviderCard'
@@ -38,15 +38,11 @@ export const CLAUDE_TEXT = {
     login: 'Credential: your Claude Code login.',
   } as Record<EffectiveClaudeLaunch['credential'], string>,
   approvalLabel: 'How much may agents do on their own?',
-  approval: {
-    never: { label: 'Never ask', hint: 'Central and every Claude agent act without asking you first; only your deny rules, budgets and Stop still apply.' },
-    risky: { label: 'Ask for risky things', hint: 'Actions that cannot be undone (deleting files, pushing, running destructive commands) ask first; routine work runs without asking.' },
-    always: { label: 'Ask every time', hint: 'Every action waits for your approval first. Safest, and the slowest.' },
-  } as Record<ApprovalLevel, { label: string; hint: string }>,
+  approval: APPROVAL_LEVEL_TEXT,
   rawMode: 'Claude permission mode',
   rawModeHint: 'Passed to Claude as --permission-mode when it starts. The choice above sets it for you.',
-  rawModeLocked: 'Never ask is on, so agents start without asking.',
-  rawModeFix: 'Ask for risky things instead',
+  rawModeLocked: 'Danger is on, so agents start without asking.',
+  rawModeFix: 'Use Auto instead',
 } as const
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [

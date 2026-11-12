@@ -84,7 +84,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
   e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
   e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
-  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Never ask, ask for risky things, or ask every time.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Danger.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
   e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
   e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),
   e('claude', 'claudePermissionMode', 'Claude permission mode', CLAUDE_TEXT.rawModeHint, 'permission-mode approval plan'),

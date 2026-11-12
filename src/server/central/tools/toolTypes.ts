@@ -22,7 +22,7 @@ export type GuardVerdict = { ok: true } | { ok: false; code: string }
 export interface ControlGuard {
   check(request: GuardRequest): GuardVerdict
   /** Settings > Skip approvals is on for this caller; handlers with their own card skip it. */
-  skipsApprovals?(): boolean
+  skipsApprovals?(projectId?: string | null): boolean
 }
 
 export type ToolInput = Record<string, unknown>

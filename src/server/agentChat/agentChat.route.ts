@@ -116,7 +116,7 @@ async function post(c: Ctx, deps: AgentChatRouteDeps, nodeId: string, verb: stri
     return r.ok ? ok(c) : fail(c, { status: r.status, error: 'not_pending', reason: r.reason })
   }
   if (!isPermissionMode(b.mode)) return fail(c, bad('mode must be one of manual, auto, acceptEdits, plan, bypassPermissions.'))
-  await s.setMode(b.mode)
+  await deps.pool.setMode(nodeId, b.mode, 'human-ui')
   return ok(c)
 }
 

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Settings › Claude: the effective-launch line and profile badges come from the server (command mode
 // included), Central's own pick shows as a deviation, the one permissions choice writes `agentApprovalLevel`,
-// the raw permission mode sits under Advanced locked by "Never ask", and no Claude bits are left elsewhere.
+// the raw permission mode sits under Advanced locked by "Danger", and no Claude bits are left elsewhere.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
@@ -89,7 +89,7 @@ describe('Permissions', () => {
   it('one select with three levels; each writes the mapped runtime keys', () => {
     const spy = vi.fn()
     render(<Harness spy={spy} />)
-    expect([...level().options].map((o) => o.textContent)).toEqual(['Never ask', 'Ask for risky things', 'Ask every time'])
+    expect([...level().options].map((o) => o.textContent)).toEqual(['Danger', 'Auto', 'Ask'])
     fireEvent.change(level(), { target: { value: 'risky' } })
     expect(spy).toHaveBeenLastCalledWith({ agentApprovalLevel: 'risky' })
     expect(keys()).toEqual({ skip: false, mode: 'auto', level: 'risky' })
@@ -99,20 +99,20 @@ describe('Permissions', () => {
     expect(keys()).toMatchObject({ skip: true, level: 'never' })
   })
 
-  it('"Never ask" reads as a warning; the separate skip / hook switches are gone', () => {
+  it('"Danger" reads as a warning; the separate skip / hook switches are gone', () => {
     render(<Harness initial={{ skipApprovals: true, agentApprovalLevel: 'never' }} />)
-    expect(screen.getByText(/act without asking you first/)).toBeTruthy()
+    expect(screen.getByText(/only your Deny rules, spend limits and secret access/)).toBeTruthy()
     expect(screen.queryByLabelText('Skip approvals')).toBeNull()
     expect(screen.queryByLabelText('Hook approvals from the canvas')).toBeNull()
   })
 
-  it('raw permission mode lives under Advanced, locked by Never ask, with a fix to the risky level', () => {
+  it('raw permission mode lives under Advanced, locked by Danger, with a fix to the risky level', () => {
     const spy = vi.fn()
     render(<Harness spy={spy} initial={{ skipApprovals: true, agentApprovalLevel: 'never' }} />)
     const raw = screen.getByLabelText('Claude permission mode') as HTMLSelectElement
     expect(raw.closest('details')).toBeTruthy()
     expect(raw.disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Ask for risky things instead' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use Auto instead' }))
     expect(spy).toHaveBeenLastCalledWith({ agentApprovalLevel: 'risky' })
     expect((screen.getByLabelText('Claude permission mode') as HTMLSelectElement).disabled).toBe(false)
   })

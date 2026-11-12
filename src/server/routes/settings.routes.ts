@@ -11,7 +11,11 @@ import { agentProtectionRoute } from '../agentSandbox.api'
 import { json, type ApiRoute } from './route.core'
 import { installedShells, SHELLS_PATH } from '../shells'
 import { canvasBackgroundRoutes } from './canvasBackground.routes'
-import { effectiveClaudeMode } from '../permission/permission.mode'
+import { effectiveClaudeMode, launchModeFor } from '../permission/permission.mode'
+import { APPROVAL_SESSIONS_PATH, approvalSessions, recordLevelChanges, switchAgentChats } from '../permission/permission.levelChange'
+import { approvalLevelFor } from '../../shared/settings.projectApprovalLevels'
+import { findWorkspaceFor } from '../contextLink'
+import { createLogger } from '../logs'
 import { applyApprovalLevelSwitch } from '../policy/policy.approvalLevel'
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
@@ -24,8 +28,16 @@ export function applyPtyOptions(): void {
     // Same mode Agent Chat gets (agentChat.runtime.ts): `auto` is passed through, not dropped.
     claudePermissionMode: mode,
     hookReplyApprovals: s.hookReplyApprovals,
+    // Per node, read at launch: the approval level of the node's workspace (its override, else global).
+    launchFor: (nodeId) => {
+      const now = db.getSettings()
+      const workspaceId = findWorkspaceFor(db.list(), nodeId)?.id ?? null
+      return { mode: launchModeFor(now, workspaceId), workspaceId, level: approvalLevelFor(now, workspaceId) }
+    },
   }
 }
+
+const log = createLogger('settings')
 
 export const settingsRoutes: ApiRoute[] = [
   { name: 'env-settings', match: (c) => c.path === ENV_SETTINGS_PATH, handle: async (c) => { await envSettingsRoute(c.req, c.res, c.method, envSettingsApiDeps()); return true } },
@@ -39,9 +51,26 @@ export const settingsRoutes: ApiRoute[] = [
     name: 'settings',
     match: (c) => c.path === '/api/settings',
     handle: async (c) => {
-      await settingsRoute(c.req, c.res, c.method, db, (patch) => applyApprovalLevelSwitch(patch, c.ledger()))
+      const prev = db.getSettings()
+      await settingsRoute(c.req, c.res, c.method, db, (patch) => {
+        applyApprovalLevelSwitch(patch, c.ledger())
+        const next = db.getSettings()
+        // Transparent and live: one event per changed scope, running Agent Chats follow at once.
+        const changes = recordLevelChanges(prev, next, 'human-ui')
+        switchAgentChats(changes, next).catch((err: unknown) => log.error('settings.mode_switch_failed', 'Switching agent chats to the new level failed', { cause: err instanceof Error ? err.message : String(err) }))
+      })
       // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
       if (c.method === 'PUT') applyPtyOptions()
+      return true
+    },
+  },
+  // Read-only: the level in a workspace and how many running terminal sessions keep an older one until restarted.
+  {
+    name: 'approval-sessions',
+    match: (c) => c.path === APPROVAL_SESSIONS_PATH && c.method === 'GET',
+    handle: (c) => {
+      const ws = c.url.searchParams.get('workspaceId') || undefined
+      json(c.res, 200, approvalSessions(db.getSettings(), (id) => sessions.isLive(id), ws))
       return true
     },
   },

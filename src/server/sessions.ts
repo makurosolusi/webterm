@@ -24,6 +24,7 @@ import { missingBinaryText } from './sessionsNotices'
 import { locateBinary } from './loginShellPath'
 import { dataDir } from './config'
 import { recordEvent } from './events/producers'
+import { recordLaunchLevel } from './permission/permission.mode'
 import type { StaleSweepEntry } from './nodeRegistry'
 
 // `launchLine` dulu tinggal di file ini dan diimpor dari sini oleh test/pemanggil lama. Re-export
@@ -85,8 +86,9 @@ export class Sessions extends SessionsAdopt {
     // Diprobe SEKALI (filesystem), lalu dipakai dua kali: menjatuhkan `--resume` dan memberi tahu
     // pengguna. Hanya transcript yang TERBUKTI tidak ada yang menjatuhkannya — `transcriptPresence.ts`.
     const deadResume = !!msg.resume && resumeIsDead(msg.sessionId, msg.agentId)
+    const launch = msg.agentId && !held ? this.options.launchFor?.(msg.id) : undefined
     let cmd = launchLine(msg, PORT, {
-      permissionMode: this.options.claudePermissionMode,
+      permissionMode: launch?.mode ?? this.options.claudePermissionMode,
       resumeIsDead: deadResume,
     })
     const notices: string[] = profileNotice ? [profileNotice] : []
@@ -106,6 +108,7 @@ export class Sessions extends SessionsAdopt {
       if (bin && !bin.includes('/') && !SHELL_WORDS.has(bin) && !locateBinary(bin, agentPath())) throw new Error(missingBinaryText(bin))
       // Claude provider (Settings > Capabilities): key/base URL reach THIS claude process only, via a
       // one-shot 0600 file, never argv or the tmux -e list (claudeProvider/claudeProvider.launch.ts).
+      if (launch && msg.agentId && hasClaudeHookSettings(msg.agentId)) recordLaunchLevel(msg.id, launch.workspaceId, launch.level)
       if (msg.agentId && hasClaudeHookSettings(msg.agentId)) cmd = wrapClaudeLaunch(cmd, activeProviderEnv(), resolveShell(this.options.shell))
     }
     // Env sesi agent, digerbangi TERPISAH:

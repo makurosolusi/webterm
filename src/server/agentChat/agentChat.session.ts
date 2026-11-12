@@ -105,6 +105,9 @@ export class AgentChatSession {
     }
   }
 
+  /** Mode picked by setMode in this session; undefined = the opener's (node / level) mode. */
+  currentMode(): AgentPermissionMode | undefined { return this.mode }
+
   async setMode(mode: AgentPermissionMode): Promise<void> {
     this.mode = mode
     const sdkMode = agentChatPermissionMode(mode)

@@ -10,6 +10,7 @@ import { classifierSwitch } from '../policy/policy.classifier'
 import { classifyCard } from '../policy/policy.classifier.card'
 import { answerPermission, type PermissionAsk } from './permission.wait'
 import type { PermissionOutput } from './permission.model'
+import { preToolRuleBlock, type PreToolAsk } from './permission.preTool'
 
 /**
  * Answers with the live ledger + policy. `enabled` is `settings.hookReplyApprovals` (Settings >
@@ -34,4 +35,10 @@ export async function answerPermissionLive(ask: PermissionAsk, enabled: boolean)
     waitMs: enabled ? PERM_WAIT_SECS_INTERACTIVE * 1000 : 0,
     ...(classifierSwitch(ledger.db).permissions ? { classify: (a) => classifyCard({ db: ledger.db }, a) } : {}),
   }, ask)
+}
+
+/** PreToolUse: a user Deny rule blocks in every mode (permission.preTool.ts); no policy = nothing to enforce. */
+export function preToolRuleLive(ask: PreToolAsk): Record<string, unknown> {
+  const policy = activePolicy()
+  return policy ? preToolRuleBlock({ policy, record: recordEvent }, ask) : {}
 }

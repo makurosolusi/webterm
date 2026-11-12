@@ -29,6 +29,8 @@ import { takeCheckpointSafe } from './checkpoint/checkpoint.service'
 import { activeBrowser } from './browser/browser.state'
 import type { PermissionOutput } from './permission/permission.model'
 import type { PermissionAsk } from './permission/permission.wait'
+import type { PreToolAsk } from './permission/permission.preTool'
+import type { ApprovalModeName } from '../shared/settings.projectApprovalLevels'
 import {
   nodeTokenHeader,
   nodeTokenMismatch,
@@ -59,6 +61,10 @@ export interface AgentStatusDeps {
   releaseBrowser?(browserNodeId: string): void
   /** Holds a `PermissionRequest` for a human decision (F3-b); absent = no decision, Claude prompts. */
   answerPermission?(ask: PermissionAsk): Promise<PermissionOutput | null>
+  /** PreToolUse: deny by a user Deny rule in every mode (permission.preTool.ts); absent = not wired (tests). */
+  preToolRule?(ask: PreToolAsk): Record<string, unknown>
+  /** Ask/Auto/Danger the node runs under (launch level, else its workspace's level); absent = not recorded. */
+  modeOf?(nodeId: string, workspaceId: string | null): ApprovalModeName
 }
 
 /** Opsi test: override gerbang + dependency. Produksi memanggil route tanpa argumen keempat. */
@@ -79,7 +85,7 @@ function json(res: ServerResponse, status: number, body: unknown): void {
  * dengan dependency palsu).
  */
 async function defaultDeps(): Promise<AgentStatusDeps> {
-  const [{ db }, { sessions }, { answerPermissionLive }] = await Promise.all([import('./db'), import('./sessions'), import('./permission/permission.runtime')])
+  const [{ db }, { sessions }, { answerPermissionLive, preToolRuleLive }, { sessionModeName }] = await Promise.all([import('./db'), import('./sessions'), import('./permission/permission.runtime'), import('./permission/permission.mode')])
   // Satu-satunya titik start loop link-note: hook Claude Code pertama (SessionStart) menyalakannya,
   // jadi tidak ada flag/konfigurasi — dan test dengan deps palsu tidak pernah memuatnya.
   await startLinkNotes()
@@ -90,6 +96,8 @@ async function defaultDeps(): Promise<AgentStatusDeps> {
     releaseBrowser: (id) => activeBrowser()?.releaseLease(id),
     // Read per request: the Settings toggle applies to the very next prompt, no restart.
     answerPermission: (ask) => answerPermissionLive(ask, db.getSettings().hookReplyApprovals !== false),
+    preToolRule: preToolRuleLive,
+    modeOf: (nodeId, workspaceId) => sessionModeName(db.getSettings(), nodeId, workspaceId),
   }
 }
 
@@ -186,19 +194,24 @@ export async function agentStatusRoute(
   // this hook just wrote. Trusted only when the request carried this node's own token. A node on no
   // board gets no ledger row (data-209-1): the event table is append-only, so a row per stray POST
   // is permanent growth (temporary mitigation; retention/GC is a later wave).
-  if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node })
+  const mode = deps.modeOf?.(node, ws?.id ?? null)
+  if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node, mode })
   await checkpointBeforePrompt(event, ws, node)
   if (ws && deps.releaseBrowser) releaseCabledBrowsers(event, ws, node, deps.releaseBrowser)
   const mail = outboxHookContext(node, event)
   const text = [aware, extras, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')
   const out: Record<string, unknown> = text && event ? { hookEventName: event, additionalContext: text } : {}
-  if (event === 'PreToolUse') Object.assign(out, doomLoopBlock(node, ws?.id ?? null, body))
+  if (event === 'PreToolUse') {
+    // A user Deny rule first (holds in Danger too), then the doom-loop guard.
+    const denied = deps.preToolRule?.({ nodeId: node, workspaceId: ws?.id ?? null, body, mode: mode ?? 'auto' }) ?? {}
+    Object.assign(out, Object.keys(denied).length ? denied : doomLoopBlock(node, ws?.id ?? null, body))
+  }
   if (event === 'PermissionRequest' && deps.answerPermission) {
     // Held until a human decides or the wait ends; a vanished curl (Claude closed) stops the wait.
     const gone = new AbortController()
     if (typeof res.on === 'function') res.on('close', () => { if (!res.writableEnded) gone.abort() })
     const title = ws?.nodes.find((n) => n.id === node)?.title || node
-    const answer = await deps.answerPermission({ nodeId: node, nodeTitle: title, workspaceId: ws?.id ?? null, body, signal: gone.signal })
+    const answer = await deps.answerPermission({ nodeId: node, nodeTitle: title, workspaceId: ws?.id ?? null, body, signal: gone.signal, ...(mode ? { mode } : {}) })
     if (answer) Object.assign(out, answer.hookSpecificOutput)
   }
   if (Object.keys(out).length > 0) {

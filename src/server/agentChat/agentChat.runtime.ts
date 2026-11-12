@@ -33,8 +33,7 @@ export function agentChatPool(): AgentChatPool {
       return ws && node ? { ws, node } : undefined
     },
     opener: (t) => {
-      const s = db.getSettings()
-      return agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, mode: s.claudePermissionMode, skip: s.skipApprovals }))
+      return agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, settings: db.getSettings() }))
     },
     persist,
   })
