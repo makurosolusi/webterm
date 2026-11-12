@@ -12,6 +12,7 @@ import { createSettingsHistory, type SettingsChange, type SettingsHistory } from
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createSaveStates, responseError } from './settingsSave'
 import { profileInUseError, rememberProfileNames } from './claudeLauncher/profileInUse.text'
+import { saveFetchError, saveTimeoutSignal } from './settingsSave.timeout'
 
 export const SAVE_COALESCE_MS = 300
 
@@ -86,7 +87,8 @@ async function putSettings(patch: SettingsPatch): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body,
     keepalive: fitsKeepalive(body, SETTINGS_KEEPALIVE_MAX_BYTES),
-  })
+    signal: saveTimeoutSignal(),
+  }).catch((err: unknown) => { throw saveFetchError(err) })
   // A refused profile delete (Reset Setting on the profile list) says which profile and why, not the code.
   if (!res.ok) throw (await profileInUseError(res)) ?? await responseError(res, 'PUT /api/settings')
 }
