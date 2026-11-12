@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// The permission-mode control: the Central chat chip (effective mode, scope, Danger confirm with
+// The permission-mode control: the Central composer mode button (effective mode, icon + tooltip, scope, Danger confirm with
 // confirmDanger in the payload, a confirm_required reply reopening the dialog, the stale-sessions line)
 // and the Settings rows (all projects + This project, "Same as all projects" clears the override).
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -49,6 +49,27 @@ describe('ApprovalModeChip', () => {
     cleanup()
     chip(settings(), 'w2')
     expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Auto (all projects)')
+  })
+
+  it('ghost text button: icon per mode, no chevron; the tooltip states mode, scope and what it means', () => {
+    const tipOf = (el: Element): string | null => {
+      fireEvent.keyDown(document, { key: 'Tab' })
+      fireEvent.focus(el)
+      const t = document.querySelector('[role="tooltip"]')?.textContent ?? null
+      fireEvent.blur(el)
+      return t
+    }
+    chip(settings({ projectApprovalLevels: { w1: 'never' } }))
+    expect(trigger().querySelector('.codicon-warning')).toBeTruthy()
+    expect(trigger().querySelector('.codicon-chevron-down')).toBeNull()
+    expect(tipOf(trigger())).toBe('Danger in this project: agents act without asking. Your Deny rules, spend limits and secret access still apply.')
+    cleanup()
+    chip(settings({ projectApprovalLevels: { w1: 'always' } }))
+    expect(trigger().querySelector('.codicon-shield')).toBeTruthy()
+    cleanup()
+    chip(settings(), 'w2')
+    expect(trigger().querySelector('.codicon-workspace-trusted')).toBeTruthy()
+    expect(tipOf(trigger())).toBe('Auto in all projects: routine work runs on its own; actions that cannot be undone ask first.')
   })
 
   it('defaults to This project; "All projects" writes the global level', async () => {

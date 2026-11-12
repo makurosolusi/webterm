@@ -19,7 +19,6 @@ import { centralChatAttach, centralParts, centralWire } from './chatCentralAttac
 import type { ChatPart } from './chatTypes'
 import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 import { CentralModelPicker } from '../central/centralModelPicker'
-import { ApprovalModeChip } from '../ApprovalModeControl'
 import { useActiveWorkspaceId } from '../activeWorkspace.context'
 import { CentralContextMeter } from '../central/centralContextMeter'
 
@@ -200,7 +199,6 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
           : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
         {props.commands && <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />}
-        {props.commands && <ApprovalModeChip workspaceId={workspaceId} />}
         {props.commands && <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
           openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />}
       </header>
@@ -221,7 +219,8 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
       <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
       <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
-        completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section} />
+        completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
+        permissionMode={props.commands ? { workspaceId } : undefined} />
     </section>
   )
 }
