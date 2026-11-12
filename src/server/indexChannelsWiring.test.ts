@@ -9,6 +9,7 @@ const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
 const GATE = 'if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(res); return true }'
 const BINDINGS = 'return telegramHot.handleApi(req, res) || handleApi(req, res)'
 const WEBHOOK = 'if (telegramHot.handle(req, res)) return true'
+const STREAM_BRIDGE = 'if (!routeApp(req, res, reqUrl(req))) { res.statusCode = 404; res.end() }'
 
 describe('index.ts channel wiring', () => {
   it('gates the binding API in both listeners, always after `allowed`', () => {
@@ -16,7 +17,10 @@ describe('index.ts channel wiring', () => {
     expect(blocks).toHaveLength(2)
     // The bindings call comes before the generic API dispatch (short-circuit `||`), so it owns its path.
     expect(blocks[1]).toContain(BINDINGS)
-    expect(source.split('routeApp(req, res, ').length - 1).toBe(2) // dev + prod listener
+    // Three callers share the gate: dev listener, prod listener, WS stream bridge (SSE over the shared socket).
+    expect(source.split('routeApp(req, res, ').length - 1).toBe(3)
+    const bridge = source.slice(source.indexOf('const streamDispatch = '))
+    expect(bridge.split('\n}')[0]).toContain(STREAM_BRIDGE)
   })
 
   it('routes the webhook before the gate (provider secret, not WEBTERM_TOKEN)', () => {
