@@ -8,7 +8,8 @@ import { claudeHeadersPath } from '../hooksPaths'
 import { claudeNodeSettings } from '../hooksSettings'
 import { nodeToken } from '../hooksTokens'
 import { launchLine } from '../launchLine'
-import { MCP_MAIN, mcpConfigPath } from './mcp.launch'
+import { isCompiledBinary } from '../selfLaunch'
+import { MCP_MAIN, mcpConfigPath, mcpLaunchBase } from './mcp.launch'
 
 const DIR = mkdtempSync(join(tmpdir(), 'mcp-launch-'))
 const prev = process.env.WEBTERM_DATA_DIR
@@ -20,6 +21,23 @@ afterAll(() => {
 })
 const SID = '0b5f5a8e-9a43-4d4e-9d0c-1a2b3c4d5e6f'
 const open = (agentId: string, cmd = agentId) => ({ t: 'open' as const, id: 'n1', cols: 80, rows: 24, cmd, agentId, sessionId: SID })
+
+describe('mcpLaunchBase', () => {
+  it('dev: the running bun (or bun on PATH) + main.ts', () => {
+    expect(mcpLaunchBase(false)).toEqual({ command: process.versions.bun ? process.execPath : 'bun', args: [MCP_MAIN] })
+  })
+
+  it('compiled binary: the binary itself with the hidden __mcp-stdio subcommand, never a /$bunfs path', () => {
+    expect(mcpLaunchBase(true)).toEqual({ command: process.execPath, args: ['__mcp-stdio'] })
+  })
+
+  it('detects the compiled binary from a /$bunfs (POSIX) or ~BUN (Windows) module URL only', () => {
+    expect(isCompiledBinary('file:///$bunfs/root/webterm')).toBe(true)
+    expect(isCompiledBinary('file:///B:/~BUN/root/webterm.exe')).toBe(true)
+    expect(isCompiledBinary('file:///Users/me/webterm/src/server/selfLaunch.ts')).toBe(false)
+    expect(isCompiledBinary()).toBe(false) // this test runs from source
+  })
+})
 
 describe('webterm mcp auto-configuration', () => {
   it('claude: --mcp-config points at a webterm-owned file naming main.ts and the header file', () => {

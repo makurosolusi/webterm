@@ -6,6 +6,7 @@ import type { ProviderView } from './claudeProvider/claudeProvider.model'
 function deps(over: Partial<DoctorDeps> = {}): DoctorDeps {
   return {
     onPath: () => true, claudeReady: async () => ({ ok: true }),
+    mcpServer: async () => ({ ok: true, server: 'webterm 1.0.0' }), lastCentralMcp: () => null,
     generated: () => [{ label: 'context-link skill', path: '/s', expected: 'v2' }], readFile: () => 'v2', installGenerated: () => {},
     telegram: async () => ({ state: 'ok', name: '@bot' }), sandbox: () => ({ on: true, supported: true }), setSandbox: () => {},
     looseDirs: () => [], tightenDirs: () => {}, verifyLedger: () => ({ ok: true, checked: 4, head: null }), ...over,
@@ -17,8 +18,18 @@ const byId = async (d: DoctorDeps): Promise<Record<DoctorId, DoctorCheck>> =>
 describe('runDoctor', () => {
   it('all green on a healthy machine, no fix offered', async () => {
     const all = await runDoctor(deps())
-    expect(all.map((c) => c.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok'])
+    expect(all.map((c) => c.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok'])
     expect(all.some((c) => c.fix)).toBe(false)
+  })
+
+  it('tools: fails when the MCP server does not start, warns when the last Central turn saw it failed', async () => {
+    const down = await byId(deps({ mcpServer: async () => ({ ok: false, reason: 'exited with code 2' }) }))
+    expect(down.tools).toMatchObject({ status: 'fail' })
+    expect(down.tools.detail).toContain('exited with code 2')
+    const flaky = await byId(deps({ lastCentralMcp: () => ({ status: 'failed', at: 1 }) }))
+    expect(flaky.tools).toMatchObject({ status: 'warn' })
+    expect(flaky.tools.detail).toContain('failed')
+    expect((await byId(deps({ lastCentralMcp: () => ({ status: 'connected', at: 1 }) }))).tools.status).toBe('ok')
   })
 
   it('reports each failure with an explanation and a fix only where it is safe', async () => {
@@ -74,7 +85,7 @@ describe('runDoctor', () => {
     const all = await runDoctor(deps({ verifyLedger: () => { throw new Error('disk I/O error') } }))
     expect(all.find((c) => c.id === 'ledger')).toMatchObject({ status: 'fail' })
     expect(all.find((c) => c.id === 'ledger')?.detail).toContain('disk I/O error')
-    expect(all.filter((c) => c.status === 'ok')).toHaveLength(7)
+    expect(all.filter((c) => c.status === 'ok')).toHaveLength(8)
   })
 })
 

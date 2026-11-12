@@ -25,6 +25,7 @@ import { isEnabled } from './featureCapabilities.runtime'
 import { writeHouseRules } from './hooksSettings'
 import { houseRulesPath } from './hooksPaths'
 import { HOUSE_RULES } from './webtermAwareness'
+import { lastCentralMcpStatus, probeMcpServer } from './mcp/mcp.health'
 
 const GETME_TIMEOUT_MS = 5_000
 const PRIVATE_DIR_MODE = 0o700
@@ -79,6 +80,8 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
       return { ok: false, reason: r.hint || r.code, missing: r.failed === 'wrapper_not_found' || r.failed === 'claude_not_found', ...via }
     },
     claudeProvider: () => ({ view: providerView(), lastTest: lastProviderTest() }),
+    mcpServer: () => probeMcpServer(),
+    lastCentralMcp: lastCentralMcpStatus,
     generated: () => generated(env),
     readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } }, // absent = stale, reported by the check
     installGenerated: () => {

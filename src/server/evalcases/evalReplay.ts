@@ -28,7 +28,6 @@ import { createEventLog } from '../events/eventLog'
 import { approvalDigest } from '../ledger/ledgerApproval'
 import { allRows, execWrite, getRow, parseJson } from '../ledger/ledgerCore'
 import { openLedgerDb } from '../ledger/migration'
-import { MCP_MAIN } from '../mcp/mcp.launch'
 import { mcpRoute } from '../mcp/mcp.route'
 import type { McpDeps } from '../mcp/mcp.tools'
 import { normalizeTool, type EvalCase } from './evalCase.model'
@@ -127,7 +126,7 @@ async function replayOne(source: Database, c: EvalCase, model: ReplayModel): Pro
   try {
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
     copyProject(source, db, c.projectId)
-    const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port: (server.address() as AddressInfo).port, approvalWaitMs: 0, command: { command: process.execPath, args: [MCP_MAIN] } })
+    const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port: (server.address() as AddressInfo).port, approvalWaitMs: 0 })
     if (model.kind === 'fake') {
       const stepsFile = join(dir, 'steps.json')
       writeFileSync(stepsFile, JSON.stringify(model.steps(c)))

@@ -7,6 +7,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import pkg from '../../../package.json'
+import { probeMcpServer } from '../mcp/mcp.health'
 
 const ENTRY = join(import.meta.dirname, '../index.ts')
 const RUN_TIMEOUT_MS = 20_000
@@ -74,7 +75,7 @@ test('--readme prints the embedded README when stdout is not a terminal; --docs 
   expectNoSideEffects(bad)
 }, RUN_TIMEOUT_MS)
 
-test('a --compile binary of the entry answers --version and --bogus', () => {
+test('a --compile binary of the entry answers --version and --bogus, and starts its MCP server', async () => {
   const box = sandbox()
   const out = join(box.home, 'webterm-bin')
   const build = spawnSync(process.execPath, ['build', '--compile', '--no-compile-autoload-bunfig', '--external', 'vite', '--outfile', out, ENTRY], { encoding: 'utf8', timeout: COMPILE_TIMEOUT_MS })
@@ -84,4 +85,12 @@ test('a --compile binary of the entry answers --version and --bogus', () => {
   expect(v.out).toContain(`webterm ${pkg.version} (`)
   expectNoSideEffects(v)
   expect(run([out], ['--bogus']).code).toBe(2)
+  // Root cause of "Central has no tools" in the release binary: the MCP server must start from the binary
+  // itself (`__mcp-stdio`), since its .ts entry only exists inside /$bunfs.
+  expect(await probeMcpServer({ command: out, args: ['__mcp-stdio'] })).toEqual({ ok: true, server: 'webterm 1.0.0' })
+  expect(await probeMcpServer({ command: out, args: [join('/$bunfs/root', 'main.ts')] })).toMatchObject({ ok: false })
 }, COMPILE_TIMEOUT_MS + RUN_TIMEOUT_MS)
+
+test('the Doctor probe starts the dev MCP server (bun + main.ts) and gets its initialize answer', async () => {
+  expect(await probeMcpServer()).toMatchObject({ ok: true })
+}, RUN_TIMEOUT_MS)

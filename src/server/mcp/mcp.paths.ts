@@ -9,3 +9,10 @@ export const MCP_SERVER_NAME = 'webterm'
 export const CENTRAL_MCP_MINTER = 'central-mcp:'
 /** Receipt evidence `approvalStatus` meaning "a card exists and nobody decided yet" (mcp.central.ts; main.ts polls on it). */
 export const APPROVAL_PENDING = 'pending'
+
+/**
+ * Init statuses that let a Central turn go on: `pending` = Claude is still connecting; `unknown` = an init
+ * without a status field (shape drift must not block every turn). Anything else (missing, failed,
+ * needs-auth, ...) means the model would run without its tools and only say so.
+ */
+export const MCP_USABLE: ReadonlySet<string> = new Set(['connected', 'pending', 'unknown'])

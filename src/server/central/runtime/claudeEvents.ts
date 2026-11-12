@@ -11,7 +11,9 @@
 // stream-json run (2026-11-04). Only `mcp__webterm__*` tools may appear; anything else fails closed.
 import type { TurnEmitter } from './runtimeEvents'
 import { type ClaudeTurnState, failTurn } from './claudeSession'
-import { MCP_SERVER_NAME } from '../../mcp/mcp.paths'
+import { MCP_SERVER_NAME, MCP_USABLE } from '../../mcp/mcp.paths'
+import { recordCentralMcpStatus } from '../../mcp/mcp.health'
+import { createLogger } from '../../logs'
 import { WEBTERM_MCP_TOOL_PREFIX } from './claudeOptions'
 import { stderrReason } from './runtimeShared'
 import { type ClaudeResultEvent, type ClaudeUsage, type Rec, parseClaudeResult, parseUsage, rec, str } from './claudeResult'
@@ -21,7 +23,8 @@ export interface ClaudeToolUse { id: string; name: string; input: unknown }
 export interface ClaudeToolResult { toolUseId: string; isError: boolean; texts: string[] }
 
 export type ClaudeEvent =
-  | { type: 'init'; sessionId: string | null; tools: string[]; servers: string[] }
+  /** `webtermStatus`: Claude's status for the webterm MCP server (`connected`, `failed`, ...), `missing` when not listed. */
+  | { type: 'init'; sessionId: string | null; tools: string[]; servers: string[]; webtermStatus: string }
   | { type: 'delta'; text: string }
   | { type: 'assistant'; messageId: string | null; text: string; toolUses: ClaudeToolUse[]; error: string | null; usage: ClaudeUsage | null }
   | { type: 'tool_results'; results: ClaudeToolResult[] }
@@ -32,6 +35,12 @@ export type ClaudeEvent =
 function names(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.map((item) => (typeof item === 'string' ? item : str(rec(item)?.name) ?? ''))
+}
+
+/** Status of the webterm entry of `mcp_servers`; `unknown` when it carries no status, `missing` when absent. */
+function webtermStatus(value: unknown): string {
+  const entry = Array.isArray(value) ? value.map(rec).find((s) => s?.name === MCP_SERVER_NAME) : undefined
+  return entry ? str(entry.status) ?? 'unknown' : 'missing'
 }
 
 function parseAssistant(obj: Rec): ClaudeEvent {
@@ -77,7 +86,7 @@ export function parseClaudeMessage(message: unknown): ClaudeEvent | null {
   switch (obj.type) {
     case 'system':
       if (obj.subtype === 'init') {
-        return { type: 'init', sessionId: str(obj.session_id), tools: names(obj.tools), servers: names(obj.mcp_servers) }
+        return { type: 'init', sessionId: str(obj.session_id), tools: names(obj.tools), servers: names(obj.mcp_servers), webtermStatus: webtermStatus(obj.mcp_servers) }
       }
       return obj.subtype === 'api_retry' ? { type: 'retry' } : null
     case 'stream_event': {
@@ -174,6 +183,12 @@ function initAllowed(event: Extract<ClaudeEvent, { type: 'init' }>): boolean {
   return event.tools.every(isWebtermTool) && event.servers.every((name) => name === MCP_SERVER_NAME)
 }
 
+const log = createLogger('central')
+
+/** User-facing failure for a turn whose webterm tools did not start. */
+export const mcpNotStartedReason = (status: string): string =>
+  `Central's tools did not start (webterm MCP server: ${status}). Retry, or see Settings › Health.`
+
 const RETRYABLE_ASSISTANT_ERRORS: ReadonlySet<string> = new Set(['rate_limit', 'overloaded', 'server_error'])
 
 function checkLimits(ctx: ApplyContext): void {
@@ -231,6 +246,13 @@ export function applyClaudeEvent(event: ClaudeEvent, ctx: ApplyContext): void {
           code: 'runtime_error',
           reason: `Claude started with tools or MCP servers webterm does not allow (${foreign.slice(0, 5).join(', ')}); check managed Claude settings or plugins`,
         })
+        ctx.kill()
+        return
+      }
+      recordCentralMcpStatus(event.webtermStatus)
+      if (!MCP_USABLE.has(event.webtermStatus)) {
+        log.error('central.mcp_not_connected', 'webterm MCP server did not start for this turn; turn failed', { status: event.webtermStatus, servers: event.servers })
+        failTurn(emitter, state, { code: 'runtime_error', retryable: true, reason: mcpNotStartedReason(event.webtermStatus) })
         ctx.kill()
       }
       return

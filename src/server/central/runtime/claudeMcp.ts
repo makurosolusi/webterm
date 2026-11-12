@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CAPABILITY_HEADER } from '../../auth'
-import { MCP_MAIN } from '../../mcp/mcp.launch'
+import { mcpLaunchBase } from '../../mcp/mcp.launch'
 import { CENTRAL_MCP_MINTER, MCP_SERVER_NAME } from '../../mcp/mcp.paths'
 import { parsePort } from '../../serverConfig'
 
@@ -47,7 +47,7 @@ export interface LinkOptions {
   port?: number
   mint?: MintCentralToken
   approvalWaitMs?: number
-  /** Executable + leading args that start the MCP server; defaults to this bun + main.ts. */
+  /** Executable + leading args that start the MCP server; defaults to `mcpLaunchBase()`. */
   command?: { command: string; args: string[] }
 }
 
@@ -70,7 +70,7 @@ export function createCentralMcpLink(o: LinkOptions): CentralMcpLink {
       }
       try {
         writeFileSync(headers, `${CAPABILITY_HEADER}: ${minted.token}\n`, { mode: FILE_MODE })
-        const base = o.command ?? { command: process.versions.bun ? process.execPath : 'bun', args: [MCP_MAIN] }
+        const base = o.command ?? mcpLaunchBase()
         const wait = Math.max(0, Math.min(o.approvalWaitMs ?? DEFAULT_APPROVAL_WAIT_MS, turn.wallMs))
         const args = [...base.args, '--headers', headers, '--port', String(o.port ?? parsePort(process.env.PORT)), '--approval-wait-ms', String(wait)]
         writeFileSync(configPath, JSON.stringify({ mcpServers: { [MCP_SERVER_NAME]: { type: 'stdio', command: base.command, args } } }), { mode: FILE_MODE })

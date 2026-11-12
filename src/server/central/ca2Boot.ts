@@ -38,6 +38,7 @@ import { activeCa2, setActiveCa2 } from './ca2Active'
 import { projectWorkspaceId } from './workspaceLookup'
 import { skipApprovalsFor } from '../../shared/settings.projectApprovalLevels'
 import { reconcileTurns } from './chat/turnReconciler'
+import { BUILTIN_SKILLS } from './skills/builtinSkills.embedded'
 import { createSkillStore, type SkillAdminStore } from './skills/skillStore'
 import { defaultRegistry } from './tools/defaultRegistry'
 import { createAgentKindsDef } from './tools/defs/agentKinds.defs'
@@ -116,7 +117,7 @@ function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGua
 
 function buildSkills(db: Database, root: string, now: () => number): SkillAdminStore | null {
   try {
-    const store = createSkillStore({ db, root, now })
+    const store = createSkillStore({ db, root, now, builtins: BUILTIN_SKILLS })
     store.installBuiltins()
     return store
   } catch (err) {
