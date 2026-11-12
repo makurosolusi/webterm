@@ -15,6 +15,7 @@ import type { AgentId, AgentStatus, Workspace, WsNode, WsNodeKind } from '../sha
 import { agentConfig } from '../shared/workspace'
 import { isAutoName } from './nodeIdentity'
 import { withNodeName } from './nodeName.label'
+import { AGENT_CHAT_TITLE } from '../shared/agentChat.node'
 
 /** Kind node yang dihitung sebagai "sesi". `files`/`editor` adalah penampil, bukan shell —
  *  nodeterm juga hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
@@ -127,8 +128,10 @@ export function sessionStatusGroup(kind: StatusKind, unread: boolean): StatusGro
 export function sessionTitle(n: Pick<WsNode, 'title' | 'agentId' | 'kind'>): string {
   const title = isAutoName(n.title) ? undefined : n.title?.trim()
   if (title) return title
+  // An Agent Chat also carries `agentId: 'claude'`, but its chrome names it "Agent Chat", not the agent.
+  if (n.kind === 'agentChat') return AGENT_CHAT_TITLE
   if (n.agentId) return agentConfig(n.agentId)?.label ?? n.agentId
-  return 'Terminal'
+  return n.kind === 'agent' ? 'Agent' : 'Terminal'
 }
 
 /** Sidebar / Reopen label: `Mango · Deploy` (node name, then `sessionTitle`). */

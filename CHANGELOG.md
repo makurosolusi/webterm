@@ -322,6 +322,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Tab layout: Editor, Changes, Plan and App nodes no longer show a second header with their own title and close button inside the tab. Their actions (Save, Preview, Word wrap, Send to agent, Refresh, Approve and run…) sit at the right end of the tab strip and in the tab's right-click menu, and only the tab's × closes them (an editor with unsaved changes still asks to save). An untitled Agent Chat is labeled "Agent Chat" in its tab, the sidebar and Recently closed instead of "Terminal", and every node type falls back to its own name.
 - Control tab strip: the active tab (e.g. Automations) is fully visible when the panel opens, the tab changes or the side bar is resized, instead of being cut off at the edge; a fade marks the side with more tabs.
 - A Files node opened at the root folder shows just its name in the header again, without a trailing "· /". The browser start page's tile "⋮" and the disabled "Add shortcut" tile (at the shortcut limit) now show the app's tooltip instead of the slow native one.
 - Agent Chat and Central chat: the newest message is no longer hidden under the composer when the box, the status line or a panel below the list grows, or when a reply grows after it renders.

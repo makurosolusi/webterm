@@ -18,10 +18,12 @@ import { editorFileKind, fileBaseName, fileExt } from './editorFile'
 import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
 import { EditorRenamePreview } from './EditorRenamePreview'
 import { loadMonaco } from './lazyMonaco'
-import { ShowInFilesButton } from './ShowInFilesButton'
+import { ShowInFilesButton, useShowInFiles } from './ShowInFilesButton'
 import './editor.css'
 import { NodeNameLabel } from './nodeName.label'
-import { WordWrapButton } from './editorWrap'
+import { useWrapChord, WordWrapButton, wrapChordLabel } from './editorWrap'
+import { useNodeHost } from './tabLayout.context'
+import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
 import { useEditorView } from './EditorNode.view'
 import { chordLabel, useCommands } from './commandRegistry'
 import { useKeybindingOverrides } from './keybindings.store'
@@ -94,6 +96,19 @@ function EditorNode({
   const previewChord = commandKey(PREVIEW_COMMAND_ID, useCommands(), useKeybindingOverrides())
   const previewKey = previewChord ? chordLabel(previewChord, isMacPlatform()) : ''
   const previewTitle = previewKey ? `Toggle markdown preview (${previewKey})` : 'Toggle markdown preview'
+  const wrapKey = wrapChordLabel(useWrapChord())
+  const showInFiles = useShowInFiles(id)
+  // Tab mode: the tab is the header, so the header's actions move to the tab strip and tab menu.
+  const host = useNodeHost()
+  const tabActions: TabAction[] = [
+    ...(showInFiles ? [{ id: 'show-in-files', label: 'Show in Files', icon: 'folder-opened', onSelect: showInFiles }] : []),
+    ...(editable ? [
+      { id: 'preview', label: ef.preview ? 'Edit' : 'Preview', tooltip: previewTitle, icon: ef.preview ? 'edit' : 'open-preview', checked: ef.preview, onSelect: ef.togglePreview },
+      { id: 'wrap', label: 'Word wrap', tooltip: wrapKey ? `Toggle word wrap (${wrapKey})` : 'Toggle word wrap', icon: 'word-wrap', checked: view.wrap, onSelect: view.toggleWrap },
+      ...(lspLanguage ? [{ id: 'outline', label: 'Outline', tooltip: 'Go to symbol in file (⇧⌘O)', icon: 'symbol-class', onSelect: () => void showOutline(id) }] : []),
+      ...(!readOnly ? [{ id: 'save', label: 'Save', tooltip: 'Save (⌘S)', disabled: !ef.dirty, onSelect: () => void ef.save() }] : []),
+    ] : []),
+  ]
 
   // Rename lewat bus fs: path (dan judul, yang diturunkan dari path) ikut lewat data node yang sama
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
@@ -164,6 +179,7 @@ function EditorNode({
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >
+        {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} /> : (
         <div className="node-header" onContextMenu={editable ? view.openMenu : undefined}>
           <span
             className="node-title editor-node__name"
@@ -215,6 +231,7 @@ function EditorNode({
             </ToolbarButton>
           </ToolbarContainer>
         </div>
+        )}
         {view.menu}
         {/* Breadcrumb path file seperti di bawah tab editor VS Code: 3 segmen terakhir, statis. */}
         {filePath && (

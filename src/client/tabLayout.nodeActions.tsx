@@ -5,7 +5,8 @@
 // here for the strip to read when a tab's context menu opens.
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { IconButton } from '@/components/ui/icon-button'
+import { IconButton, IconTooltip } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 
 let slot: HTMLElement | null = null
@@ -35,14 +36,53 @@ export interface TabNodeActionsProps {
   onStop?: () => void
   /** Node-specific header widgets (usage pill, view switch). */
   extra?: ReactNode
+  /** Node-specific actions (Save, Preview, Refresh…): a strip button each, and a context-menu row. */
+  actions?: TabAction[]
+}
+
+/** One node action shown in the strip (icon → icon button, else a text button) and in the tab menu. */
+export interface TabAction {
+  id: string
+  /** Button text (or accessible name of an icon button) and menu row label. */
+  label: string
+  /** Tooltip when it says more than `label`. */
+  tooltip?: string
+  /** Codicon name: an icon button instead of a text button. */
+  icon?: string
+  disabled?: boolean
+  /** Running: the button reads `aria-busy` (its label says what runs, e.g. "Saving…"). */
+  busy?: boolean
+  /** Toggle state (Preview, Word wrap). */
+  checked?: boolean
+  /** The primary action of the node (Approve and run); others are secondary. */
+  primary?: boolean
+  onSelect: () => void
+}
+
+function StripAction({ a }: { a: TabAction }) {
+  const common = { disabled: a.disabled, 'aria-busy': a.busy ? true : undefined, 'aria-pressed': a.checked, onClick: a.onSelect }
+  if (a.icon) {
+    return (
+      <IconButton label={a.label} tooltip={a.tooltip} side="bottom" size="icon-sm" {...common}>
+        <span className={`codicon codicon-${a.icon}`} aria-hidden="true" />
+      </IconButton>
+    )
+  }
+  return (
+    <IconTooltip label={a.tooltip ?? a.label} side="bottom" disabled={a.disabled}>
+      <Button variant={a.primary ? 'default' : 'secondary'} size="xs" {...common}>{a.label}</Button>
+    </IconTooltip>
+  )
 }
 
 /** Publishes the node's menu rows and, for the active tab, renders its editor actions into the strip. */
-export default function TabNodeActions({ id, visible, items, search, onStop, extra }: TabNodeActionsProps) {
+export default function TabNodeActions({ id, visible, items, search, onStop, extra, actions = [] }: TabNodeActionsProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const target = useSyncExternalStore(subscribeSlot, () => slot, () => null)
   const all: VscodeMenuItem[] = [
     ...(search ? [{ type: 'item', id: 'search', label: 'Search', checked: search.open, onSelect: search.toggle } as const, { type: 'separator' } as const] : []),
+    ...actions.map((a): VscodeMenuItem => ({ type: 'item', id: a.id, label: a.label, title: a.tooltip, disabled: a.disabled, checked: a.checked, onSelect: a.onSelect })),
+    ...(actions.length && items.length ? [{ type: 'separator' } as const] : []),
     ...items,
     ...(onStop ? [{ type: 'separator' } as const, { type: 'item', id: 'stop', label: 'Stop Agent (keeps the node)', onSelect: onStop } as const] : []),
   ]
@@ -55,6 +95,7 @@ export default function TabNodeActions({ id, visible, items, search, onStop, ext
   return createPortal(
     <>
       {extra}
+      {actions.map((a) => <StripAction key={a.id} a={a} />)}
       {search && (
         <IconButton label="Search" side="bottom" size="icon-sm" aria-pressed={search.open} onClick={search.toggle}>
           <span className="codicon codicon-search" aria-hidden="true" />
@@ -65,10 +106,12 @@ export default function TabNodeActions({ id, visible, items, search, onStop, ext
           <span className="codicon codicon-debug-stop" aria-hidden="true" />
         </IconButton>
       )}
-      <IconButton
-        label="More Actions…" side="bottom" size="icon-sm"
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }) }}
-      ><span className="codicon codicon-ellipsis" aria-hidden="true" /></IconButton>
+      {items.length > 0 && (
+        <IconButton
+          label="More Actions…" side="bottom" size="icon-sm"
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom }) }}
+        ><span className="codicon codicon-ellipsis" aria-hidden="true" /></IconButton>
+      )}
       {menuAt && <VscodeMenu open anchor={menuAt} items={items} onClose={() => setMenuAt(null)} ariaLabel="More Actions" />}
     </>,
     target,

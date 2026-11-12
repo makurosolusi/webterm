@@ -10,6 +10,8 @@ import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { callAppTool, fetchAppView, type AppView } from './mcpApp.api'
 import { APP_SANDBOX, allowAttribute, createAppBridge } from './mcpApp.bridge'
 import { NodeNameLabel } from '../nodeName.label'
+import { useNodeHost } from '../tabLayout.context'
+import TabNodeActions from '../tabLayout.nodeActions'
 
 export const APP_TEXT = {
   loading: 'Loading app…',
@@ -61,10 +63,13 @@ function McpAppNode({ id, data, selected }: NodeProps) {
   }, [view, id])
 
   const allow = view ? allowAttribute(view.permissions) : ''
+  // Tab mode: the tab is the header (its × closes the node); the app has no other header actions.
+  const host = useNodeHost()
   return (
     <>
       <NodeLayoutResizer minWidth={280} minHeight={200} color={swatch} />
       <div className={`term-node mcp-app-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch, display: 'flex', flexDirection: 'column' } as CSSProperties}>
+        {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} /> : (
         <div className="node-header">
           <span className="node-title" title={view ? `${view.uri}\nCSP: ${view.csp}` : undefined}>
             <span className="codicon codicon-window" aria-hidden="true" />
@@ -76,6 +81,7 @@ function McpAppNode({ id, data, selected }: NodeProps) {
             <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
           </ToolbarContainer>
         </div>
+        )}
         <div className="node-body nodrag nowheel nokey" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {error ? <p role="alert" style={{ padding: 12, margin: 0, fontSize: 12 }}>{error}</p>
             : !view ? <p role="status" style={{ padding: 12, margin: 0, fontSize: 12 }}>{APP_TEXT.loading}</p>
