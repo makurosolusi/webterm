@@ -1,5 +1,5 @@
-// Boot kemampuan (ES-09) tanpa mengikat port: store kosong tidak menyalakan apa pun, dan browser bisa
-// on lalu off lewat rute tanpa restart. Peluncur + CDP TIRUAN; data dir dan HOME sementara di /tmp.
+// Boot kemampuan (ES-09) tanpa mengikat port: store kosong menyalakan browser (default maksimal, Chromium ada) tapi
+// tidak poller Telegram (butuh bot), dan browser bisa off lalu on lewat rute tanpa restart. Peluncur + CDP TIRUAN; data dir dan HOME sementara di /tmp.
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -27,7 +27,7 @@ async function post(path: string, body: unknown): Promise<number> {
   return res.status
 }
 
-test('store kosong tidak memulai browser maupun poller; browser on lalu off tanpa restart', async () => {
+test('store kosong memulai browser (default on) tapi bukan poller; browser off lalu on tanpa restart', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'wt-capboot-'))
   for (const k of Object.keys(process.env)) if (k.startsWith('WEBTERM_') || k === 'PORT') delete process.env[k]
   Object.assign(process.env, { WEBTERM_DATA_DIR: dir, HOME: dir })
@@ -44,13 +44,13 @@ test('store kosong tidak memulai browser maupun poller; browser on lalu off tanp
   try {
     envSettingsApiDeps() // overlay dari store kosong
     await reconcile(new Set(), enabledSet(process.env))
-    expect(activeBrowser()).toBeNull()
+    expect(activeBrowser()).not.toBeNull()
     expect(telegram.channels).toBeNull()
 
-    expect(await post('/api/capabilities/browser', { enabled: true })).toBe(200)
-    expect(activeBrowser()).not.toBeNull()
     expect(await post('/api/capabilities/browser', { enabled: false })).toBe(200)
     expect(activeBrowser()).toBeNull()
+    expect(await post('/api/capabilities/browser', { enabled: true })).toBe(200)
+    expect(activeBrowser()).not.toBeNull()
     expect(telegram.channels).toBeNull()
   } finally {
     off.forEach((f) => f())

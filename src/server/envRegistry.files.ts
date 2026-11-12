@@ -1,5 +1,5 @@
-// Registry env: file manager (PLAN/FILEMANAGER-b.md §5.5). Empat flag baca-saja default ON (L11, minim-.env),
-// MUTATE dan UPLOAD tetap OFF; empat perbaikan P0 (create-eksklusif, versi/konflik, body cap, penolakan biner)
+// Registry env: file manager (PLAN/FILEMANAGER-b.md §5.5). Semua flag default ON (L11, minim-.env; MUTATE/UPLOAD ikut
+// sejak default maksimal 2026-11-12: hapus = tempat sampah + Undo, jadi tak ada aksi tak terbalikkan); empat perbaikan P0 (create-eksklusif, versi/konflik, body cap, penolakan biner)
 // TIDAK di balik flag. Data murni.
 // Grup + owner 'files' (envRegistry.groups.ts). Semua restart 'hot': dibaca per panggilan. Hanya saklar mutasi yang 'user'.
 import { FILES_LIST_MAX_DEFAULT, FILES_UPLOAD_MAX_MB_DEFAULT } from '../shared/fsLimits'
@@ -21,8 +21,8 @@ export type FilesFlag = keyof typeof FILES_FLAG
 const LIST_MAX_KEY = 'WEBTERM_FILES_LIST_MAX'
 const UPLOAD_MAX_KEY = 'WEBTERM_FILES_UPLOAD_MAX_MB'
 
-/** Flag baca-saja yang default ON di zero-config (L11). Mutasi/upload sengaja tidak ada di sini: tulis harus opt-in. */
-export const FILES_DEFAULT_ON: ReadonlySet<FilesFlag> = new Set<FilesFlag>(['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN'])
+/** Flags on in zero-config (L11). Writes too: delete goes to the trash with Undo, so nothing here is irreversible. */
+export const FILES_DEFAULT_ON: ReadonlySet<FilesFlag> = new Set<FilesFlag>(['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN', 'MUTATE', 'UPLOAD'])
 
 /** Default `on|off` satu flag; sumber tunggal untuk spec registry DAN pembaca (RND/53 G6). */
 function filesDefault(name: FilesFlag): 'on' | 'off' {

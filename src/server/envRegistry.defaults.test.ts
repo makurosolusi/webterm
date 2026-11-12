@@ -24,6 +24,7 @@ import { parseCapacity } from './logs/logBus'
 import { memoryFilesEnabled } from './memory/memoryFilePath'
 import { orchestratorRunEnabled, orchestratorRunRequireApproval } from './orchestratorRunModel'
 import { idleDoneMs } from './orchestrator/workerSignal'
+import { setupEnv } from './envSettings.testutil'
 
 const E: NodeJS.ProcessEnv = {}
 const onOff = (b: boolean): string => (b ? 'on' : 'off')
@@ -33,10 +34,8 @@ const budget = (k: 'tokens' | 'spawns' | 'costMicros') => (): string => String(b
 /** [kunci, pembaca nyata pada env kosong, lokasi pembaca]. */
 const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_TELEGRAM', () => onOff(telegramChannelEnabled(E)), 'channels/channelsRuntime.ts:94'],
-  ['WEBTERM_CENTRAL', () => onOff(centralEnabled('')), 'central/centralModel.ts:67'],
   ['WEBTERM_CENTRAL_RUNTIME', () => centralRuntimeKind(''), 'central/runtime/runtimeFlag.ts:18'],
   ['WEBTERM_CENTRAL_AUTONOMY', () => onOff(autonomyEnabled('')), 'central/centralAutonomy.ts:99'],
-  ['WEBTERM_CENTRAL_RELIABILITY', () => onOff(reliabilityEnabled('')), 'central/autonomyDispatch.ts:12'],
   ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
@@ -46,9 +45,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_MAX_INFLIGHT', () => String(maxInflightFromEnv('')), 'central/autonomyDispatch.ts:24'],
   ['WEBTERM_CENTRAL_CONTEXT_WINDOW', () => String(contextWindowTokens(E)), 'central/context/rotationPolicy.ts:15'],
   ['WEBTERM_AGENT_IDLE_DONE_MS', () => String(idleDoneMs(E)), 'orchestrator/workerSignal.ts:17'],
-  ['WEBTERM_ORCHESTRATOR_RUN', () => onOff(orchestratorRunEnabled(E)), 'orchestratorRunModel.ts:36'],
   ['WEBTERM_RUN_REQUIRE_APPROVAL', () => onOff(orchestratorRunRequireApproval(E)), 'orchestratorRunModel.ts:42'],
-  ['WEBTERM_MEMORY_FILES', () => onOff(memoryFilesEnabled(E)), 'memory/memoryFilePath.ts:23'],
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
   ['WEBTERM_AGENT_SANDBOX', () => onOff(agentSandboxOn(E)), 'agentSandbox.ts:agentSandboxOn'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],
@@ -74,15 +71,26 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
 
 /** Pembaca `flagOn(env[KEY])`: env kosong = off. [kunci, lokasi]. */
 const FLAGON_READERS: ReadonlyArray<readonly [string, string]> = [
-  ['WEBTERM_CENTRAL_MEMORY', 'central/chat/turnService.ts:123'],
-  ['WEBTERM_CENTRAL_SKILLS', 'central/ca2Boot.ts:132'],
-  ['WEBTERM_CENTRAL_SKILL_PROPOSE', 'central/ca2Boot.ts:132'],
-  ['WEBTERM_CENTRAL_BOTS', 'channels/botManager.ts:120'],
-  ['WEBTERM_KNOWLEDGE', 'central/tools/registerAll.ts:51'],
-  ['WEBTERM_AGENT_MAIL', 'central/tools/registerAll.ts:50'],
-  ['WEBTERM_CENTRAL_READ_TOOLS', 'central/tools/defs/read.shared.ts:READ_TOOLS_FLAG (def.flag, toolTypes defEnabled)'],
-  ['WEBTERM_BROWSER', 'browser/browser.runtime.ts:53'],
   ['WEBTERM_BROWSER_HEADLESS', 'browser/chromium.flags.ts:headlessReason'],
+]
+
+/**
+ * Default `on` (default maksimal, settings-overhaul W3) dengan pembaca fail-closed: envSettings.apply menulis `on` ke
+ * env selama tak ada yang mengisinya (defaultOnOf), jadi pembaca melihat default yang sama. [kunci, pembaca(env), lokasi].
+ */
+const APPLIED_ON: ReadonlyArray<readonly [string, (env: NodeJS.ProcessEnv) => boolean, string]> = [
+  ['WEBTERM_CENTRAL', (e) => centralEnabled(e.WEBTERM_CENTRAL ?? ''), 'central/centralModel.ts'],
+  ['WEBTERM_CENTRAL_RELIABILITY', (e) => reliabilityEnabled(e.WEBTERM_CENTRAL_RELIABILITY ?? ''), 'central/autonomyDispatch.ts'],
+  ['WEBTERM_ORCHESTRATOR_RUN', (e) => orchestratorRunEnabled(e), 'orchestratorRunModel.ts'],
+  ['WEBTERM_MEMORY_FILES', (e) => memoryFilesEnabled(e), 'memory/memoryFilePath.ts'],
+  ['WEBTERM_CENTRAL_MEMORY', (e) => flagOn(e.WEBTERM_CENTRAL_MEMORY), 'central/chat/turnService.ts'],
+  ['WEBTERM_CENTRAL_SKILLS', (e) => flagOn(e.WEBTERM_CENTRAL_SKILLS), 'central/ca2Boot.ts'],
+  ['WEBTERM_CENTRAL_SKILL_PROPOSE', (e) => flagOn(e.WEBTERM_CENTRAL_SKILL_PROPOSE), 'central/ca2Boot.ts'],
+  ['WEBTERM_CENTRAL_BOTS', (e) => flagOn(e.WEBTERM_CENTRAL_BOTS), 'channels/botManager.ts'],
+  ['WEBTERM_KNOWLEDGE', (e) => flagOn(e.WEBTERM_KNOWLEDGE), 'central/tools/registerAll.ts'],
+  ['WEBTERM_AGENT_MAIL', (e) => flagOn(e.WEBTERM_AGENT_MAIL), 'central/tools/registerAll.ts'],
+  ['WEBTERM_CENTRAL_READ_TOOLS', (e) => flagOn(e.WEBTERM_CENTRAL_READ_TOOLS), 'central/tools/defs/read.shared.ts'],
+  ['WEBTERM_BROWSER', (e) => flagOn(e.WEBTERM_BROWSER), 'browser/browser.runtime.ts'],
 ]
 
 /** Tanpa default statis: kosong = perilaku bawaan pembaca (secret, path, daftar, model, mode otomatis). */
@@ -101,12 +109,18 @@ describe('default registry == default pembaca (env kosong)', () => {
     expect(specFor(key)?.default, `${key} (pembaca ${at})`).toBe('off')
   })
 
+  it.each(APPLIED_ON)('%s: default on, ditulis ke env oleh envSettings.apply', (key, reader, at) => {
+    expect(specFor(key)?.default, key).toBe('on')
+    expect(reader({}), `${key} (pembaca ${at}) fail-closed tanpa apply`).toBe(false)
+    expect(reader(setupEnv().target), `${key} (pembaca ${at}) setelah apply`).toBe(true)
+  })
+
   it('kunci tanpa default statis memang tak punya default (atau kosong)', () => {
     for (const key of NO_STATIC_DEFAULT) expect(specFor(key)?.default ?? '', key).toBe('')
   })
 
   it('setiap kunci registry non-bootstrap tercakup tepat satu tabel (kunci baru wajib menyatakan default pembacanya)', () => {
-    const covered = [...READERS.map(([k]) => k), ...FLAGON_READERS.map(([k]) => k), ...NO_STATIC_DEFAULT]
+    const covered = [...READERS.map(([k]) => k), ...FLAGON_READERS.map(([k]) => k), ...APPLIED_ON.map(([k]) => k), ...NO_STATIC_DEFAULT]
     const missing = ENV_REGISTRY.map((s) => s.key).filter((k) => !isBootstrapOnly(k) && !covered.includes(k))
     expect(missing).toEqual([])
     expect(covered.filter((k, i) => covered.indexOf(k) !== i)).toEqual([])

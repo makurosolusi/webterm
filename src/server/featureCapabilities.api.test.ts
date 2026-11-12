@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
 import { Readable } from 'node:stream'
 import { TEST_TOKEN, fakeBotApi, ok } from './channels/telegramPollHarness'
-import { setupEnv, recorder } from './envSettings.testutil'
+import { CAPABILITIES_OFF, setupEnv, recorder } from './envSettings.testutil'
 import { capabilitiesRoute, type CapabilityExtras } from './featureCapabilities.api'
 import { createChromiumDownloader } from './browser/browserDownload'
 import type { AuditEntry } from './featureCapabilities.audit'
@@ -19,7 +19,7 @@ const ORIGIN = 'http://127.0.0.1:8700'
 interface Opts { origin?: string | null; remote?: boolean; cookie?: false; query?: string }
 
 function harness(fetch = fakeBotApi([]).fetch, more: Partial<CapabilityExtras> = {}) {
-  const h = setupEnv({})
+  const h = setupEnv({ ...CAPABILITIES_OFF })
   const audits: AuditEntry[] = []
   const deps = { service: h.svc, guard: (req: IncomingMessage) => settingsGuard(req, undefined), audit: (e: AuditEntry) => { audits.push(e) } }
   const detectCalls: Array<{ fresh?: boolean } | undefined> = []
@@ -96,7 +96,7 @@ describe('POST /:id', () => {
       await h.call('POST', '/api/capabilities/central', { enabled: true }, { cookie: false }),
     ]
     expect(blocked.map((r) => [r.status, r.json])).toEqual(Array(3).fill([403, { error: 'forbidden' }]))
-    expect(h.target.WEBTERM_CENTRAL).toBeUndefined()
+    expect(h.target.WEBTERM_CENTRAL).toBe('off') // the harness's shell value, untouched
     expect(h.audits.map((a) => [a.action, a.via, a.detail])).toEqual([['denied', 'rejected', 'origin'], ['denied', 'rejected', 'origin'], ['denied', 'rejected', 'session']])
   })
   it('GET ?refresh=1 meminta deteksi segar; GET biasa tetap memakai cache', async () => {
@@ -196,7 +196,7 @@ describe('POST /reset', () => {
     expect((await h.call('POST', '/api/capabilities/reset', {}, { origin: null })).status).toBe(403)
     const r = await h.call('POST', '/api/capabilities/reset', {})
     expect(r.status).toBe(200)
-    expect(h.target.WEBTERM_FILES_VIEWERS).toBeUndefined()
+    expect(h.target.WEBTERM_FILES_VIEWERS).toBe('off') // override gone: back to the harness's shell value
     expect(r.json?.capabilities.every((c: { status: string }) => c.status === 'off')).toBe(true)
   })
 })

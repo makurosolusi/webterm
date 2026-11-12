@@ -23,6 +23,7 @@ import { DisabledReason, type Lock } from '@/components/ui/disabled-reason'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Settings } from '../shared/settings'
+import { safeguardFor } from '../shared/settings.safeguards'
 import type { SettingsFieldId } from './settings.link'
 import { isModified, resetPatch, useSettingsItemScope } from './settingsContext'
 import { useFieldSave, type FieldSave } from './settingsSave'
@@ -118,6 +119,12 @@ export function SettingsSearchProvider({
   return <SearchContext.Provider value={query}>{children}</SearchContext.Provider>
 }
 
+/** Why a field keeps a restrictive default (shared/settings.safeguards.ts); nothing for an ordinary field. */
+export function SafeguardNote({ id }: { id: string | undefined }): React.JSX.Element | null {
+  const reason = safeguardFor(id)
+  return reason ? <p className="st-hint st-safeguard" data-safeguard={id}>{reason}</p> : null
+}
+
 /** id of a field's lock reason line, for the control's `aria-describedby`. */
 export const lockReasonId = (controlId: string): string => `${controlId}-lock`
 
@@ -166,7 +173,8 @@ export function Field({
   const [confirming, setConfirming] = useState<string | null>(null)
   const autoId = useId()
   const settingSave = useFieldSave(setting ? settingsSaves : undefined, setting)
-  if (!matchesSearch(`${label} ${hint ?? ''} ${lock?.reason ?? ''}`, query)) return null
+  const fieldId = field ?? setting
+  if (!matchesSearch(`${label} ${hint ?? ''} ${lock?.reason ?? ''} ${safeguardFor(fieldId) ?? ''}`, query)) return null
 
   const modified = setting !== undefined && settings !== undefined ? isModified(settings, setting) : !!modifiedProp
   const reset = setting !== undefined
@@ -178,12 +186,13 @@ export function Field({
     : onReset
   const status = <FieldSaveStatus save={save ?? settingSave} />
   const reason = lock ? <DisabledReason id={htmlFor ? lockReasonId(htmlFor) : autoId} {...lock} /> : null
-  const description = hint || lock ? <>{hint ? <p className="st-hint" style={tone === 'warning' ? { color: 'var(--st-warning)' } : undefined}>{hint}</p> : null}{reason}</> : null
+  const safeguard = <SafeguardNote id={fieldId} />
+  const description = hint || lock || safeguardFor(fieldId) ? <>{hint ? <p className="st-hint" style={tone === 'warning' ? { color: 'var(--st-warning)' } : undefined}>{hint}</p> : null}{safeguard}{reason}</> : null
   return (
     <div
       className={'st-field' + (block ? ' st-field--block' : '') + (modified ? ' is-modified' : '')}
       data-slot="settings-field"
-      data-field={field ?? setting}
+      data-field={fieldId}
     >
       <div className="st-title">
         {/* Page prefix only in search results (query set), and never "Central Agent: Central Agent". */}

@@ -42,8 +42,7 @@ const env = (key: string, extra: { unit?: string; scale?: number } = {}): Centra
 
 // Only real preferences are listed. Automatic now (no row): the model (ladder), context window (from the model,
 // rotationPolicy.ts), reply time and steps (scaled to the model tier, turnLimits.ts), the token budget (the dollar
-// limit is the budget), skills and checkpoints (always on), project knowledge / steadier autonomy / agent mail (on
-// with "Work on its own", LINKED_SETTINGS). "Propose work" always asks before a worker runs (the switch merged into it).
+// limit is the budget), skills, checkpoints, project knowledge, steadier autonomy and agent mail (on by default). "Propose work" always asks before a worker runs (the switch merged into it).
 export const CENTRAL_FIELDS: readonly CentralField[] = [
   f('central', { group: 'status', control: 'switch', source: { kind: 'capability', id: 'central' }, always: true }),
 
