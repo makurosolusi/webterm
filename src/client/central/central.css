@@ -78,3 +78,15 @@
 .ccm-popover li { padding: 2px 0; overflow-wrap: anywhere; }
 .ccm-chip { margin-left: 6px; padding: 0 4px; border: 0; background: none; color: var(--vscode-descriptionForeground); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
 .ccm-chip:hover, .ccm-meter:hover { color: var(--vscode-foreground); }
+/* Abilities: one summary line, search, collapsible categories, one-line rows that expand. */
+.ccp-ab-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; min-width: 0; margin: 0 0 4px; }
+.ccp-ab-search { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 4px 0; }
+.ccp-ab-search > span { flex: none; }
+.ccp-ab-cat > summary { cursor: pointer; padding: 2px 0; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.ccp-ab-item { min-width: 0; border-bottom: 1px solid var(--vscode-panel-border); }
+.ccp-ab-row > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 8px; padding: 2px 0; cursor: pointer; list-style: none; }
+.ccp-ab-row > summary::-webkit-details-marker { display: none; }
+.ccp-ab-row__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ccp-ab-row__text { grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); }
+.ccp-ab-row[open] .ccp-ab-row__text { display: none; }
+.ccp-ab-row__more { padding: 0 0 4px; overflow-wrap: anywhere; }

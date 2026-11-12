@@ -170,8 +170,6 @@ export const SOURCE_LABEL: Record<string, string> = {
 /** Abilities tab: what Central can do at the current level (`GET /api/central/tools`). */
 export const AB = {
   intro: 'Everything Central can do at your current level.',
-  filter: 'Show',
-  all: 'All',
   levelOff: 'Central is turned off, so it can do none of these right now.',
   none: 'Nothing matches this filter.',
   footnote: 'Your rules in Settings › Rules & secrets, the daily budget and worker limits can still stop or pause a tool.',
@@ -180,10 +178,7 @@ export const AB = {
   skillsHeading: 'Skills Central can use',
   skillsNone: 'No skills yet. Skills you approve in the Skills tab show up here.',
   skillsOff: 'Skills are turned off. Turn them on in the Skills tab.',
-  /** [one, many] */
-  count: { auto: ['runs on its own', 'run on their own'], asks: ['asks you first', 'ask you first'], blocked: ['not allowed at this level', 'not allowed at this level'], off: ['turned off', 'turned off'] },
   badge: { auto: 'Runs on its own', asks: 'Asks you first', blocked: 'Not allowed at this level', off: 'Turned off' },
-  filterLabel: { auto: 'Runs on its own', asks: 'Asks you', blocked: 'Not allowed' },
   group: {
     projects: 'Projects & nodes', workers: 'Workers', tasks: 'Tasks & plans', memory: 'Memory', browser: 'Browser',
     skills: 'Skills', channels: 'Telegram & channels', approvals: 'Approvals', other: 'Other',
