@@ -6,7 +6,7 @@ import ChatPanel from '../ChatPanel'
 import type { ChatClient, ChatConversation } from '../chat/chatTypes'
 import type { StreamFactory } from '../chat/chatConversation'
 import { InboxApiError } from '../inboxTypes'
-import { openCentralTab, reloadSideBarFromStorage, setNeedsYouExpanded, setSideBar, useSideBar, type CentralTab } from '../secondarySideBar.store'
+import { draftCentralChat, openCentralTab, reloadSideBarFromStorage, setNeedsYouExpanded, setSideBar, useSideBar, type CentralTab } from '../secondarySideBar.store'
 import { GATE, serveLedger } from '../chat/needsYou.fixtures'
 import { resetNeedsYou } from '../chat/needsYouApi'
 import CentralControlPanel from './CentralControlPanel'
@@ -82,6 +82,19 @@ const options = async (): Promise<string[]> => {
   return within(list).getAllByRole('option').map((o) => o.querySelector('.cmp-name')!.textContent!)
 }
 const send = async (text: string): Promise<void> => { type(text); await act(async () => { key('Enter') }) }
+
+describe('Central chat draft handoff', () => {
+  it('a draft from another view (Health "Ask Central to fix") fills the composer unsent, once', async () => {
+    const { client } = await setup()
+    act(() => draftCentralChat('Please fix big.ts'))
+    await waitFor(() => expect(box().value).toBe('Please fix big.ts'))
+    expect(screen.getByTestId('sidebar').textContent).toBe('chat')
+    expect(client.sendMessage).not.toHaveBeenCalled()
+    cleanup()
+    await setup()
+    expect(box().value).toBe('')
+  })
+})
 
 describe('Central chat permission mode', () => {
   it('sits in the composer toolbar under the box, not in the header (status, context, model only)', async () => {

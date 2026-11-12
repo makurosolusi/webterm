@@ -1,44 +1,17 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import type { FindingView, HealthScanView } from '../../../shared/centralHealth'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { InboxApiError } from '../../inboxTypes'
 import { knownTab } from '../CentralControlPanel'
-import { CENTRAL_PAGE_SIZE } from '../centralControlApi'
 import { shimRadixSelect } from '../work/taskBoardFixtures.testutil'
 import HealthView from './HealthView'
-import { healthApi, type AnalysisView, type HealthClient, type HealthSummaryView } from './healthApi'
+import { expand, findingOf, makeClient, scanOf, summaryOf } from './health.fixtures.testutil'
+import { healthApi, type AnalysisView } from './healthApi'
 import { HL, SCAN_POLL_MS } from './healthModel'
 
 beforeAll(shimRadixSelect)
 beforeEach(() => localStorage.clear())
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals() })
-
-// test-only fixtures
-const scanOf = (over: Partial<HealthScanView> = {}): HealthScanView => ({
-  id: 's1', projectId: 'p1', origin: 'scan', status: 'done', startedAt: Date.now() - 60_000, finishedAt: Date.now() - 60_000, filesScanned: 42, truncated: false, opened: 1, fixed: 0, error: null, ...over,
-})
-const summaryOf = (over: Partial<HealthSummaryView> = {}): HealthSummaryView => ({ open: 1, high: 1, medium: 0, low: 0, lastScan: scanOf(), running: false, ...over })
-const findingOf = (over: Partial<FindingView> = {}): FindingView => ({
-  id: 'f1', projectId: 'p1', origin: 'scan', status: 'open', rule: 'file_size', severity: 'high', confidence: 'high', file: 'src/big.ts', line: 12,
-  title: 'File too large', evidence: '612 lines', source: 'Rule 8 (global CLAUDE.md)', suggestion: 'Split it by concern.', fingerprint: 'fp',
-  taskId: null, dismissedReason: null, dismissedBy: null, firstSeenAt: 1, lastSeenAt: 2, fixedAt: null, ...over,
-})
-
-function makeClient(over: Partial<HealthClient> = {}) {
-  const client = {
-    listProjects: vi.fn(async () => [{ id: 'p1', name: 'Alpha' }]),
-    getSummary: vi.fn(async () => summaryOf()),
-    listFindings: vi.fn(async () => ({ items: [findingOf()], hasMore: false })),
-    scan: vi.fn(async () => undefined),
-    dismiss: vi.fn(async (id: string, reason: string) => findingOf({ id, status: 'dismissed', dismissedReason: reason })),
-    reopen: vi.fn(async (id: string) => findingOf({ id })),
-    getAnalysis: vi.fn(async (): Promise<AnalysisView> => ({ scan: null, running: false, retryAt: null, dropped: null })),
-    analyze: vi.fn(async () => undefined),
-    ...over,
-  }
-  return client as unknown as { [K in keyof HealthClient]: Mock<HealthClient[K]> }
-}
 
 describe('Health tab states', () => {
   it('is a known tab', () => expect(knownTab('health')).toBe('health'))
@@ -53,26 +26,28 @@ describe('Health tab states', () => {
     expect(await screen.findByText(HL.noProjects)).toBeTruthy()
   })
 
-  it('shows counts, last scan, partial badge and findings with evidence', async () => {
+  it('shows the one-row summary, partial badge and a one-line row whose details expand', async () => {
     render(<HealthView client={makeClient({ getSummary: vi.fn(async () => summaryOf({ lastScan: scanOf({ truncated: true }) })) })} />)
-    expect(await screen.findByText('612 lines')).toBeTruthy()
-    expect(screen.getByText(HL.counts(1))).toBeTruthy()
-    expect(screen.getByText(/Last scan .* 42 files/)).toBeTruthy()
+    const toggle = await screen.findByRole('button', { name: HL.details('File too large') })
+    expect(screen.getByText(/^1 open · scanned .+ · 42 files$/)).toBeTruthy()
     expect(screen.getByText(HL.partial)).toBeTruthy()
-    expect(screen.getByText('src/big.ts:12')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Copy src/big.ts:12' })).toBeTruthy()
-    expect(screen.getByText(/Rule 8 \(global CLAUDE.md\)/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'big.ts:12' })).toBeTruthy()
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('612 lines')).toBeNull()
+    expect(screen.queryByText(/Rule 8/)).toBeNull()
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('612 lines')).toBeTruthy()
+    expect(screen.getByText(/Rule 8 \(global CLAUDE.md\) · High confidence/)).toBeTruthy()
+    expect(screen.getByText('Split it by concern.')).toBeTruthy()
+    expect(screen.getByText(/First seen/)).toBeTruthy()
     expect(screen.queryByText(HL.verifyFirst)).toBeNull()
   })
 
-  it('hints to verify a medium-confidence finding and expands details', async () => {
+  it('hints to verify a medium-confidence finding in its details', async () => {
     render(<HealthView client={makeClient({ listFindings: vi.fn(async () => ({ items: [findingOf({ confidence: 'medium' })], hasMore: false })) })} />)
-    expect(await screen.findByText(HL.verifyFirst)).toBeTruthy()
-    const toggle = screen.getByRole('button', { name: HL.details('File too large') })
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByText(/First seen/)).toBeTruthy()
+    await expand()
+    expect(screen.getByText(HL.verifyFirst)).toBeTruthy()
   })
 
   it('says no findings with the last scan time', async () => {
@@ -106,7 +81,7 @@ describe('Health tab states', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
     getSummary.mockResolvedValue(summaryOf())
     fireEvent.click(screen.getByRole('button', { name: HL.retry }))
-    expect(await screen.findByText('612 lines')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: HL.details('File too large') })).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -146,65 +121,24 @@ describe('Health scan', () => {
   })
 })
 
-describe('Health filters, dismiss and pages', () => {
-  it('status and severity buttons change the query', async () => {
-    const client = makeClient()
-    render(<HealthView client={client} />)
-    await screen.findByText('612 lines')
-    fireEvent.click(within(screen.getByRole('group', { name: HL.statusLabel })).getByRole('button', { name: 'Dismissed' }))
-    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'dismissed' }, { limit: CENTRAL_PAGE_SIZE, offset: 0 }, expect.anything()))
-    fireEvent.click(within(screen.getByRole('group', { name: HL.severityLabel })).getByRole('button', { name: 'High' }))
-    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'dismissed', severity: 'high' }, expect.anything(), expect.anything()))
-    expect(within(screen.getByRole('group', { name: HL.severityLabel })).getByRole('button', { name: 'High' }).getAttribute('aria-pressed')).toBe('true')
-  })
-
-  it('rule select changes the query', async () => {
-    const client = makeClient()
-    render(<HealthView client={client} />)
-    await screen.findByText('612 lines')
-    fireEvent.keyDown(screen.getByRole('combobox', { name: HL.ruleLabel }), { key: 'Enter' })
-    fireEvent.click(await screen.findByRole('option', { name: 'Empty catch' }))
-    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'open', rule: 'empty_catch' }, expect.anything(), expect.anything()))
-  })
-
-  it('dismiss needs a reason and sends preset plus note', async () => {
-    const client = makeClient()
-    render(<HealthView client={client} />)
-    fireEvent.click(await screen.findByRole('button', { name: HL.dismissLabel('File too large') }))
-    const form = screen.getByRole('group', { name: HL.dismissLabel('File too large') })
-    const confirm = within(form).getByRole('button', { name: HL.dismissConfirm })
-    expect((confirm as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(within(form).getByRole('button', { name: 'False positive' }))
-    fireEvent.change(within(form).getByRole('textbox', { name: HL.dismissNote }), { target: { value: 'generated file' } })
-    fireEvent.click(confirm)
-    expect(confirm.getAttribute('aria-busy')).toBe('true')
-    expect(confirm.textContent).toBe('Dismissing…')
-    await waitFor(() => expect(client.dismiss).toHaveBeenCalledWith('f1', 'False positive: generated file'))
-    expect(await screen.findByText('Dismissed: False positive: generated file')).toBeTruthy()
-    const reopen = screen.getByRole('button', { name: HL.reopenLabel('File too large') }) as HTMLButtonElement
-    await waitFor(() => expect(reopen.disabled).toBe(false))
-    fireEvent.click(reopen)
-    await waitFor(() => expect(client.reopen).toHaveBeenCalledWith('f1'))
-  })
-
-  it('offers Load more on a full page and asks for the next offset', async () => {
-    const items = Array.from({ length: CENTRAL_PAGE_SIZE }, (_, i) => findingOf({ id: `f${i}`, title: `Finding ${i}` }))
-    const client = makeClient({ listFindings: vi.fn(async () => ({ items, hasMore: true })) })
-    render(<HealthView client={client} />)
-    fireEvent.click(await screen.findByRole('button', { name: HL.loadMore }))
-    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'open' }, { limit: CENTRAL_PAGE_SIZE, offset: CENTRAL_PAGE_SIZE }, expect.anything()))
-  })
-})
-
 const analysisOf = (over: Partial<AnalysisView> = {}): AnalysisView => ({ scan: null, running: false, retryAt: null, dropped: null, ...over })
 
 describe('Health deep analysis', () => {
-  it('offers Deep analysis with its cost note and starts it', async () => {
-    const client = makeClient()
+  it('Scan now and Deep analysis are buttons side by side; the cost note sits behind (i)', async () => {
+    let finish: () => void = () => undefined
+    const client = makeClient({ analyze: vi.fn(() => new Promise<void>((r) => { finish = r })) })
     render(<HealthView client={client} />)
-    fireEvent.click(await screen.findByRole('button', { name: HL.analyze }))
-    expect(screen.getByText(HL.analyzeCost)).toBeTruthy()
-    await waitFor(() => expect(client.analyze).toHaveBeenCalledWith('p1'))
+    const analyze = await screen.findByRole('button', { name: HL.analyze })
+    expect(analyze.getAttribute('data-slot')).toBe('button')
+    expect(analyze.parentElement?.parentElement).toBe(screen.getByRole('button', { name: HL.scanNow }).parentElement)
+    expect(screen.queryByText(HL.analyzeCost)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: HL.about }))
+    expect(screen.getByRole('note').textContent).toContain(HL.analyzeCost)
+    fireEvent.click(analyze)
+    const busy = await screen.findByRole('button', { name: HL.analyzing })
+    expect([busy.getAttribute('aria-busy'), (busy as HTMLButtonElement).disabled]).toEqual(['true', true])
+    expect(client.analyze).toHaveBeenCalledWith('p1')
+    await act(async () => finish())
   })
 
   it('shows running, then reloads findings and summary when it ends', async () => {
@@ -245,12 +179,11 @@ describe('Health deep analysis', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(HL.analyzeFailed)
   })
 
-  it('origin buttons filter the list; analysis findings carry a Verified quote badge', async () => {
-    const client = makeClient({ listFindings: vi.fn(async () => ({ items: [findingOf({ origin: 'analysis', rule: 'analysis', confidence: 'medium' })], hasMore: false })) })
-    render(<HealthView client={client} />)
-    expect(await screen.findByText(HL.verifiedQuote)).toBeTruthy()
-    fireEvent.click(within(screen.getByRole('group', { name: HL.originLabel })).getByRole('button', { name: 'Analysis' }))
-    await waitFor(() => expect(client.listFindings).toHaveBeenLastCalledWith('p1', { status: 'open', origin: 'analysis' }, expect.anything(), expect.anything()))
+  it('analysis findings explain the verified quote in their details', async () => {
+    render(<HealthView client={makeClient({ listFindings: vi.fn(async () => ({ items: [findingOf({ origin: 'analysis', rule: 'analysis', confidence: 'medium' })], hasMore: false })) })} />)
+    await expand()
+    expect(screen.getByText(HL.verifiedQuote)).toBeTruthy()
+    expect(screen.getByText(HL.verifiedQuoteHint)).toBeTruthy()
   })
 })
 
@@ -267,6 +200,14 @@ describe('healthApi', () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ items: [], hasMore: false }), { status: 200 }))
     await healthApi.listFindings('p1', { status: 'open', origin: 'review' }, { limit: 50, offset: 0 })
     expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/central/health/findings?projectId=p1&status=open&origin=review&limit=50&offset=0')
+  })
+
+  it('lists projects with their folder by id, else by a unique name', async () => {
+    const body = (url: string) => (url.startsWith('/api/workspaces')
+      ? [{ id: 'w1', name: 'Alpha', cwd: '/a' }, { id: 'p2', name: 'Beta', cwd: '/b' }, { id: 'w3', name: 'Dup', cwd: '/d1' }, { id: 'w4', name: 'Dup', cwd: '/d2' }]
+      : { items: [], projects: [{ id: 'p1', name: 'Alpha' }, { id: 'p2', name: 'Other' }, { id: 'p3', name: 'Dup' }] })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(body(url)), { status: 200 })))
+    expect(await healthApi.listProjects()).toEqual([{ id: 'p1', name: 'Alpha', root: '/a' }, { id: 'p2', name: 'Other', root: '/b' }, { id: 'p3', name: 'Dup' }])
   })
 
   it('builds the findings query and posts a dismiss reason', async () => {

@@ -1,9 +1,9 @@
 // Wires the Central chat's `/` commands (centralCommands) into a conversation view: the composer
 // `completion`, a `seed` for `/help` and a missing argument, and an `onSend` that acts on a command
 // instead of sending it. Kept out of chat/chatConversation so that file only passes three props.
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchWorkspaces } from '../api'
-import { expandNeedsYou, openCentralTab } from '../secondarySideBar.store'
+import { expandNeedsYou, openCentralTab, takeCentralChatDraft, useCentralChatDraft } from '../secondarySideBar.store'
 import { listActiveSkills } from './centralControlApi'
 import { createCentralCommands, type CentralSkill } from './centralCommands'
 import { setCentralModel } from './centralModel'
@@ -36,6 +36,13 @@ export function useCentralChatCommands<R extends unknown[]>(
   const hostRef = useRef(host)
   hostRef.current = host
   const [seed, setSeed] = useState<{ text: string; key: number; menu?: boolean }>()
+  // A draft another view handed over (Health "Ask Central to fix") lands in the composer, unsent.
+  const draft = useCentralChatDraft()
+  useEffect(() => {
+    if (!draft) return
+    takeCentralChatDraft(draft.seq)
+    setSeed((s) => ({ text: draft.text, key: (s?.key ?? 0) + 1 }))
+  }, [draft])
   // Bumped by bare `/model`; the header picker opens on each new value.
   const [modelPickerRequest, setModelPickerRequest] = useState(0)
   const enabled = host?.centralEnabled

@@ -100,6 +100,26 @@ export function expandNeedsYou(): void {
   setSideBar({ open: true, view: 'chat' })
 }
 
+// A message prefilled into the Central chat composer (Health "Ask Central to fix"); taken once by the
+// mounted chat. Not persisted, like the Needs-you strip.
+let chatDraft: { text: string; seq: number } | null = null
+
+/** Show the side bar on Chat with `text` in the composer, unsent: the human reviews and sends it. */
+export function draftCentralChat(text: string): void {
+  chatDraft = { text, seq: (chatDraft?.seq ?? 0) + 1 }
+  setSideBar({ open: true, view: 'chat' })
+}
+
+/** The pending composer draft, if the chat has not taken it yet. */
+export function useCentralChatDraft(): { text: string; seq: number } | null {
+  return useSyncExternalStore(subscribe, () => chatDraft)
+}
+
+/** Marks `seq` taken so a remounted chat does not prefill it again. */
+export function takeCentralChatDraft(seq: number): void {
+  if (chatDraft?.seq === seq) chatDraft = null
+}
+
 export function useNeedsYouExpanded(): boolean {
   return useSyncExternalStore(subscribe, () => needsYouExpanded)
 }
