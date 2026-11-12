@@ -20,13 +20,8 @@ const CentralControlPanel = lazy(() => import('./central/CentralControlPanel'))
 const VIEWS: { id: SideBarView; label: string; tooltip: string }[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Central agent chat' },
   // Id stays `central`: it is the persisted view (`webterm.secondarySideBar`); only the label says Control.
-  { id: 'central', label: 'Control', tooltip: 'Central status, abilities, agents and skills' },
+  { id: 'central', label: 'Control', tooltip: 'Memory, automations and spending; with Central on also its status, abilities, agents and skills' },
 ]
-
-/** The view the side bar shows: Central falls back to Chat while its flag is off. */
-export function shownSideBarView(view: SideBarView, centralEnabled: boolean): SideBarView {
-  return view === 'central' && !centralEnabled ? 'chat' : view
-}
 
 export interface SecondarySideBarProps {
   centralEnabled: boolean
@@ -38,13 +33,14 @@ export interface SecondarySideBarProps {
 const NO_URL: AppRouteActions['setCentralTab'] = () => {}
 
 export default function SecondarySideBar({ centralEnabled, ctab = null, setCentralTab }: SecondarySideBarProps): React.JSX.Element | null {
-  useCentralTabUrlSync(ctab, setCentralTab ?? NO_URL, centralEnabled && setCentralTab !== undefined)
+  useCentralTabUrlSync(ctab, setCentralTab ?? NO_URL, setCentralTab !== undefined, centralEnabled ? 'status' : 'memory')
   const { open, view } = useSideBar()
   const narrow = useNarrowWindow()
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   if (!open) return null
-  const shown = shownSideBarView(view, centralEnabled)
-  const views = VIEWS.filter((v) => v.id === 'chat' || centralEnabled)
+  // Control is always there: memory, automations and spending work without Central (CENTRAL_FREE_TABS).
+  const shown = view
+  const views = VIEWS
   return (
     <InboxPanelSurface
       dock="right"
@@ -64,14 +60,14 @@ export default function SecondarySideBar({ centralEnabled, ctab = null, setCentr
           <ChatPanel open embedded compact centralEnabled={centralEnabled} actionsHost={shown === 'chat' ? slot : null} />
         </Suspense>
       </div>
-      {centralEnabled && (
+      {shown === 'central' || centralEnabled ? (
         <div className="vscode-bottom-panel__pane" hidden={shown !== 'central'}>
           <Suspense fallback={<LazyPaneFallback />}>
-            <CentralControlPanel open enabled actionsHost={shown === 'central' ? slot : null}
+            <CentralControlPanel open enabled={centralEnabled} actionsHost={shown === 'central' ? slot : null}
               {...(setCentralTab ? { tab: ctab ?? undefined, onTabChange: setCentralTab } : {})} />
           </Suspense>
         </div>
-      )}
+      ) : null}
     </InboxPanelSurface>
   )
 }

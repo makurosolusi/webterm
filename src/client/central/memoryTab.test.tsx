@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { InboxApiError } from '../inboxTypes'
 import { knownTab } from './CentralControlPanel'
 import MemoryView from './MemoryView'
+import MemoryTab from './MemoryTab'
 import { CENTRAL_PAGE_SIZE } from './centralControlApi'
 import type { MemoryRow } from './centralControlTypes'
 import { fakeClient } from './centralFixtures.testutil'
@@ -167,5 +168,49 @@ describe('Remembered rows', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.closest('li')?.textContent).toContain('one')
     expect(first.disabled).toBe(false)
+  })
+})
+
+describe('Control › Memory: one surface with a filter', () => {
+  const stub = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.startsWith('/api/memory2?') || url === '/api/memory2' ? { items: [] }
+      : url === '/api/memory-proposals' ? { proposals: [], tokensToday: 0, dailyTokens: 0 }
+        : url === '/api/blackboard' ? { entries: [], proposals: [] }
+          : url.startsWith('/api/memory2/incognito') ? { refs: [] } : { facts: [] }))))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('All shows every part; Suggested, Notes and Central show one each', async () => {
+    stub()
+    const client = fakeClient({ getWorkingState: vi.fn(async () => ({ global: null, project: null })), listMemory: list([]) })
+    render(<MemoryTab client={client} central />)
+    const filter = screen.getByRole('group', { name: 'Show' })
+    expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['All', 'Suggested', 'Notes', 'Central'])
+    expect(await screen.findByTestId('memory-all')).toBeTruthy()
+    expect(await screen.findByTestId('memory-proposals')).toBeTruthy()
+    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
+    expect(await screen.findByText('Central has not remembered anything yet.')).toBeTruthy()
+
+    fireEvent.click(within(filter).getByRole('button', { name: 'Suggested' }))
+    expect(await screen.findByTestId('memory-proposals')).toBeTruthy()
+    expect(screen.queryByTestId('memory-all')).toBeNull()
+    expect(screen.queryByTestId('memory-blackboard')).toBeNull()
+    expect(screen.queryByText('Central has not remembered anything yet.')).toBeNull()
+
+    fireEvent.click(within(filter).getByRole('button', { name: 'Notes' }))
+    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
+    expect(screen.queryByTestId('memory-proposals')).toBeNull()
+
+    fireEvent.click(within(filter).getByRole('button', { name: 'Central' }))
+    expect(await screen.findByText('Central has not remembered anything yet.')).toBeTruthy()
+    expect(screen.queryByTestId('agent-memory')).toBeNull()
+  })
+
+  it('with Central off there is no Central filter and Central is never asked', async () => {
+    stub()
+    const client = fakeClient({ listMemory: list([]) })
+    render(<MemoryTab client={client} central={false} />)
+    expect(within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['All', 'Suggested', 'Notes'])
+    expect(await screen.findByTestId('memory-all')).toBeTruthy()
+    expect(client.listMemory).not.toHaveBeenCalled()
   })
 })

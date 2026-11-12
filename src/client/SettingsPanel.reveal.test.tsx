@@ -78,17 +78,10 @@ describe('links inside Settings name the field they land on', () => {
     expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 
-  it('Spending → Central’s own limit', async () => {
-    const onSectionChange = vi.fn()
-    panel('spending', undefined, onSectionChange)
-    fireEvent.click(await within(screen.getByRole('main', { name: 'Settings' })).findByRole('button', { name: 'Central Agent' }))
-    expect(onSectionChange.mock.calls).toEqual([['central', 'central.costLimit']])
-  })
-
   it('a TOC click is a plain section change: the field is cleared', async () => {
     const onSectionChange = vi.fn()
     panel('central', 'central.level', onSectionChange)
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Memory' }))
-    expect(onSectionChange).toHaveBeenCalledWith('memory', undefined)
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Rules & secrets' }))
+    expect(onSectionChange).toHaveBeenCalledWith('rules', undefined)
   })
 })

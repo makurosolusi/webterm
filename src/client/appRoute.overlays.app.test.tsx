@@ -50,8 +50,8 @@ describe('Settings section in the URL', () => {
     await mountCanvas(fx(BOARD))
     await act(async () => { harnessNavigate!(`${BOARD}?settings=agent`) }) // a link pushes Settings
     await screen.findByRole('button', { name: 'Close settings' })
-    fireEvent.click(within(settingsNav()).getByRole('button', { name: 'Memory' }))
-    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=memory`))
+    fireEvent.click(within(settingsNav()).getByRole('button', { name: 'Rules & secrets' }))
+    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=rules`))
     await back() // the section change replaced the entry: Back leaves Settings, it does not step sections
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Close settings' })).toBeNull())
   })

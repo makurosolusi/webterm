@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import type { EffectiveRow } from './ControlPanel'
 import { ControlField } from './ControlPanelField'
-import { CostPanel, COST_API_PATH } from './CostPanel'
 import { PolicySimulator } from './PolicySimulator'
 import { CustomAgentsSettings } from './SettingsAgents'
 import { CanvasSection } from './SettingsCanvasSections'
@@ -122,19 +121,6 @@ describe('settings pickers per screen', () => {
     render(<ControlField row={row({ key: 'WEBTERM_SECRET', label: 'Secret', kind: 'secret', secret: true })} write={write} />)
     expect((screen.getByLabelText('Secret') as HTMLInputElement).type).toBe('password')
     expect(screen.queryByRole('combobox')).toBeNull()
-  })
-
-  it('Cost panel: the daily cap is a combobox with No limit and dollar presets', async () => {
-    const data = { today: { costMicros: 0, cacheHitRate: null, unpriced: 0, byWorkspace: [], byNode: [], byRoutine: [], byModel: [] },
-      week: { costMicros: 0, cacheHitRate: null, unpriced: 0, byWorkspace: [], byNode: [], byRoutine: [], byModel: [] },
-      caps: [{ scope: 'day', spentMicros: 0, limitMicros: 10_000_000, pausedAt: null, reason: null }], labels: {}, pricing: { source: 'x', checkedAt: 'y' } }
-    const f = vi.fn(async (url: string, _init?: RequestInit) => new Response(JSON.stringify(url === COST_API_PATH ? data : { ok: true })))
-    vi.stubGlobal('fetch', f)
-    render(<CostPanel />)
-    await waitFor(() => expect(combo("Pause all work when today's spend reaches").value).toBe('10'))
-    expect(optionsOf("Pause all work when today's spend reaches")).toEqual(['No limit', '$55', '$1010', '$2525', '$5050'])
-    fireEvent.click(screen.getByRole('option', { name: /No limit/ }))
-    await waitFor(() => expect(f.mock.calls.some(([u, i]) => u === `${COST_API_PATH}/caps` && String((i as RequestInit | undefined)?.body).includes('"limitMicros":0'))).toBe(true))
   })
 
   it('Policy simulator: subject is a select of principals; capability and scope offer known patterns', async () => {

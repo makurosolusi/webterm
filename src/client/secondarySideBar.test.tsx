@@ -86,11 +86,11 @@ describe('toggle', () => {
     expect(sideBar()).toBeNull()
   })
 
-  it('shows Chat while Central is selected but its flag is off', () => {
+  it('keeps Control while Central is off: memory, automations and spending work without it', () => {
     setSideBar({ open: true, view: 'central' })
     render(<Shell />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Chat'])
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Chat', 'Control'])
+    expect(screen.getByRole('tab', { name: 'Control' }).getAttribute('aria-selected')).toBe('true')
   })
 })
 

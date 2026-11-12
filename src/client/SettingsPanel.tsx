@@ -9,7 +9,8 @@
 //
 // Sidebar dikelompokkan (`group` tiap section; grup tanpa section terlihat disembunyikan); panah/Home/End
 // melintasi grup karena navigasi menghitung semua tombol di nav. Developer hanya tampil dalam developer
-// mode (./developerMode); tautan ke sana tetap membukanya.
+// mode (./developerMode); tautan ke sana tetap membukanya. Memory, Automations dan Spending pindah ke
+// panel Control: hasil search-nya membuka tab Control (`go`).
 //
 // Halaman Features (id `capabilities`, dulu Capabilities; ENVSIMPLE D6) menggantikan Channels dan
 // Environment; tautan lama ke `env`/`channels` tetap mendarat di sini lewat `toSectionId`. A link that
@@ -31,14 +32,12 @@ import { ClaudeSettingsSection } from './ClaudeSettingsSection'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { CentralSettingsSection } from './CentralSettingsSection'
 import type { CentralLinkTarget } from './centralSettings.registry'
-import { AutomationsSection } from './AutomationsSection'
 import { DeveloperSection } from './DeveloperSection'
 import { HealthSection } from './HealthSection'
-import { MemorySection } from './MemorySection'
 import { RulesSection } from './RulesSection'
-import { SpendingSection } from './SpendingSection'
 import { normalizeQuery } from './SettingsFields'
-import { SETTINGS_SEARCH_INDEX, searchSettings } from './settings.search'
+import { SETTINGS_SEARCH_INDEX, searchSettings, type SearchGroupId, type SettingsSearchEntry } from './settings.search'
+import { openCentralTab } from './secondarySideBar.store'
 import { SettingsItemScopeProvider } from './settingsContext'
 import { AppearanceSection, CanvasSection, TerminalSection } from './SettingsSections'
 import { NotificationsSection } from './osNotify.settings'
@@ -46,10 +45,11 @@ import { useDeveloperMode } from './developerMode'
 import { toSettingsRouteSection } from './appRoute'
 import type { SettingsFieldId } from './settings.link'
 import { revealSettingsField } from './settingsPanel.reveal'
-import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { MOVED_GROUP_LABEL, SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { AccountSection } from './AccountSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
+import type { WorkspaceName } from './RulesSection'
 import './settings-sections.css'
 import './settings-search.css'
 
@@ -64,6 +64,7 @@ interface SectionCtx {
   onChange: (patch: SettingsPatch) => void
   navigate: (to: CentralLinkTarget) => void
   projectId: string
+  workspaces: readonly WorkspaceName[]
 }
 
 /** Section id -> its body. A `Record` over `SectionId`, so a new section without a body fails the type check. */
@@ -74,10 +75,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   notifications: () => <NotificationsSection />,
   claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} />,
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
-  rules: () => <RulesSection />,
-  memory: () => <MemorySection />,
-  automations: () => <AutomationsSection />,
-  spending: (c) => <SpendingSection onNavigate={c.navigate} />,
+  rules: (c) => <RulesSection workspaceId={c.projectId} workspaces={c.workspaces} />,
   capabilities: (c) => <CapabilitiesSection projectId={c.projectId} settings={c.s} onChange={c.onChange} />,
   account: () => <AccountSection />,
   health: () => <HealthSection />,
@@ -90,6 +88,8 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
+  /** Every workspace's id and name: Rules & secrets names the workspace a rule is limited to. */
+  workspaces?: readonly WorkspaceName[]
   /** Section shown first (e.g. 'central' from the Central card's "Edit launch profile"). */
   initialSection?: string
   /** Controlled section (the URL's `?settings=`); with it, section changes go to `onSectionChange`. */
@@ -101,6 +101,8 @@ interface PanelProps {
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
+
+const NO_WORKSPACES: readonly WorkspaceName[] = []
 
 /** Below this width the sidebar becomes a section dropdown (no room for a 260px column next to the fields). */
 export const NARROW_QUERY = '(max-width: 719px)'
@@ -118,14 +120,16 @@ function useNarrow(): boolean {
   return narrow
 }
 
-const sectionLabel = (id: SectionId): string => SETTINGS_SECTIONS.find((x) => x.id === id)?.label ?? id
+const sectionLabel = (id: SearchGroupId): string => (id === 'control' ? MOVED_GROUP_LABEL : SETTINGS_SECTIONS.find((x) => x.id === id)?.label ?? id)
 
 /** The page that holds `field` (from the search index), so a link with an old section id still lands. */
-export const pageOfField = (field: SettingsFieldId | undefined): SectionId | undefined =>
-  field ? SETTINGS_SEARCH_INDEX.find((x) => x.field === field)?.page : undefined
+export const pageOfField = (field: SettingsFieldId | undefined): SectionId | undefined => {
+  const page = field ? SETTINGS_SEARCH_INDEX.find((x) => x.field === field)?.page : undefined
+  return page === 'control' ? undefined : page
+}
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'appearance', section, field, onSectionChange }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', workspaces = NO_WORKSPACES, history, initialSection = 'appearance', section, field, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [ownRaw, setOwnRaw] = useState<string>(initialSection)
@@ -149,6 +153,11 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     setActive(id, to)
   }
   const navigate = (to: CentralLinkTarget): void => open(to.section, to.field)
+  // A result that moved out of Settings (Memory, Automations, Spending) opens its Control side bar tab instead.
+  const go = (entry: SettingsSearchEntry): void => {
+    if (entry.ctab) { onClose(); openCentralTab(entry.ctab); return }
+    open(entry.page, entry.field)
+  }
 
   // Pindah section = daftar baru, mulai dari atas seperti VS Code saat memilih entri TOC.
   useEffect(() => {
@@ -160,7 +169,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   useEffect(() => (target && !normalized ? revealSettingsField(() => mainRef.current, target) : undefined), [target, active, normalized])
 
   const renderSection = (id: SectionId): React.JSX.Element =>
-    SECTION_BODY[id]({ s, onChange, navigate, projectId })
+    SECTION_BODY[id]({ s, onChange, navigate, projectId, workspaces })
 
   const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
   const activeLabel = activeSection.label
@@ -304,7 +313,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
                     <ul className="st-results">
                       {entries.map((entry) => (
                         <li key={entry.field ?? `${page}:${entry.label}`} className="st-result">
-                          <button type="button" className="st-result-go" onClick={() => open(entry.page, entry.field)}>
+                          <button type="button" className="st-result-go" onClick={() => go(entry)}>
                             {entry.label === sectionLabel(page) ? entry.label : <><span className="st-result-path">{sectionLabel(page)} ›</span> {entry.label}</>}
                           </button>
                           {entry.hint ? <p className="st-hint">{entry.hint}</p> : null}

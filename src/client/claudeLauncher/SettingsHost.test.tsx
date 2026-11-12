@@ -44,7 +44,7 @@ describe('SettingsHost', () => {
     render(host('claude', onOpen))
     const agent = await screen.findByRole('button', { name: 'Claude' })
     expect(agent.getAttribute('aria-current')).toBe('true')
-    act(() => screen.getByRole('button', { name: 'Memory' }).click())
-    expect(onOpen).toHaveBeenCalledWith('memory', null) // a plain section change clears the field
+    act(() => screen.getByRole('button', { name: 'Rules & secrets' }).click())
+    expect(onOpen).toHaveBeenCalledWith('rules', null) // a plain section change clears the field
   })
 })

@@ -66,3 +66,19 @@ describe('cableGrants', () => {
     expect(cableGrants(ws([{ id: 'e', source: 'a1', target: 'a2', kind: 'context' }]), 'a1')).toEqual([])
   })
 })
+
+describe('workspace-limited rules', () => {
+  const inW1 = rule('w', 'node:*', 'secret.run', 'allow', { workspaceId: 'w1' })
+  const at = (workspaceId?: string) => ({ ...q('node:a1', 'secret.run'), workspaceId })
+  it('match only agents on that workspace; a caller with no workspace is not on it', () => {
+    expect(evaluate([inW1], at('w1')).effect).toBe('allow')
+    expect(evaluate([inW1], at('w2')).effect).toBe('deny')
+    expect(evaluate([inW1], at()).effect).toBe('deny')
+  })
+  it('a rule without a workspace (absent or null) still matches everywhere', () => {
+    for (const r of [rule('a', 'node:*', 'secret.run', 'allow'), rule('n', 'node:*', 'secret.run', 'allow', { workspaceId: null })]) {
+      expect(evaluate([r], at('w2')).effect).toBe('allow')
+      expect(evaluate([r], at()).effect).toBe('allow')
+    }
+  })
+})

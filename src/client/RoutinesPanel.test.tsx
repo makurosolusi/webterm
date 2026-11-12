@@ -13,17 +13,19 @@ const TEMPLATE = {
 }
 
 /** Fake `/api/routines` + `/api/workspaces`: routines in memory, every write recorded. */
-function server(initial: RoutineView[], runs: RoutineRun[] = []) {
+function server(initial: RoutineView[], runs: RoutineRun[] = [], runStatus: RoutineRun['status'] = 'running') {
   let routines = [...initial]
   const writes: { method: string; url: string; body?: Record<string, unknown> }[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
-    if (url === '/api/workspaces') return new Response(JSON.stringify([{ id: 'w1', name: 'webterm', cwd: '/tmp/w1' }]))
+    if (url === '/api/workspaces') return new Response(JSON.stringify([{ id: 'w1', name: 'webterm', cwd: '/tmp/w1',
+      nodes: [{ id: 'n-agent', kind: 'agent', title: 'brisk-otter' }, { id: 'n-term', kind: 'terminal', title: 'zsh' }] }]))
     if (method === 'GET' && url.includes('/runs')) return new Response(JSON.stringify({ runs }))
     if (method === 'GET') return new Response(JSON.stringify({ routines, templates: [TEMPLATE] }))
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined
     writes.push({ method, url, ...(body ? { body } : {}) })
     if (method === 'POST' && url === '/api/routines') routines = [...routines, { ...(body as unknown as RoutineView), id: 'r2', tier: 'R2', nextRunAt: null, lastRun: null }]
+    if (method === 'POST' && url.endsWith('/run')) return new Response(JSON.stringify({ run: { id: 'm', trigger: 'manual', status: runStatus, reason: runStatus === 'skipped' ? 'precheck exited 1' : null, startedAt: AT, costUsd: null } }), { status: 202 })
     if (method === 'DELETE') routines = routines.filter((r) => !url.endsWith(r.id))
     return new Response(JSON.stringify({ ok: true }), { status: method === 'POST' ? 201 : 200 })
   }))
@@ -36,25 +38,66 @@ const routine: RoutineView = {
   lastRun: { id: 'x', trigger: 'schedule', status: 'skipped', reason: 'precheck exited 1', startedAt: AT, costUsd: null },
 }
 
-describe('Routines (Settings › Automations)', () => {
-  it('lists routines with trigger, tier and the last skip reason; Run now and history', async () => {
+describe('Routines (Control › Automations)', () => {
+  it('lists routines with trigger and the last skip reason in plain words; Run now says Started; history', async () => {
     const { writes } = server([routine], [{ id: 'a', trigger: 'catch_up', status: 'ran', reason: null, startedAt: AT, costUsd: 0.5, estimateUsd: 0.4 }])
     render(<RoutinesPanel />)
     expect(await screen.findByText('Nightly tests')).toBeTruthy()
-    expect(screen.getByText(/Custom schedule \(0 2 \* \* \*\) · R2/)).toBeTruthy()
-    expect(screen.getByTestId('last-run').textContent).toBe('skipped — precheck exited 1')
+    expect(screen.getByText('Custom schedule (0 2 * * *) · ' + `next ${new Date(AT).toLocaleString()}`)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/\bR2\b|catch_up/)
+    expect(screen.getByTestId('last-run').textContent).toBe('Skipped, on schedule — precheck exited 1')
     fireEvent.click(screen.getByRole('button', { name: 'Run now' }))
-    await waitFor(() => expect(writes[0]).toEqual({ method: 'POST', url: '/api/routines/r1/run' }))
+    expect(await screen.findByText('Started')).toBeTruthy()
+    expect(writes[0]).toEqual({ method: 'POST', url: '/api/routines/r1/run' })
     fireEvent.click(screen.getByRole('button', { name: 'History' }))
     const list = await screen.findByRole('list', { name: 'History: Nightly tests' })
-    expect(list.textContent).toContain('catch_up · ran')
+    expect(list.textContent).toContain('Ran, made up for a missed run')
     expect(list.textContent).toContain('$0.50 · est. $0.40')
+  })
+
+  it('Run now that the server skips says why, as a failure-free result', async () => {
+    server([routine], [], 'skipped')
+    render(<RoutinesPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Run now' }))
+    expect(await screen.findByText('Skipped, by hand — precheck exited 1')).toBeTruthy()
+  })
+
+  it('Delete asks first; Cancel keeps the routine', async () => {
+    const { writes } = server([routine])
+    render(<RoutinesPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    const ask = screen.getByRole('alertdialog', { name: 'Delete “Nightly tests”? Its history goes too.' })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    expect(writes).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(writes).toEqual([{ method: 'DELETE', url: '/api/routines/r1' }]))
+    expect(await screen.findByText('No routines yet.')).toBeTruthy()
+  })
+
+  it('an event routine picks the event in words; a message routine picks an agent from the boards, never a typed id', async () => {
+    const { writes } = server([])
+    render(<RoutinesPanel />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New routine' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ping' } })
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: 'event' } })
+    const form = screen.getByRole('form', { name: 'Routine' })
+    fireEvent.click(within(form).getAllByRole('button', { name: 'Show suggestions' })[0]!)
+    fireEvent.click(screen.getByRole('option', { name: /A file in the workspace changes/ }))
+    fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'outbox' } })
+    await waitFor(() => expect(screen.getByRole('option', { name: 'brisk-otter · webterm' })).toBeTruthy())
+    expect(screen.queryByRole('option', { name: /zsh/ })).toBeNull() // terminals are not agents
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true) // no agent picked yet
+    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'n-agent' } })
+    fireEvent.submit(form)
+    await waitFor(() => expect(writes[0]?.method).toBe('POST'))
+    expect(writes[0]!.body).toMatchObject({ trigger: { type: 'event', pattern: 'fs.change' }, action: { type: 'outbox', to: 'n-agent' } })
   })
 
   it('shows the run estimate next to a skipped run that never spent', async () => {
     server([{ ...routine, lastRun: { ...routine.lastRun!, reason: 'budget: cap', estimateUsd: 2 } }])
     render(<RoutinesPanel />)
-    expect((await screen.findByTestId('last-run')).textContent).toBe('skipped — budget: cap · est. $2.00')
+    expect((await screen.findByTestId('last-run')).textContent).toBe('Skipped, on schedule — budget: cap · est. $2.00')
   })
 
   it('toggling Enabled sends the whole definition with enabled flipped', async () => {
@@ -70,7 +113,8 @@ describe('Routines (Settings › Automations)', () => {
     const { writes } = server([])
     render(<RoutinesPanel />)
     expect(await screen.findByText('No routines yet.')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Start from a template…'), { target: { value: 'weekly-missing-tests' } })
+    // Templates come first, each one click away.
+    fireEvent.click(within(screen.getByTestId('routine-templates')).getByRole('button', { name: 'Weekly: find missing tests' }))
     const form = await screen.findByRole('form', { name: 'Routine' })
     expect((screen.getByLabelText('Schedule') as HTMLInputElement).value).toBe('0 9 * * 1')
     expect((screen.getByTestId('routine-more') as HTMLDetailsElement).open).toBe(true) // the template has a check command
@@ -85,7 +129,7 @@ describe('Routines (Settings › Automations)', () => {
   it('a preset schedule shows in plain words; Edit picks another preset and saves its cron', async () => {
     const { writes } = server([{ ...routine, trigger: { type: 'schedule', cron: '0 9 * * 1-5' } }])
     render(<RoutinesPanel />)
-    expect(await screen.findByText(/Weekdays at 9:00 · R2/)).toBeTruthy()
+    expect(await screen.findByText(/^Weekdays at 9:00/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     const form = await screen.findByRole('form', { name: 'Routine' })
     fireEvent.click(within(form).getAllByRole('button', { name: 'Show suggestions' })[0]!)

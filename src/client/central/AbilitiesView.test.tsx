@@ -71,13 +71,13 @@ describe('AbilitiesView', () => {
     expect(client.listActiveSkills).not.toHaveBeenCalled()
   })
 
-  it('the footnote opens Settings › Rules & approvals', async () => {
+  it('the footnote opens Settings › Rules & secrets', async () => {
     const seen: unknown[] = []
     const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
     window.addEventListener('webterm:open-settings', on)
     render(<AbilitiesView client={fakeClient()} />)
     expect(await screen.findByText(/can still stop or pause a tool/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Rules & approvals' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Rules & secrets' }))
     window.removeEventListener('webterm:open-settings', on)
     expect(seen).toEqual([{ section: 'rules' }])
   })

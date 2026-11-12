@@ -54,11 +54,12 @@ describe('SettingsPanel search', () => {
       fireEvent.change(search(), { target: { value: q } })
       return [...document.querySelectorAll('.st-search-group h3')].map((h) => h.textContent)
     }
-    expect(pageOf('secret')).toContain('Rules & approvals')
-    expect(pageOf('routine')).toContain('Automations')
-    expect(pageOf('budget')).toContain('Spending')
+    expect(pageOf('secret')).toContain('Rules & secrets')
+    // Moved to the Control side bar: still found, under their own heading.
+    expect(pageOf('routine')).toContain('Control panel')
+    expect(pageOf('budget')).toContain('Control panel')
     expect(pageOf('password')).toContain('Account')
-    expect(pageOf('remember')).toContain('Memory')
+    expect(pageOf('remember')).toContain('Control panel')
     expect(pageOf('diagnostics')).toContain('Health')
     expect(pageOf('scrollbacklines')).toEqual(['Terminal']) // key names match too
   })

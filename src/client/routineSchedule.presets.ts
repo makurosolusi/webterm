@@ -31,3 +31,24 @@ export const DEBOUNCE_CHOICES = [0, 1, 5, 15, 30, 60] as const
 /** Select options for `choices`, plus `current` when a stored value is not one of them (it must stay visible). */
 export const numberOptions = (choices: readonly number[], current: number, unit: (n: number) => string): { value: string; label: string }[] =>
   [...new Set([...choices, current])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: unit(n) }))
+
+export const ROUTINE_EVENT_FIELD_ID = 'routines.event'
+/**
+ * Events a routine can wait for, in plain words (Senses log kinds, `<family>.<name>`; Claude Code hook events are
+ * `hook.<HookEventName>`). A custom kind or `family.*` pattern can still be typed.
+ */
+export const ROUTINE_EVENT_PRESETS: readonly ComboPreset[] = [
+  { value: 'hook.Stop', label: 'An agent finishes a reply' },
+  { value: 'hook.Notification', label: 'An agent needs your attention' },
+  { value: 'hook.SessionEnd', label: 'An agent session ends' },
+  { value: 'fs.change', label: 'A file in the workspace changes' },
+  { value: 'git.push', label: 'Code is pushed' },
+  { value: 'checkpoint.created', label: 'A checkpoint is saved' },
+  { value: 'pty.exit', label: 'A terminal exits' },
+  { value: 'hook.*', label: 'Any agent event' },
+  { value: 'fs.*', label: 'Any file event' },
+]
+
+/** "An agent finishes a reply" for a known event pattern, else the pattern itself. */
+export const eventText = (pattern: string): string =>
+  ROUTINE_EVENT_PRESETS.find((p) => p.value === pattern.trim())?.label ?? pattern

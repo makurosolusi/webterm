@@ -1,5 +1,5 @@
-// Body of the Central tab in the secondary side bar (`App.secondarySideBar`). Renders nothing
-// unless the flag is on; opened from the Dock.
+// Body of the Control tab in the secondary side bar (`App.secondarySideBar`), opened from the Dock. With Central
+// off only the tabs that work without it (`CENTRAL_FREE_TABS`: memory, automations, spending) are shown.
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconButton } from '@/components/ui/icon-button'
@@ -8,21 +8,23 @@ import AgentList from './AgentList'
 import LevelPanel from './LevelPanel'
 import AbilitiesView from './AbilitiesView'
 import SkillReview from './SkillReview'
-import MemoryView from './MemoryView'
+import MemoryTab from './MemoryTab'
+import { RoutinesPanel } from '../RoutinesPanel'
+import { CostPanel } from '../CostPanel'
 import HealthView from './health/HealthView'
 import { HL } from './health/healthModel'
 import { CL } from './centralLabels'
 import { centralControlApi, useCentralControlEnabled } from './centralControlApi'
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import { useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
-import { CENTRAL_PANEL_TABS, type CentralPanelTab } from './centralTabs'
+import { CENTRAL_FREE_TABS, CENTRAL_PANEL_TABS, type CentralPanelTab } from './centralTabs'
 import './central.css'
 
 type TabId = CentralPanelTab
 /** Last `/halt` request already turned into a confirmation, so a remount does not ask again. */
 let haltSeen = 0
 const TAB_LABELS: Record<TabId, string> = {
-  status: CL.tabStatus, abilities: CL.tabAbilities, agents: CL.tabAgents, skills: CL.tabSkills, memory: CL.tabMemory, health: HL.tab,
+  status: CL.tabStatus, abilities: CL.tabAbilities, agents: CL.tabAgents, skills: CL.tabSkills, memory: CL.tabMemory, automations: CL.tabAutomations, spending: CL.tabSpending, health: HL.tab,
 }
 const TABS = CENTRAL_PANEL_TABS.map((id) => ({ id, label: TAB_LABELS[id] }))
 
@@ -59,7 +61,10 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
   }, [request])
   const [status, setStatus] = useState<StatusView | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
-  if (!enabled || !open) return null
+  if (!open) return null
+  // Central off: only the tabs that work without it; a tab it cannot show falls back to the first one.
+  const tabs = enabled ? TABS : TABS.filter((t) => CENTRAL_FREE_TABS.includes(t.id))
+  const shown = tabs.find((t) => t.id === tab)?.id ?? tabs[0]!.id
   return (
     <div className="ccp-panel ccp-panel--embedded">
       {actionsHost && createPortal(
@@ -67,20 +72,22 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
           <span className="codicon codicon-refresh" aria-hidden="true" />
         </IconButton>, actionsHost)}
       <div className="ccp-body">
-        <Tabs value={tab} onValueChange={(id) => setTab(id as TabId)}>
+        <Tabs value={shown} onValueChange={(id) => setTab(id as TabId)}>
           <TabsList aria-label={CL.tabsLabel}>
-            {TABS.map((t) => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}
+            {tabs.map((t) => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}
           </TabsList>
         </Tabs>
         {status?.model.free && <p className="ccp-privacy" role="note">{CL.privacyLabel} ({status.model.id})</p>}
         {/* refreshKey remounts the active section so it reloads its data. */}
-        <div key={`${tab}-${refreshKey}`} className="ccp-section-host">
-          {tab === 'status' && <LevelPanel client={client} visible={visible} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
-          {tab === 'agents' && <AgentList client={client} visible={visible} />}
-          {tab === 'skills' && <SkillReview client={client} />}
-          {tab === 'abilities' && <AbilitiesView client={client} />}
-          {tab === 'memory' && <MemoryView client={client} />}
-          {tab === 'health' && <HealthView visible={visible} />}
+        <div key={`${shown}-${refreshKey}`} className="ccp-section-host">
+          {shown === 'status' && <LevelPanel client={client} visible={visible} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
+          {shown === 'agents' && <AgentList client={client} visible={visible} />}
+          {shown === 'skills' && <SkillReview client={client} />}
+          {shown === 'abilities' && <AbilitiesView client={client} />}
+          {shown === 'memory' && <MemoryTab client={client} central={enabled} />}
+          {shown === 'automations' && <RoutinesPanel />}
+          {shown === 'spending' && <CostPanel />}
+          {shown === 'health' && <HealthView visible={visible} />}
         </div>
       </div>
     </div>

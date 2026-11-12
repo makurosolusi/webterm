@@ -35,6 +35,8 @@ export function handlePolicyApi(req: IncomingMessage, url: URL, body: unknown, d
       subject: b.subject as string, capability: b.capability as string, effect: b.effect as Effect,
       ...(typeof b.scope === 'string' ? { scope: b.scope } : {}),
       ...(typeof b.expiresAt === 'number' ? { expiresAt: b.expiresAt } : {}),
+      // Passed through as sent: createGrant refuses anything but null or one well-formed workspace id.
+      ...(b.workspaceId !== undefined ? { workspaceId: b.workspaceId as string | null } : {}),
     })
     return res.ok ? { status: 201, body: { grant: res.grant } } : { status: res.status, body: { error: res.code } }
   }
