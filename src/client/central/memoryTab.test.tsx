@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { InboxApiError } from '../inboxTypes'
 import { knownTab } from './CentralControlPanel'
 import MemoryView from './MemoryView'
@@ -175,46 +175,113 @@ describe('Remembered rows', () => {
   })
 })
 
-describe('Control › Memory: one surface with a filter', () => {
-  const stub = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
-    url.startsWith('/api/memory2?') || url === '/api/memory2' ? { items: [] }
-      : url === '/api/memory-proposals' ? { proposals: [], tokensToday: 0, dailyTokens: 0 }
-        : url === '/api/blackboard' ? { entries: [], proposals: [] }
-          : url.startsWith('/api/memory2/incognito') ? { refs: [] } : { facts: [] }))))
+describe('Control › Memory: one surface, one filter bar', () => {
+  // jsdom lacks the ResizeObserver / pointer-capture APIs the Radix popper menu calls when it opens.
+  beforeAll(() => {
+    globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+    Element.prototype.hasPointerCapture ??= () => false
+    Element.prototype.scrollIntoView ??= () => undefined
+  })
+  // test-only
+  const items = [
+    { id: 'r1', kind: 'procedural', text: 'Rule one' }, { id: 'f1', kind: 'semantic', text: 'Fact one' }, { id: 'e1', kind: 'episodic', text: 'Session one' },
+  ].map((m) => ({ scope: 'global', status: 'fact', trust: 'human', origin: 't', title: 't', suppressed: false, freshness: 1, needsReview: false, validFrom: 0, updatedAt: 0, ...m }))
+  const stub = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const kind = new URL(url, 'http://x').searchParams.get('kind')
+    return new Response(JSON.stringify(
+      url.startsWith('/api/memory2?') || url === '/api/memory2' ? { items: kind ? items.filter((m) => m.kind === kind) : items }
+        : url === '/api/memory-proposals' ? { proposals: [{ id: 'p1', op: 'add', kind: 'preference', text: 'Proposed one', targetText: null, untrusted: false, node: null }], tokensToday: 0, dailyTokens: 0 }
+          : url === '/api/blackboard' ? { entries: [{ id: 'b1', key: 'goal', value: 'Note one', status: 'set', by: 'human', at: 0 }], proposals: [] }
+            : url.startsWith('/api/memory2/incognito') ? { refs: [] } : { facts: [] }))
+  }))
   afterEach(() => vi.unstubAllGlobals())
-
-  it('All shows every part; Suggested, Notes and Central show one each', async () => {
-    stub()
+  const trigger = (name: 'Source' | 'Kind') => screen.getByRole('button', { name: new RegExp(`^${name}: `) })
+  const choose = (name: 'Source' | 'Kind', option: string) => {
+    fireEvent.keyDown(trigger(name), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: option }))
+  }
+  const renderTab = (central = true) => {
     const client = fakeClient({ getWorkingState: vi.fn(async () => ({ global: null, project: null })), listMemory: list([]) })
-    render(<MemoryTab client={client} central />)
-    const filter = screen.getByRole('group', { name: 'Show' })
-    expect(within(filter).getAllByRole('button').map((b) => b.textContent)).toEqual(['All', 'Suggested', 'Notes', 'Central'])
-    expect(await screen.findByTestId('memory-all')).toBeTruthy()
-    expect(await screen.findByTestId('memory-proposals')).toBeTruthy()
-    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
-    expect(await screen.findByText('Central has not remembered anything yet.')).toBeTruthy()
+    render(<MemoryTab client={client} central={central} />)
+    return client
+  }
 
-    fireEvent.click(within(filter).getByRole('button', { name: 'Suggested' }))
-    expect(await screen.findByTestId('memory-proposals')).toBeTruthy()
+  it('has no pill or tab rows, only the Source and Kind dropdowns under the Remember field', async () => {
+    stub()
+    renderTab()
+    expect(await screen.findByText('Rule one')).toBeTruthy()
+    const tab = screen.getByTestId('memory-tab')
+    expect(within(tab).queryAllByRole('group')).toHaveLength(0)
+    expect(within(tab).queryAllByRole('tablist')).toHaveLength(0)
+    expect(tab.querySelectorAll('[aria-pressed]')).toHaveLength(0)
+    expect(trigger('Source').textContent).toBe('Source: All')
+    expect(trigger('Kind').textContent).toBe('Kind: All')
+    const add = screen.getByRole('textbox', { name: 'Remember' })
+    expect(add.compareDocumentPosition(screen.getByTestId('memory-filters')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('Kind=Rules shows only rules and the label says so', async () => {
+    stub()
+    renderTab()
+    expect(await screen.findByText('Fact one')).toBeTruthy()
+    choose('Kind', 'Rules')
+    await waitFor(() => expect(screen.queryByText('Fact one')).toBeNull())
+    expect(screen.getByText('Rule one')).toBeTruthy()
+    expect(screen.queryByText('Session one')).toBeNull()
+    expect(trigger('Kind').textContent).toBe('Kind: Rules')
+  })
+
+  it('Source=Suggested shows only suggested, keeps the bar and disables Kind', async () => {
+    stub()
+    renderTab()
+    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
+    choose('Source', 'Suggested')
+    expect(await screen.findByText('Proposed one')).toBeTruthy()
     expect(screen.queryByTestId('memory-all')).toBeNull()
     expect(screen.queryByTestId('memory-blackboard')).toBeNull()
     expect(screen.queryByText('Central has not remembered anything yet.')).toBeNull()
-
-    fireEvent.click(within(filter).getByRole('button', { name: 'Notes' }))
-    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
-    expect(screen.queryByTestId('memory-proposals')).toBeNull()
-
-    fireEvent.click(within(filter).getByRole('button', { name: 'Central' }))
-    expect(await screen.findByText('Central has not remembered anything yet.')).toBeTruthy()
-    expect(screen.queryByTestId('agent-memory')).toBeNull()
+    expect(trigger('Source').textContent).toBe('Source: Suggested')
+    expect((trigger('Kind') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('with Central off there is no Central filter and Central is never asked', async () => {
+  it('Notes and Central each show their part only', async () => {
     stub()
-    const client = fakeClient({ listMemory: list([]) })
-    render(<MemoryTab client={client} central={false} />)
-    expect(within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['All', 'Suggested', 'Notes'])
+    renderTab()
+    choose('Source', 'Notes')
+    expect(await screen.findByTestId('memory-blackboard')).toBeTruthy()
+    expect(screen.queryByTestId('memory-proposals')).toBeNull()
+    choose('Source', 'Central')
+    expect(await screen.findByText('Central has not remembered anything yet.')).toBeTruthy()
+    expect(screen.queryByTestId('agent-memory')).toBeNull()
+    expect(trigger('Source').textContent).toBe('Source: Central')
+  })
+
+  it('keyboard: Enter opens, arrows move, Enter chooses', async () => {
+    stub()
+    renderTab()
+    expect(await screen.findByText('Session one')).toBeTruthy()
+    fireEvent.keyDown(trigger('Kind'), { key: 'Enter' })
+    const menu = screen.getByRole('menu', { name: /^Kind: / })
+    expect(within(menu).getAllByRole('menuitemradio').map((o) => o.textContent)).toEqual(['All', 'Rules', 'Facts', 'Past sessions'])
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('All'))
+    // Radix roving focus moves on a timer, so each arrow waits for focus to land.
+    for (const next of ['Rules', 'Facts', 'Past sessions']) {
+      fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' })
+      await waitFor(() => expect(document.activeElement?.textContent).toBe(next))
+    }
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(trigger('Kind').textContent).toBe('Kind: Past sessions')
+    await waitFor(() => expect(screen.queryByText('Rule one')).toBeNull())
+    expect(screen.getByText('Session one')).toBeTruthy()
+  })
+
+  it('with Central off there is no Central source and Central is never asked', async () => {
+    stub()
+    const client = renderTab(false)
     expect(await screen.findByTestId('memory-all')).toBeTruthy()
+    fireEvent.keyDown(trigger('Source'), { key: 'Enter' })
+    expect(screen.getAllByRole('menuitemradio').map((o) => o.textContent)).toEqual(['All', 'Suggested', 'Notes'])
     expect(client.listMemory).not.toHaveBeenCalled()
   })
 })
