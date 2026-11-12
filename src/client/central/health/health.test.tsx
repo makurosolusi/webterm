@@ -202,12 +202,13 @@ describe('healthApi', () => {
     expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/central/health/findings?projectId=p1&status=open&origin=review&limit=50&offset=0')
   })
 
-  it('lists projects with their folder by id, else by a unique name', async () => {
-    const body = (url: string) => (url.startsWith('/api/workspaces')
-      ? [{ id: 'w1', name: 'Alpha', cwd: '/a' }, { id: 'p2', name: 'Beta', cwd: '/b' }, { id: 'w3', name: 'Dup', cwd: '/d1' }, { id: 'w4', name: 'Dup', cwd: '/d2' }]
-      : { items: [], projects: [{ id: 'p1', name: 'Alpha' }, { id: 'p2', name: 'Other' }, { id: 'p3', name: 'Dup' }] })
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(body(url)), { status: 200 })))
-    expect(await healthApi.listProjects()).toEqual([{ id: 'p1', name: 'Alpha', root: '/a' }, { id: 'p2', name: 'Other', root: '/b' }, { id: 'p3', name: 'Dup' }])
+  it('lists projects with the folder the board-nodes route returns, without reading workspaces', async () => {
+    const projects = [{ id: 'p1', name: 'Alpha', workspaceId: 'w1', cwd: '/a' }, { id: 'p2', name: 'NoFolder', workspaceId: 'w2', cwd: null }, { id: 'p3', name: 'Older server' }]
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ items: [], projects }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await healthApi.listProjects()).toEqual([{ id: 'p1', name: 'Alpha', root: '/a' }, { id: 'p2', name: 'NoFolder' }, { id: 'p3', name: 'Older server' }])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toMatch(/^\/api\/central\/nodes\?/)
   })
 
   it('builds the findings query and posts a dismiss reason', async () => {

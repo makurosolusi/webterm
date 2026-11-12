@@ -6,7 +6,7 @@ import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import type {
-  AgentActionResult, AgentRow, BoardNodeRow, CentralControlClient, ContextView, ControlView, MemoryRow,
+  AgentActionResult, AgentRow, BoardNodeRow, BoardProject, CentralControlClient, ContextView, ControlView, MemoryRow,
   SkillReviewRow, StateDoc, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView, TurnContext, WorkingState,
 } from './centralControlTypes'
 
@@ -62,7 +62,7 @@ const toBoardNode = (r: unknown): BoardNodeRow | null => (isRec(r) && str(r.node
   ? { nodeId: str(r.nodeId), workspaceId: str(r.workspaceId), projectId: str(r.projectId), projectName: str(r.projectName), kind: str(r.kind), title: str(r.title), live: r.live === true, status: str(r.status) || null }
   : null)
 
-const toProject = (r: unknown): { id: string; name: string } | null => (isRec(r) && str(r.id) ? { id: str(r.id), name: str(r.name) } : null)
+const toProject = (r: unknown): BoardProject | null => (isRec(r) && str(r.id) ? { id: str(r.id), name: str(r.name), workspaceId: str(r.workspaceId) || null, cwd: str(r.cwd) || null } : null)
 
 const toSkill = (r: unknown): SkillReviewRow | null => (isRec(r) && isRec(r.record) && str(r.record.name)
   ? { record: r.record as unknown as SkillReviewRow['record'], lint: { ok: isRec(r.lint) && r.lint.ok === true, findings: isRec(r.lint) && Array.isArray(r.lint.findings) ? r.lint.findings.map(str) : [] }, diff: str(r.diff), canRollback: r.canRollback === true }
