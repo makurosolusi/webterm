@@ -12,7 +12,9 @@ export interface TooltipPolicyViolation {
 const OPENING_TAG = /<(button|Button)\b(?:=>|[^>])*>/g
 // Wrappers that give their single child a visible tooltip. VscodeTooltip is the older VS Code
 // layer primitive (output toolbar, timeline) and also renders a real hover, so it counts.
-const TOOLTIP_WRAPPER = /<(?:IconTooltip|VscodeTooltip)\b(?:=>|[^>])*>\s*$/
+// A Radix `<X.Trigger asChild>` between them (menu/popover button with a tooltip) passes the
+// button through as the same single child, so it is allowed in between.
+const TOOLTIP_WRAPPER = /<(?:IconTooltip|VscodeTooltip)\b(?:=>|[^>])*>\s*(?:<\w+\.Trigger\s+asChild\b(?:=>|[^>])*>\s*)?$/
 
 /** Children that render only a glyph: `{codicon(...)}`, codicon spans, svg, `<XxxIcon/>`, lucide imports. */
 function iconOnly(children: string, lucide: Set<string>): boolean {

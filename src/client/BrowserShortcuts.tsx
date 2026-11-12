@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -20,6 +21,12 @@ export default function BrowserShortcuts({ onGo }: { onGo: (url: string) => void
   const [menu, setMenu] = useState<{ s: Shortcut; x: number; y: number } | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
   const full = list.length >= SHORTCUTS_MAX
+  const addTile = (
+    <Button type="button" variant="ghost" className="browser-start-tile" disabled={full} onClick={() => setEditing({ label: '', url: '' })}>
+      <span className="browser-start-icon browser-start-icon--add codicon codicon-add" aria-hidden="true" />
+      <span className="browser-start-name">{T.add}</span>
+    </Button>
+  )
 
   return (
     <>
@@ -30,17 +37,16 @@ export default function BrowserShortcuts({ onGo }: { onGo: (url: string) => void
               <BrowserFavicon className="browser-start-icon" url={s.url} label={s.label} color={s.color} />
               <span className="browser-start-name">{s.label}</span>
             </Button>
-            <button
-              type="button" className="browser-start-tile-menu codicon codicon-kebab-vertical" aria-label={T.tileMenu(s.label)} title={T.tileMenu(s.label)} aria-haspopup="menu"
-              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ s, x: r.left, y: r.bottom }) }}
-            />
+            <IconTooltip label={T.tileMenu(s.label)}>
+              <button
+                type="button" className="browser-start-tile-menu codicon codicon-kebab-vertical" aria-label={T.tileMenu(s.label)} aria-haspopup="menu"
+                onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ s, x: r.left, y: r.bottom }) }}
+              />
+            </IconTooltip>
           </li>
         ))}
         <li className="browser-start-cell">
-          <Button type="button" variant="ghost" className="browser-start-tile" disabled={full} title={full ? T.full : undefined} onClick={() => setEditing({ label: '', url: '' })}>
-            <span className="browser-start-icon browser-start-icon--add codicon codicon-add" aria-hidden="true" />
-            <span className="browser-start-name">{T.add}</span>
-          </Button>
+          {full ? <IconTooltip label={T.full} disabled>{addTile}</IconTooltip> : addTile}
         </li>
       </ul>
       {menu && (

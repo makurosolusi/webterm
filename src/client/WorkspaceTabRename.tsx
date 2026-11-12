@@ -2,6 +2,7 @@
 // Escape cancels. While the save runs the input is read-only (`aria-busy`); a rejected save keeps
 // the editor open with the cause, so the typed name is not lost.
 import { useEffect, useRef, useState } from 'react'
+import { Input } from '@/components/ui/input'
 import { normalizeWorkspaceName } from './workspaceMenu'
 
 export interface WorkspaceTabRenameProps {
@@ -47,7 +48,7 @@ export function WorkspaceTabRename({ initial, onCommit, onClose }: WorkspaceTabR
 
   return (
     <span className="app-tab-rename">
-      <input
+      <Input
         ref={ref}
         className="app-tab-rename__input"
         value={draft}

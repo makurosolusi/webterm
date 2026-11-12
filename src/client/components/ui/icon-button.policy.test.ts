@@ -33,6 +33,7 @@ describe('findTooltipPolicyViolations', () => {
       ['XxxIcon component', '<button aria-label="Kind"><KindIcon kind={k} /></button>'],
       ['lucide import', "import { X as CloseGlyph } from 'lucide-react'\n<button aria-label=\"Close\"><CloseGlyph size={14} /></button>"],
       ['JSX comment beside the glyph', `<button aria-label="Run">{/* play */}{codicon('play')}</button>`],
+      ['Radix Trigger asChild without a tooltip', `<DropdownMenu.Trigger asChild>\n  <button aria-label="More">{codicon('kebab-vertical')}</button>\n</DropdownMenu.Trigger>`],
     ])('flags %s', (_name, src) => {
       expect(findTooltipPolicyViolations(src).map((v) => v.reason)).toEqual(['icon-only-button'])
     })
@@ -47,6 +48,7 @@ describe('findTooltipPolicyViolations', () => {
       ['wrapped in IconTooltip', `<IconTooltip label="Run" side="top">\n  <button aria-label="Run" onClick={() => run()}>{codicon('play')}</button>\n</IconTooltip>`],
       ['wrapped in VscodeTooltip', `<VscodeTooltip content={label}>\n  <button aria-label={label}><span className="codicon codicon-x" /></button>\n</VscodeTooltip>`],
       ['IconButton', `<IconButton label="Run">{codicon('play')}</IconButton>`],
+      ['tooltip around a Radix Trigger asChild', `<IconTooltip label="Account">\n  <DropdownMenu.Trigger asChild disabled={off}>\n    <button aria-label="Account"><span className="codicon codicon-account" aria-hidden /></button>\n  </DropdownMenu.Trigger>\n</IconTooltip>`],
     ])('accepts %s', (_name, src) => {
       expect(findTooltipPolicyViolations(src)).toEqual([])
     })

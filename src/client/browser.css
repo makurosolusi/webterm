@@ -52,6 +52,8 @@
   background: transparent; color: inherit; cursor: pointer; font: inherit;
 }
 .browser-start-tile { flex-direction: column; justify-content: center; gap: 4px; width: 100%; padding: 8px 4px; }
+/* At the shortcut limit the disabled add tile sits in IconTooltip's focusable span: keep it full width. */
+.browser-start-cell > [data-slot='icon-tooltip-disabled'] { display: flex; width: 100%; }
 .browser-start-tile:hover, .browser-start-item:hover { background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 15%)); }
 .browser-start-tile:focus-visible, .browser-start-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
 /* Hover "⋮" on a tile (Chrome NTP): visible on hover/focus only; right-click opens the same menu. */

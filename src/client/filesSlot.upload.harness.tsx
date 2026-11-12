@@ -10,6 +10,7 @@ import { FilesNoticeLine, FilesProgressBar } from './FilesNoticeLine'
 import type { FilesSlotCtx } from './filesSlots'
 import { uploadSlot } from './filesSlot.upload'
 import { FilesWriteOffer } from './filesWriteOffer'
+import { Button } from '@/components/ui/button'
 
 export const entries: FileMeta[] = [{ name: 'a.txt', dir: false, ignored: false }, { name: 'sub', dir: true, ignored: false }]
 
@@ -29,7 +30,7 @@ export function Host({ ctx }: { ctx: FilesSlotCtx }): ReactNode {
     <div data-id={ctx.nodeId} data-testid="node">
       <div className="files-node" data-testid="body">
         <div data-testid="toolbar">{uploadSlot.overflow?.(ctx).map((r, i) => ('label' in r
-          ? <button key={i} type="button" onClick={r.onClick}>{r.label}</button> : null))}</div>
+          ? <Button key={i} type="button" onClick={r.onClick}>{r.label}</Button> : null))}</div>
         <FilesProgressBar nodeId={ctx.nodeId} />
         <div data-testid="list">
           {ctx.entries.map((e, i) => createElement('vscode-tree-item', { key: e.name, 'data-index': i, 'data-testid': `row-${e.name}` },
