@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '../shared/workspace'
-import { buildContext, describeEvent, groupEvents, matchesFilter, mergeEvents, NO_FILTER, type TimelineEvent } from './Timeline.model'
+import { autoUndoOf, buildContext, describeEvent, groupEvents, matchesFilter, mergeEvents, NO_FILTER, type TimelineEvent } from './Timeline.model'
 import { effectiveLevel, parseControl, parseIntegrity } from './Timeline.status'
 
 // test-only fixtures
@@ -83,4 +83,34 @@ it('parseIntegrity: ok, broken chain, diverged anchor, unknown', () => {
     .toEqual({ state: 'warning', reason: 'Event chain broken at #3 (hash_mismatch)' })
   expect(parseIntegrity({ anchorStatus: 'match', startStatus: 'rewritten', verify: { ok: true } }).state).toBe('warning')
   expect(parseIntegrity({})).toEqual({ state: 'unknown' })
+})
+
+describe('automatic actions (auto.*)', () => {
+  it('any auto.* kind shows payload.text, tagged automatic, with its undo', () => {
+    const undo = { label: 'Reopen task', method: 'POST', path: '/api/work/t1/reopen', body: { id: 't1' } }
+    const done = ev('auto.task_done', { source: 'auto', nodeId: 'n1', payload: { text: 'Marked task "fix" done', undo } })
+    expect(describeEvent(done, ctx)).toEqual({ text: 'Marked task "fix" done', focusId: 'n1', auto: true })
+    expect(autoUndoOf(done)).toEqual(undo)
+    const future = ev('auto.something_new', { source: 'auto', payload: { text: 'Did a new thing' } })
+    expect(describeEvent(future, ctx).text).toBe('Did a new thing')
+    expect(autoUndoOf(future)).toBeNull()
+    expect(matchesFilter(future, { ...NO_FILTER, kind: 'auto' }, ctx)).toBe(true)
+    expect(matchesFilter(ev('hook.Stop'), { ...NO_FILTER, kind: 'auto' }, ctx)).toBe(false)
+  })
+
+  it('old or unknown payloads fall back to a readable kind name; bad undo is ignored', () => {
+    expect(describeEvent(ev('auto.boot_changes'), ctx).text).toBe('Automatic: boot changes')
+    expect(describeEvent(ev('auto.retention_sweep', { payload: 'garbage' }), ctx).text).toBe('Automatic: retention sweep')
+    expect(describeEvent(ev('auto.', { payload: { text: 42 } }), ctx).text).toBe('Automatic: action')
+    expect(autoUndoOf(ev('auto.nudge', { payload: { undo: { label: 'x', method: 'GET', path: '/api/x' } } }))).toBeNull()
+    expect(autoUndoOf(ev('auto.nudge', { payload: { undo: { label: 'x', method: 'POST', path: 'https://evil/x' } } }))).toBeNull()
+  })
+
+  it('collapses a consecutive run of auto.mail_delivered into one summary line', () => {
+    const mail = () => ev('auto.mail_delivered', { source: 'auto', payload: { text: 'Delivered a message to brisk-otter' } })
+    const lines = groupEvents([mail(), mail(), mail(), ev('auto.nudge', { payload: { text: 'Nudged' } }), mail()], 'workspace', ctx)[0]!.lines
+    expect(lines.map((l) => [l.text, l.count, l.auto])).toEqual([
+      ['Delivered 3 messages to agents', 3, true], ['Nudged', 1, true], ['Delivered a message to brisk-otter', 1, true],
+    ])
+  })
 })
