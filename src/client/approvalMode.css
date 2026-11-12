@@ -1,5 +1,7 @@
-/* Permission-mode chip (ApprovalModeControl.tsx): Danger red, Auto neutral, Ask muted. */
-.approval-chip { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.approval-chip[data-mode='never'] .approval-chip__trigger { color: var(--vscode-errorForeground); border-color: var(--vscode-errorForeground); }
-.approval-chip[data-mode='always'] .approval-chip__trigger { opacity: 0.75; }
+/* Permission-mode button in the Central composer toolbar (ApprovalModeControl.tsx): a borderless ghost
+   text button like the other composer controls. Ask/Auto muted; Danger red text + warning icon, no box. */
+.approval-chip { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.approval-chip[data-mode='never'] .approval-chip__trigger { color: var(--vscode-errorForeground, #f48771); }
 .approval-chip .st-save, .approval-chip .approval-stale { margin: 0; font-size: 11px; }
+/* Narrow composer: icon only; the tooltip and aria-label still state the mode. */
+@container chat-composer (max-width: 280px) { .approval-chip__label { display: none; } }

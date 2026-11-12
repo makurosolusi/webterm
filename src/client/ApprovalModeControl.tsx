@@ -1,6 +1,7 @@
 // The one permission-mode control (Ask / Auto / Danger), in two shapes over the same save path
-// (approvalMode.state.ts): the Settings rows (all projects, plus "This project") and the compact chip in
-// the Central chat header. Danger asks once per change in the app AlertDialog.
+// (approvalMode.state.ts): the Settings rows (all projects, plus "This project") and the quiet text button in
+// the Central chat composer toolbar (like Claude Code's mode line under the input, Cursor's composer mode
+// picker). Danger asks once per change in the app AlertDialog.
 import { DropdownMenu } from 'radix-ui'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -37,7 +38,19 @@ export const APPROVAL_TEXT = {
   chip: (level: ApprovalLevel, scoped: boolean): string => `Permission mode: ${APPROVAL_LEVEL_TEXT[level].label}${scoped ? ' (this project)' : ' (all projects)'}`,
   scopeProject: 'This project',
   scopeAll: 'All projects',
+  /** Tooltip: the mode, where it applies, and one line of what it means. */
+  tooltip: (level: ApprovalLevel, scoped: boolean): string =>
+    `${APPROVAL_LEVEL_TEXT[level].label} in ${scoped ? 'this project' : 'all projects'}: ${MODE_MEANING[level]}`,
 } as const
+
+const MODE_MEANING: Record<ApprovalLevel, string> = {
+  always: 'agents ask before every action that needs permission.',
+  risky: 'routine work runs on its own; actions that cannot be undone ask first.',
+  never: 'agents act without asking. Your Deny rules, spend limits and secret access still apply.',
+}
+
+/** Codicon per mode: shield (Ask), check-shield (Auto), warning (Danger). */
+const MODE_ICON: Record<ApprovalLevel, string> = { always: 'shield', risky: 'workspace-trusted', never: 'warning' }
 
 /** The Danger confirmation of `change`; renders nothing while nobody is asked. */
 export function DangerConfirm({ change }: { change: ApprovalModeChange }): React.JSX.Element | null {
@@ -90,7 +103,7 @@ export function ApprovalModeFields({ settings: s, projectId }: { settings: Setti
   )
 }
 
-/** Central chat header chip: the EFFECTIVE mode of the open project; its menu picks a mode and where it applies. */
+/** Central chat composer mode button: the EFFECTIVE mode of the open project; its menu picks a mode and where it applies. */
 export function ApprovalModeChip({ workspaceId }: { workspaceId: string | null }): React.JSX.Element {
   const s = useLiveSettings()
   const change = useApprovalModeChange(s)
@@ -99,21 +112,22 @@ export function ApprovalModeChip({ workspaceId }: { workspaceId: string | null }
   const effective = approvalLevelFor(s, workspaceId)
   const shown = target.scope === 'global' ? s.agentApprovalLevel : effective
   const save = useFieldSave(settingsSaves, approvalSaveKey(target))
-  const label = APPROVAL_TEXT.chip(effective, !!workspaceId && s.projectApprovalLevels[workspaceId] !== undefined)
+  const scoped = !!workspaceId && s.projectApprovalLevels[workspaceId] !== undefined
+  const label = APPROVAL_TEXT.chip(effective, scoped)
   useCycleApprovalMode(() => change.choose(target, nextApprovalLevel(shown)))
   return (
     <span className="act-picker approval-chip" data-mode={effective}>
       <DropdownMenu.Root modal={false}>
-        <IconTooltip label={`${label}. ${APPROVAL_LEVEL_TEXT[effective].hint}`}>
+        <IconTooltip label={APPROVAL_TEXT.tooltip(effective, scoped)}>
           <DropdownMenu.Trigger asChild>
             <button type="button" className="act-trigger approval-chip__trigger" aria-label={label} aria-busy={save?.status === 'saving'}>
-              <span className="act-trigger__label">{APPROVAL_LEVEL_TEXT[effective].label}</span>
-              <span className="codicon codicon-chevron-down" aria-hidden="true" />
+              <span className={`codicon codicon-${MODE_ICON[effective]}`} aria-hidden="true" />
+              <span className="act-trigger__label approval-chip__label">{APPROVAL_LEVEL_TEXT[effective].label}</span>
             </button>
           </DropdownMenu.Trigger>
         </IconTooltip>
         <DropdownMenu.Portal container={portalContainer()}>
-          <DropdownMenu.Content className="act-menu" side="bottom" align="end" sideOffset={4}>
+          <DropdownMenu.Content className="act-menu" side="top" align="start" sideOffset={4}>
             {workspaceId && (
               <>
                 <DropdownMenu.Label className="act-menu__note">Applies to</DropdownMenu.Label>

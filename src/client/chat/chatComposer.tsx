@@ -14,6 +14,7 @@ import { AttachTray, useComposerAttach, type AttachFiles } from './chatComposerA
 import { useComposerCompletion } from '../agentChat/completionMenu'
 import type { ComposerCompletion } from '../agentChat/composerCompletion'
 import { OFFLINE_REASON, useDisconnected } from '../useConnection'
+import { ApprovalModeChip } from '../ApprovalModeControl'
 
 export interface ChatComposerProps {
   busy: boolean
@@ -39,6 +40,8 @@ export interface ChatComposerProps {
   /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message");
    *  with `menu` the completion menu opens on it (Central `/help` seeds `/`). */
   seed?: { text: string; key: number; menu?: boolean }
+  /** Central only: the permission-mode button in the toolbar under the box, for this project (null = none open). */
+  permissionMode?: { workspaceId: string | null }
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -191,6 +194,11 @@ export default function ChatComposer(props: ChatComposerProps) {
           </IconTooltip>
         )}
       </div>
+      {props.permissionMode && (
+        <div className="chat-composer__toolbar">
+          <ApprovalModeChip workspaceId={props.permissionMode.workspaceId} />
+        </div>
+      )}
       {offline && <p className="chat-composer__limit" role="status">{OFFLINE_REASON}</p>}
       {tooLong && (
         <p className="chat-composer__limit" role="alert">

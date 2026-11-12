@@ -5,6 +5,8 @@ import { act } from '@testing-library/react'
 import ChatComposer, { stepHistory } from './chatComposer'
 import { OFFLINE_REASON } from '../useConnection'
 import { setConnection } from '../ws.connection'
+import { DEFAULT_SETTINGS, mergeSettings } from '../../shared/settings'
+import { SettingsProvider } from '../useSettings'
 
 afterEach(cleanup)
 
@@ -111,6 +113,17 @@ describe('ChatComposer', () => {
     rerender(<ChatComposer busy onSend={() => {}} onStop={onStop} />)
     fireEvent.keyDown(box(), { key: 'Escape' })
     expect(onStop).toHaveBeenCalledTimes(1)
+  })
+
+  it('permissionMode puts the mode button in the toolbar under the box; without it there is none', () => {
+    const { unmount } = render(<ChatComposer busy={false} onSend={() => {}} onStop={() => {}} />)
+    expect(screen.queryByRole('button', { name: /^Permission mode/ })).toBeNull()
+    unmount()
+    const s = mergeSettings({ ...DEFAULT_SETTINGS, projectApprovalLevels: { w1: 'never' } })
+    render(<SettingsProvider value={s}><ChatComposer busy={false} onSend={() => {}} onStop={() => {}} permissionMode={{ workspaceId: 'w1' }} /></SettingsProvider>)
+    const mode = screen.getByRole('button', { name: 'Permission mode: Danger (this project)' })
+    expect(mode.closest('.chat-composer__toolbar')).toBeTruthy()
+    expect(mode.closest('.chat-composer__box')).toBeNull()
   })
 
   it('offline: Send is disabled with the reason, the draft stays editable and is kept for later', () => {

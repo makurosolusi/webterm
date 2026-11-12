@@ -83,6 +83,15 @@ const options = async (): Promise<string[]> => {
 }
 const send = async (text: string): Promise<void> => { type(text); await act(async () => { key('Enter') }) }
 
+describe('Central chat permission mode', () => {
+  it('sits in the composer toolbar under the box, not in the header (status, context, model only)', async () => {
+    await setup()
+    const mode = screen.getByRole('button', { name: /^Permission mode/ })
+    expect(mode.closest('.chat-composer__toolbar')).toBeTruthy()
+    expect(document.querySelector('.chat-conversation__head [aria-label^="Permission mode"]')).toBeNull()
+  })
+})
+
 describe('Central chat / menu', () => {
   it('"/" lists Central commands with descriptions, hints and approved skills', async () => {
     await setup()
