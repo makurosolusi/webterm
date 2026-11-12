@@ -20,7 +20,14 @@ const SWEEP_LIMIT = 200
 const log = createLogger('central.skills')
 export const BUILTIN_DIR = join(dirname(fileURLToPath(import.meta.url)), 'builtin')
 
-export interface SkillStoreOptions { db: Database; root: string; now?: () => number; evaluator?: SkillEvaluator; allowedCaps?: ReadonlySet<string>; builtinDir?: string }
+/** SKILL.md text by skill name, read from a `builtin/`-shaped folder (dev and tests; the binary uses builtinSkills.embedded.ts). */
+export function readBuiltinDir(dir: string): Record<string, string> {
+  if (!existsSync(dir)) return {}
+  return Object.fromEntries(readdirSync(dir).filter(isSkillName).map((name) => [name, readFileSync(join(dir, name, SKILL_FILE), 'utf8')]))
+}
+
+/** `builtins`: shipped skills by name; defaults to reading BUILTIN_DIR from disk. */
+export interface SkillStoreOptions { db: Database; root: string; now?: () => number; evaluator?: SkillEvaluator; allowedCaps?: ReadonlySet<string>; builtins?: Readonly<Record<string, string>> }
 export interface SkillPage { limit?: number; offset?: number }
 
 /** `SkillStore` plus the human-only admin steps; none of these are exposed as tools. */
@@ -93,12 +100,11 @@ function loadSkill(ctx: SkillCtx, name: string): SkillContent | null {
   }
 }
 
-function installBuiltins(ctx: SkillCtx, source: string): SkillRecord[] {
-  if (!existsSync(source)) return []
+function installBuiltins(ctx: SkillCtx, source: Readonly<Record<string, string>>): SkillRecord[] {
   const out: SkillRecord[] = []
-  for (const entry of readdirSync(source).sort()) {
+  for (const entry of Object.keys(source).sort()) {
     if (!isSkillName(entry)) continue
-    const text = readFileSync(join(source, entry, SKILL_FILE), 'utf8')
+    const text = source[entry]
     const lint = lintSkill(text, { expectedName: entry })
     if (!lint.ok || !lint.meta?.version) throw new SkillError('invalid', `builtin skill ${entry} failed lint`, lint.issues)
     const { version, description, caps } = lint.meta
@@ -142,6 +148,6 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
     evaluate: (name, version) => evaluateSkill(ctx, name, version, evaluator),
     submit: (name, version) => submitForApproval(ctx, name, version),
     reject: (name, version, by) => rejectSkill(ctx, name, version, by),
-    installBuiltins: () => installBuiltins(ctx, opts.builtinDir ?? BUILTIN_DIR),
+    installBuiltins: () => installBuiltins(ctx, opts.builtins ?? readBuiltinDir(BUILTIN_DIR)),
   }
 }
