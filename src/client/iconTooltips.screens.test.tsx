@@ -41,7 +41,7 @@ describe('BrowserToolbar tooltips', () => {
     expect(tipOf(fwd)).toBe('Go forward one page (no later page)')
   })
 
-  it('site-info icon, zoom pill and ⋯ have visible tooltips', () => {
+  it('site-info icon, zoom pill and ⋮ More actions have visible tooltips', () => {
     render(<BrowserToolbar
       state={{ id: 'n1', url: 'http://a.com/', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' }}
       nav={() => {}} agentControl={false} agentEnabled onAgentControl={() => {}} zoom={1.3} onZoom={() => {}}
@@ -50,7 +50,16 @@ describe('BrowserToolbar tooltips', () => {
     expect(tipOf(screen.getByRole('button', { name: 'Zoom 130%, reset to 100%' }))).toBe('Page zoom is 130%: click to reset to 100%')
     const more = screen.getByRole('button', { name: 'More actions' })
     expect(more.hasAttribute('title')).toBe(false)
-    expect(tipOf(more)).toBe('Zoom, device mode, Shields, Design Mode and more')
+    expect(tipOf(more)).toBe('Zoom, device mode, Shields, Design Mode, cookies and more')
+  })
+
+  it('a blank page shows a search icon with a visible tooltip instead of site info', () => {
+    render(<BrowserToolbar
+      state={{ id: 'n1', url: 'about:blank', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' }}
+      nav={() => {}} agentControl={false} agentEnabled onAgentControl={() => {}} onZoom={() => {}}
+    />)
+    expect(screen.queryByRole('img', { name: 'Not secure' })).toBeNull()
+    expect(tipOf(screen.getByRole('img', { name: 'Search' }))).toBe('Type to search or enter an address')
   })
 })
 
