@@ -26,10 +26,9 @@ import type { CentralMcpLink } from './claudeMcp'
 
 const log = createLogger('central')
 
-/** Result of the readiness check injected by the wiring layer (CR-02/CR-03). */
-export type ClaudeReady =
-  | { ok: true }
-  | { ok: false; code: ClaudeUnavailableCode; hint: string }
+/** Result of the readiness check injected by the wiring layer (CR-02/CR-03); defined with the probe. */
+export type { ClaudeReady } from './claudePreflight'
+import type { ClaudeReady } from './claudePreflight'
 
 export type ClaudeUnavailableCode = 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'
 

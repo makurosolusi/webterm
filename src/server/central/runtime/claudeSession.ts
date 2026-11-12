@@ -16,7 +16,7 @@ export interface TurnFailure {
   retryable?: boolean
   /** Which input-free message to use when `code` is `runtime_unavailable`. */
   unavailable?: ClaudeUnavailableCode
-  /** Redacted human cause shown instead of the bare `runtime_error` message. */
+  /** Redacted human cause shown instead of the bare `runtime_error` / `runtime_unavailable` message. */
   reason?: string
 }
 
@@ -35,6 +35,8 @@ export interface ClaudeTurnState {
   spawnError: NodeJS.ErrnoException | null
   /** Bounded tail of the child's stderr (or the SDK's error when the child said nothing), in memory only; redacted before it is logged or surfaced. */
   stderrTail: string
+  /** Log fields of a not-ready preflight (stage, profile, timing), when there was one. */
+  preflight: Record<string, unknown> | null
   /** MCP tool calls requested and not yet answered: tool_use id -> name + start time. */
   openTools: Map<string, { name: string; at: number }>
   /** Every tool_use id already announced (partial mode repeats assistant messages). */
@@ -43,7 +45,7 @@ export interface ClaudeTurnState {
 
 export function newTurnState(): ClaudeTurnState {
   return { sessionRef: null, sawInit: false, sawDelta: false, messages: new Map(), failure: null,
-    termination: null, result: null, retries: 0, spawnError: null, stderrTail: '', openTools: new Map(), seenTools: new Set() }
+    termination: null, result: null, retries: 0, spawnError: null, stderrTail: '', preflight: null, openTools: new Map(), seenTools: new Set() }
 }
 
 const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
@@ -56,7 +58,7 @@ const UNAVAILABLE_MESSAGES: Record<ClaudeUnavailableCode, string> = {
 export function runtimeErrorMessage(code: RuntimeErrorCode, unavailable?: ClaudeUnavailableCode, reason?: string): string {
   switch (code) {
     case 'runtime_unavailable':
-      return UNAVAILABLE_MESSAGES[unavailable ?? 'claude_check_failed']
+      return reason || UNAVAILABLE_MESSAGES[unavailable ?? 'claude_check_failed']
     case 'timeout':
       return 'claude timed out'
     case 'cancelled':
