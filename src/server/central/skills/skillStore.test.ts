@@ -1,11 +1,11 @@
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nodeSqlite } from '../../nodeSqlite.testutil'
 import { DAY_MS, DDL_SKILL, MAX_ACTIVE_SKILLS, SKILL_PERMISSION, SkillError, ensureSkillTable, getRecord, isSkillName, putRecord } from './skillIndex'
 import { confirmPhrase } from './skillLifecycle'
-import { type SkillAdminStore, createSkillStore } from './skillStore'
+import { BUILTIN_DIR, type SkillAdminStore, createSkillStore, readBuiltinDir } from './skillStore'
 
 const HUMAN = 'human:alice'
 let root: string
@@ -43,6 +43,23 @@ describe('builtin skills', () => {
     store.installBuiltins()
     expect(await asyncCode(store.propose(input({ name: 'webterm-central-basics' }), 'central:c1'))).toBe('forbidden')
     expect(codeOf(() => store.rollback('webterm-central-basics', HUMAN))).toBe('forbidden')
+  })
+})
+
+describe('builtin skill sources', () => {
+  it('readBuiltinDir maps each webterm-* folder to its SKILL.md and skips other entries', () => {
+    const dir = join(root, 'src')
+    for (const name of ['webterm-a', 'Not_A_Skill']) { mkdirSync(join(dir, name), { recursive: true }); writeFileSync(join(dir, name, 'SKILL.md'), `body ${name}`) }
+    expect(readBuiltinDir(dir)).toEqual({ 'webterm-a': 'body webterm-a' })
+    expect(readBuiltinDir(join(root, 'missing'))).toEqual({})
+    expect(Object.keys(readBuiltinDir(BUILTIN_DIR))).toHaveLength(4)
+  })
+
+  it('installs from the `builtins` map instead of the folder when one is given (the compiled binary path)', () => {
+    const text = readFileSync(join(BUILTIN_DIR, 'webterm-central-basics', 'SKILL.md'), 'utf8')
+    const only = createSkillStore({ db: raw.db, root, now: () => clock, builtins: { 'webterm-central-basics': text } })
+    expect(only.installBuiltins().map((r) => r.name)).toEqual(['webterm-central-basics'])
+    expect(only.load('webterm-central-basics')?.body).toContain('You propose; humans and the server decide.')
   })
 })
 
