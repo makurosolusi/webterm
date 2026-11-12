@@ -107,6 +107,9 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_skill: sweep('rejected proposals 30+ days old, with their proposed/ folder (only inside the skills root)', (ctx, now, limit) => sweepRejectedSkills(ctx, now, limit)),
   central_agents: sweep('ended 30+ days ago (live agents and their resume approvals stay)', (ctx, now, limit) =>
     deleteBatch(ctx, 'central_agents', 'ended_at IS NOT NULL AND ended_at < ?', limit, now - SETTLED_RETENTION_MS)),
+  central_playbook_run: sweep('last moved 30+ days ago and not waiting on a pending approval card', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_playbook_run', `updated_at < ? AND NOT (status = 'waiting'
+      AND EXISTS (SELECT 1 FROM approval a WHERE a.id = central_playbook_run.approval_id AND a.status = 'pending'))`, limit, now - SETTLED_RETENTION_MS)),
   usage: sweep('responses 400+ days old (spend reads use a since window)', (ctx, now, limit) =>
     deleteBatch(ctx, 'usage', 'ts < ?', limit, now - LEDGER_USAGE_RETENTION_MS)),
   run: sweep('started 400+ days ago, once all its usage rows have aged out', (ctx, now, limit) =>

@@ -15,7 +15,7 @@ export interface CatalogTool { name: string; summary: string; group: ToolGroup; 
 
 /** Name prefix -> group, first match wins; anything unmatched is `other`. */
 const GROUP_PREFIXES: ReadonlyArray<[string, ToolGroup]> = [
-  ['project.', 'projects'], ['node.', 'projects'], ['canvas.', 'projects'], ['chat.', 'projects'], ['workspace.', 'projects'], ['repo.', 'projects'], ['agent.', 'workers'],
+  ['project.', 'projects'], ['node.', 'projects'], ['canvas.', 'projects'], ['chat.', 'projects'], ['workspace.', 'projects'], ['repo.', 'projects'], ['agent.', 'workers'], ['playbook.', 'workers'],
   ['task.', 'tasks'], ['plan.', 'tasks'], ['goal.', 'tasks'], ['run.', 'tasks'],
   ['memory.', 'memory'], ['kb.', 'memory'], ['blackboard.', 'memory'], ['browser_', 'browser'], ['skill.', 'skills'],
   ['channel.', 'channels'], ['central_bot', 'channels'], ['approval.', 'approvals'],

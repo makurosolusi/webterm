@@ -32,6 +32,7 @@ import { TASK_READ_DEFS } from './defs/read.task'
 import { SKILLS_FLAG, type SkillStoreResolver, createSkillDefs } from './defs/skill.defs'
 import { createTaskWorkDefs } from './defs/task.work.defs'
 import { createWorkspaceDefs } from './defs/workspace.defs'
+import { createPlaybookDefs } from '../playbooks/playbook.tools'
 import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
 
 export { toolsHash } from './toolRegistry'
@@ -93,6 +94,8 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
   const groups: Array<[boolean, () => readonly ToolDef[]]> = [
     [central, () => [...CAP_DEFS, ...PROJECT_READ_DEFS, ...nodeDefs(), ...TASK_READ_DEFS]],
     [agentsOn(env) && !!deps.executor, () => createAgentDefs(deps.executor as AgentExecutor)],
+    // Playbooks chain task.create + agent.* (playbooks/playbook.defs.ts), so they exist only with both.
+    [central && agentsOn(env) && !!deps.executor, () => createPlaybookDefs()],
     [on(env, AGENT_MAIL_FLAG) && agentsOn(env), () => [createAgentRelayDef({ ...(deps.deliver ? { deliver: deps.deliver } : {}) })]],
     [on(env, KNOWLEDGE_FLAG) && !!deps.openKb, () => createKnowledgeDefs(deps.openKb as () => Database)],
     // repo.map keeps its own cache (repomap.db), so it needs no knowledge.db handle.

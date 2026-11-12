@@ -32,6 +32,7 @@ import { applyV30 } from './ledgerSchemaV30'
 import { applyV31 } from './ledgerSchemaV31'
 import { applyV32 } from './ledgerSchemaV32'
 import { applyV33 } from './ledgerSchemaV33'
+import { applyV34 } from './ledgerSchemaV34'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -103,4 +104,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 32, up: applyV32 },
   // v33: central_control admits `setting:<name>` rows with value_json (switches that must outlive event retention); rows kept.
   { version: 33, up: applyV33 },
+  // v34: central_playbook_run (cursor of a playbook waiting on an approval); additive, nothing to backfill.
+  { version: 34, up: applyV34 },
 ]

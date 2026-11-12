@@ -30,7 +30,10 @@ import { resumeApprovedAgents } from './agents/agentResume'
 import { createMailDeliver } from './agents/mailDeliver'
 import { createMailStore } from './agents/mailStore'
 import type { AgentRecord } from './contracts'
-import { type SyncControlGuard, createControlGuard } from './guard/controlGuard'
+import { type SyncControlGuard, createControlGuard, toToolGuard } from './guard/controlGuard'
+import { type MapTool, registerCapabilityMap } from './context/capabilityMap'
+import { watchPlaybookApprovals } from './playbooks/playbook.run'
+import { toolsView } from './toolsCatalog.api'
 import { activeCa2, setActiveCa2 } from './ca2Active'
 import { projectWorkspaceId } from './workspaceLookup'
 import { skipApprovalsFor } from '../../shared/settings.projectApprovalLevels'
@@ -140,6 +143,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let timer: ReturnType<typeof setInterval> | null = null
   let unwatchPty: (() => void) | null = null
   let stopWork: (() => void) | null = null
+  let unwatchPlaybooks: (() => void) | null = null
+  let unmapCapabilities: (() => void) | null = null
   const work = createWorkTracking({ db, sessions, now, noTimer: opts.noTimer === true })
   let armed = false
   // Crash recovery runs once per process: a re-arm (Central off -> on) must not sweep turns this process is still running.
@@ -193,6 +198,9 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
       try { await executor?.reconcile() } catch (err) { log.error('ca2.agents_reconcile_failed', 'agent reconcile failed', { error: err instanceof Error ? err.message : String(err) }) }
     })()
     if (executor) unwatchPty ??= startAgentPtyWatcher({ db, store: executor.store, now })
+    // A playbook parked on a card continues when the card is decided (any surface); off again on pause.
+    unwatchPlaybooks ??= watchPlaybookApprovals((conversationId) => (armed ? { db, registry, guard: toToolGuard(guard), maxTier: 'R3', conversationId, now, env: eff } : null))
+    unmapCapabilities ??= registerCapabilityMap(() => (toolsView(handle).body as { tools: MapTool[] }).tools)
     // Chat and terminal delegation do not depend on the spawn executor, so this runs with agents off too.
     stopWork ??= work.start()
     if (executor && !opts.noTimer) {
@@ -212,6 +220,10 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     unwatchPty = null
     stopWork?.()
     stopWork = null
+    unwatchPlaybooks?.()
+    unwatchPlaybooks = null
+    unmapCapabilities?.()
+    unmapCapabilities = null
     if (activeCa2() === handle) setActiveCa2(null)
   }
   const unhook = onCapabilityChange('central', { start, stop: pause })
