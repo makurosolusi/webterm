@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Diff node DOM: file list with status, secret files never get an editor, a wired agent supplies
 // the root and receives the notes batch through the outbox. API, Monaco, fetch and the socket are faked.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, useNodesState, type Edge, type Node } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
@@ -28,6 +28,8 @@ const monaco = vi.hoisted(() => {
 vi.mock('./lazyMonaco', () => ({ loadMonaco: () => Promise.resolve(monaco.m) }))
 
 import DiffNode from './DiffNode'
+import { NodeHostContext } from './tabLayout.context'
+import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
 
 // test-only: jsdom has no ResizeObserver; React Flow renders unmeasured nodes, which is all this needs.
 beforeAll(() => {
@@ -55,9 +57,16 @@ function Canvas({ init, edges }: { init: Node[]; edges: Edge[] }) {
   return <div style={{ width: 800, height: 600 }}><ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} nodeTypes={nodeTypes} /></div>
 }
 
-function mount(data: Record<string, unknown>, extra: { nodes?: Node[]; edges?: Edge[] } = {}) {
+function mount(data: Record<string, unknown>, extra: { nodes?: Node[]; edges?: Edge[]; inTab?: boolean } = {}) {
   const self: Node = { id: 'd1', type: 'diff', position: { x: 0, y: 0 }, data, width: 600, height: 400 }
-  return render(<ReactFlowProvider><Canvas init={[self, ...(extra.nodes ?? [])]} edges={extra.edges ?? []} /></ReactFlowProvider>)
+  return render(
+    <ReactFlowProvider>
+      <div ref={setEditorActionsSlot} data-slot="tab-editor-actions" />
+      <NodeHostContext.Provider value={{ inTab: !!extra.inTab, visible: true, maximized: false }}>
+        <Canvas init={[self, ...(extra.nodes ?? [])]} edges={extra.edges ?? []} />
+      </NodeHostContext.Provider>
+    </ReactFlowProvider>,
+  )
 }
 
 describe('DiffNode', () => {
@@ -165,5 +174,32 @@ describe('DiffNode', () => {
     fireEvent.click(screen.getByText('Undo'))
     await waitFor(() => expect(api.undoHunk).toHaveBeenCalledWith('/repo', 'a.ts', 'h1'))
     expect(confirm).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('DiffNode in tab mode', () => {
+  const strip = () => within(document.querySelector<HTMLElement>('[data-slot="tab-editor-actions"]')!)
+  it('renders no own header; Send to agent and Refresh sit in the strip and the tab menu', async () => {
+    api.fetchDiffList.mockResolvedValue(LIST)
+    const { container } = mount({ cwd: '/repo' }, { inTab: true })
+    await waitFor(() => expect(container.querySelectorAll('.diff-node__file')).toHaveLength(3))
+    expect(container.querySelector('.diff-node .node-header')).toBeNull()
+    expect(container.querySelector('.diff-node .codicon-close')).toBeNull()
+    expect(strip().getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Send to agent (0)', 'Refresh'])
+    expect(tabNodeMenuItems('d1').map((r) => (r.type === 'item' ? r.label : r.type))).toEqual(['Send to agent (0)', 'Refresh'])
+    fireEvent.click(strip().getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(api.fetchDiffList).toHaveBeenCalledTimes(2))
+    // No agent wired: the click's refusal shows as the node message, as from the header.
+    fireEvent.click(strip().getByRole('button', { name: 'Send to agent (0)' }))
+    expect(container.querySelector('.diff-node__msg')?.textContent).toBeTruthy()
+  })
+
+  it('keeps its own header on the canvas and publishes nothing', async () => {
+    api.fetchDiffList.mockResolvedValue(LIST)
+    const { container } = mount({ cwd: '/repo' })
+    await waitFor(() => expect(container.querySelectorAll('.diff-node__file')).toHaveLength(3))
+    expect(container.querySelector('.diff-node .node-header .codicon-close')).not.toBeNull()
+    expect(strip().queryAllByRole('button')).toHaveLength(0)
+    expect(tabNodeMenuItems('d1')).toEqual([])
   })
 })

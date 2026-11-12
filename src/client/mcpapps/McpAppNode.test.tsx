@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({ fetchAppView: vi.fn(), callAppTool: vi.fn(), cla
 vi.mock('./mcpApp.api', () => api)
 
 import McpAppNode, { APP_TEXT } from './McpAppNode'
+import { NodeHostContext } from '../tabLayout.context'
+import { setEditorActionsSlot, tabNodeMenuItems } from '../tabLayout.nodeActions'
 
 // test-only: jsdom has no ResizeObserver.
 beforeAll(() => {
@@ -19,11 +21,14 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 // test-only view
 const VIEW = { id: 'app-1', uri: 'ui://weather/forecast', ownerNodeId: 'a1', csp: "default-src 'none'", html: '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'"><p>hi</p>', permissions: ['camera'] }
-const mount = () => render(
+const mount = (inTab = false) => render(
   <ReactFlowProvider>
-    <div style={{ width: 800, height: 600 }}>
-      <ReactFlow nodes={[{ id: 'app-1', type: 'app', position: { x: 0, y: 0 }, width: 480, height: 360, data: {} } satisfies Node]} nodeTypes={{ app: McpAppNode }} />
-    </div>
+    <div ref={setEditorActionsSlot} data-slot="tab-editor-actions" />
+    <NodeHostContext.Provider value={{ inTab, visible: true, maximized: false }}>
+      <div style={{ width: 800, height: 600 }}>
+        <ReactFlow nodes={[{ id: 'app-1', type: 'app', position: { x: 0, y: 0 }, width: 480, height: 360, data: {} } satisfies Node]} nodeTypes={{ app: McpAppNode }} />
+      </div>
+    </NodeHostContext.Provider>
   </ReactFlowProvider>,
 )
 
@@ -56,5 +61,25 @@ describe('McpAppNode', () => {
     api.fetchAppView.mockRejectedValue(Object.assign(new Error('Load app: app_not_found'), { status: 404 }))
     mount()
     expect((await screen.findByRole('alert')).textContent).toBe(APP_TEXT.gone)
+  })
+})
+
+describe('McpAppNode in tab mode', () => {
+  const slot = () => document.querySelector<HTMLElement>('[data-slot="tab-editor-actions"]')!
+  it('renders no own header or close (the tab × closes it) and adds no strip buttons', async () => {
+    api.fetchAppView.mockResolvedValue(VIEW)
+    const { container } = mount(true)
+    await screen.findByTitle(APP_TEXT.frameTitle)
+    expect(container.querySelector('.mcp-app-node .node-header')).toBeNull()
+    expect(container.querySelector('.mcp-app-node .codicon-close')).toBeNull()
+    expect(slot().querySelectorAll('button')).toHaveLength(0)
+    expect(tabNodeMenuItems('app-1')).toEqual([])
+  })
+
+  it('keeps its own header with Close on the canvas', async () => {
+    api.fetchAppView.mockResolvedValue(VIEW)
+    const { container } = mount()
+    await screen.findByTitle(APP_TEXT.frameTitle)
+    expect(container.querySelector('.mcp-app-node .node-header .codicon-close')).not.toBeNull()
   })
 })
