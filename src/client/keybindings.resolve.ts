@@ -82,14 +82,16 @@ export function isAppChord(
   if (!chord) return false
   const bareCtrl = (platform.isMac ? /^Ctrl\+[A-Z]$/ : /^Mod\+[A-Z]$/).test(chord)
   return list.some((c) =>
-    scopeOf(c) === 'global' && (c.run || c.fixed) && effectiveKey(c, overrides) === chord &&
+    scopeOf(c) === 'global' && (c.run || c.fixed) && effectiveKey(c, overrides, platform.isMac) === chord &&
     (ESCAPE_HATCH.has(c.id) || (policy === 'app-first' && (!bareCtrl || isUser(c, overrides)))))
 }
 
 /** The live chord of command `id`, if it is registered and bound. */
-export function commandKey(id: string, list: readonly Command[] = listCommands(), overrides: KeybindingOverrides = keybindingOverrides()): string | undefined {
+export function commandKey(
+  id: string, list: readonly Command[] = listCommands(), overrides: KeybindingOverrides = keybindingOverrides(), isMac: boolean = isMacPlatform(),
+): string | undefined {
   const cmd = list.find((c) => c.id === id)
-  return cmd && effectiveKey(cmd, overrides)
+  return cmd && effectiveKey(cmd, overrides, isMac)
 }
 
 /** True when `e` is the live chord of command `id`: how a surface dispatches its own scoped commands. */
@@ -97,6 +99,6 @@ export function commandMatches(
   e: KeyLike, id: string, list: readonly Command[] = listCommands(), overrides: KeybindingOverrides = keybindingOverrides(),
   isMac: boolean = isMacPlatform(),
 ): boolean {
-  const key = commandKey(id, list, overrides)
+  const key = commandKey(id, list, overrides, isMac)
   return !!key && eventChord(e, isMac) === key
 }

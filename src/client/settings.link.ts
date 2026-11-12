@@ -14,9 +14,15 @@ const BLOCK_FIELD_IDS = ['model-ladder', 'claude-provider', 'chromium', 'agentEn
 
 /**
  * What `data-field` may hold, and so what a link may target: a `Field setting="<key>"` (its key),
- * a Central row (`central.<id>`), a capability card (`capability.<id>`) or one of the blocks above.
+ * a Central row (`central.<id>`), a capability card (`capability.<id>`), a Keyboard Shortcuts row
+ * (`keybinding.<command id>`) or one of the blocks above.
  */
-export type SettingsFieldId = keyof Settings | `central.${CentralFieldId}` | `capability.${CapabilityId}` | (typeof BLOCK_FIELD_IDS)[number]
+export type SettingsFieldId = keyof Settings | `central.${CentralFieldId}` | `capability.${CapabilityId}` | `keybinding.${string}` | (typeof BLOCK_FIELD_IDS)[number]
+
+/** The Keyboard Shortcuts row of command `id`. */
+export const keybindingFieldId = (id: string): `keybinding.${string}` => `keybinding.${id}`
+/** Command ids are registered at run time, so any well-formed one may be targeted (an unknown one reveals nothing). */
+const KEYBINDING_FIELD = /^keybinding\.[\w.-]+$/
 
 const FIELD_IDS: ReadonlySet<string> = new Set([
   ...Object.keys(DEFAULT_SETTINGS),
@@ -58,7 +64,7 @@ export function movedSettingsField(id: string | null | undefined): MovedField | 
 export function toSettingsFieldId(id: string | null | undefined): SettingsFieldId | null {
   const moved = movedSettingsField(id)
   if (moved) return moved.field
-  return typeof id === 'string' && FIELD_IDS.has(id) ? (id as SettingsFieldId) : null
+  return typeof id === 'string' && (FIELD_IDS.has(id) || KEYBINDING_FIELD.test(id)) ? (id as SettingsFieldId) : null
 }
 
 /** Event that opens Settings (App's SettingsHost listens): `detail.section` = section id (legacy and
