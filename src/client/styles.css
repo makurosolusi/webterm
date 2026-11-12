@@ -268,19 +268,6 @@ button.app-titlebar__name {
   background: var(--vscode-commandCenter-activeBackground);
   border-color: var(--vscode-commandCenter-activeBorder);
 }
-.app-titlebar__rename {
-  width: min(320px, 40vw);
-  height: 24px;
-  padding: 2px 6px;
-  background: var(--vscode-input-background);
-  border: 1px solid var(--vscode-focusBorder);
-  border-radius: 4px;
-  color: var(--vscode-input-foreground);
-  font-family: inherit;
-  font-size: var(--ui-font-size-small);
-  outline: none;
-}
-
 .app-titlebar__actions {
   display: flex;
   flex: none;
@@ -347,6 +334,34 @@ button.app-titlebar__name {
   color: var(--vscode-tab-activeForeground);
 }
 .app-tabs__action:disabled { opacity: 0.4; }
+
+/* Inline rename inside a workspace tab (WorkspaceTabRename): same 35px slot, VS Code input colours. */
+.app-tab-rename {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+.app-tab-rename__input {
+  width: 160px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 2px;
+  color: var(--vscode-input-foreground);
+  font-family: inherit;
+  font-size: var(--ui-font-size-small);
+  outline: none;
+}
+.app-tab-rename__input[aria-busy='true'] { opacity: 0.6; }
+.app-tab-rename__input[aria-invalid='true'] { border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground)); }
+.app-tab-rename__busy { font-size: var(--ui-icon-size); }
+/* The cause is in the input's tooltip; the alert text is for screen readers (the strip clips overflow). */
+.app-tab-rename__error {
+  position: absolute; overflow: hidden; width: 1px; height: 1px; margin: -1px;
+  padding: 0; border: 0; clip-path: inset(50%); white-space: nowrap;
+}
 
 /* Status bar menempati baris grid terakhir; primitifnya sendiri yang memegang tinggi 22px. */
 .app-statusbar {

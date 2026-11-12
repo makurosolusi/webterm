@@ -33,7 +33,7 @@ const statusFetch = (extra?: (url: string, init?: RequestInit) => Response | nul
   extra?.(url, init) ?? jsonRes(url.includes(encodeURIComponent(WT.path!)) ? WT : { managed: false })
 
 async function openDelete() {
-  fireEvent.click(screen.getByLabelText('Workspace options'))
+  fireEvent.contextMenu(screen.getByRole('tab', { name: /Feat/ }), { clientX: 10, clientY: 10 })
   fireEvent.click(await screen.findByText('Delete'))
 }
 

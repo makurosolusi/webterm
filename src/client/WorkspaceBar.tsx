@@ -2,23 +2,23 @@
 //
 // Baris 1 (35px): brand, `VscodeMenuBar` (File / Help — urutan & label mengikuti VS Code; menu
 // yang tak punya padanan di webterm tidak dibuat), identitas workspace aktif di tengah, dan aksi
-// kanan (menu akun). Rename workspace memakai command center di tengah itu: input
-// muncul di tempat yang sudah terlihat, bukan di dalam tab yang bisa tergulung keluar layar.
+// kanan (menu akun).
 //
 // Baris 2 (35px): `VscodeEditorTabBar` memuat satu tab per workspace — status dot sebagai ikon,
-// nama sebagai label, overflow/fade/wheel/reveal milik primitif. Di ujung kanan deretan duduk dua
-// aksi baris: kebab menu workspace aktif (satu-satunya permukaan rename/hapus) dan `+` workspace
-// baru. `+` sengaja SAUDARA strip, bukan anaknya, supaya 10+ workspace tidak mendorongnya keluar
-// layar.
+// nama sebagai label, overflow/fade/wheel/reveal milik primitif. Like VS Code / browser tabs:
+// `+` (new workspace) sits right after the last tab (sticky at the visible edge on overflow);
+// per-workspace actions live ON the tab (right-click / Shift+F10 menu, double-click inline
+// rename); the board-scoped layout toggle sits at the far right, where VS Code puts editor-group
+// actions. File > Rename/Delete still act on the active workspace.
 //
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
-// bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout & kebab DISEMBUNYIKAN.
+// bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout toggle DISEMBUNYIKAN.
 import { useMemo, useState, type ReactNode } from 'react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
-import { deleteWorkspaceMessage, normalizeWorkspaceName } from './workspaceMenu'
-import { Input } from '@/components/ui/input'
+import { deleteWorkspaceMessage } from './workspaceMenu'
+import { WorkspaceTabRename } from './WorkspaceTabRename'
 import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
 import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
@@ -34,7 +34,7 @@ import { openSetup } from './setup/setup.open'
 import { AccountMenu } from './AccountMenu'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
-/** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
+/** Jarak menu dari tepi bawah tombol `+`, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
 const MENU_GAP = 4
 
 export interface WorkspaceBarProps {
@@ -47,8 +47,8 @@ export interface WorkspaceBarProps {
   onSelect: (id: string) => void
   /** No path: pick an existing folder. A path (cloned / new project): open it as a workspace. */
   onNewWorkspace: (path?: string) => void
-  /** Nama sudah dinormalkan (trim, tidak pernah kosong) sebelum sampai ke sini. */
-  onRenameWorkspace: (id: string, name: string) => void
+  /** Nama sudah dinormalkan (trim, tidak pernah kosong). A returned promise shows the tab editor busy. */
+  onRenameWorkspace: (id: string, name: string) => void | Promise<unknown>
   /** Sudah dikonfirmasi pengguna di sini — pemanggil langsung menghapus. */
   onDeleteWorkspace: (id: string) => void
   /** Sign out (POST /auth/logout) then reload to SignInScreen. Rendered only when `showLogout`. */
@@ -102,30 +102,17 @@ export default function WorkspaceBar({
     [workspaces, liveActiveNodes, activeId, statuses],
   )
 
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  /** Tab context menu: which workspace it acts on (not necessarily the active one) and where. */
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const mutedIds = useNotifyPrefs().muted
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
 
   const worktrees = useWorktreeStatuses(workspaces)
   const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
 
-  const commitRename = (): void => {
-    if (!editingId) return
-    const name = normalizeWorkspaceName(draft)
-    const before = workspaces.find((w) => w.id === editingId)?.name
-    // Draft kosong/spasi, atau nama yang tidak berubah: tutup editor tanpa menulis apa-apa — PUT
-    // workspace itu mahal (seluruh board ikut dikirim) dan rename yang sama tidak membawa apa pun.
-    if (name && name !== before) onRenameWorkspace(editingId, name)
-    setEditingId(null)
-  }
-
-  const startRename = (id: string, current: string): void => {
-    setEditingId(id)
-    setDraft(current)
-  }
+  const menuGroup = menu ? groups.find((g) => g.projectId === menu.id) ?? null : null
 
   const deleteWorkspace = (projectId: string, projectName: string, sessions: number): void => {
     // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang), jadi ia
@@ -156,7 +143,7 @@ export default function WorkspaceBar({
       {
         id: 'rename-workspace',
         label: 'Rename Workspace…',
-        onSelect: () => startRename(activeGroup.projectId, activeGroup.projectName),
+        onSelect: () => setEditingId(activeGroup.projectId),
       },
       {
         id: 'delete-workspace',
@@ -196,6 +183,9 @@ export default function WorkspaceBar({
       tooltip: wt?.managed ? `${workspaceTabTitle(g)}\n${worktreeSummary(wt)}` : workspaceTabTitle(g),
       icon: <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />,
       dirty: wt?.managed === true && (wt.dirtyCount ?? 0) > 0,
+      editor: editingId === g.projectId
+        ? <WorkspaceTabRename initial={g.projectName} onCommit={(name) => onRenameWorkspace(g.projectId, name)} onClose={() => setEditingId(null)} />
+        : undefined,
     }
   })
 
@@ -209,23 +199,9 @@ export default function WorkspaceBar({
 
         <VscodeMenuBar menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />
 
-        {/* Command center: identitas workspace aktif, atau input rename saat diminta menu. */}
+        {/* Command center: identitas workspace aktif. */}
         <div className="app-titlebar__center">
-          {editingId ? (
-            <Input
-              className="app-titlebar__rename"
-              value={draft}
-              autoFocus
-              spellCheck={false}
-              aria-label="Workspace name"
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename()
-                if (e.key === 'Escape') setEditingId(null)
-              }}
-              onBlur={commitRename}
-            />
-          ) : onOpenPalette ? (
+          {onOpenPalette ? (
             // VS Code command center: the pill opens Go to Anything and shows its chord.
             <IconTooltip label="Go to anything: nodes, files, URLs, agents, commands" commandId="workbench.omnibox">
               <button type="button" className="app-titlebar__name" aria-label="Search" onClick={onOpenPalette}>
@@ -254,10 +230,28 @@ export default function WorkspaceBar({
           tabs={tabs}
           activeId={activeId}
           onActivate={onSelect}
+          onDoubleClick={setEditingId}
+          onContextMenu={(id, at) => setMenu({ id, ...at })}
           ariaLabel="Workspaces"
+          trailing={
+            <IconTooltip label="New workspace: open a folder, clone a repository or create a project">
+              <button
+                type="button"
+                className="app-tabs__action"
+                aria-label="New workspace"
+                onClick={(e) => {
+                  // Three ways in, as nodeterm's Welcome cards: open a folder, clone, or start a new project.
+                  const r = e.currentTarget.getBoundingClientRect()
+                  setAddMenu({ x: r.left, y: r.bottom + MENU_GAP })
+                }}
+              >
+                <span className="codicon codicon-add" aria-hidden />
+              </button>
+            </IconTooltip>
+          }
         />
-        <div className="app-tabs__actions">
-          {onToggleLayout && activeGroup && (
+        {onToggleLayout && activeGroup && (
+          <div className="app-tabs__actions">
             <IconTooltip label={layoutMode === 'tabs' ? 'Switch to canvas layout' : 'Switch to tab layout'} commandId="view.layout.toggle">
               <button
                 type="button"
@@ -269,36 +263,8 @@ export default function WorkspaceBar({
                 <span className={layoutMode === 'tabs' ? 'codicon codicon-graph' : 'codicon codicon-layout'} aria-hidden />
               </button>
             </IconTooltip>
-          )}
-          {activeGroup && <IconTooltip label="Workspace options: rename, delete or set the canvas background of the active workspace">
-            <button
-              type="button"
-              className="app-tabs__action"
-              aria-label="Workspace options"
-              onClick={(e) => {
-                // Klik kebab tidak berpindah workspace; menu ini bekerja pada workspace aktif.
-                const r = e.currentTarget.getBoundingClientRect()
-                setMenu({ x: r.left, y: r.bottom + MENU_GAP })
-              }}
-            >
-              <span className="codicon codicon-ellipsis" aria-hidden />
-            </button>
-          </IconTooltip>}
-          <IconTooltip label="New workspace: open a folder, clone a repository or create a project">
-            <button
-              type="button"
-              className="app-tabs__action"
-              aria-label="New workspace"
-              onClick={(e) => {
-                // Three ways in, as nodeterm's Welcome cards: open a folder, clone, or start a new project.
-                const r = e.currentTarget.getBoundingClientRect()
-                setAddMenu({ x: r.left, y: r.bottom + MENU_GAP })
-              }}
-            >
-              <span className="codicon codicon-add" aria-hidden />
-            </button>
-          </IconTooltip>
-        </div>
+          </div>
+        )}
       </div>
 
       {addMenu && (
@@ -315,24 +281,23 @@ export default function WorkspaceBar({
       )}
       <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
-      {menu && activeGroup && (
+      {menu && menuGroup && (
         <NodeContextMenu
           x={menu.x}
           y={menu.y}
           rows={[
-            {
-              label: 'Rename',
-              onClick: () => startRename(activeGroup.projectId, activeGroup.projectName),
-            },
-            { label: 'Canvas Background…', onClick: openWorkspaceCanvasBackground },
+            { label: 'Rename', onClick: () => setEditingId(menuGroup.projectId) },
+            // The background editor (Settings › Appearance) works on the active board, so open this one first.
+            { label: 'Canvas Background…', onClick: () => { if (menuGroup.projectId !== activeId) onSelect(menuGroup.projectId); openWorkspaceCanvasBackground() } },
             // Per-workspace mute lives here, next to the workspace (Settings › Notifications holds the global switches).
-            mutedIds.includes(activeGroup.projectId)
-              ? { label: 'Unmute Notifications', onClick: () => setWorkspaceMuted(activeGroup.projectId, false) }
-              : { label: 'Mute Notifications', onClick: () => setWorkspaceMuted(activeGroup.projectId, true) },
+            mutedIds.includes(menuGroup.projectId)
+              ? { label: 'Unmute Notifications', onClick: () => setWorkspaceMuted(menuGroup.projectId, false) }
+              : { label: 'Mute Notifications', onClick: () => setWorkspaceMuted(menuGroup.projectId, true) },
+            { type: 'separator' },
             {
               label: 'Delete',
               danger: true,
-              onClick: () => deleteWorkspace(activeGroup.projectId, activeGroup.projectName, activeGroup.sessions.length),
+              onClick: () => deleteWorkspace(menuGroup.projectId, menuGroup.projectName, menuGroup.sessions.length),
             },
           ]}
           onClose={() => setMenu(null)}

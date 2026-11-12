@@ -104,29 +104,29 @@ describe('Help > Set up webterm…', () => {
 })
 
 describe('tab-row actions without a workspace', () => {
-  const labels = ['Toggle tab layout', 'Workspace options']
-
-  it('hides layout and workspace options (not disabled); keeps +, search and Account', () => {
+  it('hides the layout toggle (not disabled); keeps +, search and Account', () => {
     mount({ workspaces: [], activeId: null, liveActiveNodes: null, onToggleLayout: vi.fn(), onOpenPalette: vi.fn(), showLogout: true, onOpenAccount: vi.fn() })
-    for (const name of labels) expect(screen.queryByRole('button', { name })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Toggle tab layout' })).toBeNull()
     for (const name of ['New workspace', 'Search', 'Account']) expect(screen.getByRole('button', { name })).toBeTruthy()
   })
 
-  it('shows both, enabled, with a workspace open', () => {
+  it('shows the layout toggle, enabled, with a workspace open', () => {
     mount({ onToggleLayout: vi.fn() })
-    for (const name of labels) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Toggle tab layout' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
 
-describe('Workspace menu', () => {
+describe('Workspace tab context menu', () => {
+  const openMenu = () => fireEvent.contextMenu(screen.getByRole('tab', { name: /Proj/ }), { clientX: 10, clientY: 10 })
+
   it('Mute Notifications mutes this workspace and the row then offers Unmute', async () => {
     const { readNotifyPrefs, setWorkspaceMuted } = await import('./osNotify.prefs')
     setWorkspaceMuted('w1', false)
     mount()
-    fireEvent.click(screen.getByLabelText('Workspace options'))
+    openMenu()
     fireEvent.click(await screen.findByText('Mute Notifications'))
     expect(readNotifyPrefs().muted).toContain('w1')
-    fireEvent.click(screen.getByLabelText('Workspace options'))
+    openMenu()
     fireEvent.click(await screen.findByText('Unmute Notifications'))
     expect(readNotifyPrefs().muted).not.toContain('w1')
   })
@@ -136,7 +136,7 @@ describe('Workspace menu', () => {
     const seen = vi.fn()
     window.addEventListener(OPEN_SETTINGS_EVENT, seen)
     mount()
-    fireEvent.click(screen.getByLabelText('Workspace options'))
+    openMenu()
     fireEvent.click(await screen.findByText('Canvas Background…'))
     expect((seen.mock.calls[0][0] as CustomEvent).detail).toEqual({ section: 'appearance', field: 'canvasBackground' })
     window.removeEventListener(OPEN_SETTINGS_EVENT, seen)
