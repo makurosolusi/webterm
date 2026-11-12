@@ -1,6 +1,6 @@
 // Body of the Control tab in the secondary side bar (`App.secondarySideBar`), opened from the Dock. With Central
 // off only the tabs that work without it (`CENTRAL_FREE_TABS`: memory, automations, spending) are shown.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -61,6 +61,12 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
   }, [request])
   const [status, setStatus] = useState<StatusView | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const listRef = useRef<HTMLDivElement>(null)
+  // Tabs that do not fit scroll inside the strip (like the editor tab strip); keep the active one in view.
+  // jsdom has no scrollIntoView; browsers do.
+  useEffect(() => {
+    listRef.current?.querySelector('[data-state="active"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [tab, enabled, open])
   if (!open) return null
   // Central off: only the tabs that work without it; a tab it cannot show falls back to the first one.
   const tabs = enabled ? TABS : TABS.filter((t) => CENTRAL_FREE_TABS.includes(t.id))
@@ -71,12 +77,13 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
         <IconButton label={CL.refresh} size="icon-sm" onClick={() => setRefreshKey((k) => k + 1)}>
           <span className="codicon codicon-refresh" aria-hidden="true" />
         </IconButton>, actionsHost)}
-      <div className="ccp-body">
-        <Tabs value={shown} onValueChange={(id) => setTab(id as TabId)}>
-          <TabsList aria-label={CL.tabsLabel}>
-            {tabs.map((t) => <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
+      {/* Pinned header: only the body below scrolls (VS Code / DevTools). */}
+      <Tabs value={shown} onValueChange={(id) => setTab(id as TabId)} className="ccp-tabs">
+        <TabsList ref={listRef} aria-label={CL.tabsLabel} className="ccp-tabs__list w-full justify-start">
+          {tabs.map((t) => <TabsTrigger key={t.id} value={t.id} className="flex-none">{t.label}</TabsTrigger>)}
+        </TabsList>
+      </Tabs>
+      <div className="ccp-body" data-testid="ccp-scroll">
         {status?.model.free && <p className="ccp-privacy" role="note">{CL.privacyLabel} ({status.model.id})</p>}
         {/* refreshKey remounts the active section so it reloads its data. */}
         <div key={`${shown}-${refreshKey}`} className="ccp-section-host">

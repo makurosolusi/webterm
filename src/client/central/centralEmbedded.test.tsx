@@ -19,6 +19,28 @@ describe('CentralControlPanel body', () => {
     expect(screen.queryByText('What Central may do')).toBeNull()
   })
 
+  it('pins the tab list outside the scrolling body and keeps the active tab in view', () => {
+    const scrolled: Element[] = []
+    const orig = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    try {
+      const { container } = render(<CentralControlPanel open enabled client={fakeClient()} tab="health" />)
+      const panel = container.querySelector('.ccp-panel') as HTMLElement
+      const scroll = screen.getByTestId('ccp-scroll')
+      const nav = screen.getByRole('tablist', { name: 'Central control sections' })
+      expect(scroll.contains(nav)).toBe(false)
+      expect(scroll.parentElement).toBe(panel)
+      // Header first, then the content element that scrolls (sections render inside it).
+      expect(nav.compareDocumentPosition(scroll) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(scroll.querySelector('.ccp-section-host')).toBeTruthy()
+      // Overflowing tabs scroll inside the strip; the last (active) tab was scrolled into view.
+      expect(nav.className).toContain('ccp-tabs__list')
+      expect(scrolled.at(-1)?.textContent).toBe('Health')
+    } finally {
+      Element.prototype.scrollIntoView = orig
+    }
+  })
+
   it('portals the refresh control into actionsHost', () => {
     const host = document.createElement('div')
     document.body.appendChild(host)

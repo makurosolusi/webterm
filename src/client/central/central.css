@@ -1,5 +1,5 @@
 /* Panel kontrol Central Agent v2: hanya variabel tema VS Code, tanpa warna literal. */
-.ccp-body { padding: 8px 16px; overflow-y: auto; color: var(--vscode-foreground); font-size: 13px; line-height: 20px; }
+.ccp-body { padding: 8px 16px; overflow-y: auto; overflow-x: hidden; color: var(--vscode-foreground); font-size: 13px; line-height: 20px; }
 .ccp-body :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 .ccp-group-h { margin: 8px 0 2px; font-size: 12px; font-weight: 600; }
 .ccp-section h3 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
@@ -43,7 +43,15 @@
 .ccp-table th, .ccp-table td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--vscode-panel-border); vertical-align: top; overflow-wrap: anywhere; }
 .ccp-confirm-input input, .ccp-confirm input { width: 16rem; }
 .ccp-panel--embedded { height: 100%; min-height: 0; display: flex; flex-direction: column; }
-.ccp-panel--embedded .ccp-body { flex: 1; min-height: 0; }
+.ccp-panel--embedded .ccp-body { flex: 1; min-height: 0; min-width: 0; }
+/* Tab row pinned above the scrolling body; tabs that do not fit scroll inside the strip, scrollbar hidden
+   (same as .tabs-strip__list), so the panel itself never scrolls sideways. */
+.ccp-tabs { flex: none; min-width: 0; padding: 0 16px; border-bottom: 1px solid var(--vscode-panel-border); }
+.ccp-tabs__list { min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.ccp-tabs__list::-webkit-scrollbar { display: none; }
+.ccp-section-host { min-width: 0; }
+.ccp-kv dd { min-width: 0; overflow-wrap: anywhere; }
+.ccp-confirm-input input, .ccp-confirm input { max-width: 100%; min-width: 0; }
 .ccp-state__body { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; }
 .ccp-state__form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .ccp-state__actions { display: flex; gap: 6px; }

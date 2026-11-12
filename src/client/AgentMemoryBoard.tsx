@@ -73,16 +73,17 @@ export function ProposalsSection({ act, tick }: { act: MemoryAct; tick: number }
     <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-proposals">
       <h4 className="font-semibold">{BOARD_TEXT.proposalsTitle}</h4>
       <p className="opacity-70" title={BOARD_TEXT.tokens(state.used, state.cap)}>{BOARD_TEXT.proposalsIntro}</p>
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-1">
         {confirmable.length > 1 ? <MemoryButton what={BOARD_TEXT.confirmAll} busyLabel={MEMORY_BUSY.confirmAll} run={() => act(BOARD_TEXT.confirmAll, 'POST', `${PROPOSALS_PATH}/confirm-all`)} /> : null}
         <MemoryButton variant="secondary" what={BOARD_TEXT.reviewNow} busyLabel={MEMORY_BUSY.review} run={() => act(BOARD_TEXT.reviewNow, 'POST', `${PROPOSALS_PATH}/run`)} />
       </div>
       {state.proposals.length === 0 ? <p className="opacity-70">{BOARD_TEXT.proposalsNone}</p> : (
         <ul className="flex flex-col gap-1">
           {state.proposals.map((p) => (
-            <li key={p.id} data-proposal={p.id} className="flex flex-wrap items-center gap-2">
+            <li key={p.id} data-proposal={p.id} className="flex flex-wrap items-center gap-1 border-b border-(--vscode-panel-border) py-1">
+              <span className="basis-full break-words [overflow-wrap:anywhere]">{p.text}{p.targetText ? <span className="opacity-70"> · {BOARD_TEXT.was(p.targetText)}</span> : null}</span>
               <Badge variant="outline">{BOARD_TEXT.ops[p.op]}</Badge>
-              <span className="flex-1 break-words">{p.text}{p.targetText ? <span className="opacity-70"> · {BOARD_TEXT.was(p.targetText)}</span> : null}</span>
+              <span className="flex-1" />
               {p.untrusted ? <Badge variant="outline">{MEMORY_TEXT.untrusted}</Badge>
                 : <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', `${PROPOSALS_PATH}/${encodeURIComponent(p.id)}/confirm`)} />}
               <MemoryButton variant="secondary" what={BOARD_TEXT.dismiss} busyLabel={MEMORY_BUSY.dismiss} run={() => act(BOARD_TEXT.dismiss, 'POST', ctl(p.id, 'forget'))} />
@@ -113,26 +114,26 @@ export function BoardSection({ act, tick }: { act: MemoryAct; tick: number }): R
       <p className="opacity-70">{BOARD_TEXT.boardIntro}</p>
       {board.entries.length === 0 ? <p className="opacity-70">{BOARD_TEXT.boardNone}</p> : (
         <ul className="flex flex-col gap-1">
-          {board.entries.map((e) => <li key={e.id} data-board={e.key}><code>{e.key}</code>: {e.value}</li>)}
+          {board.entries.map((e) => <li key={e.id} data-board={e.key} className="[overflow-wrap:anywhere]"><code>{e.key}</code>: {e.value}</li>)}
         </ul>
       )}
       {board.proposals.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {board.proposals.map((e) => (
-            <li key={e.id} data-board-proposal={e.id} className="flex flex-wrap items-center gap-2">
-              <span className="flex-1 break-words"><code>{e.key}</code>: {e.value} <span className="opacity-70">· {BOARD_TEXT.proposedBy(e.by)}</span></span>
+            <li key={e.id} data-board-proposal={e.id} className="flex flex-wrap items-center justify-end gap-1 py-1">
+              <span className="basis-full break-words [overflow-wrap:anywhere]"><code>{e.key}</code>: {e.value} <span className="opacity-70">· {BOARD_TEXT.proposedBy(e.by)}</span></span>
               <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', prop(e.id, 'confirm'))} />
               <MemoryButton variant="secondary" what={BOARD_TEXT.reject} busyLabel={MEMORY_BUSY.reject} run={() => act(BOARD_TEXT.reject, 'POST', prop(e.id, 'reject'))} />
             </li>
           ))}
         </ul>
       ) : null}
-      <div className="flex items-center gap-2">
-        <span className="w-48">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="w-48 max-w-full">
           <SettingsCombobox ariaLabel={BOARD_TEXT.boardKey} fieldId={BOARD_KEY_FIELD_ID} mono placeholder={BOARD_TEXT.boardPlaceholder} maxLength={160}
             presets={[...new Set(board.entries.map((e) => e.key))].map((value) => ({ value }))} value={key} onDraft={setKey} onCommit={setKey} />
         </span>
-        <Input aria-label={BOARD_TEXT.boardValue} value={value} maxLength={500} onChange={(e) => setValue(e.target.value)} className="min-w-32 flex-1" />
+        <Input aria-label={BOARD_TEXT.boardValue} value={value} maxLength={500} onChange={(e) => setValue(e.target.value)} className="min-w-0 flex-1 basis-32" />
         <MemoryButton disabled={key.trim() === '' || value.trim() === ''} what={BOARD_TEXT.boardSet} busyLabel={MEMORY_BUSY.set}
           run={async () => { await act(BOARD_TEXT.boardSet, 'POST', BLACKBOARD_PATH, { key: key.trim(), value: value.trim() }); setValue('') }} />
       </div>

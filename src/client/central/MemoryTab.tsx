@@ -19,7 +19,7 @@ export default function MemoryTab({ client, central }: { client: CentralControlC
   const filters = (Object.keys(MEMORY_TAB_TEXT.filters) as Filter[]).filter((f) => central || f !== 'central')
   return (
     <div className="flex flex-col gap-3 text-[13px]" data-testid="memory-tab">
-      <div role="group" aria-label={MEMORY_TAB_TEXT.filter} className="flex gap-1">
+      <div role="group" aria-label={MEMORY_TAB_TEXT.filter} className="flex flex-wrap gap-1">
         {filters.map((f) => (
           <Button key={f} size="sm" variant={f === filter ? 'default' : 'secondary'} aria-pressed={f === filter} onClick={() => setFilter(f)}>
             {MEMORY_TAB_TEXT.filters[f]}
