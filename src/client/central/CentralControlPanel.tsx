@@ -19,6 +19,7 @@ import { centralControlApi, useCentralControlEnabled } from './centralControlApi
 import type { CentralControlClient, StatusView } from './centralControlTypes'
 import { useCentralTabRequest, useSideBar } from '../secondarySideBar.store'
 import { CENTRAL_FREE_TABS, CENTRAL_PANEL_TABS, type CentralPanelTab } from './centralTabs'
+import { useTabStripReveal } from './centralTabStrip.reveal'
 import './central.css'
 
 type TabId = CentralPanelTab
@@ -63,17 +64,15 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
   const [status, setStatus] = useState<StatusView | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
-  // Tabs that do not fit scroll inside the strip (like the editor tab strip); keep the active one in view.
-  // jsdom has no scrollIntoView; browsers do.
-  useEffect(() => {
-    listRef.current?.querySelector('[data-state="active"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
-  }, [tab, enabled, open])
-  if (!open) return null
   // Central off: only the tabs that work without it; a tab it cannot show falls back to the first one.
   // Spending is off the strip (cost is not a priority); Settings search ("Spending") and `?ctab=spending` still
   // open it, and then it shows as the active tab.
   const tabs = (enabled ? TABS : TABS.filter((t) => CENTRAL_FREE_TABS.includes(t.id))).filter((t) => t.id !== 'spending' || tab === 'spending')
   const shown = tabs.find((t) => t.id === tab)?.id ?? tabs[0]!.id
+  // Tabs that do not fit scroll inside the strip (like the editor tab strip): the active one stays fully in view
+  // on mount, change and resize, and a fade marks the edge with more tabs (centralTabStrip.reveal.ts).
+  useTabStripReveal(listRef, `${shown}:${tabs.length}:${open}`)
+  if (!open) return null
   return (
     <div className="ccp-panel ccp-panel--embedded">
       {actionsHost && createPortal(

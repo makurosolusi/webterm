@@ -54,12 +54,12 @@ export function RoutineRow({ r, history, run, setEnabled, edit, toggleHistory, r
     ok: (v) => runOf(v)?.status !== 'failed',
   })
   return (
-    <li data-routine={r.id} className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
+    <li data-routine={r.id} className="flex min-w-0 flex-col gap-1 rounded border p-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <SettingsCheckbox ariaLabel={`${T.enabled}: ${r.name}`} checked={r.enabled} onChange={setEnabled} />
-        <strong className="flex-1">{r.name}</strong>
-        <span className="opacity-70">{triggerText(r)}{r.nextRunAt ? ` · ${T.next(r.nextRunAt)}` : ''}</span>
-        <span className="opacity-70" data-testid="last-run">{r.lastRun ? runText(r.lastRun) : T.never}</span>
+        <strong className="min-w-0 flex-1 break-words">{r.name}</strong>
+        <span className="min-w-0 break-words opacity-70">{triggerText(r)}{r.nextRunAt ? ` · ${T.next(r.nextRunAt)}` : ''}</span>
+        <span className="min-w-0 break-words opacity-70" data-testid="last-run">{r.lastRun ? runText(r.lastRun) : T.never}</span>
         <ActionButton size="sm" action={runNow} busyLabel={T.starting}>{T.runNow}</ActionButton>
         <Button size="sm" variant="secondary" onClick={edit}>{T.edit}</Button>
         <Button size="sm" variant="secondary" onClick={toggleHistory}>{history ? T.hideHistory : T.history}</Button>
@@ -67,14 +67,14 @@ export function RoutineRow({ r, history, run, setEnabled, edit, toggleHistory, r
       </div>
       <ActionResult action={runNow} />
       {asking ? (
-        <div role="alertdialog" aria-label={T.deleteAsk(r.name)} className="flex items-center gap-2">
-          <span>{T.deleteAsk(r.name)}</span>
+        <div role="alertdialog" aria-label={T.deleteAsk(r.name)} className="flex flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words">{T.deleteAsk(r.name)}</span>
           <Button size="sm" variant="destructive" onClick={() => { setAsking(false); remove() }}>{T.delete}</Button>
           <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>{T.cancel}</Button>
         </div>
       ) : null}
       {history ? (
-        <ul aria-label={`${T.history}: ${r.name}`} className="ml-4 flex flex-col opacity-80">
+        <ul aria-label={`${T.history}: ${r.name}`} className="m-0 flex min-w-0 list-none flex-col gap-0.5 border-l pl-2 break-words opacity-80">
           {history.length === 0 ? <li>{T.historyEmpty}</li> : history.map((x) => <li key={x.id} data-status={x.status}>{`${new Date(x.startedAt).toLocaleString()} · ${runText(x)}`}</li>)}
         </ul>
       ) : null}

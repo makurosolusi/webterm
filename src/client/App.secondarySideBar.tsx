@@ -20,7 +20,7 @@ const CentralControlPanel = lazy(() => import('./central/CentralControlPanel'))
 const VIEWS: { id: SideBarView; label: string; tooltip: string }[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Central agent chat' },
   // Id stays `central`: it is the persisted view (`webterm.secondarySideBar`); only the label says Control.
-  { id: 'central', label: 'Control', tooltip: 'Memory, automations and spending; with Central on also its status, abilities, agents and skills' },
+  { id: 'central', label: 'Control', tooltip: 'Memory and automations; with Central on also its status, abilities, agents and skills' },
 ]
 
 export interface SecondarySideBarProps {
@@ -38,7 +38,7 @@ export default function SecondarySideBar({ centralEnabled, ctab = null, setCentr
   const narrow = useNarrowWindow()
   const [slot, setSlot] = useState<HTMLElement | null>(null)
   if (!open) return null
-  // Control is always there: memory, automations and spending work without Central (CENTRAL_FREE_TABS).
+  // Control is always there: memory and automations work without Central (CENTRAL_FREE_TABS).
   const shown = view
   const views = VIEWS
   return (
