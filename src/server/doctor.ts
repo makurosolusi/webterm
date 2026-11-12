@@ -4,9 +4,11 @@
 // Never carries a secret: the Telegram check reports valid/invalid/unset, never the token.
 import type { VerifyResult } from './events/eventModel'
 import type { ProviderView } from './claudeProvider/claudeProvider.model'
+import type { CentralMcpSeen, McpProbe } from './mcp/mcp.health'
+import { MCP_USABLE } from './mcp/mcp.paths'
 
 export type DoctorStatus = 'ok' | 'warn' | 'fail' | 'off'
-export const DOCTOR_IDS = ['claude', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'] as const
+export const DOCTOR_IDS = ['claude', 'tools', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'] as const
 export type DoctorId = (typeof DOCTOR_IDS)[number]
 
 export interface DoctorCheck {
@@ -33,6 +35,10 @@ export interface DoctorDeps {
   claudeReady(): Promise<ClaudeLaunchReady>
   /** Saved Claude provider (never the secret) + the last Test connection of this process; absent = login. */
   claudeProvider?(): { view: ProviderView; lastTest: { ok: boolean; message: string } | null }
+  /** Starts webterm's MCP tool server the way agents and Central do and waits for its `initialize` answer. */
+  mcpServer(): Promise<McpProbe>
+  /** Webterm MCP server status from the last Central turn's init; null = no turn since start. */
+  lastCentralMcp(): CentralMcpSeen | null
   generated(): GeneratedFile[]
   readFile(path: string): string | null
   installGenerated(): void
@@ -71,6 +77,14 @@ const PROBES: Record<DoctorId, Probe> = {
     }
     return r.ok ? check('claude', t, 'ok', `Installed and logged in.${via}`)
       : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.${via}`)
+  },
+  async tools(d) {
+    const t = 'webterm tool server (MCP)'
+    const p = await d.mcpServer()
+    if (!p.ok) return check('tools', t, 'fail', `It did not start (${p.reason}). Central and Claude agent nodes have no webterm tools until it does.`)
+    const seen = d.lastCentralMcp()
+    if (seen && !MCP_USABLE.has(seen.status)) return check('tools', t, 'warn', `It starts (${p.server}), but Claude reported it as ${seen.status} in the last Central turn. Retry that turn; if it repeats, check the server log.`)
+    return check('tools', t, 'ok', `Starts and answers (${p.server}): Central and Claude agent nodes get their webterm tools.`)
   },
   skills(d) {
     const stale = d.generated().filter((f) => d.readFile(f.path) !== f.expected).map((f) => f.label)

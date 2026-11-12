@@ -31,6 +31,7 @@ function harness(env: NodeJS.ProcessEnv = {}, doctor?: Partial<DoctorDeps>) {
 function fakeDoctor(over: Partial<DoctorDeps>): DoctorDeps {
   return {
     onPath: () => true, claudeReady: async () => ({ ok: true }),
+    mcpServer: async () => ({ ok: true, server: 'webterm 1' }), lastCentralMcp: () => null,
     generated: () => [], readFile: () => null, installGenerated: () => {}, telegram: async () => ({ state: 'unset' }),
     sandbox: () => ({ on: true, supported: true }), setSandbox: () => {}, looseDirs: () => [], tightenDirs: () => {},
     verifyLedger: () => null, ...over,
@@ -144,7 +145,7 @@ describe('Doctor over the route', () => {
   it('GET ?doctor=1 lists every check', async () => {
     const res = await harness({}, {}).call('GET', undefined, '/api/control/effective?doctor=1')
     const ids = (res.json() as { checks: { id: string }[] }).checks.map((c) => c.id)
-    expect(ids).toEqual(['claude', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'])
+    expect(ids).toEqual(['claude', 'tools', 'skills', 'telegram', 'ripgrep', 'tmux', 'sandbox', 'dataDir', 'ledger'])
   })
 
   it('POST {fix} applies a safe fix and returns the re-run check; no fix on offer = 409', async () => {

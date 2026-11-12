@@ -1,6 +1,7 @@
 // Pure argv parser for the server entry: argv -> one action. No I/O; cliMain.ts runs the action.
 // Conventions follow git/gh: unknown input is an error (exit 2) with a "did you mean" hint, never a
 // silent server start.
+import { EVAL_RUN_COMMAND, MCP_STDIO_COMMAND } from '../selfLaunch'
 
 export type CliAction =
   | { kind: 'serve' }
@@ -10,6 +11,12 @@ export type CliAction =
   | { kind: 'docs'; topic?: string }
   | { kind: 'reset-password'; username: string }
   | { kind: 'error'; message: string }
+  /** Hidden subcommand (selfLaunch.ts): run a bundled entry point in-process with the remaining args. */
+  | { kind: 'internal'; entry: InternalEntry; args: string[] }
+
+export type InternalEntry = 'mcp' | 'eval'
+/** Hidden first-argument subcommands; never listed in --help and never suggested for a typo. */
+const INTERNAL_COMMANDS = new Map<string, InternalEntry>([[MCP_STDIO_COMMAND, 'mcp'], [EVAL_RUN_COMMAND, 'eval']])
 
 export interface CliOption {
   /** Omitted for rare, destructive flags that should be typed out in full. */
@@ -71,6 +78,8 @@ function unknown(arg: string): CliAction {
 
 /** Parse argv (without the runtime and script path). Empty argv = start the server. */
 export function parseArgs(argv: readonly string[]): CliAction {
+  const entry = INTERNAL_COMMANDS.get(argv[0] ?? '')
+  if (entry) return { kind: 'internal', entry, args: argv.slice(1) }
   const seen = new Set<FlagKind>()
   const values = new Map<FlagKind, string>()
   for (let i = 0; i < argv.length; i++) {

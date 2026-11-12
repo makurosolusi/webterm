@@ -21,6 +21,7 @@ function serve(env: NodeJS.ProcessEnv = {}, doctor: Partial<DoctorDeps> = {}) {
     service: s.svc, env: s.target, dotenvKeys: new Set(), rootToken: null, guard: () => ({ ok: true, via: 'ui' }), audit: () => {},
     doctor: () => ({
       onPath: () => true, claudeReady: async () => ({ ok: true }), opencodeBin: 'opencode', opencodeReady: async () => ({ ok: true }),
+      mcpServer: async () => ({ ok: true, server: 'webterm 1' }), lastCentralMcp: () => null,
       generated: () => [], readFile: () => null, installGenerated: () => {}, telegram: async () => ({ state: 'unset' }),
       sandbox: () => ({ on: true, supported: true }), setSandbox: () => {}, looseDirs: () => [], tightenDirs: () => {},
       verifyLedger: () => null, ...doctor,
