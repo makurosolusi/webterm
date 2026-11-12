@@ -57,6 +57,8 @@ export interface Settings extends TerminalSettings, AgentSettings {
   canvasDots: boolean
   /** Modifier held for "Quick move & resize" (drag anywhere on a node). Normalized on load. */
   quickDrag: QuickDragPreset
+  /** Status bar at the bottom of terminal and agent nodes (session facts + anomaly badges). */
+  nodeStatusBar: boolean
   /** Tampilan chrome APP (panel, header node, menu). `auto` (default, "System") mengikuti mode
    *  terang/gelap OS (`prefers-color-scheme`); `dark`/`light` memakunya. */
   appTheme: AppTheme
@@ -146,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultNodeHeight: 440,
   canvasDots: true,
   quickDrag: 'cmdCtrl',
+  nodeStatusBar: true,
   appTheme: 'auto',
   edgeColor: 'default',
   edgeWidth: 2,

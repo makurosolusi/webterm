@@ -12,6 +12,7 @@ import { replayOpen } from './ws.replayOpen'
 import { type ConnectionPhase, getConnection, reconnectDelay, setConnection, setRetryHandler } from './ws.connection'
 import { dispatchBroadcast, notifyReconnect } from './ws.listeners'
 import { browserOffline, createHeartbeat, installWakeTriggers } from './ws.liveness'
+import { noteClientMsg, noteServerMsg } from './nodeActivity.store'
 
 export { replayOpen } from './ws.replayOpen'
 export { getStatus, onReconnect, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
@@ -216,10 +217,13 @@ function connect() {
         if (msg.seq <= sub.seq) return
         sub.seq = msg.seq
       }
+      noteServerMsg(msg)
       sub.onOutput(msg.data)
     } else if (msg.t === 'exit') {
       sub.exited = true
-      sub.onExit(msg.code, exitReasonFor(msg.id, msg.reason))
+      const reason = exitReasonFor(msg.id, msg.reason)
+      noteServerMsg(msg, reason)
+      sub.onExit(msg.code, reason)
     }
   }
   ws.onclose = socketClosed
@@ -249,6 +253,7 @@ export function __resetWsForTests(): void {
 }
 
 export function send(msg: ClientMsg) {
+  noteClientMsg(msg)
   if (msg.t === 'open') {
     const sub = subs.get(msg.id)
     if (sub) {

@@ -16,6 +16,7 @@ import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { linkRows } from './terminalLinks'
 import { isPathDrag, readDroppedPath } from './terminalDrop'
+import NodeStatusBar from './NodeStatusBar'
 
 const COLLAPSED_H = 40
 
@@ -223,6 +224,7 @@ function TerminalNode({ id, data, selected, height }: NodeProps) {
             onRatio={(path, ratio) => rf.updateNodeData(id, { panes: setRatio(panes, path, ratio) })}
           />
         </div>
+        {!collapsed && <NodeStatusBar sessionId={activePane} kind="terminal" cwd={d.cwd} />}
         {searchOpen && (
           <FindBar
             onSearch={(t, dir) => term()?.search(t, { direction: dir })}

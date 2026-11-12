@@ -8,7 +8,7 @@ import type { AgentStatus } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
 import { STALE_SWEEP_MS } from '../shared/agentStale'
-import { NodeRegistry, tailOutputBytes, type NodeExit, type StaleSweepEntry } from './nodeRegistry'
+import { NodeRegistry, tailOutputBytes, type NodeExit, type NodeStatusEntry, type StaleSweepEntry } from './nodeRegistry'
 import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
 import { ptyLog } from './sessionsLog'
@@ -129,6 +129,16 @@ export class SessionsCore {
   isLive(id: string): boolean { return this.map.has(id) }
   getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }
   pidOf(id: string): number | undefined { return this.map.get(id)?.pty.pid }
+  /** PTY facts of a LIVE session (node status bar); undefined once it is gone. */
+  ptyInfoOf(id: string): { pid: number; startedAt: number; cols: number; rows: number } | undefined {
+    const s = this.map.get(id)
+    return s && { pid: s.pty.pid, startedAt: s.startedAt, cols: s.cols, rows: s.rows }
+  }
+  /** Status with its clocks: last write (`updatedAt`) and start of this status (`since`). */
+  statusEntryOf(id: string): (NodeStatusEntry & { since?: number }) | undefined {
+    const e = this.registry.getStatus(id)
+    return e && { ...e, since: this.registry.statusSince(id) }
+  }
 
   /** Sesi yang masih hidup, urut sesuai waktu spawn. */
   list(): SessionInfo[] {

@@ -3,7 +3,7 @@
 // (App `resizedNodeSize`), so there is no node-size setting.
 import { QUICK_DRAG_PRESETS, DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { Input } from '@/components/ui/input'
-import { Field, SelectField } from './SettingsFields'
+import { Field, SelectField, ToggleField } from './SettingsFields'
 import { SettingsAdvanced, SettingsSelect } from './SettingsControls'
 import { NumberSelectField } from './SettingsPickerFields'
 import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS } from './settingsPresets'
@@ -65,6 +65,9 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it."
         options={QUICK_DRAG_PRESETS.map((p) => ({ value: p, label: quickDragLabel(p, isMacPlatform()) }))}
         onChange={(v) => onChange({ quickDrag: v })} />
+      <ToggleField setting="nodeStatusBar" id="st-nodeStatusBar" label="Status bar" value={s.nodeStatusBar}
+        hint="Show session and agent details at the bottom of each node, with warnings when something looks wrong."
+        onChange={(v) => onChange({ nodeStatusBar: v })} />
       <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
       <SettingsAdvanced>
         <NumberSelectField setting="gridSize" id="st-gridSize" label="Grid size" value={s.gridSize} options={GRID_SIZE_OPTIONS}

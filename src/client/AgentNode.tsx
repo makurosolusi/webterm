@@ -24,6 +24,7 @@ import { generateName as apiGenerateName } from './api'
 import { autoTitleFromWork, canResumeAfter, identityColor, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
 import { AgentFailedBar } from './AgentFailedBar'
 import { ClaudeTerminalViewButton } from './agentChat/claudeViewSwitch'
+import NodeStatusBar from './NodeStatusBar'
 
 const COLLAPSED_H = 40
 
@@ -310,6 +311,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
             claudeProfileId={d.claudeProfileId}
           />
         </div>
+        {!collapsed && <NodeStatusBar sessionId={id} kind="agent" cwd={cwd} />}
         {searchOpen && (
           <FindBar
             onSearch={(t, dir) => termRef.current?.search(t, { direction: dir })}

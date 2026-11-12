@@ -13,6 +13,17 @@ describe('NodeRegistry status', () => {
     expect(reg.getStatus('missing')).toBeUndefined()
   })
 
+  it('statusSince keeps the start of a status across repeated writes and moves on a change', () => {
+    const reg = new NodeRegistry()
+    reg.setStatus('n1', 'working', T0)
+    reg.setStatus('n1', 'working', T0 + 5)
+    expect(reg.statusSince('n1')).toBe(T0)
+    reg.setStatus('n1', 'blocked', T0 + 9)
+    expect(reg.statusSince('n1')).toBe(T0 + 9)
+    reg.deleteStatus('n1')
+    expect(reg.statusSince('n1')).toBeUndefined()
+  })
+
   it('does not leak its internal entry by reference', () => {
     const reg = new NodeRegistry()
     reg.setStatus('n1', 'working', T0)
