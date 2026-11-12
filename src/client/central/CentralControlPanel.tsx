@@ -1,5 +1,6 @@
 // Body of the Control tab in the secondary side bar (`App.secondarySideBar`), opened from the Dock. With Central
-// off only the tabs that work without it (`CENTRAL_FREE_TABS`: memory, automations, spending) are shown.
+// off only the tabs that work without it (`CENTRAL_FREE_TABS`: memory, automations, spending) are shown. Spending
+// is hidden from the strip unless it is the open tab (reached from Settings search / `?ctab=spending`).
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconButton } from '@/components/ui/icon-button'
@@ -69,7 +70,9 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
   }, [tab, enabled, open])
   if (!open) return null
   // Central off: only the tabs that work without it; a tab it cannot show falls back to the first one.
-  const tabs = enabled ? TABS : TABS.filter((t) => CENTRAL_FREE_TABS.includes(t.id))
+  // Spending is off the strip (cost is not a priority); Settings search ("Spending") and `?ctab=spending` still
+  // open it, and then it shows as the active tab.
+  const tabs = (enabled ? TABS : TABS.filter((t) => CENTRAL_FREE_TABS.includes(t.id))).filter((t) => t.id !== 'spending' || tab === 'spending')
   const shown = tabs.find((t) => t.id === tab)?.id ?? tabs[0]!.id
   return (
     <div className="ccp-panel ccp-panel--embedded">

@@ -3,6 +3,7 @@
 // source it is disabled (Past sessions under Notes means nothing).
 import { DropdownMenu } from 'radix-ui'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { portalContainer } from '@/components/vscode/portalContainer'
 import { MEMORY_TEXT, type MemoryKindFilter } from './AgentMemory.api'
 import './agentChat/agentChatToolbar.css'
@@ -26,11 +27,14 @@ function FilterMenu<T extends string>({ name, value, options, labels, onChange, 
   const label = MEMORY_FILTER_TEXT.label(name, labels[value])
   return (
     <DropdownMenu.Root modal={false}>
-      <DropdownMenu.Trigger asChild disabled={disabled}>
-        <Button size="sm" variant="secondary" aria-label={label} title={hint}>
-          {label}<span className="codicon codicon-chevron-down" aria-hidden="true" />
-        </Button>
-      </DropdownMenu.Trigger>
+      {/* A disabled filter says why in the app tooltip (no native title). */}
+      <IconTooltip label={label} disabled={disabled} disabledReason={hint}>
+        <DropdownMenu.Trigger asChild disabled={disabled}>
+          <Button size="sm" variant="secondary" aria-label={label}>
+            {label}<span className="codicon codicon-chevron-down" aria-hidden="true" />
+          </Button>
+        </DropdownMenu.Trigger>
+      </IconTooltip>
       <DropdownMenu.Portal container={portalContainer()}>
         <DropdownMenu.Content className="act-menu" align="start" sideOffset={4}>
           <DropdownMenu.RadioGroup value={value} onValueChange={(v) => onChange(v as T)}>

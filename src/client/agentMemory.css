@@ -1,0 +1,6 @@
+/* Control › Memory rows (AgentMemoryRow.tsx): Edit shows on hover or keyboard focus (opacity, so it stays
+   focusable); touch screens have no hover, so it always shows there. */
+.memory-row__reveal { display: inline-flex; opacity: 0; }
+.memory-row:hover .memory-row__reveal, .memory-row:focus-within .memory-row__reveal { opacity: 1; }
+@media (hover: none) { .memory-row__reveal { opacity: 1; } }
+.act-menu__item--danger { color: var(--vscode-errorForeground, #f48771); }

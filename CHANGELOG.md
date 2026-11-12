@@ -180,6 +180,11 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Control › Memory: "Waiting for your OK" sits on top with a count and shrinks to one muted line when empty; long explanations moved into (i) popovers.
+- Control › Memory: a search box with a count ("1 of 3 shown"); adding is behind "+ Add memory".
+- Control › Memory: look-alike memories get one "2 memories look alike · Merge" line. Merge lets you edit the kept text, then forgets the other only after you confirm (it cannot be undone).
+- Control › Memory rows: badges only for exceptions (suggested, from a web page, still true?, muted); Edit is an icon on hover or focus, Mute and Forget moved into a "⋯" menu, and rows line up with the heading.
+- Control › Spending is no longer a tab by default; Settings search "Spending" still opens it.
 - Central chat and Agent Chat share one composer: the model, effort, context meter, permission mode, attach "+" and Send/Stop now sit on the bottom row inside the message box. Central's header keeps only the status.
 - Replies no longer carry a per-message header ("Central agent", "Claude"). Copy shows on hover or keyboard focus; on a Central reply that row also shows the model and tier, and the turn cost appears only in its tooltip.
 - System notices in both chats are one compact centered line; the time is in its tooltip.
