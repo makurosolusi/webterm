@@ -10,11 +10,12 @@
 // Every label is derived from what the server recorded (DB + hooks), never guessed (PLAN rnd/04 pitfall).
 import type { SenseEvent } from '../server/events/eventModel'
 import type { WsNode, Workspace } from '../shared/workspace'
+import { isAutoMode, isDangerMode, isPermissionKind, permissionText, type LineTone } from './Timeline.permission'
 
 export type TimelineEvent = SenseEvent
 export type GroupMode = 'task' | 'node' | 'workspace'
 /** Kind filter values: an event family, or everything. */
-export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge'
+export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge' | 'permissions'
 
 export interface TimelineFilter { workspaceId: string; kind: KindFilter; nodeId: string }
 export const NO_FILTER: TimelineFilter = { workspaceId: '', kind: 'all', nodeId: '' }
@@ -36,6 +37,8 @@ export interface TimelineLine {
   /** Collapsed identical consecutive lines. */
   count: number
   untrusted: boolean
+  /** 'warning' = the agent acted without asking (Danger) or a loop was stopped. */
+  tone?: LineTone
 }
 
 export interface TimelineGroup {
@@ -50,7 +53,7 @@ export interface TimelineGroup {
 }
 
 export const KIND_LABELS: Record<KindFilter, string> = {
-  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables',
+  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables', permissions: 'Permissions',
 }
 export const GROUP_LABELS: Record<GroupMode, string> = { task: 'Task', node: 'Node', workspace: 'Workspace' }
 
@@ -74,6 +77,8 @@ const rec = (v: unknown): Rec => (typeof v === 'object' && v !== null && !Array.
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 export const familyOf = (kind: string): string => kind.split('.')[0] ?? kind
+/** Filter value an event kind falls under (permission, Central guard and policy events share one). */
+export const filterKindOf = (kind: string): string => (isPermissionKind(kind) ? 'permissions' : familyOf(kind))
 
 /** Workspace an event belongs to: recorded id, else its node's board, else the deepest cwd holding an fs path. */
 export function workspaceOf(e: TimelineEvent, ctx: TimelineContext): string | null {
@@ -89,15 +94,25 @@ export function workspaceOf(e: TimelineEvent, ctx: TimelineContext): string | nu
   return best?.id ?? null
 }
 
-function hookText(name: string, who: string, p: Rec): string {
+type Described = { text: string; focusId: string | null; tone?: LineTone }
+
+/** Tool plus its (server-redacted, capped) input; old events carry no input. */
+const toolWithInput = (tool: string, p: Rec): string => { const input = str(p.input); return input ? `${tool} ${input}` : tool }
+
+function toolUse(name: 'PreToolUse' | 'PostToolUse', who: string, p: Rec): { text: string; tone?: LineTone } {
   const tool = str(p.toolName)
+  const what = tool ? toolWithInput(tool, p) : 'a tool'
+  if (name === 'PostToolUse') return { text: `${who} ran ${what}${p.outcome === 'error' ? ' (failed)' : ''}` }
+  if (isDangerMode(p.mode)) return { text: `${who} skipped asking (Danger): ${what}`, tone: 'warning' }
+  return { text: `${who} is running ${what}${isAutoMode(p.mode) ? ' (Auto)' : ''}` }
+}
+
+function hookText(name: string, who: string, p: Rec): string {
   const preview = str(p.preview)
   switch (name) {
     case 'Stop': return `${who} finished a turn`
     case 'SubagentStop': return `${who}: a subagent finished`
     case 'UserPromptSubmit': return `${who} received a prompt`
-    case 'PreToolUse': return tool ? `${who} is running ${tool}` : `${who} is running a tool`
-    case 'PostToolUse': return tool ? `${who} ran ${tool}` : `${who} ran a tool`
     case 'Notification': return preview ? `${who} needs attention: ${preview}` : `${who} needs attention`
     case 'SessionStart': return `${who} started a session`
     case 'SessionEnd': return `${who} ended its session`
@@ -138,9 +153,12 @@ function edgeText(p: Rec, ctx: TimelineContext): { text: string; focusId: string
 }
 
 /** Human-readable line for one event. */
-export function describeEvent(e: TimelineEvent, ctx: TimelineContext): { text: string; focusId: string | null } {
+export function describeEvent(e: TimelineEvent, ctx: TimelineContext): Described {
   const p = rec(e.payload)
   const who = e.nodeId ? ctx.nodeName(e.nodeId) : 'An agent'
+  if (e.kind === 'hook.PreToolUse' || e.kind === 'hook.PostToolUse') return { ...toolUse(e.kind.slice(5) as 'PreToolUse', who, p), focusId: e.nodeId }
+  const perm = permissionText(e.kind, p)
+  if (perm) return { ...perm, focusId: e.nodeId }
   if (e.kind.startsWith('hook.')) return { text: hookText(e.kind.slice(5), who, p), focusId: e.nodeId }
   if (e.kind === 'pty.exit') {
     const text = p.reason === 'closed' ? `${who} was closed` : `${who} exited (code ${typeof p.code === 'number' ? p.code : '?'})`
@@ -155,7 +173,7 @@ export function describeEvent(e: TimelineEvent, ctx: TimelineContext): { text: s
 }
 
 export function matchesFilter(e: TimelineEvent, f: TimelineFilter, ctx: TimelineContext): boolean {
-  if (f.kind !== 'all' && familyOf(e.kind) !== f.kind) return false
+  if (f.kind !== 'all' && filterKindOf(e.kind) !== f.kind) return false
   if (f.nodeId && e.nodeId !== f.nodeId) return false
   if (f.workspaceId && workspaceOf(e, ctx) !== f.workspaceId) return false
   return true
@@ -176,7 +194,7 @@ export function groupEvents(events: readonly TimelineEvent[], mode: GroupMode, c
   }
   events.forEach((e, i) => {
     const wsId = workspaceOf(e, ctx)
-    const { text, focusId } = describeEvent(e, ctx)
+    const { text, focusId, tone } = describeEvent(e, ctx)
     let g: TimelineGroup
     if (mode === 'workspace' || !e.nodeId) {
       g = ensure(`ws:${wsId ?? ''}`, () => ({ label: wsName(wsId), workspaceId: wsId, focusId: null }))
@@ -196,7 +214,7 @@ export function groupEvents(events: readonly TimelineEvent[], mode: GroupMode, c
     }
     const last = g.lines[g.lines.length - 1]
     if (last && last.text === text && last.focusId === focusId) { last.count += 1; last.ts = e.ts }
-    else g.lines.push({ key: keyOf(e, i), ts: e.ts, text, focusId, count: 1, untrusted: e.trust === 'untrusted' })
+    else g.lines.push({ key: keyOf(e, i), ts: e.ts, text, focusId, count: 1, untrusted: e.trust === 'untrusted', ...(tone ? { tone } : {}) })
     g.lastTs = Math.max(g.lastTs, e.ts)
   })
   return [...groups.values()].sort((a, b) => b.lastTs - a.lastTs)
