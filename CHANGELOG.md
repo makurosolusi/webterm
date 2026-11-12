@@ -180,6 +180,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Spend warnings are off by default: the "Today's spend passed $10" notice no longer fills Needs you, and the daily digest never re-lists it. Turn it back on with "Warn when today's spend passes $10" in Settings > Central; while it is off, open warnings (and digests that only listed them) are closed once, with one notice saying so. The daily spending limit is unchanged.
 - Central no longer sets reminders to check on agents it delegated to: it is told their reports reach it by themselves; reminders are for follow-ups only time can tell. Playbooks answer `started` (with the agent and its browser) instead of `done`.
 - Hung agents are caught sooner: no sign of start after 1 minute, a nudge after 3 quiet minutes, stalled after 6 (was 2 / 10 / 20); a failed send gets 1 minute of grace before it becomes a duty.
 - New Central tool `browser_open` opens a browser node beside an agent Central started and cables it to that agent.

@@ -13,6 +13,7 @@ export const SAFEGUARDS: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_DAILY_SPAWNS: 'Caps how many workers, and so how much spend, Central can start in one day.',
   WEBTERM_CENTRAL_MAX_INFLIGHT: 'Caps how many workers run at once, so spend and load stay predictable.',
   centralCheckinDailyLimit: 'Caps the turns Central starts by itself, so it never spends without you in the loop for long.',
+  dailySpendWarning: 'Cost is covered by the model plan; spend warnings are noise unless you ask for them.',
   secretAccess: 'Agents ask before they use a secret, because a leaked secret cannot be taken back.',
   denyRules: 'Deny rules hold even in Danger mode, so a block you set is never skipped.',
 }
@@ -24,6 +25,7 @@ const FIELD_ALIASES: Readonly<Record<string, string>> = {
   'central.dailySpawns': 'WEBTERM_CENTRAL_DAILY_SPAWNS',
   'central.maxInflight': 'WEBTERM_CENTRAL_MAX_INFLIGHT',
   'central.checkinLimit': 'centralCheckinDailyLimit',
+  'central.spendWarning': 'dailySpendWarning',
 }
 
 /** The safeguard reason a field shows, or undefined when its default is simply the most capable one. */

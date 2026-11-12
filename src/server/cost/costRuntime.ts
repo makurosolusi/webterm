@@ -5,7 +5,7 @@ import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { eventBus } from '../events/eventBus'
 import { createLogger } from '../logs'
 import { captureTranscript, syncCentralTurns } from './costCapture'
-import { warnDailyCost } from './costDailyWarning'
+import { closeSpendWarnings, warnDailyCost } from './costDailyWarning'
 import { CENTRAL_COST_KEY, mergeDayCapIntoCentral } from './costDayCap'
 import { beginCostRun, costGate, endCostRun, type BeginRunInput, type CostRunKind, type EndRunResult, type GateResult } from './costOracle'
 
@@ -18,6 +18,8 @@ export interface CostRuntimeDeps {
   db: () => Database | null
   /** Transcript path last reported by a node's hooks. */
   transcriptOf: (nodeId: string) => string | undefined
+  /** Settings `dailySpendWarning`; absent = off (the default). */
+  spendWarning?: () => boolean
 }
 
 let deps: CostRuntimeDeps | null = null
@@ -25,7 +27,8 @@ let stop: (() => void) | null = null
 
 async function defaultDeps(): Promise<CostRuntimeDeps> {
   const { sessions } = await import('../sessions')
-  return { db: () => activeLedgerRuntime()?.db ?? null, transcriptOf: (id) => sessions.getTranscript(id) }
+  const { db: store } = await import('../db')
+  return { db: () => activeLedgerRuntime()?.db ?? null, transcriptOf: (id) => sessions.getTranscript(id), spendWarning: () => store.getSettings().dailySpendWarning }
 }
 
 /** Reads what is new in one node's transcripts. Never throws: a broken file must not break a hook. */
@@ -47,7 +50,10 @@ export function syncCentral(): number {
   if (!db) return 0
   try {
     const added = syncCentralTurns(db)
-    warnDailyCost(db)
+    // Every tick (boot included): off = close what is open (idempotent, one notice per close), on = warn once a day.
+    const enabled = deps?.spendWarning?.() ?? false
+    warnDailyCost(db, { enabled })
+    if (!enabled) closeSpendWarnings(db)
     return added
   } catch (err) {
     log.warn('cost.central_sync_failed', 'Cannot sync Central turn usage', { error: err instanceof Error ? err.message : String(err) })
