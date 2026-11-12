@@ -94,6 +94,6 @@ export interface ControlGuard {
   /** Adds usage to the daily budget. */
   recordUsage(usage: GuardUsage): Awaitable<void>
   readonly breaker: BreakerPort
-  /** Settings > Skip approvals: asks become allows (denies stay); absent = never skips. */
-  skipsApprovals?(): boolean
+  /** Danger level for the project (else the global level): asks become allows (denies stay); absent = never skips. */
+  skipsApprovals?(projectId?: string | null): boolean
 }

@@ -9,7 +9,7 @@ import type { ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
 import { approvalLevelPatch, isApprovalLevel } from './settings.approvalLevel'
 
 /** Map-valued keys patched per entry. `keybindings` is NOT one: `null` there means "unbind". */
-export const ENTRY_PATCH_KEYS = ['canvasBackgroundByWorkspace', 'projectModels', 'inputHistory'] as const
+export const ENTRY_PATCH_KEYS = ['canvasBackgroundByWorkspace', 'projectModels', 'projectApprovalLevels', 'inputHistory'] as const
 type EntryKey = (typeof ENTRY_PATCH_KEYS)[number]
 
 /** Deletes the launch profile `id` in a `claudeLaunchProfiles` patch. */

@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Settings } from '../shared/settings'
 import { readCappedRequestBody, SETTINGS_BODY_MAX_BYTES } from './cappedRequestBody'
 import { createLogger } from './logs'
-import { SettingsConflictError, SettingsValidationError } from './settingsStore'
+import { SettingsConfirmError, SettingsConflictError, SettingsValidationError } from './settingsStore'
 
 const log = createLogger('settings')
 
@@ -66,6 +66,8 @@ export async function settingsRoute(
     } catch (err) {
       // Ids are random, not user data: the UI names the profile and the reason it must stay.
       if (err instanceof SettingsConflictError) return json(res, 409, { error: 'profile_in_use', profileId: err.profileId, reason: err.reason })
+      // Workspace ids only (random), never a settings value.
+      if (err instanceof SettingsConfirmError) return json(res, 400, { error: 'confirm_required', scopes: err.scopes })
       if (!(err instanceof SettingsValidationError)) throw err
       // Hanya {index, field, code}: tak ada nilai input yang dipantulkan balik.
       return json(res, 400, { error: 'invalid_settings', errors: err.errors })

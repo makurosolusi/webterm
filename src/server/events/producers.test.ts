@@ -52,6 +52,25 @@ describe('produceHookEvent', () => {
     expect(json).not.toContain('rm -rf')
   })
 
+  it('tool hooks keep the redacted, capped command or path, the session mode and (PostToolUse) the outcome', () => {
+    const seen = capture('hook.*')
+    const secret = 'sk-' + 'B'.repeat(30) // test-only fake key
+    produceHookEvent({ nodeId: 'a1', workspaceId: 'w1', status: null, verified: true, mode: 'danger', body: { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `curl -H "x: ${secret}" ${'y'.repeat(400)}`, description: 'private body' } } })
+    produceHookEvent({ nodeId: 'a1', workspaceId: 'w1', status: null, verified: true, mode: 'ask', body: { hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: { file_path: '/repo/a.ts', new_string: 'body' }, tool_response: { success: true } } })
+    produceHookEvent({ nodeId: 'a1', workspaceId: 'w1', status: null, verified: true, body: { hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'false' }, tool_response: { is_error: true } } })
+    const [pre, post, failed] = seen.map((e) => e.payload as Record<string, unknown>)
+    expect(String(pre.input)).toContain('curl -H')
+    expect(String(pre.input)).not.toContain(secret)
+    expect(String(pre.input).length).toBeLessThanOrEqual(201)
+    expect(JSON.stringify(pre)).not.toContain('private body')
+    expect(pre).toMatchObject({ mode: 'danger', toolName: 'Bash' })
+    expect(pre.outcome).toBe(undefined)
+    expect(post).toMatchObject({ input: '/repo/a.ts', mode: 'ask', outcome: 'ok' })
+    expect(JSON.stringify(post)).not.toContain('body')
+    expect(failed).toMatchObject({ outcome: 'error' })
+    expect(failed.mode).toBe(undefined)
+  })
+
   it('a hook without this node\'s token is untrusted; a malformed event name is skipped', () => {
     const seen = capture('hook.*')
     produceHookEvent({ nodeId: 'a1', status: null, verified: false, body: { hook_event_name: 'Stop' } })

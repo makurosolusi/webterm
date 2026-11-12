@@ -17,6 +17,8 @@ import { eventBus } from './events/eventBus'
 import type { SenseEvent } from './events/eventModel'
 import { permissionDecision } from './permission/permission.model'
 import type { PermissionAsk } from './permission/permission.wait'
+import { preToolRuleBlock } from './permission/permission.preTool'
+import type { AppendEventInput } from './events/eventModel'
 
 function req(body: unknown): IncomingMessage {
   const r = Object.assign(new EventEmitter(), { method: 'POST', headers: {}, resume: () => {} }) as unknown as IncomingMessage
@@ -90,5 +92,37 @@ describe('UserPromptSubmit checkpoint (F3-c)', () => {
     await post('n1', { hook_event_name: 'UserPromptSubmit', prompt: 'go' }, deps)
     expect(checkpoint.takeCheckpointSafe).toHaveBeenCalledTimes(1)
     expect(checkpoint.takeCheckpointSafe).toHaveBeenCalledWith(ws, { reason: 'prompt', nodeId: 'n1' })
+  })
+})
+
+describe('PreToolUse user rules hold in every mode (Danger included)', () => {
+  // Fake policy: one human-ui rule on claude.tool:Bash with the given effect (test-only).
+  const policy = (effect: 'allow' | 'ask' | 'deny') => ({
+    evaluate: (_p: string, capability: string) => (capability === 'claude.tool:Bash' ? { effect, origin: 'human-ui', ruleId: 'r-1', reason: '' } : { effect: 'allow', origin: 'builtin', reason: '' }),
+    store: { grants: () => [{ id: 'r-1', capability: 'claude.tool:Bash' }] },
+  }) as unknown as Parameters<typeof preToolRuleBlock>[0]['policy']
+  const call = { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git push --force' } }
+
+  it('a Deny rule denies through the PreToolUse reply under bypass, and the decision is recorded with the mode', async () => {
+    const seen: AppendEventInput[] = []
+    const deps: AgentStatusDeps = {
+      setStatus() {}, setTranscript() {}, workspaceFor: () => null, modeOf: () => 'danger',
+      preToolRule: (a) => preToolRuleBlock({ policy: policy('deny'), record: (e) => seen.push(e) }, a),
+    }
+    const out = await post('dz1', call, deps)
+    expect(out.status).toBe(200)
+    expect(out.json.hookSpecificOutput).toMatchObject({ hookEventName: 'PreToolUse', permissionDecision: 'deny' })
+    expect(out.json.hookSpecificOutput.permissionDecisionReason).toContain('r-1')
+    expect(seen[0]).toMatchObject({ kind: 'permission.decision', payload: { behavior: 'deny', by: 'rule', ruleId: 'r-1', mode: 'danger', hook: 'PreToolUse' } })
+  })
+
+  it('an ask rule under Danger is recorded as skipped and does not block; under Auto nothing happens here', () => {
+    const seen: AppendEventInput[] = []
+    const ask = { nodeId: 'dz2', workspaceId: 'w1', body: call }
+    expect(preToolRuleBlock({ policy: policy('ask'), record: (e) => seen.push(e) }, { ...ask, mode: 'danger' })).toEqual({})
+    expect(seen[0]).toMatchObject({ payload: { behavior: 'allow', by: 'rule', ruleId: 'r-1', skipped: true, mode: 'danger' } })
+    expect(preToolRuleBlock({ policy: policy('ask'), record: (e) => seen.push(e) }, { ...ask, mode: 'auto' })).toEqual({})
+    expect(preToolRuleBlock({ policy: policy('allow'), record: (e) => seen.push(e) }, { ...ask, mode: 'danger' })).toEqual({})
+    expect(seen).toHaveLength(1)
   })
 })

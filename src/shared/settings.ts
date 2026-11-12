@@ -28,6 +28,7 @@ import type { AppTheme, TerminalSettings } from './settings.terminal'
 import type { AgentSettings } from './settings.agent'
 import { normalizeKeybindings } from './settings.keybindings'
 import { normalizeProjectModels } from './settings.projectModels'
+import { normalizeProjectApprovalLevels } from './settings.projectApprovalLevels'
 import { normalizeInputHistory } from './settings.inputHistory'
 import { DEFAULT_SETUP, normalizeSetup, type SetupState } from './settings.setup'
 import { DEFAULT_APPROVAL_LEVEL, approvalLevelOf, approvalLevelPatch } from './settings.approvalLevel'
@@ -146,6 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
   centralCheckins: true,
   centralCheckinDailyLimit: 10,
   projectModels: {},
+  projectApprovalLevels: {},
   gridSize: 24,
   snapToGrid: false,
   defaultNodeWidth: 640,
@@ -223,6 +225,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.canvasBackground = normalizeCanvasBackground(src.canvasBackground)
   out.canvasBackgroundByWorkspace = normalizeWorkspaceBackgrounds(src.canvasBackgroundByWorkspace)
   out.projectModels = normalizeProjectModels(src.projectModels)
+  out.projectApprovalLevels = normalizeProjectApprovalLevels(src.projectApprovalLevels)
   out.inputHistory = normalizeInputHistory(src.inputHistory)
   out.setup = normalizeSetup(src.setup)
   // Enum: shape matching lets any string through, so an unknown preset falls back to the default.

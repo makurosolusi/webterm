@@ -29,6 +29,7 @@ import { useTasksMenu } from './TasksMenu'
 import MorningBrief from './MorningBrief'
 import { SettingsProvider, SettingsUpdateProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
+import { ActiveWorkspaceProvider } from './activeWorkspace.context'
 import { toWsNode } from './store'
 import { useBoardNodeNames } from './nodeNames.board'
 import { useCanvasPaneMenu } from './canvasMenu.pane'
@@ -215,6 +216,7 @@ export default function App() {
     <SettingsProvider value={settings}>
     <SettingsUpdateProvider value={update}>
     <NodeActionsProvider value={nodeActions}>
+    <ActiveWorkspaceProvider value={activeId}>
     <div className={`app-shell${sideBar.open && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
@@ -292,6 +294,7 @@ export default function App() {
         />
       )}
     </div>
+    </ActiveWorkspaceProvider>
     </NodeActionsProvider>
     </SettingsUpdateProvider>
     </SettingsProvider>

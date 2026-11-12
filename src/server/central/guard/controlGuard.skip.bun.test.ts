@@ -5,6 +5,8 @@ import type { GuardDecision, GuardRequest } from '../contracts/level.types'
 import { createControlGuard, toToolGuard } from './controlGuard'
 import { setLevel } from './levelStore'
 import { eventKinds, freshDb, HUMAN, run, T0 } from './controlGuard.testutil'
+import { projectWorkspaceId } from '../workspaceLookup'
+import { skipApprovalsFor } from '../../../shared/settings.projectApprovalLevels'
 
 const GATED = { WEBTERM_CENTRAL_AGENTS: 'propose' }
 const AUTO = { WEBTERM_CENTRAL_AGENTS: 'auto' }
@@ -61,4 +63,28 @@ test('skip off asks as before, and the switch is read fresh on every check', () 
   flag.on = false
   expect(code(guard.check(spawn))).toBe('needs_approval')
   expect(createControlGuard({ db, now: () => T0, env: GATED }).skipsApprovals()).toBe(false)
+})
+
+test('per project: Danger in one project (by its workspace) skips there only; a user ask rule is audited with its id', () => {
+  const db = freshDb()
+  const settings = { skipApprovals: false, claudePermissionMode: 'auto' as const, projectApprovalLevels: { w1: 'never' as const } }
+  // Same wiring as ca2Boot: ledger project -> workspace id -> that workspace's level.
+  const guard = createControlGuard({ db, now: () => T0, env: GATED, random: () => 0, skipApprovals: (pid) => skipApprovalsFor(settings, projectWorkspaceId(db, pid)) })
+  level(db, 'act_gated')
+  expect(projectWorkspaceId(db, 'p1')).toBe('w1')
+  expect(projectWorkspaceId(db, 'nope')).toBe(null)
+  expect(code(guard.check(spawn))).toBe('allow')
+  expect(code(guard.check({ ...spawn, projectId: 'p2' }))).toBe('needs_approval')
+  expect(code(guard.check({ ...spawn, projectId: null }))).toBe('needs_approval')
+  expect(guard.skipsApprovals('p1')).toBe(true)
+  expect(guard.skipsApprovals('p2')).toBe(false)
+  expect(toToolGuard(guard).skipsApprovals('p1')).toBe(true)
+
+  level(db, 'act_envelope')
+  const grant = guard.policy.createGrant('human-ui', { subject: 'central', capability: 'goal.*', scope: 'project:p1', effect: 'ask' })
+  expect(code(guard.check(req()))).toBe('allow')
+  if (!grant.ok) throw new Error(grant.code)
+  const ruleId = grant.grant.id
+  expect(ruleId).toBeTruthy()
+  expect(eventKinds(db, 'central.guard').at(-1)).toMatchObject({ verdict: 'allow', skipped: true, rule: ruleId })
 })

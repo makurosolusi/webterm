@@ -1,0 +1,5 @@
+/* Permission-mode chip (ApprovalModeControl.tsx): Danger red, Auto neutral, Ask muted. */
+.approval-chip { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.approval-chip[data-mode='never'] .approval-chip__trigger { color: var(--vscode-errorForeground); border-color: var(--vscode-errorForeground); }
+.approval-chip[data-mode='always'] .approval-chip__trigger { opacity: 0.75; }
+.approval-chip .st-save, .approval-chip .approval-stale { margin: 0; font-size: 11px; }

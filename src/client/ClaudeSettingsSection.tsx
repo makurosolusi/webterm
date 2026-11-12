@@ -7,7 +7,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
-import { APPROVAL_LEVELS, type ApprovalLevel } from '../shared/settings.approvalLevel'
+import { APPROVAL_LEVEL_TEXT } from '../shared/settings.approvalLevel'
+import { APPROVAL_TEXT, ApprovalModeFields } from './ApprovalModeControl'
 import type { EffectiveClaudeLaunch } from '../shared/claudeLaunch/claudeLaunch.effective'
 import type { AgentPermissionMode } from '../shared/workspace'
 import { ClaudeProviderCard } from './ClaudeProviderCard'
@@ -37,16 +38,12 @@ export const CLAUDE_TEXT = {
     env: 'Credential: from the server environment.',
     login: 'Credential: your Claude Code login.',
   } as Record<EffectiveClaudeLaunch['credential'], string>,
-  approvalLabel: 'How much may agents do on their own?',
-  approval: {
-    never: { label: 'Never ask', hint: 'Central and every Claude agent act without asking you first; only your deny rules, budgets and Stop still apply.' },
-    risky: { label: 'Ask for risky things', hint: 'Actions that cannot be undone (deleting files, pushing, running destructive commands) ask first; routine work runs without asking.' },
-    always: { label: 'Ask every time', hint: 'Every action waits for your approval first. Safest, and the slowest.' },
-  } as Record<ApprovalLevel, { label: string; hint: string }>,
+  approvalLabel: APPROVAL_TEXT.allLabel,
+  approval: APPROVAL_LEVEL_TEXT,
   rawMode: 'Claude permission mode',
   rawModeHint: 'Passed to Claude as --permission-mode when it starts. The choice above sets it for you.',
-  rawModeLocked: 'Never ask is on, so agents start without asking.',
-  rawModeFix: 'Ask for risky things instead',
+  rawModeLocked: 'Danger is on, so agents start without asking.',
+  rawModeFix: 'Use Auto instead',
 } as const
 
 const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
@@ -56,8 +53,6 @@ const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }
   { value: 'plan', label: 'Plan only, change nothing' },
   { value: 'bypassPermissions', label: 'Never ask (no prompts)' },
 ]
-
-const APPROVAL_OPTIONS = APPROVAL_LEVELS.map((v) => ({ value: v, label: CLAUDE_TEXT.approval[v].label }))
 
 /** The server's effective launch, reloaded when a setting it depends on changes (and on `reload`). */
 function useEffectiveLaunch(s: Settings): { data: EffectiveClaudeLaunch | null; error: string | null; reload(): void } {
@@ -101,18 +96,7 @@ export function EffectiveLaunchLine({ effective: e, error, onRetry }: { effectiv
   )
 }
 
-/** The one permissions choice; written as `agentApprovalLevel`, which the server maps onto the runtime keys. */
-function ApprovalField({ s, onChange }: { s: Settings; onChange(p: SettingsPatch): void }): React.JSX.Element {
-  const level = s.agentApprovalLevel
-  return (
-    <Field label={CLAUDE_TEXT.approvalLabel} hint={CLAUDE_TEXT.approval[level].hint} htmlFor="st-agentApprovalLevel" setting="agentApprovalLevel"
-      tone={level === 'never' ? 'warning' : undefined}>
-      <SettingsSelect id="st-agentApprovalLevel" value={level} options={APPROVAL_OPTIONS} onChange={(v) => onChange({ agentApprovalLevel: v })} />
-    </Field>
-  )
-}
-
-export function ClaudeSettingsSection({ settings: s, onChange }: { settings: Settings; onChange(patch: SettingsPatch): void }): React.JSX.Element {
+export function ClaudeSettingsSection({ settings: s, onChange, projectId }: { settings: Settings; onChange(patch: SettingsPatch): void; projectId?: string }): React.JSX.Element {
   const effective = useEffectiveLaunch(s)
   return (
     <div className="st-claude" data-section="claude">
@@ -124,7 +108,7 @@ export function ClaudeSettingsSection({ settings: s, onChange }: { settings: Set
       </div>
       <section aria-label={CLAUDE_TEXT.permissions} data-claude-group="permissions">
         <h4 className="st-group-title">{CLAUDE_TEXT.permissions}</h4>
-        <ApprovalField s={s} onChange={onChange} />
+        <ApprovalModeFields settings={s} projectId={projectId} />
       </section>
       <section aria-label={CLAUDE_TEXT.models} data-claude-group="models">
         <h4 className="st-group-title">{CLAUDE_TEXT.models}</h4>

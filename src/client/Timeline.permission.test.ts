@@ -32,6 +32,9 @@ describe('tool lines', () => {
   it('fall back for old events without the new fields', () => {
     expect(say('hook.PreToolUse', { toolName: 'Bash' })).toEqual(['brisk-otter is running Bash'])
     expect(say('hook.PostToolUse', { toolName: 'Bash' })).toEqual(['brisk-otter ran Bash'])
+    expect(say('hook.PostToolUseFailure', { toolName: 'Bash', input: 'npm test', outcome: 'error' })).toEqual(['brisk-otter ran Bash npm test (failed)'])
+    expect(say('hook.PermissionRequest', { toolName: 'Bash', input: 'git push' })).toEqual(['brisk-otter asks permission for Bash git push'])
+    expect(say('hook.PermissionRequest', {})).toEqual(['brisk-otter asks permission for a tool'])
     expect(say('hook.PreToolUse', null)).toEqual(['brisk-otter is running a tool'])
   })
 })
@@ -57,6 +60,8 @@ describe('permission lines', () => {
     expect(say('permission.mode_change', { actor: 'human-ui', scope: 'workspace', workspaceId: 'w1', from: 'risky', to: 'never' }, { nodeId: null, workspaceId: 'w1' }))
       .toEqual(['Mode changed: Auto → Danger (this project)', 'warning'])
     expect(say('permission.mode_change', { actor: 'human-ui', scope: 'global', from: 'never', to: 'always' }, { nodeId: null })).toEqual(['Mode changed: Danger → Ask (all projects)'])
+    expect(say('permission.mode_change', { scope: 'node', from: 'manual', to: 'acceptEdits' })).toEqual(['Mode changed: Ask → Accept edits (this agent)'])
+    expect(say('permission.mode_change', { scope: 'node', from: null, to: 'plan' })).toEqual(['Mode changed to Plan (this agent)'])
   })
   it('central.guard verdicts', () => {
     const g = (p: Record<string, unknown>) => say('central.guard', { action: 'run', tool: 'shell.exec', tier: 'R2', level: 'act_gated', ...p }, { nodeId: null, workspaceId: 'w1' })

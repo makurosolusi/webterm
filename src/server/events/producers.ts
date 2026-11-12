@@ -5,8 +5,10 @@
 // linkNote and `wake` keep working.
 //
 // Redaction rule: payloads carry names, ids, statuses and at most a short scrubbed preview, never a
-// prompt body, tool input/output, token or session id (Rule 12).
+// prompt body, tool output, token or session id (Rule 12). Tool input is only the redacted, capped
+// command or path the tool acts on.
 import type { AgentStatus } from '../../shared/workspace'
+import type { ApprovalModeName } from '../../shared/settings.projectApprovalLevels'
 import { dataDir } from '../config'
 import { redactSecrets } from '../redactSecrets'
 import { createLogger } from '../logs'
@@ -71,6 +73,29 @@ export interface HookEventInput {
   status: AgentStatus | null
   /** True when the request carried this node's own token; anything else is `untrusted`. */
   verified: boolean
+  /** Ask/Auto/Danger the session runs under; absent = unknown. */
+  mode?: ApprovalModeName
+}
+
+/** Hooks about one tool call: the only ones whose `input` is kept. */
+const TOOL_HOOKS: ReadonlySet<string> = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest'])
+
+/** Longest tool input kept (Bash command or file path), after redaction. */
+export const HOOK_INPUT_CHARS = 200
+
+/** What the tool acts on: the Bash `command`, else `file_path` / `path`; redacted and capped, never the rest of the input. */
+function toolInputPreview(input: unknown): string | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const i = input as Record<string, unknown>
+  return previewText(i.command ?? i.file_path ?? i.path, HOOK_INPUT_CHARS) ?? undefined
+}
+
+/** ok/error of a finished tool call: PostToolUseFailure or an error-flagged response is `error`. */
+function toolOutcome(name: string, response: unknown): 'ok' | 'error' | undefined {
+  if (name === 'PostToolUseFailure') return 'error'
+  if (name !== 'PostToolUse') return undefined
+  const r = response && typeof response === 'object' ? (response as Record<string, unknown>) : {}
+  return r.is_error === true || r.success === false || r.interrupted === true ? 'error' : 'ok'
 }
 
 /** `hook.<HookEventName>` from the agent-status route. Unknown/malformed event names are skipped. */
@@ -92,6 +117,9 @@ export function produceHookEvent(input: HookEventInput): void {
       toolName: str(input.body.tool_name),
       subagent: typeof input.body.agent_id === 'string' || undefined,
       preview: previewText(input.body.message ?? input.body.prompt) ?? undefined,
+      input: TOOL_HOOKS.has(name) ? toolInputPreview(input.body.tool_input) : undefined,
+      mode: input.mode,
+      outcome: toolOutcome(name, input.body.tool_response),
     },
   })
 }

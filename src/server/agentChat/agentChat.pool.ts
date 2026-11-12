@@ -6,7 +6,8 @@
 import type { AgentChatEvent, AgentChatImage } from '../../shared/agentChat.wire'
 import { AGENT_CHAT_KIND, type AgentChatNodeConfig } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode, Workspace, WsNode } from '../../shared/workspace'
-import { effectiveClaudeMode } from '../permission/permission.mode'
+import { launchModeFor } from '../permission/permission.mode'
+import type { ApprovalSettings } from '../../shared/settings.projectApprovalLevels'
 import { resolveCwd } from '../ptyShell'
 import type { Query } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatOpen } from './agentChat.options'
@@ -17,6 +18,9 @@ import { AgentChatLock } from './agentChat.lock'
 import { agentChatLadderPick } from './agentChat.ladder'
 import { nodeConfigOf, nodeModeOf, sameNodeConfig } from './agentChat.snapshot'
 import { recordEvent } from '../events/producers'
+
+/** Recorded on every Agent Chat mode switch and every saved approval-level change (routes/settings.routes.ts). */
+export const MODE_CHANGE_EVENT = 'permission.mode_change'
 
 /** Open Claude processes at once (same default as the browser's DEFAULT_MAX_LIVE). */
 export const AGENT_CHAT_MAX_LIVE = 3
@@ -50,10 +54,10 @@ export interface AgentChatPoolDeps {
 /**
  * Opener config of one node, exactly as a terminal agent node launches: the node's cwd (set from the
  * workspace at creation, workspace cwd as fallback) resolved like the PTY, its launch profile, and its
- * own mode else the settings default (Skip approvals overrides both).
+ * own mode else its workspace's approval level (Danger overrides both).
  */
-export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; mode: AgentPermissionMode; skip?: boolean }) {
-  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: effectiveClaudeMode(d.mode, t.node.permissionMode, d.skip === true), workspaceId: t.ws.id }
+export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; settings: ApprovalSettings }) {
+  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: launchModeFor(d.settings, t.ws.id, t.node.permissionMode), workspaceId: t.ws.id }
 }
 
 interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void; phase?: 'busy' | 'awaiting' }
@@ -107,6 +111,17 @@ export class AgentChatPool {
     // No Query is open yet, so setConfig only stores and emits (it cannot reject).
     if (t.node.chatConfig) void session.setConfig(t.node.chatConfig)
     return session
+  }
+
+  /** Switch a node's mode (live, else for its next open) and record `permission.mode_change` (scope node); false = not a chat node. */
+  async setMode(nodeId: string, mode: AgentPermissionMode, actor: string): Promise<boolean> {
+    const s = this.session(nodeId)
+    const t = this.target(nodeId)
+    if (!s || !t) return false
+    const from = s.currentMode() ?? t.node.permissionMode ?? null
+    await s.setMode(mode)
+    if (from !== mode) recordEvent({ kind: MODE_CHANGE_EVENT, source: 'agentChat', actor, trust: 'trusted', subject: `node:${nodeId}`, nodeId, workspaceId: t.ws.id, payload: { scope: 'node', from, to: mode } })
+    return true
   }
 
   /** The node's session when one exists (never creates one). */

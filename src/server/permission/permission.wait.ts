@@ -55,6 +55,8 @@ export interface PermissionAsk {
   body: PermissionBody
   /** Aborted when the hook's curl goes away (Claude was closed or answered elsewhere). */
   signal?: AbortSignal
+  /** Ask/Auto/Danger the session runs under, recorded on every decision event. */
+  mode?: string
 }
 
 /** The request stored on the approval row: what the human sees and what "always allow" saves. */
@@ -95,13 +97,18 @@ function editedInput(db: Database, approvalId: string, original: Record<string, 
 const log = createLogger('permission')
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-/** A live human-ui rule on `claude.tool:*` decides; any other rule (builtin node deny, control grants) never does. */
+/** The live human-ui rule on `claude.tool:*` matching this call (Rules & secrets); any other rule (builtin node deny, control grants) is never one. */
+export function userToolRule(policy: PermissionWaitDeps['policy'], nodeId: string, body: PermissionBody): { effect: 'allow' | 'ask' | 'deny'; ruleId: string } | null {
+  const d = policy.evaluate(`node:${nodeId}`, `${TOOL_CAPABILITY_PREFIX}${toolName(body)}`, { resource: toolResource(body) })
+  if (d.origin !== 'human-ui' || !d.ruleId) return null
+  const rule = policy.store.grants().find((g) => g.id === d.ruleId)
+  return rule?.capability.startsWith(TOOL_CAPABILITY_PREFIX) ? { effect: d.effect, ruleId: d.ruleId } : null
+}
+
+/** An allow/deny user rule decides at once; an `ask` rule leaves it to the human. */
 function ruleDecision(deps: PermissionWaitDeps, ask: PermissionAsk): { behavior: 'allow' | 'deny'; ruleId: string } | null {
-  const d = deps.policy.evaluate(`node:${ask.nodeId}`, `${TOOL_CAPABILITY_PREFIX}${toolName(ask.body)}`, { resource: toolResource(ask.body) })
-  if (d.origin !== 'human-ui' || !d.ruleId || d.effect === 'ask') return null
-  const rule = deps.policy.store.grants().find((g) => g.id === d.ruleId)
-  if (!rule?.capability.startsWith(TOOL_CAPABILITY_PREFIX)) return null
-  return { behavior: d.effect, ruleId: d.ruleId }
+  const r = userToolRule(deps.policy, ask.nodeId, ask.body)
+  return r && r.effect !== 'ask' ? { behavior: r.effect, ruleId: r.ruleId } : null
 }
 
 /** Decision JSON for the hook reply, or null for "no decision" (Claude prompts in the terminal). */
@@ -109,7 +116,7 @@ export async function answerPermission(deps: PermissionWaitDeps, ask: Permission
   const now = deps.now ?? Date.now
   const label = toolLabel(ask.body)
   const event = (payload: Record<string, unknown>, actor = `node:${ask.nodeId}`, kind = PERMISSION_DECISION_EVENT): void =>
-    deps.record({ kind, source: 'permission', actor: /^[\w.:-]{1,64}$/.test(actor) ? actor : 'agent', trust: 'trusted', subject: `node:${ask.nodeId}`, nodeId: ask.nodeId, workspaceId: ask.workspaceId, payload: { tool: toolName(ask.body), label, ...payload } })
+    deps.record({ kind, source: 'permission', actor: /^[\w.:-]{1,64}$/.test(actor) ? actor : 'agent', trust: 'trusted', subject: `node:${ask.nodeId}`, nodeId: ask.nodeId, workspaceId: ask.workspaceId, payload: { tool: toolName(ask.body), label, ...(ask.mode ? { mode: ask.mode } : {}), ...payload } })
 
   const rule = ruleDecision(deps, ask)
   if (rule) {

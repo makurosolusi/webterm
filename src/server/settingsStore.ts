@@ -18,6 +18,7 @@ import { normalizeCustomAgents, type CustomAgentError } from '../shared/customAg
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { applySettingsPatch, isProfileTombstone, type ProfileInUse } from '../shared/settings.patch'
 import { projectModelsPatchErrors } from '../shared/settings.projectModels'
+import { approvalLevelChanges, projectApprovalLevelsPatchErrors } from '../shared/settings.projectApprovalLevels'
 import { inputHistoryPatchErrors } from '../shared/settings.inputHistory'
 import { DEFAULT_CLAUDE_PROFILE, seedClaudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
@@ -40,6 +41,18 @@ export class SettingsConflictError extends Error {
   constructor(readonly profileId: string, readonly reason: ProfileInUse) {
     super(`launch profile ${profileId} cannot be deleted: ${reason}`)
     this.name = 'SettingsConflictError'
+  }
+}
+
+/**
+ * A level change to Danger (`never`, global or one workspace) without `confirmDanger: true` in the same
+ * PATCH; the route maps it to HTTP 400 `confirm_required`. Danger runs irreversible actions without
+ * asking, so the UI must have confirmed it once.
+ */
+export class SettingsConfirmError extends Error {
+  constructor(readonly scopes: string[]) {
+    super(`switching to Danger needs confirmDanger: ${scopes.join(', ')}`)
+    this.name = 'SettingsConfirmError'
   }
 }
 
@@ -112,13 +125,18 @@ export function nextSettingsDocument(
   }
   const modelErrors = projectModelsPatchErrors(p.projectModels)
   if (modelErrors.length) throw new SettingsValidationError(modelErrors)
+  const levelErrors = projectApprovalLevelsPatchErrors(p.projectApprovalLevels)
+  if (levelErrors.length) throw new SettingsValidationError(levelErrors)
   const historyErrors = inputHistoryPatchErrors(p.inputHistory)
   if (historyErrors.length) throw new SettingsValidationError(historyErrors)
   const accepted = Object.fromEntries(Object.entries(p).filter(([k, v]) => acceptsShape(k, v)))
   const stored = storedDocument(storedJson)
   const doc = applySettingsPatch(stored, accepted)
   const settings = mergeSettings(doc, warnDropped)
-  refuseInUseDeletes(mergeSettings(stored), settings, accepted.claudeLaunchProfiles, opts.providerProfileId)
+  const prev = mergeSettings(stored)
+  refuseInUseDeletes(prev, settings, accepted.claudeLaunchProfiles, opts.providerProfileId)
+  const toDanger = approvalLevelChanges(prev, settings).filter((c) => c.to === 'never' && c.from !== 'never')
+  if (toDanger.length && p.confirmDanger !== true) throw new SettingsConfirmError(toDanger.map((c) => c.workspaceId ?? 'global'))
   for (const k of Object.keys(accepted)) doc[k] = settings[k as keyof Settings]
   // The one-time load migration (legacy claude command -> profile) is persisted with the write.
   Object.assign(doc, seedClaudeProfiles(doc, settings.agentLaunchCommands.claude))

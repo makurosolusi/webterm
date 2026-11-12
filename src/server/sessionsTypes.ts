@@ -1,4 +1,5 @@
 import type { AgentPermissionMode, AgentStatus } from '../shared/workspace'
+import type { ApprovalLevel } from '../shared/settings.approvalLevel'
 import type { OutputLog } from './outputLog'
 import type { Pty, spawnPty } from './pty'
 import type { SubscriberSet } from './subscribers'
@@ -43,6 +44,8 @@ export interface SessionsOptions {
   /** Mode permission awal sesi claude (`settings.claudePermissionMode`). Absen = tidak ada flag
    *  `--permission-mode` (hanya sebelum `applyPtyOptions` jalan / di test). */
   claudePermissionMode?: AgentPermissionMode
+  /** Per-node launch: the mode for the node's workspace (its approval level). Absent = `claudePermissionMode`. */
+  launchFor?: (nodeId: string) => { mode: AgentPermissionMode; workspaceId: string | null; level: ApprovalLevel }
   /** Unused since the dead `NODETERM_PERM_WAIT_SECS` injection was removed (the hold is
    *  `PERM_WAIT_SECS_INTERACTIVE` in hooksSettings.ts). Remove with api.ts:86 and sessions.ts:105. */
   hookReplyApprovals?: boolean

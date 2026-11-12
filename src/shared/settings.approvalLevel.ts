@@ -34,3 +34,10 @@ export function approvalClassifierSwitch(level: ApprovalLevel): { central: boole
   const on = level === 'risky'
   return { central: on, permissions: on }
 }
+
+/** User-facing name and one-sentence hint per level (Settings, per-project switch). */
+export const APPROVAL_LEVEL_TEXT: Record<ApprovalLevel, { label: string; hint: string }> = {
+  always: { label: 'Ask', hint: 'Every action that needs permission waits for your approval first.' },
+  risky: { label: 'Auto', hint: 'Routine work runs on its own; only actions that cannot be undone ask first.' },
+  never: { label: 'Danger', hint: 'Nothing asks, like --dangerously-skip-permissions; only your Deny rules, spend limits and secret access still protect you.' },
+}

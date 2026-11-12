@@ -42,4 +42,6 @@ export interface AgentSettings {
   centralCheckinDailyLimit: number
   /** Per-workspace model/effort override of the model ladder, by workspace id; absent = ladder. */
   projectModels: Record<string, ProjectModelOverride>
+  /** Per-workspace approval level, by workspace id; absent = `agentApprovalLevel` (settings.projectApprovalLevels.ts). */
+  projectApprovalLevels: Record<string, ApprovalLevel>
 }

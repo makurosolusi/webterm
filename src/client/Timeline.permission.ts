@@ -13,8 +13,11 @@ export interface PermissionLine { text: string; tone?: LineTone }
 export const isPermissionKind = (kind: string): boolean =>
   kind.startsWith('permission.') || kind.startsWith('policy.') || kind === 'central.guard'
 
-/** Approval levels (`always|risky|never`) as the user sees them in Settings. */
-export const MODE_NAMES: Record<string, string> = { always: 'Ask', risky: 'Auto', never: 'Danger', ask: 'Ask', auto: 'Auto', danger: 'Danger' }
+/** Approval levels (`always|risky|never`) as the user sees them in Settings, plus raw Claude modes (Agent Chat switches). */
+export const MODE_NAMES: Record<string, string> = {
+  always: 'Ask', risky: 'Auto', never: 'Danger', ask: 'Ask', auto: 'Auto', danger: 'Danger',
+  manual: 'Ask', default: 'Ask', acceptEdits: 'Accept edits', plan: 'Plan', bypassPermissions: 'Danger',
+}
 const modeName = (m: unknown): string => MODE_NAMES[String(m)] ?? (str(m) ?? '?')
 
 /** Danger = never ask (hook `mode` is 'danger'; raw level 'never' and Claude's `bypassPermissions` mean the same). */
@@ -78,8 +81,9 @@ export function permissionText(kind: string, p: Rec): PermissionLine | null {
     case 'permission.decision': return decisionText(p, label)
     case 'permission.doom_loop': return warn(`Stopped a repeat loop: ${label}${typeof p.count === 'number' ? ` (${p.count} times)` : ''}`)
     case 'permission.mode_change': {
-      const where = p.scope === 'workspace' ? 'this project' : 'all projects'
-      const text = `Mode changed: ${modeName(p.from)} → ${modeName(p.to)} (${where})`
+      const where = p.scope === 'node' ? 'this agent' : p.scope === 'workspace' ? 'this project' : 'all projects'
+      // An Agent Chat switch may have no known `from` (the chat had not picked a mode yet).
+      const text = p.from == null ? `Mode changed to ${modeName(p.to)} (${where})` : `Mode changed: ${modeName(p.from)} → ${modeName(p.to)} (${where})`
       return isDangerMode(p.to) ? warn(text) : { text }
     }
     case 'central.guard': return guardText(p)

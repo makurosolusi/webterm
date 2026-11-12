@@ -99,9 +99,13 @@ type Described = { text: string; focusId: string | null; tone?: LineTone }
 /** Tool plus its (server-redacted, capped) input; old events carry no input. */
 const toolWithInput = (tool: string, p: Rec): string => { const input = str(p.input); return input ? `${tool} ${input}` : tool }
 
-function toolUse(name: 'PreToolUse' | 'PostToolUse', who: string, p: Rec): { text: string; tone?: LineTone } {
+const TOOL_HOOKS = new Set(['hook.PreToolUse', 'hook.PostToolUse', 'hook.PostToolUseFailure', 'hook.PermissionRequest'])
+
+function toolUse(name: string, who: string, p: Rec): { text: string; tone?: LineTone } {
   const tool = str(p.toolName)
   const what = tool ? toolWithInput(tool, p) : 'a tool'
+  if (name === 'PostToolUseFailure') return { text: `${who} ran ${what} (failed)` }
+  if (name === 'PermissionRequest') return { text: `${who} asks permission for ${what}` }
   if (name === 'PostToolUse') return { text: `${who} ran ${what}${p.outcome === 'error' ? ' (failed)' : ''}` }
   if (isDangerMode(p.mode)) return { text: `${who} skipped asking (Danger): ${what}`, tone: 'warning' }
   return { text: `${who} is running ${what}${isAutoMode(p.mode) ? ' (Auto)' : ''}` }
@@ -156,7 +160,7 @@ function edgeText(p: Rec, ctx: TimelineContext): { text: string; focusId: string
 export function describeEvent(e: TimelineEvent, ctx: TimelineContext): Described {
   const p = rec(e.payload)
   const who = e.nodeId ? ctx.nodeName(e.nodeId) : 'An agent'
-  if (e.kind === 'hook.PreToolUse' || e.kind === 'hook.PostToolUse') return { ...toolUse(e.kind.slice(5) as 'PreToolUse', who, p), focusId: e.nodeId }
+  if (TOOL_HOOKS.has(e.kind)) return { ...toolUse(e.kind.slice(5), who, p), focusId: e.nodeId }
   const perm = permissionText(e.kind, p)
   if (perm) return { ...perm, focusId: e.nodeId }
   if (e.kind.startsWith('hook.')) return { text: hookText(e.kind.slice(5), who, p), focusId: e.nodeId }
