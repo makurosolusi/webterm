@@ -15,7 +15,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 - A stored WEBTERM_CENTRAL_RUNTIME=opencode now means automatic (Claude); WEBTERM_OPENCODE_* keys are ignored.
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
-- Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
+- Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, choose "Ask for risky things" in Settings › Claude › Permissions (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
@@ -157,6 +157,11 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Settings › Claude (new, first under Agents) puts everything about Claude on one page. **Connection** holds the provider choice with its staged test, the launch profiles right under it, and one line saying what new agents, Central and helpers really start with (and where the credential comes from), as resolved by the server. The profile badges now match where launches really go, also in Custom command mode. **Permissions** is a single choice, "How much may agents do on their own?": Never ask, Ask for risky things (the new default: actions that cannot be undone, such as deleting files, pushing or destructive commands, ask first; routine work runs without asking), or Ask every time. A choice you already stored (for example Skip approvals on) is kept; only installs that never set it get the new default. **Models** shows the ladder read-only, folded. **Advanced** holds Central's own profile, the raw permission mode, the Add menu, custom agents and the automation token. Old links to Settings › Agent land on the matching Claude field.
+- Saving Custom command mode also makes its profile the default for new Claude agents (one setting, not two); existing installs are aligned once at startup. Leaving command mode puts the default back to plain `claude`.
+- Settings › Central is down to On/off, What Central may do, Check in by itself and one daily spending limit that shows what was spent today. Workers per day, check-ins per day and max workers at once are under Advanced. "Propose work" now always asks before each worker runs, so the separate switch is gone.
+- Central picks the rest itself. Its context window comes from the model (200K, or 1M for a `[1m]` model id; `WEBTERM_CENTRAL_CONTEXT_WINDOW` still overrides). The reply time limit and steps per reply scale with the model tier (Opus ×1.5, Fable ×2; the env keys still override). Skills are on as soon as Central is. Project knowledge, steadier autonomy and agent mail turn on with "Work on its own".
+- The daily token budget no longer limits Central by default: the dollar limit is the budget. `WEBTERM_CENTRAL_DAILY_TOKENS` still works when set.
 
 - Settings search results show as "Page › Setting" rows. Clicking one opens that page and highlights the setting.
 - Below 720px wide, the Settings sidebar becomes a section dropdown above full-width content.
@@ -373,6 +378,7 @@ Operator notes:
 - Send buttons are disabled while you are offline, and what you typed is kept.
 
 ### Removed
+- Settings rows that the system now decides: Central's model, context window, reply time limit, steps per reply, daily token budget, skill switches, engine, browser, Telegram, profile, ladder and report rows, Project knowledge, Steadier autonomy and Agent mail, and the Agent page's Skip approvals, Hook approvals, "Default for new Claude agents" and per-workspace model editor. Stored per-workspace model overrides are still honoured.
 - Settings › Agent › "Agent default": the quick-add button always used the first enabled agent, so the choice did nothing. A stored value is dropped on load.
 - Unused settings and env keys that changed nothing: the `accent` setting, and `WEBTERM_CHANNELS`, `WEBTERM_CENTRAL_CHAT`, `WEBTERM_CENTRAL_TELEGRAM`, `WEBTERM_CENTRAL_TOOLS` and `WEBTERM_CENTRAL_PLANNER` (chat and the Telegram bridge follow the Central Agent and Telegram switches; proposal tools are always available). Stored values are kept but have no effect.
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

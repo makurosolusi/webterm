@@ -13,7 +13,7 @@ describe('chatErrorMessage', () => {
     const msg = (status: number, code: string) => chatErrorMessage(new ChatApiError('x', status, code))
     expect(msg(401, 'x')).toBe('Not allowed. Reload and sign in again.')
     expect(msg(409, 'conversation_busy')).toBe('Another turn is running. Stop it or wait for it to finish.')
-    expect(msg(503, 'central_runtime_off')).toBe('Central needs Claude. Set up Claude in Settings › Agent › Claude launch profiles and press Test.')
+    expect(msg(503, 'central_runtime_off')).toBe('Central needs Claude. Set up Claude in Settings › Claude and press Test.')
     expect(msg(409, 'turn_not_active')).toBe('This turn already finished.')
     expect(msg(404, 'conversation_not_found')).toBe('This conversation no longer exists.')
     expect(msg(404, 'http_404')).toBe('Central chat is not enabled on this server.')

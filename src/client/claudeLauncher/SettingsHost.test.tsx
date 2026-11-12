@@ -15,14 +15,14 @@ describe('SettingsHost', () => {
     const { container } = render(host(null, onOpen))
     expect(container.innerHTML).toBe('')
     act(() => openLaunchProfileSettings())
-    expect(onOpen).toHaveBeenCalledWith('central', 'central.profile')
+    expect(onOpen).toHaveBeenCalledWith('claude', 'claudeLaunchProfiles')
   })
 
   it('drops an event field that is not a known setting id', () => {
     const onOpen = vi.fn()
     render(host(null, onOpen))
     act(() => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'agent', field: 'nope' } })) })
-    expect(onOpen).toHaveBeenCalledWith('agent', null)
+    expect(onOpen).toHaveBeenCalledWith('claude', null) // the retired Agent page lands on Claude
   })
 
   it('maps a legacy event id to its route section', () => {
@@ -34,8 +34,8 @@ describe('SettingsHost', () => {
 
   it('shows the section it is given and reports nav clicks as section changes', async () => {
     const onOpen = vi.fn()
-    render(host('agent', onOpen))
-    const agent = await screen.findByRole('button', { name: 'Agent' })
+    render(host('claude', onOpen))
+    const agent = await screen.findByRole('button', { name: 'Claude' })
     expect(agent.getAttribute('aria-current')).toBe('true')
     act(() => screen.getByRole('button', { name: 'Memory' }).click())
     expect(onOpen).toHaveBeenCalledWith('memory', null) // a plain section change clears the field

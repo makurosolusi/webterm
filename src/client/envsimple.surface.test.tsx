@@ -113,17 +113,13 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(details.querySelectorAll(':scope > div').length).toBe(4) // butir, bukan kontrol: Chromium punya beberapa tombol
   })
 
-  it('Central Agent: persetujuan worker hanya aktif saat Worker on, halaman bebas kata terlarang dan env var', async () => {
-    const openCentral = async (on: ReadonlySet<CapabilityId>): Promise<HTMLElement> => {
-      await openCapabilities(on)
-      fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
-      return screen.findByRole('switch', { name: 'Ask before each worker runs' })
-    }
-    expect((await openCentral(new Set<CapabilityId>(['central']))).hasAttribute('disabled')).toBe(true)
+  it('Central: tanpa sakelar persetujuan worker terpisah (Propose selalu bertanya), halaman bebas kata terlarang dan env var', async () => {
+    await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central' }))
+    await screen.findByRole('radiogroup', { name: 'What Central may do' })
+    expect(screen.queryByRole('switch', { name: 'Ask before each worker runs' })).toBeNull()
     const text = screen.getByRole('main', { name: 'Settings' }).textContent ?? ''
     expect(text).not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
-    cleanup()
-    expect((await openCentral(new Set<CapabilityId>(['central', 'workers']))).hasAttribute('disabled')).toBe(false)
   })
 })

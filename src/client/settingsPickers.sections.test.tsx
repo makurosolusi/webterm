@@ -8,7 +8,7 @@ import type { EffectiveRow } from './ControlPanel'
 import { ControlField } from './ControlPanelField'
 import { CostPanel, COST_API_PATH } from './CostPanel'
 import { PolicySimulator } from './PolicySimulator'
-import { AgentSettings } from './SettingsAgents'
+import { CustomAgentsSettings } from './SettingsAgents'
 import { CanvasSection } from './SettingsCanvasSections'
 import { InteractionSection, ShellSection, TerminalSection } from './SettingsTerminalSections'
 
@@ -81,7 +81,7 @@ describe('settings pickers per screen', () => {
 
   it('Agents: a custom agent launch command is a combobox offering claude', () => {
     const onChange = vi.fn()
-    render(<AgentSettings settings={{ ...DEFAULT_SETTINGS, customAgents: [{ id: 'custom:x', label: 'X', launchCmd: '' }] }} onChange={onChange} />)
+    render(<CustomAgentsSettings settings={{ ...DEFAULT_SETTINGS, customAgents: [{ id: 'custom:x', label: 'X', launchCmd: '' }] }} onChange={onChange} />)
     expect(optionsOf('Launch command')).toEqual(['claude'])
     fireEvent.click(screen.getByRole('option', { name: 'claude' }))
     expect(onChange).toHaveBeenCalledWith({ customAgents: [{ id: 'custom:x', label: 'X', launchCmd: 'claude' }] })

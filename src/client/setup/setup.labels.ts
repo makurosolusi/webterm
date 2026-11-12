@@ -21,7 +21,7 @@ export const SETUP_TEXT = {
 
   claude: {
     intro: 'This applies to every Claude agent and Central.',
-    where: 'Capabilities › Claude provider',
+    where: 'Claude › Connection',
     saveFailed: 'Could not save the Claude provider. Fix the error above, then Continue again.',
   },
 

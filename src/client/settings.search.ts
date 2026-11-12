@@ -9,6 +9,8 @@ import { ADVANCED_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
+import { CLAUDE_TEXT } from './ClaudeSettingsSection'
+import { MODELS_TEXT } from './SettingsModels'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
 import { CENTRAL_GROUP_TITLE, CENTRAL_TEXT } from './centralSettingsLabels'
 import { COST_TEXT } from './CostPanel'
@@ -34,8 +36,8 @@ const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   terminal: 'appearance look font theme color dark light',
   interaction: 'keyboard mouse clipboard',
   shell: 'zsh bash fish buffer folder',
-  agent: 'claude permission approval profile model',
-  central: 'assistant orchestrator autonomy check-in budget',
+  claude: 'anthropic agent agents permission approval profile model connection login key proxy',
+  central: 'assistant orchestrator autonomy check-in budget spending limit',
   rules: 'secret secrets allow deny block approve permission policy safety',
   memory: 'remember notes knowledge facts forget',
   automations: 'routine routines schedule cron recurring timer job',
@@ -82,15 +84,15 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('shell', 'defaultShell', 'Default shell', 'Empty = use the system default shell.', 'zsh bash fish pwsh'),
   e('shell', 'scrollbackBytes', 'Server replay buffer', 'Raw terminal output replayed when the tab reloads.', 'scrollback reload'),
   e('shell', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
-  // Agent (SettingsAgents.tsx, SettingsModels.tsx, ClaudeLaunchProfilesCard.tsx)
-  e('agent', 'skipApprovals', 'Skip approvals', 'Central and every Claude agent act without asking you first.', 'yolo dangerous permission ask'),
-  e('agent', 'claudePermissionMode', 'Claude permission mode', undefined, 'permission-mode approval plan'),
-  e('agent', 'hookReplyApprovals', 'Hook approvals from the canvas', undefined, 'approve deny permission'),
-  e('agent', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
-  e('agent', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account'),
-  e('agent', 'defaultClaudeProfileId', PROFILES_TEXT.defaultFor, undefined, 'profile'),
-  e('agent', 'model-ladder', 'Models', 'A model ladder picks the model and effort for each task.', 'opus sonnet haiku effort'),
-  e('agent', 'projectModels', 'Per-workspace model', 'Pin a model or effort for one workspace.', 'override project'),
+  // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
+  e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
+  e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Never ask, ask for risky things, or ask every time.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
+  e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
+  e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),
+  e('claude', 'claudePermissionMode', 'Claude permission mode', CLAUDE_TEXT.rawModeHint, 'permission-mode approval plan'),
+  e('claude', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
+  e('claude', 'customAgents', 'Custom agents', 'Bring your own agent CLI, or wrap a builtin harness.', 'cli proxy wrapper byo'),
   // Canvas (SettingsCanvasSections.tsx)
   e('canvas', 'gridSize', 'Grid size'),
   e('canvas', 'snapToGrid', 'Snap to grid', 'While on, dragging a node rounds its position to the grid.', 'align'),
@@ -105,8 +107,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('spending', 'cost-panel', COST_TEXT.title, COST_TEXT.intro, 'cost money report usage'),
   e('capabilities', 'capability.central', CENTRAL_TEXT.summaryTitle, CAPABILITIES.central.blurb, [...CAPABILITY_KEYWORDS.central, ...CAPABILITY_KEYWORDS.workers, ...CAPABILITY_KEYWORDS.autonomy].join(' ')),
   ...CARDS,
-  e('capabilities', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'anthropic api key proxy gateway custom command envman wrapper'),
-  e('capabilities', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
+  e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),
   e('capabilities', 'agentEngine', ADVANCED_TEXT.engineLabel, ADVANCED_TEXT.engineRecheckHint, 'claude install sign in'),
 ]

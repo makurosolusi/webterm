@@ -1,6 +1,7 @@
 // Client side of POST /api/claude-launch/test (server/claudeLauncher/claudeLauncher.api.ts).
 import { flushSettingsSaves } from '../useSettings'
 import { openSettingsAt } from '../settings.link'
+import { CLAUDE_LAUNCH_EFFECTIVE_PATH, type EffectiveClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.effective'
 
 /** `install`: on a claude-missing row, the official install commands (server `CLAUDE_INSTALL`).
  *  `signIn`: on a wrapper that is not signed in, the sign-in command it suggested (server `WrapperSignIn`). */
@@ -15,8 +16,8 @@ export interface LaunchTest {
 }
 
 export { OPEN_SETTINGS_EVENT } from '../settings.link'
-/** Reveals Settings › Central Agent › Claude launch profile (Central's pick; the row links to the profile list). */
-export const openLaunchProfileSettings = (): void => openSettingsAt('central', 'central.profile')
+/** Reveals Settings › Claude › launch profiles (Central's own pick is under Advanced there). */
+export const openLaunchProfileSettings = (): void => openSettingsAt('claude', 'claudeLaunchProfiles')
 
 /** Probe a saved profile, or the one Central uses. Throws with the server's error code. */
 export async function testClaudeLaunch(target: { profileId: string } | { central: true }): Promise<LaunchTest> {
@@ -28,4 +29,12 @@ export async function testClaudeLaunch(target: { profileId: string } | { central
   const obj = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
   if (!res.ok) throw new Error(typeof obj.error === 'string' ? obj.error : `http_${res.status}`)
   return obj as unknown as LaunchTest
+}
+
+/** GET /api/claude-launch/effective: what agents, Central and helpers really start with (server truth). */
+export async function fetchEffectiveLaunch(signal?: AbortSignal): Promise<EffectiveClaudeLaunch> {
+  const res = await fetch(CLAUDE_LAUNCH_EFFECTIVE_PATH, { headers: { Accept: 'application/json' }, cache: 'no-store', signal })
+  const data = (await res.json().catch(() => undefined)) as Partial<EffectiveClaudeLaunch> & { error?: string } | undefined
+  if (!res.ok || !data?.agents || !data.central) throw new Error(data?.error ?? `http_${res.status}`)
+  return data as EffectiveClaudeLaunch
 }

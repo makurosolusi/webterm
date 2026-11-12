@@ -90,8 +90,8 @@ describe('tab Kemampuan (D8)', () => {
     expect(within(summary).getByRole('status').textContent).toBe('On')
     expect(within(main).getAllByRole('region', { name: /Telegram/ }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
-    fireEvent.click(within(summary).getByRole('button', { name: 'Managed in Central Agent →' }))
-    expect(document.querySelector('.st-section-title')?.textContent).toBe('Central Agent')
+    fireEvent.click(within(summary).getByRole('button', { name: 'Managed in Central →' }))
+    expect(document.querySelector('.st-section-title')?.textContent).toBe('Central')
     expect(await screen.findByRole('switch', { name: 'Central Agent' })).toBeTruthy()
   })
 

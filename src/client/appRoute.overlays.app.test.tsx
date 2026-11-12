@@ -33,10 +33,10 @@ const settingsNav = () => screen.getByRole('navigation', { name: 'Section settin
 const currentSection = () => within(settingsNav()).getAllByRole('button').find((b) => b.getAttribute('aria-current') === 'true')?.textContent ?? ''
 
 describe('Settings section in the URL', () => {
-  it('a reload with `?settings=agent` opens Settings on Agent', async () => {
+  it('a reload with the retired `?settings=agent` opens Settings on Claude', async () => {
     await mountCanvas(fx(`${BOARD}?settings=agent`))
     await screen.findByRole('button', { name: 'Close settings' })
-    expect(currentSection()).toContain('Agent')
+    expect(currentSection()).toContain('Claude')
   })
 
   it('a deep link `?settings=account` opens Settings on Account', async () => {
