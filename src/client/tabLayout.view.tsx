@@ -17,7 +17,7 @@ import { useUnreadIds } from './unread'
 import TabStrip, { type TabItem } from './tabLayout.strip'
 import FilesDock from './tabLayout.filesDock'
 import NewTabMenu, { type NewTabMenuProps } from './tabLayout.newMenu'
-import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
+import { setEditorActionsSlot, tabNodeMenuItems, useDirtyTabs } from './tabLayout.nodeActions'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 import './tab-layout.css'
 
@@ -43,6 +43,7 @@ export default function TabsView(p: TabsViewProps) {
   const { nodes } = p
   const { order, active, filesPanel } = useTabLayout().tabs
   const unread = useUnreadIds()
+  const dirty = useDirtyTabs()
 
   // Keep order/active in line with the nodes; a node that appears next to existing ones becomes the active tab (Orca opens new tabs focused).
   const seen = useRef<Set<string> | null>(null)
@@ -67,7 +68,7 @@ export default function TabsView(p: TabsViewProps) {
 
   const items: TabItem[] = order.filter((id) => live.has(id)).map((id) => {
     const n = byId.get(id) as Node
-    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], kind: NODE_KIND_LABEL[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)) }
+    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], kind: NODE_KIND_LABEL[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)), dirty: dirty.has(id) }
   })
   const filesId = nodes.find((n) => kindOf(n) === 'files')?.id ?? null
   // Tab context menu: the node's own "More Actions…" rows (published by its NodeChrome), then Close.

@@ -106,7 +106,7 @@ function EditorNode({
       { id: 'preview', label: ef.preview ? 'Edit' : 'Preview', tooltip: previewTitle, icon: ef.preview ? 'edit' : 'open-preview', checked: ef.preview, onSelect: ef.togglePreview },
       { id: 'wrap', label: 'Word wrap', tooltip: wrapKey ? `Toggle word wrap (${wrapKey})` : 'Toggle word wrap', icon: 'word-wrap', checked: view.wrap, onSelect: view.toggleWrap },
       ...(lspLanguage ? [{ id: 'outline', label: 'Outline', tooltip: 'Go to symbol in file (⇧⌘O)', icon: 'symbol-class', onSelect: () => void showOutline(id) }] : []),
-      ...(!readOnly ? [{ id: 'save', label: 'Save', tooltip: 'Save (⌘S)', disabled: !ef.dirty, onSelect: () => void ef.save() }] : []),
+      ...(!readOnly ? [{ id: 'save', label: ef.saving ? 'Saving…' : 'Save', tooltip: 'Save (⌘S)', disabled: !ef.dirty || ef.saving, busy: ef.saving, onSelect: () => void ef.save() }] : []),
     ] : []),
   ]
 
@@ -179,7 +179,7 @@ function EditorNode({
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >
-        {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} /> : (
+        {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} dirty={editable && ef.dirty} /> : (
         <div className="node-header" onContextMenu={editable ? view.openMenu : undefined}>
           <span
             className="node-title editor-node__name"
@@ -214,8 +214,8 @@ function EditorNode({
                 {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
                     yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
                 {!readOnly && (
-                  <VscodeButton secondary disabled={!ef.dirty} title="Save (⌘S)" onClick={ef.save}>
-                    Save
+                  <VscodeButton secondary disabled={!ef.dirty || ef.saving} aria-busy={ef.saving ? 'true' : 'false'} title="Save (⌘S)" onClick={ef.save}>
+                    {ef.saving ? 'Saving…' : 'Save'}
                   </VscodeButton>
                 )}
               </>
@@ -270,7 +270,8 @@ function EditorNode({
           )}
           {ef.saveError && (
             <div className="editor-node__save-error nodrag" role="alert">
-              {ef.saveError}
+              <span>{ef.saveError}</span>
+              <VscodeButton secondary disabled={ef.saving} onClick={ef.retry}>Retry</VscodeButton>
             </div>
           )}
         </div>

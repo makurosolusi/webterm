@@ -42,7 +42,7 @@ vi.mock('./fsClient', () => ({
 
 import EditorNode from './EditorNode'
 import { NodeHostContext } from './tabLayout.context'
-import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
+import { setEditorActionsSlot, tabNodeMenuItems, useDirtyTabs } from './tabLayout.nodeActions'
 import { beforeNodeDelete, NodeCloseConfirmHost } from './nodeCloseConfirm'
 
 // test-only: jsdom has no ResizeObserver.
@@ -75,6 +75,15 @@ function mount(inTab: boolean, extra?: ReactNode) {
     </ReactFlowProvider>,
   )
 }
+/** Shows which tabs the strip would mark dirty. */
+function DirtyProbe() { return <output data-testid="dirty">{[...useDirtyTabs()].join(',')}</output> }
+/** A write that stays in flight until the test settles it. */
+function pendingWrite() {
+  let settle!: { resolve: (r: { ok: true; version: string }) => void; reject: (e: Error) => void }
+  writeChecked.mockImplementationOnce(() => new Promise((resolve, reject) => { settle = { resolve, reject } }))
+  return () => settle
+}
+const edit = () => { fake.editors[0].value = 'changed'; act(() => fake.editors[0].onChange()) }
 const strip = () => within(document.querySelector<HTMLElement>('[data-slot="tab-editor-actions"]')!)
 
 describe('EditorNode in tab mode', () => {
@@ -123,5 +132,72 @@ describe('EditorNode in tab mode', () => {
     expect(within(document.querySelector<HTMLElement>('.editor-node .node-header')!).getByRole('button', { name: 'Save' })).toBeTruthy()
     expect(strip().queryAllByRole('button')).toHaveLength(0)
     expect(tabNodeMenuItems('e1')).toEqual([])
+  })
+
+  it('publishes the dirty state for the tab dot while unsaved, and clears it after saving', async () => {
+    mount(true, <DirtyProbe />)
+    await waitFor(() => expect(fake.editors).toHaveLength(1))
+    expect(screen.getByTestId('dirty').textContent).toBe('')
+    edit()
+    expect(screen.getByTestId('dirty').textContent).toBe('e1')
+    await act(async () => { fireEvent.click(strip().getByRole('button', { name: 'Save' })) })
+    await waitFor(() => expect(screen.getByTestId('dirty').textContent).toBe(''))
+  })
+
+  it('Save reads "Saving…" and is disabled while the write is in flight, in the strip and the tab menu', async () => {
+    mount(true)
+    await waitFor(() => expect(fake.editors).toHaveLength(1))
+    const settle = pendingWrite()
+    edit()
+    await act(async () => { fireEvent.click(strip().getByRole('button', { name: 'Save' })) })
+    const busy = strip().getByRole('button', { name: 'Saving…' }) as HTMLButtonElement
+    expect(busy.disabled).toBe(true)
+    expect(busy.getAttribute('aria-busy')).toBe('true')
+    expect(tabNodeMenuItems('e1').find((r) => r.type === 'item' && r.id === 'save')).toMatchObject({ label: 'Saving…', disabled: true })
+    await act(async () => { settle().resolve({ ok: true, version: 'v2' }) })
+    expect(strip().getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(strip().queryByRole('button', { name: 'Saving…' })).toBeNull()
+  })
+
+  it('a failed save shows the error with Retry, and Retry saves again', async () => {
+    mount(true)
+    await waitFor(() => expect(fake.editors).toHaveLength(1))
+    const settle = pendingWrite()
+    edit()
+    await act(async () => { fireEvent.click(strip().getByRole('button', { name: 'Save' })) })
+    await act(async () => { settle().reject(new Error('disk full')) })
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('Couldn’t save note.md: disk full')
+    expect(strip().getByRole('button', { name: 'Save' })).toBeTruthy()
+    writeChecked.mockClear()
+    await act(async () => { fireEvent.click(within(alert).getByRole('button', { name: 'Retry' })) })
+    expect(writeChecked).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
+  // Fit width is refused in tab mode (`fitRefusal`, editorFit.ts: mode === 'tabs' → "The view is locked"), so it has no tab row.
+  it('the tab menu offers Word wrap and no Fit width', async () => {
+    mount(true)
+    await waitFor(() => expect(fake.editors).toHaveLength(1))
+    const rows = tabNodeMenuItems('e1').flatMap((r) => (r.type === 'item' ? [r.label] : []))
+    expect(rows).toContain('Word wrap')
+    expect(rows.some((l) => /fit width/i.test(l))).toBe(false)
+  })
+
+  it('on the canvas the header keeps its dirty dot and Save reads "Saving…" while in flight', async () => {
+    mount(false, <DirtyProbe />)
+    await waitFor(() => expect(fake.editors).toHaveLength(1))
+    const header = within(document.querySelector<HTMLElement>('.editor-node .node-header')!)
+    expect(header.queryByRole('img', { name: 'Unsaved changes' })).toBeNull()
+    const settle = pendingWrite()
+    edit()
+    expect(header.getByRole('img', { name: 'Unsaved changes' })).toBeTruthy()
+    expect(screen.getByTestId('dirty').textContent).toBe('')
+    await act(async () => { fireEvent.click(header.getByRole('button', { name: 'Save' })) })
+    // jsdom does not reflect vscode-button's `disabled`; the busy flag is what it can observe.
+    expect(header.getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true')
+    await act(async () => { settle().resolve({ ok: true, version: 'v2' }) })
+    await waitFor(() => expect(header.queryByRole('img', { name: 'Unsaved changes' })).toBeNull())
+    expect(header.getByRole('button', { name: 'Save' })).toBeTruthy()
   })
 })

@@ -74,6 +74,13 @@
 /* Close: hidden until hover, always visible on the active tab (Orca). */
 .tabs-tab__close { flex: none; opacity: 0; }
 .tabs-tab:hover .tabs-tab__close, .tabs-tab:focus-within .tabs-tab__close, .tabs-tab--active .tabs-tab__close { opacity: 1; }
+/* Unsaved (VS Code): the dot sits where the × is, even on the active tab; hover/focus swaps in the ×. */
+.tabs-tab__end { flex: none; display: grid; place-items: center; }
+.tabs-tab__end > * { grid-area: 1 / 1; }
+.tabs-tab__dirty { font-size: 10px; pointer-events: none; }
+.tabs-tab--dirty .tabs-tab__close { opacity: 0; }
+.tabs-tab--dirty:hover .tabs-tab__close, .tabs-tab--dirty:focus-within .tabs-tab__close { opacity: 1; }
+.tabs-tab--dirty:hover .tabs-tab__dirty, .tabs-tab--dirty:focus-within .tabs-tab__dirty { visibility: hidden; }
 
 /* ---- Files panel ---- */
 .tabs-files {
