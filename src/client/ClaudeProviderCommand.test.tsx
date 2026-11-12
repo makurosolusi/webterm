@@ -152,23 +152,25 @@ describe('Claude provider: Custom command', () => {
     expect(screen.queryByText(/^wrapper:/)).toBeNull()
   })
 
-  it('offers the envman template only when envman is installed, and selects its placeholder', async () => {
-    serve({ wrappers: [{ name: 'envman', installed: true }, { name: 'direnv', installed: false }] })
+  it('lists every installed wrapper as an equal hint, offers no template and uses a neutral placeholder', async () => {
+    serve({ wrappers: [{ name: 'doppler', installed: true }, { name: 'envman', installed: true }, { name: 'op', installed: true }, { name: 'direnv', installed: false }] })
     render(<ClaudeProviderCard />)
     await open()
-    fireEvent.click(await screen.findByRole('button', { name: COMMAND_TEXT.template }))
-    const input = screen.getByLabelText(COMMAND_TEXT.command) as HTMLInputElement
-    expect(input.value).toBe('envman -e project:env -- claude')
-    expect(input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0)).toBe('project:env')
+    const input = await screen.findByLabelText(COMMAND_TEXT.command) as HTMLInputElement
+    expect(await screen.findByText(COMMAND_TEXT.detected(['doppler', 'envman', 'op']))).toBeTruthy()
+    expect(input.value).toBe('') // nothing pre-filled
+    expect(input.placeholder).toBe('your-wrapper … -- claude')
+    expect(input.placeholder).not.toMatch(/envman|doppler|\bop\b/)
+    expect(screen.queryByRole('button', { name: /template/i })).toBeNull()
   })
 
-  it('hides the template when envman is not installed', async () => {
+  it('shows no detection hint when no wrapper is installed', async () => {
     serve({ wrappers: [{ name: 'envman', installed: false }] })
     render(<ClaudeProviderCard />)
     await open()
     await screen.findByLabelText(COMMAND_TEXT.command)
     await waitFor(() => expect(calls.some((c) => c.url.endsWith('/detect'))).toBe(true))
-    expect(screen.queryByRole('button', { name: COMMAND_TEXT.template })).toBeNull()
+    expect(screen.queryByText(/^Detected on this machine/)).toBeNull()
   })
 
   it('warns, without blocking, when the server says the command looks like a secret', async () => {

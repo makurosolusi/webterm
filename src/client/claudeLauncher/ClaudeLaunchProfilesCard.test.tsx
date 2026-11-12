@@ -58,7 +58,7 @@ describe('ClaudeLaunchProfilesCard', () => {
     const spy = setup()
     openAdd()
     expect(document.activeElement).toBe(within(editor()).getByLabelText('Name'))
-    expect((within(editor()).getByLabelText('Launch command') as HTMLInputElement).placeholder).toBe('envman -e claude:my-account --')
+    expect((within(editor()).getByLabelText('Launch command') as HTMLInputElement).placeholder).toBe('your-wrapper … --')
     fireEvent.keyDown(within(editor()).getByLabelText('Name'), { key: 'Escape' })
     expect(screen.queryByRole('form')).toBeNull()
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add profile' }))

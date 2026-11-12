@@ -1,5 +1,5 @@
 // "Claude launch profiles" (Settings > Claude, under Connection): how webterm starts Claude, e.g.
-// `envman -e claude:malik-opus -- claude`. A list like VS Code's settings list editor: the built-in
+// a wrapper such as `op run -- claude` or `envman -e x -- claude`. A list like VS Code's settings list editor: the built-in
 // Default (`claude`, read-only) first, then the user's profiles with their resolved command, badges
 // and Edit / Test / Delete. The badges come from the server's resolver (GET /api/claude-launch/effective), so
 // the command-mode default is shown where launches really go; without it they fall back to the stored keys. Add and Edit open ClaudeProfileEditor inline; Test probes the SAVED profile.
@@ -28,7 +28,7 @@ type LaunchSettings = Pick<Settings, 'claudeLaunchProfiles' | 'defaultClaudeProf
 
 export const PROFILES_TEXT = {
   title: 'Claude launch profiles',
-  hint: 'How webterm starts Claude. Use a wrapper that injects env vars, e.g. envman -e claude:malik-opus -- claude. '
+  hint: 'How webterm starts Claude. Optionally use a wrapper that injects env vars, e.g. op run, doppler run or envman (your-wrapper … -- claude). '
     + 'Ending with "--" is enough; claude is added for you. Flags after claude (--model …) are kept.',
   empty: 'A profile is a named command that starts Claude, for example through a wrapper that picks an account. Without one, webterm runs plain claude.',
   add: 'Add profile',
