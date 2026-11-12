@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { Textarea } from '@/components/ui/textarea'
 import type { ChatMessage } from './chatTypes'
 import './chatRerun.css'
 
@@ -43,7 +44,7 @@ export function EditBox(props: { initial: string; allowEmpty: boolean; onSave: (
   const save = (): void => { if (!empty) props.onSave(text.trim()) }
   return (
     <form className="chat-edit" aria-label="Edit message" onSubmit={(e) => { e.preventDefault(); save() }}>
-      <textarea
+      <Textarea
         className="chat-edit__input"
         aria-label="Message text"
         value={text}
