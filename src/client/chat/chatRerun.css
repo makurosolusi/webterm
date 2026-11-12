@@ -1,0 +1,20 @@
+/* Inline editor of the last human message (chatRerun.tsx). */
+.chat-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.chat-edit__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+  border-radius: 4px;
+  background: var(--vscode-input-background, transparent);
+  color: var(--vscode-input-foreground, inherit);
+  font: inherit;
+  resize: vertical;
+}
+.chat-edit__input:focus { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
+.chat-edit__actions { display: flex; justify-content: flex-end; gap: 6px; }

@@ -171,6 +171,28 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     )
   }
 
+  // Regenerate / Edit of the last exchange. No optimistic rows: the stream drops the old exchange
+  // (`message.superseded`) and brings the new one; `rerunning` hides both actions until the server answers.
+  const [rerunning, setRerunning] = useState(false)
+  const rerun = (mode: 'regenerate' | 'edit', messageId: string, text?: string): void => {
+    const clientMessageId = newClientMessageId()
+    const input = { clientMessageId, messageId, ...(text === undefined ? {} : { text }) }
+    const client = clientRef.current
+    const call = mode === 'edit' ? client.editMessage?.(conversation.id, input) : client.regenerate?.(conversation.id, input)
+    if (!call) return
+    setRerunning(true)
+    call.then(
+      (result) => dispatch({
+        type: 'send-ok', clientMessageId, messageId: result.messageId, seq: result.seq, turnId: result.turnId, status: result.status,
+      }),
+      (error: unknown) => {
+        const message = chatErrorMessage(error)
+        if (error instanceof ChatApiError && error.code === 'conversation_busy') dispatch({ type: 'busy', activeTurnId: error.activeTurnId, error: message })
+        else dispatch({ type: 'error', error: message })
+      }
+    ).finally(() => setRerunning(false))
+  }
+
   const stop = (): void => {
     const turnId = state.activeTurnId
     if (!turnId) {
@@ -215,8 +237,10 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         </div>
       )}
 
-      <ChatMessages messages={orderedMessages(state)} streaming={busy || state.stream === 'reconnecting'} onRetry={send}
-        imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
+      <ChatMessages messages={orderedMessages(state)} streaming={busy || rerunning || state.stream === 'reconnecting'} onRetry={send}
+        imageUrl={(ref) => chatImageUrl(conversation.id, ref)}
+        {...(props.client.regenerate ? { onRegenerate: (replyId: string) => rerun('regenerate', replyId) } : {})}
+        {...(props.client.editMessage ? { onEdit: (messageId: string, text: string) => rerun('edit', messageId, text) } : {})} />
       <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
         completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
         toolbar={props.commands && (

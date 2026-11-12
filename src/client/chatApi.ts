@@ -10,9 +10,11 @@
 //   GET  /conversations/:id/messages    -> {items: Message[]}        (?limit=50)
 //   POST /conversations/:id/messages    -> {messageId,seq,turnId,status}  (Idempotency-Key)
 //   GET  /conversations/:id/stream      -> SSE frames, `id: <seq>`
+//   POST /conversations/:id/regenerate  -> {messageId,seq,turnId,status}  ({clientMessageId,messageId}; last message only)
+//   POST /conversations/:id/edit        -> {messageId,seq,turnId,status}  ({clientMessageId,messageId,text}; last message only)
 //   POST /turns/:id/cancel              -> {status}
 import type {
-  CancelTurnResult, ChatClient, ChatConversation, ChatConversationPage, ChatMessage, SendMessageInput,
+  CancelTurnResult, ChatClient, ChatConversation, ChatConversationPage, ChatMessage, RerunInput, SendMessageInput,
   SendMessageResult, ChatTurnStatus,
 } from './chat/chatTypes'
 import type { RequestOptions } from './inboxTypes'
@@ -93,6 +95,11 @@ export async function sendMessage(
       signal: opts.signal,
     }
   )
+  return turnStarted(body)
+}
+
+/** The `202 {messageId,seq,turnId,status}` answer of a send, regenerate or edit. */
+function turnStarted(body: unknown): SendMessageResult {
   const row = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
   const messageId = typeof row?.messageId === 'string' ? row.messageId : ''
   const turnId = typeof row?.turnId === 'string' ? row.turnId : ''
@@ -106,6 +113,19 @@ export async function sendMessage(
     turnId,
     status: typeof row.status === 'string' ? (row.status as ChatTurnStatus) : 'queued',
   }
+}
+
+/** Regenerate (same text) or Edit (`text`) of the last human message; the server supersedes the old exchange. */
+export async function rerunMessage(
+  conversationId: string, mode: 'regenerate' | 'edit', input: RerunInput, opts: RequestOptions = {}
+): Promise<SendMessageResult> {
+  const body = await requestJson<unknown>(`${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/${mode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.clientMessageId },
+    body: JSON.stringify(input),
+    signal: opts.signal,
+  })
+  return turnStarted(body)
 }
 
 /** URL of a stored image of a conversation (`ref` of a history `image` part); same cookie as the rest. */
@@ -131,4 +151,6 @@ export const chatApi: ChatClient = {
   listMessages,
   sendMessage,
   cancelTurn,
+  regenerate: (conversationId, input, opts) => rerunMessage(conversationId, 'regenerate', input, opts),
+  editMessage: (conversationId, input, opts) => rerunMessage(conversationId, 'edit', input, opts),
 }

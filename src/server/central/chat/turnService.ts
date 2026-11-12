@@ -32,13 +32,13 @@ import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
 import { markSystemTurn, systemTurnsToday, withoutHumanLabel, type SystemTurnOrigin } from './turnOrigin'
+import { freshSessionPending, prepareRerun, type RerunInput } from './turnRerun'
 
 const log = createLogger('central')
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
-export { localDayStart, systemTurnsToday } from './turnOrigin'
-export type { SystemTurnOrigin } from './turnOrigin'
+export { localDayStart, systemTurnsToday, type SystemTurnOrigin } from './turnOrigin'
 export {
   DEFAULT_MESSAGE_LIMIT, MAX_MESSAGE_LIMIT, listConversationSummaries, listMessages,
 } from './turnPersistence'
@@ -130,8 +130,8 @@ export class TurnService {
     if (origin && systemTurnsToday(this.db, this.now()) >= origin.dailyLimit) {
       throw new CentralChatError('budget_exhausted', `conversation ${conversation.id}: daily limit of ${origin.dailyLimit} automatic turns is used`, 429)
     }
-    // A `/model` choice since the last good turn: this turn opens a fresh session (reseeded like a rotation).
-    const switchModel = modelSwitchPending(this.db, conversation.id)
+    // A `/model` choice or a Regenerate/Edit since the last good turn: this turn opens a fresh session (reseeded like a rotation).
+    const switchModel = modelSwitchPending(this.db, conversation.id) || freshSessionPending(this.db, conversation.id)
     const { context = this.context, summarize } = this.wiring()
     const built = context.build({
       db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
@@ -190,6 +190,13 @@ export class TurnService {
       response: { messageId: message.id, seq: message.seq, turnId: turn.id, status: turn.status },
       done,
     }
+  }
+
+  /** Regenerate / Edit of the last human message (turnRerun): supersedes it and its reply, then submits afresh. */
+  rerun(input: RerunInput): SubmitResult {
+    if (this.runtime === null) throw new CentralChatError('central_runtime_off', 'central runtime is off', 503)
+    const next = prepareRerun(this.db, this.stream, input, this.runtime.kind, (id) => this.active.get(id), this.now)
+    return 'replay' in next ? this.replay(next.replay) : this.submit(next)
   }
 
   /** Cancels through the runtime, then force-closes the turn if it does not settle in time. */

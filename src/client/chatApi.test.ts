@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CHAT_PATH, ChatApiError, cancelTurn, chatErrorMessage, createConversation, listConversations, listMessages,
-  openChatStream, sendMessage,
+  openChatStream, rerunMessage, sendMessage,
 } from './chatApi'
 import type { ChatEvent } from './chat/chatTypes'
 import { STREAM_REOPEN_JITTER_MS, setConnection } from './ws.connection'
@@ -141,6 +141,16 @@ describe('chat fetch client', () => {
     expect(headersOf(0)['Idempotency-Key']).toBe('cm-9')
     expect(JSON.parse(String(init.body))).toEqual({ clientMessageId: 'cm-9', text: 'hello' })
     expect(result).toEqual({ messageId: 'm9', seq: 9, turnId: 't1', status: 'queued' })
+  })
+
+  it('posts Regenerate / Edit to their routes with the target message and answers the new turn', async () => {
+    fetchMock.mockResolvedValue(response({ messageId: 'm10', seq: 10, turnId: 't2', status: 'running' }))
+    const result = await rerunMessage('central:global', 'edit', { clientMessageId: 'cm-e', messageId: 'm9', text: 'new' })
+    expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations/central%3Aglobal/edit`)
+    expect(JSON.parse(String(initOf(0).body))).toEqual({ clientMessageId: 'cm-e', messageId: 'm9', text: 'new' })
+    expect(result).toEqual({ messageId: 'm10', seq: 10, turnId: 't2', status: 'running' })
+    await rerunMessage('central:global', 'regenerate', { clientMessageId: 'cm-r', messageId: 'm9' })
+    expect(fetchMock.mock.calls[1][0]).toBe(`${CHAT_PATH}/conversations/central%3Aglobal/regenerate`)
   })
 
   it('keeps the newlines of a multi-line message in the POST body', async () => {

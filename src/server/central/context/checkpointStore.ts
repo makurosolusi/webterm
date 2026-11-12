@@ -35,14 +35,14 @@ function textOf(partsJson: string): string {
   return parts.filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text').map((p) => p.text).join('\n')
 }
 
-/** Last `limit` messages with plain text, oldest first (state ids stay in `facts`, not here). */
+/** Last `limit` visible messages with plain text, oldest first (state ids stay in `facts`, not here; superseded rows never). */
 export function recentMessages(
   db: Database, conversationId: string, limit: number, afterSeq = 0, beforeSeq = Number.MAX_SAFE_INTEGER
 ): CheckpointMessage[] {
   return list(
     db,
     `SELECT id, seq, role, parts_json FROM central_message
-     WHERE conversation_id = ? AND seq > ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
+     WHERE conversation_id = ? AND seq > ? AND seq < ? AND state != 'superseded' ORDER BY seq DESC LIMIT ?`,
     conversationId, afterSeq, beforeSeq, limit
   ).reverse().map((r) => ({ id: String(r['id']), seq: Number(r['seq']), role: String(r['role']), text: textOf(String(r['parts_json'])) }))
 }
@@ -55,7 +55,7 @@ export function messageSeq(db: Database, messageId: string): number {
 
 /** Newest tool card in the last messages: the most recent proposal and how it ended. */
 function lastProposal(db: Database, conversationId: string): { name: string; state: string } | null {
-  for (const row of list(db, 'SELECT parts_json FROM central_message WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?', conversationId, FACT_LIST_LIMIT)) {
+  for (const row of list(db, "SELECT parts_json FROM central_message WHERE conversation_id = ? AND state != 'superseded' ORDER BY seq DESC LIMIT ?", conversationId, FACT_LIST_LIMIT)) {
     const tool = (JSON.parse(String(row['parts_json'])) as MessagePart[]).reverse().find((p) => p.type === 'tool')
     if (tool?.type === 'tool') return { name: tool.name, state: tool.state }
   }

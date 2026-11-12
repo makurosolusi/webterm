@@ -210,6 +210,12 @@ function applyOnce(state: ChatState, event: ChatEvent): ChatState {
       return turnError(state, event)
     case 'notice':
       return notice(state, event)
+    case 'message.superseded': {
+      // Regenerate / Edit: the old exchange leaves the thread; its replacement follows as `message.created`.
+      const ids = payloadOf(event).messageIds
+      const gone = new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [])
+      return { ...state, messages: state.messages.filter((m) => !gone.has(m.id)) }
+    }
     case 'approval.requested':
     case 'approval.updated':
       return approval(state, event)

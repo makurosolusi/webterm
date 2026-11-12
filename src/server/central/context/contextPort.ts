@@ -48,7 +48,7 @@ export interface ContextAssembler {
 
 function recentMessageIds(db: Database, conversationId: string): string[] {
   return allRows(
-    db, 'SELECT id FROM central_message WHERE conversation_id = ? ORDER BY seq DESC LIMIT ?',
+    db, "SELECT id FROM central_message WHERE conversation_id = ? AND state != 'superseded' ORDER BY seq DESC LIMIT ?",
     conversationId, HISTORY_LIMIT
   ).map((row) => String(row['id'])).reverse()
 }
