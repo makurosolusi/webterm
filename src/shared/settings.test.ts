@@ -69,11 +69,12 @@ describe('mergeSettings', () => {
     expect(merged.terminalLetterSpacing).toBe(0)
   })
 
-  it('skipApprovals: absent (existing installs) -> true, stored false stays false, non-boolean ignored', () => {
-    expect(mergeSettings({}).skipApprovals).toBe(true)
+  it('skipApprovals: absent -> false (default level ask-for-risky), stored true/false kept, non-boolean ignored', () => {
+    expect(mergeSettings({}).skipApprovals).toBe(false)
+    expect(mergeSettings({ skipApprovals: true }).skipApprovals).toBe(true)
     expect(mergeSettings({ skipApprovals: false }).skipApprovals).toBe(false)
     expect(mergeSettings(JSON.parse(JSON.stringify(mergeSettings({ skipApprovals: false })))).skipApprovals).toBe(false)
-    expect(mergeSettings({ skipApprovals: 'no' }).skipApprovals).toBe(true)
+    expect(mergeSettings({ skipApprovals: 'no' }).skipApprovals).toBe(false)
   })
 
   it('membuang nilai yang bentuknya tidak cocok dengan default (batas input HTTP)', () => {

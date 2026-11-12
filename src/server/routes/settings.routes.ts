@@ -12,6 +12,7 @@ import { json, type ApiRoute } from './route.core'
 import { installedShells, SHELLS_PATH } from '../shells'
 import { canvasBackgroundRoutes } from './canvasBackground.routes'
 import { effectiveClaudeMode } from '../permission/permission.mode'
+import { applyApprovalLevelSwitch } from '../policy/policy.approvalLevel'
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
 export function applyPtyOptions(): void {
@@ -38,7 +39,7 @@ export const settingsRoutes: ApiRoute[] = [
     name: 'settings',
     match: (c) => c.path === '/api/settings',
     handle: async (c) => {
-      await settingsRoute(c.req, c.res, c.method, db)
+      await settingsRoute(c.req, c.res, c.method, db, (patch) => applyApprovalLevelSwitch(patch, c.ledger()))
       // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
       if (c.method === 'PUT') applyPtyOptions()
       return true

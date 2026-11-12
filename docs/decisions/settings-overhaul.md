@@ -55,9 +55,13 @@ duplikat scrollback, dua Sign out, flag env turunan yang tidak dibaca runtime (v
   tools" atau `?dev=1` (`?dev=0` mematikan). Tautan langsung ke `?settings=developer` tetap membuka halamannya.
 - Doctor memberi `go: { field }` terstruktur; klien mencari halamannya di indeks pencarian.
 
-## Keputusan terbuka
+## Keputusan
 
-- Default izin agent (3 level): Never ask (= sekarang) / Ask for risky things (rekomendasi) / Ask every time — menunggu user.
+Diputuskan user 2026-11-12:
+
+- Default izin agent = **Ask for risky things** (aksi tak bisa dibatalkan bertanya dulu; nilai eksplisit lama dipertahankan).
+- Secret "Allow agents to use this" = selamanya, **hanya agent di project/workspace tempat tombol ditekan**.
+- File pembungkus lama `MemorySection`/`AutomationsSection`/`SpendingSection` dihapus (pindah ke panel Control).
 
 ## Gelombang
 

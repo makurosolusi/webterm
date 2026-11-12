@@ -20,3 +20,12 @@ describe('contextWindowTokens', () => {
     expect(contextWindowTokens({})).toBe(DEFAULT_CONTEXT_WINDOW_TOKENS)
   })
 })
+
+describe('context window from the model', () => {
+  it('200K by default, 1M only for a long-context id; an env override still wins', () => {
+    expect(contextWindowTokens({})).toBe(200_000)
+    expect(contextWindowTokens({ WEBTERM_CENTRAL_MODEL: 'opus' })).toBe(200_000)
+    expect(contextWindowTokens({ WEBTERM_CENTRAL_MODEL: 'claude-sonnet-5-5[1m]' })).toBe(1_000_000)
+    expect(contextWindowTokens({ WEBTERM_CENTRAL_MODEL: 'sonnet[1m]', [CONTEXT_WINDOW_ENV]: '64000' })).toBe(64_000)
+  })
+})

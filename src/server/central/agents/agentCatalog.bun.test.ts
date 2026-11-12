@@ -149,7 +149,7 @@ describe('spawn through the real guard', () => {
     const host: AgentHost = {
       runnerFor: () => 'pty', spawnTier: (k) => catalog.resolve(k)?.tier ?? null, defHashOf: (k) => catalog.resolve(k)?.defHash,
       worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
-      openPty: async (_a, _cwd, nodeId) => { opened.push(nodeId) }, headlessArgv: () => null, send: async () => undefined,
+      openPty: async (_a, _cwd, nodeId) => { opened.push(nodeId) }, headlessArgv: () => null, send: async () => ({ ok: true as const, started: true as const }),
       scrollback: async () => [], closePty: async () => undefined, hasSession: () => false,
     }
     const ex = createAgentExecutor({ db, guard, host, now: () => T0 })

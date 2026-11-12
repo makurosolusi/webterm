@@ -139,6 +139,8 @@ export class SessionsCore {
     const e = this.registry.getStatus(id)
     return e && { ...e, since: this.registry.statusSince(id) }
   }
+  /** The agent a LIVE session was launched as (undefined = plain shell or no session). */
+  agentIdOf(id: string): string | undefined { return this.map.get(id)?.agentId }
 
   /** Sesi yang masih hidup, urut sesuai waktu spawn. */
   list(): SessionInfo[] {

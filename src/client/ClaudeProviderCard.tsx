@@ -1,4 +1,4 @@
-// "Claude provider" card (Settings > Capabilities): which credential every Claude process webterm
+// "Connection" card (Settings > Claude): which credential every Claude process webterm
 // starts uses (agent nodes, Central, headless helpers). Server: claudeProvider/claudeProvider.api.ts.
 // The key is write-only: the server answers "set" or not, the typed value lives in component state
 // until Save and is cleared right after; it is never logged or put in an error message.
@@ -10,6 +10,7 @@ import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
 import { SettingsCombobox } from './SettingsCombobox'
+import { reloadSettings } from './useSettings'
 import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State } from './claudeProvider.api'
 import { ConnectionTest, testButtonLabel } from './claudeLauncher/ConnectionTest'
 import { useConnectionTest, type ConnectionTestHandle } from './claudeLauncher/connectionTest.client'
@@ -42,7 +43,7 @@ function Choice<T extends string>(p: { label: string; options: T[]; names: Recor
 }
 
 export const PROVIDER_TEXT = {
-  title: 'Claude provider',
+  title: 'Connection',
   why: 'Used by every Claude agent node, Central and the background helpers (classifier, planner, summaries, names).',
   modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint', command: 'Custom command' } as Record<Mode, string>,
   modeHelp: {
@@ -86,7 +87,7 @@ export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null
 /** The Claude provider card; loads from the server and waits for it on every change. `connection`: the host
  *  owns the Test connection and shows it (setup wizard's single status), so the card only starts it.
  *  `commitRef`: the host saves through it (wizard Continue), so the card hides its own Save. */
-export function ClaudeProviderCard({ connection, commitRef }: { connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef } = {}): React.JSX.Element {
+export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connection?: ConnectionTestHandle; commitRef?: ProviderCommitRef; onSaved?(): void } = {}): React.JSX.Element {
   const [state, setState] = useState<State | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
@@ -120,6 +121,8 @@ export function ClaudeProviderCard({ connection, commitRef }: { connection?: Con
   }, [])
 
   const markSaved = (): void => {
+    // The server may have moved the default profile with the mode (command mode = the default): re-read both.
+    void reloadSettings().finally(() => onSaved?.())
     const n = ++seq.current
     setSaved({ seq: n, at: new Date().toLocaleTimeString() })
     setToast({ seq: n, severity: 'info', title: PROVIDER_TEXT.savedToast })

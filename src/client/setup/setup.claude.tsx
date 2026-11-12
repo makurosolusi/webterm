@@ -25,7 +25,7 @@ export function ClaudeStep({ nav }: StepProps): React.JSX.Element {
           No separate Save here: Continue saves the card's pending edits first and stays on the step when that fails. */}
       <ConnectionTest test={connection} />
       <ClaudeProviderCard connection={connection} commitRef={commit} />
-      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'claude-provider' }} commit={async () => (commit.current && !(await commit.current()) ? T.saveFailed : null)} />
+      <StepFooter nav={nav} where={T.where} at={{ section: 'claude', field: 'claude-provider' }} commit={async () => (commit.current && !(await commit.current()) ? T.saveFailed : null)} />
     </div>
   )
 }

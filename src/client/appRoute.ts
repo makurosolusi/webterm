@@ -10,16 +10,17 @@ import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
-import { toSettingsFieldId, type SettingsFieldId } from './settings.link'
+import { movedSettingsField, toSettingsFieldId, type SettingsFieldId } from './settings.link'
 
 /** `?settings=` values: the ids of `SETTINGS_SECTIONS`, read from the React-free registry so the lazily
  *  loaded Settings panel stays out of the start-up chunk. */
 export const SETTINGS_ROUTE_SECTIONS: readonly SectionId[] = SETTINGS_SECTIONS.map((s) => s.id)
 /** Retired ids and where they land now: `env`/`channels` -> Features, the old Control mega page -> Health,
- *  Interaction and Shell & buffer -> Terminal, Canvas background (global or `:workspace`) -> Appearance.
+ *  Interaction and Shell & buffer -> Terminal, Canvas background (global or `:workspace`) -> Appearance,
+ *  Agent -> Claude.
  *  A link that also names a field lands on the page holding that field (SettingsPanel `pageOfField`). */
 const LEGACY_SETTINGS_SECTION: Readonly<Record<string, SettingsRouteSection>> = {
-  env: 'capabilities', channels: 'capabilities', control: 'health',
+  env: 'capabilities', channels: 'capabilities', control: 'health', agent: 'claude',
   interaction: 'terminal', shell: 'terminal', background: 'appearance', 'background:workspace': 'appearance', 'canvas-background': 'appearance',
 }
 
@@ -77,7 +78,10 @@ export function parseAppRoute(pathname: string, search: string): AppRoute {
     }
   }
   const q = new URLSearchParams(search)
-  const settings = pick(SETTINGS_ROUTE_SECTIONS, q.get('settings'))
+  const rawSection = q.get('settings')
+  const moved = movedSettingsField(q.get('field'))
+  // A retired page id lands where it went; a moved setting takes its new page along.
+  const settings = rawSection === null ? null : moved?.section ?? LEGACY_SETTINGS_SECTION[rawSection] ?? pick(SETTINGS_ROUTE_SECTIONS, rawSection)
   return {
     workspaceId,
     settings,

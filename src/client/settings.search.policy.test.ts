@@ -48,7 +48,8 @@ const indexed = SETTINGS_SEARCH_INDEX.flatMap((x) => (x.field ? [x.field as stri
 
 it('the scan really walked the Settings tree', () => {
   expect(files.size).toBeGreaterThan(50)
-  expect(literal.length).toBeGreaterThan(40)
+  // Floor, not a count: the General/Claude/Central rework cut the literal ids to under 40.
+  expect(literal.length).toBeGreaterThan(30)
 })
 
 it('every rendered data-field has an index entry, and every indexed field is rendered', () => {

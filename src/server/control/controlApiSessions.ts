@@ -1,6 +1,7 @@
 // Session-mutating `/api/control/*` routes: spawn, prompt, close. Split out of `controlApi.ts`.
 import npath from 'node:path'
 import { isBuiltinAgent, isSafeNodeId } from '../../shared/workspace'
+import { submitToNode } from '../agentSubmit'
 import { spawnAgent } from '../spawn/agentSpawn'
 import { claudeProfileLine } from '../../shared/claudeLaunch/claudeLaunch.builtin'
 import { authorize, badRequest, capabilityHolder } from './controlAuth'
@@ -73,12 +74,12 @@ export async function spawnRoute(req: ControlRequest, deps: ControlDeps, acks: A
   return result
 }
 
-export function promptRoute(
+export async function promptRoute(
   req: ControlRequest,
   deps: ControlDeps,
   acks: AckStore,
   now: number
-): ControlResult {
+): Promise<ControlResult> {
   const body = asObject(req.body)
   if (!isValidRequestId(body.requestId)) return badRequest('invalid_request_id')
   const nodeId = body.nodeId
@@ -96,7 +97,12 @@ export function promptRoute(
   if (body.submit !== undefined && typeof body.submit !== 'boolean') return badRequest('invalid_submit')
   if (!deps.sessions.isLive(nodeId)) return { status: 404, body: { error: 'node_not_found' } }
 
-  deps.sessions.input(nodeId, body.submit === false ? body.text : `${body.text}\r`)
+  if (body.submit === false) deps.sessions.input(nodeId, body.text)
+  else {
+    const sent = await submitToNode(deps.sessions, nodeId, body.text, deps.sleep ? { sleep: deps.sleep } : {})
+    // Not acked: a retry with the same requestId may try again.
+    if (!sent.ok) return { status: sent.reason === 'not_ready' ? 409 : 502, body: { error: sent.reason, message: sent.message, requestId: body.requestId, nodeId } }
+  }
   const result = { status: 200, body: { ok: true, requestId: body.requestId, nodeId } }
   acks.set(key, result, now)
   return result

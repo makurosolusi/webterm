@@ -49,7 +49,7 @@ describe('SettingsPanel VS Code layout', () => {
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
     // Developer is hidden outside developer mode (./developerMode).
-    const labels = ['Appearance', 'Terminal', 'Canvas', 'Notifications', 'Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations',
+    const labels = ['Appearance', 'Terminal', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & approvals', 'Memory', 'Automations',
       'Spending', 'Account', 'Features', 'Health']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
@@ -68,7 +68,7 @@ describe('SettingsPanel VS Code layout', () => {
     const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
     expect(byGroup).toEqual([
       ['Appearance', 'Terminal', 'Canvas', 'Notifications'],
-      ['Agent', 'Central Agent', 'Rules & approvals', 'Memory', 'Automations', 'Spending'],
+      ['Claude', 'Central', 'Rules & approvals', 'Memory', 'Automations', 'Spending'],
       ['Account', 'Features', 'Health'],
     ])
     expect(within(groups[1]!).getByRole('button', { name: 'Rules & approvals' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
@@ -201,7 +201,7 @@ describe('SettingsPanel keyboard', () => {
     // Across a group heading: the last General item steps down into the first Agents item.
     items[3]!.focus()
     fireEvent.keyDown(items[3]!, { key: 'ArrowDown' })
-    expect(document.activeElement?.textContent).toContain('Agent')
+    expect(document.activeElement?.textContent).toContain('Claude')
     expect(document.activeElement).toBe(items[4])
   })
 })
@@ -281,7 +281,7 @@ describe('SettingsPanel persistence', () => {
 
   it('lists agents of the Add menu as checkboxes, not toggle chips', () => {
     const { onChange } = renderPanel({ disabledAgents: [] })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     expect(document.querySelector('.st-chip')).toBeNull()
     const [first] = document.querySelectorAll<HTMLInputElement>('.st-checkrow input[type="checkbox"]')
@@ -303,7 +303,7 @@ describe('SettingsPanel persistence', () => {
 describe('SettingsPanel agents', () => {
   it('Escape in the launch profile editor cancels the editor, not the Settings dialog', () => {
     const { onClose } = renderPanel()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add profile' }))
     const name = screen.getByLabelText('Name')
     expect(document.activeElement).toBe(name)
@@ -316,7 +316,7 @@ describe('SettingsPanel agents', () => {
   it('has no per-CLI launch command rows; Claude is configured through launch profiles and the base picker offers Claude only', () => {
     const agent: CustomAgent = { id: 'custom:p', label: 'Proxy', launchCmd: '', baseAgent: 'claude' }
     render(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, customAgents: [agent] }} onChange={vi.fn()} onClose={vi.fn()} />)
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
     for (const label of ['Codex', 'Gemini', 'Claude Code']) expect(screen.queryByLabelText(`${label} launch command`)).toBeNull()
     expect(screen.getByRole('region', { name: 'Default' })).toBeTruthy()
     // The Agents-in-Add-menu checklist lists Claude Code and the custom agent, no retired CLI.
@@ -326,7 +326,7 @@ describe('SettingsPanel agents', () => {
 
   it('adds a custom agent with a stable id prefix', () => {
     const { onChange } = renderPanel()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Add agent' }))
 
@@ -341,7 +341,7 @@ describe('SettingsPanel agents', () => {
       customAgents: [agent],
       disabledAgents: [agent.id],
     })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
 

@@ -59,8 +59,9 @@ describe('GET /api/node-status', () => {
     expect(await nodeStatusRoute('/api/other', 'GET', new URLSearchParams(), { sessions: () => sessions, db: () => null })).toBeNull()
   })
 
-  it('infers the long window once a response read past 200k', () => {
-    expect(contextPercent(180_000)).toBe(90)
-    expect(contextPercent(500_000)).toBe(50)
+  it('takes the window from the model id, and the long one once a response read past 200K', () => {
+    expect(contextPercent(180_000, 'claude-opus-4-7')).toBe(90)
+    expect(contextPercent(180_000, 'sonnet[1m]')).toBe(18)
+    expect(contextPercent(500_000, 'claude-opus-4-7')).toBe(50)
   })
 })

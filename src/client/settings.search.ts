@@ -8,13 +8,17 @@ import { CAPABILITIES, type CapabilityId } from '../shared/featureCapabilities'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
+import { PROVIDER_TEXT } from './ClaudeProviderCard'
+import { CLAUDE_TEXT } from './ClaudeSettingsSection'
 import { HEALTH_TEXT } from './controlPanelLabels'
+import { MODELS_TEXT } from './SettingsModels'
 import { NOTIFY_TEXT } from './osNotify.settings'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
 import { CENTRAL_GROUP_TITLE } from './centralSettingsLabels'
 import { COST_TEXT } from './CostPanel'
 import type { SettingsFieldId } from './settings.link'
 import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { TOKEN_TEXT } from './tokenAccessLabels'
 
 /** One searchable item. No `field` = the page itself (or a block without a deep-link id). */
 export interface SettingsSearchEntry {
@@ -35,8 +39,8 @@ const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   terminal: 'keyboard mouse clipboard scrollback buffer shell zsh bash fish',
   canvas: 'grid node cable edge snap folder',
   notifications: 'alert alerts sound chime notify permission mute',
-  agent: 'claude permission approval profile model',
-  central: 'assistant orchestrator autonomy check-in budget',
+  claude: 'anthropic agent agents permission approval profile model connection login key proxy',
+  central: 'assistant orchestrator autonomy check-in budget spending limit',
   rules: 'secret secrets allow deny block approve permission policy safety',
   memory: 'remember notes knowledge facts forget',
   automations: 'routine routines schedule cron recurring timer job',
@@ -75,15 +79,15 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('terminal', 'terminalFontZoomKeys', 'Keyboard font zoom', 'Change the font size of the focused terminal with the keyboard.', 'shortcut size'),
   e('terminal', 'defaultShell', 'Default shell', 'Shells installed on this computer.', 'zsh bash fish pwsh'),
   e('terminal', 'terminalMinContrast', 'Minimum contrast', 'Raise it when colored text is hard to read.', 'accessibility wcag readability'),
-  // Agent (SettingsAgents.tsx, SettingsModels.tsx, ClaudeLaunchProfilesCard.tsx)
-  e('agent', 'skipApprovals', 'Skip approvals', 'Central and every Claude agent act without asking you first.', 'yolo dangerous permission ask'),
-  e('agent', 'claudePermissionMode', 'Claude permission mode', undefined, 'permission-mode approval plan'),
-  e('agent', 'hookReplyApprovals', 'Hook approvals from the canvas', undefined, 'approve deny permission'),
-  e('agent', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
-  e('agent', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account'),
-  e('agent', 'defaultClaudeProfileId', PROFILES_TEXT.defaultFor, undefined, 'profile'),
-  e('agent', 'model-ladder', 'Models', 'A model ladder picks the model and effort for each task.', 'opus sonnet haiku effort'),
-  e('agent', 'projectModels', 'Per-workspace model', 'Pin a model or effort for one workspace.', 'override project'),
+  // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
+  e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
+  e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Never ask, ask for risky things, or ask every time.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
+  e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
+  e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),
+  e('claude', 'claudePermissionMode', 'Claude permission mode', CLAUDE_TEXT.rawModeHint, 'permission-mode approval plan'),
+  e('claude', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
+  e('claude', 'customAgents', 'Custom agents', 'Bring your own agent CLI, or wrap a builtin harness.', 'cli proxy wrapper byo'),
   // Canvas (SettingsCanvasSections.tsx)
   e('canvas', 'canvasDots', 'Grid', 'Off, dots, or dots that dragged nodes snap to.', 'dots snap align'),
   e('canvas', 'quickDrag', 'Quick move & resize', 'Hold the keys and drag anywhere on a node.', 'drag modifier'),
@@ -100,9 +104,8 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('spending', 'cost-panel', COST_TEXT.title, COST_TEXT.intro, 'cost money report usage'),
   ...CARDS,
   e('capabilities', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
+  e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),
-  // The engine row lives in Central Agent (AgentEngineField).
-  e('central', 'agentEngine', ADVANCED_TEXT.engineLabel, ADVANCED_TEXT.engineRecheckHint, 'claude install sign in'),
   // Health (HealthSection.tsx)
   e('health', undefined, HEALTH_TEXT.dataDir, 'Where webterm keeps its data on this computer.', 'directory path storage'),
   e('health', undefined, HEALTH_TEXT.developerMode, HEALTH_TEXT.developerModeHint, 'debug raw developer'),

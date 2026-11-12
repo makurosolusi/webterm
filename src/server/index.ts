@@ -54,7 +54,8 @@ import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { backfillSetup } from './setupBackfill'
-import { providerSaved } from './claudeProvider/claudeProvider.store'
+import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
+import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
 import { pruneCanvasBackgrounds } from './canvasBackground.gc'
 import { backgroundsDir } from './canvasBackground.store'
 import { guardWorkspaceRepos } from './repoHygiene'
@@ -95,6 +96,14 @@ try {
   backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() })
 } catch (e) {
   log.warn('settings.setup.backfill_failed', 'Cannot backfill first-run setup state at boot', { cause: e instanceof Error ? e.message : String(e) })
+}
+// Command mode's profile is the default for new agents (saved together since the Claude page); an older
+// install that saved command mode alone gets the default written once (idempotent: equal = no write).
+try {
+  const id = defaultProfileAfter({ mode: 'login' }, loadConfig(), db.getSettings().defaultClaudeProfileId)
+  if (id !== null) db.saveSettings({ defaultClaudeProfileId: id })
+} catch (e) {
+  log.warn('settings.claude_default.migrate_failed', 'Cannot align the default Claude profile with command mode at boot', { cause: e instanceof Error ? e.message : String(e) })
 }
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })

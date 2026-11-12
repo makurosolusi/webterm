@@ -51,6 +51,9 @@ export function harness(overrides: Partial<ControlDeps> = {}) {
       isLive(id) {
         return live.has(id)
       },
+      // Plain-shell submit path (one write); the confirmed Claude path is covered by agentSubmit.test.ts.
+      screenSource: () => undefined,
+      agentIdOf: () => undefined,
     },
     capabilities: {
       verify: (token, now = clock.t) => store.verify(token, now),

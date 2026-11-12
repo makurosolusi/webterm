@@ -74,11 +74,11 @@ describe('A2 drift: no behaviour key is env-only (F1 exit)', () => {
 describe('Central Agent section keys', () => {
   it('live in Settings › Central Agent under their registry label and are read-only in Control', () => {
     const { row } = build({})
-    expect(CENTRAL_SECTION_KEYS).toHaveLength(14)
+    expect(CENTRAL_SECTION_KEYS).toHaveLength(3)
     for (const k of CENTRAL_SECTION_KEYS) {
       expect(row(k), k).toMatchObject({ ui: `${CENTRAL_SETTINGS} › ${row(k).label}`, editable: false })
     }
-    expect(row('WEBTERM_CENTRAL_DAILY_COST_MICROS').ui).toBe('Settings › Central Agent › Daily spending limit')
+    expect(row('WEBTERM_CENTRAL_DAILY_COST_MICROS').ui).toBe('Settings › Central › Daily spending limit')
     // Derived keys keep following their card.
     expect(row('WEBTERM_CENTRAL_MEMORY').ui).toBe('Settings › Capabilities › Central agent (derived)')
   })

@@ -36,7 +36,6 @@ const PENDING: Record<string, Reason[]> = {
   'src/client/ScmPanel.tsx': ['async-click'],
   'src/client/SecretsPanel.tsx': ['async-click', 'disabled-no-reason'],
   'src/client/SessionHistory.tsx': ['async-click'],
-  'src/client/SettingsModels.tsx': ['disabled-no-reason'],
   'src/client/TelegramCard.tsx': ['async-click'],
   'src/client/Timeline.panel.tsx': ['async-click'],
   'src/client/TokenAccessCard.tsx': ['async-click'],

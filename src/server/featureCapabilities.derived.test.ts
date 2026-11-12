@@ -25,9 +25,11 @@ afterEach(() => { offs.splice(0).forEach((off) => off()); events.length = 0 })
 
 describe('kunci turunan Worker/Otonomi', () => {
   it('linkedSettings: Worker = propose; Otonomi = auto; mati = off; retired dead keys are no longer written', () => {
-    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose' })
-    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
-    expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off' })
+    // Work on its own also brings project knowledge, steadier autonomy and agent mail (no Settings rows any more).
+    const extras = (v: string) => ({ WEBTERM_KNOWLEDGE: v, WEBTERM_CENTRAL_RELIABILITY: v, WEBTERM_AGENT_MAIL: v })
+    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose', ...extras('off') })
+    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto', ...extras('on') })
+    expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off', ...extras('off') })
   })
   it('toggle menulis nilainya ke env; mematikan Otonomi turun ke propose', async () => {
     const h = harness()
@@ -86,8 +88,10 @@ describe('syncLinkedSettings (boot)', () => {
     expect(syncLinkedSettings(h.svc, h.target)).toEqual([])
   })
   it('env eksplisit menang dan kartu mati tidak menulis apa pun', () => {
-    const h = harness({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' })
+    const h = harness({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AUTONOMY: 'on', WEBTERM_CENTRAL_AGENTS: 'propose',
+      WEBTERM_KNOWLEDGE: 'off', WEBTERM_CENTRAL_RELIABILITY: 'off', WEBTERM_AGENT_MAIL: 'off' })
     expect(syncLinkedSettings(h.svc, h.target)).toEqual([])
+    expect(h.target.WEBTERM_KNOWLEDGE).toBe('off')
     expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('propose')
     expect(syncLinkedSettings(harness().svc, {})).toEqual([])
   })

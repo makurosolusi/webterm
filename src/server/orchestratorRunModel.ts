@@ -20,7 +20,7 @@ export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 export const DEFAULT_AGENT_ID = 'claude'
 /** Refusal when no worker kind is configured and Claude cannot start: the user sets Claude up. */
 export const CLAUDE_NEEDED_ERROR = 'claude_needed'
-export const CLAUDE_NEEDED_MESSAGE = 'Workers need Claude. Set up Claude in Settings › Agent › Claude launch profiles and press Test.'
+export const CLAUDE_NEEDED_MESSAGE = 'Workers need Claude. Set up Claude in Settings › Claude and press Test.'
 export const MAX_ID_CHARS = 200
 export const MAX_PROMPT_CHARS = 2000
 export const MAX_BASE_REF_CHARS = 200

@@ -19,5 +19,5 @@ export function openFailedNotice(err: unknown): string {
  *  Thrown by `open` before spawning, so the node shows it through `openFailedNotice`. */
 export function missingBinaryText(bin: string): string {
   const text = isClaudeToken(bin) ? PROBE_TEXT.claudeMissing : `${bin} was not found on PATH. Install it and try again.`
-  return `${text} Or fix the launch command in Settings › Agent.`
+  return `${text} Or fix the launch command in Settings › Claude.`
 }

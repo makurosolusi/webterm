@@ -30,10 +30,10 @@ export class ChatApiError extends Error {
 }
 
 /** Shown when the server's Claude Code runtime is missing or not logged in (code `runtime_unavailable`). */
-export const RUNTIME_UNAVAILABLE_MESSAGE = 'Claude Code is not ready on the server (not installed or not logged in). Set up Claude in Settings › Agent › Claude launch profiles and press Test.'
+export const RUNTIME_UNAVAILABLE_MESSAGE = 'Claude Code is not ready on the server (not installed or not logged in). Set up Claude in Settings › Claude and press Test.'
 
 /** Shown when Central has no engine (code `central_runtime_off`): Central runs on Claude only. */
-export const CENTRAL_OFF_MESSAGE = 'Central needs Claude. Set up Claude in Settings › Agent › Claude launch profiles and press Test.'
+export const CENTRAL_OFF_MESSAGE = 'Central needs Claude. Set up Claude in Settings › Claude and press Test.'
 
 /** Short human text; never echoes a response body (it could contain server internals). */
 export function chatErrorMessage(error: unknown): string {

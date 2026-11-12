@@ -93,6 +93,7 @@ function fakeSessions(): FakeSessions {
       fake.inputs.push({ nodeId, text })
       fake.onInput?.(nodeId)
     },
+    submit: async () => ({ ok: true as const, started: true as const }),
     statusOf: (nodeId) => {
       fake.onStatus?.(nodeId)
       return fake.status.get(nodeId)
@@ -531,6 +532,8 @@ describe('createSessionsPort', () => {
       },
       input: () => {},
       statusOf: () => 'working',
+      screenSource: () => undefined,
+      agentIdOf: () => undefined,
       getTerminal: () => 'screen',
       isLive: () => true,
       close: (id) => closed.push(id),

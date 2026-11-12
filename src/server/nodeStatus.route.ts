@@ -8,10 +8,8 @@ import type { AgentStatus } from '../shared/workspace'
 import { NODE_STATUS_MAX_IDS, NODE_STATUS_PATH, type NodeStatusInfo } from '../shared/nodeStatusBar'
 import { getRow } from './ledger/ledgerCore'
 import { createWorkStore } from './central/work/workStore'
+import { DEFAULT_CONTEXT_WINDOW_TOKENS, LONG_CONTEXT_WINDOW_TOKENS, contextWindowForModel } from './central/context/rotationPolicy'
 
-/** Claude's standard context window; a response that read more must be on the long window. */
-export const CLAUDE_CONTEXT_TOKENS = 200_000
-export const CLAUDE_LONG_CONTEXT_TOKENS = 1_000_000
 const MICROS_PER_USD = 1_000_000
 const MAX_MODEL_CHARS = 100
 const MAX_TITLE_CHARS = 120
@@ -32,10 +30,14 @@ export interface NodeStatusDeps {
 type Result = { status: number; body: unknown } | null
 const num = (v: unknown): number | undefined => (v === null || v === undefined ? undefined : Number(v))
 
-/** Used share of the window, 0..100. ponytail: the window is inferred from the count (usage rows do not
- *  carry it), so a 1M session below 200k reads high; record the window with the usage row to fix it. */
-export function contextPercent(tokens: number): number {
-  const window = tokens > CLAUDE_CONTEXT_TOKENS ? CLAUDE_LONG_CONTEXT_TOKENS : CLAUDE_CONTEXT_TOKENS
+/**
+ * Used share of the window, 0..100. The window comes from the model id (`contextWindowForModel`: 1M for a
+ * `[1m]` id). Transcript rows carry the API model id, which never has that suffix, so a response that read
+ * more than the standard window also proves the long one. ponytail: a 1M session below 200K still reads
+ * against 200K; record the window with the usage row to fix it.
+ */
+export function contextPercent(tokens: number, model?: string): number {
+  const window = tokens > DEFAULT_CONTEXT_WINDOW_TOKENS ? LONG_CONTEXT_WINDOW_TOKENS : contextWindowForModel(model)
   return Math.min(100, Math.round((tokens / window) * 1000) / 10)
 }
 
@@ -47,7 +49,7 @@ function costOf(db: Database, id: string): Pick<NodeStatusInfo, 'model' | 'conte
   const spent = getRow(db, "SELECT COALESCE(SUM(cost_micros), 0) AS c FROM cost_usage WHERE node_id = ? AND source = 'agent' AND session_id IS ?", id, last['session_id'])
   return {
     ...(typeof last['model'] === 'string' ? { model: last['model'].slice(0, MAX_MODEL_CHARS) } : {}),
-    contextPct: contextPercent(tokens),
+    contextPct: contextPercent(tokens, typeof last['model'] === 'string' ? last['model'] : undefined),
     costUsd: Number(spent?.['c'] ?? 0) / MICROS_PER_USD,
   }
 }

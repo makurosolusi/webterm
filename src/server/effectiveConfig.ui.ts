@@ -9,14 +9,13 @@ import { specFor } from './envRegistry'
 
 const CAP = 'Settings › Capabilities'
 /** The Central Agent settings section (client section id `central`). */
-export const CENTRAL_SETTINGS = 'Settings › Central Agent'
+export const CENTRAL_SETTINGS = 'Settings › Central'
 
-/** Keys the Central Agent section edits; the location uses the registry label so the two never drift. */
+/** Keys the Central section edits; the location uses the registry label so the two never drift. The rest
+ *  (model, turn limits, context window, token budget, skills, knowledge, reliability, mail) is automatic now
+ *  and only reachable in Settings › Developer. */
 export const CENTRAL_SECTION_KEYS: readonly string[] = [
-  'WEBTERM_CENTRAL_DAILY_COST_MICROS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_MODEL',
-  'WEBTERM_CENTRAL_TURN_WALL_MS', 'WEBTERM_CENTRAL_TURN_STEPS', 'WEBTERM_CENTRAL_CONTEXT_WINDOW',
-  'WEBTERM_CENTRAL_DAILY_TOKENS', 'WEBTERM_CENTRAL_MAX_INFLIGHT', 'WEBTERM_KNOWLEDGE', 'WEBTERM_CENTRAL_RELIABILITY',
-  'WEBTERM_AGENT_MAIL', 'WEBTERM_CENTRAL_SKILLS', 'WEBTERM_CENTRAL_SKILL_PROPOSE', 'WEBTERM_CENTRAL_CHECKPOINT',
+  'WEBTERM_CENTRAL_DAILY_COST_MICROS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_MAX_INFLIGHT',
 ]
 
 /** English card names (the catalog titles are still Indonesian; product text is English). */
