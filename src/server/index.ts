@@ -8,7 +8,7 @@ import { serveTerminalSocket } from './terminalSocket'
 import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
-import { sweepTrashOnBoot } from './fsBoot'
+import { createTrashReaper, sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
@@ -107,7 +107,7 @@ try {
 }
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
-  startLedgerReaper(ledgerRuntime.ledger)
+  startLedgerReaper({ task: ledgerRuntime.ledger.task, retention: ledgerRuntime.ledger.retention, trash: createTrashReaper() })
 }
 
 // Telegram hot-apply: runtime kanal + poller dibangun/dihentikan hook kemampuan `telegram`, bukan di boot;

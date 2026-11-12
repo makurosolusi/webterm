@@ -6,13 +6,24 @@
 // a settled end state past their age, and never a row something open still points at.
 import { TURN_STATUSES, isActiveTurnStatus } from '../central/conversationModel'
 import { execWrite, type LedgerContext } from './ledgerCore'
-import { pruneEventChain } from './ledgerRetentionEvent'
+import { sweepMessages, sweepTurns } from './ledgerRetentionChat'
+import { pruneAuditEvents, pruneEventChain } from './ledgerRetentionEvent'
+import { sweepRejectedSkills } from './ledgerRetentionSkill'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Settled work rows (outbox, inbox, approvals, dags, chat replay events) are kept this long. */
 export const SETTLED_RETENTION_MS = 30 * DAY_MS
 /** Spend history is kept a little over a year, so a year-on-year view still has data. */
 export const USAGE_RETENTION_MS = 400 * DAY_MS
+/**
+ * Ledger `usage` / `run` (per-project spend behind the project cost totals) follow the same 400 days as
+ * cost_usage. Readers: sumUsage/brief use a `since` window; checkBudget's all-time sum has no caller
+ * outside tests; the project cost total becomes "last 400 days".
+ */
+export const LEDGER_USAGE_RETENTION_MS = USAGE_RETENTION_MS
+export const LEDGER_RUN_RETENTION_MS = USAGE_RETENTION_MS
+/** A forgotten memory keeps its audit trail (who forgot it, when) this long; the scrubbed row and tombstone stay. */
+export const FORGOTTEN_MEMORY_EVENT_RETENTION_MS = 90 * DAY_MS
 /** A settled approval keeps its tool input (≤ 32 KB) this long for the history view, then it is blanked. */
 export const APPROVAL_INPUT_GRACE_MS = DAY_MS
 
@@ -53,9 +64,10 @@ const exempt = (reason: string): RetentionEntry => ({ kind: 'exempt', reason })
 const PROJECT_SCOPED = 'project-scoped state, deleted with its project (ledger.deleteProject cascade)'
 const FTS_SHADOW = 'FTS5 shadow table, follows memory (rows go when memory rows go)'
 
-/** Run order matters: approvals before decisions (orphans), dags before their cost runs. */
+/** Run order matters: approvals before decisions (orphans), dags before their cost runs, usage before runs. */
 export const RETENTION: Record<string, RetentionEntry> = {
-  event: sweep('chained rows past 30 days or past 200k rows, prefix only (chain stays verifiable)', (ctx, now, limit) => pruneEventChain(ctx, now, limit)),
+  event: sweep('chained rows past 30 days or 200k rows (prefix only, chain stays verifiable); audit rows past 90 days or 200k rows; '
+    + 'the newest row of each setting kind and the timeline of an existing work task stay', (ctx, now, limit) => pruneEventChain(ctx, now, limit) + pruneAuditEvents(ctx, now, limit)),
   agent_outbox: sweep('settled (not queued) and settled 30+ days ago', (ctx, now, limit) =>
     deleteBatch(ctx, 'agent_outbox', "status != 'queued' AND settled_at IS NOT NULL AND settled_at < ?", limit, now - SETTLED_RETENTION_MS)),
   inbox_item: sweep('resolved (not open) 30+ days ago and its approval is no longer pending', (ctx, now, limit) =>
@@ -87,6 +99,18 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_health_scan: sweep('started 30+ days ago and not the latest run of its project and origin (lastScanAt reads it)', (ctx, now, limit) =>
     deleteBatch(ctx, 'central_health_scan', `started_at < ? AND EXISTS (SELECT 1 FROM central_health_scan n
       WHERE n.project_id = central_health_scan.project_id AND n.origin = central_health_scan.origin AND n.started_at > central_health_scan.started_at)`, limit, now - SETTLED_RETENTION_MS)),
+  central_message: sweep('system notices 30+ days old, then all but the newest 5000 per conversation; never a running turn, '
+    + 'the current /model choice, or a notice whose inbox item or work task is still open', sweepMessages),
+  central_turn: sweep('context trace blanked 30 days after a settled turn started; settled turns past the newest 2500 per conversation deleted', sweepTurns),
+  memory_event: sweep('events of a forgotten memory (scrubbed row) 90+ days old; rows of a deleted memory cascade', (ctx, now, limit) =>
+    deleteBatch(ctx, 'memory_event', "ts < ? AND memory_id IN (SELECT id FROM memory WHERE substr(key, 1, 10) = 'forgotten:')", limit, now - FORGOTTEN_MEMORY_EVENT_RETENTION_MS)),
+  central_skill: sweep('rejected proposals 30+ days old, with their proposed/ folder (only inside the skills root)', (ctx, now, limit) => sweepRejectedSkills(ctx, now, limit)),
+  central_agents: sweep('ended 30+ days ago (live agents and their resume approvals stay)', (ctx, now, limit) =>
+    deleteBatch(ctx, 'central_agents', 'ended_at IS NOT NULL AND ended_at < ?', limit, now - SETTLED_RETENTION_MS)),
+  usage: sweep('responses 400+ days old (spend reads use a since window)', (ctx, now, limit) =>
+    deleteBatch(ctx, 'usage', 'ts < ?', limit, now - LEDGER_USAGE_RETENTION_MS)),
+  run: sweep('started 400+ days ago, once all its usage rows have aged out', (ctx, now, limit) =>
+    deleteBatch(ctx, 'run', 'started_at < ? AND NOT EXISTS (SELECT 1 FROM usage u WHERE u.run_id = run.id)', limit, now - LEDGER_RUN_RETENTION_MS)),
   agent_mail: sweep('expired (24 h TTL set at send)', (ctx, now, limit) => deleteBatch(ctx, 'agent_mail', 'expires_at <= ?', limit, now)),
   cost_usage: sweep('responses 400+ days old (caps only read today and the current dag)', (ctx, now, limit) =>
     deleteBatch(ctx, 'cost_usage', 'ts < ?', limit, now - USAGE_RETENTION_MS)),
@@ -97,15 +121,12 @@ export const RETENTION: Record<string, RetentionEntry> = {
     deleteBatch(ctx, 'central_budget', 'day < ?', limit, new Date(now - USAGE_RETENTION_MS).toISOString().slice(0, 10))),
 
   event_chain_base: exempt('single row (id = 1): the pruned chain origin'),
-  usage: exempt('ledger budgets sum all usage of a project (checkBudget); pruning would reset spend. Deleted with its project'),
-  run: exempt('parent of usage (same reason); deleted with its project'),
   project: exempt('user-created; removed by deleteProject / workspace delete'),
   agent: exempt(PROJECT_SCOPED), task: exempt(PROJECT_SCOPED), plan: exempt(PROJECT_SCOPED),
   plan_item: exempt('replaced wholesale per plan (orchestrator/plan.ts); deleted with its plan'),
   budget: exempt(PROJECT_SCOPED), prefix: exempt(PROJECT_SCOPED),
   memory: exempt('user-curated knowledge; removed by the memory forget/tombstone flow'),
   memory_embedding: exempt('one row per memory; follows memory'),
-  memory_event: exempt('memory audit trail; follows memory'),
   memory_tombstone: exempt('must persist so forgotten facts are never re-learned'),
   memory_incognito: exempt('user privacy switches, one row per scope'),
   memory_fts: exempt(FTS_SHADOW), memory_fts_config: exempt(FTS_SHADOW), memory_fts_data: exempt(FTS_SHADOW),
@@ -122,13 +143,9 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_control: exempt('configuration, one row per key'), cost_cap: exempt('user configuration'),
   channel_store: exempt('single document row (channels config + bounded reply queue)'),
   central_conversation: exempt('one row per scope (UNIQUE), the chat itself'),
-  central_message: exempt('user-visible chat history, kept like a transcript'),
-  central_turn: exempt('one row per chat turn, read with its messages'),
   central_checkpoint: exempt('conversation context state, replaced per conversation'),
   central_state: exempt('one capped document per scope, overwritten in place; project rows cascade with their project'),
-  central_agents: exempt('live agents and their resume approvals; small, ended rows are history'),
   central_breaker: exempt('one row per breaker key'),
-  central_skill: exempt('skill registry, one row per skill version'),
   bakeoff: exempt('human-started runs that own worktree cleanup state'),
   bakeoff_candidate: exempt('children of bakeoff'),
   eval_case: exempt('curated eval dataset'),

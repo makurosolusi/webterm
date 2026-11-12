@@ -140,3 +140,16 @@ test('the existing reaper timer runs retention, and a failing retention never st
   expect(brokenLeases >= 2).toBe(true)
   expect(errors.length).toBe(brokenLeases)
 })
+
+test('the reaper also ticks the trash sweep, and a throwing trash tick never stops the lease sweep', async () => {
+  let leases = 0
+  let trashTicks = 0
+  const errors: unknown[] = []
+  const stop = startLedgerReaper({ task: { sweepExpiredLeases: () => { leases++ } }, trash: { tick: () => { trashTicks++; throw new Error('trash tick failed') } } }, 5, (err) => { errors.push(err) })
+  const deadline = Date.now() + 2000
+  while (leases < 2 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5))
+  stop()
+  expect(leases >= 2).toBe(true)
+  expect(trashTicks).toBe(leases)
+  expect(errors.length).toBe(trashTicks)
+})
