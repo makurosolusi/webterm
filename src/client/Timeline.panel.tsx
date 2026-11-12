@@ -6,11 +6,12 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeTooltip } from './components/vscode/vscodeTooltip'
 import { LEVEL_NAMES } from './central/centralLabels'
 import {
-  GROUP_LABELS, KIND_LABELS, NO_FILTER, buildContext, groupEvents, matchesFilter,
+  GROUP_LABELS, KIND_LABELS, NO_FILTER, autoUndoOf, buildContext, groupEvents, matchesFilter,
   type GroupMode, type KindFilter, type TimelineFilter,
 } from './Timeline.model'
 import { useTimelineFeed } from './Timeline.stream'
 import { effectiveLevel, useTimelineStatus, type ControlSnapshot, type Integrity } from './Timeline.status'
+import { AutoTag, AutoUndoControl } from './Timeline.auto'
 import { checkpointTarget, checkpointText, NotRewindableChip, rewindLabel, RewindControl } from './Timeline.checkpoint'
 import type { TimelinePanelProps } from './Timeline'
 import './Timeline.css'
@@ -92,12 +93,14 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
                 const ev = byKey.get(l.key)
                 const label = ev ? rewindLabel(ev, ctx) : null
                 const target = ev ? checkpointTarget(ev) : null
-                const body = <><time>{timeOf(l.ts)}</time> <span className="timeline-text">{(ev && checkpointText(ev)) ?? l.text}</span>{l.count > 1 && <span className="timeline-count"> ×{l.count}</span>}</>
+                const undo = ev ? autoUndoOf(ev) : null
+                const body = <><time>{timeOf(l.ts)}</time> <span className="timeline-text">{(ev && checkpointText(ev)) ?? l.text}</span>{l.auto && <> <AutoTag /></>}{l.count > 1 && !l.run && <span className="timeline-count"> ×{l.count}</span>}</>
                 return (
                   <li key={l.key} className="timeline-line" data-untrusted={l.untrusted ? 'true' : undefined} data-tone={l.tone}>
                     {l.focusId ? <button type="button" onClick={() => onFocusNode(l.focusId!)}>{body}</button> : <span>{body}</span>}
                     {label && <NotRewindableChip label={label} />}
                     {target && <RewindControl workspaceId={target.workspaceId} seq={target.seq} />}
+                    {undo && <AutoUndoControl eventKey={l.key} undo={undo} />}
                   </li>
                 )
               })}
