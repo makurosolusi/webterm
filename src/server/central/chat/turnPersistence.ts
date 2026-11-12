@@ -229,7 +229,7 @@ export function listConversationSummaries(
   const rows = allRows(
     db,
     `SELECT c.*,
-       (SELECT m.parts_json FROM central_message m WHERE m.conversation_id = c.id AND m.role = 'human'
+       (SELECT m.parts_json FROM central_message m WHERE m.conversation_id = c.id AND m.role = 'human' AND m.state != 'superseded'
         ORDER BY m.seq ASC LIMIT 1) AS first_human,
        (SELECT COUNT(*) FROM central_turn t WHERE t.conversation_id = c.id) AS turn_count
      FROM central_conversation c ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?`,
@@ -246,7 +246,7 @@ export function listConversationSummaries(
   return { items, nextOffset: rows.length > limit ? offset + limit : null }
 }
 
-/** One page of history, ascending; `nextBefore` pages backwards (seq < before). */
+/** One page of visible history (superseded rows stay for audit only), ascending; `nextBefore` pages backwards (seq < before). */
 export function listMessages(
   db: Database, conversationId: string, options: { limit?: number; before?: number } = {}
 ): MessagePage {
@@ -263,9 +263,9 @@ export function listMessages(
     throw new CentralChatError('invalid_cursor', 'before must be a positive message seq', 400)
   }
   const rows = before === undefined
-    ? allRows(db, `SELECT * FROM central_message WHERE conversation_id = ?
+    ? allRows(db, `SELECT * FROM central_message WHERE conversation_id = ? AND state != 'superseded'
         ORDER BY seq DESC LIMIT ?`, conversationId, limit + 1)
-    : allRows(db, `SELECT * FROM central_message WHERE conversation_id = ? AND seq < ?
+    : allRows(db, `SELECT * FROM central_message WHERE conversation_id = ? AND seq < ? AND state != 'superseded'
         ORDER BY seq DESC LIMIT ?`, conversationId, before, limit + 1)
   const hasMore = rows.length > limit
   const page = rows.slice(0, limit).map(asMessage).reverse()

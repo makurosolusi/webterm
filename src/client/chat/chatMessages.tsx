@@ -5,7 +5,7 @@
 // `role="log"` announces completed messages, not every token; deltas are visual only. Markdown
 // goes through the shared sanitizer (`../markdown`), never raw HTML. Auto-scroll only sticks when
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { ChatApprovalCard } from './chatApprovalCard'
 import { CopyButton, MessageActionRow } from './chatMessageActions'
 import { ChatNotice } from './chatNotice'
@@ -18,6 +18,7 @@ import { messageText } from './chatTypes'
 import { ToolCard, ToolGroup, threadRows, type Segment } from './chatToolGroup'
 import { splitProposalBlocks, type LegacyProposal } from './proposalBlocks'
 import { openSettingsAt } from '../settings.link'
+import { EditBox, EditButton, RegenerateButton, rerunTargets } from './chatRerun'
 import './chatBubbles.css'
 
 const NEAR_BOTTOM_PX = 80
@@ -100,22 +101,24 @@ function PartView(props: { part: ChatPart; assistant: boolean; imageUrl?: ImageU
 }
 
 /** Your own message: a right-aligned bubble with no header, as in VS Code / Copilot Chat. */
-function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
-  const { message } = props
+function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl; rerun?: Rerun }) {
+  const { message, rerun } = props
   return (
     <div
       className={`chat-message chat-message--human chat-bubble-row${message.optimistic ? ' is-optimistic' : ''}`}
       data-state={message.state}
       aria-label="human message"
     >
-      <div className="chat-bubble">
-        <span className="sr-only">You said: </span>
-        {message.parts.map((part, index) => (
-          <PartView key={`${message.id}-${index}`} part={part} assistant={false} imageUrl={props.imageUrl} />
-        ))}
-      </div>
+      {rerun?.editor ?? (
+        <div className="chat-bubble">
+          <span className="sr-only">You said: </span>
+          {message.parts.map((part, index) => (
+            <PartView key={`${message.id}-${index}`} part={part} assistant={false} imageUrl={props.imageUrl} />
+          ))}
+        </div>
+      )}
       {message.state === 'failed' && <FailedNote onRetry={props.onRetry} text="Not sent" />}
-      {message.state !== 'failed' && <Actions message={message} />}
+      {message.state !== 'failed' && !rerun?.editor && <Actions message={message} extra={rerun?.button} />}
     </div>
   )
 }
@@ -134,9 +137,12 @@ function FailedNote(props: { text?: string; onRetry?: (() => void) | undefined }
   )
 }
 
-/** Hover/focus row: Copy when there is text; on a settled reply the model · tier meta and the memories chip.
- *  No Regenerate or Edit: the Central API has no endpoint to replay or edit a turn (only send and cancel). */
-function Actions({ message }: { message: ChatMessage }) {
+/** Regenerate / Edit of the last exchange (chatRerun): the row's extra button, and the open inline editor. */
+interface Rerun { button?: ReactNode; editor?: ReactNode }
+
+/** Hover/focus row: Copy when there is text, then `extra` (Regenerate / Edit on the last exchange); on a
+ *  settled reply the model · tier meta and the memories chip. */
+function Actions({ message, extra }: { message: ChatMessage; extra?: ReactNode }) {
   const text = messageText(message)
   const meta = message.role !== 'human' && message.usage && message.state !== 'streaming' && (
     <>
@@ -144,13 +150,13 @@ function Actions({ message }: { message: ChatMessage }) {
       {message.turnId && <TurnMemoryChip turnId={message.turnId} />}
     </>
   )
-  if (!text && !meta) return null
-  return <MessageActionRow meta={meta || undefined}>{text && <CopyButton text={() => text} label="Copy message" />}</MessageActionRow>
+  if (!text && !meta && !extra) return null
+  return <MessageActionRow meta={meta || undefined}>{text && <CopyButton text={() => text} label="Copy message" />}{extra}</MessageActionRow>
 }
 
-function MessageRow(props: { message: ChatMessage; segments: Segment[]; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
+function MessageRow(props: { message: ChatMessage; segments: Segment[]; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl; rerun?: Rerun }) {
   const { message } = props
-  if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} imageUrl={props.imageUrl} />
+  if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} imageUrl={props.imageUrl} rerun={props.rerun} />
   // A plain-text system message is a notice line; one carrying a card or an error keeps the full row below.
   if (message.role === 'system' && message.parts.length > 0 && message.parts.every((p) => p.type === 'text' || p.type === 'notice')) {
     const text = message.parts.map((p) => ('text' in p ? p.text : '')).filter(Boolean).join(' ')
@@ -172,7 +178,7 @@ function MessageRow(props: { message: ChatMessage; segments: Segment[]; onRetry?
       )}
       {message.state === 'cancelled' && <span className="chat-message__cancelled">Cancelled</span>}
       {message.state === 'failed' && props.onRetry && <FailedNote onRetry={props.onRetry} />}
-      {message.state !== 'streaming' && <Actions message={message} />}
+      {message.state !== 'streaming' && <Actions message={message} extra={props.rerun?.button} />}
     </div>
   )
 }
@@ -204,11 +210,31 @@ export interface ChatMessagesProps {
   onRetry?: (text: string, attached: ChatPart[]) => void
   /** URL of a stored image (history `image` part reference). */
   imageUrl?: (ref: string) => string
+  /** Re-runs the last human message; offered on its settled (not failed) reply while no turn runs. */
+  onRegenerate?: (replyId: string) => void
+  /** Replaces the last human message's text and re-runs it; offered on that message while no turn runs. */
+  onEdit?: (messageId: string, text: string) => void
 }
 
 export default function ChatMessages(props: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [editing, setEditing] = useState<string | null>(null)
+  const targets = props.streaming ? null : rerunTargets(props.messages)
+  const { onRegenerate, onEdit } = props
+  /** Regenerate on the last reply, Edit (or the open editor) on the last human message. */
+  const rerunOf = (message: ChatMessage): Rerun | undefined => {
+    if (onRegenerate && message.id === targets?.replyId && message.state !== 'failed') {
+      return { button: <RegenerateButton onClick={() => onRegenerate(message.id)} /> }
+    }
+    if (!onEdit || message.id !== targets?.humanId) return undefined
+    if (editing !== message.id) return { button: <EditButton onClick={() => setEditing(message.id)} /> }
+    const attached = message.parts.some((p) => p.type === 'image' || p.type === 'file')
+    return {
+      editor: <EditBox initial={messageText(message)} allowEmpty={attached} onCancel={() => setEditing(null)}
+        onSave={(text) => { setEditing(null); onEdit(message.id, text) }} />,
+    }
+  }
 
   const nearBottom = (): boolean => {
     const el = scrollRef.current
@@ -243,7 +269,7 @@ export default function ChatMessages(props: ChatMessagesProps) {
             // Only the newest message: retrying an old failure in the middle of the thread would be out of context.
             const again = props.onRetry && !props.streaming && message === props.messages[last] ? retryPayload(retrySource(props.messages, last)) : null
             const retry = props.onRetry
-            return <MessageRow key={message.id} message={message} segments={segments} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} />
+            return <MessageRow key={message.id} message={message} segments={segments} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} rerun={rerunOf(message)} />
           })
         )}
       </div>

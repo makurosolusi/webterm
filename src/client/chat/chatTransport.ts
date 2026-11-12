@@ -12,6 +12,7 @@ export const CHAT_PATH = '/api/central'
 export const CHAT_EVENT_TYPES = [
   'message.created', 'part.delta', 'part.completed', 'tool.requested', 'tool.completed',
   'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done', 'notice',
+  'message.superseded',
 ] as const
 
 /** Typed API failure. `code` is the server's stable error code; the message is not contract. */
@@ -44,6 +45,7 @@ export function chatErrorMessage(error: unknown): string {
     if (error.code === 'runtime_unavailable') return RUNTIME_UNAVAILABLE_MESSAGE
     if (error.code === 'turn_not_active') return 'This turn already finished.'
     if (error.code === 'conversation_not_found') return 'This conversation no longer exists.'
+    if (error.code === 'not_last_message' || error.code === 'message_not_found') return 'Only your last message can be regenerated or edited.'
     if (error.code === 'http_404') return 'Central chat is not enabled on this server.'
     if (error.code === 'central_chat_internal') return 'The server could not answer. Try again.'
     if (error.status >= 500) return 'The server could not answer. Try again.'

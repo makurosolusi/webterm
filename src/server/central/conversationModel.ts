@@ -5,7 +5,7 @@
  */
 export const MESSAGE_ROLES = ['human', 'assistant', 'tool', 'system'] as const
 export type MessageRole = (typeof MESSAGE_ROLES)[number]
-export const MESSAGE_STATES = ['streaming', 'complete', 'failed', 'cancelled', 'stale'] as const
+export const MESSAGE_STATES = ['streaming', 'complete', 'failed', 'cancelled', 'stale', 'superseded'] as const
 export type MessageState = (typeof MESSAGE_STATES)[number]
 export const TURN_STATUSES = ['queued', 'running', 'awaiting_approval', 'succeeded', 'failed', 'cancelled'] as const
 export type TurnStatus = (typeof TURN_STATUSES)[number]
@@ -16,6 +16,7 @@ export type RiskClass = (typeof RISK_CLASSES)[number]
 export const CENTRAL_EVENT_TYPES = [
   'message.created', 'part.delta', 'part.completed', 'tool.requested', 'tool.completed',
   'approval.requested', 'approval.updated', 'entity.updated', 'turn.status', 'error', 'done', 'notice',
+  'message.superseded',
 ] as const
 export type CentralEventType = (typeof CENTRAL_EVENT_TYPES)[number]
 

@@ -6,7 +6,7 @@
 import type { RequestOptions } from '../inboxTypes'
 
 export type ChatRole = 'human' | 'assistant' | 'tool' | 'system'
-export type ChatMessageState = 'streaming' | 'complete' | 'failed' | 'cancelled' | 'stale'
+export type ChatMessageState = 'streaming' | 'complete' | 'failed' | 'cancelled' | 'stale' | 'superseded'
 export type ChatTurnStatus = 'queued' | 'running' | 'awaiting_approval' | 'succeeded' | 'failed' | 'cancelled'
 export type ChatToolState =
   | 'requested' | 'running' | 'awaiting_approval' | 'succeeded' | 'failed' | 'denied' | 'cancelled'
@@ -98,6 +98,14 @@ export interface SendMessageResult {
   status: ChatTurnStatus
 }
 
+/** Regenerate / Edit of the last human message: `messageId` is that message (or its reply, Regenerate). */
+export interface RerunInput {
+  clientMessageId: string
+  messageId: string
+  /** Edit only. */
+  text?: string
+}
+
 export interface CancelTurnResult {
   status: ChatTurnStatus
 }
@@ -140,6 +148,10 @@ export interface ChatClient {
     opts?: RequestOptions
   ) => Promise<SendMessageResult>
   cancelTurn: (turnId: string, opts?: RequestOptions) => Promise<CancelTurnResult>
+  /** Re-runs the last human message; absent = the thread offers no Regenerate. */
+  regenerate?: (conversationId: string, input: RerunInput, opts?: RequestOptions) => Promise<SendMessageResult>
+  /** Replaces the last human message's text and re-runs it; absent = no Edit. */
+  editMessage?: (conversationId: string, input: RerunInput, opts?: RequestOptions) => Promise<SendMessageResult>
 }
 
 export const GLOBAL_CONVERSATION_ID = 'central:global'

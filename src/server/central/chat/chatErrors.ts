@@ -4,6 +4,7 @@ export type ChatErrorCode =
   | 'central_runtime_off' | 'conversation_busy' | 'conversation_not_found' | 'turn_not_found'
   | 'turn_not_active' | 'project_not_found' | 'invalid_message' | 'invalid_limit'
   | 'invalid_body' | 'invalid_cursor' | 'budget_exhausted' | 'images_unsupported'
+  | 'message_not_found' | 'not_last_message' | 'invalid_attachment'
 
 export class CentralChatError extends Error {
   constructor(readonly code: ChatErrorCode, message: string, readonly status: number) {
@@ -18,7 +19,7 @@ export function chatErrorStatus(code: string): number {
   // Context window is full: the conversation must rotate to a new session, a retry as-is cannot succeed.
   if (code === 'budget_exhausted') return 429
   if (code === 'conversation_busy' || code === 'turn_not_active') return 409
-  if (code === 'conversation_not_found' || code === 'turn_not_found' || code === 'project_not_found') return 404
+  if (code === 'conversation_not_found' || code === 'turn_not_found' || code === 'project_not_found' || code === 'message_not_found') return 404
   if (code === 'invalid_limit' || code === 'invalid_cursor') return 400
   return 400
 }
