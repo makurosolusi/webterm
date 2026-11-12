@@ -16,12 +16,13 @@ import { Field, FieldSaveStatus } from './SettingsFields'
 import { SettingsSelect } from './SettingsControls'
 import { useFieldSave } from './settingsSave'
 import { settingsSaves, useLiveSettings } from './useSettings'
-import { approvalSaveKey, staleSessionsText, useApprovalModeChange, type ApprovalModeChange, type ApprovalTarget } from './approvalMode.state'
+import {
+  approvalSaveKey, MODE_ORDER, nextApprovalLevel, staleSessionsText, useApprovalModeChange, useCycleApprovalMode, type ApprovalModeChange, type ApprovalTarget,
+} from './approvalMode.state'
 import './agentChat/agentChatToolbar.css'
 import './approvalMode.css'
 
-/** Menu and select order: least to most autonomous. */
-export const MODE_ORDER: readonly ApprovalLevel[] = ['always', 'risky', 'never']
+export { MODE_ORDER } from './approvalMode.state'
 const SAME_AS_ALL = 'inherit'
 
 export const APPROVAL_TEXT = {
@@ -99,6 +100,7 @@ export function ApprovalModeChip({ workspaceId }: { workspaceId: string | null }
   const shown = target.scope === 'global' ? s.agentApprovalLevel : effective
   const save = useFieldSave(settingsSaves, approvalSaveKey(target))
   const label = APPROVAL_TEXT.chip(effective, !!workspaceId && s.projectApprovalLevels[workspaceId] !== undefined)
+  useCycleApprovalMode(() => change.choose(target, nextApprovalLevel(shown)))
   return (
     <span className="act-picker approval-chip" data-mode={effective}>
       <DropdownMenu.Root modal={false}>

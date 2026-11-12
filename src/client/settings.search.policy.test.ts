@@ -2,14 +2,14 @@
 // has an index entry and every indexed field is rendered, so search can neither miss a setting nor offer
 // one that "Go to" cannot reveal. Labels written next to a literal id must equal the indexed label.
 // "Rendered" = literal ids in files reachable from SettingsPanel.tsx, plus the registry-driven ids
-// (Central rows, capability cards).
+// (Central rows, capability cards, Keyboard Shortcuts rows).
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { expect, it } from 'vitest'
 import { CAPABILITY_IDS } from '../shared/featureCapabilities'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
 import { toSettingsFieldId } from './settings.link'
-import { SETTINGS_SEARCH_INDEX, searchSettings } from './settings.search'
+import { INDEXED_COMMANDS, SETTINGS_SEARCH_INDEX, searchSettings } from './settings.search'
 import { SETTINGS_SECTIONS } from './settingsSections.registry'
 
 const code = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
@@ -43,6 +43,8 @@ const rendered = new Set([
   ...literal.map((x) => x.id),
   ...CENTRAL_FIELDS.map((f) => `central.${f.id}`),
   ...CARD_IDS.map((id) => `capability.${id}`),
+  // SettingsKeybindings renders one Field per registered command; these are registered without the app mounted.
+  ...INDEXED_COMMANDS.map((c) => `keybinding.${c.id}`),
 ])
 const indexed = SETTINGS_SEARCH_INDEX.flatMap((x) => (x.field ? [x.field as string] : []))
 

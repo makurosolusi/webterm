@@ -17,7 +17,12 @@ import { MODELS_TEXT } from './SettingsModels'
 import { NOTIFY_TEXT } from './osNotify.settings'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
 import { CENTRAL_GROUP_TITLE } from './centralSettingsLabels'
-import type { SettingsFieldId } from './settings.link'
+import { keybindingFieldId, type SettingsFieldId } from './settings.link'
+import { appCommands, FIXED_COMMANDS, SURFACE_COMMANDS, type AppCommandDeps } from './commandRegistry.defaults'
+import { chordLabel, commandCategory, type Command } from './commandRegistry'
+import { CYCLE_APPROVAL_MODE_COMMAND } from './approvalMode.state'
+import { OUTPUT_TOGGLE_COMMAND } from './output/outputCommands'
+import { isMacPlatform } from './terminalKeys.platform'
 import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import type { CentralTab } from './secondarySideBar.store'
 import { TOKEN_TEXT } from './tokenAccessLabels'
@@ -47,6 +52,7 @@ const e = (page: SectionId, field: SettingsFieldId | undefined, label: string, h
 const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   appearance: 'look font theme color colors dark light mode cursor wallpaper background',
   terminal: 'keyboard mouse clipboard scrollback buffer shell zsh bash fish',
+  keyboard: 'keybinding keybindings shortcut shortcuts hotkey key keys chord record rebind conflict',
   canvas: 'grid node cable edge snap folder',
   notifications: 'alert alerts sound chime notify permission mute',
   claude: 'anthropic agent agents permission approval profile model connection login key proxy',
@@ -121,11 +127,19 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
 /** Moved pages: found by name and keywords, opened in the Control side bar. */
 const MOVED: SettingsSearchEntry[] = MOVED_SETTINGS_PAGES.map((m) => ({ page: 'control', ctab: m.ctab, label: m.label, hint: m.description, keywords: kw(m.keywords) }))
 
+const noop = (): void => {}
+const NOOP_DEPS = new Proxy({}, { get: () => noop }) as AppCommandDeps
+/** Commands known without mounting the app: their Keyboard Shortcuts rows are in the search index.
+ *  Commands a surface registers while mounted (tabs, layers…) are found by the page's own filter. */
+export const INDEXED_COMMANDS: readonly Command[] = [...FIXED_COMMANDS, ...SURFACE_COMMANDS, ...appCommands(NOOP_DEPS), OUTPUT_TOGGLE_COMMAND, CYCLE_APPROVAL_MODE_COMMAND]
+const KEYBINDINGS = INDEXED_COMMANDS.map((c) => e('keyboard', keybindingFieldId(c.id), c.label,
+  c.defaultKey ? chordLabel(c.defaultKey, isMacPlatform()) : undefined, `shortcut keybinding ${commandCategory(c).toLowerCase()} ${c.id}`))
+
 const CENTRAL = CENTRAL_FIELDS.map((f) => e('central', `central.${f.id}`, f.label, f.hint, CENTRAL_GROUP_TITLE[f.group].toLowerCase()))
 
 /** Every searchable entry, in sidebar order (a page first, then its settings). */
 export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = (() => {
-  const all = [...ENTRIES_BY_HAND, ...CENTRAL]
+  const all = [...ENTRIES_BY_HAND, ...KEYBINDINGS, ...CENTRAL]
   return [...SETTINGS_SECTIONS.flatMap((s) => [...PAGES.filter((p) => p.page === s.id), ...all.filter((x) => x.page === s.id)]), ...MOVED]
 })()
 

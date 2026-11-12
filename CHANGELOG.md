@@ -24,6 +24,8 @@ Operator notes:
 - Ledger schema v31 adds a nullable `workspace_id` column to `policy_grant`; existing rules keep applying to every workspace, nothing to backfill.
 
 ### Added
+- Settings › Keyboard Shortcuts (in General): every shortcut with where it comes from (Default, Custom or Built-in) and a search box. Click a shortcut and press the new keys to change it (Escape cancels). A key that can't be used says why right there, and a key already taken names the other command with a Replace button. Each row has Reset, and Reset all asks first. Changes show Saving… / Saved like other settings, and terminals and editors follow the new keys straight away.
+- Command "Central: Cycle Permission Mode (Ask, Auto, Danger)", run from ⌘K or a shortcut you set in Settings › Keyboard Shortcuts. It has no default shortcut because ⌘⇧M / Ctrl+Shift+M belongs to the browser. Switching to Danger still asks for confirmation first.
 - Permission modes Ask, Auto and Danger for Central and every Claude agent, set globally with an override per project. Danger works like `--dangerously-skip-permissions` inside that project, but your Deny rules, spend limits and secret access still apply. Deny rules now block in every mode. Switching to Danger needs a one-time confirmation. Change it in Settings › Claude › Permissions (all projects, plus a "This project" row) or from the mode chip in the Central chat header, which always shows the mode that applies to the open project. Running Agent Chats switch at once; terminal sessions keep their mode until restarted, and both places say how many do. Every mode change, and each tool call's command or file path with its mode and outcome, is recorded in the Timeline (secrets are redacted).
 - Activity has a Permissions filter that shows approvals, auto-allowed and blocked actions, rule decisions, mode changes, Central guard verdicts and auto-review results in plain words. Actions an agent ran without asking (Danger) are shown in a warning color, and tool lines show the command or file when the agent reports it.
 - Central now keeps a list of the delegations it owns that are stuck or failed, acts on them, and tells you when it cannot fix one.
@@ -279,6 +281,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- On Linux and Windows, shortcuts that are written with Ctrl (such as Ctrl+Shift+` for New Terminal) now work. Before, they never fired there, Monaco editors read them as the Windows key, and a conflict between Ctrl+… and the same key recorded on the keyboard went unnoticed.
+- The View › Output menu now shows your current Output shortcut instead of always showing ⇧⌘U / Ctrl+Shift+U. The Clean view hint reads its key from the same list.
 - Canvas background: a gradient preset showed as selected after its angle was changed.
 - Central and other senders now confirm a Claude agent actually started a prompt instead of leaving it unsent in the input box.
 - Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.

@@ -38,6 +38,9 @@ export function resetKeybinding(commandId: string): void {
   save(rest)
 }
 
+/** Every command back to its default keybinding. */
+export const resetAllKeybindings = (): void => save({})
+
 /** Point the store at a settings value and a writer (App does this; tests may pass a stub). */
 export function connectKeybindings(value: KeybindingOverrides, write: ((next: Record<string, string | null>) => void) | null): void {
   current = value
