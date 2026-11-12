@@ -36,17 +36,28 @@ describe('Secrets (Settings › Rules & secrets)', () => {
     expect(document.body.textContent).not.toMatch(/secret\.run|secret:<|scope|capability/)
   })
 
-  it('"Allow agents to use this" makes the rule right there, says so, and tells the rule list', async () => {
+  it('"Allow for agents in <workspace>" makes a forever rule for that workspace only, says so, and tells the rule list', async () => {
     const { writes } = server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
     let changed = 0
     const on = (): void => { changed += 1 }
     window.addEventListener(RULES_CHANGED_EVENT, on)
-    render(<SecretsPanel />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Allow agents to use this' }))
-    expect((await screen.findAllByText('Agents may now use NPM_TOKEN. Revoke it under Rules.')).length).toBeGreaterThan(0)
+    render(<SecretsPanel workspace={{ id: 'w1', name: 'Shop' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Allow for agents in Shop' }))
+    expect((await screen.findAllByText('NPM_TOKEN: allowed for agents in Shop. Revoke it under Rules.')).length).toBeGreaterThan(0)
     window.removeEventListener(RULES_CHANGED_EVENT, on)
-    expect(writes).toEqual([{ method: 'POST', url: '/api/policy/grants', body: { subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', effect: 'allow' } }])
+    // No expiresAt = forever; workspaceId = only the agents on that board.
+    expect(writes).toEqual([{ method: 'POST', url: '/api/policy/grants', body: { subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', workspaceId: 'w1', effect: 'allow' } }])
     expect(changed).toBe(1)
+  })
+
+  it('locks Allow with the reason when no workspace is open, and writes nothing', async () => {
+    const { writes } = server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
+    render(<SecretsPanel />)
+    const button = await screen.findByRole('button', { name: 'Allow agents to use this' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByText('Open a workspace first: the rule is for the agents in it.')).toBeTruthy()
+    fireEvent.click(button)
+    expect(writes).toEqual([])
   })
 
   it('lists names with last use and the usage log, never a value', async () => {

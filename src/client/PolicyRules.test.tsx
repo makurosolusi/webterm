@@ -76,6 +76,17 @@ describe('Policy rules (Settings › Rules & secrets)', () => {
     await waitFor(() => expect(within(screen.getByRole('radiogroup', { name: /Effect for Any agent → Close a node/ })).getByRole('radio', { name: 'Deny' }).getAttribute('aria-checked')).toBe('true'))
   })
 
+  it('names the workspace a rule is limited to, and keeps that limit when the effect changes', async () => {
+    const { writes } = server([grant({ id: 'g5', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', workspaceId: 'w1' }),
+      grant({ id: 'g6', capability: 'secret.run', scope: 'secret:GH:*', workspaceId: 'gone' })])
+    render(<PolicyRules workspaceNames={new Map([['w1', 'Shop']])} />)
+    const group = await screen.findByRole('radiogroup', { name: /Effect for Any agent in Shop → Use a secret \(NPM_TOKEN, any command\)/ })
+    expect(document.querySelector('li[data-grant="g6"]')?.textContent).toContain('Any agent in workspace gone →')
+    fireEvent.click(within(group).getByRole('radio', { name: 'Deny' }))
+    await waitFor(() => expect(writes).toHaveLength(2))
+    expect(writes[0]?.body).toEqual({ subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', effect: 'deny', workspaceId: 'w1' })
+  })
+
   it('revokes a rule', async () => {
     const { writes } = server([grant({}), grant({ id: 'g9', capability: 'node.close' })])
     render(<PolicyRules />)

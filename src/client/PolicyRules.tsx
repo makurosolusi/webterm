@@ -28,18 +28,23 @@ export const POLICY_TEXT = {
 
 const EFFECTS = [{ value: 'allow', label: 'Allow' }, { value: 'ask', label: 'Ask' }, { value: 'deny', label: 'Deny' }] as const
 
-export const ruleText = (g: Pick<PolicyGrant, 'subject' | 'capability' | 'scope'>): string => `${whoText(g.subject)} → ${whatText(g.capability)} (${whereText(g.scope)})`
+/** Workspace id -> name, for "in <workspace>" on a workspace-limited rule. */
+export type WorkspaceNames = ReadonlyMap<string, string>
+
+export const ruleText = (g: Pick<PolicyGrant, 'subject' | 'capability' | 'scope' | 'workspaceId'>, names?: WorkspaceNames): string =>
+  `${whoText(g.subject)}${g.workspaceId ? ` in ${names?.get(g.workspaceId) ?? `workspace ${g.workspaceId}`}` : ''} → ${whatText(g.capability)} (${whereText(g.scope)})`
 const why = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
-function RuleRow({ g, onChangeEffect, onRevoke }: { g: PolicyGrant; onChangeEffect(effect: PolicyGrant['effect']): void; onRevoke(): Promise<void> }): React.JSX.Element {
-  const revoke = useAction(onRevoke, { label: `${POLICY_TEXT.revoke}: ${ruleText(g)}`, success: () => POLICY_TEXT.revoked })
+function RuleRow({ g, names, onChangeEffect, onRevoke }: { g: PolicyGrant; names?: WorkspaceNames; onChangeEffect(effect: PolicyGrant['effect']): void; onRevoke(): Promise<void> }): React.JSX.Element {
+  const text = ruleText(g, names)
+  const revoke = useAction(onRevoke, { label: `${POLICY_TEXT.revoke}: ${text}`, success: () => POLICY_TEXT.revoked })
   return (
     <li data-grant={g.id} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <span className="flex-1" title={rawRuleText(g)}>{ruleText(g)}
+        <span className="flex-1" title={rawRuleText(g)}>{text}
           <span className="opacity-70"> · {g.expiresAt === null ? POLICY_TEXT.permanent : POLICY_TEXT.expires(g.expiresAt)}</span>
         </span>
-        <Segmented label={POLICY_TEXT.rowEffect(ruleText(g))} value={g.effect} options={EFFECTS} onChange={(v) => onChangeEffect(v as PolicyGrant['effect'])} />
+        <Segmented label={POLICY_TEXT.rowEffect(text)} value={g.effect} options={EFFECTS} onChange={(v) => onChangeEffect(v as PolicyGrant['effect'])} />
         <ActionButton size="sm" variant="secondary" action={revoke} busyLabel={POLICY_TEXT.revoking}>{POLICY_TEXT.revoke}</ActionButton>
       </div>
       <ActionResult action={revoke} />
@@ -47,7 +52,7 @@ function RuleRow({ g, onChangeEffect, onRevoke }: { g: PolicyGrant; onChangeEffe
   )
 }
 
-export function PolicyRules(): React.JSX.Element {
+export function PolicyRules({ workspaceNames }: { workspaceNames?: WorkspaceNames } = {}): React.JSX.Element {
   const [grants, setGrants] = useState<PolicyGrant[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -71,6 +76,7 @@ export function PolicyRules(): React.JSX.Element {
     try {
       await policyRequest('POST', POLICY_GRANTS_PATH, {
         subject: g.subject, capability: g.capability, scope: g.scope, effect, ...(g.expiresAt === null ? {} : { expiresAt: g.expiresAt }),
+        ...(g.workspaceId ? { workspaceId: g.workspaceId } : {}),
       })
       await policyRequest('DELETE', `${POLICY_GRANTS_PATH}/${encodeURIComponent(g.id)}`)
     } catch (err) { setError(POLICY_TEXT.failed(POLICY_TEXT.change, why(err))) }
@@ -93,7 +99,7 @@ export function PolicyRules(): React.JSX.Element {
       {grants?.length === 0 ? <p className="text-xs opacity-70">{POLICY_TEXT.empty}</p> : null}
       {grants && grants.length > 0 ? (
         <ul className="mt-2 flex flex-col gap-1 text-xs">
-          {grants.map((g) => <RuleRow key={g.id} g={g} onChangeEffect={(e) => { void changeEffect(g, e) }} onRevoke={() => revoke(g.id)} />)}
+          {grants.map((g) => <RuleRow key={g.id} g={g} names={workspaceNames} onChangeEffect={(e) => { void changeEffect(g, e) }} onRevoke={() => revoke(g.id)} />)}
         </ul>
       ) : null}
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}

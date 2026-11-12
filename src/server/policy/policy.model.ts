@@ -30,6 +30,8 @@ export interface Grant {
   capability: string
   /** Resource pattern, e.g. `node:b1`, `workspace:w1*`, `*`. */
   scope: string
+  /** Workspace the rule is limited to (agents on that board only); null/absent = every workspace. */
+  workspaceId?: string | null
   effect: Effect
   /** Epoch ms; null = permanent. */
   expiresAt: number | null
@@ -80,12 +82,15 @@ export interface DecideQuery {
   capability: string
   /** Resource acted on; `*`-only rules match when absent. */
   resource?: string
+  /** Workspace of the caller; a workspace-limited rule matches only when this equals its `workspaceId`. */
+  workspaceId?: string
   now: number
 }
 
 /** True when `g` is live at `now` and matches the query. */
 export function grantMatches(g: Grant, q: DecideQuery): boolean {
   if (g.expiresAt !== null && q.now >= g.expiresAt) return false
+  if (g.workspaceId != null && g.workspaceId !== q.workspaceId) return false
   return wildcardMatch(g.subject, q.principal)
     && wildcardMatch(g.capability, q.capability)
     && (g.scope === '*' || (q.resource !== undefined && wildcardMatch(g.scope, q.resource)))

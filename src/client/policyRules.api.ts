@@ -9,9 +9,11 @@ export const RECENT_ASKS_PATH = '/api/approvals/permission?recent=1'
 /** Mirror of the server `Grant` (src/server/policy/policy.model.ts). */
 export interface PolicyGrant {
   id: string; subject: string; capability: string; scope: string; effect: 'allow' | 'ask' | 'deny'
+  /** Workspace the rule is limited to; null/absent = every workspace. */
+  workspaceId?: string | null
   expiresAt: number | null; origin: string; createdBy: string; createdAt: number
 }
-export type NewRule = Pick<PolicyGrant, 'subject' | 'capability' | 'scope' | 'effect'> & { expiresAt?: number }
+export type NewRule = Pick<PolicyGrant, 'subject' | 'capability' | 'scope' | 'effect' | 'workspaceId'> & { expiresAt?: number }
 
 /** Mirror of the server `RecentPermission`. */
 export interface RecentAsk { tool: string; label: string; pattern: string; node: string; createdAt: number }

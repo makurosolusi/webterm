@@ -20,6 +20,7 @@ Operator notes:
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
+- Ledger schema v31 adds a nullable `workspace_id` column to `policy_grant`; existing rules keep applying to every workspace, nothing to backfill.
 
 ### Added
 - First-run setup after sign-in: connect Claude, set up the browser node, Central Agent and the basics; each step can be skipped, closing keeps progress, and Help › Set up webterm… (or `Setup: Open` in ⌘K) reopens it.
@@ -157,6 +158,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- A secret's Allow button in Settings › Rules & secrets now reads "Allow for agents in <workspace>" and allows only the agents in the workspace you are in, still with no end date. The rule shows in the Rules list as "in <workspace>", where you can revoke it. With no workspace open, the button is locked and says why.
 
 - Memory, Automations and the Spending report moved out of Settings into tabs of the Control side bar. They work even when the Central Agent is off. Settings search still finds them and opens the right tab, and old `?settings=memory|automations|spending` links land there too.
 - Control › Memory is one place for everything agents remember. A filter switches between All, Suggested (waiting for your OK), Notes (the shared board) and Central (Central's own memory). Forget now asks before it deletes. `/memory` in Central chat opens this tab.

@@ -63,11 +63,18 @@ function defaultLastUsed(): Map<string, number> {
   return ledger ? lastUsedByName(ledger.db) : new Map()
 }
 
+const nodeIdOf = (principal: Principal): string | null => (principalKind(principal) === 'node' ? principal.slice('node:'.length) : null)
+
+/** The board workspace holding the calling node; undefined for the human or a node not on any board. */
+async function workspaceOf(deps: BrokerDeps, principal: Principal): Promise<Workspace | undefined> {
+  const nodeId = nodeIdOf(principal)
+  return nodeId ? findWorkspaceFor([...(await boardOf(deps))], nodeId) : undefined
+}
+
 /** Working folder for the run: a node stays inside its own folder; the human picks any. */
-async function cwdFor(deps: BrokerDeps, principal: Principal, asked: unknown): Promise<string | Out> {
-  const nodeId = principalKind(principal) === 'node' ? principal.slice('node:'.length) : null
+function cwdFor(ws: Workspace | undefined, principal: Principal, asked: unknown): string | Out {
+  const nodeId = nodeIdOf(principal)
   if (!nodeId) return typeof asked === 'string' && asked !== '' ? resolve(asked) : homedir()
-  const ws = findWorkspaceFor([...(await boardOf(deps))], nodeId)
   const base = ws?.nodes.find((n) => n.id === nodeId)?.cwd ?? ws?.cwd
   if (!base) return result('denied', 'no_cwd', {}, 'this node has no working folder on the canvas')
   const cwd = resolve(base, typeof asked === 'string' ? asked : '.')
@@ -111,8 +118,10 @@ async function runSecret(deps: BrokerDeps, args: Record<string, unknown>, princi
 
   const policy = (deps.policy ?? activePolicy)()
   if (!policy && principal !== 'human-ui') return result('denied', 'policy_unavailable', {}, 'the webterm ledger is off; only the user can turn it on')
+  // Resolved before deciding: a rule limited to one workspace matches only agents on that board.
+  const ws = await workspaceOf(deps, principal)
   for (const name of names) {
-    const d = policy?.decide(principal, 'secret.run', { resource: `${SECRET_SUBJECT_PREFIX}${name}:${line}`, cable: askByDefault(principal) })
+    const d = policy?.decide(principal, 'secret.run', { resource: `${SECRET_SUBJECT_PREFIX}${name}:${line}`, workspaceId: ws?.id, cable: askByDefault(principal) })
     if (d && d.effect !== 'allow') {
       return result('denied', d.effect === 'ask' ? 'approval_required' : 'policy_denied', { name, reason: d.reason, ...(d.ruleId ? { ruleId: d.ruleId } : {}) }, DENY_NEXT)
     }
@@ -125,7 +134,7 @@ async function runSecret(deps: BrokerDeps, args: Record<string, unknown>, princi
     if (value === null) return result('error', 'unknown_secret', { name }, 'secret.list shows the secret names that exist')
     injected[name] = value
   }
-  const cwd = await cwdFor(deps, principal, args.cwd)
+  const cwd = cwdFor(ws, principal, args.cwd)
   if (typeof cwd !== 'string') return cwd
 
   // The child gets the server env minus every server and broker secret, plus exactly the granted ones.
@@ -142,7 +151,7 @@ async function runSecret(deps: BrokerDeps, args: Record<string, unknown>, princi
   const data = { ...out, stdout: maskSecrets(out.stdout, values), stderr: maskSecrets(out.stderr, values) }
   const commandHash = createHash('sha256').update(line).digest('hex')
   const events = (deps.events ?? activeEventLog)()
-  const nodeId = principalKind(principal) === 'node' ? principal.slice('node:'.length) : null
+  const nodeId = nodeIdOf(principal)
   const seqs = names.map((name) => events?.append({
     kind: SECRET_USE_EVENT, source: 'secrets', actor: principal, subject: `${SECRET_SUBJECT_PREFIX}${name}`, nodeId, trust: 'trusted',
     payload: { name, commandHash, exitCode: out.exitCode, timedOut: out.timedOut },

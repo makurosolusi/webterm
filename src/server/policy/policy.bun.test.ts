@@ -130,6 +130,7 @@ test('grants, lineage, tier data and principal tokens survive a restart', () => 
   const db1 = openLedgerDb(path)
   const p1 = createPolicy({ db: db1, now: () => T0 })
   p1.createGrant('human-ui', { subject: 'central', capability: 'node.close', effect: 'deny' })
+  p1.createGrant('human-ui', { subject: 'node:a1', capability: 'secret.run', workspaceId: 'w1', effect: 'allow' })
   p1.registerSpawn('node:a1', 'node:a2')
   p1.store.setTierMinimum('R1', 'act_gated')
   const token = p1.store.issueToken('node:a2')
@@ -139,6 +140,8 @@ test('grants, lineage, tier data and principal tokens survive a restart', () => 
   const db2 = openLedgerDb(path)
   const p2 = createPolicy({ db: db2, now: () => T0 + 5000 })
   expect(p2.decide('central', 'node.close').effect).toBe('deny')
+  expect(p2.decide('node:a1', 'secret.run', { workspaceId: 'w1' }).effect).toBe('allow')
+  expect(p2.decide('node:a1', 'secret.run', { workspaceId: 'w2' }).effect).toBe('deny')
   expect(p2.store.ancestors('node:a2')).toEqual(['node:a1'])
   expect(p2.store.tierMinimum('R1')).toBe('act_gated')
   expect(p2.store.verifyToken(token)).toBe('node:a2')
@@ -178,6 +181,10 @@ test('HTTP: an agent credential cannot create grants (403); the same-origin UI c
   const ok = call('POST', ui, rule)
   expect(ok).toMatchObject({ status: 201, body: { grant: { subject: 'node:a1', origin: 'human-ui', expiresAt: null } } })
   expect(call('POST', ui, { subject: '', capability: '*', effect: 'allow' })).toEqual({ status: 400, body: { error: 'invalid_grant' } })
+  expect(call('POST', ui, { ...rule, workspaceId: 'w1' })).toMatchObject({ status: 201, body: { grant: { workspaceId: 'w1' } } })
+  for (const workspaceId of ['', 'w*', 42, 'x'.repeat(201)]) {
+    expect(call('POST', ui, { ...rule, workspaceId })).toEqual({ status: 400, body: { error: 'invalid_workspace' } })
+  }
   const id = (ok?.body as { grant: { id: string } }).grant.id
   expect((call('GET', ui)?.body as { grants: { id: string }[] }).grants.some((g) => g.id === id)).toBe(true)
   expect(call('DELETE', ui, undefined, `${POLICY_GRANTS_PATH}/${id}`)).toEqual({ status: 200, body: { ok: true } })

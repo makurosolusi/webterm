@@ -45,6 +45,7 @@ import { MOVED_GROUP_LABEL, SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId }
 import { AccountSection } from './AccountSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
 import type { SettingsUndo } from './useSettings'
+import type { WorkspaceName } from './RulesSection'
 import './settings-sections.css'
 import './settings-search.css'
 
@@ -59,6 +60,7 @@ interface SectionCtx {
   onChange: (patch: SettingsPatch) => void
   navigate: (to: CentralLinkTarget) => void
   projectId: string
+  workspaces: readonly WorkspaceName[]
   activeRaw: string
 }
 
@@ -69,7 +71,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   shell: (c) => <ShellSection settings={c.s} onChange={c.onChange} />,
   agent: (c) => <AgentSettings settings={c.s} onChange={c.onChange} />,
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
-  rules: () => <RulesSection />,
+  rules: (c) => <RulesSection workspaceId={c.projectId} workspaces={c.workspaces} />,
   canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
   [CANVAS_BG_SECTION]: (c) => (
     <CanvasBackgroundSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined}
@@ -91,6 +93,8 @@ interface PanelProps {
   onClose: () => void
   /** Workspace aktif: proyek tujuan tautan chat Telegram. */
   projectId?: string
+  /** Every workspace's id and name: Rules & secrets names the workspace a rule is limited to. */
+  workspaces?: readonly WorkspaceName[]
   /** Section shown first (e.g. 'central' from the Central card's "Edit launch profile"). */
   initialSection?: string
   /** Controlled section (the URL's `?settings=`); with it, section changes go to `onSectionChange`. */
@@ -102,6 +106,8 @@ interface PanelProps {
   /** Undo/redo of settings changes (`useSettings().history`): toast + ⌘Z/⇧⌘Z while the panel has focus. */
   history?: SettingsUndo
 }
+
+const NO_WORKSPACES: readonly WorkspaceName[] = []
 
 /** Below this width the sidebar becomes a section dropdown (no room for a 260px column next to the fields). */
 export const NARROW_QUERY = '(max-width: 719px)'
@@ -122,7 +128,7 @@ function useNarrow(): boolean {
 const sectionLabel = (id: SearchGroupId): string => (id === 'control' ? MOVED_GROUP_LABEL : SETTINGS_SECTIONS.find((x) => x.id === id)?.label ?? id)
 
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, field, onSectionChange }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', workspaces = NO_WORKSPACES, history, initialSection = 'terminal', section, field, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [ownRaw, setOwnRaw] = useState<string>(initialSection)
@@ -160,7 +166,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   useEffect(() => (target && !normalized ? revealSettingsField(() => mainRef.current, target) : undefined), [target, active, normalized])
 
   const renderSection = (id: SectionId): React.JSX.Element =>
-    SECTION_BODY[id]({ s, onChange, navigate, projectId, activeRaw })
+    SECTION_BODY[id]({ s, onChange, navigate, projectId, workspaces, activeRaw })
 
   const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
   const activeLabel = activeSection.label
