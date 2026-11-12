@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, ReactNode } from 'react'
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
@@ -12,6 +12,8 @@ export interface VscodeEditorTab {
   /** Defaults to true; pass false for pinned/preview tabs. */
   closable?: boolean
   tooltip?: string
+  /** Replaces the tab button while set (inline rename); the tab keeps its slot in the strip. */
+  editor?: ReactNode
 }
 
 export interface VscodeEditorTabBarProps {
@@ -22,6 +24,10 @@ export interface VscodeEditorTabBarProps {
   onClose?: (id: string) => void
   /** Double-click on a tab (VS Code: pin/keep the preview tab). */
   onDoubleClick?: (id: string) => void
+  /** Right-click, Shift+F10 or the ContextMenu key on a tab. `at` is the menu's viewport anchor. */
+  onContextMenu?: (id: string, at: { x: number; y: number }) => void
+  /** Rendered right after the last tab (VS Code / browser "+"); sticks to the right edge on overflow. */
+  trailing?: ReactNode
   className?: string
   ariaLabel?: string
 }
@@ -41,6 +47,8 @@ export function VscodeEditorTabBar({
   onActivate,
   onClose,
   onDoubleClick,
+  onContextMenu,
+  trailing,
   className,
   ariaLabel = 'Editor tabs',
 }: VscodeEditorTabBarProps) {
@@ -101,7 +109,20 @@ export function VscodeEditorTabBar({
     onClose(tab.id)
   }
 
+  // Keyboard-opened menus (and a `contextmenu` event the ContextMenu key fires at 0,0) anchor
+  // under the tab, like VS Code; a mouse right-click anchors at the pointer.
+  const openMenu = (tabId: string, el: HTMLElement, pointer?: { x: number; y: number }) => {
+    if (!onContextMenu) return
+    const r = el.getBoundingClientRect()
+    onContextMenu(tabId, pointer && (pointer.x !== 0 || pointer.y !== 0) ? pointer : { x: r.left, y: r.bottom })
+  }
+
   const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: VscodeEditorTab) => {
+    if (onContextMenu && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+      event.preventDefault()
+      openMenu(tab.id, event.currentTarget)
+      return
+    }
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault()
@@ -145,10 +166,9 @@ export function VscodeEditorTabBar({
       className={['vscode-editor-tabs', className].filter(Boolean).join(' ')}
       data-slot="vscode-editor-tabs"
       data-overflowing={overflowing ? 'true' : 'false'}
-      role="tablist"
-      aria-label={ariaLabel}
-      aria-orientation="horizontal"
     >
+      {/* `display: contents`: the tablist holds only tabs, `trailing` sits beside it in the same flex row. */}
+      <div className="vscode-editor-tabs__list" role="tablist" aria-label={ariaLabel} aria-orientation="horizontal">
       {tabs.map((tab) => {
         const active = tab.id === activeId
         const focusable = (focusedId ?? activeId) === tab.id
@@ -163,7 +183,7 @@ export function VscodeEditorTabBar({
             data-dirty={tab.dirty ? 'true' : 'false'}
             className="vscode-editor-tab"
           >
-            <IconTooltip label={tab.tooltip ?? tab.label}>
+            {tab.editor ?? <IconTooltip label={tab.tooltip ?? tab.label}>
               <button
                 ref={(element) => {
                   if (element) tabRefs.current.set(tab.id, element)
@@ -180,6 +200,11 @@ export function VscodeEditorTabBar({
                   onActivate(tab.id)
                 }}
                 onDoubleClick={() => onDoubleClick?.(tab.id)}
+                onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
+                  if (!onContextMenu) return
+                  event.preventDefault()
+                  openMenu(tab.id, event.currentTarget, { x: event.clientX, y: event.clientY })
+                }}
                 // Middle button: suppress browser autoscroll on press, close on release (VS Code).
                 onMouseDown={(event) => {
                   if (event.button === 1) event.preventDefault()
@@ -199,8 +224,8 @@ export function VscodeEditorTabBar({
                 ) : null}
                 <span className="vscode-editor-tab__label">{tab.label}</span>
               </button>
-            </IconTooltip>
-            {closeable ? (
+            </IconTooltip>}
+            {tab.editor ? null : closeable ? (
               <IconTooltip label={`Close ${tab.label}`}>
                 <button
                   type="button"
@@ -225,6 +250,8 @@ export function VscodeEditorTabBar({
           </div>
         )
       })}
+      </div>
+      {trailing ? <div className="vscode-editor-tabs__trailing" data-slot="vscode-editor-tabs-trailing">{trailing}</div> : null}
     </div>
   )
 }

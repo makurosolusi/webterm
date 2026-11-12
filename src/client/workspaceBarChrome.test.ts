@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // `sidebarChrome.test.ts`. Yang dijaga di sini adalah kontrak yang paling mudah diam-diam rusak:
 //
 //   1. Title bar 35px memakai `VscodeMenuBar`, editor tabs 35px memakai `VscodeEditorTabBar`.
-//   2. Rename/hapus workspace tetap terjangkau (menu + kebab) dan rename tetap Enter/Escape/blur.
+//   2. Rename/hapus workspace tetap terjangkau (File menu + tab context menu) dan rename tetap Enter/Escape/blur.
 //   3. Status dot tetap milik workspace, bukan penanda tab aktif.
 //   4. CSS tab buatan sendiri yang sudah mati tidak kembali.
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
@@ -72,29 +72,28 @@ describe('rename & hapus workspace tetap terjangkau', () => {
     expect(bar).toContain('window.confirm(')
   })
 
-  it('kebab baris tab membuka permukaan Rename/Delete yang sama', () => {
-    expect(bar).toContain('aria-label="Workspace options"')
+  it('tab context menu membuka permukaan Rename/Delete yang sama; tidak ada kebab', () => {
+    expect(bar).not.toContain('aria-label="Workspace options"')
     expect(bar).toContain("label: 'Rename'")
     expect(bar).toContain("label: 'Delete'")
     expect(bar).toContain('<NodeContextMenu')
+    expect(bar).toMatch(/<VscodeEditorTabBar[\s\S]{0,400}?onContextMenu=/)
   })
 
-  it('rename tetap Enter simpan, Escape batal, blur simpan', () => {
-    const at = bar.indexOf('className="app-titlebar__rename"')
-    const input = bar.slice(at, bar.indexOf('/>', at))
-    expect(input).toContain('aria-label="Workspace name"')
-    expect(input).toContain("if (e.key === 'Enter') commitRename()")
-    expect(input).toContain("if (e.key === 'Escape') setEditingId(null)")
-    expect(input).toContain('onBlur={commitRename}')
-    // Input hidup di command center title bar, bukan di dalam tab yang menggulung.
-    expect(rule(css, '.app-titlebar__rename')).toContain('width: min(320px, 40vw)')
+  it('rename inline di tab: Enter simpan, Escape batal, blur simpan', () => {
+    const rename = src('WorkspaceTabRename.tsx')
+    expect(rename).toContain('aria-label="Workspace name"')
+    expect(rename).toContain("if (e.key === 'Enter') commit()")
+    expect(rename).toContain("if (e.key === 'Escape') close()")
+    expect(rename).toContain('onBlur={commit}')
+    expect(bar).not.toContain('app-titlebar__rename')
+    expect(rule(css, '.app-tab-rename__input')).toContain('height: 22px')
   })
 
-  it('`+` workspace baru adalah saudara strip, bukan anaknya', () => {
-    const tabs = bar.slice(bar.indexOf('<div className="app-tabs">'))
-    const actionAt = tabs.indexOf('aria-label="New workspace"')
-    const stripClose = tabs.indexOf('</VscodeEditorTabBar>')
-    expect(actionAt).toBeGreaterThan(stripClose)
+  it('`+` workspace baru duduk di dalam strip, setelah tab terakhir (trailing)', () => {
+    const strip = bar.slice(bar.indexOf('<VscodeEditorTabBar'), bar.indexOf('{onToggleLayout && activeGroup && ('))
+    expect(strip).toContain('trailing={')
+    expect(strip).toContain('aria-label="New workspace"')
     expect(rule(css, '.app-tabs__action')).toContain('width: 35px')
   })
 })
