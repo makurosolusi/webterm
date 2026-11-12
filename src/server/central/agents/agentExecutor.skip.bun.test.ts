@@ -21,7 +21,7 @@ function setup() {
   const host: AgentHost = {
     runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
     openPty: async (_a, _cwd, nodeId) => { sessions.add(nodeId) }, headlessArgv: () => null,
-    send: async () => undefined, scrollback: async () => [], closePty: async () => undefined, hasSession: (n) => sessions.has(n),
+    send: async () => ({ ok: true as const, started: true as const }), scrollback: async () => [], closePty: async () => undefined, hasSession: (n) => sessions.has(n),
   }
   const ex = createAgentExecutor({ db, guard, host, now })
   const input: SpawnInput = { projectId: 'p1', kind: 'opencode', role: 'worker', title: 'Fix it', reqId: 'r1', owner: 'central:global', requireApproval: true }

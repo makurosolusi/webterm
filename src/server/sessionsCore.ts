@@ -129,6 +129,8 @@ export class SessionsCore {
   isLive(id: string): boolean { return this.map.has(id) }
   getExit(id: string): NodeExit | undefined { return this.registry.getExit(id) }
   pidOf(id: string): number | undefined { return this.map.get(id)?.pty.pid }
+  /** The agent a LIVE session was launched as (undefined = plain shell or no session). */
+  agentIdOf(id: string): string | undefined { return this.map.get(id)?.agentId }
 
   /** Sesi yang masih hidup, urut sesuai waktu spawn. */
   list(): SessionInfo[] {

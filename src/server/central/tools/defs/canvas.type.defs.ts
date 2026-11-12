@@ -4,6 +4,7 @@
 // The typed text is never echoed in the output or the audit row: it may hold anything the user dictated.
 import { AGENT_CHAT_KIND } from '../../../../shared/agentChat.shape'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
+import { submitToNode, type SubmitOptions, type SubmitResult, type SubmitSessions } from '../../../agentSubmit'
 import { MAX_PROMPT_CHARS } from '../../../control/controlTypes'
 import { beginDelegation, settleSend } from '../../work/workDelegation'
 import { createWorkStore } from '../../work/workStore'
@@ -14,13 +15,15 @@ import { liveAgentNodes } from './canvas.act.defs'
 import { KEY_NAMES, keyBytes } from './canvas.type.keys'
 import { isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
-/** The two Sessions calls this tool uses (tests pass a fake). */
-export interface TypeSessions { isLive(id: string): boolean; input(id: string, data: string): void }
+/** The Sessions calls this tool uses (tests pass a fake); submitting goes through `agentSubmit.ts`. */
+export interface TypeSessions extends SubmitSessions { isLive(id: string): boolean }
 export interface CanvasTypeDeps {
   /** Resolved per call so the PTY supervisor only boots when the tool runs. */
   sessions(): TypeSessions | Promise<TypeSessions>
   /** Pause between keys and text; tests pass a fake so they do not wait. */
   sleep?(ms: number): Promise<void>
+  /** Screen renderer for the submit confirmation; tests pass a fake screen. */
+  render?: SubmitOptions['render']
 }
 
 /** Pause after pressed keys before the text: ESC straight followed by `/` reads as Alt+/ in TUIs. */
@@ -71,26 +74,37 @@ export async function liveSession(ctx: ToolCtx, deps: Pick<CanvasTypeDeps, 'sess
   return { ok: false, result: fail('session_not_running', { nodeId, hint: 'Its session is not running. Ask the user to open or restart the node in webterm, then retry.' }) }
 }
 
+/** What Central should do next when a submit did not start. */
+const NOT_SUBMITTED_HINT: Record<Exclude<SubmitResult, { ok: true }>['reason'], string> = {
+  not_ready: 'Check the node with node.inspect (a dialog or a half-typed draft may be open), then retry or tell the user.',
+  not_on_screen: 'Nothing was submitted. Retry once; if it fails again, tell the user.',
+  not_started: 'The text may still be waiting in its input box: check with node.inspect and press keys:["Enter"] or tell the user. Do not retype it.',
+}
+
 /** What to type: keys go first, then the text. */
 export interface TypeCall { node: BoardNode; text?: string; keys: string[]; submit: boolean; taskId?: string }
 
 /** Types into a live node; text submitted to a Claude terminal is recorded as a delegation first. */
-export async function typeInto(ctx: ToolCtx, projectId: string | undefined, sessions: TypeSessions, call: TypeCall, sleep: (ms: number) => Promise<void> = wait): Promise<ToolResult> {
+export async function typeInto(ctx: ToolCtx, projectId: string | undefined, sessions: TypeSessions, call: TypeCall, seams: Pick<CanvasTypeDeps, 'sleep' | 'render'> = {}): Promise<ToolResult> {
+  const sleep = seams.sleep ?? wait
   const { node, text, keys, taskId } = call
   const submitted = text !== undefined && call.submit
   const delegation = submitted && node.kind === 'agent'
     ? beginDelegation(createWorkStore(ctx.db, ctx.now), { projectId: String(projectId), nodeId: node.id, channel: 'terminal', instruction: text, ...(taskId ? { taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}) })
     : null
   if (delegation && !delegation.ok) return fail(delegation.code, delegation.data)
-  const send = async (): Promise<void> => {
+  const send = async (): Promise<SubmitResult | null> => {
     if (keys.length) sessions.input(node.id, keys.map((k) => keyBytes(k) ?? '').join(''))
-    if (text === undefined) return
+    if (text === undefined) return null
     if (keys.length) await sleep(KEY_SETTLE_MS)
-    sessions.input(node.id, submitted ? `${text}\r` : text)
+    if (!submitted) { sessions.input(node.id, text); return null }
+    return submitToNode(sessions, node.id, text, { sleep, ...(seams.render ? { render: seams.render } : {}) })
   }
-  if (delegation) await settleSend(delegation, send, () => null)
-  else await send()
+  const sent = delegation ? await settleSend(delegation, send, (r) => (r && !r.ok ? r.reason : null)) : await send()
   const tracking = delegation ? { taskId: delegation.taskId, assignmentId: delegation.assignmentId } : taskId ? { tracked: false } : {}
+  if (sent && !sent.ok) {
+    return fail(sent.reason, { nodeId: node.id, name: node.name, ...tracking, hint: `${sent.message} ${NOT_SUBMITTED_HINT[sent.reason]}` })
+  }
   return { ok: true, data: { nodeId: node.id, name: node.name, submitted, length: text?.length ?? 0, keys, ...tracking } }
 }
 
@@ -126,7 +140,7 @@ export function createCanvasTypeDefs(deps: CanvasTypeDeps): ToolDef[] {
       return typeInto(ctx, projectId, live.sessions, {
         node, keys: (input.keys as string[] | undefined) ?? [], submit: input.submit !== false,
         ...(typeof input.text === 'string' ? { text: input.text } : {}), ...(typeof input.taskId === 'string' ? { taskId: input.taskId } : {}),
-      }, deps.sleep)
+      }, deps)
     },
   }
   return [type]

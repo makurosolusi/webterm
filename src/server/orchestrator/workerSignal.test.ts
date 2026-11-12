@@ -14,6 +14,7 @@ function harness(git: { dirty?: string; head?: string } = {}) {
   const inner: WorkerSessionPort = {
     open: () => {},
     input: () => {},
+    submit: async () => ({ ok: true as const, started: true as const }),
     statusOf: () => status,
     getTerminal: () => output,
     isLive: () => true,

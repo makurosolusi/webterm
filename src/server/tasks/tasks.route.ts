@@ -8,6 +8,7 @@
 // from the workspace's own files, never taken from the request. POST is human-UI only.
 import type { IncomingMessage } from 'node:http'
 import { isSafeNodeId, type Workspace } from '../../shared/workspace'
+import { submitToNode } from '../agentSubmit'
 import { AGENT_CANNOT_APPROVE, uiOnlyDenial } from '../approvalAuth'
 import type { AppendEventInput } from '../events/eventModel'
 import { isValidNodeToken } from '../hooksTokens'
@@ -63,7 +64,9 @@ export async function tasksRoute(req: IncomingMessage, url: URL, body: () => Pro
     if (waited >= (deps.waitMs ?? TASK_START_WAIT_MS)) return { status: 504, body: { error: 'terminal_not_ready', message: 'The task terminal did not start in time.' } }
     await sleep(POLL_MS)
   }
-  sessions.input(b.node, `${task.run}\r`)
+  // A task terminal is a plain shell the client just created: the helper's one-write shell branch runs the line.
+  const shell = { input: (id: string, d: string) => sessions.input(id, d), statusOf: () => undefined, screenSource: () => undefined, agentIdOf: () => undefined }
+  await submitToNode(shell, b.node, task.run)
   deps.record({
     kind: 'task.run', source: 'tasks', actor: 'human-ui', subject: `node:${b.node}`, nodeId: b.node, workspaceId: ws.id,
     trust: 'trusted', payload: { task: task.name, source: task.source },

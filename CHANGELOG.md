@@ -262,6 +262,7 @@ Operator notes:
 
 ### Fixed
 - Canvas background: a gradient preset showed as selected after its angle was changed.
+- Central and other senders now confirm a Claude agent actually started a prompt instead of leaving it unsent in the input box.
 - Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.
 - "Max workers at once" for Central now applies whenever Central works on its own (not only with Steadier autonomy) and takes effect for the next worker it starts, without a restart.
 - The daily spending limit hint now says what happens at 100%: Central pauses until the next UTC day or until you raise the limit.
