@@ -9,7 +9,8 @@ import { nextSettingsDocument, parseStored, SettingsConflictError } from '../../
 import { ClaudeProviderCard, PROVIDER_TEXT } from '../ClaudeProviderCard'
 import { COMMAND_TEXT } from '../ClaudeProviderCommand'
 import { flushSettingsSaves, useSettings } from '../useSettings'
-import { ClaudeLaunchProfilesCard } from './ClaudeLaunchProfilesCard'
+import { SettingsItemScopeProvider } from '../settingsContext'
+import { ClaudeLaunchProfilesCard, PROFILES_TEXT } from './ClaudeLaunchProfilesCard'
 
 const CMD = 'envman -e claude:malik-opus -- claude' // test-only
 const WORK = { id: 'w', name: 'Work', command: 'claude' } // test-only
@@ -79,5 +80,32 @@ describe('launch profiles written by the setup wizard', () => {
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'envman: claude:malik-opus' })).getByRole('alert').textContent).toMatch(/Claude provider runs/))
     expect(parseStored(server.stored()).claudeLaunchProfiles).toHaveLength(2)
+  })
+
+  it('Reset Setting on the list, refused because the provider runs one: the reason shows inline and the profiles stay', async () => {
+    const server = serve()
+    function Scoped(): React.JSX.Element {
+      const { settings, update, hydrated } = useSettings()
+      return (
+        <>
+          <ClaudeProviderCard />
+          {hydrated ? <SettingsItemScopeProvider category="Claude" settings={settings} onChange={update}><ClaudeLaunchProfilesCard settings={settings} onChange={update} /></SettingsItemScopeProvider> : null}
+        </>
+      )
+    }
+    render(<Scoped />)
+    await screen.findByRole('region', { name: 'Work' })
+    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.command }))
+    fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
+    fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
+    await screen.findByRole('region', { name: 'envman: claude:malik-opus' })
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Claude launch profiles' }))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Reset' }))
+    await act(() => flushSettingsSaves().catch(() => undefined))
+    const field = document.querySelector('[data-field="claudeLaunchProfiles"]') as HTMLElement
+    await waitFor(() => expect(within(field).getByText(/^Could not save:/).textContent)
+      .toBe(`Could not save: ${PROFILES_TEXT.inUse('envman: claude:malik-opus', 'provider')}`))
+    expect(parseStored(server.stored()).claudeLaunchProfiles).toHaveLength(2)
+    expect(await screen.findByRole('region', { name: 'envman: claude:malik-opus' })).toBeTruthy()
   })
 })

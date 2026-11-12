@@ -269,7 +269,9 @@ describe('TelegramCard', () => {
     routes['POST /api/capabilities/telegram'] = { status: 200, body: caps('needs-step') }
     render(<TelegramCard projectId={PROJECT} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Start again' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('The saved token can’t be used. Paste the bot token again.')
+    expect(screen.getByRole('button', { name: 'Starting…' }).getAttribute('aria-busy')).toBe('true')
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('The saved token can’t be used. Paste the bot token again.'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy() // the failure toast offers Retry
     expect(screen.getByLabelText('Bot token')).toBeTruthy()
   })
 })

@@ -51,6 +51,7 @@ describe('SessionHistory panel', () => {
     expect(calls[0]).toContain('cwd=%2Frepo')
     expect(tipOf(screen.getByRole('button', { name: 'Refresh agent history' }))).toBe('Refresh agent history')
     fireEvent.click(screen.getByText('Load more'))
+    expect(screen.getByText('Loading…').closest('button')?.getAttribute('aria-busy')).toBe('true')
     await screen.findByText('Prompt 2')
     expect(calls[1]).toContain('offset=1')
     expect(screen.queryByText('Load more')).toBeNull()

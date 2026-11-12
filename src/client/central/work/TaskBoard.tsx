@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { ActionResult, useAction } from '@/components/ui/action'
 import { isAbortError } from '../../inboxApi'
 import { CapabilityOffer } from '../../CapabilityOffer'
 import { centralErrorMessage, useLoad } from '../centralLoad'
@@ -46,7 +47,6 @@ function rememberProject(id: string): void {
 function AutoDoneSwitch({ client, projectId }: { client: TaskBoardClient; projectId: string }): React.JSX.Element {
   const [value, setValue] = useState(false)
   const [ready, setReady] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     const ac = new AbortController()
@@ -56,24 +56,21 @@ function AutoDoneSwitch({ client, projectId }: { client: TaskBoardClient; projec
     )
     return () => ac.abort()
   }, [client, projectId])
-  const change = async (next: boolean): Promise<void> => {
-    setSaving(true)
-    setError(null)
-    try {
-      await client.setAutoDone(projectId, next)
-      setValue(next)
-    } catch (err) {
-      setError(centralErrorMessage(err, TL.autoDoneFailed))
-    } finally {
-      setSaving(false)
-    }
-  }
+  // Switch is not a button: it shows the busy state itself and the result line sits beside it.
+  const next = useRef(false)
+  const save = useAction(async () => { await client.setAutoDone(projectId, next.current); setValue(next.current) }, {
+    label: TL.autoDone, success: () => 'Saved', failure: (err) => centralErrorMessage(err, TL.autoDoneFailed),
+  })
+  const change = (on: boolean): void => { next.current = on; void save.run() }
   return (
-    <label className="task-board__switch">
-      <Switch aria-label={TL.autoDone} checked={value} disabled={!ready || saving} onCheckedChange={(on) => void change(on)} />
-      {TL.autoDone}
-      {error && <span role="alert" className="task-board__error">{error}</span>}
-    </label>
+    <>
+      <label className="task-board__switch">
+        <Switch aria-label={TL.autoDone} checked={value} disabled={!ready || save.busy} aria-busy={save.busy} onCheckedChange={change} />
+        {TL.autoDone}
+        {error && <span role="alert" className="task-board__error">{error}</span>}
+      </label>
+      <ActionResult action={save} />
+    </>
   )
 }
 

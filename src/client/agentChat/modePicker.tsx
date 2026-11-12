@@ -26,6 +26,8 @@ export function ModePicker({ mode, onChange, disabled }: ModePickerProps) {
     setFailed(undefined)
     try { await onChange(m) } catch (e) { setFailed({ mode: m, error: errorText(e) }) } finally { setPending(undefined) }
   }
+  // Feedback lives in the picker: the spinner (role=status) while pending, then this alert again on a new failure.
+  const retry = (): void => { if (failed) void change(failed.mode) }
   return (
     <div className="acc-mode">
       <Select value={pending ?? mode} disabled={disabled || pending !== undefined}
@@ -39,7 +41,7 @@ export function ModePicker({ mode, onChange, disabled }: ModePickerProps) {
       {failed && (
         <span className="acc-row" role="alert">
           <span className="acc-error">{`Could not switch to ${MODE_LABEL[failed.mode]}: ${failed.error}`}</span>
-          <Button variant="secondary" size="xs" disabled={disabled} onClick={() => void change(failed.mode)}>Retry</Button>
+          <Button variant="secondary" size="xs" disabled={disabled} onClick={retry}>Retry</Button>
         </span>
       )}
     </div>

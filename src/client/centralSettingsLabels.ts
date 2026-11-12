@@ -18,6 +18,8 @@ export const CENTRAL_TEXT = {
   locked: 'Locked by the server environment.',
   loading: 'Loading…',
   retry: 'Retry',
+  fixChain: 'Turn on Central',
+  fixing: 'Turning on…',
   loadFailed: (why: string): string => `Could not load these settings: ${why}`,
   decrease: (label: string): string => `Decrease ${label}`,
   increase: (label: string): string => `Increase ${label}`,

@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchWorkspaces } from './api'
-import { BoardSection, ProposalsSection } from './AgentMemoryBoard'
+import { ActionButton, ActionResult } from '@/components/ui/action'
+import { BoardSection, MEMORY_BUSY, MemoryButton, ProposalsSection, useMemoryAction } from './AgentMemoryBoard'
 
 import {
   ctl, INCOGNITO_PATH, isFacts, itemsOf, MEMORY_CONTROLS_PATH, MEMORY_TEXT, memoryRequest, NODE_PREFIX, PROCEDURAL_PATH, refsOf, setNodeIncognito,
@@ -30,6 +31,9 @@ function MemoryRow({ m, confirmable, act }: { m: MemoryItem; confirmable: boolea
   const confirmPath = m.status === 'claim'
     ? (confirmable ? `${PROCEDURAL_PATH}/${encodeURIComponent(m.id)}/confirm` : null)
     : (m.needsReview ? ctl(m.id, 'verify') : null)
+  // Forget and Save swap the buttons away on click, so their results live on the row.
+  const forget = useMemoryAction(MEMORY_TEXT.forget, () => act(MEMORY_TEXT.forget, ctl(m.id, 'forget')))
+  const save = useMemoryAction(MEMORY_TEXT.edit, async () => { await act(MEMORY_TEXT.edit, ctl(m.id, 'edit'), { text: (draft ?? '').trim() }); setDraft(null) })
   return (
     <li data-memory={m.id} data-kind={m.kind} className="flex flex-wrap items-center gap-2">
       <Badge variant={m.status === 'fact' ? 'secondary' : 'outline'}>
@@ -42,25 +46,26 @@ function MemoryRow({ m, confirmable, act }: { m: MemoryItem; confirmable: boolea
         : <Input aria-label={MEMORY_TEXT.edit} value={draft} maxLength={1200} onChange={(e) => setDraft(e.target.value)} className="min-w-48 flex-1" />}
       {draft === null ? (
         <>
-          {confirmPath ? <Button size="sm" onClick={() => void act(MEMORY_TEXT.confirm, confirmPath)}>{MEMORY_TEXT.confirm}</Button> : null}
+          {confirmPath ? <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, confirmPath)} /> : null}
           {!untrusted ? <Button size="sm" variant="secondary" onClick={() => setDraft(m.text)}>{MEMORY_TEXT.edit}</Button> : null}
-          <Button size="sm" variant="secondary" onClick={() => void act(MEMORY_TEXT.mute, ctl(m.id, 'suppress'), { on: !m.suppressed })}>
-            {m.suppressed ? MEMORY_TEXT.unmute : MEMORY_TEXT.mute}
-          </Button>
+          <MemoryButton variant="secondary" what={m.suppressed ? MEMORY_TEXT.unmute : MEMORY_TEXT.mute} busyLabel={MEMORY_BUSY.mute}
+            run={() => act(MEMORY_TEXT.mute, ctl(m.id, 'suppress'), { on: !m.suppressed })} />
           {asking ? (
             <span role="alertdialog" aria-label={MEMORY_TEXT.forgetAsk} className="flex items-center gap-1">
               <span>{MEMORY_TEXT.forgetAsk}</span>
-              <Button size="sm" variant="destructive" onClick={() => { setAsking(false); void act(MEMORY_TEXT.forget, ctl(m.id, 'forget')) }}>{MEMORY_TEXT.forget}</Button>
+              <ActionButton size="sm" variant="destructive" action={forget} busyLabel={MEMORY_BUSY.forget} onClick={() => setAsking(false)}>{MEMORY_TEXT.forget}</ActionButton>
               <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>{MEMORY_TEXT.cancel}</Button>
             </span>
           ) : <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>{MEMORY_TEXT.forget}</Button>}
         </>
       ) : (
         <>
-          <Button size="sm" disabled={draft.trim() === ''} onClick={() => { void act(MEMORY_TEXT.edit, ctl(m.id, 'edit'), { text: draft.trim() }); setDraft(null) }}>{MEMORY_TEXT.save}</Button>
+          <ActionButton size="sm" disabled={draft.trim() === ''} action={save} busyLabel={MEMORY_BUSY.save}>{MEMORY_TEXT.save}</ActionButton>
           <Button size="sm" variant="secondary" onClick={() => setDraft(null)}>{MEMORY_TEXT.cancel}</Button>
         </>
       )}
+      <ActionResult action={forget} />
+      <ActionResult action={save} />
     </li>
   )
 }
@@ -105,12 +110,10 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
   }, [kind])
   useEffect(load, [load])
 
-  const act = async (what: string, method: string, path: string, body?: unknown): Promise<void> => {
-    setError(null)
-    try {
-      await memoryRequest(method, path, body)
-      load()
-    } catch (err) { setError(MEMORY_TEXT.failed(what, err instanceof Error ? err.message : String(err))) }
+  // Throws on failure: each button's action shows busy, then the result or the failure with Retry.
+  const act = async (_what: string, method: string, path: string, body?: unknown): Promise<void> => {
+    await memoryRequest(method, path, body)
+    load()
   }
   const add = async (): Promise<void> => { await act(MEMORY_TEXT.add, 'POST', PROCEDURAL_PATH, { text: text.trim() }); setText('') }
   const leave = (nodeId: string): void => {
@@ -129,7 +132,7 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
           <div className="flex items-center gap-2">
             <Input aria-label={MEMORY_TEXT.add} placeholder={MEMORY_TEXT.placeholder} value={text} maxLength={300}
               onChange={(e) => setText(e.target.value)} className="min-w-48 flex-1" />
-            <Button size="sm" onClick={() => void add()} disabled={text.trim() === ''}>{MEMORY_TEXT.add}</Button>
+            <MemoryButton what={MEMORY_TEXT.add} busyLabel={MEMORY_BUSY.add} run={add} disabled={text.trim() === ''} />
           </div>
           <div role="group" className="flex gap-1">
             {(Object.keys(MEMORY_TEXT.kinds) as MemoryKindFilter[]).map((k) => (

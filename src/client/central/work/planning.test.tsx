@@ -101,7 +101,9 @@ describe('goals strip', () => {
     const button = await screen.findByRole('button', { name: TL.actionOn(TL.goalActivate, 'Ship login') })
     client.listGoals.mockClear()
     fireEvent.click(button)
-    expect((await screen.findByRole('alert')).textContent).toBe(TL.goalErrors.stale_version)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.textContent).toBe('Activating…')
+    expect(await screen.findByText(TL.goalErrors.stale_version, { selector: '.task-board__error' })).toBeTruthy()
     await waitFor(() => expect(client.listGoals).toHaveBeenCalled())
   })
 

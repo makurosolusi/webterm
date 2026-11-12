@@ -51,6 +51,7 @@ describe('Bake-off dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '3' }))
     expect(screen.getByRole('button', { name: '3' }).getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(screen.getByText('Start bake-off'))
+    expect(screen.getByRole('button', { name: 'Starting…' }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(calls.find((c) => c.method === 'POST')).toBeTruthy())
     expect(calls.find((c) => c.method === 'POST')).toEqual({ url: '/api/bakeoff', method: 'POST', body: { repo: '/r', prompt: 'Add dark mode', count: 3, workspaceId: 'ws' } })
   })
@@ -72,8 +73,21 @@ describe('Bake-off dialog', () => {
     fireEvent.click(screen.getByText('Clean up worktrees…'))
     expect(await screen.findByText(/Remove 1 worktree and their branches/)).toBeTruthy()
     expect(calls.filter((c) => c.url.endsWith('/cleanup')).map((c) => c.body)).toEqual([{}])
-    fireEvent.click(screen.getByText('Remove'))
+    const remove = screen.getByRole('button', { name: 'Remove' }) as HTMLButtonElement
+    await waitFor(() => expect(remove.disabled).toBe(false)) // off while the check is still busy
+    fireEvent.click(remove)
     await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/cleanup')).map((c) => c.body)).toEqual([{}, { confirm: true }]))
+  })
+})
+
+describe('Bake-off failures', () => {
+  it('a refused merge says why and offers Retry', async () => {
+    const state = bakeoff({ status: 'picked', winnerId: 'b1-1' })
+    stubApi((c) => (c.url.endsWith('/merge') ? { status: 409, body: { error: 'merge conflict in a.ts' } } : { body: { bakeoffs: [state] } }))
+    render(<BakeoffDialog repo="/r" onClose={() => {}} />)
+    fireEvent.click(await screen.findByText('Merge winner into main'))
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('merge conflict in a.ts'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 })
 

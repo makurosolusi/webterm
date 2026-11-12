@@ -3,6 +3,7 @@
 // edits stay on the desktop: a permanent rule is not something to grant from a lock screen (K4).
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction, type Action as UiAction } from '@/components/ui/action'
 import { Textarea } from '@/components/ui/textarea'
 import { INBOX_ITEMS_PATH, impactText, snoozeUntil, type UnifiedItem } from '../chat/needsYouApi'
 import { inboxErrorMessage } from '../inboxApi'
@@ -21,60 +22,56 @@ type Action = { type: 'approve' } | { type: 'deny' } | { type: 'reply'; text: st
 export const actOn = (id: string, action: Action) =>
   request<Record<string, unknown>>(`${INBOX_ITEMS_PATH}/act`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }) })
 
+/** One inbox answer: busy while it posts, then the list reloads (the item leaves), or the failure with Retry. */
+function useInboxAct(id: string, label: string, action: () => Action, done: () => void): UiAction<void> {
+  return useAction(async () => { await actOn(id, action()); done() }, { label, failure: (err) => `${label} failed: ${inboxErrorMessage(err)}` })
+}
+
+function InboxCard({ item, done }: { item: UnifiedItem; done: () => void }): React.JSX.Element {
+  const [reply, setReply] = useState<string | null>(null)
+  const approve = useInboxAct(item.id, 'Approve', () => ({ type: 'approve' }), done)
+  const deny = useInboxAct(item.id, 'Deny', () => ({ type: 'deny' }), done)
+  const snooze = useInboxAct(item.id, 'Snooze', () => ({ type: 'snooze', until: snoozeUntil('1h', Date.now()) }), done)
+  const send = useInboxAct(item.id, 'Send reply', () => ({ type: 'reply', text: reply ?? '' }), () => { setReply(null); done() })
+  const busy = approve.busy || deny.busy || snooze.busy || send.busy
+  const can = (a: string) => item.actions.includes(a as never)
+  return (
+    <article className={`m-card m-kind-${item.kind}`} aria-busy={busy}>
+      <div className="m-card-kind">{KIND_LABEL[item.kind]}{item.count > 1 ? ` · ×${item.count}` : ''}</div>
+      <h3 className="m-card-title">{item.title}</h3>
+      {item.impact && <p className="m-card-meta">{impactText(item.impact)}</p>}
+      {item.body && item.kind !== 'gate' && <p className="m-card-body">{item.body}</p>}
+      {reply !== null ? (
+        <div className="m-reply">
+          <Textarea aria-label="Reply" value={reply} onChange={(e) => setReply(e.target.value)} rows={3} />
+          <div className="m-actions">
+            <ActionButton type="button" className="m-btn m-primary" disabled={busy || !reply.trim()} action={send} busyLabel="Sending…">Send reply</ActionButton>
+            <Button type="button" className="m-btn" onClick={() => setReply(null)}>Cancel</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="m-actions">
+          {can('approve') && <ActionButton type="button" className="m-btn m-primary" disabled={busy} action={approve} busyLabel="Approving…">{item.kind === 'gate' ? 'Approve once' : 'Approve'}</ActionButton>}
+          {can('deny') && <ActionButton type="button" className="m-btn m-danger" disabled={busy} action={deny} busyLabel="Denying…">Deny</ActionButton>}
+          {can('reply') && <Button type="button" className="m-btn" disabled={busy} onClick={() => setReply('')}>Reply</Button>}
+          {can('snooze') && <ActionButton type="button" className="m-btn" disabled={busy} action={snooze} busyLabel="Snoozing…">Snooze 1h</ActionButton>}
+        </div>
+      )}
+      {[approve, deny, snooze, send].map((a) => <ActionResult key={a.label} action={a} />)}
+    </article>
+  )
+}
+
 export function MobileInbox(props: { pollMs?: number }): React.JSX.Element {
   const { data, error, reload } = usePoll(() => request<{ items?: UnifiedItem[] }>(INBOX_ITEMS_PATH), props.pollMs ?? 4000)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [reply, setReply] = useState<{ id: string; text: string } | null>(null)
-  const [actError, setActError] = useState<string | null>(null)
   const items = (data?.items ?? []).filter(shownHere)
   const hidden = (data?.items?.length ?? 0) - items.length
-
-  const run = async (id: string, action: Action) => {
-    setBusy(id)
-    setActError(null)
-    try {
-      await actOn(id, action)
-      setReply(null)
-      reload()
-    } catch (err) {
-      setActError(inboxErrorMessage(err))
-    } finally {
-      setBusy(null)
-    }
-  }
 
   return (
     <section className="m-screen" aria-label="Inbox">
       {error && <p className="m-error" role="alert">{error}</p>}
-      {actError && <p className="m-error" role="alert">{actError}</p>}
       {data && items.length === 0 && <p className="m-empty">Nothing needs you right now.</p>}
-      {items.map((item) => {
-        const can = (a: string) => item.actions.includes(a as never)
-        return (
-          <article key={item.id} className={`m-card m-kind-${item.kind}`}>
-            <div className="m-card-kind">{KIND_LABEL[item.kind]}{item.count > 1 ? ` · ×${item.count}` : ''}</div>
-            <h3 className="m-card-title">{item.title}</h3>
-            {item.impact && <p className="m-card-meta">{impactText(item.impact)}</p>}
-            {item.body && item.kind !== 'gate' && <p className="m-card-body">{item.body}</p>}
-            {reply?.id === item.id ? (
-              <div className="m-reply">
-                <Textarea aria-label="Reply" value={reply.text} onChange={(e) => setReply({ id: item.id, text: e.target.value })} rows={3} />
-                <div className="m-actions">
-                  <Button type="button" className="m-btn m-primary" disabled={busy !== null || !reply.text.trim()} onClick={() => void run(item.id, { type: 'reply', text: reply.text })}>Send reply</Button>
-                  <Button type="button" className="m-btn" onClick={() => setReply(null)}>Cancel</Button>
-                </div>
-              </div>
-            ) : (
-              <div className="m-actions">
-                {can('approve') && <Button type="button" className="m-btn m-primary" disabled={busy !== null} onClick={() => void run(item.id, { type: 'approve' })}>{item.kind === 'gate' ? 'Approve once' : 'Approve'}</Button>}
-                {can('deny') && <Button type="button" className="m-btn m-danger" disabled={busy !== null} onClick={() => void run(item.id, { type: 'deny' })}>Deny</Button>}
-                {can('reply') && <Button type="button" className="m-btn" disabled={busy !== null} onClick={() => setReply({ id: item.id, text: '' })}>Reply</Button>}
-                {can('snooze') && <Button type="button" className="m-btn" disabled={busy !== null} onClick={() => void run(item.id, { type: 'snooze', until: snoozeUntil('1h', Date.now()) })}>Snooze 1h</Button>}
-              </div>
-            )}
-          </article>
-        )
-      })}
+      {items.map((item) => <InboxCard key={item.id} item={item} done={reload} />)}
       {hidden > 0 && <p className="m-empty">{hidden} task review{hidden === 1 ? '' : 's'} need the desktop Inbox.</p>}
     </section>
   )

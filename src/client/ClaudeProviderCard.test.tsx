@@ -188,6 +188,9 @@ describe('ClaudeProviderCard', () => {
       expect(document.querySelector('[data-slot="vscode-notification"][data-severity="error"]')).toBeTruthy()
       expect(screen.queryByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).toBeNull()
       expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
+      // The toast's Retry saves the same form again; this time it goes through.
+      fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.retry }))
+      expect(await screen.findByText(new RegExp(`^${PROVIDER_TEXT.saved} at `))).toBeTruthy()
     })
   })
 })

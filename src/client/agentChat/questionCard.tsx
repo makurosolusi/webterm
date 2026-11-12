@@ -120,7 +120,7 @@ export function QuestionCard({ request, outcome, answer }: PermissionCardProps) 
         <>
           <div className="acc-row">
             {pending && <Spinner />}
-            <Button size="xs" disabled={!complete || pending} onClick={() => void submit()}>Submit</Button>
+            <Button size="xs" disabled={!complete || pending} aria-busy={pending} onClick={submit}>Submit</Button>
           </div>
           {error && <AnswerError error={error} retry={retry} disabled={pending} />}
         </>

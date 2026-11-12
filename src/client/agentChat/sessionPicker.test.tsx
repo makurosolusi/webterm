@@ -65,6 +65,7 @@ describe('SessionPicker', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Refactor footer/ }))
     expect(onResume).toHaveBeenCalledWith('s2')
     expect(screen.getByRole('button', { name: /Refactor footer/ }).textContent).toContain('Resuming…')
+    expect(screen.getByRole('button', { name: /Refactor footer/ }).getAttribute('aria-busy')).toBe('true')
     await act(async () => reject(new Error('session locked')))
     expect(screen.getByRole('alert').textContent).toBe('Could not resume the conversation: session locked')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Refactor footer/ })) })

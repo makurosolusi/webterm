@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { ActionButton, ActionResult, useAction, type Action } from '@/components/ui/action'
 import type { FindingView } from '../../../shared/centralHealth'
 import { relativeTime } from '../../SessionHistory.model'
 import { centralErrorMessage } from '../centralLoad'
@@ -22,7 +23,7 @@ function CopyLocation({ loc }: { loc: string }) {
   )
 }
 
-function DismissForm({ title, busy, onCancel, onConfirm }: { title: string; busy: boolean; onCancel: () => void; onConfirm: (reason: string) => void }) {
+function DismissForm({ title, busy, onCancel, onReason, action }: { title: string; busy: boolean; onCancel: () => void; onReason: (reason: string) => void; action: Action<unknown> }) {
   const [preset, setPreset] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const reason = dismissReason(preset, note)
@@ -34,7 +35,7 @@ function DismissForm({ title, busy, onCancel, onConfirm }: { title: string; busy
       ))}
       <Textarea aria-label={HL.dismissNote} placeholder={HL.dismissNote} maxLength={DISMISS_REASON_MAX} value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
       <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={onCancel}>{HL.cancel}</Button>
-      <Button type="button" size="sm" disabled={busy || reason === ''} onClick={() => onConfirm(reason)}>{HL.dismissConfirm}</Button>
+      <ActionButton type="button" size="sm" disabled={busy || reason === ''} action={action} busyLabel="Dismissing…" onClick={() => onReason(reason)}>{HL.dismissConfirm}</ActionButton>
     </div>
   )
 }
@@ -43,18 +44,11 @@ export function HealthFinding({ finding, client }: { finding: FindingView; clien
   const [view, setView] = useState(finding)
   const [open, setOpen] = useState(false)
   const [asking, setAsking] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const inFlight = useRef(false)
-  const act = async (fn: () => Promise<FindingView>): Promise<void> => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
-    setError(null)
-    try { setView(await fn()); setAsking(false) } catch (err) { setError(centralErrorMessage(err, HL.actionFailed)) }
-    inFlight.current = false
-    setBusy(false)
-  }
+  const reason = useRef('')
+  const failure = (err: unknown) => centralErrorMessage(err, HL.actionFailed)
+  const dismiss = useAction(async () => { setView(await client.dismiss(view.id, reason.current)); setAsking(false) }, { label: HL.dismiss, success: () => 'Dismissed', failure })
+  const reopen = useAction(async () => { setView(await client.reopen(view.id)) }, { label: HL.reopen, success: () => 'Reopened', failure })
+  const busy = dismiss.busy || reopen.busy
   const loc = locationOf(view)
   const detailsId = `health-details-${view.id}`
   return (
@@ -84,10 +78,11 @@ export function HealthFinding({ finding, client }: { finding: FindingView; clien
       )}
       <div className="ccp-row__actions">
         {view.status === 'open' && !asking && <Button type="button" size="sm" variant="secondary" aria-label={HL.dismissLabel(view.title)} disabled={busy} onClick={() => setAsking(true)}>{HL.dismiss}</Button>}
-        {view.status === 'dismissed' && <Button type="button" size="sm" variant="secondary" aria-label={HL.reopenLabel(view.title)} disabled={busy} onClick={() => void act(() => client.reopen(view.id))}>{HL.reopen}</Button>}
+        {view.status === 'dismissed' && <ActionButton type="button" size="sm" variant="secondary" aria-label={HL.reopenLabel(view.title)} disabled={busy} action={reopen} busyLabel="Reopening…">{HL.reopen}</ActionButton>}
       </div>
-      {asking && <DismissForm title={view.title} busy={busy} onCancel={() => setAsking(false)} onConfirm={(reason) => void act(() => client.dismiss(view.id, reason))} />}
-      {error && <p role="alert" className="ccp-error">{error}</p>}
+      {asking && <DismissForm title={view.title} busy={busy} onCancel={() => setAsking(false)} onReason={(r) => { reason.current = r }} action={dismiss} />}
+      <ActionResult action={dismiss} />
+      <ActionResult action={reopen} />
     </li>
   )
 }

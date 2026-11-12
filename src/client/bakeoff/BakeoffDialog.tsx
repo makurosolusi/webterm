@@ -5,13 +5,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { BAKEOFF_API, BAKEOFF_POLL_MS, BAKEOFF_TEXT as T, bakeoffRequest, formatCost, formatDuration, verdictLine, type BakeoffView, type CandidateView } from './bakeoff.client'
 
 const COUNTS = [2, 3, 4] as const
+const LABEL = { picking: 'Picking…', merging: 'Merging…', checking: 'Checking…', removing: 'Removing…', started: 'Started', confirmBelow: 'Confirm the removal below' } as const
 
-function CandidateCard({ b, c, busy, onPick }: { b: BakeoffView; c: CandidateView; busy: boolean; onPick: (id: string) => void }): React.JSX.Element {
+function CandidateCard({ b, c, busy, onPick }: { b: BakeoffView; c: CandidateView; busy: boolean; onPick: (id: string) => Promise<unknown> }): React.JSX.Element {
+  const pick = useAction(() => onPick(c.id), { label: `${T.pick} #${c.idx}`, success: () => T.winner })
   const isWinner = b.winnerId === c.id
   const canPick = (b.status === 'ready' || b.status === 'picked') && c.status !== 'removed' && !isWinner
   return (
@@ -23,7 +26,8 @@ function CandidateCard({ b, c, busy, onPick }: { b: BakeoffView; c: CandidateVie
       <p>{verdictLine(c)} · {formatCost(c.costMicros)}{c.durationMs !== null ? ` · ${formatDuration(c.durationMs)}` : ''}</p>
       {c.error && <p className="text-red-600">{c.error}</p>}
       {c.verdict?.diffStat ? <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap opacity-80">{c.verdict.diffStat}</pre> : null}
-      {canPick && <Button size="sm" className="mt-1" disabled={busy} onClick={() => onPick(c.id)}>{T.pick}</Button>}
+      {canPick && <ActionButton size="sm" className="mt-1" disabled={busy} action={pick} busyLabel={LABEL.picking}>{T.pick}</ActionButton>}
+      <ActionResult action={pick} />
     </li>
   )
 }
@@ -33,7 +37,6 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
   const [selected, setSelected] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
   const [count, setCount] = useState<number>(2)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<CandidateView[] | null>(null)
 
@@ -53,22 +56,22 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
     return () => clearInterval(t)
   }, [running, load])
 
-  const act = async (fn: () => Promise<unknown>) => {
-    setBusy(true); setError(null)
-    try { await fn() } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setBusy(false); load() }
-  }
-  const start = () => act(async () => {
+  /** Every action reloads the list afterwards, whatever its outcome. */
+  const reloadAfter = <R,>(fn: () => Promise<R>) => async (): Promise<R> => { try { return await fn() } finally { load() } }
+  const path = (verb: string) => `${BAKEOFF_API}/${encodeURIComponent(current!.id)}/${verb}`
+  const start = useAction(reloadAfter(async () => {
     const b = (await bakeoffRequest('POST', BAKEOFF_API, { repo, prompt, count, workspaceId: workspaceId ?? null })) as BakeoffView
     setSelected(b.id); setPrompt('')
-  })
-  const path = (verb: string) => `${BAKEOFF_API}/${encodeURIComponent(current!.id)}/${verb}`
-  const pick = (candidateId: string) => act(() => bakeoffRequest('POST', path('pick'), { candidateId }))
-  const merge = () => act(() => bakeoffRequest('POST', path('merge'), {}))
-  const askCleanup = () => act(async () => {
+  }), { label: T.start, success: () => LABEL.started })
+  const pick = (candidateId: string) => reloadAfter(() => bakeoffRequest('POST', path('pick'), { candidateId }))()
+  const merge = useAction(reloadAfter(() => bakeoffRequest('POST', path('merge'), {})), { label: T.merge(current?.baseBranch ?? ''), success: () => T.status.merged })
+  const askCleanup = useAction(reloadAfter(async () => {
     const r = (await bakeoffRequest('POST', path('cleanup'), {}, [409])) as { error?: string; remove?: CandidateView[] }
     setConfirm(r.remove ?? [])
-  })
-  const doCleanup = () => act(async () => { await bakeoffRequest('POST', path('cleanup'), { confirm: true }); setConfirm(null) })
+  }), { label: T.cleanup, success: () => LABEL.confirmBelow })
+  const doCleanup = useAction(reloadAfter(async () => { await bakeoffRequest('POST', path('cleanup'), { confirm: true }); setConfirm(null) }),
+    { label: T.confirm, success: () => T.status.cleaned })
+  const busy = start.busy || merge.busy || askCleanup.busy || doCleanup.busy
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
@@ -88,8 +91,9 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
                   <Button key={n} size="sm" variant={count === n ? 'default' : 'outline'} aria-pressed={count === n} onClick={() => setCount(n)}>{n}</Button>
                 ))}
               </div>
-              <Button size="sm" disabled={busy || prompt.trim() === ''} onClick={() => void start()}>{busy ? T.starting : T.start}</Button>
+              <ActionButton size="sm" disabled={busy || prompt.trim() === ''} action={start} busyLabel={T.starting}>{T.start}</ActionButton>
             </div>
+            <ActionResult action={start} />
           </div>
         )}
         {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
@@ -107,18 +111,21 @@ export function BakeoffDialog({ repo, workspaceId, onClose }: { repo?: string; w
           <div className="flex flex-col gap-2">
             <p className="text-xs opacity-80">{current.prompt}</p>
             <ul className="grid gap-2 sm:grid-cols-2">
-              {current.candidates.map((c) => <CandidateCard key={c.id} b={current} c={c} busy={busy} onPick={(id) => void pick(id)} />)}
+              {current.candidates.map((c) => <CandidateCard key={c.id} b={current} c={c} busy={busy} onPick={pick} />)}
             </ul>
             <div className="flex flex-wrap gap-2">
-              {current.status === 'picked' && <Button size="sm" disabled={busy} onClick={() => void merge()}>{T.merge(current.baseBranch)}</Button>}
-              {(current.status === 'picked' || current.status === 'merged') && !confirm && <Button size="sm" variant="outline" disabled={busy} onClick={() => void askCleanup()}>{T.cleanup}</Button>}
+              {current.status === 'picked' && <ActionButton size="sm" disabled={busy} action={merge} busyLabel={LABEL.merging}>{T.merge(current.baseBranch)}</ActionButton>}
+              {(current.status === 'picked' || current.status === 'merged') && !confirm && <ActionButton size="sm" variant="outline" disabled={busy} action={askCleanup} busyLabel={LABEL.checking}>{T.cleanup}</ActionButton>}
             </div>
+            <ActionResult action={merge} />
+            <ActionResult action={askCleanup} />
+            <ActionResult action={doCleanup} />
             {confirm && (
               <div className="rounded border p-2 text-xs" role="alertdialog" aria-label={T.cleanup}>
                 <p>{T.confirmCleanup(confirm.length)}</p>
                 <ul>{confirm.map((c) => <li key={c.id}>#{c.idx} {c.branch}</li>)}</ul>
                 <div className="mt-1 flex gap-2">
-                  <Button size="sm" variant="destructive" disabled={busy} onClick={() => void doCleanup()}>{T.confirm}</Button>
+                  <ActionButton size="sm" variant="destructive" disabled={busy} action={doCleanup} busyLabel={LABEL.removing}>{T.confirm}</ActionButton>
                   <Button size="sm" variant="outline" onClick={() => setConfirm(null)}>{T.cancel}</Button>
                 </div>
               </div>

@@ -279,6 +279,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Buttons that save, test, check, retry, delete, install or connect now show that they are working, then the result or the reason they failed with Retry, across Settings, the setup wizard and the rest of the app; a disabled button says why. The setup wizard no longer shows desktop notifications as on while the browser blocks them: it reads the browser's real permission, like Settings › Notifications, and says how to unblock it. Resetting the Claude launch profile list when the Claude provider still runs one of them now says which profile and why, instead of a bare error code.
 - Canvas background: a gradient preset showed as selected after its angle was changed.
 - Central and other senders now confirm a Claude agent actually started a prompt instead of leaving it unsent in the input box.
 - Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.

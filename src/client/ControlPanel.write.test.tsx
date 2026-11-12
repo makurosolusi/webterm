@@ -86,7 +86,9 @@ describe('Developer table writes', () => {
     expect(s.puts).toEqual([{ set: { WEBTERM_AGENT_SANDBOX: 'off' }, unset: [] }])
     expect(s.target['WEBTERM_AGENT_SANDBOX']).toBe('off')
     fireEvent.click(within(rowEl('WEBTERM_AGENT_SANDBOX')).getByRole('button', { name: 'Reset' }))
+    expect(within(rowEl('WEBTERM_AGENT_SANDBOX')).getByRole('button', { name: 'Resetting…' }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(rowEl('WEBTERM_AGENT_SANDBOX').hasAttribute('data-modified')).toBe(false))
+    expect(await within(rowEl('WEBTERM_AGENT_SANDBOX')).findByText('Saved.')).toBeTruthy()
   })
 
   it('a number is committed on Enter; a boot knob says it needs a server restart; bad input is reported', async () => {

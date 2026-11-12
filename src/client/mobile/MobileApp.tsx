@@ -3,7 +3,7 @@
 // (username + password, POST /auth/login -> the `wt_ui` session cookie an installed PWA keeps across
 // launches); before the first account exists it says to create it on the computer first.
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
 import { MobileAgents } from './MobileAgents'
@@ -47,12 +47,9 @@ function SignIn({ reload }: { reload: () => void }): React.JSX.Element {
   )
 }
 
+/** Signs out and reloads into the sign-in screen; a failure stays on screen with Retry (still signed in). */
 async function signOut(): Promise<void> {
-  try {
-    await logout()
-  } catch (err) {
-    console.warn('[m] sign out failed', err)
-  }
+  await logout()
   location.reload()
 }
 
@@ -62,6 +59,7 @@ const reloadPage = (): void => location.reload()
 export function MobileApp({ reload = reloadPage }: { reload?: () => void } = {}): React.JSX.Element {
   const [tab, setTab] = useState<TabId>(() => tabFromHash(location.hash))
   const [auth, setAuth] = useState<Auth>('checking')
+  const signOutAct = useAction(signOut, { label: 'Sign out' })
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash(location.hash))
@@ -82,8 +80,9 @@ export function MobileApp({ reload = reloadPage }: { reload?: () => void } = {})
     <div className="m-app">
       <header className="m-header">
         <h1>{TABS.find((t) => t.id === tab)!.label}</h1>
-        <Button type="button" className="m-link" onClick={() => void signOut()}>Sign out</Button>
+        <ActionButton type="button" className="m-link" action={signOutAct} busyLabel="Signing out…">Sign out</ActionButton>
       </header>
+      <ActionResult action={signOutAct} />
       <main className="m-main">
         {tab === 'brief' && <MobileBrief />}
         {tab === 'inbox' && <><MobilePushCard /><MobileInbox /></>}

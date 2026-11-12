@@ -3,6 +3,7 @@
 // prerequisites and derives the agent/tool/planner keys); numbers through /api/settings/env.
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Switch } from '@/components/ui/switch'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import type { Settings } from '../shared/settings'
@@ -26,6 +27,8 @@ export interface CentralSettingsSectionProps {
 }
 
 const isOn = (v: CapabilityView | undefined): boolean => v?.status === 'on'
+/** id of a row's disabled-reason line, for the control's aria-describedby. */
+const reasonId = (controlId: string): string => `${controlId}-reason`
 
 /** Segmented over capabilities: the last option whose capability is on ('none' when none is). */
 export function levelOf(field: CentralField, view: (id: CapabilityId) => CapabilityView | undefined): string {
@@ -78,10 +81,15 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     if (t && !(await api.toggle(t.id, t.on))) return
     if (v === 'workers') await api.setSub('workers', 'runRequireApproval', true)
   }
+  // Busy only: the step disappears once Central is on, and a refusal is the alert at the top.
+  const fixChain = useAction(() => api.toggle('central', true), { label: CENTRAL_TEXT.fixChain, toast: 'never' })
 
+  // Each switch/select below gives its own feedback: capability rows disable while saving and show the
+  // status beside them (a refusal is the alert at the top); env and check-in rows show the Field save state.
   const control = (field: CentralField, id: string, reason: string | null): React.ReactNode => {
     const src = field.source
     const disabled = reason !== null
+    const why = reason ? reasonId(id) : undefined
     if (field.control === 'combobox') return null // CostLimitField renders its own Field
     if (src.kind === 'capability') {
       if (field.control === 'segmented') {
@@ -92,23 +100,25 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
       }
       const sub = src.sub ? view(src.id)?.subs?.find((x) => x.key === src.sub) : undefined
       const checked = src.sub ? !!sub?.on : view(src.id)?.status !== undefined && view(src.id)?.status !== 'off'
+      const saveCapability = (on: boolean): void => { void (src.sub ? api.setSub(src.id, src.sub, on) : api.toggle(src.id, on)) }
       return (
         <span className="inline-flex items-center gap-2">
           {src.sub ? null : <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view(src.id)?.status ?? 'off']}</span>}
-          <Switch id={id} checked={checked} disabled={disabled || !api.data || api.busyId === src.id}
-            onCheckedChange={(on) => void (src.sub ? api.setSub(src.id, src.sub, on) : api.toggle(src.id, on))} />
+          <Switch id={id} checked={checked} disabled={disabled || !api.data || api.busyId === src.id} aria-describedby={why}
+            onCheckedChange={saveCapability} />
         </span>
       )
     }
     if (src.kind === 'checkin') {
       const { data } = checkin
-      if (field.control === 'switch') return <Switch id={id} checked={data?.enabled ?? false} disabled={disabled || checkin.saving} onCheckedChange={(on) => void checkin.save({ enabled: on })} />
+      const saveEnabled = (on: boolean): void => { void checkin.save({ enabled: on }) }
+      if (field.control === 'switch') return <Switch id={id} checked={data?.enabled ?? false} disabled={disabled || checkin.saving} aria-describedby={why} onCheckedChange={saveEnabled} />
       if (!data) return null
       const limit = String(data.dailyLimit)
       const opts = field.options ?? []
       return (
         <>
-          <SettingsSelect id={id} value={limit} disabled={disabled || checkin.saving} onChange={(v) => void checkin.save({ dailyLimit: Number(v) })}
+          <SettingsSelect id={id} value={limit} disabled={disabled || checkin.saving} describedBy={why} onChange={(v) => void checkin.save({ dailyLimit: Number(v) })}
             options={opts.some((o) => o.value === limit) ? opts : [...opts, { value: limit, label: limit }]} />
           <span role="status" className="st-hint">{CENTRAL_TEXT.checkinUsed(data.usedToday, data.dailyLimit)}</span>
         </>
@@ -117,7 +127,8 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     if (src.kind !== 'env') return null
     const raw = env.value(src.key)
     if (field.control === 'switch') {
-      return <Switch id={id} checked={raw.trim().toLowerCase() === 'on'} disabled={disabled} onCheckedChange={(on) => void env.write(src.key, on ? 'on' : 'off')} />
+      const saveSwitch = (on: boolean): void => { void env.write(src.key, on ? 'on' : 'off') }
+      return <Switch id={id} checked={raw.trim().toLowerCase() === 'on'} disabled={disabled} aria-describedby={why} onCheckedChange={saveSwitch} />
     }
     if (field.control === 'stepper') {
       const scale = src.scale ?? 1
@@ -128,7 +139,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     const opts = field.options ?? []
     const known = opts.some((o) => o.value === raw)
     return (
-      <SettingsSelect id={id} value={raw} disabled={disabled} onChange={(v) => void env.write(src.key, v === '' ? null : v)}
+      <SettingsSelect id={id} value={raw} disabled={disabled} describedBy={why} onChange={(v) => void env.write(src.key, v === '' ? null : v)}
         options={known ? opts : [...opts, { value: raw, label: raw }]} />
     )
   }
@@ -147,7 +158,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
         onReset={envKey && reason === null ? () => { void env.write(envKey, null) } : undefined}>
         <div className="flex flex-wrap items-center gap-2" data-central-field={field.id}>
           {control(field, id, reason)}
-          {reason ? <span className="st-hint" data-reason>{reason}</span> : null}
+          {reason ? <span id={reasonId(id)} className="st-hint" data-reason>{reason}</span> : null}
         </div>
       </Field>
     )
@@ -187,7 +198,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
         </p>
       ) : null}
       {central?.status === 'needs-step' && central.step?.kind === 'fixChain' ? (
-        <Button size="sm" variant="secondary" onClick={() => void api.toggle('central', true)}>{central.step.label}</Button>
+        <ActionButton size="sm" variant="secondary" action={fixChain} busyLabel={CENTRAL_TEXT.fixing}>{central.step.label}</ActionButton>
       ) : null}
       {CENTRAL_GROUPS.map(group)}
     </div>

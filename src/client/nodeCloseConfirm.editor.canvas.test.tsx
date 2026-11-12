@@ -89,6 +89,7 @@ describe('editor close (canvas)', () => {
     expect(document.activeElement?.textContent).toBe('Save')
 
     fireEvent.click(dlgBtn('Save'))
+    expect(dlgBtn('Saving…').getAttribute('aria-busy')).toBe('true')
     await flush()
     expect(save).toHaveBeenCalledOnce()
     expect(nodeIds()).toEqual(['ed-a']) // write still in flight

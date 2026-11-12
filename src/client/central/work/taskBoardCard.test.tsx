@@ -95,8 +95,13 @@ describe('task board card', () => {
     render(<TaskBoard client={client} />)
     await screen.findByText('Task r')
     const before = client.listColumn.mock.calls.length
-    fireEvent.click(screen.getByRole('button', { name: named(TL.approve, 'Task r') }))
+    const approve = screen.getByRole('button', { name: named(TL.approve, 'Task r') })
+    fireEvent.click(approve)
+    expect(approve.getAttribute('aria-busy')).toBe('true')
     expect(await screen.findByText(TL.actionErrors.illegal_transition!)).toBeTruthy()
+    // The failed line carries Retry (toast), which acts again.
+    await waitFor(() => expect(approve.closest('article')?.querySelector('[data-action-result="failed"]')).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
     await waitFor(() => expect(client.listColumn.mock.calls.length).toBeGreaterThan(before))
     fireEvent.click(screen.getByRole('button', { name: named(TL.approve, 'Task q') }))
     expect(await screen.findByText(TL.actionRefused('odd_code'))).toBeTruthy()

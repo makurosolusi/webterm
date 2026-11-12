@@ -131,7 +131,9 @@ describe('DiffNode', () => {
       edges: [{ id: 'e', source: 'ag', target: 'd1' }],
     })
     fireEvent.click(await screen.findByText('Send to agent (1)'))
-    await screen.findByText('Send review notes to ag: node not found')
+    expect(screen.getByText('Sending…').getAttribute('aria-busy')).toBe('true')
+    await screen.findByText('Send review notes to ag: node not found', { selector: '[data-action-result="failed"] span' })
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
     expect((latest.find((n) => n.id === 'd1')?.data as { diffNotes: unknown[] }).diffNotes).toHaveLength(1)
   })
 

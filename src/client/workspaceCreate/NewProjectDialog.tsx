@@ -4,6 +4,7 @@
 // as Clone repository (useCreateFlow / CreateNotices).
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,7 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
   const flow = useCreateFlow({ parent: parent.trim(), name: name.trim() }, run, onCreated)
   const edit = (set: (v: string) => void) => (v: string) => { set(v); flow.reset() }
   const canCreate = !flow.busy && name.trim() !== '' && parent.trim() !== ''
+  const createLock = flow.busy ? undefined : name.trim() === '' ? 'Enter a project name first.' : parent.trim() === '' ? 'Choose a parent folder first.' : undefined
 
   if (browsing) return <FolderPicker initialPath={parent || undefined} onPick={(p) => { edit(setParent)(p); setBrowsing(false) }} onClose={() => setBrowsing(false)} />
 
@@ -49,7 +51,7 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
               <Label htmlFor="new-project-name">Project name</Label>
               <Input id="new-project-name" autoFocus value={name} spellCheck={false} disabled={flow.busy} placeholder="my-project" onChange={(e) => edit(setName)(e.target.value)} />
             </div>
-            <ParentField id="new-project-parent" value={parent} disabled={flow.busy} onChange={edit(setParent)} onBrowse={() => setBrowsing(true)} />
+            <ParentField id="new-project-parent" value={parent} busy={flow.busy} onChange={edit(setParent)} onBrowse={() => setBrowsing(true)} />
             <TargetPath parent={parent} name={name} />
             <div className="flex items-center gap-2">
               <Checkbox id="new-project-git" checked={gitInit} disabled={flow.busy} onCheckedChange={(c) => setGitInit(c === true)} />
@@ -61,7 +63,9 @@ export function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; 
             {(flow.error || loadError) && <p className="text-(--vscode-errorForeground)" role="alert">{flow.error || loadError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" disabled={flow.busy} onClick={onClose}>Cancel</Button>
-              <Button type="submit" disabled={!canCreate}>{flow.busy ? 'Creating…' : 'Create project'}</Button>
+              <IconTooltip label="Create project" disabled={!canCreate} disabledReason={createLock}>
+                <Button type="submit" disabled={!canCreate}>{flow.busy ? 'Creating…' : 'Create project'}</Button>
+              </IconTooltip>
             </DialogFooter>
           </form>
         )}

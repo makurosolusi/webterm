@@ -179,6 +179,9 @@ describe('Clone repository dialog', () => {
     type('Repository URL', 'file:///etc')
     expect(screen.getByText(/Use an https:\/\/ or git@host/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Clone' }) as HTMLButtonElement).disabled).toBe(true)
+    // The disabled Clone says why on hover.
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Clone' }).parentElement!, { pointerType: 'mouse' })
+    expect((await screen.findByRole('tooltip')).textContent).toContain('Enter a repository URL first.')
   })
 
   it('suggests the remembered parent while it exists, else the default projects folder', async () => {

@@ -189,7 +189,10 @@ describe('ClaudeLaunchProfilesCard', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'profile_in_use', profileId: 'm', reason: 'provider' }), { status: 409 })))
     fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Delete' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
-    expect((await within(row('Malik')).findByRole('alert')).textContent).toBe(PROFILES_TEXT.inUse('Malik', 'provider'))
+    const delBtn = within(screen.getByRole('alertdialog')).getByRole('button', { name: PROFILES_TEXT.removing })
+    expect(delBtn.getAttribute('aria-busy')).toBe('true') // busy while the server answers
+    expect((await within(row('Malik')).findByRole('alert')).textContent).toContain(PROFILES_TEXT.inUse('Malik', 'provider'))
+    expect(row('Malik').querySelector('[data-action-result="failed"]')).toBeTruthy()
   })
 
   it('Test shows each stage with a check or a cross and the fix hint', async () => {
@@ -212,7 +215,11 @@ describe('ClaudeLaunchProfilesCard', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'unknown_profile' }), { status: 404 })))
     setup({ claudeLaunchProfiles: [MALIK] })
     fireEvent.click(within(row('Malik')).getByRole('button', { name: 'Test' }))
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/unknown_profile/))
+    expect(within(row('Malik')).getByRole('button', { name: PROFILES_TEXT.testing }).getAttribute('aria-busy')).toBe('true')
+    await waitFor(() => expect(within(row('Malik')).getByRole('alert').textContent).toMatch(/unknown_profile/))
+    // The failure also offers Retry (toast), which runs the test again.
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2))
   })
 
   it('"(Modified)" shows only when the stored list differs from the default', () => {

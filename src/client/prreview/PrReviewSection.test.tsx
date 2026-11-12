@@ -48,8 +48,18 @@ describe('PR review section', () => {
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(0)
     expect(tipOf(screen.getByRole('button', { name: 'Post review' }))).toBe('Posts one review with inline comments to GitHub. Cannot be undone.')
     fireEvent.click(screen.getByRole('button', { name: 'Post review' }))
+    expect(screen.getByRole('button', { name: /Posting/ }).getAttribute('aria-busy')).toBe('true')
     expect(await screen.findByText('Review posted: https://github.com/o/r/pull/7#pullrequestreview-1')).toBeTruthy()
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.url)).toEqual(['/api/prreview/gate_1/post'])
+  })
+
+  it('a failed start says why and offers Retry', async () => {
+    stubApi((c) => (c.method === 'POST' ? { status: 409, body: { error: 'a review of PR #7 is already running' } } : { body: { jobs: [], drafts: [] } }))
+    render(<PrReviewSection root="/r" gh pollMs={0} />)
+    fireEvent.change(screen.getByLabelText('Pull request number'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review PR #7' }))
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('already running'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 
   it('without gh the review button is off and says why', async () => {

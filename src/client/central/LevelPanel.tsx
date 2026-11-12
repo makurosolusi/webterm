@@ -2,6 +2,7 @@
 // Display plus stop only: the level is set in one place, Settings › Central Agent ("Change" opens it).
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { useEffect, useRef, useState } from 'react'
 import { openSettingsAt, type CentralFieldId } from '../settings.link'
 import { useLiveSettings } from '../useSettings'
@@ -55,6 +56,8 @@ export const AGENT_SETTINGS_SECTION = 'claude'
 const openAgentSettings = (): void => openSettingsAt(AGENT_SETTINGS_SECTION, 'agentApprovalLevel')
 
 /** Below L2 Central cannot change anything, so skipping approvals does not alter what the level means. */
+const STOPPING = 'Stopping…'
+
 const skipApplies = (level: ControlView['effective']): boolean => level !== 'off' && level !== 'observe'
 
 /** "Working now", "Last turn 5m ago · Idle" or "No turns yet". */
@@ -70,28 +73,25 @@ export default function LevelPanel({ client = centralControlApi, visible = true,
   const { skipApprovals } = useLiveSettings()
   const [confirming, setConfirming] = useState(false)
   const [reason, setReason] = useState('')
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const statusData = status.data
   useEffect(() => { if (statusData) onStatus?.(statusData) }, [statusData, onStatus])
   useEffect(() => { if (confirming) cancelRef.current?.focus() }, [confirming])
   useEffect(() => {
     if (!askHalt) return
-    setMsg(null)
     setConfirming(true)
     onHaltAsked?.()
   }, [askHalt, onHaltAsked])
 
-  const doHalt = async () => {
+  // The confirmation closes either way; the result line (and on failure the toast with Retry) sits under it.
+  const halt = useAction(async () => {
     try {
       await client.halt(reason.trim())
-      setMsg({ ok: true, text: CL.haltDone })
       control.reload()
-    } catch (err) {
-      setMsg({ ok: false, text: centralErrorMessage(err, CL.actionFailed) })
+    } finally {
+      setConfirming(false)
     }
-    setConfirming(false)
-  }
+  }, { label: CL.haltButton, success: () => CL.haltDone, failure: (err) => centralErrorMessage(err, CL.actionFailed) })
 
   const c = control.data
   const skipped = skipApprovals && !!c && skipApplies(c.effective)
@@ -122,16 +122,16 @@ export default function LevelPanel({ client = centralControlApi, visible = true,
       {status.loading && !statusData && <p role="status">{CL.loading}</p>}
       {statusData && <div role="group" aria-labelledby="ccp-budget-h">{budgetMeters(statusData.budget)}</div>}
       <div className="ccp-halt">
-        {!confirming && <Button type="button" size="sm" variant="destructive" onClick={() => { setMsg(null); setConfirming(true) }}>{CL.haltButton}</Button>}
+        {!confirming && <Button type="button" size="sm" variant="destructive" onClick={() => setConfirming(true)}>{CL.haltButton}</Button>}
         {confirming && (
           <div role="alertdialog" aria-modal="false" aria-labelledby="ccp-halt-q" className="ccp-confirm" onKeyDown={(e) => { if (e.key === 'Escape') setConfirming(false) }}>
             <p id="ccp-halt-q">{CL.haltPrompt}</p>
             <Input aria-label={CL.haltReason} placeholder={CL.haltReason} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />
             <Button type="button" size="sm" variant="secondary" ref={cancelRef} onClick={() => setConfirming(false)}>{CL.haltCancel}</Button>
-            <Button type="button" size="sm" variant="destructive" onClick={() => void doHalt()}>{CL.haltConfirm}</Button>
+            <ActionButton type="button" size="sm" variant="destructive" action={halt} busyLabel={STOPPING}>{CL.haltConfirm}</ActionButton>
           </div>
         )}
-        {msg && <p role={msg.ok ? 'status' : 'alert'} className={msg.ok ? undefined : 'ccp-error'}>{msg.text}</p>}
+        <ActionResult action={halt} />
       </div>
     </section>
   )

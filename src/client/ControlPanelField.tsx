@@ -3,7 +3,7 @@
 // docs), a "Reset Setting" action on modified values, and settings set outside the editor (VS Code
 // policy, `@haspolicy`) shown read-only with the reason. code.visualstudio.com/docs/configure/settings
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction, type Action } from '@/components/ui/action'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import type { EffectiveRow } from './ControlPanel'
@@ -29,19 +29,32 @@ function TextField({ row, write }: { row: EffectiveRow; write: ControlWrite }): 
   )
 }
 
+/** Runs a write as an action: a refusal sentence becomes its failure (inline, toast with Retry). */
+function useWrite(write: ControlWrite, key: string, value: () => string | null, label: string, done?: () => void): Action<void> {
+  return useAction(async () => {
+    const err = await write(key, value())
+    if (err !== null) throw new Error(err)
+    done?.()
+  }, { label, success: () => CONTROL_TEXT.saved, failure: (e) => CONTROL_TEXT.writeFailed(e instanceof Error ? e.message : String(e)) })
+}
+
 function SecretField({ row, write }: { row: EffectiveRow; write: ControlWrite }): React.JSX.Element {
   const [draft, setDraft] = useState('')
+  const save = useWrite(write, row.key, () => draft, `${CONTROL_TEXT.save} ${row.label}`, () => setDraft(''))
   return (
-    <span className="flex items-center gap-1">
-      <Input aria-label={row.label} data-control={row.key} type="password" autoComplete="off" value={draft}
-        placeholder={CONTROL_TEXT.secretPlaceholder} className="h-7 text-xs" onChange={(e) => setDraft(e.target.value)} />
-      <Button size="sm" variant="secondary" disabled={draft === ''}
-        onClick={() => void write(row.key, draft).then((err) => { if (err === null) setDraft('') })}>{CONTROL_TEXT.save}</Button>
+    <span className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-1">
+        <Input aria-label={row.label} data-control={row.key} type="password" autoComplete="off" value={draft}
+          placeholder={CONTROL_TEXT.secretPlaceholder} className="h-7 text-xs" onChange={(e) => setDraft(e.target.value)} />
+        <ActionButton size="sm" variant="secondary" action={save} busyLabel={CONTROL_TEXT.saving}
+          lock={draft === '' ? { reason: CONTROL_TEXT.secretEmpty } : undefined}>{CONTROL_TEXT.save}</ActionButton>
+      </span>
+      <ActionResult action={save} />
     </span>
   )
 }
 
-function Editor({ row, write }: { row: EffectiveRow; write: ControlWrite }): React.JSX.Element {
+function Editor({ row, write, rawWrite }: { row: EffectiveRow; write: ControlWrite; rawWrite: ControlWrite }): React.JSX.Element {
   if (row.kind === 'flag') {
     return <span data-control={row.key}><SettingsCheckbox ariaLabel={row.label} checked={row.setting === 'on'} onChange={(on) => void write(row.key, on ? 'on' : 'off')} /></span>
   }
@@ -49,7 +62,8 @@ function Editor({ row, write }: { row: EffectiveRow; write: ControlWrite }): Rea
     const options = row.options.map((o) => ({ value: o, label: row.optionLabels?.[o] ?? o }))
     return <span data-control={row.key}><SettingsSelect ariaLabel={row.label} value={row.setting} options={options} onChange={(v) => void write(row.key, v)} /></span>
   }
-  if (row.kind === 'secret') return <SecretField row={row} write={write} />
+  // Its own action (busy, result, Retry), so the raw write, not the cell's.
+  if (row.kind === 'secret') return <SecretField row={row} write={rawWrite} />
   return <TextField row={row} write={write} />
 }
 
@@ -64,6 +78,7 @@ export function ControlField({ row, write }: { row: EffectiveRow; write: Control
     setError(err)
     return err
   }
+  const reset = useWrite(write, row.key, () => null, `${CONTROL_TEXT.reset} ${row.label}`)
   if (!row.editable) {
     if (row.lockReason) return <span data-locked={row.key} title={row.lockReason}><strong>{CONTROL_TEXT.locked}:</strong> {row.lockReason}</span>
     return <em className="opacity-70">{row.ui ? CONTROL_TEXT.managedIn(row.ui) : CONTROL_TEXT.noUi}</em>
@@ -71,10 +86,10 @@ export function ControlField({ row, write }: { row: EffectiveRow; write: Control
   return (
     <div className="flex flex-col gap-1">
       <span className="flex items-center gap-1">
-        <Editor row={row} write={run} />
+        <Editor row={row} write={run} rawWrite={write} />
         {row.source === 'settings' ? (
           <IconTooltip label={CONTROL_TEXT.resetTitle}>
-            <Button size="sm" variant="ghost" onClick={() => void run(row.key, null)}>{CONTROL_TEXT.reset}</Button>
+            <ActionButton size="sm" variant="ghost" action={reset} busyLabel={CONTROL_TEXT.resetting}>{CONTROL_TEXT.reset}</ActionButton>
           </IconTooltip>
         ) : null}
         {busy ? <span className="opacity-70">{CONTROL_TEXT.saving}</span> : null}
@@ -82,6 +97,7 @@ export function ControlField({ row, write }: { row: EffectiveRow; write: Control
       <span className="opacity-70">{row.pendingRestart ? CONTROL_TEXT.restartPending : CONTROL_TEXT.restart[row.restart]}</span>
       {row.dangerNote ? <span className="text-amber-600">{row.dangerNote}</span> : null}
       {error ? <span role="alert" className="text-destructive">{CONTROL_TEXT.writeFailed(error)}</span> : null}
+      <ActionResult action={reset} />
     </div>
   )
 }

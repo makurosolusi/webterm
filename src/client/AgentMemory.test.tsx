@@ -94,6 +94,7 @@ describe('What agents remember: one list', () => {
     fireEvent.click(within(row('m1').getByRole('alertdialog')).getByRole('button', { name: 'Forget' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Remember' }), { target: { value: ' Reply in Indonesian ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Remember' }))
+    expect(screen.getByRole('button', { name: 'Remembering…' }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(writes.length).toBe(6))
     expect(writes).toEqual([
       { method: 'POST', url: '/api/awareness/procedural/s1/confirm' },

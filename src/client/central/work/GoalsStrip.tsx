@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import type { GoalCard } from '../../../shared/centralWork'
 import { legalGoalActions, type GoalAction } from './planningModel'
 import type { TaskBoardClient } from './taskBoardApi'
@@ -10,12 +11,17 @@ import { usePolledPages, useRowActions } from './usePolledPages'
 
 type GoalRowData = GoalCard & { id: string }
 
+const BUSY = { activate: 'Activating…', abandon: 'Abandoning…' } as const
+// The reason of a refusal shows in the strip's notice (it survives the reload that remounts the row).
+const outcome = (label: string) => ({ label, ok: (ok: boolean) => ok, success: (ok: boolean) => (ok ? 'Done' : `${label} failed`) })
+
 function GoalRow({ goal, busy, onAct }: { goal: GoalRowData; busy: boolean; onAct: (goal: GoalRowData, action: GoalAction) => Promise<boolean> }): React.JSX.Element {
   const [confirming, setConfirming] = useState(false)
   const legal = legalGoalActions(goal.status)
   const { done } = goal.counts
   const named = (action: string): string => TL.actionOn(action, goal.statement)
-  const abandon = async (): Promise<void> => { await onAct(goal, 'abandon'); setConfirming(false) }
+  const activate = useAction(() => onAct(goal, 'activate'), outcome(TL.goalActivate))
+  const abandon = useAction(async () => { const ok = await onAct(goal, 'abandon'); setConfirming(false); return ok }, outcome(TL.goalAbandon))
   return (
     <li className="task-goal" data-status={goal.status}>
       <div className="task-goal__line">
@@ -30,17 +36,19 @@ function GoalRow({ goal, busy, onAct }: { goal: GoalRowData; busy: boolean; onAc
         <span className="task-card__meta">{COLUMN_ORDER.map((c) => `${TL.columns[c]} ${goal.counts[c]}`).join(' · ')}</span>
         {goal.complete && <span className="task-goal__hint">{TL.goalAllDone}</span>}
         <span className="task-goal__actions">
-          {legal.includes('activate') && <Button type="button" size="xs" disabled={busy} aria-label={named(TL.goalActivate)} onClick={() => void onAct(goal, 'activate')}>{TL.goalActivate}</Button>}
+          {legal.includes('activate') && <ActionButton type="button" size="xs" disabled={busy} aria-label={named(TL.goalActivate)} action={activate} busyLabel={BUSY.activate}>{TL.goalActivate}</ActionButton>}
           {legal.includes('abandon') && !confirming && <Button type="button" size="xs" variant="ghost" disabled={busy} aria-label={named(TL.goalAbandon)} onClick={() => setConfirming(true)}>{TL.goalAbandon}</Button>}
           {legal.includes('abandon') && confirming && (
             <span className="task-goal__actions" role="group" aria-label={TL.goalAbandonConfirm}>
               <span className="task-card__meta">{TL.goalAbandonConfirm}</span>
-              <Button type="button" size="xs" variant="destructive" disabled={busy} aria-label={named(TL.goalAbandonYes)} onClick={() => void abandon()}>{TL.goalAbandonYes}</Button>
+              <ActionButton type="button" size="xs" variant="destructive" disabled={busy} aria-label={named(TL.goalAbandonYes)} action={abandon} busyLabel={BUSY.abandon}>{TL.goalAbandonYes}</ActionButton>
               <Button type="button" size="xs" variant="secondary" onClick={() => setConfirming(false)}>{TL.cancelNo}</Button>
             </span>
           )}
         </span>
       </div>
+      <ActionResult action={activate} />
+      <ActionResult action={abandon} />
     </li>
   )
 }

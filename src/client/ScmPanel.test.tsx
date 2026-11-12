@@ -66,7 +66,8 @@ describe('ScmPanel', () => {
     await openPanel()
     const commit = () => button('Commit (1)')
     fireEvent.change(screen.getByLabelText('Commit message'), { target: { value: 'update stuff' } })
-    expect(await screen.findByRole('alert')).toBeTruthy()
+    // Scoped: the embedded PR review section may show its own load alert.
+    expect((await screen.findByText(/First line must be/)).getAttribute('role')).toBe('alert')
     fireEvent.click(commit())
     expect(api.commitStaged).not.toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText('Commit message'), { target: { value: 'feat(scm): add source control panel' } })
@@ -79,6 +80,8 @@ describe('ScmPanel', () => {
     await openPanel()
     api.generateMessage.mockResolvedValue({ message: 'fix(scm): refuse secret files', problem: null })
     fireEvent.click(screen.getByText('Generate with AI'))
+    expect(button('Generating…').getAttribute('aria-busy')).toBe('true')
+    expect(await screen.findByText('Message drafted.')).toBeTruthy()
     await waitFor(() => expect((screen.getByLabelText('Commit message') as HTMLTextAreaElement).value).toBe('fix(scm): refuse secret files'))
   })
 
@@ -89,6 +92,8 @@ describe('ScmPanel', () => {
     fireEvent.change(screen.getByLabelText('Commit message'), { target: { value: 'feat(scm): add panel' } })
     fireEvent.click(button('Commit (1)'))
     expect((await screen.findByLabelText('Commit failure output')).textContent).toBe('eslint: 2 errors')
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('Commit: failed'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
     fireEvent.click(screen.getByText('Fix with agent'))
     await waitFor(() => expect(api.sendFixToAgent).toHaveBeenCalledWith('ag', 'FIX PROMPT', expect.any(String)))
   })

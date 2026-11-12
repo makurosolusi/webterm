@@ -2,26 +2,43 @@
 // progress and the open drafts with a Post review button. Posting is the human approval: the server
 // decides the draft's Inbox gate and posts one review; approving it in the Central chat does the same.
 import { useCallback, useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { PRREVIEW_API, PRREVIEW_POLL_MS, PRREVIEW_TEXT as T, prReviewRequest, type DraftView, type PrReviewJob } from './prreview.client'
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const TEXT = { starting: 'Starting review…', started: (pr: string) => `Review of PR #${pr} started`, posting: 'Posting…', loadFailed: 'Cannot load reviews' } as const
+
+/** One draft with its own Post review: busy, then the posted URL, or the failure with Retry. */
+function DraftRow({ d, locked, done }: { d: DraftView; locked: boolean; done(): void }): React.JSX.Element {
+  const post = useAction(async () => {
+    try { return T.posted((await prReviewRequest<{ url: string }>('POST', `${PRREVIEW_API}/${encodeURIComponent(d.itemId)}/post`, {})).url) } finally { done() }
+  }, { label: T.post, success: (m) => m })
+  return (
+    <li>
+      <span>{T.draft(d)}</span>
+      <IconTooltip label="Posts one review with inline comments to GitHub. Cannot be undone." disabled={locked} disabledReason="another action is running">
+        <ActionButton size="sm" action={post} busyLabel={TEXT.posting} disabled={locked}>{T.post}</ActionButton>
+      </IconTooltip>
+      <ActionResult action={post} />
+    </li>
+  )
+}
 
 export function PrReviewSection({ root, gh, pollMs = PRREVIEW_POLL_MS }: { root: string; gh: boolean; pollMs?: number }): React.JSX.Element {
   const [pr, setPr] = useState('')
   const [jobs, setJobs] = useState<PrReviewJob[]>([])
   const [drafts, setDrafts] = useState<DraftView[]>([])
-  const [msg, setMsg] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(async () => {
     try {
       const r = await prReviewRequest<{ jobs: PrReviewJob[]; drafts: DraftView[] }>('GET', `${PRREVIEW_API}?repo=${encodeURIComponent(root)}`)
       setJobs(r.jobs)
       setDrafts(r.drafts)
-    } catch (e) { setMsg(errText(e)) }
+      setLoadError('')
+    } catch (e) { setLoadError(errText(e)) }
   }, [root])
 
   useEffect(() => { void load() }, [load])
@@ -32,16 +49,10 @@ export function PrReviewSection({ root, gh, pollMs = PRREVIEW_POLL_MS }: { root:
     return () => clearTimeout(t)
   }, [running, jobs, pollMs, load])
 
-  const act = async (call: () => Promise<string | void>) => {
-    setBusy(true)
-    setMsg('')
-    try {
-      const m = await call()
-      if (m) setMsg(m)
-    } catch (e) { setMsg(errText(e)) } finally { setBusy(false); void load() }
-  }
-  const start = () => act(async () => { await prReviewRequest('POST', PRREVIEW_API, { repo: root, pr: Number(pr) }); setPr('') })
-  const post = (d: DraftView) => act(async () => T.posted((await prReviewRequest<{ url: string }>('POST', `${PRREVIEW_API}/${encodeURIComponent(d.itemId)}/post`, {})).url))
+  const start = useAction(async () => {
+    const n = pr
+    try { await prReviewRequest('POST', PRREVIEW_API, { repo: root, pr: Number(n) }); setPr(''); return n } finally { void load() }
+  }, { label: T.review(pr), success: (n) => TEXT.started(n) })
 
   return (
     <section aria-label={T.title} className="scm-panel__prreview">
@@ -49,21 +60,15 @@ export function PrReviewSection({ root, gh, pollMs = PRREVIEW_POLL_MS }: { root:
       <p className="scm-panel__msg">{gh ? T.intro : T.noGh}</p>
       <div className="scm-panel__actions">
         <Input aria-label={T.prLabel} inputMode="numeric" placeholder="#" value={pr} onChange={(e) => setPr(e.target.value.replace(/\D/g, ''))} />
-        <Button size="sm" disabled={busy || !gh || !pr} onClick={() => void start()}>{T.review(pr)}</Button>
+        <ActionButton size="sm" action={start} busyLabel={TEXT.starting} disabled={!gh || !pr}>{T.review(pr)}</ActionButton>
       </div>
-      {msg && <div className="scm-panel__msg" role="status">{msg}</div>}
+      <ActionResult action={start} />
+      {loadError && <div className="scm-panel__msg" role="alert">{`${TEXT.loadFailed}: ${loadError}`}</div>}
       <ul className="scm-panel__list" aria-label="Reviews">
         {jobs.map((j) => <li key={j.id}>PR #{j.pr}: {T.status[j.status]}{j.error ? ` (${j.error})` : ''}</li>)}
       </ul>
       <ul className="scm-panel__list" aria-label="Draft reviews">
-        {drafts.map((d) => (
-          <li key={d.itemId}>
-            <span>{T.draft(d)}</span>
-            <IconTooltip label="Posts one review with inline comments to GitHub. Cannot be undone." disabled={busy} disabledReason="another action is running">
-              <Button size="sm" disabled={busy} onClick={() => void post(d)}>{T.post}</Button>
-            </IconTooltip>
-          </li>
-        ))}
+        {drafts.map((d) => <DraftRow key={d.itemId} d={d} locked={start.busy} done={() => void load()} />)}
       </ul>
     </section>
   )

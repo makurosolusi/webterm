@@ -1,7 +1,7 @@
 // Butir "Lokasi Chromium" di Lanjutan: server mencari sendiri (path aktif + kandidat di disk), pengguna
 // boleh menimpa dengan path sendiri atau kembali ke otomatis.
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
-import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Label } from '@/components/ui/label'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { SettingsCombobox } from './SettingsCombobox'
@@ -19,6 +19,9 @@ export interface ChromiumPathFieldProps {
 /** Path aktif + sumbernya, combobox (kandidat di disk + path yang pernah dipakai) yang menyimpan saat dipilih/Enter/blur, dan kembali ke otomatis. */
 export function ChromiumPathField({ chromium, save, redetect }: ChromiumPathFieldProps): React.JSX.Element {
   const auto = chromium.candidates[0]
+  // Busy only: the result is the "In use" line above, and each caller shows its own save error.
+  const useAuto = useAction(() => save(''), { label: ADVANCED_TEXT.chromiumUseAuto, toast: 'never' })
+  const detect = useAction(redetect, { label: ADVANCED_TEXT.chromiumRedetect, toast: 'never' })
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5 py-2" data-field="chromium">
@@ -41,9 +44,9 @@ export function ChromiumPathField({ chromium, save, redetect }: ChromiumPathFiel
             onCommit={(p) => void save(p)} />
         </span>
         {chromium.value !== '' ? (
-          <Button size="sm" variant="outline" onClick={() => void save('')}>{ADVANCED_TEXT.chromiumUseAuto}</Button>
+          <ActionButton size="sm" variant="outline" action={useAuto} busyLabel={ADVANCED_TEXT.saving}>{ADVANCED_TEXT.chromiumUseAuto}</ActionButton>
         ) : null}
-        <Button size="sm" variant="ghost" onClick={() => void redetect()}>{ADVANCED_TEXT.chromiumRedetect}</Button>
+        <ActionButton size="sm" variant="ghost" action={detect} busyLabel={ADVANCED_TEXT.detecting}>{ADVANCED_TEXT.chromiumRedetect}</ActionButton>
       </div>
     </div>
   )

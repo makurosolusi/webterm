@@ -154,6 +154,7 @@ describe('TimelinePanel', () => {
     await mount()
     await waitFor(() => expect(lineTexts()).toHaveLength(2))
     fireEvent.click(screen.getByRole('button', { name: 'Load older activity' }))
+    expect(screen.getByRole('button', { name: 'Loading…' }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(lineTexts()).toContain('brisk-otter finished a turn'))
     expect(server.calls).toContain('/api/events/history?limit=100&beforeSeq=2')
     expect(screen.queryByRole('button', { name: 'Load older activity' })).toBeNull()

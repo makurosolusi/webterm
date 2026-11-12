@@ -4,6 +4,7 @@
 // picks one, then the card points the provider at it (PUT {mode:'command', profileId}).
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -29,6 +30,8 @@ export const COMMAND_TEXT = {
   saving: 'Saving…',
   clean: 'Saved',
   noChanges: 'No changes to save',
+  needCommand: 'Enter the command first.',
+  testing: 'Testing…',
   loadFailed: 'Could not load the saved commands.',
   saveFailed: (code: string): string => `Could not save the command (${code}).`,
   fallbackName: 'Custom command',
@@ -63,7 +66,8 @@ export interface ClaudeProviderCommandProps {
   /** Probe the saved provider (no save first: this form already saved). */
   test(): Promise<void>
   /** A save failed here (the profile write): the card toasts it. */
-  onError?(message: string): void
+  /** A failed save; `retry` saves the same draft again. */
+  onError?(message: string, retry: () => void): void
   /** Filled with this form's save while it has unsaved edits, null when clean (wizard Continue). */
   pending?: MutableRefObject<(() => Promise<boolean>) | null>
   /** The host saves through `pending`, so no Save button here. */
@@ -119,7 +123,7 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       return await p.commit(r.id)
     } catch (e) {
       const message = COMMAND_TEXT.saveFailed(e instanceof Error ? e.message : 'error')
-      setError(message); p.onError?.(message)
+      setError(message); p.onError?.(message, () => { void saveDraft() })
       return false
     } finally { setWorking(false) }
   }
@@ -130,6 +134,11 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
     if (!clean && !(await saveDraft())) return
     await p.test()
   }
+
+  const empty = command.trim() === ''
+  // Busy per button; the inline error (and the card's toast with Retry) is the failure surface.
+  const saveAct = useAction(saveDraft, { label: COMMAND_TEXT.save, ok: (r) => r, toast: 'never', minBusyMs: 0 })
+  const testAct = useAction(runTest, { label: p.testLabel, toast: 'never', minBusyMs: 0 })
 
   return (
     <div className="flex flex-col gap-2" data-card="claude-provider-command">
@@ -163,13 +172,14 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
       <p className="text-xs opacity-70">{COMMAND_TEXT.note}</p>
       <div className="flex items-center gap-2">
         {p.hideSave ? null : (
-          <IconTooltip label={working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save} disabled={disabled || command.trim() === '' || clean}
-            disabledReason={clean && !working ? COMMAND_TEXT.noChanges : undefined}>
-            <Button size="sm" disabled={disabled || command.trim() === '' || clean} aria-busy={working}
-              onClick={() => void saveDraft()}>{working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</Button>
+          <IconTooltip label={working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save} disabled={disabled || empty || clean}
+            disabledReason={working ? undefined : empty ? COMMAND_TEXT.needCommand : clean ? COMMAND_TEXT.noChanges : undefined}>
+            <ActionButton size="sm" disabled={disabled || empty || clean} action={saveAct} busyLabel={COMMAND_TEXT.saving}>
+              {working ? COMMAND_TEXT.saving : clean ? COMMAND_TEXT.clean : COMMAND_TEXT.save}</ActionButton>
           </IconTooltip>
         )}
-        <Button variant="outline" size="sm" disabled={disabled || command.trim() === ''} onClick={() => void runTest()}>{p.testLabel}</Button>
+        <ActionButton variant="outline" size="sm" disabled={disabled} action={testAct} busyLabel={working ? COMMAND_TEXT.saving : p.testLabel}
+          lock={empty ? { reason: COMMAND_TEXT.needCommand } : undefined}>{p.testLabel}</ActionButton>
       </div>
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
     </div>

@@ -2,6 +2,7 @@
 // and 2 live in `setup.claude.tsx` / `setup.browser.tsx` (each is a screen of its own).
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { DisabledReason } from '@/components/ui/disabled-reason'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { CapabilitiesResponse } from '../../shared/featureCapabilities'
@@ -11,13 +12,13 @@ import type { SetupStep } from '../../shared/settings.setup'
 import type { AppTheme } from '../../shared/settings.terminal'
 import { CentralLaunchStatus } from '../claudeLauncher/CentralLaunchStatus'
 import { openSettingsAt } from '../settings.link'
-import { useNotifyPrefs, writeNotifyPrefs } from '../osNotify.prefs'
+import { NOTIFY_TEXT, useDesktopNotify } from '../osNotify.settings'
 import { useCapabilities } from '../useCapabilities'
 import { ProjectsFolderSetting } from '../workspaceCreate/ProjectsFolderSetting'
 import { BrowserStep } from './setup.browser'
 import { ClaudeStep } from './setup.claude'
 import { SETUP_TEXT } from './setup.labels'
-import { StepFooter, Tiles, type StepProps } from './setup.ui'
+import { LoadRetry, StepFooter, Tiles, type StepProps } from './setup.ui'
 
 /** How much Central may do; each level is the capability of that name (it implies the ones before). */
 export type CentralLevel = 'off' | 'central' | 'workers' | 'autonomy'
@@ -39,8 +40,8 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
     return (
       <div className="flex flex-col gap-3" data-setup-step="central">
         <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
-        {error ? <Button size="sm" variant="outline" className="self-start" onClick={() => void refresh()}>{SETUP_TEXT.retry}</Button> : null}
-        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} disabled />
+        {error ? <LoadRetry load={refresh} /> : null}
+        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} locked={SETUP_TEXT.waitForLoad} />
       </div>
     )
   }
@@ -62,34 +63,23 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
 
 const THEMES: readonly AppTheme[] = ['auto', 'light', 'dark']
 
-function notifyHint(): string {
-  const T = SETUP_TEXT.basics
-  if (typeof Notification === 'undefined') return T.notifyUnsupported
-  return Notification.permission === 'denied' ? T.notifyBlocked : T.notifyHint
-}
-
 /** Step 4: theme, projects folder, desktop notifications; applied as they are chosen. */
 export function BasicsStep({ nav, settings, update }: StepProps & { settings: Settings; update(patch: SettingsPatch): void }): React.JSX.Element {
   const T = SETUP_TEXT.basics
-  const prefs = useNotifyPrefs()
-  const [, rerender] = useState(0)
-  // The switch click is the user gesture the browser needs to show its permission prompt.
-  const onNotify = (v: boolean): void => {
-    writeNotifyPrefs({ enabled: v })
-    if (v && typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      void Notification.requestPermission().then(() => rerender((n) => n + 1))
-    }
-  }
+  // Real permission, as in Settings › Notifications: never "on" while the browser blocks it.
+  const notify = useDesktopNotify()
   const openCapabilities = (): void => openSettingsAt('capabilities', 'capability.telegram')
   return (
     <div className="flex flex-col gap-3" data-setup-step="basics">
       <Tiles label={T.theme} options={THEMES} names={T.themes} value={settings.appTheme} onChange={(appTheme) => update({ appTheme })} />
       <ProjectsFolderSetting value={settings.defaultProjectsFolder} onChange={(defaultProjectsFolder) => update({ defaultProjectsFolder })} />
       <div className="flex items-start gap-2">
-        <Switch id="setup-notify" checked={prefs.enabled} disabled={typeof Notification === 'undefined'} onCheckedChange={onNotify} />
+        <Switch id="setup-notify" checked={notify.on} disabled={notify.lock !== undefined} aria-describedby="setup-notify-reason" onCheckedChange={notify.set} />
         <div className="flex flex-col">
           <Label htmlFor="setup-notify">{T.notify}</Label>
-          <span className="text-xs opacity-70">{notifyHint()}</span>
+          <span className="text-xs opacity-70">{T.notifyHint}</span>
+          {notify.lock ? <DisabledReason id="setup-notify-reason" {...notify.lock} /> : null}
+          {notify.refused ? <p id="setup-notify-reason" role="alert" className="m-0 text-xs">{NOTIFY_TEXT.refused}</p> : null}
         </div>
       </div>
       <p className="m-0 text-xs">

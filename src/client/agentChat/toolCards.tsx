@@ -138,12 +138,14 @@ function ToolOutput({ tool, loadFull }: Pick<ToolCardProps, 'tool' | 'loadFull'>
     setError(undefined)
     try { setFull(await loadFull(tool.id)) } catch (e) { setError(errorText(e)) } finally { setLoading(false) }
   }
+  // The button is the feedback: spinner + "Loading full output…" while it runs, then the output or the alert with Retry.
+  const showFull = (): void => { void fetchFull() }
   return (
     <>
       <pre className={`acc-code acc-output${tool.state === 'error' || tool.state === 'denied' ? ' acc-output--error' : ''}`} aria-label="Tool output">{text}</pre>
       {tool.truncated && full === undefined && (
         <div className="acc-row">
-          <Button variant="link" size="xs" disabled={loading} onClick={() => void fetchFull()}>
+          <Button variant="link" size="xs" disabled={loading} aria-busy={loading} onClick={showFull}>
             {loading ? <><span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />Loading full output…</> : error ? 'Retry' : 'Show full output'}
           </Button>
           {error && <span className="acc-error" role="alert">{`Could not load the full output: ${error}`}</span>}

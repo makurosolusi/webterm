@@ -3,6 +3,7 @@
 // and a retried tap is delivered once (same operationId).
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Textarea } from '@/components/ui/textarea'
 import type { MobileAgent } from '../../server/push/mobileAgents'
 import { OUTBOX_PATH, type OutboxEnqueueReply } from '../../server/outbox/outbox.types'
@@ -26,25 +27,20 @@ function AgentCard({ agent }: { agent: MobileAgent }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [op, setOp] = useState(() => newOperationId(agent.nodeId))
-  const [note, setNote] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const status = agent.status ? STATUS_LABEL[agent.status] ?? agent.status : agent.live ? 'Idle' : 'Not running'
 
-  const submit = async () => {
-    setBusy(true)
-    setNote(null)
-    try {
-      const r = await sendPrompt(agent.nodeId, text.trim(), op)
-      setNote(r.message.status === 'delivered' ? 'Sent.' : 'Queued: delivered when the agent is idle.')
-      setText('')
-      setOp(newOperationId(agent.nodeId)) // the next prompt is a new operation; a retry of this one is not
-      setOpen(false)
-    } catch (err) {
-      setNote(inboxErrorMessage(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+  // A failure keeps the text and the operationId, so Retry delivers this prompt once.
+  const submit = useAction(async () => {
+    const r = await sendPrompt(agent.nodeId, text.trim(), op)
+    setText('')
+    setOp(newOperationId(agent.nodeId)) // the next prompt is a new operation; a retry of this one is not
+    setOpen(false)
+    return r
+  }, {
+    label: `Send prompt to ${agent.title}`,
+    success: (r) => (r.message.status === 'delivered' ? 'Sent.' : 'Queued: delivered when the agent is idle.'),
+    failure: (err) => `Could not send: ${inboxErrorMessage(err)}`,
+  })
 
   return (
     <article className="m-card">
@@ -58,14 +54,14 @@ function AgentCard({ agent }: { agent: MobileAgent }): React.JSX.Element {
         <div className="m-reply">
           <Textarea aria-label={`Prompt for ${agent.title}`} value={text} onChange={(e) => setText(e.target.value)} rows={3} />
           <div className="m-actions">
-            <Button type="button" className="m-btn m-primary" disabled={busy || !text.trim()} onClick={() => void submit()}>Send</Button>
+            <ActionButton type="button" className="m-btn m-primary" disabled={!text.trim()} action={submit} busyLabel="Sending…">Send</ActionButton>
             <Button type="button" className="m-btn" onClick={() => setOpen(false)}>Cancel</Button>
           </div>
         </div>
       ) : (
         <div className="m-actions"><Button type="button" className="m-btn" onClick={() => setOpen(true)}>Send prompt</Button></div>
       )}
-      {note && <p className="m-card-meta" role="status">{note}</p>}
+      <ActionResult action={submit} />
     </article>
   )
 }

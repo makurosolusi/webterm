@@ -3,6 +3,7 @@
 // The key is write-only: the server answers "set" or not, the typed value lives in component state
 // until Save and is cleared right after; it is never logged or put in an error message.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +62,7 @@ export const PROVIDER_TEXT = {
   keySet: 'Saved. Type a new one to replace it.',
   keyUnset: 'Not set',
   removeKey: 'Remove key',
+  retry: 'Retry',
   model: 'Default model (optional)',
   save: 'Save',
   saving: 'Saving…',
@@ -92,7 +94,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
   const [error, setError] = useState<string | null>(null)
   // Each save gets a new seq: the status line and the toast remount, so a repeated save is visibly new.
   const [saved, setSaved] = useState<{ seq: number; at: string } | null>(null)
-  const [toast, setToast] = useState<{ seq: number; severity: VscodeNotificationSeverity; title: string } | null>(null)
+  const [toast, setToast] = useState<{ seq: number; severity: VscodeNotificationSeverity; title: string; retry?: () => void } | null>(null)
   const seq = useRef(0)
   const [working, setBusy] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -127,9 +129,10 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
     setSaved({ seq: n, at: new Date().toLocaleTimeString() })
     setToast({ seq: n, severity: 'info', title: PROVIDER_TEXT.savedToast })
   }
-  const fail = (message: string): void => {
+  // In the wizard (commitRef) Continue turns into Retry, so the toast offers none of its own.
+  const fail = (message: string, retry: () => void): void => {
     setError(message)
-    setToast({ seq: ++seq.current, severity: 'error', title: message })
+    setToast({ seq: ++seq.current, severity: 'error', title: message, retry: commitRef ? undefined : retry })
   }
   /** true = saved. */
   const save = async (secretOverride?: '', profileId?: string): Promise<boolean> => {
@@ -142,7 +145,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
       markSaved()
       return true
     } catch (e) {
-      fail(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'))
+      fail(PROVIDER_TEXT.saveFailed(e instanceof Error ? e.message : 'error'), () => { void save(secretOverride, profileId) })
       return false
     } finally { setBusy(false); setSaving(false) }
   }
@@ -153,7 +156,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
       adopt(await call(RESET_PATH, 'POST') as unknown as State)
       markSaved()
     } catch (e) {
-      fail(PROVIDER_TEXT.resetFailed(e instanceof Error ? e.message : 'error'))
+      fail(PROVIDER_TEXT.resetFailed(e instanceof Error ? e.message : 'error'), () => { void reset() })
     } finally { setBusy(false); setResetting(false) }
   }
   const p = state?.provider
@@ -169,6 +172,11 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
     if (dirty && !(await save())) return
     await runTest()
   }
+  // Busy per button; the card's own lines (Saved at …, the error) and toast (with Retry) are the result.
+  const saveAct = useAction(() => save(), { label: PROVIDER_TEXT.save, ok: (r) => r, toast: 'never', minBusyMs: 0 })
+  const removeKeyAct = useAction(() => save(''), { label: PROVIDER_TEXT.removeKey, ok: (r) => r, toast: 'never', minBusyMs: 0 })
+  const resetAct = useAction(reset, { label: PROVIDER_TEXT.reset, toast: 'never', minBusyMs: 0 })
+  const testAct = useAction(test, { label: testLabel, toast: 'never', minBusyMs: 0 })
   // Command mode keeps its draft in ClaudeProviderCommand, which fills this with its own save (null = clean).
   const commandCommit = useRef<(() => Promise<boolean>) | null>(null)
   useEffect(() => {
@@ -184,7 +192,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
       {p?.configError ? (
         <div role="alert" className="flex flex-col items-start gap-2 rounded border border-[var(--vscode-inputValidation-errorBorder,var(--vscode-errorForeground))] bg-[var(--vscode-inputValidation-errorBackground)] p-2 text-xs">
           <p><span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.damaged}</p>
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => void reset()}>{resetting ? PROVIDER_TEXT.resetting : PROVIDER_TEXT.reset}</Button>
+          <ActionButton size="sm" variant="outline" disabled={busy} action={resetAct} busyLabel={PROVIDER_TEXT.resetting}>{resetting ? PROVIDER_TEXT.resetting : PROVIDER_TEXT.reset}</ActionButton>
         </div>
       ) : null}
       {state ? (
@@ -193,7 +201,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
           <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
           {mode === 'command' && p ? (
             <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest}
-              onError={(m) => setToast({ seq: ++seq.current, severity: 'error', title: m })} pending={commandCommit} hideSave={!!commitRef} />
+              onError={(m, retry) => setToast({ seq: ++seq.current, severity: 'error', title: m, retry: commitRef ? undefined : retry })} pending={commandCommit} hideSave={!!commitRef} />
           ) : null}
           {mode === 'custom' ? (
             <>
@@ -214,12 +222,12 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
             {commitRef ? null : (
               <IconTooltip label={saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean} disabled={busy || !dirty}
                 disabledReason={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}>
-                <Button size="sm" disabled={busy || !dirty} aria-busy={saving}
-                  onClick={() => void save()}>{saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</Button>
+                <ActionButton size="sm" disabled={busy || !dirty} action={saveAct} busyLabel={PROVIDER_TEXT.saving}>
+                  {saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</ActionButton>
               </IconTooltip>
             )}
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => void test()}>{testLabel}</Button>
-            {mode !== 'login' && p?.secretSet ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void save('')}>{PROVIDER_TEXT.removeKey}</Button> : null}
+            <ActionButton variant="outline" size="sm" disabled={busy} action={testAct} busyLabel={testing ? testLabel : PROVIDER_TEXT.saving}>{testLabel}</ActionButton>
+            {mode !== 'login' && p?.secretSet ? <ActionButton variant="outline" size="sm" disabled={busy} action={removeKeyAct} busyLabel={PROVIDER_TEXT.saving}>{PROVIDER_TEXT.removeKey}</ActionButton> : null}
           </div> : null}
           {connection ? null : <ConnectionTest test={conn} />}
           {/* The previous result (before this page ran one), from the server. */}
@@ -237,7 +245,8 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
       ) : null}
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
       {toast ? <VscodeNotification key={toast.seq} id={`claude-provider-${toast.seq}`} severity={toast.severity} title={toast.title}
-        onClose={() => setToast((t) => (t?.seq === toast.seq ? null : t))} /> : null}
+        onClose={() => setToast((t) => (t?.seq === toast.seq ? null : t))}
+        actions={toast.retry ? [{ label: PROVIDER_TEXT.retry, onClick: () => { setToast(null); toast.retry?.() } }] : undefined} /> : null}
     </section>
   )
 }

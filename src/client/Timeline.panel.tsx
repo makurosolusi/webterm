@@ -1,6 +1,7 @@
 // Body of the Activity panel (Timeline.tsx owns its open state and bottom-panel tab). Split out so it
 // loads when the tab first shows: the panel is closed by default.
 import { useMemo, useState } from 'react'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeTooltip } from './components/vscode/vscodeTooltip'
 import { LEVEL_NAMES } from './central/centralLabels'
@@ -37,6 +38,7 @@ function LevelBadge({ control, workspaceId }: { control: ControlSnapshot | null;
 /** The panel body; exported separately so tests mount it without the open store. */
 export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusNode }: TimelinePanelProps): React.JSX.Element {
   const feed = useTimelineFeed(true)
+  const older = useAction(feed.loadOlder, { label: 'Load older activity', success: () => 'Loaded' })
   const { control, integrity } = useTimelineStatus(true, feed.epoch)
   const [mode, setMode] = useState<GroupMode>('task')
   const [filter, setFilter] = useState<TimelineFilter>(NO_FILTER)
@@ -103,9 +105,10 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
           </section>
         ))}
         {feed.more && (
-          <button type="button" className="timeline-older" disabled={feed.loadingOlder} onClick={() => void feed.loadOlder()}>
-            {feed.loadingOlder ? 'Loading…' : 'Load older activity'}
-          </button>
+          <>
+            <ActionButton type="button" variant="ghost" size="sm" className="timeline-older" action={older} busyLabel="Loading…">Load older activity</ActionButton>
+            <ActionResult action={older} />
+          </>
         )}
       </div>
     </div>

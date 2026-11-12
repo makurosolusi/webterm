@@ -83,7 +83,10 @@ export default function SessionHistory({ active, activeWs, workspaces, deps }: S
 
   if (!active) return null
 
-  const retry = () => void load(0)
+  // Loads are not useAction: `seq` drops stale answers. Busy = `loading` on the button, failure = the alert with Retry.
+  const retry = (): void => { void load(0) }
+  const refresh = (): void => { void load(0, true) }
+  const loadMore = (): void => { if (next !== null) void load(next) }
   return (
     <div className="agent-history-view nodrag" aria-label="Agent history">
       <div className="agent-history__toolbar">
@@ -97,7 +100,7 @@ export default function SessionHistory({ active, activeWs, workspaces, deps }: S
             ))}
           </div>
           {!noFolder && <span className="agent-history__count">{items.length} shown · {total}</span>}
-          <IconButton type="button" size="icon-sm" className="agent-history__refresh" label="Refresh agent history" disabled={noFolder} onClick={() => void load(0, true)}>
+          <IconButton type="button" size="icon-sm" className="agent-history__refresh" label="Refresh agent history" disabled={noFolder || loading} aria-busy={loading} onClick={refresh}>
             <span className="codicon codicon-refresh" aria-hidden />
           </IconButton>
         </div>
@@ -131,7 +134,7 @@ export default function SessionHistory({ active, activeWs, workspaces, deps }: S
           ))}
         </ul>
         {!noFolder && next !== null && (
-          <Button type="button" variant="secondary" size="xs" className="agent-history__more" disabled={loading} onClick={() => void load(next)}>
+          <Button type="button" variant="secondary" size="xs" className="agent-history__more" disabled={loading} aria-busy={loading} onClick={loadMore}>
             {loading ? 'Loading…' : 'Load more'}
           </Button>
         )}

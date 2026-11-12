@@ -1,7 +1,8 @@
 // Shared pieces of the wizard steps: option tiles (one-of-N, no typing) and the step footer with
 // Back / Skip / Continue, the "Change later" link (opens Settings on that setting) and the save error with Retry.
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import type { CapabilitiesLoad } from '../useCapabilities'
 import { SETUP_TEXT } from './setup.labels'
 import { openSettingsAt, type SettingsFieldId } from '../settings.link'
 
@@ -26,12 +27,11 @@ export function Tiles<T extends string>(p: {
   help?: Partial<Record<T, string>>
   value: T
   onChange(v: T): void
-  disabled?: boolean
 }): React.JSX.Element {
   return (
     <div role="group" aria-label={p.label} className="flex flex-col gap-1">
       {p.options.map((o) => (
-        <Button key={o} variant={p.value === o ? 'default' : 'outline'} aria-pressed={p.value === o} disabled={p.disabled}
+        <Button key={o} variant={p.value === o ? 'default' : 'outline'} aria-pressed={p.value === o}
           className="h-auto min-h-8 flex-col items-start justify-start whitespace-normal py-1 text-left" onClick={() => p.onChange(o)}>
           <span className="[overflow-wrap:anywhere]">{p.names[o]}</span>
           {p.help?.[o] ? <span className="text-xs font-normal opacity-80">{p.help[o]}</span> : null}
@@ -43,41 +43,46 @@ export function Tiles<T extends string>(p: {
 
 /**
  * Footer of a step. `commit` runs on Continue and resolves an error message (shown with Retry, the
- * step stays) or null (the step is done). Skip leaves the step unchanged on the server.
+ * step stays) or null (the step is done). Skip leaves the step unchanged on the server. `locked` =
+ * why Continue cannot run yet (shown under it).
  */
-export function StepFooter({ nav, where, at, commit, disabled }: {
+export function StepFooter({ nav, where, at, commit, locked }: {
   nav: StepNav
   where: string
   /** The setting `where` names: the "Change later" link reveals it (Settings opens over the wizard). */
   at: { section: string; field: SettingsFieldId }
   commit?: () => Promise<string | null>
-  disabled?: boolean
+  locked?: string
 }): React.JSX.Element {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const last = nav.index === nav.total - 1
-  const onContinue = async (): Promise<void> => {
-    setBusy(true)
-    setError(null)
+  // No toast: the failure line plus Continue turning into Retry is the whole failure surface.
+  const cont = useAction(async () => {
     const failed = commit ? await commit() : null
-    setBusy(false)
-    if (failed) setError(failed)
-    else nav.next()
-  }
+    if (!failed) nav.next()
+    return failed
+  }, { label: last ? SETUP_TEXT.finish : SETUP_TEXT.next, ok: (f) => f === null, success: (f) => f ?? SETUP_TEXT.saved, toast: 'never' })
+  const error = cont.result !== null && !cont.result.ok
+  const busy = cont.busy
   return (
     <div className="mt-auto flex flex-col gap-2 pt-2">
       <Button size="xs" variant="link" className="h-auto self-start px-0 text-xs opacity-70" onClick={() => openSettingsAt(at.section, at.field)}>
         {SETUP_TEXT.changeLater(where)}
       </Button>
-      {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
+      {error ? <ActionResult action={cont} /> : null}
       <div className="flex items-center gap-2">
         {nav.index > 0 ? <Button size="sm" variant="ghost" disabled={busy} onClick={nav.back}>{SETUP_TEXT.back}</Button> : null}
         <span className="flex-1" />
         <Button size="sm" variant="outline" disabled={busy} onClick={nav.skip}>{SETUP_TEXT.skip}</Button>
-        <Button size="sm" disabled={busy || disabled} onClick={() => void onContinue()}>
-          {busy ? SETUP_TEXT.saving : error ? SETUP_TEXT.retry : last ? SETUP_TEXT.finish : SETUP_TEXT.next}
-        </Button>
+        <ActionButton size="sm" action={cont} busyLabel={SETUP_TEXT.saving} lock={locked ? { reason: locked } : undefined}>
+          {error ? SETUP_TEXT.retry : last ? SETUP_TEXT.finish : SETUP_TEXT.next}
+        </ActionButton>
       </div>
     </div>
   )
+}
+
+/** Retry for a step whose settings failed to load: busy while it reloads; the step's alert above says why. */
+export function LoadRetry({ load }: { load(): Promise<CapabilitiesLoad> }): React.JSX.Element {
+  const retry = useAction(load, { label: SETUP_TEXT.retry, ok: (r) => r.ok, toast: 'never' })
+  return <ActionButton size="sm" variant="outline" className="self-start" action={retry} busyLabel={SETUP_TEXT.retrying}>{SETUP_TEXT.retry}</ActionButton>
 }

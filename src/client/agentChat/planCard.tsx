@@ -67,12 +67,12 @@ export function PlanCard({ request, outcome, answer, setMode }: PlanCardProps) {
           </fieldset>
           <div className="acc-row">
             {pending && <Spinner />}
-            <Button size="xs" disabled={pending} onClick={() => void approve()}>Approve</Button>
+            <Button size="xs" disabled={pending} aria-busy={pending} onClick={approve}>Approve</Button>
           </div>
           <Textarea aria-label="Feedback on the plan" placeholder="Tell Claude what to change (sent with Keep planning)"
             rows={2} value={feedback} disabled={pending || answered.current} onChange={(e) => setFeedback(e.target.value)} />
           <div className="acc-row">
-            <Button variant="secondary" size="xs" disabled={pending || answered.current} onClick={() => void keepPlanning()}>Keep planning</Button>
+            <Button variant="secondary" size="xs" disabled={pending || answered.current} aria-busy={pending} onClick={keepPlanning}>Keep planning</Button>
           </div>
         </>
       )}

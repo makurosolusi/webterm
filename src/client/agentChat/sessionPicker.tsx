@@ -44,11 +44,14 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
     setActionError(undefined)
     void load()
   }
-  const act = async (key: string, what: string, fn: () => Promise<void>): Promise<void> => {
+  // Feedback is in the list: the spinner / "Resuming…" + aria-busy while it runs, then the popover closes,
+  // or the error line (role=alert) stays with the list open to try again.
+  const act = (key: string, what: string, fn: () => Promise<void>): void => {
     setBusy(key)
     setActionError(undefined)
-    try { await fn(); setOpen(false) } catch (e) { setActionError(`Could not ${what}: ${errorText(e)}`) } finally { setBusy(undefined) }
+    new Promise<void>((done) => done(fn())).then(() => setOpen(false), (e: unknown) => setActionError(`Could not ${what}: ${errorText(e)}`)).finally(() => setBusy(undefined))
   }
+  const reload = (): void => { void load() }
   // Only a new request opens it; `openChange` is rebuilt every render, so it is not a dependency.
   useEffect(() => { if (openRequest && !disabled) openChange(true) }, [openRequest])
   const q = query.trim().toLowerCase()
@@ -69,7 +72,7 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
           <div className="act-sessions__bar">
             <Input className="act-sessions__search" value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations" aria-label="Search conversations" autoFocus />
-            <Button variant="secondary" size="xs" disabled={!!busy} onClick={() => void act('new', 'start a new conversation', onNew)}>
+            <Button variant="secondary" size="xs" disabled={!!busy} aria-busy={busy === 'new'} onClick={() => act('new', 'start a new conversation', onNew)}>
               <span className={`codicon ${busy === 'new' ? 'codicon-loading codicon-modifier-spin' : 'codicon-add'}`} aria-hidden="true" />
               New conversation
             </Button>
@@ -79,7 +82,7 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
           {error && !loading && (
             <p className="act-menu__note act-menu__note--error" role="alert">
               {`Could not load conversations: ${error} `}
-              <Button variant="secondary" size="xs" onClick={() => void load()}>Retry</Button>
+              <Button variant="secondary" size="xs" onClick={reload}>Retry</Button>
             </p>
           )}
           {shown && !loading && !error && shown.length === 0 && (
@@ -90,7 +93,8 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
               {shown.map((s) => (
                 <li key={s.sessionId}>
                   <button type="button" className="act-menu__item act-sessions__item" disabled={s.current || !!busy}
-                    aria-current={s.current || undefined} onClick={() => void act(s.sessionId, 'resume the conversation', () => onResume(s.sessionId))}>
+                    aria-current={s.current || undefined} aria-busy={busy === s.sessionId}
+                    onClick={() => act(s.sessionId, 'resume the conversation', () => onResume(s.sessionId))}>
                     <span className="act-sessions__title">{s.title || 'Untitled conversation'}</span>
                     <span className="act-menu__desc">
                       {busy === s.sessionId ? 'Resuming…' : s.current ? `Current · ${relativeTime(s.updatedAt)}` : relativeTime(s.updatedAt)}

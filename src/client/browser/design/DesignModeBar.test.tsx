@@ -52,7 +52,9 @@ describe('DesignModeBar', () => {
     render(<Harness nodeId="web1" />)
     fireEvent.click(screen.getByRole('button', { name: 'switch' }))
     fireEvent.click(await screen.findByRole('button', { name: DESIGN_TEXT.send }))
-    expect((await screen.findByRole('alert')).textContent).toBe('No agent is wired to this browser node.')
+    expect(screen.getByRole('button', { name: DESIGN_TEXT.sending }).getAttribute('aria-busy')).toBe('true')
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('No agent is wired to this browser node.'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 
   it('Exit in the bar turns Design Mode off and removes the bar', async () => {

@@ -1,9 +1,22 @@
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import type { ReminderCard } from '../../../shared/centralWork'
 import { dueWords } from './planningModel'
 import type { TaskBoardClient } from './taskBoardApi'
 import { TL } from './taskBoardLabels'
 import { actionErrorText } from './taskBoardModel'
 import { usePolledPages, useRowActions } from './usePolledPages'
+
+/** Cancel one reminder; the refusal's reason shows in the list's notice (it survives the reload). */
+function CancelReminder({ r, busy, cancel }: { r: ReminderCard; busy: boolean; cancel: () => Promise<boolean> }): React.JSX.Element {
+  const act = useAction(cancel, { label: TL.cancel, ok: (ok) => ok, success: (ok) => (ok ? 'Cancelled' : `${TL.cancel} failed`) })
+  return (
+    <>
+      <ActionButton type="button" size="xs" variant="ghost" disabled={busy} aria-label={TL.actionOn(TL.cancel, r.text)} action={act} busyLabel="Cancelling…">{TL.cancel}</ActionButton>
+      <ActionResult action={act} />
+    </>
+  )
+}
 
 /** Pending reminders with Cancel. Hidden when there are none. */
 export function UpcomingList({ client, visible }: { client: TaskBoardClient; visible: boolean }): React.JSX.Element | null {
@@ -29,7 +42,7 @@ export function UpcomingList({ client, visible }: { client: TaskBoardClient; vis
             <span className="task-upcoming__text">{r.text}</span>
             <span className="task-card__meta">{r.projectName}</span>
             <time className="task-card__meta" dateTime={new Date(r.dueAt).toISOString()} title={new Date(r.dueAt).toLocaleString()}>{dueWords(r.dueAt)}</time>
-            <Button type="button" size="xs" variant="ghost" disabled={busy.has(r.id)} aria-label={TL.actionOn(TL.cancel, r.text)} onClick={() => void run(r.id, () => client.cancelReminder(r.id))}>{TL.cancel}</Button>
+            <CancelReminder r={r} busy={busy.has(r.id)} cancel={() => run(r.id, () => client.cancelReminder(r.id))} />
           </li>
         ))}
       </ul>

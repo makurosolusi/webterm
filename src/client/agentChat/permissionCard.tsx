@@ -20,18 +20,21 @@ export function ResolvedBadge({ outcome }: { outcome: Exclude<PermissionOutcome,
   return <span className={`acc-badge acc-badge--${outcome}`} role="status">{OUTCOME_LABEL[outcome]}</span>
 }
 
-/** Runs one answer action at a time; keeps the last action so a failed POST can be retried as-is. */
-export function useAnswerAction(): { pending: boolean; error: string | undefined; run: (act: () => Promise<void>) => Promise<void>; retry: () => void } {
+/** Runs one answer action at a time; keeps the last action so a failed POST can be retried as-is.
+ * The card renders all of its feedback (spinner + aria-busy while pending, AnswerError with Retry,
+ * then ResolvedBadge), so `run` only starts the action. */
+export function useAnswerAction(): { pending: boolean; error: string | undefined; run: (act: () => Promise<void>) => void; retry: () => void } {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string>()
   const last = useRef<() => Promise<void>>(undefined)
-  const run = useCallback(async (act: () => Promise<void>) => {
+  const run = useCallback((act: () => Promise<void>): void => {
     last.current = act
     setPending(true)
     setError(undefined)
-    try { await act() } catch (e) { setError(errorText(e)) } finally { setPending(false) }
+    // The executor runs `act` now (callers expect the POST to start on click) and turns a sync throw into a rejection.
+    new Promise<void>((done) => done(act())).catch((e: unknown) => setError(errorText(e))).finally(() => setPending(false))
   }, [])
-  const retry = useCallback(() => { if (last.current) void run(last.current) }, [run])
+  const retry = useCallback(() => { if (last.current) run(last.current) }, [run])
   return { pending, error, run, retry }
 }
 
@@ -73,9 +76,9 @@ export function PermissionCard({ request, outcome, answer }: PermissionCardProps
             rows={1} value={note} disabled={pending} onChange={(e) => setNote(e.target.value)} />
           <div className="acc-row">
             {pending && <Spinner />}
-            <Button size="xs" disabled={pending} onClick={() => void allow(false)}>Allow once</Button>
-            {canAlways && <Button variant="secondary" size="xs" disabled={pending} onClick={() => void allow(true)}>Always allow</Button>}
-            <Button variant="secondary" size="xs" disabled={pending} onClick={() => void deny()}>Deny</Button>
+            <Button size="xs" disabled={pending} aria-busy={pending} onClick={() => allow(false)}>Allow once</Button>
+            {canAlways && <Button variant="secondary" size="xs" disabled={pending} aria-busy={pending} onClick={() => allow(true)}>Always allow</Button>}
+            <Button variant="secondary" size="xs" disabled={pending} aria-busy={pending} onClick={deny}>Deny</Button>
           </div>
           {error && <AnswerError error={error} retry={retry} disabled={pending} />}
         </>

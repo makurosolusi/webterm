@@ -223,6 +223,10 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect((screen.getByLabelText('Daily spending limit') as HTMLInputElement).disabled).toBe(true))
     expect(main.querySelectorAll('[data-reason]').length).toBeGreaterThan(3)
     expect(main.textContent).toContain('Turn on Central Agent first.')
+    // Each disabled switch points at the line saying why.
+    for (const sw of switches.filter((x) => x.hasAttribute('disabled'))) {
+      expect(document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.hasAttribute('data-reason')).toBe(true)
+    }
   })
 
   it('daily spending limit shows dollars, writes micros, and clears to unlimited', async () => {

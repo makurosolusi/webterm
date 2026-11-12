@@ -122,6 +122,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
       setEvents((cur) => mergeEvents(cur, page.events, Number.MAX_SAFE_INTEGER))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      throw err // the Load older button shows the failure with Retry
     } finally {
       setLoadingOlder(false)
     }

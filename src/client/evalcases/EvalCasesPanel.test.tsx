@@ -48,6 +48,8 @@ describe('Eval cases (Settings › Developer)', () => {
     await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true))
     expect(calls.find((c) => c.method === 'POST')).toEqual({ method: 'POST', url: '/api/evalcases/c1/promote', body: { reason: 'never touch staging' } })
     fireEvent.change(screen.getByLabelText('Why did you reject it? (optional)'), { target: { value: '  ' } })
+    // Both buttons stay off until the first decision settles.
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Dismiss' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(2))
     expect(calls.filter((c) => c.method === 'POST')[1]).toEqual({ method: 'POST', url: '/api/evalcases/c1/dismiss', body: {} })
@@ -76,6 +78,10 @@ describe('Eval cases (Settings › Developer)', () => {
     await screen.findByText('Central plan rejected')
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })))
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('Dismiss failed: not_found')
+    const busy = screen.getByRole('button', { name: /Dismissing/ })
+    expect(busy.getAttribute('aria-busy')).toBe('true')
+    expect((screen.getByRole('button', { name: 'Promote to golden' }) as HTMLButtonElement).disabled).toBe(true)
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('Dismiss failed: not_found'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy() // failure toast offers Retry
   })
 })

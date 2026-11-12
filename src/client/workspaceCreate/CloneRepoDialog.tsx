@@ -5,6 +5,7 @@
 // place, see useCreateFlow) and a success state with Reveal in Finder and Copy path.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,6 +54,8 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
   // A new URL drops every answer; a new folder keeps "clone again anyway" (it was about the repo).
   const edit = <T,>(set: (v: T) => void, keepExisting = true) => (v: T) => { set(v); flow.reset(keepExisting) }
   const canClone = !flow.busy && valid && parent.trim() !== '' && folder.trim() !== ''
+  const cloneLock = flow.busy ? undefined : !valid ? 'Enter a repository URL first.' : folder.trim() === '' ? 'Enter a folder name first.'
+    : parent.trim() === '' ? 'Choose a parent folder first.' : undefined
 
   const cancel = (): void => {
     if (cloning) void cancelClone()
@@ -81,7 +84,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
               <Label htmlFor="clone-name">Folder name</Label>
               <Input id="clone-name" value={folder} spellCheck={false} disabled={flow.busy} onChange={(e) => edit(setName)(e.target.value)} />
             </div>
-            <ParentField id="clone-parent" value={parent} disabled={flow.busy} onChange={edit(setParent)} onBrowse={() => setBrowsing(true)} />
+            <ParentField id="clone-parent" value={parent} busy={flow.busy} onChange={edit(setParent)} onBrowse={() => setBrowsing(true)} />
             <TargetPath parent={parent} name={folder} />
             {flow.notice && (
               <CreateNotice notice={flow.notice} verb="Clone"
@@ -99,7 +102,9 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
-              <Button type="submit" disabled={!canClone}>{cloning ? 'Cloning…' : 'Clone'}</Button>
+              <IconTooltip label="Clone" disabled={!canClone} disabledReason={cloneLock}>
+                <Button type="submit" disabled={!canClone}>{cloning ? 'Cloning…' : 'Clone'}</Button>
+              </IconTooltip>
             </DialogFooter>
           </form>
         )}

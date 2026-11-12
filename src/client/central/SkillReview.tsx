@@ -1,8 +1,8 @@
 // Skill review: lint result, diff, and the human-only actions. Approving activates a skill (R3), so it
 // needs the typed phrase; reject and rollback are one click (reject only frees the name, rollback re-points `active/<name>`).
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useRef, useState } from 'react'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { useState } from 'react'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { useCapabilities } from '../useCapabilities'
 import { CL } from './centralLabels'
@@ -12,22 +12,21 @@ import { centralErrorMessage, useLoad } from './centralLoad'
 
 const OPEN_STATUSES: readonly SkillReviewRow['record']['status'][] = ['proposed', 'evaluated', 'pending_approval']
 
+const BUSY = { approve: 'Approving…', reject: 'Rejecting…', rollback: 'Rolling back…', turnOn: 'Turning on…' } as const
+
 const diffClass = (line: string): string => (line.startsWith('+') ? 'ccp-diff--add' : line.startsWith('-') ? 'ccp-diff--del' : '')
 
 function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: CentralControlClient; onDone: () => void }) {
   const { record, lint, diff, canRollback } = row
   const [typed, setTyped] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const inFlight = useRef(false)
-  const act = async (fn: () => Promise<void>) => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
-    setError(null)
-    // On success the row stays busy: the status it acted on changed, so the reload remounts it.
-    try { await fn(); onDone() } catch (err) { inFlight.current = false; setBusy(false); setError(centralErrorMessage(err, CL.actionFailed)) }
-  }
+  // On success the row stays disabled: the status it acted on changed, so the reload remounts it.
+  const [done, setDone] = useState(false)
+  const failure = (err: unknown) => centralErrorMessage(err, CL.actionFailed)
+  const then = (fn: () => Promise<void>) => async () => { await fn(); setDone(true); onDone() }
+  const approve = useAction(then(() => client.approveSkill(record.name, record.version, typed)), { label: CL.skillApprove, failure })
+  const reject = useAction(then(() => client.rejectSkill(record.name, record.version)), { label: CL.skillReject, failure })
+  const rollback = useAction(then(() => client.rollbackSkill(record.name)), { label: CL.skillRollback, failure })
+  const busy = done || approve.busy || reject.busy || rollback.busy
   const named = (verb: string): string => `${verb} ${record.name} ${record.version}`
   const open = OPEN_STATUSES.includes(record.status)
   return (
@@ -50,12 +49,14 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
           <label className="ccp-confirm-input">{CL.confirmLabel(CONFIRM_PHRASE)}
             <Input value={typed} autoComplete="off" onChange={(e) => setTyped(e.target.value)} />
           </label>
-          <Button type="button" size="sm" aria-label={named(CL.skillApprove)} disabled={busy || typed !== CONFIRM_PHRASE || !lint.ok} onClick={() => void act(() => client.approveSkill(record.name, record.version, typed))}>{CL.skillApprove}</Button>
+          <ActionButton type="button" size="sm" aria-label={named(CL.skillApprove)} disabled={busy || typed !== CONFIRM_PHRASE || !lint.ok} action={approve} busyLabel={BUSY.approve}>{CL.skillApprove}</ActionButton>
         </>
       )}
-      {open && <Button type="button" size="sm" variant="secondary" aria-label={named(CL.skillReject)} disabled={busy} onClick={() => void act(() => client.rejectSkill(record.name, record.version))}>{CL.skillReject}</Button>}
-      {canRollback && <Button type="button" size="sm" variant="secondary" aria-label={named(CL.skillRollback)} disabled={busy} onClick={() => void act(() => client.rollbackSkill(record.name))}>{CL.skillRollback}</Button>}
-      {error && <p role="alert" className="ccp-error">{error}</p>}
+      {open && <ActionButton type="button" size="sm" variant="secondary" aria-label={named(CL.skillReject)} disabled={busy} action={reject} busyLabel={BUSY.reject}>{CL.skillReject}</ActionButton>}
+      {canRollback && <ActionButton type="button" size="sm" variant="secondary" aria-label={named(CL.skillRollback)} disabled={busy} action={rollback} busyLabel={BUSY.rollback}>{CL.skillRollback}</ActionButton>}
+      <ActionResult action={approve} />
+      <ActionResult action={reject} />
+      <ActionResult action={rollback} />
     </article>
   )
 }
@@ -63,12 +64,15 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
 /** Skills switched off: what they do and the Central card's skills switch (applies live, no restart). */
 function SkillsOff({ onEnabled }: { onEnabled: () => void }) {
   const { busyId, error, setSub } = useCapabilities()
-  const enable = async () => { if (await setSub('central', CENTRAL_SKILLS_SUB, true)) onEnabled() }
+  // setSub answers false and fills the hook's `error` (the reason, shown under the failure line).
+  const enable = useAction(async () => { const ok = await setSub('central', CENTRAL_SKILLS_SUB, true); if (ok) onEnabled(); return ok }, {
+    label: CL.turnOn, ok: (ok) => ok, success: (ok) => (ok ? CL.actionDone : `${CL.turnOn} failed`),
+  })
   return (
     <div className="ccp-off" data-central-off="skills">
       <p>{CL.skillsOff}</p>
-      <Button type="button" size="sm" disabled={busyId === 'central'} onClick={() => void enable()}>{CL.turnOn}</Button>
-      {error && <p role="alert" className="ccp-error">{error}</p>}
+      <ActionButton type="button" size="sm" disabled={busyId === 'central'} action={enable} busyLabel={BUSY.turnOn}>{CL.turnOn}</ActionButton>
+      <ActionResult action={enable}>{error && <p className="ccp-error">{error}</p>}</ActionResult>
     </div>
   )
 }

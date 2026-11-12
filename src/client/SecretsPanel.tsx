@@ -2,9 +2,8 @@
 // (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a
 // password manager field, the list shows names only and the input is cleared after a save.
 import { useCallback, useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { secretRule, whoText } from './policyPresets'
 import { createRule } from './policyRules.api'
 
@@ -30,6 +29,8 @@ export const SECRETS_TEXT = {
   ok: 'OK', exitFailed: (code: number) => `Failed (exit ${code})`, noResult: 'Unknown',
   usageTitle: 'Usage log', usageEmpty: 'No uses yet.', usageOff: 'The usage log is unavailable while the ledger is off.',
   failed: (what: string, why: string) => `${what} failed: ${why}`,
+  saving: 'Saving…', deleting: 'Deleting…', saved: (name: string) => `Saved ${name}.`, deleted: (name: string) => `Deleted ${name}.`,
+  badName: 'Name: a capital letter first, then capitals, digits or _ (e.g. NPM_TOKEN).', needValue: 'Enter a value.',
 } as const
 
 const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/
@@ -64,10 +65,23 @@ function AllowSecret({ name, workspace }: { name: string; workspace: SecretsWork
   )
 }
 
+/** Delete one secret, with busy and its failure on the row. */
+function DeleteSecret({ name, onDone }: { name: string; onDone(): void }): React.JSX.Element {
+  const del = useAction(async () => {
+    await secretsRequest('DELETE', `${SECRETS_PATH}/${encodeURIComponent(name)}`)
+    onDone()
+  }, { label: `${SECRETS_TEXT.delete} ${name}`, success: () => SECRETS_TEXT.deleted(name), failure: (e) => SECRETS_TEXT.failed(SECRETS_TEXT.delete, errorCause(e)) })
+  return (
+    <span className="flex flex-col gap-0.5">
+      <ActionButton size="sm" variant="secondary" action={del} busyLabel={SECRETS_TEXT.deleting}>{SECRETS_TEXT.delete}</ActionButton>
+      <ActionResult action={del} />
+    </span>
+  )
+}
+
 export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspace | null }): React.JSX.Element {
   const [view, setView] = useState<SecretsView | null>(null)
   const [loadError, setLoadError] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
 
@@ -78,22 +92,14 @@ export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspac
   }, [])
   useEffect(load, [load])
 
-  const save = async (): Promise<void> => {
-    setError(null)
-    try {
-      await secretsRequest('PUT', `${SECRETS_PATH}/${encodeURIComponent(name.trim())}`, { value })
-      setValue('')
-      load()
-    } catch (err) { setError(SECRETS_TEXT.failed(SECRETS_TEXT.save, err instanceof Error ? err.message : String(err))) }
-  }
-
-  const remove = async (n: string): Promise<void> => {
-    setError(null)
-    try {
-      await secretsRequest('DELETE', `${SECRETS_PATH}/${encodeURIComponent(n)}`)
-      load()
-    } catch (err) { setError(SECRETS_TEXT.failed(SECRETS_TEXT.delete, err instanceof Error ? err.message : String(err))) }
-  }
+  const save = useAction(async () => {
+    const n = name.trim()
+    await secretsRequest('PUT', `${SECRETS_PATH}/${encodeURIComponent(n)}`, { value })
+    setValue('')
+    load()
+    return n
+  }, { label: SECRETS_TEXT.save, success: (n) => SECRETS_TEXT.saved(n), failure: (e) => SECRETS_TEXT.failed(SECRETS_TEXT.save, errorCause(e)) })
+  const saveLock = !NAME_RE.test(name.trim()) ? SECRETS_TEXT.badName : value.trim() === '' ? SECRETS_TEXT.needValue : undefined
 
   return (
     <section aria-label={SECRETS_TEXT.title} data-testid="secrets-panel">
@@ -110,7 +116,7 @@ export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspac
               <code className="flex-1">{s.name}</code>
               <span className="opacity-70">{s.lastUsedAt === null ? SECRETS_TEXT.neverUsed : SECRETS_TEXT.lastUsed(s.lastUsedAt)}</span>
               <AllowSecret name={s.name} workspace={workspace} />
-              <Button size="sm" variant="secondary" onClick={() => void remove(s.name)}>{SECRETS_TEXT.delete}</Button>
+              <DeleteSecret name={s.name} onDone={load} />
             </li>
           ))}
         </ul>
@@ -119,10 +125,10 @@ export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspac
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           <Input aria-label={SECRETS_TEXT.name} placeholder={SECRETS_TEXT.name} value={name} onChange={(e) => setName(e.target.value.toUpperCase())} className="min-w-32 flex-1" />
           <Input aria-label={SECRETS_TEXT.value} placeholder={SECRETS_TEXT.value} type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} className="min-w-32 flex-1" />
-          <Button size="sm" onClick={() => void save()} disabled={!NAME_RE.test(name.trim()) || value.trim() === ''}>{SECRETS_TEXT.save}</Button>
+          <ActionButton size="sm" action={save} busyLabel={SECRETS_TEXT.saving} lock={saveLock ? { reason: saveLock } : undefined}>{SECRETS_TEXT.save}</ActionButton>
         </div>
       ) : null}
-      {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
+      <ActionResult action={save} />
       {view ? (
         <div className="mt-2">
           <h4 className="text-xs font-semibold">{SECRETS_TEXT.usageTitle}</h4>

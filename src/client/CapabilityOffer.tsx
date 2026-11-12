@@ -9,6 +9,7 @@ import { CAPABILITY_TEXT } from './capabilitiesLabels'
 import { ChromiumPathField } from './ChromiumPathField'
 import { capabilityErrorMessage, useCapabilities } from './useCapabilities'
 import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 
 export interface CapabilityOfferProps {
   id: CapabilityId
@@ -31,14 +32,16 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
   useEffect(() => {
     if (status === 'on' && acted.current) { acted.current = false; onDone?.() }
   }, [status, onDone])
-  if (!view || view.status === 'on') return null
-  const busy = busyId === id
   // onDone lewat efek status di atas, bukan hasil toggle: browser tanpa Chrome menjawab `needs-step`,
   // dan pemanggil yang menunggu node lahir tidak boleh diberi tahu "sudah menyala".
   const enable = async (): Promise<void> => {
     acted.current = true
     if (!(await toggle(id, true))) acted.current = false
   }
+  // Busy only: the offer disappears once on, and a refusal shows in the alert line below with the button still there.
+  const enableAction = useAction(enable, { label: CAPABILITY_TEXT.offerAction, toast: 'never' })
+  if (!view || view.status === 'on') return null
+  const busy = busyId === id
   const saveAdvanced = async (body: { chromiumPath: string }): Promise<void> => {
     try {
       await callCapabilities('/advanced', 'PUT', body)
@@ -68,7 +71,7 @@ export function CapabilityOffer({ id, onDone, onStep }: CapabilityOfferProps): R
           <Button size="sm" variant="secondary" className="self-start" disabled={busy} onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
         )
       ) : (
-        <Button size="sm" className="self-start" disabled={busy} onClick={() => { void enable() }}>{CAPABILITY_TEXT.offerAction}</Button>
+        <ActionButton size="sm" className="self-start" disabled={busy} action={enableAction} busyLabel={CAPABILITY_TEXT.offerBusy}>{CAPABILITY_TEXT.offerAction}</ActionButton>
       )}
       {shownError ? <p role="alert" className="m-0 text-destructive">{shownError}</p> : null}
     </div>

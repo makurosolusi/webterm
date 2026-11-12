@@ -7,6 +7,7 @@ import { fileIconClass } from './fileIcon'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
 import * as fsClient from './fsClient'
 import { writeClipboard } from './clipboard'
+import { ActionResult, useAction } from '@/components/ui/action'
 import { EditorConflictBar } from './EditorConflictBar'
 import { useEditorFile, type WriteChecked } from './useEditorFile'
 import { useEditorSync } from './useEditorSync'
@@ -127,9 +128,7 @@ function EditorNode({
       return (
         <div className="editor-node__placeholder">
           <span>Binary file — can’t be opened as text.</span>
-          <VscodeButton secondary title="Copy file path" onClick={() => void writeClipboard(filePath)}>
-            Copy Path
-          </VscodeButton>
+          <CopyText text={filePath} title="Copy file path">Copy Path</CopyText>
         </div>
       )
     return (
@@ -242,7 +241,7 @@ function EditorNode({
           {lspHint && (
             <div className="editor-node__banner editor-node__lsp-hint nodrag" role="status">
               <span>{lspHint.message} Install it with <code>{lspHint.command}</code></span>
-              <VscodeButton secondary title="Copy install command" onClick={() => void writeClipboard(lspHint.command)}>Copy command</VscodeButton>
+              <CopyText text={lspHint.command} title="Copy install command">Copy command</CopyText>
               <ToolbarButton label="Dismiss" title="Dismiss" onClick={() => dismissLspHint(lspLanguage)}>
                 <span className="codicon codicon-close" aria-hidden="true" />
               </ToolbarButton>
@@ -259,6 +258,18 @@ function EditorNode({
           )}
         </div>
       </div>
+    </>
+  )
+}
+
+/** Copy `text` to the clipboard, then say "Copied" (or that copying failed, with Retry). */
+function CopyText({ text, title, children }: { text: string; title: string; children: string }) {
+  const act = useAction(() => writeClipboard(text), { label: children, ok: (r) => r, success: (r) => (r ? 'Copied' : 'Copy failed: the browser blocked the clipboard') })
+  const click = (): void => { void act.run() }
+  return (
+    <>
+      <VscodeButton secondary title={title} disabled={act.busy} aria-busy={act.busy ? 'true' : 'false'} onClick={click}>{children}</VscodeButton>
+      <ActionResult action={act} />
     </>
   )
 }
