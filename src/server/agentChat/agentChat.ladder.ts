@@ -40,7 +40,7 @@ export function withLadderEntry(models: AgentChatModel[], p: ModelPick): AgentCh
   const efforts = models.find((m) => m.value === p.model)?.efforts ?? own?.efforts
   const entry: AgentChatModel = {
     ...(efforts ? { efforts } : {}), value: AGENT_CHAT_DEFAULT_MODEL, displayName: agentChatLadderLabel(p),
-    description: p.reason === 'user override' ? 'Set for this workspace in Settings › Agent › Models' : 'Picked by the model ladder',
+    description: p.reason === 'user override' ? 'Set for this workspace' : 'Picked by the model ladder',
   }
   return own ? models.map((m) => (m === own ? entry : m)) : [entry, ...models]
 }

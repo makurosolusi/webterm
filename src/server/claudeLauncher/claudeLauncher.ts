@@ -8,6 +8,7 @@ import {
   type ClaudeLaunchProfile, type ClaudeLaunchSettings, type ResolvedClaudeLaunch,
 } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
+import type { EffectiveClaudeLaunch, LaunchTarget } from '../../shared/claudeLaunch/claudeLaunch.effective'
 
 export type { ClaudeLaunchProfile, ResolvedClaudeLaunch }
 export { DEFAULT_CLAUDE_PROFILE }
@@ -62,6 +63,19 @@ export function centralClaudeLaunch(): ResolvedClaudeLaunch {
   return resolveClaudeLaunch(centralProfileId(effective()))
 }
 
+/** Agents' and Central's launch as the server resolves it (the command-mode override included). */
+export function effectiveLaunchTargets(): Pick<EffectiveClaudeLaunch, 'agents' | 'central' | 'deviations'> {
+  const target = (r: ResolvedClaudeLaunch): LaunchTarget => ({ profileId: r.profile.id, name: r.profile.name, command: joinArgv(r.argv) })
+  const agents = target(resolveClaudeLaunch())
+  const central = target(centralClaudeLaunch())
+  const own = read().centralClaudeProfileId !== '' && central.profileId !== agents.profileId
+  return {
+    agents,
+    central: { ...central, source: own ? 'central' : 'default' },
+    deviations: own ? [{ who: 'central', profileId: central.profileId, name: central.name }] : [],
+  }
+}
+
 /** All profiles, Default first (for listings). */
 export const listClaudeProfiles = (): ClaudeLaunchProfile[] => claudeProfiles(read())
 
@@ -72,7 +86,7 @@ const MAX_PROFILE_ID = 64
 
 /** Terminal note for a node whose recorded profile was deleted (id/name never printed: user text). */
 export const missingProfileNotice = (fallback: string): string =>
-  `\r\n[webterm] This node's Claude launch profile no longer exists — launching with "${fallback}". Pick another in Settings › Agent › Claude launch profiles.\r\n`
+  `\r\n[webterm] This node's Claude launch profile no longer exists — launching with "${fallback}". Pick another in Settings › Claude.\r\n`
 
 /**
  * The launch of a node (terminal or Agent Chat) that recorded `profileId`. The client records the settings
@@ -82,7 +96,10 @@ export const missingProfileNotice = (fallback: string): string =>
  * follows it too. Any other id is explicit: it keeps its profile, or is `missingId` once deleted.
  */
 export function nodeClaudeLaunch(profileId?: string): ResolvedClaudeLaunch {
-  return resolveClaudeLaunch(profileId === read().defaultClaudeProfileId ? undefined : profileId)
+  // While command mode is on, a node that recorded Default was made before saving command mode also set the
+  // stored default (claudeProvider.api.ts): it followed the command then and still does.
+  const followsDefault = profileId === read().defaultClaudeProfileId || (profileId === DEFAULT_CLAUDE_PROFILE.id && liveOverride(read()) !== undefined)
+  return resolveClaudeLaunch(followsDefault ? undefined : profileId)
 }
 
 /**

@@ -1,4 +1,4 @@
-// `/api/claude-provider` (Settings > Capabilities > Claude provider). UI-only, same gate as the
+// `/api/claude-provider` (Settings > Claude > Connection). UI-only, same gate as the
 // secret broker (secret.api.ts): an agent credential or a non-browser caller gets 403.
 //   GET  /api/claude-provider       config view (secret: set/unset only), last test, sessions to restart
 //   PUT  /api/claude-provider       { mode, baseUrl?, credential?, model?, secret? }; never echoes secret
@@ -13,7 +13,9 @@ import type { RunFn } from '../claudeLauncher/claudeLaunch.probe'
 import { detectWrappers } from './claudeProvider.detect'
 import { parseUpdate } from './claudeProvider.model'
 import type { ConnStage } from './claudeProvider.connectionTest'
-import { providerView, resetProviderConfig, saveProvider } from './claudeProvider.store'
+import { loadConfig, providerView, resetProviderConfig, saveProvider } from './claudeProvider.store'
+import { defaultProfileAfter } from './claudeProvider.command'
+import type { ProviderConfig } from './claudeProvider.model'
 
 export const PROVIDER_PATH = '/api/claude-provider'
 export const DETECT_PATH = `${PROVIDER_PATH}/detect`
@@ -37,9 +39,18 @@ export interface ProviderApiDeps {
   onPath?: (name: string) => boolean
   env?: NodeJS.ProcessEnv
   now?: () => number
+  /** The settings default for new Claude agents; a command-mode save writes its profile there (`defaultProfileAfter`). */
+  defaults?: { get(): string; set(profileId: string): void }
 }
 
 type Result = { status: number; body: unknown }
+
+/** Keeps the settings default in step with command mode after a provider write. */
+function syncDefault(deps: ProviderApiDeps, prev: ProviderConfig): void {
+  if (!deps.defaults) return
+  const id = defaultProfileAfter(prev, loadConfig(), deps.defaults.get())
+  if (id !== null) deps.defaults.set(id)
+}
 
 function view(deps: ProviderApiDeps): Record<string, unknown> {
   const provider = providerView()
@@ -58,12 +69,16 @@ export async function handleProviderApi(req: IncomingMessage, url: URL, raw: str
     try { body = raw === '' ? {} : JSON.parse(raw) } catch { return { status: 400, body: { error: 'invalid_json' } } } // never echo: it holds the key
     const parsed = parseUpdate(body)
     if (!parsed.ok) return { status: 400, body: { error: parsed.error } }
+    const prev = loadConfig()
     saveProvider(parsed.config, parsed.secret, undefined, now())
+    syncDefault(deps, prev)
     lastTest = null // the old result described another provider
     return { status: 200, body: view(deps) }
   }
   if (url.pathname === RESET_PATH && method === 'POST') {
+    const prev = loadConfig()
     resetProviderConfig()
+    syncDefault(deps, prev)
     lastTest = null
     return { status: 200, body: view(deps) }
   }

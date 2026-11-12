@@ -8,14 +8,15 @@ import { enumOf, flag, num, type EnvSpec } from './envRegistry.types'
 const DEFAULT_TURN_WALL_MS = 120_000
 // Input-equivalent tokens (cache reads 0.1x, writes 1.25x, budgetStore.guardTokens). Was 1M before cache
 // tokens were counted: an observed heavy day reached ~1.13M, which would have halted Central.
-const DEFAULT_DAILY_TOKENS = 10_000_000
+// 0 = no token cap: the daily dollar limit (WEBTERM_CENTRAL_DAILY_COST_MICROS) is the one budget people set.
+const DEFAULT_DAILY_TOKENS = 0
 /** Soft daily spend warning: crossing it raises one Needs-you notice per UTC day; it never blocks work. */
 export const DAILY_COST_WARNING_MICROS = 10_000_000
 const DEFAULT_DAILY_SPAWNS = 20
 const DEFAULT_AGENT_IDLE_DONE_MS = 45_000
 const DEFAULT_TURN_STEPS = 12
 const DEFAULT_MAX_INFLIGHT = 3
-const DEFAULT_CONTEXT_WINDOW = 128_000
+const DEFAULT_CONTEXT_WINDOW = 200_000 // = rotationPolicy DEFAULT_CONTEXT_WINDOW_TOKENS (1M is derived from a [1m] model id)
 const MAX_NUMBER = 1_000_000_000
 
 // Entri ca2: owner central, section "Central" (sama dengan envRegistry.central.ts), tak di kelompok utama (advanced).
@@ -33,7 +34,7 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   }),
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, hot: true, label: 'Summarize long conversations', description: 'Keep Central up to date in every reply (time, open work, pinned state) and keep a running summary so long chats stay on track. On by default; turn off only for the bare conversation.' }, 'on'),
   num('WEBTERM_CENTRAL_TURN_WALL_MS', 'central-turn', 1000, 600_000, DEFAULT_TURN_WALL_MS, { ...C, hot: true, unit: 'ms', label: 'Time limit per reply', description: 'How long Central may work on one reply, in milliseconds (default 120,000 = 2 minutes). Applies from the next reply.' }),
-  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, unit: 'tokens', label: 'Daily token limit', description: 'How many tokens Central may use per day (UTC). Cached input counts for less. Default 10,000,000; 0 = no limit.' }),
+  num('WEBTERM_CENTRAL_DAILY_TOKENS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_TOKENS, { ...C, hot: true, unit: 'tokens', label: 'Daily token limit', description: 'How many tokens Central may use per day (UTC). Cached input counts for less. Default 0 = no limit; the daily spending limit is the budget.' }),
   num('WEBTERM_CENTRAL_DAILY_SPAWNS', 'central-budget', 0, MAX_NUMBER, DEFAULT_DAILY_SPAWNS, { ...C, hot: true, unit: 'workers', label: 'Workers per day', description: 'How many workers Central may start per day (UTC). 0 = no spawning.' }),
   num('WEBTERM_CENTRAL_DAILY_COST_MICROS', 'central-budget', 0, MAX_NUMBER, 0, { ...C, hot: true, label: 'Daily spending limit', description: 'Central stops for the day (UTC) once it has spent this many dollars. 0 = no limit (default). Stored in millionths of a dollar (1,000,000 = $1). Separately, once total spend today passes $10, webterm shows one notice for the day; that notice never stops work.' }),
   flag('WEBTERM_CENTRAL_SKILLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central use skills', description: 'Central may use the skills you have reviewed and approved.' }),
@@ -51,6 +52,6 @@ export const CA2_ENV_SPECS: readonly EnvSpec[] = [
   num('WEBTERM_CENTRAL_MAX_INFLIGHT', 'central', 1, 100, DEFAULT_MAX_INFLIGHT, { ...C, hot: true, unit: 'workers', label: 'Workers at once', description: 'How many workers Central may run at the same time when it works on its own. Applies to the next worker it starts.' }),
   flag('WEBTERM_AGENT_MAIL', 'central', { ...C, requires: [AGENTS_ON], label: 'Messages to workers', description: 'Central may send messages to workers it started (needs the Worker orchestrator).' }),
   flag('WEBTERM_CENTRAL_READ_TOOLS', 'central', { ...C, hot: true, requires: [{ key: 'WEBTERM_CENTRAL' }], label: 'Let Central look at projects', description: 'Central may read your projects, nodes and tasks. Follows the Central Agent switch.' }),
-  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once. Central starts a fresh session at 70%, carrying over a summary. Applies from the next reply.' }),
+  num('WEBTERM_CENTRAL_CONTEXT_WINDOW', 'central-context', 1000, MAX_NUMBER, DEFAULT_CONTEXT_WINDOW, { ...C, hot: true, unit: 'tokens', label: 'Context window size', description: 'How much the model can hold at once; unset = from the model (200K, 1M for a [1m] model). Central starts a fresh session at 70%, carrying over a summary. Applies from the next reply.' }),
   num('WEBTERM_CENTRAL_TURN_STEPS', 'central-turn', 1, 100, DEFAULT_TURN_STEPS, { ...C, hot: true, unit: 'steps', label: 'Steps per reply', description: 'How many steps (tool calls) Central may take in one reply. Applies from the next reply.' }),
 ]

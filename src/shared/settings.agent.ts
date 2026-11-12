@@ -5,6 +5,7 @@ import type { CustomAgent } from './customAgent.schema'
 import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 import type { ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
 import type { ProjectModelOverride } from './settings.projectModels'
+import type { ApprovalLevel } from './settings.approvalLevel'
 
 export interface AgentSettings {
   // --- Agent -----------------------------------------------------------------------------------
@@ -32,6 +33,9 @@ export interface AgentSettings {
   /** Skip approvals: Central's ask-tier actions run without a card and Claude agents launch with
    *  `bypassPermissions`. Hard denies (halt, pause, caps, budget, policy deny) still apply. */
   skipApprovals: boolean
+  /** The three keys above as one choice (`settings.approvalLevel.ts`). Derived from them on every read; a
+   *  patch carrying it is written as those keys, so it is never the source of truth itself. */
+  agentApprovalLevel: ApprovalLevel
   /** Central may start a turn by itself when the supervisor finds something that needs a decision. */
   centralCheckins: boolean
   /** Self-started Central turns per local day: 5, 10, 20 or 50. */

@@ -42,7 +42,9 @@ export async function settingsRoute(
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
-  store: SettingsStore
+  store: SettingsStore,
+  /** After a successful PUT, with the parsed patch (side effects that live outside the settings row). */
+  onSaved?: (patch: Record<string, unknown>) => void
 ): Promise<void> {
   if (method === 'GET') return json(res, 200, store.getSettings())
   if (method === 'PUT') {
@@ -70,6 +72,7 @@ export async function settingsRoute(
     }
     // Nama kunci saja: nilai settings (shell, path, mode) tidak dicatat.
     const keys = patch !== null && typeof patch === 'object' ? Object.keys(patch) : []
+    if (keys.length) onSaved?.(patch as Record<string, unknown>)
     log.info('settings.update', 'Settings updated', { keys })
     return json(res, 200, saved)
   }
