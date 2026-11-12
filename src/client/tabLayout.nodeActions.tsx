@@ -22,6 +22,23 @@ export function setEditorActionsSlot(el: HTMLElement | null): void {
 
 const menus = new Map<string, VscodeMenuItem[]>()
 
+// Tabs whose node has unsaved changes (the strip shows a dot in place of the ×, like VS Code).
+// Replaced, not mutated, so `useSyncExternalStore` sees a new snapshot.
+let dirtyIds: ReadonlySet<string> = new Set()
+const dirtySubs = new Set<() => void>()
+const subscribeDirty = (f: () => void) => { dirtySubs.add(f); return () => { dirtySubs.delete(f) } }
+function publishDirty(id: string, dirty: boolean): void {
+  if (dirtyIds.has(id) === dirty) return
+  const next = new Set(dirtyIds)
+  if (dirty) next.add(id)
+  else next.delete(id)
+  dirtyIds = next
+  dirtySubs.forEach((f) => f())
+}
+
+/** Ids of tabs whose node published unsaved changes. */
+export const useDirtyTabs = (): ReadonlySet<string> => useSyncExternalStore(subscribeDirty, () => dirtyIds, () => dirtyIds)
+
 /** Context-menu rows of a tab's node, read when the menu opens. */
 export const tabNodeMenuItems = (id: string): VscodeMenuItem[] => menus.get(id) ?? []
 
@@ -38,6 +55,8 @@ export interface TabNodeActionsProps {
   extra?: ReactNode
   /** Node-specific actions (Save, Preview, Refresh…): a strip button each, and a context-menu row. */
   actions?: TabAction[]
+  /** Unsaved changes: the node's tab shows the dirty dot. */
+  dirty?: boolean
 }
 
 /** One node action shown in the strip (icon → icon button, else a text button) and in the tab menu. */
@@ -76,7 +95,7 @@ function StripAction({ a }: { a: TabAction }) {
 }
 
 /** Publishes the node's menu rows and, for the active tab, renders its editor actions into the strip. */
-export default function TabNodeActions({ id, visible, items, search, onStop, extra, actions = [] }: TabNodeActionsProps) {
+export default function TabNodeActions({ id, visible, items, search, onStop, extra, actions = [], dirty = false }: TabNodeActionsProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const target = useSyncExternalStore(subscribeSlot, () => slot, () => null)
   const all: VscodeMenuItem[] = [
@@ -91,6 +110,11 @@ export default function TabNodeActions({ id, visible, items, search, onStop, ext
     menus.set(id, all)
     return () => { menus.delete(id) }
   })
+  useEffect(() => {
+    if (!id) return
+    publishDirty(id, dirty)
+    return () => publishDirty(id, false)
+  }, [id, dirty])
   if (!visible || !target) return null
   return createPortal(
     <>

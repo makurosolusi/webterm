@@ -18,7 +18,7 @@ import './tab-layout.css'
  * `title` is the editable label (the rename draft); `name` is the node's fixed name. The tab shows
  * the name alone (VS Code: icon + name), the title (often the node type) goes in the tooltip.
  */
-export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal; /** Node type label ("Browser"). */ kind?: string }
+export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal; /** Node type label ("Browser"). */ kind?: string; /** Unsaved changes: a dot in place of the × until hover/focus. */ dirty?: boolean }
 
 /** Tooltip: `name · title`, plus the node type when the title is not already the type. */
 export const tabTooltip = (t: TabItem): string =>
@@ -106,7 +106,7 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
           <div
             // No active tab (canvas with nothing selected): the first one is the strip's tab stop.
             key={t.id} role="tab" aria-selected={t.id === active} tabIndex={t.id === (active ?? items[0]?.id) ? 0 : -1}
-            className={cn('tabs-tab', t.id === active && 'tabs-tab--active')}
+            className={cn('tabs-tab', t.id === active && 'tabs-tab--active', t.dirty && 'tabs-tab--dirty')}
             data-active={t.id === active ? '' : undefined} data-tab-id={t.id} data-drop={drop?.id === t.id ? drop.side : undefined}
             title={editing === t.id ? undefined : tabTooltip(t)}
             draggable={editing !== t.id}
@@ -153,10 +153,13 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
             {t.signal && (
               <span className={cn('tabs-tab__status', `tabs-tab__status--${t.signal.tone}`)} role="img" aria-label={t.signal.label} />
             )}
-            <IconButton
-              label={`Close ${withNodeName(t.name, t.title)}`} side="bottom" size="icon-xs" className="tabs-tab__close"
-              onClick={(e) => { e.stopPropagation(); onClose(t.id) }}
-            ><span className="codicon codicon-close" aria-hidden="true" /></IconButton>
+            <span className="tabs-tab__end">
+              {t.dirty && <span className="tabs-tab__dirty codicon codicon-circle-filled" role="img" aria-label="Unsaved changes" />}
+              <IconButton
+                label={`Close ${withNodeName(t.name, t.title)}`} side="bottom" size="icon-xs" className="tabs-tab__close"
+                onClick={(e) => { e.stopPropagation(); onClose(t.id) }}
+              ><span className="codicon codicon-close" aria-hidden="true" /></IconButton>
+            </span>
           </div>
         ))}
       </div>

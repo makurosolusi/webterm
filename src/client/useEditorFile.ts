@@ -49,6 +49,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
   const versionRef = useRef<FsVersion>('')
   const readOnlyRef = useRef(false)
   const savingRef = useRef(false)
+  /** Mirrors `savingRef` for rendering: true while a write request is in flight ("Saving…"). */
+  const [saving, setSaving] = useState(false)
   // GERBANG KEHILANGAN DATA: hanya true setelah pembacaan selesai dan isinya benar-benar masuk ke
   // model. Tanpa ini, ⌘S pada node yang gagal memuat akan menulis buffer kosong ke file pengguna.
   const loadedRef = useRef(false)
@@ -64,6 +66,9 @@ export function useEditorFile(a: UseEditorFileArgs) {
   // TERPISAH dari `loadError` dengan sengaja: gagal BACA menolak merender editor, gagal SIMPAN harus
   // MEMPERTAHANKAN editor — editan yang belum tersimpan hanya hidup di dalam instance Monaco.
   const [saveError, setSaveError] = useState('')
+  /** Which operation `saveError` came from, so Retry repeats that one. */
+  const [failedOp, setFailedOp] = useState<'save' | 'reload'>('save')
+  const fail = (op: 'save' | 'reload', msg: string) => { setFailedOp(op); setSaveError(msg) }
   /** The mounted editor (null until Monaco is up), for options and actions owned by the node. */
   const [live, setLive] = useState<{ monaco: MonacoApi; editor: MonacoEditor.IStandaloneCodeEditor } | null>(null)
 
@@ -82,9 +87,11 @@ export function useEditorFile(a: UseEditorFileArgs) {
     if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current) return Promise.resolve(false)
     const value = editor.getValue()
     savingRef.current = true
+    setSaving(true)
     return a.writeChecked(pathRef.current, value, opts).then(
       (r) => {
         savingRef.current = false
+        setSaving(false)
         if (r.ok) {
           savedRef.current = value
           if (r.version !== undefined) versionRef.current = r.version
@@ -96,12 +103,13 @@ export function useEditorFile(a: UseEditorFileArgs) {
         }
         if (r.code === 'EVERSION') setConflict({ kind: 'version', current: r.current })
         else if (r.code === 'ENOENT') setConflict({ kind: 'missing' })
-        else setSaveError(`Couldn’t save ${fileName}: ${r.error}`)
+        else fail('save', `Couldn’t save ${fileName}: ${r.error}`)
         return false
       },
       (err: unknown) => {
         savingRef.current = false
-        setSaveError(`Couldn’t save ${fileName}: ${errText(err)}`)
+        setSaving(false)
+        fail('save', `Couldn’t save ${fileName}: ${errText(err)}`)
         return false
       }
     )
@@ -133,7 +141,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
       const meta = await a.readMeta(pathRef.current)
       const refusal = loadRefusal(meta.content, 'File', true)
       if (refusal || meta.encoding !== 'utf8') {
-        setSaveError(refusal ?? `${fileName} is no longer UTF-8 text; the buffer was not replaced.`)
+        fail('reload', refusal ?? `${fileName} is no longer UTF-8 text; the buffer was not replaced.`)
         return
       }
       if (onlyIfClean && editor.getValue() !== savedRef.current) {
@@ -148,9 +156,12 @@ export function useEditorFile(a: UseEditorFileArgs) {
       setConflict(null)
       setSaveError('')
     } catch (err) {
-      setSaveError(`Couldn’t reload ${fileName}: ${errText(err)}`)
+      fail('reload', `Couldn’t reload ${fileName}: ${errText(err)}`)
     }
   }
+
+  /** Repeat the save or reload that set `saveError`. */
+  const retry = (): void => { void (failedOp === 'reload' ? reload() : save()) }
 
   /** Pandangan sesaat untuk `useEditorSync`: dirty/saving/versi terakhir yang dikenal. */
   const snapshot = () => ({
@@ -254,5 +265,5 @@ export function useEditorFile(a: UseEditorFileArgs) {
   }, [id, dirty])
   useEffect(() => () => setEditorDirty(id, false), [id])
 
-  return { live, dirty, preview, previewSource, encoding, conflict, saveError, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
+  return { live, dirty, saving, preview, previewSource, encoding, conflict, saveError, retry, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }

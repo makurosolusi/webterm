@@ -324,6 +324,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Editor: a tab with unsaved changes shows a dot in place of its × (the × comes back on hover or focus) and announces "Unsaved changes"; Save reads "Saving…" and is disabled while the file is being written, a failed save or reload shows the error with Retry, and Word wrap is in the tab's right-click menu.
 - Health: Open file now finds the right folder for every project, including two boards with the same name. The server returns each project's board and folder with the project list instead of the panel guessing it by name; Open file stays off only for a board with no folder.
 - Tab layout: Editor, Changes, Plan and App nodes no longer show a second header with their own title and close button inside the tab. Their actions (Save, Preview, Word wrap, Send to agent, Refresh, Approve and run…) sit at the right end of the tab strip and in the tab's right-click menu, and only the tab's × closes them (an editor with unsaved changes still asks to save). An untitled Agent Chat is labeled "Agent Chat" in its tab, the sidebar and Recently closed instead of "Terminal", and every node type falls back to its own name.
 - Control tab strip: the active tab (e.g. Automations) is fully visible when the panel opens, the tab changes or the side bar is resized, instead of being cut off at the edge; a fade marks the side with more tabs.
