@@ -93,6 +93,20 @@ describe('useCanvasViewport — zoom & fit', () => {
     act(() => vi.advanceTimersByTime(1000))
     expect(scheduleSave).not.toHaveBeenCalled()
   })
+
+  it('unmount sebelum timer sync menembak: timer dibersihkan, tak ada setState maupun save', () => {
+    const { result, fake, viewportRef, scheduleSave, unmount } = mountViewport()
+    fake.at(vp(50, 0.4))
+    act(() => result.current.onFit())
+    act(() => result.current.onZoomIn())
+    expect(vi.getTimerCount()).toBe(2)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => vi.advanceTimersByTime(1000))
+    expect(fake.getViewport).not.toHaveBeenCalled()
+    expect(viewportRef.current).toEqual(DEFAULT_VIEWPORT)
+    expect(scheduleSave).not.toHaveBeenCalled()
+  })
 })
 
 describe('useCanvasViewport — riwayat pandangan', () => {
