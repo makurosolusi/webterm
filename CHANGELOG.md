@@ -180,6 +180,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Control › Spending: one column in a narrow panel so names show in full, plain model names ("Opus 5.5") and agent names (a closed agent reads "Agent (deleted)"), Central listed once, a thin share bar on each row, amounts below a cent read "<$0.01", and Today / 7 days is one segmented control you can move with the arrow keys.
 - Control › Memory: "Waiting for your OK" sits on top with a count and shrinks to one muted line when empty; long explanations moved into (i) popovers.
 - Control › Memory: a search box with a count ("1 of 3 shown"); adding is behind "+ Add memory".
 - Control › Memory: look-alike memories get one "2 memories look alike · Merge" line. Merge lets you edit the kept text, then forgets the other only after you confirm (it cannot be undone).

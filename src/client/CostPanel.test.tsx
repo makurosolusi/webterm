@@ -5,7 +5,7 @@
 // Settings › Developer's CostDetails: cache hit rate, prefix reuse, pricing.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { COST_API_PATH, COST_TEXT, CostDetails, CostPanel, formatUsd, scopeName } from './CostPanel'
+import { COST_API_PATH, COST_TEXT, CostDetails, CostPanel, formatUsd, modelName, scopeName } from './CostPanel'
 import { OPEN_SETTINGS_EVENT } from './settings.link'
 import type { CostResponse } from '../server/cost/cost.route'
 import type { SpendSummary } from '../server/cost/costStore'
@@ -13,15 +13,19 @@ import type { SpendSummary } from '../server/cost/costStore'
 // test-only fixtures
 const summary = (cost: number, hit: number | null): SpendSummary => ({
   since: 0, costMicros: cost, unpriced: 1, input: 10, output: 10, cacheRead: 30, cacheWrite: 0, cacheHitRate: hit,
-  byWorkspace: [{ key: 'w1', costMicros: cost, tokens: 50, responses: 2 }],
-  byNode: [{ key: 'n1', costMicros: cost - 100, tokens: 40, responses: 1 }, { key: '', costMicros: 100, tokens: 10, responses: 1 }],
+  byWorkspace: [{ key: 'w1', costMicros: cost - 100, tokens: 40, responses: 1 }, { key: '', costMicros: 100, tokens: 10, responses: 1 }],
+  byNode: [
+    { key: 'n1', costMicros: cost / 4, tokens: 40, responses: 1 },
+    { key: 'c-ag-9f3e21aa', costMicros: 500, tokens: 1, responses: 1 },
+    { key: '', costMicros: 100, tokens: 10, responses: 1 },
+  ],
   byModel: [{ key: 'claude-opus-5-5', costMicros: cost, tokens: 50, responses: 2 }],
   byRoutine: [{ key: 'routine:lint', costMicros: 300, tokens: 0, responses: 5 }],
 })
 const DATA: CostResponse = {
   today: summary(1_250_000, 0.75), week: summary(9_000_000, 0.5),
   caps: [{ scope: 'routine:lint', limitMicros: 0, spentMicros: 300, pausedAt: 1, reason: 'low ROI' }],
-  labels: { 'workspace:w1': 'Alpha', 'node:n1': 'Claude in Alpha' },
+  labels: { 'workspace:w1': 'Alpha', 'node:n1': 'Claude in Alpha', 'node:c-ag-9f3e21aa': 'Node c-ag-9f3' },
   pricing: { source: 'https://platform.claude.com/docs/en/about-claude/pricing', checkedAt: '2026-11-04' },
   prefix: { prefixes: 2, hits: 6, reuseRate: 0.75 },
 }
@@ -107,8 +111,64 @@ describe('CostPanel', () => {
     expect(await screen.findByText(COST_TEXT.unavailable)).toBeTruthy()
   })
 
-  it('formats sub-cent amounts with four decimals', () => {
-    expect(formatUsd(2_500)).toBe('$0.0025')
+  it('formats money one way: two decimals, "<$0.01" below a cent', () => {
+    expect(formatUsd(2_500)).toBe('<$0.01')
+    expect(formatUsd(9_999)).toBe('<$0.01')
+    expect(formatUsd(10_000)).toBe('$0.01')
+    expect(formatUsd(15_050_000)).toBe('$15.05')
     expect(formatUsd(0)).toBe('$0.00')
+  })
+
+  it('names models in plain words', () => {
+    expect(modelName('claude-opus-5-5')).toBe('Opus 5.5')
+    expect(modelName('claude-sonnet-5-5')).toBe('Sonnet 5.5')
+    expect(modelName('claude-haiku-5-5-20261001')).toBe('Haiku 5.5')
+    expect(modelName('claude-opus-4-20250514')).toBe('Opus 4')
+    expect(modelName('gpt-x')).toBe('gpt-x')
+  })
+
+  it('lays out one column when narrow, friendly names, Central once, share bars and a sub-cent row', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(DATA))))
+    render(<CostPanel />)
+    await screen.findByTestId('cost-total')
+    const groups = screen.getByTestId('cost-groups')
+    expect(groups.className).toMatch(/(^|\s)grid-cols-1(\s|$)/)
+    expect(groups.className).toContain('@xl:grid-cols-2')
+    expect(groups.parentElement?.className).toContain('@container')
+    for (const ul of document.querySelectorAll('ul')) expect(ul.className).toMatch(/list-none.*p-0|p-0.*list-none/)
+
+    expect(screen.getByText('Opus 5.5')).toBeTruthy()
+    expect(screen.queryByText('claude-opus-5-5')).toBeNull()
+    expect(screen.getByText(COST_TEXT.deletedNode)).toBeTruthy()
+    expect(screen.queryByText(/c-ag-9/)).toBeNull()
+    expect(screen.getAllByText(COST_TEXT.central)).toHaveLength(1) // By workspace only, not again in Top spenders
+    expect(document.querySelectorAll('[data-key=""]')).toHaveLength(1)
+
+    const spender = screen.getByText('Claude in Alpha').closest('li') as HTMLElement
+    expect((within(spender).getByTestId('share-bar') as HTMLElement).style.width).toBe('25%')
+    expect(within(spender).getByRole('img', { name: COST_TEXT.share(25) })).toBeTruthy()
+    const gone = screen.getByText(COST_TEXT.deletedNode).closest('li') as HTMLElement
+    expect(within(gone).getByText('<$0.01')).toBeTruthy()
+    expect((within(gone).getByTestId('share-bar') as HTMLElement).style.width).toBe('0%')
+    expect(screen.getByTestId('cost-responses').textContent).toBe('2')
+  })
+
+  it('the period is one radio group: a single tab stop, arrow keys move and select', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(DATA))))
+    render(<CostPanel />)
+    await screen.findByTestId('cost-total')
+    const group = screen.getByRole('radiogroup', { name: COST_TEXT.period })
+    const [today, week] = within(group).getAllByRole('radio')
+    expect([today!.tabIndex, week!.tabIndex]).toEqual([0, -1])
+    today!.focus()
+    fireEvent.keyDown(today!, { key: 'ArrowRight' })
+    expect(week!.getAttribute('aria-checked')).toBe('true')
+    expect(document.activeElement).toBe(week)
+    expect([today!.tabIndex, week!.tabIndex]).toEqual([-1, 0])
+    expect(screen.getByTestId('cost-total').textContent).toBe('$9.00')
+    fireEvent.keyDown(week!, { key: 'ArrowRight' }) // wraps
+    expect(today!.getAttribute('aria-checked')).toBe('true')
+    fireEvent.keyDown(today!, { key: 'ArrowLeft' })
+    expect(week!.getAttribute('aria-checked')).toBe('true')
   })
 })
