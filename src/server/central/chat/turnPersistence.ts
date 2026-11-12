@@ -23,7 +23,7 @@ import { lookupWorkspace } from '../workspaceLookup'
 import { CentralChatError } from './chatErrors'
 import type { StreamHub } from './streamHub'
 import { currentPartState, registerApprovalStream } from './approvalPublish'
-import type { RunState } from './turnEvents'
+import type { RunState, ToolRecord } from './turnEvents'
 
 export interface StoredMessage {
   id: string; conversationId: string; seq: number; role: string
@@ -125,19 +125,32 @@ export function appendAssistantMessage(
 /** Reason shown on a failed reply when the runtime gave none (it ended with an error code only). */
 const FAILED_FALLBACK = 'The central agent stopped with an error.'
 
-function assistantParts(
+function toolParts(tool: ToolRecord, cardState: (approvalId: string) => ToolCardState): MessagePart[] {
+  const parts: MessagePart[] = [{
+    type: 'tool', toolCallId: tool.toolCallId, name: tool.name, state: tool.state, risk: 'R0',
+    ...(tool.args === undefined ? {} : { args: tool.args }),
+    ...(tool.result === undefined ? {} : { result: tool.result }),
+  }]
+  // The chat's approval card, in the state the ledger has now (it may be decided before the turn ends).
+  if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: cardState(tool.approvalId) })
+  return parts
+}
+
+/** The persisted assistant reply parts: notices, then text and tool calls in event order, then the failure. */
+export function assistantParts(
   state: RunState, text: string, failure: { code: string; message: string } | null, cardState: (approvalId: string) => ToolCardState
 ): MessagePart[] {
   const parts: MessagePart[] = state.notices.map((notice) => ({ type: 'notice' as const, text: notice }))
-  if (text !== '') parts.push({ type: 'text', text })
-  for (const tool of state.tools.values()) {
-    parts.push({
-      type: 'tool', toolCallId: tool.toolCallId, name: tool.name, state: tool.state, risk: 'R0',
-      ...(tool.args === undefined ? {} : { args: tool.args }),
-      ...(tool.result === undefined ? {} : { result: tool.result }),
-    })
-    // The chat's approval card, in the state the ledger has now (it may be decided before the turn ends).
-    if (tool.approvalId) parts.push({ type: 'approval', approvalId: tool.approvalId, state: cardState(tool.approvalId) })
+  // Streamed text keeps its place between the tool calls. Only a reply with no deltas at all
+  // (runtime returned the final text only) falls back to one text part ahead of the tools.
+  const streamed = state.order.some((entry) => entry.kind === 'text')
+  if (!streamed && text !== '') parts.push({ type: 'text', text })
+  for (const entry of state.order) {
+    if (entry.kind === 'text') parts.push({ type: 'text', text: entry.text })
+    else {
+      const tool = state.tools.get(entry.toolCallId)
+      if (tool) parts.push(...toolParts(tool, cardState))
+    }
   }
   if (failure) parts.push({ type: 'error', ...failure })
   return parts
