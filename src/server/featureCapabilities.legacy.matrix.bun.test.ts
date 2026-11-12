@@ -43,6 +43,9 @@ const CASES: Case[] = [
   { name: 'nilai off tak menyalakan', stored: { [C]: 'off', [W]: 'off', [F]: 'off' }, set: [], ignored: [] },
 ]
 
+// Stored legacy keys only: code defaults (written to the env since "most capable by default") are not legacy input.
+const LEGACY_REGISTRY = ENV_REGISTRY.map((s) => ({ ...s, default: undefined }))
+
 const dir = mkdtempSync(join(tmpdir(), 'wt-legacy-matrix-'))
 
 /** Simpan kunci lama di DB baru, jalankan overlay produksi ke env kosong, kembalikan env hasilnya. */
@@ -52,7 +55,7 @@ function envFromStore(idx: number, stored: Record<string, string>): NodeJS.Proce
     db.query('INSERT INTO app (key, value) VALUES (?, ?)').run(ENV_OVERRIDES_ROW, JSON.stringify(stored))
     const target: NodeJS.ProcessEnv = {}
     const secrets = { read: () => null, write: () => undefined, remove: () => undefined }
-    createEnvSettings({ registry: ENV_REGISTRY, bootstrapKeys: BOOTSTRAP_ONLY_KEYS, target, overrides: createAppRowOverrideStore(db), secrets }).apply()
+    createEnvSettings({ registry: LEGACY_REGISTRY, bootstrapKeys: BOOTSTRAP_ONLY_KEYS, target, overrides: createAppRowOverrideStore(db), secrets }).apply()
     return target
   } finally {
     (db as unknown as { close(): void }).close() // tipe bun:sqlite di repo ini tak mengekspos close

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Segmented } from './centralSettings.controls'
 import { PolicyQuickRules } from './PolicyQuickRules'
+import { SafeguardNote } from './SettingsFields'
 import { isGrants, policyRequest, POLICY_GRANTS_PATH, RULES_CHANGED_EVENT, type PolicyGrant } from './policyRules.api'
 import { rawRuleText, whatText, whereText, whoText } from './policyPresets'
 
@@ -92,6 +93,7 @@ export function PolicyRules({ workspaceNames }: { workspaceNames?: WorkspaceName
     <section aria-label={POLICY_TEXT.title} data-testid="policy-rules">
       <h3 className="font-semibold">{POLICY_TEXT.title}</h3>
       <p className="text-xs opacity-70">{POLICY_TEXT.intro}</p>
+      <SafeguardNote id="denyRules" />
       {/* Unreadable list = a note like the protection section, not an alert: the rest of the tab still works. */}
       {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
       {grants === null && !loadError ? <p role="status" className="text-xs opacity-70">{POLICY_TEXT.loading}</p> : null}

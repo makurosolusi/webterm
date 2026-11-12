@@ -29,6 +29,14 @@ export function memSecrets(): SecretStore & { files: Map<string, string>; failOn
   return s
 }
 
+/**
+ * test-only: the capability switches as they defaulted before "most capable by default" (2026-11-12), as shell env,
+ * for tests whose premise is "start with every capability off" (a Settings override still wins over them).
+ */
+export const CAPABILITIES_OFF: Readonly<Record<string, string>> = {
+  WEBTERM_CENTRAL: 'off', WEBTERM_ORCHESTRATOR_RUN: 'off', WEBTERM_BROWSER: 'off', WEBTERM_FILES_VIEWERS: 'off', WEBTERM_FILES_MUTATE: 'off',
+}
+
 export function setupEnv(env: NodeJS.ProcessEnv = {}, stored: string | null = null) {
   const target: NodeJS.ProcessEnv = { ...env }
   const overrides = memOverrides(stored)

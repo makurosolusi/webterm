@@ -112,10 +112,8 @@ export const LINKED_SETTINGS: readonly { key: string; needs: readonly Capability
   // Tanpa kartu per aksi (auto) hanya lewat kartu Otonomi yang berbahaya; urutan ini = auto menang atas propose.
   { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['autonomy'], on: 'auto', off: 'off' },
   { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['workers'], on: 'propose', off: 'off' },
-  // Working on its own brings the tools that make it work well; Settings no longer shows them.
-  { key: 'WEBTERM_KNOWLEDGE', needs: ['autonomy'], on: 'on', off: 'off' },
-  { key: 'WEBTERM_CENTRAL_RELIABILITY', needs: ['autonomy'], on: 'on', off: 'off' },
-  { key: 'WEBTERM_AGENT_MAIL', needs: ['autonomy'], on: 'on', off: 'off' },
+  // Knowledge index, steadier autonomy and agent mail are on by default on their own (registry default `on`), so
+  // they are no longer tied to "Work on its own": the knowledge index helps chat too, mail needs workers anyway.
 ]
 
 /** Id + prasyarat rekursifnya, urut topologis (prasyarat lebih dulu, id terakhir). */

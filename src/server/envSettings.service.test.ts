@@ -30,10 +30,23 @@ describe('presedensi override > env > default', () => {
 
   it('tanpa env asli, reset menghapus kunci dari env proses', () => {
     const s = setupEnv()
-    s.svc.update({ set: { WEBTERM_CENTRAL: 'on' }, unset: [] }, ROOT)
+    s.svc.update({ set: { WEBTERM_TELEGRAM: 'on' }, unset: [] }, ROOT)
+    expect(s.target.WEBTERM_TELEGRAM).toBe('on')
+    s.svc.update({ set: {}, unset: ['WEBTERM_TELEGRAM'] }, ROOT)
+    expect('WEBTERM_TELEGRAM' in s.target).toBe(false)
+  })
+
+  it('flag default on: ditulis ke env selama tak diisi; env/override menang; reset kembali ke on; source tetap default', () => {
+    const s = setupEnv()
     expect(s.target.WEBTERM_CENTRAL).toBe('on')
+    expect(entry(s, 'WEBTERM_CENTRAL').source).toBe('default')
+    s.svc.update({ set: { WEBTERM_CENTRAL: 'off' }, unset: [] }, ROOT)
+    expect(s.target.WEBTERM_CENTRAL).toBe('off')
     s.svc.update({ set: {}, unset: ['WEBTERM_CENTRAL'] }, ROOT)
-    expect('WEBTERM_CENTRAL' in s.target).toBe(false)
+    expect(s.target.WEBTERM_CENTRAL).toBe('on')
+    expect(setupEnv({ WEBTERM_CENTRAL: 'off' }).target.WEBTERM_CENTRAL).toBe('off')
+    expect(setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL: 'off' })).target.WEBTERM_CENTRAL).toBe('off')
+    expect('WEBTERM_CENTRAL_AUTONOMY' in s.target).toBe(false) // a default-off flag is not written
   })
 
   it('override tersimpan diterapkan saat boot (overlay ke process.env)', () => {
@@ -109,11 +122,11 @@ describe('bootstrap-only, dangerous, locked', () => {
 describe('atomik + kegagalan penyimpanan', () => {
   it('satu nilai tak valid membatalkan seluruh perubahan', () => {
     const s = setupEnv()
-    const r = s.svc.update({ set: { WEBTERM_CENTRAL: 'on', WEBTERM_TELEGRAM_BOT_TOKEN: SENTINEL_BOT_TOKEN, WEBTERM_LEDGER: 'bad' }, unset: [] }, ROOT)
+    const r = s.svc.update({ set: { WEBTERM_TELEGRAM: 'on', WEBTERM_TELEGRAM_BOT_TOKEN: SENTINEL_BOT_TOKEN, WEBTERM_LEDGER: 'bad' }, unset: [] }, ROOT)
     expect(r.ok).toBe(false)
     expect(s.overrides.saves).toBe(0)
     expect(s.secrets.files.size).toBe(0)
-    expect(s.target.WEBTERM_CENTRAL).toBeUndefined()
+    expect(s.target.WEBTERM_TELEGRAM).toBeUndefined()
   })
 
   it('secret kedua gagal tulis: secret pertama di-rollback, DB tak disentuh, 500 tanpa nilai', () => {
@@ -148,7 +161,7 @@ describe('restart', () => {
 describe('storage korup tidak menjatuhkan boot', () => {
   it('JSON rusak, bentuk salah, kunci tak dikenal/secret/nilai tak valid diabaikan dengan log nama saja', () => {
     expect(setupEnv({}, '{not json').logs.join()).toContain('unreadable')
-    expect(setupEnv({}, '[1,2]').target).toEqual({})
+    expect(setupEnv({}, '[1,2]').target).toEqual(setupEnv().target) // only the default-on flags, nothing stored
     const s = setupEnv({}, JSON.stringify({
       WEBTERM_LEDGER: 'SECRETISH-bad-value', NOPE: 'x', WEBTERM_TELEGRAM_BOT_TOKEN: SENTINEL_BOT_TOKEN, WEBTERM_CENTRAL: 'on',
     }))

@@ -50,13 +50,12 @@ describe('ENV_REGISTRY', () => {
     for (const s of ENV_REGISTRY) if (s.default !== undefined) expect(validateEnvValue(s, s.default), s.key).toMatchObject({ ok: true })
   })
 
-  it('flag CA2: semua flag/enum default off (kecuali tombol approval Telegram, F3-a zero-config), angka dalam rentang, tanpa duplikat', () => {
+  it('flag CA2: semua flag default on (default maksimal), enum agen off (ikut kartu Worker), angka dalam rentang, tanpa duplikat', () => {
     const keys = CA2_ENV_SPECS.map((s) => s.key)
     expect(keys.length).toBe(18)
     expect(new Set(keys).size).toBe(keys.length)
     for (const k of keys) expect(ENV_REGISTRY.filter((s) => s.key === k).length, k).toBe(1)
-    const DEFAULT_ON = new Set(['WEBTERM_CHANNEL_APPROVAL_BUTTONS', 'WEBTERM_CENTRAL_CHECKPOINT'])
-    for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe(DEFAULT_ON.has(s.key) ? 'on' : 'off')
+    for (const s of CA2_ENV_SPECS.filter((x) => x.kind === 'flag')) expect(s.default, s.key).toBe('on')
     expect(specFor('WEBTERM_CENTRAL_AGENTS')?.default).toBe('off')
     expect(specFor('WEBTERM_CENTRAL_DAILY_TOKENS')?.default).toBe('0') // the dollar limit is the budget
     expect(specFor('WEBTERM_CENTRAL_DAILY_SPAWNS')?.default).toBe('20')
@@ -67,13 +66,13 @@ describe('ENV_REGISTRY', () => {
 
 describe('env browser', () => {
   const browserSpecs = ENV_REGISTRY.filter((s) => s.key.startsWith('WEBTERM_BROWSER') || s.key === 'WEBTERM_BROWSER')
-  it('semua kunci kontrak terdaftar di group browser dan flag default off (kecuali impor cookie & kendali agent: default on)', () => {
+  it('semua kunci kontrak terdaftar di group browser; flag default on kecuali headless (preferensi: jendela asli lebih mampu)', () => {
     expect(browserSpecs.map((s) => s.key).sort()).toEqual(Object.values(ENV_BROWSER).sort())
     for (const s of browserSpecs) {
       expect(s.group, s.key).toBe('browser')
       expect(s.restartRequired, s.key).toBe(false) // hidup-mati lewat hook kemampuan browser, tanpa restart
       expect(s.label.length, s.key).toBeGreaterThan(0)
-      if (s.kind === 'flag') expect(s.default, s.key).toBe(s.key === ENV_BROWSER.cookieImport || s.key === ENV_BROWSER.agent ? 'on' : 'off')
+      if (s.kind === 'flag') expect(s.default, s.key).toBe(s.key === ENV_BROWSER.headless ? 'off' : 'on')
     }
   })
   it('batas angka mengikuti kontrak', () => {

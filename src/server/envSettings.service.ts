@@ -38,6 +38,13 @@ export interface EnvSettingsDeps {
   log?: { info(msg: string): void; warn(msg: string): void }
 }
 
+/**
+ * A flag whose default is `on` is written into the env while nobody set it, so every reader (most are fail-closed
+ * `flagOn`) sees the same default the Settings page shows. A value from the shell/.env or Settings still wins, and a
+ * Reset (override removed) lands back on this default. `source` stays `default` (it is computed from `base`).
+ */
+export const defaultOnOf = (spec: EnvSpec): 'on' | undefined => (spec.kind === 'flag' && spec.default === 'on' ? 'on' : undefined)
+
 const fail = (status: 400 | 403 | 500, error: string, key?: string, reason?: string): EnvUpdateResult =>
   ({ ok: false, status, error, ...(key ? { key } : {}), ...(reason ? { reason } : {}) })
 
@@ -88,7 +95,7 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
         value = loadSecret(spec)
         if (value !== undefined) fileSecrets.add(spec.key)
       }
-      const next = value ?? base[spec.key]
+      const next = value ?? base[spec.key] ?? defaultOnOf(spec)
       if (next === undefined) delete target[spec.key]
       else target[spec.key] = next
     }

@@ -17,9 +17,9 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     audience: 'user',
     dangerNote: 'Runs Chromium on the server and opens the web on your behalf; a new attack surface if pages are untrusted.',
     label: 'Browser node',
-    description: 'Enables the Browser node on the canvas (Chromium on the server, shown as a stream). Off = no browser process, proxy, or routes.',
+    description: 'Web pages as nodes on the canvas (Chromium on the server). Works as soon as Chrome or Chromium is found. Off = no browser process, proxy, or routes.',
     dangerous: true,
-  }),
+  }, 'on'),
   text(ENV_BROWSER.bin, GROUP, {
     ...B,
     requires: [BROWSER_ON],

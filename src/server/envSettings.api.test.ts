@@ -75,9 +75,9 @@ describe('PUT', () => {
     const rows: AuditEntry[] = []
     const res = recorder()
     const deps: EnvSettingsApiDeps = { service: s.svc, guard: () => ({ ok: false, reason: 'origin' }), audit: (e) => rows.push(e) }
-    await envSettingsRoute(fakeReq('PUT', JSON.stringify({ set: { WEBTERM_CENTRAL: 'on' } })), res, 'PUT', deps)
+    await envSettingsRoute(fakeReq('PUT', JSON.stringify({ set: { WEBTERM_TELEGRAM: 'on' } })), res, 'PUT', deps)
     expect([res.status, res.json()]).toEqual([403, { error: 'forbidden' }])
-    expect(s.target.WEBTERM_CENTRAL).toBeUndefined()
+    expect(s.target.WEBTERM_TELEGRAM).toBeUndefined()
     expect(rows).toEqual([{ capability: 'advanced', action: 'denied', peer: 'remote', via: 'rejected', detail: 'origin' }])
     expect(res.body).not.toMatch(/token/i)
   })
