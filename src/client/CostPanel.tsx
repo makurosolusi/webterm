@@ -3,12 +3,13 @@
 // The one daily limit is Central's (Settings › Central, data-field central.costLimit); the old separate "Pause all
 // work at $" cap is gone (merged at boot, server cost/costDayCap.ts). Cache and prefix numbers are `CostDetails`,
 // shown in Settings › Developer. Numbers come from GET /api/cost (cost.route.ts); prices are estimates, not a bill.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { openSettingsAt } from './settings.link'
-import { Segmented } from './centralSettings.controls'
 import { controlRequest } from './ControlPanel'
+import { effortLabel } from './agentChat/effortPicker'
+import { modelAlias } from './chat/chatCostChip'
 import type { CostResponse } from '../server/cost/cost.route'
 import type { SpendGroup, SpendSummary } from '../server/cost/costStore'
 
@@ -35,6 +36,8 @@ export const COST_TEXT = {
   byRoutine: 'By routine or plan',
   byModel: 'By model',
   central: 'Central Agent',
+  deletedNode: 'Agent (deleted)',
+  share: (pct: number) => `${pct}% of total`,
   none: 'Nothing yet.',
   caps: 'Limits',
   limitLine: 'One daily spending limit covers Central, routines, plans and bake-offs.',
@@ -57,7 +60,17 @@ export function scopeName(scope: string): string {
   return ref ? `${name} ${ref}` : name
 }
 
-export const formatUsd = (micros: number): string => `$${(micros / 1e6).toFixed(micros > 0 && micros < 10_000 ? 4 : 2)}`
+/** The one money format here: two decimals; a non-zero amount below a cent reads "<$0.01". */
+export const formatUsd = (micros: number): string => (micros > 0 && micros < 10_000 ? '<$0.01' : `$${(micros / 1e6).toFixed(2)}`)
+
+/** `claude-opus-5-5` -> "Opus 5.5": family from the chat chip's modelAlias, version from the id; unknown ids as-is. */
+export function modelName(id: string): string {
+  const alias = modelAlias(id)
+  if (alias === id) return id
+  const v = new RegExp(`${alias}-(\\d+)(?:-(\\d{1,2})(?!\\d))?`).exec(id.toLowerCase())
+  return v ? `${effortLabel(alias)} ${[v[1], v[2]].filter(Boolean).join('.')}` : effortLabel(alias)
+}
+
 const isCost = (v: unknown): v is CostResponse => !!v && typeof (v as CostResponse).today === 'object' && Array.isArray((v as CostResponse).caps)
 
 function label(data: CostResponse, prefix: string, key: string): string {
@@ -65,16 +78,64 @@ function label(data: CostResponse, prefix: string, key: string): string {
   return data.labels[`${prefix}:${key}`] ?? key
 }
 
-function Groups({ title, rows, name }: { title: string; rows: SpendGroup[]; name: (key: string) => string }): React.JSX.Element {
+/** The server names live nodes; its fallback `Node <id8>` (brief.route nodeLabel) means the node is gone. */
+function nodeName(data: CostResponse, key: string): string {
+  const name = data.labels[`node:${key}`]
+  return !name || name === `Node ${key.slice(0, 8)}` ? COST_TEXT.deletedNode : name
+}
+
+/** Share of the period total, 0..100. */
+const sharePct = (micros: number, total: number): number => (total > 0 ? Math.min(100, Math.round((micros / total) * 100)) : 0)
+
+function Groups({ title, rows, total, name }: { title: string; rows: SpendGroup[]; total: number; name: (key: string) => string }): React.JSX.Element {
   return (
-    <div>
+    <div className="min-w-0">
       <h4 className="text-xs font-semibold">{title}</h4>
       {rows.length === 0 ? <p className="text-xs opacity-70">{COST_TEXT.none}</p> : (
-        <ul className="text-xs">
-          {rows.map((g) => <li key={g.key} className="flex justify-between gap-2"><span className="truncate">{name(g.key)}</span><span>{formatUsd(g.costMicros)}</span></li>)}
+        <ul className="m-0 flex list-none flex-col gap-1 p-0 text-xs">
+          {rows.map((g) => {
+            const pct = sharePct(g.costMicros, total)
+            return (
+              <li key={g.key} data-key={g.key}>
+                <div className="flex justify-between gap-2">
+                  <span className="min-w-0 break-words">{name(g.key)}</span>
+                  <span className="shrink-0 tabular-nums">{formatUsd(g.costMicros)}</span>
+                </div>
+                <div className="mt-0.5 h-0.5 rounded-full bg-(--vscode-widget-border)" role="img" aria-label={COST_TEXT.share(pct)}>
+                  <div data-testid="share-bar" className="h-full rounded-full bg-(--vscode-progressBar-background)" style={{ width: `${pct}%` }} />
+                </div>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
+  )
+}
+
+type Range = 'today' | 'week'
+const RANGES: readonly { value: Range; label: string }[] = [{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]
+const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+
+/** One segmented control (WAI-ARIA radio group): a single tab stop, arrow keys move and select. */
+function RangeControl({ value, onChange }: { value: Range; onChange: (v: Range) => void }): React.JSX.Element {
+  const group = useRef<HTMLSpanElement>(null)
+  const move = (e: React.KeyboardEvent, i: number): void => {
+    const step = STEP[e.key]
+    if (!step) return
+    e.preventDefault()
+    const next = (i + step + RANGES.length) % RANGES.length
+    onChange(RANGES[next]!.value)
+    group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
+  }
+  return (
+    <span ref={group} role="radiogroup" aria-label={COST_TEXT.period}
+      className="inline-flex gap-0.5 rounded-(--vscode-cornerRadius-small) border border-(--vscode-input-border) p-0.5">
+      {RANGES.map((r, i) => (
+        <Button key={r.value} size="xs" role="radio" aria-checked={r.value === value} tabIndex={r.value === value ? 0 : -1}
+          variant={r.value === value ? 'secondary' : 'ghost'} onClick={() => onChange(r.value)} onKeyDown={(e) => move(e, i)}>{r.label}</Button>
+      ))}
+    </span>
   )
 }
 
@@ -96,7 +157,7 @@ const why = (err: unknown): string => (err instanceof Error ? err.message : Stri
 export function CostPanel(): React.JSX.Element {
   const { data, error: loadError, reload } = useCost()
   const [writeError, setWriteError] = useState<string | null>(null)
-  const [range, setRange] = useState<'today' | 'week'>('today')
+  const [range, setRange] = useState<Range>('today')
 
   // A failed Resume says what went wrong; the report itself stays on screen.
   const resume = (scope: string): void => {
@@ -107,35 +168,43 @@ export function CostPanel(): React.JSX.Element {
   const s: SpendSummary | undefined = data?.[range]
   return (
     <section aria-label={COST_TEXT.title} data-testid="cost-panel">
-      <div className="flex items-center gap-2">
-        <Segmented label={COST_TEXT.period} value={range} onChange={(v) => setRange(v === 'week' ? 'week' : 'today')}
-          options={[{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]} />
-      </div>
+      <RangeControl value={range} onChange={setRange} />
       <p className="text-xs opacity-70">{COST_TEXT.intro}</p>
       {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
       {!data && !loadError ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}
       {data && s ? (
         <div className="flex flex-col gap-2">
-          <dl className="flex items-end gap-6 text-xs">
-            <div><dt className="opacity-70">{COST_TEXT.spend}</dt><dd data-testid="cost-total" className="text-2xl font-semibold">{formatUsd(s.costMicros)}</dd></div>
-            <div><dt className="opacity-70">{COST_TEXT.responses}</dt><dd>{s.byModel.reduce((n, g) => n + g.responses, 0)}</dd></div>
+          <dl className="m-0 grid grid-cols-2 gap-3 text-xs">
+            <div className="flex flex-col gap-0.5">
+              <dt className="opacity-70">{COST_TEXT.spend}</dt>
+              <dd data-testid="cost-total" className="m-0 text-2xl font-semibold tabular-nums">{formatUsd(s.costMicros)}</dd>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <dt className="opacity-70">{COST_TEXT.responses}</dt>
+              <dd data-testid="cost-responses" className="m-0 text-2xl font-semibold tabular-nums">{s.byModel.reduce((n, g) => n + g.responses, 0)}</dd>
+            </div>
           </dl>
-          <div className="grid grid-cols-2 gap-3">
-            <Groups title={COST_TEXT.byWorkspace} rows={s.byWorkspace} name={(k) => label(data, 'workspace', k)} />
-            <Groups title={COST_TEXT.topSpenders} rows={s.byNode} name={(k) => label(data, 'node', k)} />
-            <Groups title={COST_TEXT.byRoutine} rows={s.byRoutine} name={scopeName} />
-            <Groups title={COST_TEXT.byModel} rows={s.byModel} name={(k) => k || COST_TEXT.central} />
+          {/* One column in the narrow sidebar so names show in full; two only once the panel is wide (36rem). */}
+          <div className="@container">
+            <div data-testid="cost-groups" className="grid grid-cols-1 gap-3 @xl:grid-cols-2">
+              <Groups title={COST_TEXT.byWorkspace} rows={s.byWorkspace} total={s.costMicros} name={(k) => label(data, 'workspace', k)} />
+              {/* Central already has its row under By workspace, so Top spenders lists agents only. */}
+              <Groups title={COST_TEXT.topSpenders} rows={s.byNode.filter((g) => g.key !== '')} total={s.costMicros} name={(k) => nodeName(data, k)} />
+              <Groups title={COST_TEXT.byRoutine} rows={s.byRoutine} total={s.costMicros} name={scopeName} />
+              <Groups title={COST_TEXT.byModel} rows={s.byModel} total={s.costMicros} name={(k) => (k ? modelName(k) : COST_TEXT.central)} />
+            </div>
           </div>
           <div>
             <h4 className="text-xs font-semibold">{COST_TEXT.caps}</h4>
-            <ul className="text-xs">
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 text-xs">
               {data.caps.map((c) => (
-                <li key={c.scope} data-scope={c.scope} className="flex items-center gap-2">
+                <li key={c.scope} data-scope={c.scope} className="flex flex-wrap items-center gap-2">
                   <span>{scopeName(c.scope)}</span>
-                  <span>{formatUsd(c.spentMicros)}{c.limitMicros > 0 ? ` / ${formatUsd(c.limitMicros)}` : ''}</span>
+                  <span className="tabular-nums">{formatUsd(c.spentMicros)}{c.limitMicros > 0 ? ` / ${formatUsd(c.limitMicros)}` : ''}</span>
                   {c.pausedAt !== null ? (
                     <>
-                      <Badge variant="destructive" title={c.reason ?? undefined}>{COST_TEXT.paused}</Badge>
+                      <Badge variant="destructive">{COST_TEXT.paused}</Badge>
+                      {c.reason ? <span className="opacity-70">{c.reason}</span> : null}
                       <Button size="sm" variant="secondary" onClick={() => resume(c.scope)}>{COST_TEXT.resume}</Button>
                     </>
                   ) : null}
