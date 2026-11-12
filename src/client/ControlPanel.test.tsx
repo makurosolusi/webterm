@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { CONTROL_WHERE } from '../shared/envSettings.contract'
 import { CONTROL_EFFECTIVE_PATH, ControlPanel, type EffectiveConfig, type EffectiveRow } from './ControlPanel'
+import { resetDeveloperModeCache, writeDeveloperMode } from './developerMode'
 import { SettingsPanel } from './SettingsPanel'
 
 // test-only fixture rows
@@ -75,11 +76,17 @@ describe('Developer table', () => {
 
   it('is mounted as the Developer section in Settings, with eval cases in a closed disclosure', async () => {
     stub()
-    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Developer' }))
-    expect(await screen.findByTestId('control-panel')).toBeTruthy()
-    expect(await screen.findByRole('region', { name: 'Central agent' })).toBeTruthy()
-    const details = screen.getByText('Show eval cases').closest('details') as HTMLDetailsElement
-    expect(details.open).toBe(false)
+    writeDeveloperMode(true) // Developer is listed only in developer mode
+    try {
+      render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Developer' }))
+      expect(await screen.findByTestId('control-panel')).toBeTruthy()
+      expect(await screen.findByRole('region', { name: 'Central agent' })).toBeTruthy()
+      const details = screen.getByText('Show eval cases').closest('details') as HTMLDetailsElement
+      expect(details.open).toBe(false)
+    } finally {
+      writeDeveloperMode(false)
+      resetDeveloperModeCache()
+    }
   })
 })
