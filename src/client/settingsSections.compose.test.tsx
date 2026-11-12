@@ -23,7 +23,6 @@ describe('Settings purpose sections', () => {
   it.each([
     ['Rules & secrets', 'rules-section', ['policy-rules', 'secrets-panel', 'rules-advanced', 'policy-add-rule', 'policy-simulator']],
     ['Health', 'health-section', ['doctor']],
-    ['Developer', 'developer-section', ['control-panel']],
   ])('%s mounts its panels', async (label, section, panels) => {
     open(label)
     const root = await screen.findByTestId(section)
@@ -35,6 +34,12 @@ describe('Settings purpose sections', () => {
     const nav = screen.getByRole('navigation', { name: 'Section settings' })
     expect(within(within(nav).getByRole('group', { name: 'Safety' })).getAllByRole('button').map((b) => b.getAttribute('aria-labelledby'))).toEqual(['st-nav-rules'])
     for (const gone of ['Memory', 'Automations', 'Spending']) expect(within(nav).queryByRole('button', { name: gone })).toBeNull()
+  })
+
+  it('Developer (opened by link; the nav hides it outside developer mode) mounts its panels', async () => {
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} initialSection="developer" />)
+    const root = await screen.findByTestId('developer-section')
+    expect(await within(root).findByTestId('control-panel')).toBeTruthy()
   })
 
   it.each([['remember', 'Memory', 'memory'], ['routine', 'Automations', 'automations'], ['bill', 'Spending', 'spending']])(

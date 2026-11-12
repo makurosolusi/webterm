@@ -46,7 +46,7 @@ export function statusView(h: Ca2Handle): RouteResult {
   const used = readBudget(h.db, day, 'global')
   const limits = budgetLimits(h.env)
   const model = (h.env[MODEL_ENV] ?? '').trim()
-  return { status: 200, body: { day, used: { tokens: used.tokens, spawns: used.spawns }, limits: { tokens: limits.tokens, spawns: limits.spawns }, model: { id: model, free: FREE_MODEL.test(model) }, toolsHash: h.toolsHash, lastTurn: lastTurn(h) } }
+  return { status: 200, body: { day, used: { tokens: used.tokens, spawns: used.spawns, costMicros: used.costMicros }, limits: { tokens: limits.tokens, spawns: limits.spawns, costMicros: limits.costMicros }, model: { id: model, free: FREE_MODEL.test(model) }, toolsHash: h.toolsHash, lastTurn: lastTurn(h) } }
 }
 
 /** Newest turn, preferring one still active: another chat can have a newer finished turn while this one works. */

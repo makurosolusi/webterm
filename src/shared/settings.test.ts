@@ -19,12 +19,11 @@ describe('DEFAULT_SETTINGS', () => {
     expect(mergeSettings({ terminalFontZoomKeys: false }).terminalFontZoomKeys).toBe(false)
   })
 
-  it('terminalGpuRendering tidak menawarkan mode "shared" milik nodeterm', () => {
-    expect(DEFAULT_SETTINGS.terminalGpuRendering).toBe('auto')
-    // Pengaman tipe: nilai 'shared' tidak boleh assignable.
-    // @ts-expect-error 'shared' bukan TerminalGpuRendering di webterm
-    const _: Settings['terminalGpuRendering'] = 'shared'
-    void _
+  it('retired keys (GPU rendering, inactive cursor, middle-click paste) are dropped on load', () => {
+    const merged = mergeSettings({ terminalGpuRendering: 'off', cursorInactiveStyle: 'none', terminalMiddleClickPaste: true }) as unknown as Record<string, unknown>
+    expect(merged.terminalGpuRendering).toBeUndefined()
+    expect(merged.cursorInactiveStyle).toBeUndefined()
+    expect(merged.terminalMiddleClickPaste).toBeUndefined()
   })
 })
 
@@ -70,11 +69,12 @@ describe('mergeSettings', () => {
     expect(merged.terminalLetterSpacing).toBe(0)
   })
 
-  it('skipApprovals: absent (existing installs) -> true, stored false stays false, non-boolean ignored', () => {
-    expect(mergeSettings({}).skipApprovals).toBe(true)
+  it('skipApprovals: absent -> false (default level ask-for-risky), stored true/false kept, non-boolean ignored', () => {
+    expect(mergeSettings({}).skipApprovals).toBe(false)
+    expect(mergeSettings({ skipApprovals: true }).skipApprovals).toBe(true)
     expect(mergeSettings({ skipApprovals: false }).skipApprovals).toBe(false)
     expect(mergeSettings(JSON.parse(JSON.stringify(mergeSettings({ skipApprovals: false })))).skipApprovals).toBe(false)
-    expect(mergeSettings({ skipApprovals: 'no' }).skipApprovals).toBe(true)
+    expect(mergeSettings({ skipApprovals: 'no' }).skipApprovals).toBe(false)
   })
 
   it('membuang nilai yang bentuknya tidak cocok dengan default (batas input HTTP)', () => {

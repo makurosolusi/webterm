@@ -67,7 +67,7 @@ describe('Developer table writes', () => {
       expect(owned).not.toContain(k)
       expect(rowEl(k).textContent).toContain(`Managed in ${CENTRAL_SETTINGS} › `)
     }
-    expect(rowEl('WEBTERM_CENTRAL_DAILY_COST_MICROS').textContent).toContain('Managed in Settings › Central Agent › Daily spending limit')
+    expect(rowEl('WEBTERM_CENTRAL_DAILY_COST_MICROS').textContent).toContain('Managed in Settings › Central › Daily spending limit')
     const missing = owned.filter((k) => document.querySelector(`[data-control="${k}"]`) === null)
     expect(missing).toEqual([])
     for (const k of ['WEBTERM_AGENT_SANDBOX', 'WEBTERM_LEDGER', 'WEBTERM_TELEGRAM_WEBHOOK_SECRET']) expect(owned).toContain(k)

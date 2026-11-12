@@ -106,3 +106,15 @@ describe('titik lahir node baru di App', () => {
     for (const n of ADDERS) expect(setsOwnXY(adderBody(OLD_ADDERS, n))).toBe(true)
   })
 })
+
+describe('resizedNodeSize (new nodes take the last resize)', () => {
+  it('reads only a finished resize, rounded into the setting range', async () => {
+    const { resizedNodeSize } = await import('./nodeSpawn')
+    expect(resizedNodeSize([{ id: 'a', type: 'dimensions', resizing: false, dimensions: { width: 811, height: 503 } }]))
+      .toEqual({ defaultNodeWidth: 820, defaultNodeHeight: 500 })
+    expect(resizedNodeSize([{ id: 'a', type: 'dimensions', resizing: true, dimensions: { width: 900, height: 600 } }])).toBeNull()
+    expect(resizedNodeSize([{ id: 'a', type: 'dimensions', dimensions: { width: 900, height: 600 } }])).toBeNull() // a measurement
+    expect(resizedNodeSize([{ id: 'a', type: 'dimensions', resizing: false, dimensions: { width: 10, height: 99_999 } }]))
+      .toEqual({ defaultNodeWidth: 240, defaultNodeHeight: 2400 })
+  })
+})

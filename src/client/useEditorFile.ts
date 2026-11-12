@@ -4,7 +4,7 @@ import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import type { FsResult, FsVersion, ReadEncoding, ReadMeta } from '../shared/fsContract'
 import { loadMonaco, type MonacoApi } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
-import { loadRefusal, opensInPreview } from './editorFile'
+import { isMarkdownExt, loadRefusal, opensInPreview } from './editorFile'
 import { setEditorDirty } from './editorDirty'
 
 export type EditorConflict = { kind: 'version'; current?: FsVersion } | { kind: 'missing' }
@@ -18,6 +18,8 @@ export interface UseEditorFileArgs {
   /** false untuk gambar/PDF/biner: hook tidak membaca apa pun dan tidak memuat Monaco. */
   enabled: boolean
   openMarkdownPreview: boolean
+  /** Called with the new view when the user toggles Preview/Edit. */
+  onPreviewChange?: (preview: boolean) => void
   hostRef: RefObject<HTMLDivElement | null>
   readMeta: (path: string) => Promise<ReadMeta>
   writeChecked: WriteChecked
@@ -67,11 +69,10 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
   const togglePreview = () => {
     if (!enabled || !loadedRef.current) return
-    setPreview((p) => {
-      const next = !p
-      if (next && editorRef.current) setPreviewSource(editorRef.current.getValue())
-      return next
-    })
+    const next = !preview
+    if (next && editorRef.current) setPreviewSource(editorRef.current.getValue())
+    setPreview(next)
+    if (isMarkdownExt(ext)) a.onPreviewChange?.(next)
   }
 
   /** Satu percobaan tulis; `opts` menentukan seberapa ketat (versi / harus ada). Resolves true only

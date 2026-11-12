@@ -8,9 +8,11 @@ import { ENV_SETTINGS_PATH, IMPORT_ENDPOINT, envImportRoute, envSettingsRoute } 
 import { envSettingsApiDeps } from '../envSettings.runtime'
 import { capabilitiesRoute } from '../featureCapabilities.api'
 import { agentProtectionRoute } from '../agentSandbox.api'
-import type { ApiRoute } from './route.core'
+import { json, type ApiRoute } from './route.core'
+import { installedShells, SHELLS_PATH } from '../shells'
 import { canvasBackgroundRoutes } from './canvasBackground.routes'
 import { effectiveClaudeMode } from '../permission/permission.mode'
+import { applyApprovalLevelSwitch } from '../policy/policy.approvalLevel'
 
 /** Push the stored shell/scrollback/agent settings into the live PTY factory. Boot + every PUT. */
 export function applyPtyOptions(): void {
@@ -31,11 +33,13 @@ export const settingsRoutes: ApiRoute[] = [
   { name: 'capabilities', handle: (c) => capabilitiesRoute(c.req, c.res, c.method, c.path, envSettingsApiDeps) },
   { name: 'agent-protection', handle: (c) => agentProtectionRoute(c.req, c.res, c.path) },
   { name: 'custom-agents-preview', match: (c) => c.path === CUSTOM_AGENTS_PREVIEW_PATH, handle: async (c) => { await customAgentsPreviewRoute(c.req, c.res, c.method); return true } },
+  // Default shell picker: only shells installed on this machine.
+  { name: 'shells', match: (c) => c.path === SHELLS_PATH && c.method === 'GET', handle: (c) => { json(c.res, 200, { shells: installedShells() }); return true } },
   {
     name: 'settings',
     match: (c) => c.path === '/api/settings',
     handle: async (c) => {
-      await settingsRoute(c.req, c.res, c.method, db)
+      await settingsRoute(c.req, c.res, c.method, db, (patch) => applyApprovalLevelSwitch(patch, c.ledger()))
       // A saved defaultShell/scrollbackBytes must reach the NEXT spawned PTY without a restart.
       if (c.method === 'PUT') applyPtyOptions()
       return true

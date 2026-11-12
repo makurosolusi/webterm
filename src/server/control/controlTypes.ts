@@ -2,6 +2,7 @@
 // handler tetap di bawah batas 300 baris dan test bisa mengimpor kontrak tanpa memuat router.
 // Tidak ada impor `Bun`, `node:fs`, atau store di sini — modul ini harus aman di node-env vitest.
 
+import type { SubmitSessions } from '../agentSubmit'
 import type { OpenMsg, ServerMsg } from '../../shared/protocol'
 import type { Settings } from '../../shared/settings'
 import type { AgentStatus } from '../../shared/workspace'
@@ -35,12 +36,10 @@ export interface ControlSessionInfo {
 
 /** Potongan `Sessions` yang dipakai control plane. Integrator meneruskan objek nyata; test memakai
  *  fake. Semua method sinkron, persis seperti `Sessions`. */
-export interface ControlSessions {
+export interface ControlSessions extends SubmitSessions {
   open(msg: OpenMsg, send: (m: ServerMsg) => void): void
-  input(id: string, data: string): void
   close(id: string, send?: (m: ServerMsg) => void): void
   list(): ControlSessionInfo[]
-  statusOf(id: string): AgentStatus | undefined
   getExit(id: string): ControlExit | undefined
   getTerminal(id: string): string
   isLive(id: string): boolean

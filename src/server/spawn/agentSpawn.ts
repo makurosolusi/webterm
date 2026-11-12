@@ -10,6 +10,7 @@
 // per spawning node rather than per coordinator. Root principals (human-ui, central, routine, telegram)
 // are depth 0 and not capped here: Central keeps its own per-project caps (controlGuard.ts).
 import { randomUUID } from 'node:crypto'
+import { SPAWN_READY_WAIT_MS, type SubmitOptions, type SubmitResult } from '../agentSubmit'
 import { uniqueTitle } from '../../shared/nodeTitle'
 import { checkSchema } from '../capability/capability.schema'
 import { applyProviderEnv, type ProviderEnv } from '../claudeProvider/claudeProvider.model'
@@ -63,7 +64,8 @@ export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agen
 /** What the caller's session layer offers; only PTY spawns need it. */
 export interface SpawnIo {
   openPty?(input: PtyOpenInput): void | Promise<void>
-  input?(nodeId: string, text: string): void
+  /** Confirmed submit of the spawn prompt (`WorkerSessionPort.submit`, see agentSubmit.ts). */
+  submit?(nodeId: string, text: string, options?: SubmitOptions): Promise<SubmitResult>
 }
 
 export type AgentSpawnResult =
@@ -169,7 +171,11 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
     try {
       if (req.mode === 'pty') {
         await io.openPty?.({ nodeId, ...(req.cwd ? { cwd: req.cwd } : {}), ...req.pty })
-        if (req.prompt) io.input?.(nodeId, `${req.prompt}\r`)
+        if (req.prompt && io.submit) {
+          // Claude is still booting here: wait for its composer, then confirm the prompt started.
+          const sent = await io.submit(nodeId, req.prompt, { readyMs: SPAWN_READY_WAIT_MS })
+          if (!sent.ok) throw new Error(`spawn ${nodeId}: initial prompt ${sent.reason}: ${sent.message}`)
+        }
       } else {
         const h = req.headless ?? {}
         // Claude provider, as dag.planner: the exec scrub keeps only an allowlist, so the provider vars

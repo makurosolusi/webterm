@@ -9,8 +9,12 @@ import { ADVANCED_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
+import { CLAUDE_TEXT } from './ClaudeSettingsSection'
+import { HEALTH_TEXT } from './controlPanelLabels'
+import { MODELS_TEXT } from './SettingsModels'
+import { NOTIFY_TEXT } from './osNotify.settings'
 import { CENTRAL_FIELDS } from './centralSettings.registry'
-import { CENTRAL_GROUP_TITLE, CENTRAL_TEXT } from './centralSettingsLabels'
+import { CENTRAL_GROUP_TITLE } from './centralSettingsLabels'
 import type { SettingsFieldId } from './settings.link'
 import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import type { CentralTab } from './secondarySideBar.store'
@@ -36,80 +40,75 @@ const e = (page: SectionId, field: SettingsFieldId | undefined, label: string, h
 
 /** Words per page that are not in its title: what people type when they look for it. */
 const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
-  terminal: 'appearance look font theme color dark light',
-  interaction: 'keyboard mouse clipboard',
-  shell: 'zsh bash fish buffer folder',
-  agent: 'claude permission approval profile model',
-  central: 'assistant orchestrator autonomy check-in budget',
+  appearance: 'look font theme color colors dark light mode cursor wallpaper background',
+  terminal: 'keyboard mouse clipboard scrollback buffer shell zsh bash fish',
+  canvas: 'grid node cable edge snap folder',
+  notifications: 'alert alerts sound chime notify permission mute',
+  claude: 'anthropic agent agents permission approval profile model connection login key proxy',
+  central: 'assistant orchestrator autonomy check-in budget spending limit',
   rules: 'secret secrets allow deny block approve approvals permission policy safety always',
-  canvas: 'grid node cable edge',
-  background: 'wallpaper image gradient color photo',
   account: 'password username user login session sessions device devices sign out logout',
-  capabilities: 'features browser files telegram',
-  health: 'status diagnostics doctor problem broken check',
+  capabilities: 'capabilities browser files telegram chromium',
+  health: 'status diagnostics doctor problem broken check data folder developer',
   developer: 'raw debug values troubleshooting env',
 }
 
 const PAGES: SettingsSearchEntry[] = SETTINGS_SECTIONS.map((s) => e(s.id, undefined, s.label, s.description, PAGE_KEYWORDS[s.id]))
 
-/** Capability cards of their own (Central, Workers and Autonomy share the one Central row). */
+/** Capability cards on Features (Edit files is the Files card's sub-option; Central's three live in Central Agent). */
 const CARD_IDS: readonly CapabilityId[] = ['browser', 'files', 'filesWrite', 'telegram']
 const CARDS = CARD_IDS.map((id) => e('capabilities', `capability.${id}`, CAPABILITIES[id].title, CAPABILITIES[id].blurb, CAPABILITY_KEYWORDS[id].join(' ')))
 
 const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
+  // Appearance (SettingsAppearanceSection.tsx, CanvasBackgroundSection.tsx)
+  e('appearance', 'appTheme', 'Theme', 'System follows your computer’s light or dark mode.', 'dark light mode system appearance'),
+  e('appearance', 'terminalTheme', 'Terminal colors', undefined, 'color scheme theme palette dark light'),
+  e('appearance', 'fontFamily', 'Font', 'Fonts installed on this computer.', 'font family typeface monospace'),
+  e('appearance', 'fontSize', 'Font size', undefined, 'text size zoom px'),
+  e('appearance', 'cursorStyle', 'Cursor style', undefined, 'block bar underline caret'),
+  e('appearance', 'cursorBlink', 'Cursor blink', undefined, 'caret'),
+  e('appearance', 'canvasBackground', 'Canvas background', 'Color, gradient or image behind the nodes, for all workspaces or just this one.', 'wallpaper image gradient color photo'),
   // Terminal (SettingsTerminalSections.tsx)
-  e('terminal', 'fontSize', 'Font size', undefined, 'text size zoom px'),
-  e('terminal', 'fontFamily', 'Font family', 'A CSS font list. Monospace fonts only.', 'typeface monospace'),
+  e('terminal', 'copyOnSelect', 'Copy on select', 'Copy text to the clipboard as soon as you select it.', 'clipboard mouse'),
+  e('terminal', 'terminalShortcutPolicy', 'Keyboard shortcuts go to', 'While you type in a terminal, who gets a shortcut that both could use.', 'shortcut priority keys keybinding'),
+  e('terminal', 'scrollbackLines', 'History length', 'How many lines you can scroll back in a terminal.', 'scrollback history lines buffer replay reload'),
   e('terminal', 'fontWeight', 'Normal text weight', undefined, 'font thin'),
   e('terminal', 'fontWeightBold', 'Bold text weight', undefined, 'font'),
   e('terminal', 'drawBoldTextInBrightColors', 'Draw bold text in bright colors', undefined, 'font color'),
   e('terminal', 'terminalLineHeight', 'Line height', 'A multiple of the font size.', 'spacing leading'),
-  e('terminal', 'terminalLetterSpacing', 'Letter spacing', 'Extra horizontal space between cells.', 'font'),
-  e('terminal', 'terminalTheme', 'Color scheme', undefined, 'theme colors palette dark light'),
-  e('terminal', 'appTheme', 'App theme', 'The look of the app chrome (panels, node headers, menus).', 'dark light mode appearance'),
-  e('terminal', 'terminalMinContrast', 'Minimum contrast', 'Foreground/background contrast ratio.', 'accessibility wcag readability'),
-  e('terminal', 'cursorStyle', 'Cursor style', undefined, 'block bar underline caret'),
-  e('terminal', 'cursorInactiveStyle', 'Inactive cursor style', undefined, 'caret outline'),
-  e('terminal', 'cursorBlink', 'Cursor blink', undefined, 'caret'),
-  e('terminal', 'terminalGpuRendering', 'GPU rendering', undefined, 'webgl performance renderer'),
-  e('terminal', 'scrollbackLines', 'Terminal scrollback', 'How far up you can scroll inside a terminal node.', 'history lines buffer'),
-  // Interaction
-  e('interaction', 'terminalWordSeparator', 'Word separators', 'Characters that end a word on double-click selection.', 'select double-click'),
-  e('interaction', 'copyOnSelect', 'Copy on select', 'Copy a finished mouse selection to the system clipboard.', 'clipboard'),
-  e('interaction', 'terminalMiddleClickPaste', 'Middle-click paste', undefined, 'mouse clipboard'),
-  e('interaction', 'terminalFontZoomKeys', 'Keyboard font zoom', 'Change the font size of the focused terminal with the keyboard.', 'shortcut size'),
-  e('interaction', 'terminalShortcutPolicy', 'Shortcut priority', 'Who wins while a terminal holds keyboard focus.', 'keyboard keys keybinding'),
-  e('interaction', 'openMarkdownPreview', 'Open Markdown as preview', undefined, 'md editor render'),
-  // Shell & buffer
-  e('shell', 'defaultShell', 'Default shell', 'Empty = use the system default shell.', 'zsh bash fish pwsh'),
-  e('shell', 'scrollbackBytes', 'Server replay buffer', 'Raw terminal output replayed when the tab reloads.', 'scrollback reload'),
-  e('shell', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
-  // Agent (SettingsAgents.tsx, SettingsModels.tsx, ClaudeLaunchProfilesCard.tsx)
-  e('agent', 'skipApprovals', 'Skip approvals', 'Central and every Claude agent act without asking you first.', 'yolo dangerous permission ask'),
-  e('agent', 'claudePermissionMode', 'Claude permission mode', undefined, 'permission-mode approval plan'),
-  e('agent', 'hookReplyApprovals', 'Hook approvals from the canvas', undefined, 'approve deny permission'),
-  e('agent', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
-  e('agent', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account'),
-  e('agent', 'defaultClaudeProfileId', PROFILES_TEXT.defaultFor, undefined, 'profile'),
-  e('agent', 'model-ladder', 'Models', 'A model ladder picks the model and effort for each task.', 'opus sonnet haiku effort'),
-  e('agent', 'projectModels', 'Per-workspace model', 'Pin a model or effort for one workspace.', 'override project'),
+  e('terminal', 'terminalLetterSpacing', 'Letter spacing', 'Extra space between characters.', 'font'),
+  e('terminal', 'terminalWordSeparator', 'Word separators', 'Characters that end a word when you double-click to select.', 'select double-click'),
+  e('terminal', 'terminalFontZoomKeys', 'Keyboard font zoom', 'Change the font size of the focused terminal with the keyboard.', 'shortcut size'),
+  e('terminal', 'defaultShell', 'Default shell', 'Shells installed on this computer.', 'zsh bash fish pwsh'),
+  e('terminal', 'terminalMinContrast', 'Minimum contrast', 'Raise it when colored text is hard to read.', 'accessibility wcag readability'),
+  // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
+  e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
+  e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Never ask, ask for risky things, or ask every time.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
+  e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
+  e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),
+  e('claude', 'claudePermissionMode', 'Claude permission mode', CLAUDE_TEXT.rawModeHint, 'permission-mode approval plan'),
+  e('claude', 'disabledAgents', 'Agents in the Add menu', 'Turn off agents you don’t use to keep the Add menu short.', 'hide'),
+  e('claude', 'customAgents', 'Custom agents', 'Bring your own agent CLI, or wrap a builtin harness.', 'cli proxy wrapper byo'),
   // Canvas (SettingsCanvasSections.tsx)
-  e('canvas', 'gridSize', 'Grid size'),
-  e('canvas', 'snapToGrid', 'Snap to grid', 'While on, dragging a node rounds its position to the grid.', 'align'),
+  e('canvas', 'canvasDots', 'Grid', 'Off, dots, or dots that dragged nodes snap to.', 'dots snap align'),
   e('canvas', 'quickDrag', 'Quick move & resize', 'Hold the keys and drag anywhere on a node.', 'drag modifier'),
-  e('canvas', 'canvasDots', 'Grid dots', 'Visual only — snapping is unchanged.'),
+  e('canvas', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
+  e('canvas', 'gridSize', 'Grid size'),
   e('canvas', 'edgeColor', 'Cable color', 'Color of the cables between nodes.', 'edge line wire'),
   e('canvas', 'edgeWidth', 'Cable thickness', undefined, 'edge line wire width'),
-  e('canvas', 'defaultNodeWidth', 'New node width', 'Existing nodes keep the size saved with them.', 'size'),
-  e('canvas', 'defaultNodeHeight', 'New node height', undefined, 'size'),
-  e('canvas', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
-  // Capabilities
-  e('capabilities', 'capability.central', CENTRAL_TEXT.summaryTitle, CAPABILITIES.central.blurb, [...CAPABILITY_KEYWORDS.central, ...CAPABILITY_KEYWORDS.workers, ...CAPABILITY_KEYWORDS.autonomy].join(' ')),
+  // Notifications (osNotify.settings.tsx); per-workspace mute is in the workspace menu
+  e('notifications', undefined, NOTIFY_TEXT.desktop, NOTIFY_TEXT.desktopHint, 'alert permission browser'),
+  e('notifications', undefined, NOTIFY_TEXT.sound, NOTIFY_TEXT.soundHint, 'chime audio'),
+  e('notifications', undefined, 'Mute a workspace', 'Right-click a workspace tab › Mute Notifications.', 'silence quiet'),
+  // Features (the Spending report moved to the Control panel: MOVED below)
   ...CARDS,
-  e('capabilities', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'anthropic api key proxy gateway custom command envman wrapper'),
-  e('capabilities', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
+  e('capabilities', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
+  e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),
-  e('capabilities', 'agentEngine', ADVANCED_TEXT.engineLabel, ADVANCED_TEXT.engineRecheckHint, 'claude install sign in'),
+  // Health (HealthSection.tsx)
+  e('health', undefined, HEALTH_TEXT.dataDir, 'Where webterm keeps its data on this computer.', 'directory path storage'),
+  e('health', undefined, HEALTH_TEXT.developerMode, HEALTH_TEXT.developerModeHint, 'debug raw developer'),
 ]
 
 /** Moved pages: found by name and keywords, opened in the Control side bar. */

@@ -17,7 +17,7 @@ function setup(level: 'propose' | 'act_envelope') {
   const host: AgentHost = {
     runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'do it',
     openPty: async (_a, _cwd, nodeId) => { await Promise.resolve(); sessions.add(nodeId) },
-    headlessArgv: () => null, send: async () => undefined, scrollback: async () => [],
+    headlessArgv: () => null, send: async () => ({ ok: true as const, started: true as const }), scrollback: async () => [],
     closePty: async () => undefined, hasSession: (n) => sessions.has(n),
   }
   const ex = createAgentExecutor({ db, guard, host, now: () => T0 })

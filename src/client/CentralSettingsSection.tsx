@@ -1,16 +1,13 @@
-// Settings › Central Agent: every Central setting in one section, rendered from `CENTRAL_FIELDS`
-// (centralSettings.registry.ts). Capabilities go through useCapabilities (server closes prerequisites
-// and derives the agent/tool/planner keys); numbers and model through /api/settings/env.
+// Settings › Central: the few real preferences, rendered from `CENTRAL_FIELDS` (centralSettings.registry.ts);
+// the rest is automatic (see the registry). Capabilities go through useCapabilities (server closes
+// prerequisites and derives the agent/tool/planner keys); numbers through /api/settings/env.
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
-import { DEFAULT_CLAUDE_PROFILE, claudeProfiles } from '../shared/claudeLaunch/claudeLaunch.profiles'
-import { AgentEngineField } from './AgentEngineField'
 import { CAPABILITY_STATUS_LABEL } from './capabilitiesLabels'
-import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { useCheckinSettings, type CheckinApi } from './centralSettings.checkin'
 import { Segmented, Stepper } from './centralSettings.controls'
 import { useCentralEnv, type CentralEnv } from './centralSettings.env'
@@ -73,30 +70,24 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const view = (id: CapabilityId): CapabilityView | undefined => api.data?.capabilities.find((v) => v.id === id)
   const central = view('central')
-
-  // The engine row is AgentEngineField itself (it has its own label, status and Check again).
-  const engine = (): React.ReactNode => {
-    if (!api.data) return null
-    return (
-      <div key="engine" className="px-3.5" data-central-field="engine" data-field="central.engine">
-        <AgentEngineField redetect={api.recheck} />
-      </div>
-    )
+  // "Propose work" always asks before each worker runs: moving there also turns that approval on (the old
+  // separate switch), so the ledger setting cannot drift from what the level promises.
+  const moveLevel = async (v: string): Promise<void> => {
+    const levelField = CENTRAL_FIELDS.find((x) => x.id === 'level')!
+    const t = levelToggle(levelField, v, view)
+    if (t && !(await api.toggle(t.id, t.on))) return
+    if (v === 'workers') await api.setSub('workers', 'runRequireApproval', true)
   }
 
   const control = (field: CentralField, id: string, reason: string | null): React.ReactNode => {
     const src = field.source
     const disabled = reason !== null
-    if (field.control === 'link' && src.kind === 'link') {
-      return <Button size="xs" variant="link" className="px-0" aria-label={`${CENTRAL_TEXT.open} ${field.label}`} onClick={() => onNavigate(src.to)}>{CENTRAL_TEXT.open} →</Button>
-    }
     if (field.control === 'combobox') return null // CostLimitField renders its own Field
     if (src.kind === 'capability') {
-      if (field.control === 'status') return <span role="status" className="st-hint">{statusLine(field, view)}</span>
       if (field.control === 'segmented') {
         return (
           <Segmented label={field.label} value={levelOf(field, view)} options={field.options ?? []} disabled={disabled || api.busyId !== null}
-            onChange={(v) => { const t = levelToggle(field, v, view); if (t) void api.toggle(t.id, t.on) }} />
+            onChange={(v) => { void moveLevel(v) }} />
         )
       }
       const sub = src.sub ? view(src.id)?.subs?.find((x) => x.key === src.sub) : undefined
@@ -108,13 +99,6 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
             onCheckedChange={(on) => void (src.sub ? api.setSub(src.id, src.sub, on) : api.toggle(src.id, on))} />
         </span>
       )
-    }
-    if (src.kind === 'setting') {
-      const all = claudeProfiles(s)
-      const current = all.some((p) => p.id === s.centralClaudeProfileId) ? s.centralClaudeProfileId : ''
-      const options = [{ value: '', label: PROFILES_TEXT.sameAsDefault },
-        ...all.map((p) => ({ value: p.id, label: p.id === DEFAULT_CLAUDE_PROFILE.id ? `${p.name} (claude)` : p.name }))]
-      return <SettingsSelect id={id} value={current} options={options} disabled={disabled} onChange={(v) => onChange({ [src.key]: v })} />
     }
     if (src.kind === 'checkin') {
       const { data } = checkin
@@ -151,7 +135,6 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
 
   const row = (field: CentralField): React.ReactNode => {
     if (field.control === 'combobox') return <CostLimitField key={field.id} disabledReason={reasonOf(field, api, env, checkin) ?? undefined} />
-    if (field.id === 'engine') return matches(field) ? engine() : null
     const id = `st-central-${field.id}`
     const reason = reasonOf(field, api, env, checkin)
     const src = field.source
@@ -159,16 +142,12 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
     const envKey = src.kind === 'env' ? src.key : null
     const save = envKey ? env.saveState(envKey) : src.kind === 'checkin' ? checkin.saveState(src.key) : undefined
     return (
-      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} setting={src.kind === 'setting' ? src.key : undefined} field={`central.${field.id}`}
+      <Field key={field.id} label={field.label} hint={field.hint} htmlFor={id} field={`central.${field.id}`}
         save={save} modified={envKey ? env.modified(envKey) : undefined}
         onReset={envKey && reason === null ? () => { void env.write(envKey, null) } : undefined}>
         <div className="flex flex-wrap items-center gap-2" data-central-field={field.id}>
           {control(field, id, reason)}
-          {reason && field.control !== 'status' ? <span className="st-hint" data-reason>{reason}</span> : null}
-          {field.control === 'status' && src.kind === 'capability' && src.id !== 'central'
-            ? <Button size="xs" variant="link" className="px-0" aria-label={`${CENTRAL_TEXT.open} ${field.label}`}
-                onClick={() => onNavigate({ section: 'capabilities', field: `capability.${src.id}` })}>{CENTRAL_TEXT.open} →</Button>
-            : null}
+          {reason ? <span className="st-hint" data-reason>{reason}</span> : null}
         </div>
       </Field>
     )
@@ -178,15 +157,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
   const group = (g: CentralGroup): React.ReactNode => {
     const fields = CENTRAL_FIELDS.filter((x) => x.group === g)
     if (!fields.some(matches)) return null
-    const plain = fields.filter((x) => !x.experiment)
-    const experiments = fields.filter((x) => x.experiment)
-    const body = (
-      <>
-        {plain.map(row)}
-        {experiments.some(matches) ? <h5 className="st-group-title text-[13px]">{CENTRAL_TEXT.experiments}</h5> : null}
-        {experiments.map(row)}
-      </>
-    )
+    const body = <>{fields.map(row)}</>
     return g === 'advanced' ? (
       <details key={g} data-central-group={g} className="st-capabilities-advanced" open={advancedOpen || query !== ''}
         onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}>
@@ -221,14 +192,4 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
       {CENTRAL_GROUPS.map(group)}
     </div>
   )
-}
-
-/** Read-only line for the Browser and Telegram rows. */
-function statusLine(field: CentralField, view: (id: CapabilityId) => CapabilityView | undefined): string {
-  const src = field.source
-  if (src.kind !== 'capability') return ''
-  const v = view(src.id)
-  if (src.id === 'telegram') return v?.status === 'on' ? (v.detail ?? CENTRAL_TEXT.telegramOn) : v?.status === 'needs-step' ? CENTRAL_TEXT.telegramStep : CENTRAL_TEXT.telegramOff
-  if (!isOn(v)) return CENTRAL_TEXT.browserOff
-  return v?.subs?.find((x) => x.key === src.sub)?.on ? CENTRAL_TEXT.browserAgentsOn : CENTRAL_TEXT.browserAgentsOff
 }

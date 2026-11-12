@@ -10,8 +10,8 @@ import { budgetLimits } from '../central/guard/budgetStore'
 const DAY0 = Date.parse('2026-11-08T12:00:00.000Z')
 const DAY = 24 * 60 * 60_000
 
-test('defaults: 10M daily tokens, $10 warning, no hard cost cap', () => {
-  expect(budgetLimits({})).toMatchObject({ tokens: 10_000_000, costMicros: 0 })
+test('defaults: no daily token cap (the dollar limit is the budget), $10 warning, no hard cost cap', () => {
+  expect(budgetLimits({})).toMatchObject({ tokens: 0, costMicros: 0 })
   expect(DAILY_COST_WARNING_MICROS).toBe(10_000_000)
 })
 

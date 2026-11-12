@@ -26,7 +26,7 @@ export const CL = {
   change: 'Change',
   changeLabel: 'Change in Central settings',
   approvalsSkipped: 'Approvals: skipped — Central acts without asking',
-  changeApprovalsLabel: 'Change in Agent settings',
+  changeApprovalsLabel: 'Change in Claude settings',
   budgetHeading: "Today's budget",
   tokens: 'Tokens',
   spawns: 'Workers',

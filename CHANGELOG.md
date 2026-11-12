@@ -15,7 +15,7 @@ Operator notes:
 - New data-dir folder `<data dir>/agent-chat-uploads/<node id>/` holds files attached in Agent Chat; files older than 7 days are removed on the node's next upload.
 - A stored WEBTERM_CENTRAL_RUNTIME=opencode now means automatic (Claude); WEBTERM_OPENCODE_* keys are ignored.
 - Stored launch commands and hidden-agent entries for Codex, Gemini, OpenCode, Grok, GitHub Copilot, Cursor and Antigravity are dropped when settings load; a custom agent based on one of them becomes a standalone CLI. Indexed Codex sessions stay in the database but are hidden. Headless workers no longer receive non-Anthropic provider keys (`OPENAI_API_KEY`, `GEMINI_API_KEY`, …).
-- Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, turn it off in Settings › Agents (that choice is remembered).
+- Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, choose "Ask for risky things" in Settings › Claude › Permissions (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
@@ -23,6 +23,10 @@ Operator notes:
 - Ledger schema v31 adds a nullable `workspace_id` column to `policy_grant`; existing rules keep applying to every workspace, nothing to backfill.
 
 ### Added
+- Settings › Appearance: Theme (System follows your computer's light or dark mode, or Light / Dark), terminal colors with a small preview, Font (only fonts installed on this computer), font size, cursor style and blink, and the canvas background with one "This workspace: Same as all workspaces / Custom" choice.
+- Settings › Notifications: desktop notifications show the browser's real permission (blocked says how to allow it, and is never saved as on) plus the sound. Mute a single workspace from its menu: right-click the tab › Mute Notifications.
+- Settings › Health: every "fix it in Settings" hint from Doctor is a link to that exact setting, a Fix shows its result, the data folder is listed, and "Show developer tools" (or `?dev=1`) shows the Developer page.
+- Default shell lists only the shells installed on this computer (`GET /api/settings/shells`).
 - First-run setup after sign-in: connect Claude, set up the browser node, Central Agent and the basics; each step can be skipped, closing keeps progress, and Help › Set up webterm… (or `Setup: Open` in ⌘K) reopens it.
 - Download Chromium: with no browser on the server, setup's Browser step and Settings › Capabilities › Advanced can download Chrome for Testing (~200 MB) with progress, Cancel and Retry, and use it right away; the headless switch shows locked on for a Linux server without a display.
 - Welcome screen: a "Finish setup" checklist showing which setup steps are done, skipped or not set; click one to jump to it.
@@ -159,6 +163,15 @@ Operator notes:
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
 - A secret's Allow button in Settings › Rules & secrets now reads "Allow for agents in <workspace>" and allows only the agents in the workspace you are in, still with no end date. The rule shows in the Rules list as "in <workspace>", where you can revoke it. With no workspace open, the button is locked and says why.
+- Settings › Claude (new, first under Agents) puts everything about Claude on one page. **Connection** holds the provider choice with its staged test, the launch profiles right under it, and one line saying what new agents, Central and helpers really start with (and where the credential comes from), as resolved by the server. The profile badges now match where launches really go, also in Custom command mode. **Permissions** is a single choice, "How much may agents do on their own?": Never ask, Ask for risky things (the new default: actions that cannot be undone, such as deleting files, pushing or destructive commands, ask first; routine work runs without asking), or Ask every time. A choice you already stored (for example Skip approvals on) is kept; only installs that never set it get the new default. **Models** shows the ladder read-only, folded. **Advanced** holds Central's own profile, the raw permission mode, the Add menu, custom agents and the automation token. Old links to Settings › Agent land on the matching Claude field.
+- Saving Custom command mode also makes its profile the default for new Claude agents (one setting, not two); existing installs are aligned once at startup. Leaving command mode puts the default back to plain `claude`.
+- Settings › Central is down to On/off, What Central may do, Check in by itself and one daily spending limit that shows what was spent today. Workers per day, check-ins per day and max workers at once are under Advanced. "Propose work" now always asks before each worker runs, so the separate switch is gone.
+- Central picks the rest itself. Its context window comes from the model (200K, or 1M for a `[1m]` model id; `WEBTERM_CENTRAL_CONTEXT_WINDOW` still overrides). The reply time limit and steps per reply scale with the model tier (Opus ×1.5, Fable ×2; the env keys still override). Skills are on as soon as Central is. Project knowledge, steadier autonomy and agent mail turn on with "Work on its own".
+- The daily token budget no longer limits Central by default: the dollar limit is the budget. `WEBTERM_CENTRAL_DAILY_TOKENS` still works when set.
+- Settings regrouped: Terminal now holds copy on select, "Keyboard shortcuts go to: webterm first / the program in the terminal first" and one History length (it sets both the terminal scrollback and the history restored after a reload); the finer terminal options are under Advanced. Canvas holds one Grid choice (Off / Dots / Dots and snap), quick move & resize and the projects folder (Save shows Checking… then Saved); grid size and cables are under Advanced. Interaction, Shell & buffer and Canvas background are gone as pages, and links to them land on the page that now holds the setting.
+- Settings › Capabilities is now Features: Browser (with its search engine), Files (Edit and upload files is a sub-option) and Telegram. A change that fails says so on its card; turning on something risky asks in the app's dialog; Reset capabilities asks first and shows the result. The Central Agent summary row and the engine row are gone from it.
+- New nodes open at the size you last resized a node to, and Markdown files open the way you last toggled Preview/Edit.
+- Developer is hidden from the Settings sidebar unless developer mode is on.
 
 - Memory, Automations and the Spending report moved out of Settings into tabs of the Control side bar. They work even when the Central Agent is off. Settings search still finds them and opens the right tab, and old `?settings=memory|automations|spending` links land there too.
 - Control › Memory is one place for everything agents remember. A filter switches between All, Suggested (waiting for your OK), Notes (the shared board) and Central (Central's own memory). Forget now asks before it deletes. `/memory` in Central chat opens this tab.
@@ -261,6 +274,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Canvas background: a gradient preset showed as selected after its angle was changed.
+- Central and other senders now confirm a Claude agent actually started a prompt instead of leaving it unsent in the input box.
 - Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.
 - "Max workers at once" for Central now applies whenever Central works on its own (not only with Steadier autonomy) and takes effect for the next worker it starts, without a restart.
 - The daily spending limit hint now says what happens at 100%: Central pauses until the next UTC day or until you raise the limit.
@@ -383,6 +398,9 @@ Operator notes:
 ### Removed
 - The separate "Pause all work when today's spend reaches" limit. Central's daily spending limit covers all work (see Changed).
 - The two "Let a small model approve…" switches in Rules. Settings › Claude's approval level sets them now.
+- Settings rows that the system now decides: Central's model, context window, reply time limit, steps per reply, daily token budget, skill switches, engine, browser, Telegram, profile, ladder and report rows, Project knowledge, Steadier autonomy and Agent mail, and the Agent page's Skip approvals, Hook approvals, "Default for new Claude agents" and per-workspace model editor. Stored per-workspace model overrides are still honoured.
+- Settings for GPU rendering (always WebGL, falling back on its own), inactive cursor style (always outline), middle-click paste (automatic: on for Linux), Open Markdown as preview, new node width/height, and the separate server replay buffer. Stored values of the first three are dropped on load.
+- Account had two Sign out buttons; this device's row in the sessions list is the one now.
 - Settings › Agent › "Agent default": the quick-add button always used the first enabled agent, so the choice did nothing. A stored value is dropped on load.
 - Unused settings and env keys that changed nothing: the `accent` setting, and `WEBTERM_CHANNELS`, `WEBTERM_CENTRAL_CHAT`, `WEBTERM_CENTRAL_TELEGRAM`, `WEBTERM_CENTRAL_TOOLS` and `WEBTERM_CENTRAL_PLANNER` (chat and the Telegram bridge follow the Central Agent and Telegram switches; proposal tools are always available). Stored values are kept but have no effect.
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

@@ -12,7 +12,7 @@ import { SETTINGS_GROUPS, SETTINGS_SECTIONS, SettingsPanel, toSectionId } from '
 
 // Tab Kemampuan memuat dari server; tes layout ini tak membutuhkannya (D8 ada di SettingsPanel.capabilities.test.tsx).
 vi.mock('./useCapabilities', () => ({
-  useCapabilities: () => ({ data: null, loading: false, error: null, busyId: null, refresh: async () => undefined, toggle: async () => true, setSub: async () => true }),
+  useCapabilities: () => ({ data: null, loading: false, error: null, errorId: null, busyId: null, refresh: async () => undefined, toggle: async () => true, setSub: async () => true }),
   capabilityErrorMessage: () => '',
 }))
 
@@ -48,31 +48,31 @@ describe('SettingsPanel VS Code layout', () => {
     renderPanel()
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
-    const labels = ['Terminal', 'Interaction', 'Shell & buffer', 'Agent', 'Central Agent', 'Rules & secrets', 'Canvas', 'Canvas background', 'Account', 'Capabilities', 'Health', 'Developer']
+    // Developer is hidden outside developer mode (./developerMode). Memory, Automations and Spending moved to the Control panel.
+    const labels = ['Appearance', 'Terminal', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'Health']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
     const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
     expect(fontSize.getAttribute('aria-valuenow')).toBe(String(DEFAULT_SETTINGS.fontSize))
     expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
   })
 
-  it('groups the sidebar under General, Agents, Safety, Workspace and System headings, in that order', () => {
+  it('groups the sidebar under General, Agents, Safety and System headings, in that order', () => {
     renderPanel()
     const groups = within(nav()).getAllByRole('group')
-    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Safety', 'Workspace', 'System'])
+    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Safety', 'System'])
     const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
     expect(byGroup).toEqual([
-      ['Terminal', 'Interaction', 'Shell & buffer'],
-      ['Agent', 'Central Agent'],
+      ['Appearance', 'Terminal', 'Canvas', 'Notifications'],
+      ['Claude', 'Central'],
       ['Rules & secrets'],
-      ['Canvas', 'Canvas background'],
-      ['Account', 'Capabilities', 'Health', 'Developer'],
+      ['Account', 'Features', 'Health'],
     ])
     expect(within(groups[2]!).getByRole('button', { name: 'Rules & secrets' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
-    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Safety', 'Workspace', 'System'])
+    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Safety', 'System'])
     // SETTINGS_SECTIONS is listed in group order, so the sidebar order equals the array order.
     expect(SETTINGS_SECTIONS.map((x) => x.group)).toEqual([...SETTINGS_SECTIONS.map((x) => x.group)].sort((a, b) => SETTINGS_GROUPS.indexOf(a) - SETTINGS_GROUPS.indexOf(b)))
   })
@@ -101,8 +101,9 @@ describe('SettingsPanel section icons and descriptions', () => {
   it('renders a decorative icon and the description in each nav item', () => {
     renderPanel()
     const items = within(nav()).getAllByRole('button')
-    expect(items).toHaveLength(SETTINGS_SECTIONS.length)
-    SETTINGS_SECTIONS.forEach((section, i) => {
+    const listed = SETTINGS_SECTIONS.filter((x) => x.id !== 'developer') // developer mode off
+    expect(items).toHaveLength(listed.length)
+    listed.forEach((section, i) => {
       const icon = items[i]!.querySelector('.codicon')!
       expect(icon.classList).toContain(`codicon-${section.icon}`)
       expect(icon.getAttribute('aria-hidden')).toBe('true')
@@ -115,7 +116,7 @@ describe('SettingsPanel section icons and descriptions', () => {
     // The purpose sections load from the server; a 404 is enough here, the header does not wait for them.
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
     renderPanel()
-    for (const section of SETTINGS_SECTIONS.filter((x) => x.id !== 'capabilities')) {
+    for (const section of SETTINGS_SECTIONS.filter((x) => x.id !== 'capabilities' && x.id !== 'developer')) {
       fireEvent.click(within(nav()).getByRole('button', { name: section.label }))
       const heading = screen.getByRole('heading', { level: 2, name: section.label })
       expect(heading.querySelector('.codicon')?.classList).toContain(`codicon-${section.icon}`)
@@ -126,38 +127,62 @@ describe('SettingsPanel section icons and descriptions', () => {
 })
 
 describe('SettingsPanel item placement', () => {
-  it('puts scrollback lines and the app theme in Terminal, not Shell or Canvas', () => {
+  it('Appearance holds theme, colors and font; Terminal holds History length; Canvas holds the grid', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
     renderPanel()
-    expect(screen.getByLabelText('Terminal scrollback')).toBeTruthy()
-    expect(screen.getByLabelText('App theme')).toBeTruthy()
-    expect(screen.getByLabelText('Color scheme')).toBeTruthy()
+    expect(screen.getByLabelText('Theme')).toBeTruthy()
+    expect(screen.getByLabelText('Terminal colors')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Font' })).toBeTruthy()
+    expect(document.querySelector('[data-field="canvasBackground"]')).toBeTruthy()
 
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Shell & buffer' }))
-    expect(screen.queryByLabelText('Terminal scrollback')).toBeNull()
-    expect(screen.getByLabelText('Server replay buffer')).toBeTruthy()
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
+    expect(screen.getByRole('combobox', { name: 'History length' })).toBeTruthy()
+    expect(screen.queryByLabelText('Theme')).toBeNull()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
-    expect(screen.queryByLabelText('App theme')).toBeNull()
-    expect(screen.queryByLabelText('Warna aksen')).toBeNull()
+    expect(screen.getByLabelText('Grid')).toBeTruthy()
+    expect(screen.queryByLabelText('Theme')).toBeNull()
   })
 
-  it('puts the Markdown preview toggle in Interaksi', () => {
-    renderPanel()
-    expect(screen.queryByLabelText('Open Markdown as preview')).toBeNull()
-
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Interaction' }))
-
-    expect(screen.getByLabelText('Open Markdown as preview')).toBeTruthy()
+  it('a link with an old section id lands on the page that now holds the field', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="terminal" field="fontSize" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
+    cleanup()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="shell" field="defaultProjectsFolder" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Canvas' })).toBeTruthy()
+    cleanup()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="canvas" field="browserSearchEngine" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Features' })).toBeTruthy()
   })
 
-  it('falls back to terminal for an unknown or legacy tab id', () => {
-    expect(toSectionId('preview')).toBe('terminal')
-    expect(toSectionId('nope')).toBe('terminal')
+  it('falls back to Appearance for an unknown or legacy tab id', () => {
+    expect(toSectionId('preview')).toBe('appearance')
+    expect(toSectionId('nope')).toBe('appearance')
     expect(toSectionId('canvas')).toBe('canvas')
+    expect(toSectionId('interaction')).toBe('terminal')
+    expect(toSectionId('shell')).toBe('terminal')
+    expect(toSectionId('background')).toBe('appearance')
     expect(toSectionId('env')).toBe('capabilities')
     expect(toSectionId('channels')).toBe('capabilities')
     expect(toSectionId('control')).toBe('health')
     for (const section of SETTINGS_SECTIONS) expect(toSectionId(section.id)).toBe(section.id)
+  })
+
+  it('Developer shows in the nav only in developer mode (Health switch), and a link opens it anyway', async () => {
+    const { resetDeveloperModeCache, writeDeveloperMode } = await import('./developerMode')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
+    resetDeveloperModeCache()
+    writeDeveloperMode(false)
+    renderPanel()
+    expect(within(nav()).queryByRole('button', { name: 'Developer' })).toBeNull()
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Health' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Show developer tools' }))
+    expect(within(nav()).getByRole('button', { name: 'Developer' })).toBeTruthy()
+    writeDeveloperMode(false)
+    cleanup()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} initialSection="developer" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Developer' })).toBeTruthy()
   })
 })
 
@@ -173,11 +198,11 @@ describe('SettingsPanel keyboard', () => {
     expect(document.activeElement).toBe(items[items.length - 1])
     fireEvent.keyDown(items[items.length - 1]!, { key: 'Home' })
     expect(document.activeElement).toBe(items[0])
-    // Across a group heading: the last Editor item steps down into the first Agents item.
-    items[2]!.focus()
-    fireEvent.keyDown(items[2]!, { key: 'ArrowDown' })
-    expect(document.activeElement?.textContent).toContain('Agent')
-    expect(document.activeElement).toBe(items[3])
+    // Across a group heading: the last General item steps down into the first Agents item.
+    items[3]!.focus()
+    fireEvent.keyDown(items[3]!, { key: 'ArrowDown' })
+    expect(document.activeElement?.textContent).toContain('Claude')
+    expect(document.activeElement).toBe(items[4])
   })
 })
 
@@ -256,7 +281,7 @@ describe('SettingsPanel persistence', () => {
 
   it('lists agents of the Add menu as checkboxes, not toggle chips', () => {
     const { onChange } = renderPanel({ disabledAgents: [] })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     expect(document.querySelector('.st-chip')).toBeNull()
     const [first] = document.querySelectorAll<HTMLInputElement>('.st-checkrow input[type="checkbox"]')
@@ -278,7 +303,7 @@ describe('SettingsPanel persistence', () => {
 describe('SettingsPanel agents', () => {
   it('Escape in the launch profile editor cancels the editor, not the Settings dialog', () => {
     const { onClose } = renderPanel()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add profile' }))
     const name = screen.getByLabelText('Name')
     expect(document.activeElement).toBe(name)
@@ -291,7 +316,7 @@ describe('SettingsPanel agents', () => {
   it('has no per-CLI launch command rows; Claude is configured through launch profiles and the base picker offers Claude only', () => {
     const agent: CustomAgent = { id: 'custom:p', label: 'Proxy', launchCmd: '', baseAgent: 'claude' }
     render(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, customAgents: [agent] }} onChange={vi.fn()} onClose={vi.fn()} />)
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
     for (const label of ['Codex', 'Gemini', 'Claude Code']) expect(screen.queryByLabelText(`${label} launch command`)).toBeNull()
     expect(screen.getByRole('region', { name: 'Default' })).toBeTruthy()
     // The Agents-in-Add-menu checklist lists Claude Code and the custom agent, no retired CLI.
@@ -301,7 +326,7 @@ describe('SettingsPanel agents', () => {
 
   it('adds a custom agent with a stable id prefix', () => {
     const { onChange } = renderPanel()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Add agent' }))
 
@@ -316,7 +341,7 @@ describe('SettingsPanel agents', () => {
       customAgents: [agent],
       disabledAgents: [agent.id],
     })
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Agent' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Claude' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
 

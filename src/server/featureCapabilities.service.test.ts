@@ -139,7 +139,7 @@ describe('setSub central skills', () => {
     expect(h.target.WEBTERM_CENTRAL_CHECKPOINT).toBe('on')
     expect(events).toEqual([])
     expect(viewIn(r.body, 'central')?.subs?.map((s) => [s.key, s.label, s.on])).toEqual([
-      ['centralSkills', 'Let Central use skills you review and approve', false],
+      ['centralSkills', 'Let Central use skills you review and approve', true],
       ['centralSkillPropose', 'Suggest new skills', true],
       ['centralCheckpoint', 'Summarize long conversations', true],
     ])

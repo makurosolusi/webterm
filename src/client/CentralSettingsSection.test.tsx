@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
-// Settings › Central Agent: the registry renders every group, each control writes through its own
-// API (capabilities toggle/sub, /api/settings/env PUT, settings patch), Central off disables all but
-// the master switch, Advanced starts closed, and links land on the right section.
+// Settings › Central: the registry renders the few real preferences, each control writes through its own
+// API (capabilities toggle/sub, /api/settings/env PUT), Central off disables all but the master switch,
+// Advanced starts closed, and the rows that became automatic are gone.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS, type CapabilitiesResponse, type CapabilityId, type CapabilityView } from '../shared/featureCapabilities'
@@ -102,11 +102,22 @@ describe('Settings › Central Agent', () => {
   it('deep link lands on the section and renders every group; Advanced starts closed', async () => {
     const main = await open()
     expect(toSectionId('central')).toBe('central')
-    expect(within(main).getByRole('heading', { level: 2 }).textContent).toBe('Central Agent')
+    expect(within(main).getByRole('heading', { level: 2 }).textContent).toBe('Central')
     expect([...main.querySelectorAll('[data-central-group]')].map((g) => g.getAttribute('data-central-group'))).toEqual([...CENTRAL_GROUPS])
-    expect((main.querySelector('details[data-central-group="advanced"]') as HTMLDetailsElement).open).toBe(false)
-    expect(main.textContent).toContain('Connected as @bot')
-    expect(main.textContent).toContain('Agents may drive it.')
+    const advanced = main.querySelector('details[data-central-group="advanced"]') as HTMLDetailsElement
+    expect(advanced.open).toBe(false)
+    expect([...advanced.querySelectorAll('[data-central-field]')].map((x) => x.getAttribute('data-central-field'))).toEqual(['dailySpawns', 'checkinLimit', 'maxInflight'])
+  })
+
+  it('automatic rows are gone: model, context window, reply limits, token budget, skills, engine, browser, telegram, links, experiments', async () => {
+    const main = await open()
+    expect(CENTRAL_FIELDS.map((f) => f.id)).toEqual(['central', 'level', 'checkin', 'costLimit', 'dailySpawns', 'checkinLimit', 'maxInflight'])
+    for (const gone of ['Model', 'Context window', 'Reply time limit', 'Steps per reply', 'Daily token budget', 'Use approved skills', 'Suggest new skills',
+      'Summarize long conversations', 'Engine', 'Claude profile', 'Project knowledge', 'Steadier autonomy', 'Agent mail', 'Ask before each worker runs']) {
+      expect(within(main).queryByLabelText(gone), gone).toBeNull()
+    }
+    expect(within(main).queryAllByRole('button', { name: /^Open / })).toEqual([])
+    expect(CENTRAL_ENV_KEYS).toEqual(['WEBTERM_CENTRAL_DAILY_COST_MICROS', 'WEBTERM_CENTRAL_DAILY_SPAWNS', 'WEBTERM_CENTRAL_MAX_INFLIGHT'])
   })
 
   it('master switch toggles the central capability', async () => {
@@ -118,7 +129,7 @@ describe('Settings › Central Agent', () => {
   it('"What Central may do" writes the matching capability; Work on its own asks first', async () => {
     await open()
     const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
-    expect(within(group).getByRole('radio', { name: 'Propose work (you approve)' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(group).getByRole('radio', { name: 'Propose work (asks first)' }).getAttribute('aria-checked')).toBe('true')
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     fireEvent.click(within(group).getByRole('radio', { name: 'Work on its own' }))
     expect(confirm).toHaveBeenCalledTimes(1)
@@ -130,29 +141,29 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(posts[1]).toEqual({ url: '/api/capabilities/workers', body: { enabled: false } }))
   })
 
-  it('sub switches write their own sub key', async () => {
+  it('Propose work always asks: moving there also turns the worker approval on', async () => {
+    on = new Set(['central'])
     await open()
-    fireEvent.click(screen.getByRole('switch', { name: 'Ask before each worker runs' }))
-    await waitFor(() => expect(posts).toEqual([{ url: '/api/capabilities/workers/sub', body: { key: 'runRequireApproval', on: false } }]))
-    fireEvent.click(screen.getByRole('switch', { name: 'Suggest new skills' }))
-    await waitFor(() => expect(posts[1]).toEqual({ url: '/api/capabilities/central/sub', body: { key: 'centralSkillPropose', on: true } }))
-    expect(screen.getByRole('switch', { name: 'Summarize long conversations' }).getAttribute('aria-checked')).toBe('true')
+    const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
+    fireEvent.click(within(group).getByRole('radio', { name: 'Propose work (asks first)' }))
+    await waitFor(() => expect(posts).toEqual([
+      { url: '/api/capabilities/workers', body: { enabled: true } },
+      { url: '/api/capabilities/workers/sub', body: { key: 'runRequireApproval', on: true } },
+    ]))
   })
 
-  it('steppers and selects write through /api/settings/env in stored units', async () => {
+  it('Workers per day writes through /api/settings/env in stored units', async () => {
     await open()
     fireEvent.click(screen.getByRole('button', { name: 'Increase Workers per day' }))
     await waitFor(() => expect(puts).toEqual([{ set: { WEBTERM_CENTRAL_DAILY_SPAWNS: '25' }, unset: [] }]))
     await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('25 workers'))
-    fireEvent.click(screen.getByText('Advanced'))
-    fireEvent.click(screen.getByRole('button', { name: 'Decrease Reply time limit' }))
-    await waitFor(() => expect(puts[1]).toEqual({ set: { WEBTERM_CENTRAL_TURN_WALL_MS: '110000' }, unset: [] }))
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'opus' } })
-    await waitFor(() => expect(puts[2]).toEqual({ set: { WEBTERM_CENTRAL_MODEL: 'opus' }, unset: [] }))
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: '' } })
-    await waitFor(() => expect(puts[3]).toEqual({ set: {}, unset: ['WEBTERM_CENTRAL_MODEL'] }))
-    fireEvent.change(screen.getByLabelText('Daily token budget'), { target: { value: '0' } })
-    await waitFor(() => expect(puts[4]).toEqual({ set: { WEBTERM_CENTRAL_DAILY_TOKENS: '0' }, unset: [] }))
+  })
+
+  it('Max workers at once (Advanced) writes through /api/settings/env once Central works on its own', async () => {
+    on = new Set(['central', 'workers', 'autonomy'])
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease Max workers at once' }))
+    await waitFor(() => expect(puts).toEqual([{ set: { WEBTERM_CENTRAL_MAX_INFLIGHT: '2' }, unset: [] }]))
   })
 
   it('a pick shows at once; a failed write reverts it and shows the error at that field with Retry', async () => {
@@ -182,11 +193,6 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(puts[1]).toEqual({ set: {}, unset: ['WEBTERM_CENTRAL_DAILY_SPAWNS'] }))
     await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('20 workers'))
     expect(within(field()).queryByText('(Modified)')).toBeNull()
-    // Every env-backed row gets the same anatomy (registry-driven, so no row can opt out).
-    fireEvent.click(screen.getByText('Advanced'))
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'opus' } })
-    const model = screen.getByLabelText('Model').closest('[data-slot="settings-field"]') as HTMLElement
-    await waitFor(() => expect(within(model).getByRole('button', { name: 'Reset Setting: Model' })).toBeTruthy())
   })
 
   it('the page title is not repeated as a prefix on its own field', async () => {
@@ -205,13 +211,6 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('20 workers'))
   })
 
-  it('Claude profile pick writes centralClaudeProfileId', async () => {
-    const onChange = vi.fn()
-    await open(onChange)
-    fireEvent.change(screen.getByLabelText('Claude profile'), { target: { value: 'default' } })
-    expect(onChange).toHaveBeenCalledWith({ centralClaudeProfileId: 'default' })
-  })
-
   it('Central off: every control but the master switch is disabled, with a reason', async () => {
     on = new Set()
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} initialSection="central" />)
@@ -222,7 +221,7 @@ describe('Settings › Central Agent', () => {
     expect(within(main).getAllByRole('radio', { hidden: true }).every((r) => r.hasAttribute('disabled'))).toBe(true)
     expect(screen.getByRole('button', { name: 'Increase Workers per day' }).hasAttribute('disabled')).toBe(true)
     await waitFor(() => expect((screen.getByLabelText('Daily spending limit') as HTMLInputElement).disabled).toBe(true))
-    expect(main.querySelectorAll('[data-reason]').length).toBeGreaterThan(5)
+    expect(main.querySelectorAll('[data-reason]').length).toBeGreaterThan(3)
     expect(main.textContent).toContain('Turn on Central Agent first.')
   })
 
@@ -240,15 +239,5 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(puts[1]).toEqual({ set: {}, unset: [COST_CAP_KEY] }))
     expect(dollarsToMicros('1.234567')).toBe(1_234_567)
     expect(dollarsToMicros('abc')).toBeUndefined()
-  })
-
-  it('links land on the right section', async () => {
-    await open()
-    const title = (): string | null | undefined => document.querySelector('.st-section-title')?.textContent
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Model ladder & per-workspace overrides' }))
-    expect(title()).toBe('Agent')
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Browser' }))
-    expect(title()).toBe('Capabilities')
   })
 })

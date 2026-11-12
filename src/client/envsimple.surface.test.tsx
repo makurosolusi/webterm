@@ -71,7 +71,7 @@ async function openCapabilities(on: ReadonlySet<CapabilityId>): Promise<HTMLElem
   vi.stubGlobal('fetch', vi.fn(async (url: string) =>
     new Response(JSON.stringify(url.startsWith('/api/capabilities') ? fixture(on) : { items: [] }), { status: 200 })))
   render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} projectId="p1" />)
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Capabilities' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Features' }))
   await screen.findAllByRole('switch')
   return screen.getByRole('main', { name: 'Settings' })
 }
@@ -81,10 +81,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
   it('teks halaman penuh bebas kata terlarang, nama env var, dan istilah UI lama', async () => {
-    await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
+    const main = await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
     const text = document.body.textContent ?? ''
-    expect(text).toContain('Central Agent')
-    expect(text).not.toMatch(BANNED_WORDS)
+    expect(text).toContain('Central')
+    // The page body, not the sidebar: the nav's "Rules & secrets" page names secrets on purpose.
+    expect(main.textContent ?? '').not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
     expect(text).not.toMatch(OLD_UI)
     expect(text).not.toMatch(/WEBTERM_TOKEN/)
@@ -100,30 +101,26 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(toSectionId('channels')).toBe('capabilities')
   })
 
-  it('tiga kartu bersakelar (Central/Worker/Otonomi = satu baris ringkasan, Telegram = Hubungkan/Putuskan), lima kartu total', async () => {
+  it('Features: two switched cards (Browser, Files) plus Telegram (Connect/Disconnect); Central lives in Central Agent', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
-    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 4)
-    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length - 2)
+    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect(main.querySelectorAll('[data-capability]')).toHaveLength(3)
   })
 
-  it('Lanjutan tertutup dengan tepat empat butir', async () => {
+  it('Advanced is closed with exactly two items (Chromium, Reset)', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelectorAll(':scope > div').length).toBe(4) // butir, bukan kontrol: Chromium punya beberapa tombol
+    expect(details.querySelectorAll(':scope > div').length).toBe(2) // items, not controls: Chromium has several buttons
   })
 
-  it('Central Agent: persetujuan worker hanya aktif saat Worker on, halaman bebas kata terlarang dan env var', async () => {
-    const openCentral = async (on: ReadonlySet<CapabilityId>): Promise<HTMLElement> => {
-      await openCapabilities(on)
-      fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central Agent' }))
-      return screen.findByRole('switch', { name: 'Ask before each worker runs' })
-    }
-    expect((await openCentral(new Set<CapabilityId>(['central']))).hasAttribute('disabled')).toBe(true)
+  it('Central: tanpa sakelar persetujuan worker terpisah (Propose selalu bertanya), halaman bebas kata terlarang dan env var', async () => {
+    await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Central' }))
+    await screen.findByRole('radiogroup', { name: 'What Central may do' })
+    expect(screen.queryByRole('switch', { name: 'Ask before each worker runs' })).toBeNull()
     const text = screen.getByRole('main', { name: 'Settings' }).textContent ?? ''
     expect(text).not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
-    cleanup()
-    expect((await openCentral(new Set<CapabilityId>(['central', 'workers']))).hasAttribute('disabled')).toBe(false)
   })
 })

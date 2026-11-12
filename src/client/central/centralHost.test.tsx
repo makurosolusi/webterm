@@ -140,17 +140,17 @@ describe('Central not ready: the Chat tab offers it', () => {
   beforeEach(() => { resetCapabilitiesCache(); localStorage.clear(); reloadSideBarFromStorage(); setSideBar({ open: true, view: 'chat' }) })
   afterEach(() => { localStorage.clear(); reloadSideBarFromStorage() })
 
-  it('shows Set up Claude Code above the chat, leading to Settings › Central Agent', async () => {
+  it('shows Set up Claude Code above the chat, leading to Settings › Claude', async () => {
     vi.stubGlobal('fetch', route(() => caps('needs-step', { kind: 'agentEngine', label: 'Set up Claude Code' })))
     render(<SecondarySideBar centralEnabled={false} />)
     const setup = await screen.findByRole('button', { name: 'Set up Claude Code' })
     expect(setup.closest('[data-slot="central-setup"]')?.closest('.vscode-bottom-panel__pane')?.hasAttribute('hidden')).toBe(false)
     fireEvent.click(setup)
-    // Claude launch profile card: its link opens Settings › Central Agent (Claude profile pick).
+    // Claude launch profile card: its link opens Settings › Claude (launch profiles).
     const opened = vi.fn()
     window.addEventListener('webterm:open-settings', opened)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit launch profile' }))
-    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'central', field: 'central.profile' })
+    expect((opened.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ section: 'claude', field: 'claudeLaunchProfiles' })
     window.removeEventListener('webterm:open-settings', opened)
   })
 

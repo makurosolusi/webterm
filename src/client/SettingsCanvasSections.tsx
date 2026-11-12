@@ -1,20 +1,42 @@
-// Section Canvas di Settings: grid, ukuran node baru, dan mesin pencari node browser.
-import { QUICK_DRAG_PRESETS, type Settings } from '../shared/settings'
-import { SEARCH_ENGINES, type SearchEngine } from '../shared/browser.omnibox'
+// Settings › Canvas: the grid (one choice: off / dots / dots + snap), quick move & resize, and where new
+// projects go. Grid size and cables sit under Advanced. New nodes take the size of the last resize
+// (App `resizedNodeSize`), so there is no node-size setting.
+import { QUICK_DRAG_PRESETS, DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { Input } from '@/components/ui/input'
-import { Field, SelectField, ToggleField } from './SettingsFields'
+import { Field, SelectField } from './SettingsFields'
+import { SettingsAdvanced, SettingsSelect } from './SettingsControls'
 import { NumberSelectField } from './SettingsPickerFields'
-import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS, NODE_HEIGHT_OPTIONS, NODE_WIDTH_OPTIONS } from './settingsPresets'
+import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS } from './settingsPresets'
 import { Swatch } from './CanvasBackgroundControls'
 import { EDGE_STROKE } from './canvasStyle'
 import './canvasBackground.css'
-import { NotificationRows } from './osNotify.settings'
 import { quickDragLabel } from './quickDrag/quickDrag.modifier'
 import { isMacPlatform } from './terminalKeys'
+import { ProjectsFolderSetting } from './workspaceCreate/ProjectsFolderSetting'
+import { useFieldSave } from './settingsSave'
+import { settingsSaves } from './useSettings'
 
 interface P {
   settings: Settings
   onChange: (patch: Partial<Settings>) => void
+}
+
+type GridMode = 'off' | 'dots' | 'snap'
+/** The one Grid choice over the two keys behind it (dots drawn, snapping on). Snap shows the dots it snaps to. */
+export const gridMode = (s: Pick<Settings, 'canvasDots' | 'snapToGrid'>): GridMode => (s.snapToGrid ? 'snap' : s.canvasDots ? 'dots' : 'off')
+export const gridPatch = (m: GridMode): Pick<Settings, 'canvasDots' | 'snapToGrid'> => ({ canvasDots: m !== 'off', snapToGrid: m === 'snap' })
+
+function GridField({ settings: s, onChange }: P): React.JSX.Element {
+  const mode = gridMode(s)
+  const save = useFieldSave(settingsSaves, 'canvasDots')
+  return (
+    <Field label="Grid" htmlFor="st-grid" field="canvasDots" save={save}
+      hint="Snap rounds a dragged node’s position to the dots."
+      modified={mode !== gridMode(DEFAULT_SETTINGS)} onReset={() => onChange(gridPatch(gridMode(DEFAULT_SETTINGS)))}>
+      <SettingsSelect<GridMode> id="st-grid" value={mode} onChange={(m) => onChange(gridPatch(m))}
+        options={[{ value: 'off', label: 'Off' }, { value: 'dots', label: 'Dots' }, { value: 'snap', label: 'Dots and snap' }]} />
+    </Field>
+  )
 }
 
 function CableColorField({ value, onChange }: { value: string; onChange: (v: string) => void }): React.JSX.Element {
@@ -38,29 +60,19 @@ function CableColorField({ value, onChange }: { value: string; onChange: (v: str
 export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <NumberSelectField setting="gridSize" id="st-gridSize" label="Grid size" value={s.gridSize} options={GRID_SIZE_OPTIONS}
-        onChange={(v) => onChange({ gridSize: v })} />
-      <ToggleField setting="snapToGrid" id="st-snapToGrid" label="Snap to grid" value={s.snapToGrid}
-        hint="While on, dragging a node rounds its position to the grid." onChange={(v) => onChange({ snapToGrid: v })} />
+      <GridField settings={s} onChange={onChange} />
       <SelectField setting="quickDrag" id="st-quickDrag" label="Quick move & resize" value={s.quickDrag}
-        hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it. Right-drag resizes from the nearest corner."
+        hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it."
         options={QUICK_DRAG_PRESETS.map((p) => ({ value: p, label: quickDragLabel(p, isMacPlatform()) }))}
         onChange={(v) => onChange({ quickDrag: v })} />
-      <ToggleField setting="canvasDots" id="st-canvasDots" label="Grid dots" value={s.canvasDots}
-        hint="Visual only — snapping is unchanged." onChange={(v) => onChange({ canvasDots: v })} />
-      <CableColorField value={s.edgeColor} onChange={(edgeColor) => onChange({ edgeColor })} />
-      <NumberSelectField setting="edgeWidth" id="st-edgeWidth" label="Cable thickness" value={s.edgeWidth} options={EDGE_WIDTH_OPTIONS}
-        onChange={(v) => onChange({ edgeWidth: v })} />
-      <NumberSelectField setting="defaultNodeWidth" id="st-nodeW" label="New node width" value={s.defaultNodeWidth} options={NODE_WIDTH_OPTIONS}
-        hint="Existing nodes keep the size saved with them."
-        onChange={(v) => onChange({ defaultNodeWidth: v })} />
-      <NumberSelectField setting="defaultNodeHeight" id="st-nodeH" label="New node height" value={s.defaultNodeHeight} options={NODE_HEIGHT_OPTIONS}
-        onChange={(v) => onChange({ defaultNodeHeight: v })} />
-      <SelectField setting="browserSearchEngine" id="st-browserSearchEngine" label="Browser search engine" value={s.browserSearchEngine}
-        hint="Used by browser nodes when what you type in the address bar is not a web address."
-        options={(Object.keys(SEARCH_ENGINES) as SearchEngine[]).map((e) => ({ value: e, label: SEARCH_ENGINES[e].label }))}
-        onChange={(v) => onChange({ browserSearchEngine: v })} />
-      <NotificationRows />
+      <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
+      <SettingsAdvanced>
+        <NumberSelectField setting="gridSize" id="st-gridSize" label="Grid size" value={s.gridSize} options={GRID_SIZE_OPTIONS}
+          onChange={(v) => onChange({ gridSize: v })} />
+        <CableColorField value={s.edgeColor} onChange={(edgeColor) => onChange({ edgeColor })} />
+        <NumberSelectField setting="edgeWidth" id="st-edgeWidth" label="Cable thickness" value={s.edgeWidth} options={EDGE_WIDTH_OPTIONS}
+          onChange={(v) => onChange({ edgeWidth: v })} />
+      </SettingsAdvanced>
     </>
   )
 }

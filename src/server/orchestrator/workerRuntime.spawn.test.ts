@@ -17,6 +17,7 @@ function run(spawnOpts: AgentSpawnerOptions, spawnParent: string) {
   const sessions: WorkerSessionPort = {
     open: (i) => { opened.push(i); live.add(i.nodeId) },
     input: (n) => { status.set(n, 'done') },
+    submit: async () => ({ ok: true as const, started: true as const }),
     statusOf: (n) => status.get(n),
     getTerminal: () => '',
     isLive: (n) => live.has(n),

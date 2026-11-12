@@ -15,27 +15,34 @@ describe('SettingsHost', () => {
     const { container } = render(host(null, onOpen))
     expect(container.innerHTML).toBe('')
     act(() => openLaunchProfileSettings())
-    expect(onOpen).toHaveBeenCalledWith('central', 'central.profile')
+    expect(onOpen).toHaveBeenCalledWith('claude', 'claudeLaunchProfiles')
   })
 
   it('drops an event field that is not a known setting id', () => {
     const onOpen = vi.fn()
     render(host(null, onOpen))
     act(() => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'agent', field: 'nope' } })) })
-    expect(onOpen).toHaveBeenCalledWith('agent', null)
+    expect(onOpen).toHaveBeenCalledWith('claude', null) // the retired Agent page lands on Claude
+  })
+
+  it('the workspace menu\'s Canvas Background opens Appearance on that field', () => {
+    const onOpen = vi.fn()
+    render(host(null, onOpen))
+    act(() => openWorkspaceCanvasBackground())
+    expect(onOpen).toHaveBeenCalledWith('appearance', 'canvasBackground')
   })
 
   it('maps a legacy event id to its route section', () => {
     const onOpen = vi.fn()
     render(host(null, onOpen))
-    act(() => openWorkspaceCanvasBackground())
-    expect(onOpen).toHaveBeenCalledWith('background', null)
+    act(() => { window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT, { detail: { section: 'background:workspace' } })) })
+    expect(onOpen).toHaveBeenCalledWith('appearance', null)
   })
 
   it('shows the section it is given and reports nav clicks as section changes', async () => {
     const onOpen = vi.fn()
-    render(host('agent', onOpen))
-    const agent = await screen.findByRole('button', { name: 'Agent' })
+    render(host('claude', onOpen))
+    const agent = await screen.findByRole('button', { name: 'Claude' })
     expect(agent.getAttribute('aria-current')).toBe('true')
     act(() => screen.getByRole('button', { name: 'Rules & secrets' }).click())
     expect(onOpen).toHaveBeenCalledWith('rules', null) // a plain section change clears the field

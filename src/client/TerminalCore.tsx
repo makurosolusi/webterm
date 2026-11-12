@@ -18,6 +18,7 @@ import {
   SHIFT_ENTER_SEQ,
   attachCopyOnSelect,
   guardMiddleClickPaste,
+  isLinuxPlatform,
   nextTerminalFontSize,
   optionArrowSeq,
   terminalKeyAction,
@@ -262,7 +263,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     })
     const detachMiddle = guardMiddleClickPaste(
       el,
-      () => live.current.settings.terminalMiddleClickPaste,
+      // Automatic per OS: middle-click paste is a Linux convention; elsewhere the button stays inert.
+      () => isLinuxPlatform(),
     )
     const titleSub = term.onTitleChange((t) => live.current.onTitle?.(t))
 
@@ -340,8 +342,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     if (metricsChanged) refit()
     else if (themeChanged) term.refresh(0, term.rows - 1)
 
-    const wantGpu = settings.terminalGpuRendering === 'auto'
-    if (wantGpu && !webglRef.current) {
+    // WebGL per terminal, falling back to the DOM renderer on its own when a context fails or is lost.
+    if (!webglRef.current) {
       try {
         // `true` = preserveDrawingBuffer: without it the WebGL canvas reads back blank, and the
         // central agent's screenshot (`./canvasShot`) shows empty terminals.
@@ -358,9 +360,6 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
         // Konteks bisa ditolak (WebGL dimatikan, kehabisan konteks). Renderer DOM tetap benar.
         console.warn(`terminal ${id}: WebGL renderer unavailable, using DOM renderer`, err)
       }
-    } else if (!wantGpu && webglRef.current) {
-      webglRef.current.dispose()
-      webglRef.current = null
     }
   }, [id, settings, fontZoom, refit])
 

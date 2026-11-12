@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useNeedsYouCount } from './chat/needsYouApi'
 import { outputPaletteCommands } from './output/outputCommands'
 import { useOutputStatusItems } from './output/outputStatusItem'
-import { resolveTerminalTheme } from './themes'
 import { toggleTimeline } from './Timeline'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { connectEagerly, subscribeStatus } from './ws'
@@ -40,16 +39,26 @@ export function useStatusSubscription(setStatuses: Dispatch<SetStateAction<Recor
 }
 
 // Satu-satunya penulis `data-theme`; `styles.css` menyimpan varian terangnya di
-// `:root[data-theme='light']`. 'auto' mengikut tema terminal supaya memilih skema terang
-// tidak menyisakan rangka hitam di sekelilingnya.
+// `:root[data-theme='light']`. 'auto' (label "System") mengikuti mode OS lewat `prefers-color-scheme`
+// dan ikut berubah saat OS berganti. Deviasi sadar dari nodeterm (auto = ikut tema terminal): kajian
+// settings overhaul meminta Light/Dark/System seperti app desktop lain.
+const DARK_QUERY = '(prefers-color-scheme: dark)'
+
+/** Dark or light for an app theme setting; `osDark` = the OS prefers dark. */
+export function resolveAppTheme(pref: Settings['appTheme'], osDark: boolean): 'dark' | 'light' {
+  return pref === 'auto' ? (osDark ? 'dark' : 'light') : pref === 'light' ? 'light' : 'dark'
+}
+
 /** Menulis `data-theme` di <html> mengikuti pengaturan tema aplikasi. */
-export function useAppTheme(settings: Pick<Settings, 'appTheme' | 'terminalTheme'>) {
+export function useAppTheme(settings: Pick<Settings, 'appTheme'>) {
   useEffect(() => {
-    const dark = settings.appTheme === 'auto'
-      ? resolveTerminalTheme(settings.terminalTheme).dark
-      : settings.appTheme === 'dark'
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-  }, [settings.appTheme, settings.terminalTheme])
+    const mq = window.matchMedia?.(DARK_QUERY)
+    const apply = (): void => { document.documentElement.dataset.theme = resolveAppTheme(settings.appTheme, mq?.matches ?? true) }
+    apply()
+    if (settings.appTheme !== 'auto' || !mq) return undefined
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [settings.appTheme])
 }
 
 /** Whether this browser holds a UI session (drives the Logout entry), and sign-out. */

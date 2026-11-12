@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
+import { useRememberLastResize } from './nodeSpawn'
 import '@xyflow/react/dist/style.css'
 import AppDock, { AppWorkspaceBar } from './App.chrome'
 import FolderPicker from './FolderPicker'
@@ -26,7 +27,7 @@ import { usePortsStatusItems } from './PortsChip'
 import { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
 import MorningBrief from './MorningBrief'
-import { SettingsProvider, useSettings } from './useSettings'
+import { SettingsProvider, SettingsUpdateProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { toWsNode } from './store'
 import { useBoardNodeNames } from './nodeNames.board'
@@ -126,6 +127,7 @@ export default function App() {
   applyRef.current = applyWorkspace // a save another window beat reloads the stored board through it
   // Every node gets its unique name ("Mango") here, whichever path created it. See `./nodeNames.board`.
   useBoardNodeNames(nodes, onNodesChange)
+  const onCanvasNodesChange = useRememberLastResize(onNodesChange, update) // next new node = last resize
 
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
@@ -211,6 +213,7 @@ export default function App() {
 
   return (
     <SettingsProvider value={settings}>
+    <SettingsUpdateProvider value={update}>
     <NodeActionsProvider value={nodeActions}>
     <div className={`app-shell${sideBar.open && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
@@ -233,7 +236,7 @@ export default function App() {
             tabs={tabsProps}
             canvas={{
               rf, nodes: flowNodes, edges: displayEdges, settings, hydrated: settingsHydrated, viewport: activeWs?.viewport, locked, nodeColor,
-              syncViewport, onNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
+              syncViewport, onNodesChange: onCanvasNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
             }}
           />
         )}
@@ -290,6 +293,7 @@ export default function App() {
       )}
     </div>
     </NodeActionsProvider>
+    </SettingsUpdateProvider>
     </SettingsProvider>
   )
 }

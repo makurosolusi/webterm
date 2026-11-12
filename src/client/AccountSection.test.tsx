@@ -178,10 +178,11 @@ describe('AccountSection', () => {
     expect(screen.getByText(ACCOUNT_TEXT.sessionsEmpty)).toBeTruthy()
   })
 
-  it('Sign out (the button, or this device\'s row) posts /auth/logout and reloads; a refusal stays and says so', async () => {
+  it('Sign out is this device\'s row only (no second button); it posts /auth/logout and reloads, a refusal stays and says so', async () => {
     const reload = await mount()
+    expect(screen.queryByRole('button', { name: ACCOUNT_TEXT.signOut })).toBeNull()
     replies[AUTH_LOGOUT_PATH] = { status: 500 }
-    fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOut }))
+    fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel(`Chrome on macOS (${ACCOUNT_TEXT.thisDevice})`) }))
     await flush()
     expect(reload).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toContain('Signing out failed')

@@ -116,7 +116,11 @@ function toControl(b: unknown): ControlView {
 function toStatus(b: unknown): StatusView {
   if (!isRec(b) || !isRec(b.used) || !isRec(b.limits) || !isRec(b.model)) throw new InboxApiError('Status response malformed', 502, 'bad_response')
   return {
-    budget: { day: str(b.day), used: { tokens: num(b.used.tokens), spawns: num(b.used.spawns) }, limits: { tokens: num(b.limits.tokens), spawns: num(b.limits.spawns) } },
+    budget: {
+      day: str(b.day),
+      used: { tokens: num(b.used.tokens), spawns: num(b.used.spawns), costMicros: num(b.used.costMicros) },
+      limits: { tokens: num(b.limits.tokens), spawns: num(b.limits.spawns), costMicros: num(b.limits.costMicros) },
+    },
     model: { id: str(b.model.id), free: b.model.free === true },
     lastTurn: isRec(b.lastTurn) ? { at: num(b.lastTurn.at), status: str(b.lastTurn.status) } : null,
   }

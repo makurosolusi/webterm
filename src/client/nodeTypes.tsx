@@ -11,7 +11,7 @@ import PlanNode from './PlanNode'
 import AgentChatNode from './AgentChatNode'
 import McpAppNode from './mcpapps/McpAppNode'
 import { BrowserNodeType } from './BrowserNode.slots'
-import { useLiveSettings } from './useSettings'
+import { useLiveSettings, useSettingsUpdate } from './useSettings'
 import { withTabPortal } from './tabLayout.portal'
 
 export const nodeTypes = {
@@ -36,10 +36,13 @@ export const nodeTypes = {
   // di dalamnya) tapi berhenti di EditorNode kalau `openMarkdownPreview` tidak ikut berubah.
   editor: withTabPortal(function EditorNodeType(p: NodeProps) {
     const settings = useLiveSettings()
+    const update = useSettingsUpdate()
     return (
       <EditorNode
         {...p}
         openMarkdownPreview={settings.openMarkdownPreview}
+        // The last Preview/Edit choice decides how the next Markdown file opens (no setting to hunt for).
+        onPreviewChange={(openMarkdownPreview) => update({ openMarkdownPreview })}
       />
     )
   }),

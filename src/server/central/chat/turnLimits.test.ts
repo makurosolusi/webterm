@@ -23,3 +23,12 @@ describe('resolveLimits', () => {
     expect(resolveLimits({ WEBTERM_CENTRAL_TURN_TOKENS: '1000' })).toEqual({ maxTurns: 12, maxWallMs: 120_000 })
   })
 })
+
+describe('limits scale with the model tier', () => {
+  it('opus x1.5, fable x2, others the defaults; env still wins', () => {
+    expect(resolveLimits({ WEBTERM_CENTRAL_MODEL: 'sonnet' })).toEqual({ maxTurns: 12, maxWallMs: 120_000 })
+    expect(resolveLimits({ WEBTERM_CENTRAL_MODEL: 'claude-opus-5-5' })).toEqual({ maxTurns: 18, maxWallMs: 180_000 })
+    expect(resolveLimits({ WEBTERM_CENTRAL_MODEL: 'fable' })).toEqual({ maxTurns: 24, maxWallMs: 240_000 })
+    expect(resolveLimits({ WEBTERM_CENTRAL_MODEL: 'fable', [TURN_STEPS_FLAG]: '5' }).maxTurns).toBe(5)
+  })
+})

@@ -42,6 +42,8 @@ export interface EditorNodeProps extends NodeProps {
   /** Setting: file Markdown dibuka langsung sebagai preview terender. Hanya menentukan tampilan
    *  SAAT node dibuka — toggle Preview/Edit tetap dua arah sesudahnya. */
   openMarkdownPreview?: boolean
+  /** The user switched Preview/Edit on a Markdown file: remembered as how the next one opens. */
+  onPreviewChange?: (preview: boolean) => void
   /** `stat` untuk membandingkan versi saat direktori ditandai berubah. Default `fsClient.stat`. */
   stat?: typeof fsClient.stat
 }
@@ -60,6 +62,7 @@ function EditorNode({
   readMeta = fsClient.readMeta,
   writeChecked = fsClient.writeChecked,
   openMarkdownPreview = false,
+  onPreviewChange,
   stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
@@ -77,7 +80,7 @@ function EditorNode({
 
   const ef = useEditorFile({
     id, filePath, fileName, ext, hostRef, readMeta, writeChecked, setLoadError,
-    enabled: kind === 'text', openMarkdownPreview
+    enabled: kind === 'text', openMarkdownPreview, onPreviewChange
   })
   const isBinary = kind === 'text' && ef.encoding === 'binary'
   // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.

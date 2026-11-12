@@ -1,85 +1,88 @@
-// Tab Kemampuan (ENVSIMPLE D6): tujuh kartu urut katalog, satu sakelar tiap kartu, plus "Lanjutan".
-// Kartu Telegram diganti alur tempel-token. Pencarian: judul bagian, atau judul + blurb + kata kunci kartu
-// (pola indeks pencarian Orca `settings/search/settings-search.ts`: title + description + keywords).
-import { useEffect, useState } from 'react'
-import { CAPABILITIES } from '../shared/featureCapabilities'
+// Settings › Features (id `capabilities`): Browser (+ its search engine), Files (Edit and upload files is a
+// sub-option of its card) and Telegram, each with ONE switch; a failed change is shown on its card. The
+// Central Agent switches live in Settings › Central Agent; the Claude provider and token access in the
+// Claude page. Advanced: Chromium location and Reset.
+import { useState } from 'react'
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
+import type { Settings } from '../shared/settings'
+import { SEARCH_ENGINES, type SearchEngine } from '../shared/browser.omnibox'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { AdvancedSection } from './AdvancedSection'
-import { ADVANCED_TEXT, SECTION_TEXT } from './advancedLabels'
-import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
-import { CapabilityCard, CentralSummaryRow } from './CapabilityCard'
-import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
-import { matchesSearch } from './SettingsFields'
+import { SECTION_TEXT } from './advancedLabels'
+import { CapabilityCard } from './CapabilityCard'
+import { SelectField } from './SettingsFields'
 import { TelegramCard } from './TelegramCard'
-import { TokenAccessCard } from './TokenAccessCard'
-import { TOKEN_TEXT } from './tokenAccessLabels'
 import { useCapabilities } from './useCapabilities'
 import './settings-capabilities.css'
 
 const TELEGRAM_TOKEN_INPUT_ID = 'tg-token'
+/** Cards of their own, in this order; `filesWrite` rides inside Files, Central's three are elsewhere. */
+const CARD_IDS: readonly CapabilityId[] = ['browser', 'files', 'telegram']
 
 export interface CapabilitiesSectionProps {
   /** Proyek tujuan tautan chat Telegram (workspace aktif). */
   projectId: string
-  /** Query pencarian ternormalisasi; kosong = tampil semua. */
-  query: string
-  /** Judul bagian; cocok dengan query = semua kartu tampil. */
-  sectionTitle: string
-  /** Melaporkan jumlah kartu/butir yang tampil (untuk hitungan hasil pencarian). */
-  onVisibleCount?(count: number): void
-  /** Opens Settings › Central Agent (the Central, worker and autonomy switches live there). */
-  onOpenCentral?(): void
+  settings: Settings
+  onChange: (patch: Partial<Settings>) => void
 }
 
-/** Shown as ONE summary row; their switches are in Settings › Central Agent. */
-const CENTRAL_IDS: readonly CapabilityId[] = ['central', 'workers', 'autonomy']
-
-/** Isi tab Kemampuan; memuat dari server dan menunggu server pada tiap perubahan. */
-export function CapabilitiesSection({ projectId, query, sectionTitle, onVisibleCount, onOpenCentral }: CapabilitiesSectionProps): React.JSX.Element {
+/** Isi halaman Features; memuat dari server dan menunggu server pada tiap perubahan. */
+export function CapabilitiesSection({ projectId, settings: s, onChange }: CapabilitiesSectionProps): React.JSX.Element {
   const api = useCapabilities()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const all = api.data?.capabilities ?? []
-  const show = (key: CapabilityId | 'advanced' | 'token'): boolean => {
-    if (query === '' || matchesSearch(sectionTitle, query)) return true
-    const text = key === 'advanced' ? ADVANCED_TEXT.summary : key === 'token' ? `${TOKEN_TEXT.title} ${TOKEN_TEXT.why}` : `${CAPABILITIES[key].title} ${CAPABILITIES[key].blurb}`
-    return matchesSearch(`${text} ${CAPABILITY_KEYWORDS[key].join(' ')}`, query)
-  }
-  const showCentral = CENTRAL_IDS.some(show)
-  const visible = all.filter((v) => !CENTRAL_IDS.includes(v.id) && show(v.id)).length + (all.length && showCentral ? 1 : 0) + (api.data && show('advanced') ? 1 : 0) + (show('token') ? 1 : 0)
-  useEffect(() => {
-    onVisibleCount?.(visible)
-    return () => onVisibleCount?.(0)
-  }, [visible, onVisibleCount])
+  const byId = (id: CapabilityId): CapabilityView | undefined => all.find((v) => v.id === id)
+  const errorFor = (...ids: CapabilityId[]): string | null => (api.errorId && ids.includes(api.errorId) ? api.error : null)
 
-  // fixChain = nyalakan kartu ini lewat toggle biasa: server ikut menyalakan prasyaratnya
-  // (`closure`), pilihan kartu lain tidak disentuh. Dulu memanggil /reset yang menghapus semuanya.
-  // 'agentEngine' hanya milik Central, yang di sini cuma baris ringkasan (langkahnya ada di Central Agent).
+  // fixChain = nyalakan kartu ini lewat toggle biasa: server ikut menyalakan prasyaratnya (`closure`).
   const onStep = (id: CapabilityId, kind: NonNullable<CapabilityView['step']>['kind']): void => {
     if (kind === 'chromiumPath') setAdvancedOpen(true)
     else if (kind === 'telegramToken') document.getElementById(TELEGRAM_TOKEN_INPUT_ID)?.focus()
     else void api.toggle(id, true)
   }
+  const card = (view: CapabilityView, children?: React.ReactNode): React.JSX.Element => (
+    <CapabilityCard key={view.id} view={view} all={all} busy={api.busyId === view.id} error={errorFor(view.id, ...(view.id === 'files' ? ['filesWrite' as const] : []))}
+      onToggle={(on) => void api.toggle(view.id, on)}
+      onSub={(key, on) => void api.setSub(view.id, key, on)}
+      onStep={(kind) => onStep(view.id, kind)}>
+      {children}
+    </CapabilityCard>
+  )
+  const write = byId('filesWrite')
+  // Busy while it runs (busyId), and a refusal shows on the Files card (errorFor).
+  const setWrite = (on: boolean): void => { void api.toggle('filesWrite', on) }
+  const writeBusy = api.busyId === 'filesWrite'
 
   return (
     <div className="st-capabilities">
-      {api.error ? <p role="alert" className="text-xs text-destructive">{api.error}</p> : null}
+      {api.error && api.errorId === null ? <p role="alert" className="text-xs text-destructive">{api.error}</p> : null}
       {api.data === null && api.error === null ? <p role="status" className="text-xs opacity-70">{SECTION_TEXT.loading}</p> : null}
-      {all.map((view) => {
-        if (view.id === 'central') return showCentral ? <CentralSummaryRow key="central" view={view} onOpen={onOpenCentral} /> : null
-        if (CENTRAL_IDS.includes(view.id) || !show(view.id)) return null
-        return view.id === 'telegram' ? (
-          <div key={view.id} data-capability="telegram" data-field="capability.telegram"><TelegramCard projectId={projectId} /></div>
-        ) : (
-          <CapabilityCard key={view.id} view={view} all={all} busy={api.busyId === view.id}
-            onToggle={(on) => void api.toggle(view.id, on)}
-            onSub={(key, on) => void api.setSub(view.id, key, on)}
-            onStep={(kind) => onStep(view.id, kind)} />
-        )
+      {CARD_IDS.map((id) => {
+        const view = byId(id)
+        if (!view) return null
+        if (id === 'telegram') return <div key={id} data-capability="telegram" data-field="capability.telegram"><TelegramCard projectId={projectId} /></div>
+        if (id === 'browser') {
+          return (
+            <div key={id}>
+              {card(view)}
+              <SelectField setting="browserSearchEngine" id="st-browserSearchEngine" label="Browser search engine" value={s.browserSearchEngine}
+                hint="Used by browser nodes when what you type in the address bar is not a web address."
+                options={(Object.keys(SEARCH_ENGINES) as SearchEngine[]).map((e) => ({ value: e, label: SEARCH_ENGINES[e].label }))}
+                onChange={(v) => onChange({ browserSearchEngine: v })} />
+            </div>
+          )
+        }
+        return card(view, write ? (
+          <div className="flex items-center gap-2" data-capability="filesWrite" data-field="capability.filesWrite">
+            <Checkbox id="capability-sub-files-write" checked={write.status !== 'off'} disabled={writeBusy}
+              onCheckedChange={(v) => setWrite(v === true)} />
+            <Label htmlFor="capability-sub-files-write" className="text-xs">{write.title}</Label>
+          </div>
+        ) : null)
       })}
-      {query === '' || matchesSearch(`${sectionTitle} ${PROVIDER_TEXT.title} ${PROVIDER_TEXT.why} anthropic api key proxy gateway custom command envman wrapper`, query) ? <ClaudeProviderCard /> : null}
-      {show('token') ? <TokenAccessCard /> : null}
-      {api.data && show('advanced') ? (
-        <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} onRecheck={api.recheck} open={advancedOpen} onOpenChange={setAdvancedOpen} />
+      {api.data ? (
+        <AdvancedSection advanced={api.data.advanced} onChanged={api.refresh} open={advancedOpen} onOpenChange={setAdvancedOpen} />
       ) : null}
     </div>
   )

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // "Reveal setting" (settingsPanel.reveal.ts): a `field` scrolls its `[data-field]` element to the centre,
-// focuses its control, flashes it for ~1.5 s and opens a collapsed group around it; the Central links
-// inside the panel name the field they land on. Fetch is stubbed (test-only fixtures).
+// focuses its control, flashes it for ~1.5 s and opens a collapsed group around it; links inside the
+// panel name the field they land on. Fetch is stubbed (test-only fixtures).
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAPABILITIES, CAPABILITY_IDS, type CapabilitiesResponse } from '../shared/featureCapabilities'
@@ -51,10 +51,16 @@ describe('deep link to a setting', () => {
   })
 
   it('opens the collapsed group around the field first (Central › Advanced)', async () => {
-    panel('central', 'central.model')
-    const el = await revealed('central.model')
+    panel('central', 'central.checkinLimit')
+    const el = await revealed('central.checkinLimit')
     expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
     await waitFor(() => expect(document.activeElement).toBe(el.querySelector('select')))
+  })
+
+  it('opens a page\'s Advanced disclosure around the field (Terminal › Advanced › Default shell)', async () => {
+    panel('shell', 'defaultShell') // a legacy section id still lands on the page that holds the field
+    const el = await revealed('defaultShell')
+    expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 
   it('without a field nothing is revealed: the section opens at the top', async () => {
@@ -66,36 +72,15 @@ describe('deep link to a setting', () => {
 })
 
 describe('links inside Settings name the field they land on', () => {
-  const cases: [string, string, SettingsFieldId][] = [
-    ['Open Launch profiles', 'agent', 'claudeLaunchProfiles'],
-    ['Open Model ladder & per-workspace overrides', 'agent', 'model-ladder'],
-    ['Open Browser', 'capabilities', 'capability.browser'],
-    ['Open Telegram', 'capabilities', 'capability.telegram'],
-  ]
-  it.each(cases)('Central › %s → %s › %s', async (name, section, field) => {
-    const onSectionChange = vi.fn()
-    panel('central', undefined, onSectionChange)
-    fireEvent.click(await screen.findByRole('button', { name }))
-    expect(onSectionChange).toHaveBeenCalledWith(section, field)
-  })
-
-  it('uncontrolled, the panel reveals the target itself (Central → Agent › Launch profiles)', async () => {
-    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} initialSection="central" />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Open Launch profiles' }))
-    await revealed('claudeLaunchProfiles')
-  })
-
-  it('Capabilities → Central Agent row', async () => {
-    const onSectionChange = vi.fn()
-    panel('capabilities', undefined, onSectionChange)
-    const row = await waitFor(() => { expect(target('capability.central')).toBeTruthy(); return target('capability.central') })
-    fireEvent.click(within(row).getByRole('button'))
-    expect(onSectionChange.mock.calls).toEqual([['central', 'central.central']])
+  it('Claude › Advanced: a moved field (Central’s profile) opens the collapsed Advanced group', async () => {
+    panel('claude', 'centralClaudeProfileId')
+    const el = await revealed('centralClaudeProfileId')
+    expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 
   it('a TOC click is a plain section change: the field is cleared', async () => {
     const onSectionChange = vi.fn()
-    panel('central', 'central.profile', onSectionChange)
+    panel('central', 'central.level', onSectionChange)
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Rules & secrets' }))
     expect(onSectionChange).toHaveBeenCalledWith('rules', undefined)
   })

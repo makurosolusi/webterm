@@ -6,6 +6,7 @@
 import type { Settings } from './settings'
 import { applySetupPatch, mergeSetupPatches, type SetupPatch } from './settings.setup'
 import type { ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
+import { approvalLevelPatch, isApprovalLevel } from './settings.approvalLevel'
 
 /** Map-valued keys patched per entry. `keybindings` is NOT one: `null` there means "unbind". */
 export const ENTRY_PATCH_KEYS = ['canvasBackgroundByWorkspace', 'projectModels', 'inputHistory'] as const
@@ -54,6 +55,8 @@ export function applySettingsPatch<T extends object>(doc: T, patch: object): T {
     if (v === undefined) continue
     if (k === 'setup') { out[k] = applySetupPatch(out[k], v); continue }
     if (k === 'claudeLaunchProfiles') { out[k] = applyProfilePatch(out[k], v); continue }
+    // One choice written as the keys the runtime reads (settings.approvalLevel.ts); an unknown level is dropped.
+    if (k === 'agentApprovalLevel') { if (isApprovalLevel(v)) Object.assign(out, approvalLevelPatch(v), { [k]: v }); continue }
     if (!isEntryKey(k)) { out[k] = v; continue }
     const map = { ...rec(out[k]) }
     for (const [id, entry] of Object.entries(rec(v))) {

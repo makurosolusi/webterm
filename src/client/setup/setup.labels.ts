@@ -21,7 +21,7 @@ export const SETUP_TEXT = {
 
   claude: {
     intro: 'This applies to every Claude agent and Central.',
-    where: 'Capabilities › Claude provider',
+    where: 'Claude › Connection',
     saveFailed: 'Could not save the Claude provider. Fix the error above, then Continue again.',
   },
 
@@ -68,7 +68,7 @@ export const SETUP_TEXT = {
   basics: {
     where: 'Appearance, Workspaces and Canvas',
     theme: 'Theme',
-    themes: { auto: 'Auto', light: 'Light', dark: 'Dark' },
+    themes: { auto: 'System', light: 'Light', dark: 'Dark' },
     notify: 'Desktop notifications',
     notifyHint: 'Shown when an agent finishes or needs input while you are not looking.',
     notifyBlocked: "Blocked by the browser. Allow notifications for this site in the browser's site settings.",
