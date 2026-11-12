@@ -38,7 +38,7 @@ const foot = () => screen.getByTestId('foot').textContent
 const mount = async (ctx = mkCtx()) => { render(<Host ctx={ctx} />); await settle(); return ctx }
 
 describe('capabilities', () => {
-  it('upload off: no menu, no toolbar button, drop ignored', async () => {
+  it('upload off: no menu, no overflow row, drop ignored', async () => {
     fs.capabilities.mockResolvedValue(caps({ upload: false }))
     await mount(mkCtx({ selection: ['a.txt'] }))
     expect(uploadSlot.menu?.(mkCtx({ selection: ['a.txt'] }))).toEqual([])
@@ -98,10 +98,10 @@ describe('menu and toolbar', () => {
     expect(open).not.toHaveBeenCalled()
     expect(document.querySelector('a[download]')).toBeNull()
   })
-  it('toolbar holds only the Upload icon button, which opens a hidden multiple file input', async () => {
+  it('overflow menu offers "Upload Files…" with an icon, which opens a hidden multiple file input', async () => {
     const ctx = await mount()
-    const tb = screen.getByTestId('toolbar')
-    expect(tb.textContent?.trim()).toBe('')
+    const row = uploadSlot.overflow?.(ctx)[0]
+    expect(row && 'label' in row ? [row.label, !!row.icon] : null).toEqual([UPLOAD_TEXT.toolbarUpload, true])
     let input: HTMLInputElement | undefined
     vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) { input = this })
     fireEvent.click(screen.getByRole('button', { name: UPLOAD_TEXT.toolbarUpload }))
@@ -113,7 +113,6 @@ describe('menu and toolbar', () => {
     await waitFor(() => expect(foot()).toBe(UPLOAD_TEXT.done(2, 0)))
     expect(sent()).toEqual(['one.txt', 'two.txt'])
     expect(ctx.refresh).toHaveBeenCalledTimes(1)
-    expect(tb.textContent?.trim()).toBe('')
   })
 })
 

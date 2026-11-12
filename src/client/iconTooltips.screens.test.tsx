@@ -56,13 +56,14 @@ describe('BrowserToolbar tooltips', () => {
 
 describe('FilesToolbar tooltips', () => {
   const ctx = { cwd: '/p', dir: '/p', entries: [], selection: [], expanded: new Set(), toggle: () => {}, collapseAll: () => {}, startRenameAt: () => {}, refresh() {}, startInput() {}, open() {}, notify: () => '', dismiss() {}, nodeId: 'f1' } as FilesSlotCtx
-  it('states the hidden-files state and the current sort', () => {
+  it('every title-bar action carries a tooltip equal to its label, never a native title', () => {
     const view = { hidden: true, sortKey: 'mtime', sortDir: 'desc' } as ViewOpts
-    render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} />)
-    const eye = screen.getByRole('button', { name: 'Hide hidden files' })
-    expect(eye.hasAttribute('title')).toBe(false)
-    expect(tipOf(eye)).toBe('Hidden files are hidden: click to show them')
-    expect(tipOf(screen.getByRole('button', { name: 'Sort' }))).toBe('Sort files (now by modified, descending)')
+    render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} onNew={() => {}} onRefresh={() => {}} />)
+    for (const name of ['New File…', 'New Folder…', 'Refresh Explorer', 'Collapse All', 'More Actions…']) {
+      const b = screen.getByRole('button', { name })
+      expect(b.hasAttribute('title')).toBe(false)
+      expect(tipOf(b)).toBe(name)
+    }
   })
 })
 
