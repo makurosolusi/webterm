@@ -17,7 +17,7 @@ const open = () => fireEvent.keyDown(trigger(), { key: 'Enter' })
 describe('EffortPicker', () => {
   it('lists the model levels with the current one checked plus the thinking toggle', () => {
     render(<EffortPicker levels={['low', 'medium', 'high']} effort="medium" thinking onChange={vi.fn(async () => undefined)} />)
-    expect(trigger().textContent).toBe('Medium · Thinking')
+    expect(trigger().textContent).toBe('Medium')
     open()
     const radios = screen.getAllByRole('menuitemradio')
     expect(radios.map((r) => r.textContent)).toEqual(['Low', 'Medium', 'High'])

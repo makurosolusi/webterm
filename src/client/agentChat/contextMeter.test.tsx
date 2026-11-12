@@ -39,9 +39,9 @@ describe('ContextMeter', () => {
     expect(meter().textContent).toBe('100%')
   })
 
-  it('compact drops the percentage text but keeps the value', () => {
-    render(<ContextMeter context={{ used: 1, window: 4 }} compact />)
-    expect(screen.getByRole('meter').textContent).toBe('')
-    expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('25')
+  it('appends the detail line (session cost) to the tooltip only', () => {
+    render(<ContextMeter context={{ used: 1, window: 4 }} detail="Session cost $0.1000" />)
+    expect(screen.getByRole('meter').textContent).toBe('25%')
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toBe('1 of 4 tokens (25%). Session cost $0.1000')
   })
 })

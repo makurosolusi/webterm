@@ -2,7 +2,7 @@
 // dividers (`k:` keys) and the queued badge of a user message sent while Claude is busy.
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { CopyButton } from './messageActions'
+import { CopyButton } from '../chat/chatMessageActions'
 import './agentChatTimeline.css'
 
 /** Output longer than this many lines (or chars) starts collapsed. */

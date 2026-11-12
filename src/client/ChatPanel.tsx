@@ -157,14 +157,6 @@ export default function ChatPanel(props: ChatPanelProps) {
       </button>
     </IconTooltip>
   )
-  const refreshButton = (
-    <IconTooltip label="Refresh conversations">
-      <button type="button" className="vscode-panel-action" aria-label="Refresh conversations"
-        onClick={() => setRefreshKey((key) => key + 1)}>
-        <span className="codicon codicon-refresh" aria-hidden="true" />
-      </button>
-    </IconTooltip>
-  )
   const current = conversations?.find((row) => row.id === selected) ?? null
   const compact = props.compact === true
   const historyLabel = history ? 'Back to the conversation' : `Show conversations${current ? ` (current: ${conversationLabel(current)})` : ''}`
@@ -278,7 +270,7 @@ export default function ChatPanel(props: ChatPanelProps) {
   if (props.embedded) {
     return (
       <div className="chat-panel chat-panel--embedded">
-        {props.actionsHost && createPortal(<>{newChatButton}{historyButton}{refreshButton}</>, props.actionsHost)}
+        {props.actionsHost && createPortal(<>{newChatButton}{historyButton}</>, props.actionsHost)}
         {body}
       </div>
     )
@@ -298,7 +290,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       activeId="chat"
       onActivate={() => undefined}
       {...(props.onClose === undefined ? {} : { onClose: () => props.onClose?.(), onClosePanel: () => props.onClose?.() })}
-      actions={<>{newChatButton}{refreshButton}</>}
+      actions={newChatButton}
     >
       {body}
     </InboxPanelSurface>

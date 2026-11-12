@@ -140,6 +140,7 @@ export function normalizeMessage(raw: unknown): ChatMessage | null {
     ...(optionalText(row.clientMessageId) ? { clientMessageId: optionalText(row.clientMessageId) } : {}),
     ...(optionalText(row.turnId) ? { turnId: optionalText(row.turnId) } : {}),
     ...(usage ? { usage } : {}),
+    ...(finite(row.createdAt) ? { createdAt: finite(row.createdAt) } : {}),
   }
 }
 

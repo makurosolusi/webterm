@@ -1,12 +1,15 @@
 /** @vitest-environment jsdom */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AgentChatApiError } from './agentChatTransport'
 import { fakeAgentChatTransport, initEvent } from './agentChatTransport.fake'
 import { AgentChatView, statusLabel } from './agentChatView'
 import { initialAgentChatState } from './agentChatStore'
 
 afterEach(cleanup)
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+})
 
 const setup = (props: { chatSessionId?: string } = {}) => {
   const f = fakeAgentChatTransport()
@@ -46,25 +49,67 @@ describe('AgentChatView', () => {
     await waitFor(() => expect(t.answer).toHaveBeenCalledWith(expect.objectContaining({ requestId: 'r1', behavior: 'allow' })))
   })
 
-  it('shows Stop while busy, Stop interrupts, and a send during a turn queues as next', async () => {
+  it('while busy shows "Thinking…" and Stop replaces Send; typing brings Send back to queue the message next', async () => {
     const { emit, t } = setup()
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop turn' })).toBeNull()
     emit({ seq: 1, t: 'status', status: 'thinking' })
     expect(await screen.findByText('Thinking…')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop turn' }))
     expect(t.interrupt).toHaveBeenCalledTimes(1)
     expect(box().disabled).toBe(false)
     fireEvent.change(box(), { target: { value: 'also this' } })
+    expect(screen.getByRole('button', { name: 'Stop turn' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeTruthy()
     fireEvent.keyDown(box(), { key: 'Enter' })
     expect(t.send).toHaveBeenCalledWith('also this', 'next', [])
+  })
+
+  it('shows "Sending…" in the status line while a send is in flight', async () => {
+    const { t } = setup()
+    t.send.mockImplementationOnce(() => new Promise<undefined>(() => {}))
+    fireEvent.change(box(), { target: { value: 'hi' } })
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(await screen.findByText('Sending…')).toBeTruthy()
+  })
+
+  it('puts the controls inside the composer box and ends the message list before the composer', async () => {
+    const { emit, view } = setup()
+    emit({ seq: 1, t: 'delta', messageId: 'm1', kind: 'text', text: 'last line' })
+    await screen.findByText('last line')
+    const composerBox = view.container.querySelector('.chat-composer__box')!
+    const row = within(composerBox as HTMLElement).getByRole('toolbar', { name: 'Composer controls' })
+    for (const name of [/^Permission mode/, /^Model:/, /^Effort and thinking/, /^Send message/]) expect(within(row).getByRole('button', { name })).toBeTruthy()
+    expect(view.container.querySelector('footer')).toBeNull()
+    const list = screen.getByRole('log')
+    const composer = view.container.querySelector('.chat-composer')!
+    expect(list.contains(composer)).toBe(false)
+    expect(composer.contains(list)).toBe(false)
+    expect(list.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Both are flex siblings in the column: the scrolling list (in its wrap) and the composer after it.
+    expect(list.parentElement!.parentElement).toBe(composer.parentElement)
+    expect(list.contains(screen.getByText('last line'))).toBe(true)
+  })
+
+  it('renders a reply without a "Claude" header and a notice as one compact line', async () => {
+    const { emit } = setup()
+    emit({ seq: 1, t: 'delta', messageId: 'm1', kind: 'text', text: 'Hi there' }, { seq: 2, t: 'notice', level: 'info', text: 'Session resumed' })
+    const reply = (await screen.findByText('Hi there')).closest('.chat-message')!
+    expect(reply.querySelector('.chat-message__meta')).toBeNull()
+    expect(within(reply as HTMLElement).queryByText('Claude')).toBeNull()
+    const notice = (await screen.findByText('Session resumed')).closest('.chat-notice')!
+    expect(notice.className).toBe('chat-notice chat-notice--info')
+    expect(notice.querySelector('.codicon')).toBeNull()
   })
 
   it('a turn stopped mid-stream keeps its text but is no longer marked streaming', async () => {
     const { emit } = setup()
     emit({ seq: 1, t: 'status', status: 'thinking' }, { seq: 2, t: 'delta', messageId: 'm1', kind: 'text', text: 'Let me look' })
-    expect(await screen.findByText('streaming')).toBeTruthy()
+    const row = () => screen.getByText('Let me look').closest('.chat-message')!
+    await waitFor(() => expect(row().getAttribute('data-state')).toBe('streaming'))
     emit({ seq: 3, t: 'status', status: 'interrupted' })
-    await waitFor(() => expect(screen.queryByText('streaming')).toBeNull())
-    expect(screen.getByText('Let me look')).toBeTruthy()
+    await waitFor(() => expect(row().getAttribute('data-state')).toBe('complete'))
   })
 
   it('a stream the server keeps refusing shows why with Retry, not "Connecting" forever', async () => {
@@ -90,10 +135,11 @@ describe('AgentChatView', () => {
     await waitFor(() => expect(screen.queryByText('Not sent: Open elsewhere.')).toBeNull())
   })
 
-  it('shows the reconnecting banner and the last cost', async () => {
+  it('shows the reconnecting banner, and the last cost only in the context meter tooltip', async () => {
     const { emit, status } = setup()
-    emit({ seq: 1, t: 'result', costUsd: 0.5, durationMs: 1, isError: false, interrupted: false, denials: 0 })
-    expect(await screen.findByText('$0.5000')).toBeTruthy()
+    emit({ seq: 1, t: 'result', costUsd: 0.5, durationMs: 1, isError: false, interrupted: false, denials: 0 }, { seq: 2, t: 'context', context: { used: 10, window: 100 } })
+    await waitFor(() => expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toContain('Session cost $0.5000'))
+    expect(screen.queryByText('$0.5000')).toBeNull()
     status('reconnecting')
     expect(screen.getByText('Connection lost. Reconnecting…')).toBeTruthy()
   })

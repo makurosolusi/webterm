@@ -1,39 +1,6 @@
-/* Agent chat timeline extras: message actions, command output, compact divider, queued badge, todo panel. */
-.chat-message { position: relative; }
-
-/* Message actions: hidden until the message is hovered or keyboard focus is inside it. */
-.act-row {
-  display: flex;
-  gap: 2px;
-  margin-top: 2px;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-.chat-message:hover .act-row,
-.chat-message:focus-within .act-row,
-.act-row:has([data-state='copied'], [data-state='failed']) { opacity: 1; }
-
-.act-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  width: auto; /* IconButton is a fixed square; the "Copied" note widens it */
-  min-width: 20px;
-}
-.act-copy:hover { background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31)); color: var(--vscode-foreground, inherit); }
-.act-copy:focus-visible,
+/* Agent chat timeline extras: command output, compact divider, queued badge, todo panel. */
 .act-cmd__toggle:focus-visible,
 .act-todos__head:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 1px; }
-.act-copy[data-state='copied'] .codicon { color: var(--vscode-testing-iconPassed, #73c991); }
-.act-copy[data-state='failed'] .codicon { color: var(--vscode-errorForeground, #f48771); }
 
 /* Slash-command output. */
 .act-cmd {

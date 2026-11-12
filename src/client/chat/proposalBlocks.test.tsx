@@ -38,6 +38,7 @@ describe('legacy proposal in chat history', () => {
     expect(details.textContent).toContain('"statement":"Ship it"')
     expect(screen.getByText('Plan below.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('<webterm-proposal>')
-    expect(screen.queryByRole('button')).toBeNull()
+    // The only button is the message's Copy; the proposal itself offers no action.
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Copy message'])
   })
 })

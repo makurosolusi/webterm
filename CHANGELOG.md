@@ -180,6 +180,12 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Central chat and Agent Chat share one composer: the model, effort, context meter, permission mode, attach "+" and Send/Stop now sit on the bottom row inside the message box. Central's header keeps only the status.
+- Replies no longer carry a per-message header ("Central agent", "Claude"). Copy shows on hover or keyboard focus; on a Central reply that row also shows the model and tier, and the turn cost appears only in its tooltip.
+- System notices in both chats are one compact centered line; the time is in its tooltip.
+- Agent Chat: the permission mode is a small chip ("Ask", "Plan", "Bypass" in red), the model shows its name as text, effort shows as one word, and conversation history moved to the node header. Session cost and tokens moved into the context meter tooltip.
+- Agent Chat: while a turn runs, Stop replaces Send (Send comes back once you type, to queue a message); "Sending…" and "Thinking…" share the status line. The newest reply offers Regenerate, which asks again on a new branch.
+- Central chat: the "Refresh conversations" header button is gone; the list reloads each time the panel opens, and a failed load keeps its Retry.
 - Workspace tabs work like browser and VS Code tabs: "+" (new workspace) sits right after the last tab, right-click (or Shift+F10) a tab for Rename, Canvas Background…, Mute Notifications and Delete on that workspace, and double-click a tab to rename it in place. The "…" button at the far right of the tab row is gone; File › Rename/Delete Workspace still work.
 - The account button in the title bar opens a menu instead of jumping to Settings: it shows who is signed in, then Account settings, Settings, Keyboard Shortcuts and Sign out (which shows that it is working and says so if signing out fails).
 - Spend warnings are off by default: the "Today's spend passed $10" notice no longer fills Needs you, and the daily digest never re-lists it. Turn it back on with "Warn when today's spend passes $10" in Settings > Central; while it is off, open warnings (and digests that only listed them) are closed once, with one notice saying so. The daily spending limit is unchanged.
@@ -304,6 +310,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Agent Chat and Central chat: the newest message is no longer hidden under the composer when the box, the status line or a panel below the list grows, or when a reply grows after it renders.
 - The Control side bar no longer scrolls sideways at narrow widths: its tab row stays pinned at the top while only the tab content scrolls, tabs that do not fit scroll inside the tab row (the active one is kept in view), and each Memory item shows its text at full width with its badge and Edit / Mute / Forget in one row underneath.
 - An Agent Chat node no longer sits on "Connecting to Claude…" forever in browsers that leave fetch metadata (`Sec-Fetch-Site`) off the WebSocket handshake; a stream the server keeps refusing now says why, with Retry.
 - Central chat replies keep their order after a reload: text written before and after a run of tool calls stays as separate paragraphs with the "Used N tools" row between them, instead of one glued paragraph with the tools after it. The chat status row is now a fixed opaque band, so no message line shows behind it.

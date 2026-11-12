@@ -1,9 +1,6 @@
-/* Your own messages as a right-aligned bubble (VS Code / Copilot Chat); replies stay left with icon + name.
+/* Your own messages as a right-aligned bubble (VS Code / Copilot Chat); replies stay left, headerless.
    Shared by the Central chat (chatMessages.tsx) and the Agent Chat node (agentChatThread.tsx). */
 .chat-message.chat-bubble-row { align-items: flex-end; }
-/* No role icon to indent under: undo the Chat-view body indent from chat.css. */
-.chat-bubble-row.chat-message > :not(.chat-message__meta) { margin-left: 0; }
-
 .chat-bubble {
   max-width: 85%;
   box-sizing: border-box;

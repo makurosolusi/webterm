@@ -1,5 +1,5 @@
 // The Central chat's model: `/model` writes the conversation's choice server-side
-// (GET/POST /api/central/conversations/:id/model); the header picker (centralModelPicker) shows and changes it.
+// (GET/POST /api/central/conversations/:id/model); the composer picker (centralModelPicker) shows and changes it.
 import { CHAT_PATH, requestJson } from '../chat/chatTransport'
 import type { EffortArg, ModelArg } from './centralCommands'
 

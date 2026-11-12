@@ -1,6 +1,4 @@
-/* Agent chat footer toolbar: model / effort / history pickers, context meter (VS Code tokens). */
-.act-footer { flex-wrap: wrap; }
-.act-footer__end { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
+/* Composer-row controls (mode, model, effort, context meter) shared by both chats, plus the menus they open. */
 .act-picker { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
 
 .act-trigger {
@@ -24,6 +22,12 @@
 .act-trigger__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .act-trigger .codicon { font-size: 14px; }
 .act-trigger .codicon-chevron-down { font-size: 12px; }
+/* The model name is text, truncated on a narrow composer; the effort word drops first (the bulb stays). */
+.act-trigger--model { max-width: 160px; }
+@container chat-composer (max-width: 320px) {
+  .act-trigger--model { max-width: 96px; }
+  .act-trigger__label--effort { display: none; }
+}
 
 .act-alert { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .act-alert__text { color: var(--vscode-errorForeground, #f48771); }

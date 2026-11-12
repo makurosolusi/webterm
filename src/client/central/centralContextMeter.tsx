@@ -1,4 +1,4 @@
-// The Central chat header's context meter: how full this conversation's context is. Reloads after each settled
+// The Central chat composer's context meter: how full this conversation's context is. Reloads after each settled
 // turn and when the chat comes back into view; clicking shows the last compaction summary.
 import { useEffect, useRef } from 'react'
 import { Popover } from 'radix-ui'
@@ -60,7 +60,7 @@ function Meter({ conversationId, refreshKey, load = fetchCentralContext }: Centr
         </Popover.Trigger>
       </IconTooltip>
       <Popover.Portal container={portalContainer()}>
-        <Popover.Content className="ccm-popover" side="bottom" align="end" sideOffset={4} aria-label={CL.contextSummaryHeading}>
+        <Popover.Content className="ccm-popover" side="top" align="end" sideOffset={4} aria-label={CL.contextSummaryHeading}>
           {!compaction && <p>{CL.contextNeverCompacted}</p>}
           {compaction && <p>{CL.contextCompacted(relativeTime(compaction.at))}</p>}
           {compaction && (compaction.summary ? <p className="ccm-popover__summary">{compaction.summary}</p> : <p>{CL.contextNoSummary}</p>)}

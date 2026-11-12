@@ -1,4 +1,4 @@
-// Context window meter of the agent chat footer (Claude Code VS Code context indicator).
+// Context window meter of the agent chat composer row (Claude Code VS Code context indicator).
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { AgentChatContext } from '../../shared/agentChat.wire'
 import './agentChatToolbar.css'
@@ -16,14 +16,14 @@ export type ContextLevel = 'ok' | 'warn' | 'danger'
 export const contextLevel = (pct: number): ContextLevel =>
   pct >= CONTEXT_DANGER_PCT ? 'danger' : pct >= CONTEXT_WARN_PCT ? 'warn' : 'ok'
 
-/** Ring + percentage of the context window used; renders nothing without data. */
-export function ContextMeter({ context, compact }: { context?: AgentChatContext; compact?: boolean }) {
+/** Ring + percentage of the context window used (`detail`: extra tooltip line); renders nothing without data. */
+export function ContextMeter({ context, detail }: { context?: AgentChatContext; detail?: string }) {
   if (!context || context.window <= 0) return null
   const pct = Math.min(100, Math.max(0, Math.round((context.used / context.window) * 100)))
   const level = contextLevel(pct)
   const fmt = (n: number) => n.toLocaleString('en-US')
   const hint = level === 'ok' ? '' : '. Run /compact to summarize the conversation and free space.'
-  const tip = `${fmt(context.used)} of ${fmt(context.window)} tokens (${pct}%)${hint}`
+  const tip = `${fmt(context.used)} of ${fmt(context.window)} tokens (${pct}%)${hint}${detail ? `. ${detail}` : ''}`
   return (
     <IconTooltip label={tip}>
       <span className={`act-meter act-meter--${level}`} role="meter" tabIndex={0} aria-label="Context window used"
@@ -33,7 +33,7 @@ export function ContextMeter({ context, compact }: { context?: AgentChatContext;
           <circle cx="8" cy="8" r={RING_RADIUS} className="act-meter__fill" transform="rotate(-90 8 8)"
             strokeDasharray={`${(pct / 100) * RING_LENGTH} ${RING_LENGTH}`} />
         </svg>
-        {!compact && <span className="act-meter__pct">{`${pct}%`}</span>}
+        <span className="act-meter__pct">{`${pct}%`}</span>
       </span>
     </IconTooltip>
   )

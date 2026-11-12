@@ -11,7 +11,7 @@ vi.mock('../fsClient', () => ({
 }))
 const { search } = await import('../fsClient')
 
-afterEach(cleanup)
+afterEach(() => { cleanup(); document.body.innerHTML = '' })
 // jsdom lacks the ResizeObserver / pointer-capture APIs the Radix popper menu calls when it opens.
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
@@ -24,8 +24,10 @@ function setup(props: { chatSessionId?: string; chatConfig?: AgentChatNodeConfig
   const f = fakeAgentChatTransport()
   prep?.(f.t)
   const onNodeData = vi.fn()
-  render(<AgentChatView nodeId="n1" onNodeData={onNodeData} transport={f.t} {...props} />)
-  return { ...f, onNodeData }
+  // The node header slot the history button is portalled into (AgentChatNode `extraHeader`).
+  const header = document.body.appendChild(document.createElement('div'))
+  render(<AgentChatView nodeId="n1" onNodeData={onNodeData} transport={f.t} headerHost={header} {...props} />)
+  return { ...f, onNodeData, header }
 }
 const box = () => screen.getByLabelText('Message Claude') as HTMLTextAreaElement
 const type = (text: string): void => { fireEvent.change(box(), { target: { value: text } }) }
@@ -150,5 +152,24 @@ describe('AgentChatView controls', () => {
     setup()
     expect((screen.getByRole('button', { name: /^Model:/ }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Conversation history' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('puts the history button in the node header, not in the composer row', () => {
+    const { header } = setup()
+    const history = screen.getByRole('button', { name: 'Conversation history' })
+    expect(header.contains(history)).toBe(true)
+    expect(history.closest('.chat-composer')).toBeNull()
+  })
+
+  it('Regenerate on the newest reply forks before its prompt and resends it; none while busy', async () => {
+    const { t, emit } = setup()
+    emit(
+      { seq: 1, t: 'message', messageId: 'u1', role: 'user', parts: [{ k: 'text', text: 'explain this' }] },
+      { seq: 2, t: 'message', messageId: 'a1', role: 'assistant', parts: [{ k: 'text', text: 'Sure.' }] },
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Regenerate reply' }))
+    expect(t.fork).toHaveBeenCalledWith('u1', 'explain this', [])
+    emit({ seq: 3, t: 'status', status: 'thinking' })
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Regenerate reply' })).toBeNull())
   })
 })

@@ -127,10 +127,10 @@ describe('BottomPanelHost', () => {
     await screen.findByText('Deploy main')
     expect(screen.getAllByRole('toolbar')).toHaveLength(1)
     expect(screen.getByLabelText('Refresh notes')).not.toBeNull()
-    expect(screen.queryByLabelText('Refresh conversations')).toBeNull()
+    expect(screen.queryByLabelText('New chat')).toBeNull()
 
     fireEvent.click(screen.getByRole('tab', { name: /^Chat/ }))
-    expect(screen.getByLabelText('Refresh conversations')).not.toBeNull()
+    expect(screen.getByLabelText('New chat')).not.toBeNull()
     expect(screen.queryByLabelText('Refresh notes')).toBeNull()
     expect(screen.getAllByLabelText('Close Panel')).toHaveLength(1)
   })

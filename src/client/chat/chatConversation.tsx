@@ -1,4 +1,5 @@
-// One conversation: history load, SSE subscription, send/cancel, status + composer.
+// One conversation: history load, SSE subscription, send/cancel, status line + composer. The model picker,
+// context meter and permission mode live in the composer's control row (chatComposer), not in a header.
 // Split from `../ChatPanel` so both stay small. The stream is opened once per conversation with
 // the server's `lastEventSeq` as the cursor; deltas are flushed per animation frame so a burst of
 // tokens causes one render, not one per token.
@@ -21,6 +22,7 @@ import { type CentralChatHost, useCentralChatCommands } from '../central/central
 import { CentralModelPicker } from '../central/centralModelPicker'
 import { useActiveWorkspaceId } from '../activeWorkspace.context'
 import { CentralContextMeter } from '../central/centralContextMeter'
+import { ApprovalModeChip } from '../ApprovalModeControl'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -198,9 +200,6 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
           ? <span className="chat-progress" aria-hidden="true" />
           : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
-        {props.commands && <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />}
-        {props.commands && <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
-          openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />}
       </header>
 
       {error !== null && (
@@ -220,7 +219,14 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)} />
       <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
         completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
-        permissionMode={props.commands ? { workspaceId } : undefined} />
+        toolbar={props.commands && (
+          <>
+            <ApprovalModeChip workspaceId={workspaceId} />
+            <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
+              openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />
+            <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />
+          </>
+        )} />
     </section>
   )
 }

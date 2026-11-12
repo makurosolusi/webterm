@@ -109,9 +109,10 @@ describe('ModelPicker', () => {
     expect(trigger().getAttribute('aria-label')).toBe('Model: Sonnet')
   })
 
-  it('compact hides the label but keeps the accessible name; disabled blocks opening', () => {
-    render(<ModelPicker loadModels={async () => MODELS} value="sonnet" onChange={vi.fn(async () => undefined)} compact disabled />)
-    expect(trigger().textContent).toBe('')
+  it('shows the model name as text, not an icon only; disabled blocks opening', () => {
+    render(<ModelPicker loadModels={async () => MODELS} value="sonnet" onChange={vi.fn(async () => undefined)} disabled />)
+    expect(trigger().textContent).toBe('sonnet')
+    expect(trigger().querySelector('.codicon-hubot')).toBeNull()
     expect(trigger().getAttribute('aria-label')).toBe('Model: sonnet')
     expect((trigger() as HTMLButtonElement).disabled).toBe(true)
   })

@@ -1,20 +1,21 @@
-// Composer for the chat panel: Enter sends, Shift+Enter inserts a newline, ArrowUp at the start
-// recalls earlier messages (ArrowDown walks forward). The box grows with its content up to six
-// lines. While a turn is live the primary button becomes Stop (RND/11 §3): a second send would
-// be a 409, so the UI offers the action that can actually make progress. A busy conversation
-// from another tab still shows Stop because the panel learns `activeTurnId` from the 409 body.
+// Composer shell shared by the Central chat and the Agent Chat node (Claude.ai / Cursor style): one box holding
+// the textarea and, on its bottom row, attach "+", the caller's controls (`toolbar`: mode, model, effort,
+// context meter) and Send/Stop. Enter sends, Shift+Enter inserts a newline, ArrowUp at the start recalls
+// earlier messages (ArrowDown walks forward). The textarea grows with its content up to six lines.
+// While a turn is live the primary button becomes Stop (RND/11 §3). `busy` = sending would be refused, so
+// only Stop shows; `running` = sending queues (Agent Chat), so Stop shows and Send joins it once you type.
+// A busy conversation from another tab still shows Stop because the panel learns `activeTurnId` from the 409 body.
 // With `attach` the composer also takes files (chatComposerAttach): an image-only message may be sent.
 // With `completion` it opens a `/` command and `@` file menu (agentChat/completionMenu). Escape while
 // a turn runs stops it, unless a menu is open (then Escape only closes the menu).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
-import type { KeyboardEvent, RefObject } from 'react'
+import type { KeyboardEvent, ReactNode, RefObject } from 'react'
 import type { ComposerImage } from './chatAttach'
 import { AttachTray, useComposerAttach, type AttachFiles } from './chatComposerAttach'
 import { useComposerCompletion } from '../agentChat/completionMenu'
 import type { ComposerCompletion } from '../agentChat/composerCompletion'
 import { OFFLINE_REASON, useDisconnected } from '../useConnection'
-import { ApprovalModeChip } from '../ApprovalModeControl'
 
 export interface ChatComposerProps {
   busy: boolean
@@ -40,8 +41,8 @@ export interface ChatComposerProps {
   /** Replaces the text and focuses the box whenever a new seed arrives (Agent Chat "Edit message");
    *  with `menu` the completion menu opens on it (Central `/help` seeds `/`). */
   seed?: { text: string; key: number; menu?: boolean }
-  /** Central only: the permission-mode button in the toolbar under the box, for this project (null = none open). */
-  permissionMode?: { workspaceId: string | null }
+  /** Controls on the box's bottom row between "+" and Send (mode, model, effort, context meter). */
+  toolbar?: ReactNode
 }
 
 /** Lines the textarea may grow to before it scrolls. */
@@ -145,20 +146,6 @@ export default function ChatComposer(props: ChatComposerProps) {
       {complete.menu}
       <AttachTray a={files} />
       <div className="chat-composer__box">
-        {props.attach && (
-          <>
-            <IconButton label="Attach files" tooltip="Attach files or images (or paste / drop them)" size="icon-xs"
-              className="chat-composer__attach" disabled={props.disabled} onClick={() => picker.current?.click()}>
-              <span className="codicon codicon-add" aria-hidden="true" />
-            </IconButton>
-            <input ref={picker} type="file" multiple hidden tabIndex={-1} aria-hidden="true" data-testid="chat-attach-input"
-              onChange={(e) => {
-                const picked = Array.from(e.target.files ?? [])
-                e.target.value = '' // picking the same file again still fires change
-                void files.attach(picked)
-              }} />
-          </>
-        )}
         <textarea
           ref={area}
           className="chat-composer__input"
@@ -179,26 +166,41 @@ export default function ChatComposer(props: ChatComposerProps) {
           onKeyDown={onKeyDown}
           onPaste={files.onPaste}
         />
-        {props.busy ? (
-          <IconTooltip label="Stop the running turn">
-            <button type="button" className="chat-composer__send" onClick={props.onStop} aria-label="Stop turn">
-              <span className="codicon codicon-debug-stop" aria-hidden="true" />
-            </button>
-          </IconTooltip>
-        ) : (
-          <IconTooltip label="Send message" shortcut="Enter" disabled={!canSend}
-            disabledReason={offline ? OFFLINE_REASON : props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : files.busy ? 'attaching files' : 'type a message first'}>
-            <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
-              <span className="codicon codicon-send" aria-hidden="true" />
-            </button>
-          </IconTooltip>
-        )}
-      </div>
-      {props.permissionMode && (
-        <div className="chat-composer__toolbar">
-          <ApprovalModeChip workspaceId={props.permissionMode.workspaceId} />
+        <div className="chat-composer__toolbar" role="toolbar" aria-label="Composer controls">
+          {props.attach && (
+            <>
+              <IconButton label="Attach files" tooltip="Attach files or images (or paste / drop them)" size="icon-xs"
+                className="chat-composer__attach" disabled={props.disabled} onClick={() => picker.current?.click()}>
+                <span className="codicon codicon-add" aria-hidden="true" />
+              </IconButton>
+              <input ref={picker} type="file" multiple hidden tabIndex={-1} aria-hidden="true" data-testid="chat-attach-input"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? [])
+                  e.target.value = '' // picking the same file again still fires change
+                  void files.attach(picked)
+                }} />
+            </>
+          )}
+          {props.toolbar}
+          <span className="chat-composer__actions">
+            {(props.busy || props.running) && (
+              <IconTooltip label="Stop the running turn" shortcut="Esc">
+                <button type="button" className="chat-composer__send chat-composer__stop" onClick={props.onStop} aria-label="Stop turn">
+                  <span className="codicon codicon-debug-stop" aria-hidden="true" />
+                </button>
+              </IconTooltip>
+            )}
+            {!props.busy && (!props.running || hasContent) && (
+              <IconTooltip label={props.running ? 'Queue message (runs next)' : 'Send message'} shortcut="Enter" disabled={!canSend}
+                disabledReason={offline ? OFFLINE_REASON : props.disabled ? 'chat is disabled' : tooLong ? 'message is too long' : files.busy ? 'attaching files' : 'type a message first'}>
+                <button type="button" className="chat-composer__send" onClick={submit} disabled={!canSend} aria-label="Send message">
+                  <span className="codicon codicon-send" aria-hidden="true" />
+                </button>
+              </IconTooltip>
+            )}
+          </span>
         </div>
-      )}
+      </div>
       {offline && <p className="chat-composer__limit" role="status">{OFFLINE_REASON}</p>}
       {tooLong && (
         <p className="chat-composer__limit" role="alert">
