@@ -41,8 +41,11 @@
   color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
 }
 .browser-start ul { list-style: none; margin: 0; padding: 0; }
-.browser-start-search { width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-search { position: relative; width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-search__icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: .7; pointer-events: none; }
+.browser-start-search input { padding-left: 30px; border-radius: 16px; }
 .browser-start-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; width: 100%; max-width: 480px; margin: 0 auto; }
+.browser-start-cell { position: relative; }
 .browser-start-tile, .browser-start-item {
   /* Button (ghost) memberi min-height/padding/nowrap/justify-center bawaan; di sini ditimpa untuk tata letak tile/baris. */
   display: flex; align-items: center; justify-content: flex-start; min-height: 0; height: auto; border: 0; border-radius: 6px;
@@ -51,14 +54,33 @@
 .browser-start-tile { flex-direction: column; justify-content: center; gap: 4px; width: 100%; padding: 8px 4px; }
 .browser-start-tile:hover, .browser-start-item:hover { background: var(--vscode-list-hoverBackground, rgb(127 127 127 / 15%)); }
 .browser-start-tile:focus-visible, .browser-start-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
-.browser-start-icon {
-  display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%;
-  color: #fff; font-weight: 600; font-size: 15px;
+/* Hover "⋮" on a tile (Chrome NTP): visible on hover/focus only; right-click opens the same menu. */
+.browser-start-tile-menu {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: inherit; cursor: pointer; opacity: 0;
 }
-.browser-start-name { font-size: 12px; }
-.browser-start-heading { width: 100%; max-width: 480px; margin: 0 auto 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; opacity: 0.7; }
-.browser-start-recent { width: 100%; max-width: 480px; margin: 0 auto; }
-.browser-start-item { flex-direction: column; align-items: flex-start; width: 100%; padding: 6px 8px; text-align: left; }
+.browser-start-cell:hover .browser-start-tile-menu, .browser-start-tile-menu:focus-visible { opacity: .8; }
+.browser-start-tile-menu:hover { background: var(--vscode-toolbar-hoverBackground, rgb(127 127 127 / 25%)); }
+.browser-start-tile-menu:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+/* Favicon: the letter circle fills the box until the site's icon has loaded (browser.favicon.tsx). */
+.browser-start-icon, .browser-start-favicon { position: relative; display: flex; align-items: center; justify-content: center; flex: none; }
+.browser-start-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--vscode-input-background, rgb(127 127 127 / 20%)); }
+.browser-start-favicon { width: 16px; height: 16px; }
+.browser-favicon__letter {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--vscode-badge-background, #616161); color: #fff; font-weight: 600; font-size: 15px;
+}
+.browser-start-favicon .browser-favicon__letter { font-size: 9px; }
+.browser-favicon__img { width: 20px; height: 20px; object-fit: contain; }
+.browser-start-favicon .browser-favicon__img { width: 16px; height: 16px; }
+[data-favicon="loading"] > .browser-favicon__img { visibility: hidden; }
+.browser-start-icon--add { font-size: 18px; }
+.browser-start-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.browser-start-section { width: 100%; max-width: 480px; margin: 0 auto; }
+/* Same inline inset as the rows (item padding 8px): the heading starts where each row's favicon does. */
+.browser-start-heading { margin: 0 0 4px; padding: 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; opacity: 0.7; }
+.browser-start-item { gap: 8px; width: 100%; padding: 6px 8px; text-align: left; }
+.browser-start-text { display: flex; flex-direction: column; min-width: 0; }
 .browser-start-title, .browser-start-host { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-start-host { font-size: 11px; opacity: 0.7; }
 
@@ -79,7 +101,7 @@
 
 /* Toolbar (BrowserToolbar.tsx): one row like Chrome / VS Code Simple Browser. The address field is a pill holding the
    site-info icon, the input, the zoom pill and the Shields chip. Container queries on the toolbar width (the node, not the
-   window) drop forward and the Agents label first, then the in-field extras; the ⋯ menu still reaches both. */
+   window) drop forward first, then the in-field extras; the ⋮ menu still reaches both. */
 .browser-toolbar { container: browser-toolbar / inline-size; display: flex; flex-direction: column; gap: 2px; padding: 4px; }
 .browser-toolbar__row { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; min-width: 0; }
 .browser-toolbar__row > * { flex: none; }
@@ -97,5 +119,10 @@
 .browser-omnibox__input::-webkit-calendar-picker-indicator { display: none !important; }
 .browser-omnibox__extra { flex: none; }
 .browser-toolbar__errors { color: var(--vscode-errorForeground, #f48771); }
-@container browser-toolbar (max-width: 360px) { .browser-toolbar__forward, .browser-toolbar__agent > span:not(.codicon) { display: none; } }
+@container browser-toolbar (max-width: 360px) { .browser-toolbar__forward { display: none; } }
+/* Agents toggle: icon only; a dot in the corner says agents may drive, a filled accent says one is driving now. */
+.browser-toolbar__agent { position: relative; }
+.browser-toolbar__agent[aria-pressed="false"] { opacity: .6; }
+.browser-toolbar__agent-dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-charts-green, #89d185); pointer-events: none; }
+.browser-toolbar__agent[data-driving] .browser-toolbar__agent-dot { background: var(--vscode-focusBorder, var(--accent)); box-shadow: 0 0 0 2px var(--vscode-editor-background, var(--bg)); }
 @container browser-toolbar (max-width: 260px) { .browser-omnibox__extra { display: none; } }

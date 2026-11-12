@@ -1,5 +1,5 @@
 // Penempel node browser ke React Flow: BrowserNode (WS-06) + toolbar/chip lease (slot `renderToolbar`/
-// `renderOverlay`) + dialog cookie yang dibuka dari menu ⋯ header (`menuItems`). Komponen di sini dipanggil React Flow, jadi
+// `renderOverlay`) + dialog cookie yang dibuka dari menu ⋮ toolbar (`menuItems`). Komponen di sini dipanggil React Flow, jadi
 // didaftarkan sebagai konstanta modul di `nodeTypes`.
 import { memo, useCallback, useMemo, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
@@ -21,7 +21,7 @@ import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import { useLiveSettings } from './useSettings'
 import { toSearchEngine } from '../shared/browser.omnibox'
 
-function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
+function BrowserSlots({ p, ctx, menuItems }: { p: NodeProps; ctx: BrowserSlotCtx; menuItems?: VscodeMenuItem[] }) {
   const rf = useReactFlow()
   const status = useBrowserStatus()
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
@@ -33,7 +33,7 @@ function BrowserSlots({ p, ctx }: { p: NodeProps; ctx: BrowserSlotCtx }) {
   }, [p.id, rf])
   return (
     <>
-      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} onZoomReset={ctx.resetZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} console={ctx.console} design={design} />
+      <BrowserToolbar state={ctx.state} nav={ctx.nav} agentControl={agentControl} agentEnabled={status?.agentEnabled ?? false} onAgentControl={onAgentControl} onEnableAgent={enableAgent} zoom={ctx.zoom} onZoom={ctx.stepZoom} onZoomReset={ctx.resetZoom} searchEngine={searchEngine} onShields={ctx.setShields} device={ctx.device} onDevice={ctx.setDevice} console={ctx.console} design={design} menuItems={menuItems} />
       {design.on && <DesignModeBar nodeId={p.id} design={design} />}
     </>
   )
@@ -48,7 +48,7 @@ async function enableAgent(): Promise<void> {
   resetBrowserStatusCache()
 }
 
-/** Submenu "Import Cookies ▸ From File…" + catatan Google, meniru menu ⋯ browser Orca. Satu-satunya pintu ke dialog cookie. */
+/** Submenu "Import Cookies ▸ From File…" + catatan Google, meniru menu ⋯ browser Orca (di sini menu ⋮ toolbar). Satu-satunya pintu ke dialog cookie. */
 function cookieMenuItems(onFromFile: () => void): VscodeMenuItem[] {
   return [{
     type: 'item', id: 'import-cookies', label: M.importCookies,
@@ -70,8 +70,7 @@ export const BrowserNodeType = memo(function BrowserNodeType(p: NodeProps) {
     <>
       <BrowserNode
         {...p}
-        menuItems={menuItems}
-        renderToolbar={(ctx) => <BrowserSlots p={p} ctx={ctx} />}
+        renderToolbar={(ctx) => <BrowserSlots p={p} ctx={ctx} menuItems={menuItems} />}
         renderOverlay={(ctx) => (
           <>
             <BrowserLeaseChip lease={ctx.state?.lease} onTakeover={ctx.takeover} />
