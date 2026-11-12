@@ -1,4 +1,4 @@
-// `sweepTrashOnBoot`: jalan sekali bila MUTATE on, tidak sama sekali bila off, dan error tak menolak.
+// `sweepTrashOnBoot`: jalan sekali bila MUTATE on (juga saat kosong: default on), tidak sama sekali bila off, dan error tak menolak.
 import { test, expect } from 'bun:test'
 import { FILES_FLAG } from './envRegistry.files'
 import { sweepTrashOnBoot } from './fsBoot'
@@ -23,8 +23,16 @@ test('MUTATE on: sweep runs exactly once', async () => {
   })
 })
 
-test('MUTATE off: sweep never runs', async () => {
+test('MUTATE unset: sweep runs (default on since 2026-11-12)', async () => {
   await withFlag(undefined, async () => {
+    let calls = 0
+    await sweepTrashOnBoot(async () => { calls++; return 0 })
+    expect(calls).toBe(1)
+  })
+})
+
+test('MUTATE off: sweep never runs', async () => {
+  await withFlag('off', async () => {
     let calls = 0
     await sweepTrashOnBoot(async () => { calls++; return 0 })
     expect(calls).toBe(0)
