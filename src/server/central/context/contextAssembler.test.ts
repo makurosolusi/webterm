@@ -7,6 +7,7 @@ import {
   type AssembledContext, type SyncMemoryBlockProvider,
 } from './contextAssembler'
 import { GLOBAL_STATE, projectState, writeState } from './centralState'
+import { registerCapabilityMap } from './capabilityMap'
 import { HEADER_MAX_CHARS, registerActiveWorkspace } from './contextHeader'
 import { createLegacyContextAssembler, type ContextBuildInput } from './contextPort'
 import { registerWorkspaceLookup } from '../workspaceLookup'
@@ -196,5 +197,36 @@ describe('rotation', () => {
     turnCtx('t1', 90_000, 10)
     turnCtx('t2', 1_000, 20)
     expect(build({ ...ON, WEBTERM_CENTRAL_CONTEXT_WINDOW: '100000' }).decision).toBe('ok')
+  })
+})
+
+describe('playbook hint and capability map', () => {
+  it('ride in the volatile tail after the header, never in the recorded prefix', () => {
+    const unregister = registerCapabilityMap(() => [{ name: 'playbook.web_research', access: 'asks' }, { name: 'playbook.review', access: 'asks' }])
+    try {
+      const out = build(ON, { text: 'lakukan analisa ke github trending untuk hari ini' })
+      const hint = 'Suggested playbook: playbook.web_research {"goal":"lakukan analisa ke github trending untuk hari ini","url":"https://github.com/trending"}'
+      const at = out.prompt.indexOf(hint)
+      expect(at).toBeGreaterThan(out.prompt.indexOf('State: {'))
+      expect(out.prompt.indexOf('Capabilities: research the web')).toBeGreaterThan(out.prompt.indexOf('State: {'))
+      expect(at).toBeLessThan(out.prompt.indexOf('Human request:'))
+      const prefixes = fixture.db.query('SELECT text FROM prefix').all() as { text: string }[]
+      expect(prefixes.length).toBeGreaterThan(0)
+      for (const p of prefixes) expect(p.text).not.toMatch(/Suggested playbook: playbook\.|Capabilities: research/)
+      // The same message with another hint keeps the same prefix hash (cache stays warm).
+      expect(build(ON, { text: 'review PR #1' }).prefixHash).toBe(out.prefixHash)
+    } finally { unregister() }
+  })
+
+  it('without the playbook tool (agents off or Central unarmed) the tail says workers are off, never suggests the tool', () => {
+    const prompt = build(ON, { text: 'lakukan analisa ke github trending untuk hari ini' }).prompt
+    expect(prompt).not.toContain('Suggested playbook')
+    expect(prompt).toContain('This looks like web research, but workers are off (Settings › Central › What Central may do)')
+    const off = registerCapabilityMap(() => [{ name: 'playbook.web_research', access: 'off' }])
+    try { expect(build(ON, { text: 'research bun vs node' }).prompt).toContain('but workers are off') } finally { off() }
+  })
+
+  it('adds no hint for chit-chat', () => {
+    expect(build(ON, { text: 'halo, apa kabar?' }).prompt).not.toContain('Suggested playbook')
   })
 })

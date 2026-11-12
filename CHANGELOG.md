@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- Ledger schema v34 adds `central_playbook_run` (where a playbook waiting on an approval resumes); runs are deleted 30 days after they last moved.
 - Ledger schema v33 rebuilds `central_control` once (rows kept) so it can also hold named settings (`setting:<name>`, `value_json`); nothing to do by hand.
 - Ledger schema v24 adds nullable `tier` and `model` columns to `cost_run`; existing databases are upgraded in place, nothing to backfill.
 - New dependency `marked-footnote` (MIT) for markdown footnotes.
@@ -26,6 +27,8 @@ Operator notes:
 - Default-on switches are written into the server's environment at start while nothing sets them (as `WEBTERM_CENTRAL=on` and so on), so readers and Settings agree; a value in `.env`, the shell or Settings still wins. Existing projects keep their auto-done value; only new projects start with it on.
 
 ### Added
+- Central playbooks: `playbook.web_research`, `playbook.code_change` and `playbook.review` run a whole chain in one call (board task, an agent on it, a fixed brief). Web research gives the agent its own cabled browser and asks for a `RESULT:` answer with sources. When the spawn needs approval, the playbook waits on the card and continues by itself once you decide; Central posts a notice when a playbook starts, resumes or stops.
+- Central now gets a "Suggested playbook" hint when a message reads like research, a code change or a review (English and Indonesian, e.g. "lakukan analisa ke github trending"), and a short map of what it can do and whether each action runs on its own or asks first.
 - Nothing changes silently any more: auto-done, supervisor nudges and restarts, self-started autonomy runs, classifier auto-approvals, Central memory writes, skill proposals and startup setting changes each post a Central notice and leave an `auto.*` record in the Timeline (outbox deliveries are recorded only). Auto-done tasks get a Reopen button; memory writes get Forget.
 - Existing projects with auto-done off get a one-time offer to turn it on with one click; projects where it is on get a one-time notice saying so.
 - Startup setting changes are batched into one notice per boot, and each default is announced only the first time it applies.

@@ -11,6 +11,7 @@ import { localEmbedder } from '../../memory/embed/embedLocal'
 import type { MemoryBlock, MemoryBlockProvider, MemoryBlockRequest } from '../contracts/memory.types'
 import { scopeFromConversationId } from '../conversationModel'
 import { buildMemoryContext } from '../memory/contextBuilder'
+import { capabilityMapLine, currentTools, toolUsable } from './capabilityMap'
 import { pinnedState, renderPinnedState } from './centralState'
 import { createFallbackCheckpoint } from './checkpointSummarizer'
 import { latestCheckpoint, recentMessages, type Checkpoint } from './checkpointStore'
@@ -20,6 +21,7 @@ import {
   type ContextAssembler, type ContextBuildInput, type ContextBuildOutput, type ContextTrace,
 } from './contextPort'
 import { lastCtxTokens } from './contextUsage'
+import { playbookHintLine } from './playbookHint'
 import { centralCacheEnv, centralPrefixText, prefixHash, recordPrefix } from './promptPrefix'
 import { contextWindowTokens, decideRotation } from './rotationPolicy'
 
@@ -122,7 +124,10 @@ export function createContextAssembler(deps: ContextAssemblerDeps = {}): { build
       const memory = memoryBlock(db, input, deps.memory)
       const now = input.now()
       const header = buildStateHeader(db, conversationId, now)
-      const parts = [stable, renderPinnedState(state), memory.text, header].filter((part) => part !== '')
+      // Capability map and playbook hint are volatile (level, this message): after the header, never in the prefix.
+      const tools = currentTools()
+      const hint = playbookHintLine(input.text, (name) => toolUsable(tools, name))
+      const parts = [stable, renderPinnedState(state), memory.text, header, capabilityMapLine(tools), hint].filter((part) => part !== '')
       const scope = scopeFromConversationId(conversationId)
       const { hash } = recordPrefix(db, { projectId: scope.kind === 'project' ? scope.projectId : null, text: centralPrefixText(stable), now })
       scheduleIdle(() => {
