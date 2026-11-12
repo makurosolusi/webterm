@@ -60,11 +60,29 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
   // Perpindahan programatik (setViewport/zoomIn/fitView) lewat setTransform tidak mengirim
   // sourceEvent sama sekali, jadi onMoveEnd kemungkinan besar TETAP jalan. Panggilan ini
   // jaring pengaman eksplisit: sync readout + persist tanpa bergantung pada jalur event.
+  // Timer sync yang belum menembak. Dibersihkan saat unmount: tanpa itu timer menembak setelah
+  // canvas hilang — setState pada komponen mati + save liar yang menjadwalkan ulang timer save
+  // SESUDAH cleanup `cancelSave` App (dan di test: `window is not defined` setelah jsdom dibongkar).
+  const syncTimers = useRef(new Set<ReturnType<typeof setTimeout>>())
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    const timers = syncTimers.current
+    return () => {
+      mounted.current = false
+      timers.forEach(clearTimeout)
+      timers.clear()
+    }
+  }, [])
+
   const syncViewport = useCallback((delay: number) => {
-    setTimeout(() => {
+    const t = setTimeout(() => {
+      syncTimers.current.delete(t)
+      if (!mounted.current) return
       const vp = rf.current?.getViewport()
       if (vp) { viewportRef.current = vp; setZoom(vp.zoom); scheduleSave() }
     }, delay)
+    syncTimers.current.add(t)
   }, [rf, viewportRef, scheduleSave])
 
   const onMoveEnd = useCallback((_e: unknown, vp: Viewport) => {
