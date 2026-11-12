@@ -9,7 +9,7 @@ import readme from '../../../README.md' with { type: 'text' }
 import { findOnPath } from '../binaryOnPath'
 import { childEnv } from '../childEnv'
 import { createServerIdentity } from '../health.api'
-import { parseArgs } from './cliArgs'
+import { type InternalEntry, parseArgs } from './cliArgs'
 import { buildHelp, buildTopicList, buildVersion, docsTopic, topicSlugs } from './cliHelp'
 import type * as ResetPassword from './cliResetPassword'
 
@@ -39,12 +39,14 @@ function usageError(message: string): number {
   return EXIT_USAGE
 }
 
-/** Run the CLI for `argv` (without runtime/script). Returns an exit code, or 'serve' to start the server. */
-export function runCli(argv: readonly string[]): number | 'serve' {
+/** Run the CLI for `argv` (without runtime/script). Returns an exit code, 'serve' to start the server, or a hidden entry for cliGate to await. */
+export function runCli(argv: readonly string[]): number | 'serve' | { entry: InternalEntry; args: string[] } {
   const action = parseArgs(argv)
   switch (action.kind) {
     case 'serve':
       return 'serve'
+    case 'internal':
+      return { entry: action.entry, args: action.args }
     case 'error':
       return usageError(action.message)
     case 'help':

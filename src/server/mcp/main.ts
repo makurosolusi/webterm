@@ -78,11 +78,19 @@ export async function serve(backend: McpBackend, input: NodeJS.ReadableStream = 
   }
 }
 
-if (import.meta.main) {
+/** Runs the stdio server for `argv` until stdin closes; returns the exit code (1 = bad args or a crash, on stderr). */
+export async function runMcpMain(argv: readonly string[]): Promise<number> {
   try {
-    await serve(httpBackend(parseArgs(process.argv.slice(2))))
+    await serve(httpBackend(parseArgs(argv)))
+    return 0
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`)
-    process.exit(1)
+    return 1
   }
+}
+
+// Dev: `bun main.ts ...`. The compiled binary reaches runMcpMain through `webterm __mcp-stdio` (cli/cliGate.ts).
+if (import.meta.main) {
+  const code = await runMcpMain(process.argv.slice(2))
+  if (code !== 0) process.exit(code)
 }

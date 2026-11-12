@@ -43,8 +43,9 @@ export function emitSource(records: readonly unknown[]): string {
   return `for (const r of ${JSON.stringify(records)}) emit(r)\n`
 }
 
+/** A healthy init: the webterm MCP server connected (a turn without it fails, claudeEvents.ts). */
 export const initRecord = (extra: Record<string, unknown> = {}) => ({
-  type: 'system', subtype: 'init', session_id: 'sess-1', tools: [], mcp_servers: [], ...extra,
+  type: 'system', subtype: 'init', session_id: 'sess-1', tools: [], mcp_servers: [{ name: 'webterm', status: 'connected' }], ...extra,
 })
 
 export const deltaRecord = (text: string) => ({

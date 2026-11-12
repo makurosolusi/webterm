@@ -16,6 +16,11 @@ describe('buildHelp', () => {
     for (const o of CLI_OPTIONS) expect(help).toContain(o.short ? `${o.short}, ${o.long}` : o.long)
   })
 
+  it('never lists the hidden internal subcommands', () => {
+    expect(help).not.toContain('__mcp-stdio')
+    expect(help).not.toContain('__eval-run')
+  })
+
   it('lists every bootstrap key and every user-facing registry key, not advanced ones', () => {
     for (const k of BOOTSTRAP_ONLY_KEYS) expect(help).toMatch(new RegExp(`^  ${k} `, 'm'))
     const user = ENV_REGISTRY.filter((s) => resolveMeta(s).audience === 'user')

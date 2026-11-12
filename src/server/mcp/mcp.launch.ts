@@ -5,15 +5,20 @@
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir } from '../hooksPaths'
+import { MCP_STDIO_COMMAND, isCompiledBinary, selfLaunch } from '../selfLaunch'
 import { MCP_SERVER_NAME } from './mcp.paths'
 
 /** Absolute path of the stdio entry point. */
 export const MCP_MAIN = fileURLToPath(new URL('./main.ts', import.meta.url))
 
-/** How a CLI starts the MCP server for `nodeId`: the running bun (the server runs under bun) + main.ts. */
+/** Executable + leading args that start the MCP stdio server: `bun main.ts` in dev, `webterm __mcp-stdio` when compiled. */
+export const mcpLaunchBase = (compiled: boolean = isCompiledBinary()): { command: string; args: string[] } =>
+  selfLaunch(MCP_STDIO_COMMAND, MCP_MAIN, compiled)
+
+/** How a CLI starts the MCP server for `nodeId`. */
 export function mcpServerCommand(nodeId: string, port: number): { command: string; args: string[] } {
-  const bun = process.versions.bun ? process.execPath : 'bun'
-  return { command: bun, args: [MCP_MAIN, '--headers', claudeHeadersPath(nodeId), '--port', String(port)] }
+  const base = mcpLaunchBase()
+  return { command: base.command, args: [...base.args, '--headers', claudeHeadersPath(nodeId), '--port', String(port)] }
 }
 
 /** Sibling of the node's `--settings` file (same hashed name, so no traversal from the node id). */

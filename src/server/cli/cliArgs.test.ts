@@ -17,6 +17,13 @@ describe('parseArgs', () => {
     expect(parseArgs(argv)).toEqual(action)
   })
 
+  it('hidden subcommands pass every remaining arg through, flags included, and stay out of suggestions', () => {
+    expect(parseArgs(['__mcp-stdio', '--headers', '/h', '--port', '8700'])).toEqual({ kind: 'internal', entry: 'mcp', args: ['--headers', '/h', '--port', '8700'] })
+    expect(parseArgs(['__eval-run', 'run', '--json'])).toEqual({ kind: 'internal', entry: 'eval', args: ['run', '--json'] })
+    expect(parseArgs(['--help', '__mcp-stdio'])).toMatchObject({ kind: 'error' }) // only as the first argument
+    expect(suggestOption('__mcp-stdio')).toBeUndefined()
+  })
+
   it('help wins over every other flag, version over readme/docs', () => {
     expect(parseArgs(['-h', '-v'])).toEqual({ kind: 'help' })
     expect(parseArgs(['-v', '--help', '--docs', 'env'])).toEqual({ kind: 'help' })

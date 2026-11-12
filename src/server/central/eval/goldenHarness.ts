@@ -24,7 +24,6 @@ import { capabilityStore } from '../../control/mount'
 import { createEventLog } from '../../events/eventLog'
 import { allRows, execWrite, getRow } from '../../ledger/ledgerCore'
 import { openLedgerDb } from '../../ledger/migration'
-import { MCP_MAIN } from '../../mcp/mcp.launch'
 import { mcpRoute } from '../../mcp/mcp.route'
 import type { McpDeps } from '../../mcp/mcp.tools'
 import { StreamHub } from '../chat/streamHub'
@@ -181,7 +180,7 @@ export async function createHarness(options: HarnessOptions): Promise<GoldenHarn
       policy: null, workspaces: () => [], browser: null, gitDiff: async () => null, events: createEventLog(db),
       central: { db, registry, env: guardEnv, guard }, capability: (t) => capabilityStore.verify(t),
     }
-    const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port, approvalWaitMs: 0, command: { command: process.execPath, args: [MCP_MAIN] } })
+    const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port, approvalWaitMs: 0 })
     const runtime = new ClaudeRuntime({
       executable: fake, workDir: join(dir, 'work'), env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dir }, mcp,
       ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),

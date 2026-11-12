@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RuntimeEvent } from './centralRuntime'
-import { applyClaudeEvent, parseClaudeMessage } from './claudeEvents'
+import { applyClaudeEvent, mcpNotStartedReason, parseClaudeMessage } from './claudeEvents'
+import { lastCentralMcpStatus } from '../../mcp/mcp.health'
 import { newTurnState } from './claudeSession'
 import { createTurnEmitter } from './runtimeEvents'
 import { assistantRecord, deltaRecord, initRecord, resultRecord, toolResultRecord, toolUseRecord } from './claude.fakeBin'
@@ -9,7 +10,9 @@ const parse = parseClaudeMessage
 
 describe('parseClaudeMessage', () => {
   it('parses init with tool and MCP server names', () => {
-    expect(parse(initRecord())).toEqual({ type: 'init', sessionId: 'sess-1', tools: [], servers: [] })
+    expect(parse(initRecord())).toEqual({ type: 'init', sessionId: 'sess-1', tools: [], servers: ['webterm'], webtermStatus: 'connected' })
+    expect(parse(initRecord({ mcp_servers: [] }))).toMatchObject({ servers: [], webtermStatus: 'missing' })
+    expect(parse(initRecord({ mcp_servers: [{ name: 'webterm' }] }))).toMatchObject({ webtermStatus: 'unknown' })
     expect(parse(initRecord({ tools: ['Bash'], mcp_servers: [{ name: 'x', status: 'connected' }] }))).toMatchObject({ tools: ['Bash'], servers: ['x'] })
   })
 
@@ -148,6 +151,28 @@ describe('applyClaudeEvent', () => {
     c.apply(initRecord({ tools: ['mcp__webterm__project_read'], mcp_servers: [{ name: 'webterm', status: 'connected' }] }))
     expect(c.state.failure).toBeNull()
     expect(c.kills).toHaveLength(0)
+  })
+
+  it('fails the turn with a clear, retryable message when the webterm MCP server is missing or failed', () => {
+    for (const [servers, status] of [[[{ name: 'webterm', status: 'failed' }], 'failed'], [[], 'missing'], [[{ name: 'webterm', status: 'needs-auth' }], 'needs-auth']] as const) {
+      const t = setup()
+      t.apply(initRecord({ mcp_servers: servers }))
+      expect(t.state.failure).toMatchObject({ code: 'runtime_error', retryable: true, reason: mcpNotStartedReason(status) })
+      expect(t.kills).toHaveLength(1)
+      expect(t.events.find((e) => e.type === 'error')).toMatchObject({ message: `Central's tools did not start (webterm MCP server: ${status}). Retry, or see Settings › Health.` })
+      expect(lastCentralMcpStatus()?.status).toBe(status)
+    }
+  })
+
+  it('lets the turn go on when the webterm MCP server is connected or still pending', () => {
+    for (const status of ['connected', 'pending']) {
+      const t = setup()
+      t.apply(initRecord({ mcp_servers: [{ name: 'webterm', status }] }))
+      t.apply(assistantRecord('m1', 'hi'))
+      expect(t.state.failure).toBeNull()
+      expect(t.kills).toHaveLength(0)
+      expect(lastCentralMcpStatus()?.status).toBe(status)
+    }
   })
 
   it('fails closed on a tool_use outside mcp__webterm__*', () => {
