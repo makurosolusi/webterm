@@ -35,35 +35,40 @@ function MemoryRow({ m, confirmable, act }: { m: MemoryItem; confirmable: boolea
   const forget = useMemoryAction(MEMORY_TEXT.forget, () => act(MEMORY_TEXT.forget, ctl(m.id, 'forget')))
   const save = useMemoryAction(MEMORY_TEXT.edit, async () => { await act(MEMORY_TEXT.edit, ctl(m.id, 'edit'), { text: (draft ?? '').trim() }); setDraft(null) })
   return (
-    <li data-memory={m.id} data-kind={m.kind} className="flex flex-wrap items-center gap-2">
-      <Badge variant={m.status === 'fact' ? 'secondary' : 'outline'}>
-        {untrusted ? MEMORY_TEXT.untrusted : m.status === 'fact' ? MEMORY_TEXT.confirmed : MEMORY_TEXT.suggested}
-      </Badge>
-      {m.needsReview ? <Badge variant="outline">{MEMORY_TEXT.review}</Badge> : null}
-      {m.suppressed ? <Badge variant="outline">{MEMORY_TEXT.muted}</Badge> : null}
+    // Text on its own full-width line; badges and actions share one compact row under it (fits 300px and wide).
+    <li data-memory={m.id} data-kind={m.kind} className="flex flex-col gap-1 border-b border-(--vscode-panel-border) py-1">
       {draft === null
-        ? <span className="flex-1 break-words">{m.text}</span>
-        : <Input aria-label={MEMORY_TEXT.edit} value={draft} maxLength={1200} onChange={(e) => setDraft(e.target.value)} className="min-w-48 flex-1" />}
-      {draft === null ? (
-        <>
-          {confirmPath ? <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, confirmPath)} /> : null}
-          {!untrusted ? <Button size="sm" variant="secondary" onClick={() => setDraft(m.text)}>{MEMORY_TEXT.edit}</Button> : null}
-          <MemoryButton variant="secondary" what={m.suppressed ? MEMORY_TEXT.unmute : MEMORY_TEXT.mute} busyLabel={MEMORY_BUSY.mute}
-            run={() => act(MEMORY_TEXT.mute, ctl(m.id, 'suppress'), { on: !m.suppressed })} />
-          {asking ? (
-            <span role="alertdialog" aria-label={MEMORY_TEXT.forgetAsk} className="flex items-center gap-1">
-              <span>{MEMORY_TEXT.forgetAsk}</span>
-              <ActionButton size="sm" variant="destructive" action={forget} busyLabel={MEMORY_BUSY.forget} onClick={() => setAsking(false)}>{MEMORY_TEXT.forget}</ActionButton>
-              <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>{MEMORY_TEXT.cancel}</Button>
-            </span>
-          ) : <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>{MEMORY_TEXT.forget}</Button>}
-        </>
-      ) : (
-        <>
-          <ActionButton size="sm" disabled={draft.trim() === ''} action={save} busyLabel={MEMORY_BUSY.save}>{MEMORY_TEXT.save}</ActionButton>
-          <Button size="sm" variant="secondary" onClick={() => setDraft(null)}>{MEMORY_TEXT.cancel}</Button>
-        </>
-      )}
+        ? <span className="break-words [overflow-wrap:anywhere]">{m.text}</span>
+        : <Input aria-label={MEMORY_TEXT.edit} value={draft} maxLength={1200} onChange={(e) => setDraft(e.target.value)} className="w-full min-w-0" />}
+      <div data-slot="memory-row-meta" className="flex flex-wrap items-center gap-1">
+        <Badge variant={m.status === 'fact' ? 'secondary' : 'outline'}>
+          {untrusted ? MEMORY_TEXT.untrusted : m.status === 'fact' ? MEMORY_TEXT.confirmed : MEMORY_TEXT.suggested}
+        </Badge>
+        {m.needsReview ? <Badge variant="outline">{MEMORY_TEXT.review}</Badge> : null}
+        {m.suppressed ? <Badge variant="outline">{MEMORY_TEXT.muted}</Badge> : null}
+        <span data-slot="memory-row-actions" className="ml-auto flex flex-wrap items-center justify-end gap-1">
+          {draft === null ? (
+            <>
+              {confirmPath ? <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, confirmPath)} /> : null}
+              {!untrusted ? <Button size="sm" variant="secondary" onClick={() => setDraft(m.text)}>{MEMORY_TEXT.edit}</Button> : null}
+              <MemoryButton variant="secondary" what={m.suppressed ? MEMORY_TEXT.unmute : MEMORY_TEXT.mute} busyLabel={MEMORY_BUSY.mute}
+                run={() => act(MEMORY_TEXT.mute, ctl(m.id, 'suppress'), { on: !m.suppressed })} />
+              {asking ? (
+                <span role="alertdialog" aria-label={MEMORY_TEXT.forgetAsk} className="flex flex-wrap items-center gap-1">
+                  <span>{MEMORY_TEXT.forgetAsk}</span>
+                  <ActionButton size="sm" variant="destructive" action={forget} busyLabel={MEMORY_BUSY.forget} onClick={() => setAsking(false)}>{MEMORY_TEXT.forget}</ActionButton>
+                  <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>{MEMORY_TEXT.cancel}</Button>
+                </span>
+              ) : <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>{MEMORY_TEXT.forget}</Button>}
+            </>
+          ) : (
+            <>
+              <ActionButton size="sm" disabled={draft.trim() === ''} action={save} busyLabel={MEMORY_BUSY.save}>{MEMORY_TEXT.save}</ActionButton>
+              <Button size="sm" variant="secondary" onClick={() => setDraft(null)}>{MEMORY_TEXT.cancel}</Button>
+            </>
+          )}
+        </span>
+      </div>
       <ActionResult action={forget} />
       <ActionResult action={save} />
     </li>
@@ -131,10 +136,10 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
         <div className="mt-2 flex flex-col gap-1 text-xs" data-testid="memory-all">
           <div className="flex items-center gap-2">
             <Input aria-label={MEMORY_TEXT.add} placeholder={MEMORY_TEXT.placeholder} value={text} maxLength={300}
-              onChange={(e) => setText(e.target.value)} className="min-w-48 flex-1" />
+              onChange={(e) => setText(e.target.value)} className="min-w-0 flex-1" />
             <MemoryButton what={MEMORY_TEXT.add} busyLabel={MEMORY_BUSY.add} run={add} disabled={text.trim() === ''} />
           </div>
-          <div role="group" className="flex gap-1">
+          <div role="group" className="flex flex-wrap gap-1">
             {(Object.keys(MEMORY_TEXT.kinds) as MemoryKindFilter[]).map((k) => (
               <Button key={k} size="sm" variant={k === kind ? 'default' : 'secondary'} aria-pressed={k === kind} onClick={() => setKind(k)}>{MEMORY_TEXT.kinds[k]}</Button>
             ))}
@@ -156,7 +161,7 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
             <ul className="flex flex-col gap-1">
               {incognitoNodes.map((id) => (
                 <li key={id} data-incognito={id} className="flex items-center gap-2">
-                  <span className="flex-1">{titles === null ? MEMORY_TEXT.loading : titles.get(id) ?? MEMORY_TEXT.incognitoGone}</span>
+                  <span className="min-w-0 flex-1 break-words">{titles === null ? MEMORY_TEXT.loading : titles.get(id) ?? MEMORY_TEXT.incognitoGone}</span>
                   <Button size="sm" variant="secondary" onClick={() => leave(id)}>{MEMORY_TEXT.leave}</Button>
                 </li>
               ))}
