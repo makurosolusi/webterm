@@ -9,6 +9,7 @@ import { approvalLevelOf, type ApprovalLevel } from '../shared/settings.approval
 import { approvalLevelFor } from '../shared/settings.projectApprovalLevels'
 import { registerCommands, type Command } from './commandRegistry'
 import { reloadSettings, settingsSaves, settingsUrl } from './useSettings'
+import { saveFetchError, saveTimeoutSignal } from './settingsSave.timeout'
 
 /** Menu, select and cycle order: least to most autonomous (Ask → Auto → Danger). */
 export const MODE_ORDER: readonly ApprovalLevel[] = ['always', 'risky', 'never']
@@ -54,7 +55,8 @@ async function putLevel(t: ApprovalTarget, level: ApprovalLevel | null, confirmD
   const res = await fetch(settingsUrl(), {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...patch, ...(confirmDanger ? { confirmDanger: true } : {}) }),
-  })
+    signal: saveTimeoutSignal(),
+  }).catch((err: unknown) => { throw saveFetchError(err) })
   if (res.ok) return { ok: true }
   const body = (await res.json().catch(() => null)) as { error?: unknown } | null
   if (res.status === 400 && body?.error === 'confirm_required') return { ok: false, confirm: true }
