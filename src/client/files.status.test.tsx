@@ -78,16 +78,22 @@ describe('viewOpts', () => {
     { name: 'b.txt', dir: false, ignored: false },
   ]
   const toolbarBtn = (c: HTMLElement, label: string) => c.querySelector(`[aria-label="${label}"]`) as HTMLElement
+  /** Open the title bar's "…" overflow menu and pick `label`. */
+  const pickMore = async (c: HTMLElement, label: string) => {
+    fireEvent.click(toolbarBtn(c, 'More Actions…'))
+    fireEvent.click(await screen.findByText(label))
+  }
 
   it('default menampilkan dotfile; toggle menyembunyikan dan mempersist ke node', async () => {
     fs.list.mockResolvedValue(dir)
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(names(container)).toEqual(['src', '.env', 'a.txt', 'b.txt']))
-    fireEvent.click(toolbarBtn(container, 'Hide hidden files'))
+    await pickMore(container, 'Show Hidden Files')
     await waitFor(() => expect(names(container)).toEqual(['src', 'a.txt', 'b.txt']))
     expect(rf.getNode('f1')?.data.viewOpts).toEqual({ hidden: true, sortKey: 'name', sortDir: 'asc' })
-    expect(toolbarBtn(container, 'Hide hidden files').getAttribute('aria-pressed')).toBe('true')
-    expect(container.querySelector('.files-foot')?.textContent).toBe('3 of 4')
+    fireEvent.click(toolbarBtn(container, 'More Actions…'))
+    expect((await screen.findByRole('menuitemcheckbox', { name: /Show Hidden Files/ })).getAttribute('aria-checked')).toBe('false')
+    expect(container.querySelector('.files-foot')?.textContent).toBe('3 items')
   })
 
   it('viewOpts tersimpan dipakai saat node dipasang', async () => {
@@ -109,8 +115,7 @@ describe('viewOpts', () => {
     const { container } = render(tree('/proj'))
     await waitFor(() => expect(names(container)).toHaveLength(4))
     expect(fs.listV2).not.toHaveBeenCalled()
-    fireEvent.click(toolbarBtn(container, 'Sort'))
-    fireEvent.click(await screen.findByText('Sort by Size'))
+    await pickMore(container, 'Sort by Size')
     await waitFor(() => expect(names(container)).toEqual(['src', 'b.txt', 'a.txt']))
     expect(fs.listV2).toHaveBeenCalledWith('/proj')
     expect(rf.getNode('f1')?.data.viewOpts).toMatchObject({ sortKey: 'size', sortDir: 'asc' })

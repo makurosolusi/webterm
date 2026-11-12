@@ -213,10 +213,10 @@ describe('menu and toolbar', () => {
     expect(labels(treeSlot.menu?.(mkCtx()))).not.toContain(TREE_TEXT.collapseAll)
 
     const view = { hidden: false, sortKey: 'name', sortDir: 'asc' } as const
-    const { rerender } = render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} />)
+    const { rerender } = render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} onNew={() => {}} onRefresh={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: TREE_TEXT.collapseAll }))
     expect(ctx.collapseAll).toHaveBeenCalledTimes(2)
-    rerender(<FilesToolbar view={view} onChange={() => {}} ctx={mkCtx()} />)
+    rerender(<FilesToolbar view={view} onChange={() => {}} ctx={mkCtx()} onNew={() => {}} onRefresh={() => {}} />)
     expect((screen.getByRole('button', { name: TREE_TEXT.collapseAll }) as HTMLButtonElement).disabled).toBe(true)
   })
 

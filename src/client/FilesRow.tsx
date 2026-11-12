@@ -3,7 +3,7 @@
 import { memo, type CSSProperties } from 'react'
 import { TreeItem } from '@/vscode/register'
 import type { FileMeta } from '../shared/fsContract'
-import { fileIconClass, folderIconClass } from './fileIcon'
+import { fileIconClass, fileIconTone, folderIconClass } from './fileIcon'
 import type { Decoration, FilesSlot, FilesSlotCtx } from './filesSlots'
 import { leafName } from './filesTree'
 
@@ -25,10 +25,17 @@ export interface FilesRowProps {
   decoClass?: string
 }
 
+/** Row icon classes: codicon glyph + `files-icon` + optional colour tone. */
+export function iconClass(dir: boolean, open: boolean, leaf: string): string {
+  if (dir) return `${folderIconClass(open)} files-icon`
+  const tone = fileIconTone(leaf)
+  return `${fileIconClass(leaf)} files-icon${tone ? ` files-icon--${tone}` : ''}`
+}
+
 export const FilesRow = memo(function FilesRow(p: FilesRowProps) {
   const { entry: e } = p
   const leaf = leafName(e.name)
-  const cls = ['files-row', p.selected && 'files-row--sel', p.cursor && 'files-row--cursor', e.ignored && 'files-row--ignored', p.decoClass]
+  const cls = ['files-row files-row--compact', p.selected && 'files-row--sel', p.cursor && 'files-row--cursor', e.ignored && 'files-row--ignored', p.decoClass]
   return (
     <TreeItem
       ref={(el) => { if (el) { el.id = p.domId; if (e.dir) el.setAttribute('aria-expanded', String(p.open)); else el.removeAttribute('aria-expanded') } }}
@@ -36,7 +43,7 @@ export const FilesRow = memo(function FilesRow(p: FilesRowProps) {
     >
       <span data-index={p.index} className={cls.filter(Boolean).join(' ')} style={{ '--files-depth': p.depth } as CSSProperties}>
         <span className={`files-chevron${e.dir ? ` codicon codicon-chevron-${p.open ? 'down' : 'right'}` : ''}`} aria-hidden="true" />
-        <span className={`${e.dir ? folderIconClass(p.open) : fileIconClass(leaf)} files-icon`} aria-hidden="true" />
+        <span className={iconClass(e.dir, p.open, leaf)} aria-hidden="true" />
         <span className="files-name" title={e.name}>{leaf}</span>
         {p.badge && <span className="files-badge" title={p.decoTitle}>{p.badge}</span>}
       </span>

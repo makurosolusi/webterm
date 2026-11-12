@@ -13,7 +13,7 @@ import type { FileMeta } from '../shared/fsContract'
 import type { Comment, ViewOpts } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
-import { breadcrumbs, childPath } from './fileBrowse'
+import { breadcrumbs, childPath, folderTitle } from './fileBrowse'
 import FilesList from './FilesList'
 import FilesMenu from './FilesMenu'
 import FilesToolbar from './FilesToolbar'
@@ -39,6 +39,11 @@ const COLLAPSED_H = 40
 const CRUMBS_MAX_VISIBLE = 4
 /** Notice id of the node's own messages (reveal/copy/create/open); one at a time, cleared on cd. */
 const NODE_NOTICE = 'node'
+
+/** Footer count: "10 items", or "3 of 10 shown" only while the filter narrows the tree. */
+export function footCount(shown: number, all: number, query: string): string {
+  return query.trim() ? `${shown} of ${all} shown` : `${all} ${all === 1 ? 'item' : 'items'}`
+}
 
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
@@ -117,9 +122,9 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
     listRef, ctx, setMenu, setNotice, navigate, openFile,
   })
 
-  const startCreate = (dir: boolean) => {
+  const startCreate = (dir: boolean, target: FileMeta | null = menu?.entry ?? null) => {
     // Create INSIDE a clicked folder but BESIDE a clicked file; the folder opens so the input shows under it.
-    const at = act.createAt(menu?.entry ?? null)
+    const at = act.createAt(target)
     setMenu(null)
     if (at) tree.setOpen(at, true)
     input.start({ kind: dir ? 'folder' : 'file', base: at ? childPath(cwd, at) : cwd, ...(at ? { at } : {}) })
@@ -142,7 +147,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         style={{ '--node-swatch': swatch } as CSSProperties}
       >
         <NodeChrome
-          title={d.title ?? ''} name={d.name} icon="folder" description={cwd}
+          title={d.title || folderTitle(cwd)} name={d.name} icon="folder" titleHint={cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
@@ -167,7 +172,11 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
                 onClick: () => navigate(c.path, cwd),
               }))}
             />
-            <FilesToolbar view={view} ctx={ctx} onChange={(v) => rf.updateNodeData(id, { viewOpts: v })} />
+            <FilesToolbar
+              view={view} ctx={ctx} onChange={(v) => rf.updateNodeData(id, { viewOpts: v })} onRefresh={refresh}
+              // Title-bar New File/Folder targets the cursor row (VS Code: the focused item), else the root.
+              onNew={(dir) => startCreate(dir, shown[cursor]?.entry ?? null)}
+            />
           </div>
 
           {filterOpen && (
@@ -192,7 +201,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
 
           {/* Wilayah live: notice (mis. "Sudah ada: x") dibacakan pembaca layar tanpa memindahkan fokus. */}
           <div className="files-foot" role="status" aria-live="polite">
-            <FilesNoticeLine nodeId={id} fallback={`${shown.length} of ${tree.total}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`} />
+            <FilesNoticeLine nodeId={id} fallback={`${footCount(shown.length, tree.rows.length, query)}${ctx.selection.length > 1 ? ` · ${ctx.selection.length} selected` : ''}`} />
             {FILES_SLOTS.map((s) => s.footer && <Fragment key={s.id}>{s.footer(ctx)}</Fragment>)}
           </div>
         </div>

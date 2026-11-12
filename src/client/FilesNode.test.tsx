@@ -33,8 +33,8 @@ describe('FilesNode — tampilan Explorer', () => {
     const icons = [...container.querySelectorAll('.files-row .files-icon')].map((e) => e.className)
     expect(icons).toEqual([
       'codicon codicon-folder files-icon',
-      'codicon codicon-json files-icon',
-      'codicon codicon-markdown files-icon',
+      'codicon codicon-json files-icon files-icon--yellow',
+      'codicon codicon-markdown files-icon files-icon--blue',
     ])
     expect(container.querySelector('.files-row svg')).toBeNull()
     // Double-click renames a row; without `nopan` React Flow also zooms the canvas in on that dblclick.
