@@ -1,6 +1,5 @@
 // Health tab transport: project health summary, findings pages, scans and dismiss/reopen.
 import type { FindingStatus, FindingView, HealthScanView, HealthSummary } from '../../../shared/centralHealth'
-import { fetchWorkspaces } from '../../api'
 import { request } from '../../inboxTransport'
 import { InboxApiError } from '../../inboxTypes'
 import { CENTRAL_API, centralControlApi } from '../centralControlApi'
@@ -44,17 +43,8 @@ const finding = (body: Partial<FindingView> | undefined, what: string): FindingV
 export const healthApi: HealthClient = {
   async listProjects(signal) {
     // The folder opens a finding's file; without it the row still works, only Open file is off.
-    const [{ projects }, workspaces] = await Promise.all([
-      centralControlApi.listBoardNodes(0, undefined, signal),
-      fetchWorkspaces().catch((err: unknown) => { console.warn('health: reading workspace folders failed', err); return [] }),
-    ])
-    // ponytail: a ledger project id is not its workspace id and the route does not return that link, so
-    // a unique name match stands in; return `workspaceId` from the board-nodes route if names collide.
-    return projects.map((p) => {
-      const named = workspaces.filter((w) => w.name === p.name)
-      const ws = workspaces.find((w) => w.id === p.id) ?? (named.length === 1 ? named[0] : undefined)
-      return ws?.cwd ? { ...p, root: ws.cwd } : p
-    })
+    const { projects } = await centralControlApi.listBoardNodes(0, undefined, signal)
+    return projects.map(({ id, name, cwd }) => (cwd ? { id, name, root: cwd } : { id, name }))
   },
   async countFindings(projectId, status, signal) {
     // ponytail: counts by reading one capped page; add a count to the summary route if pages get heavy.
