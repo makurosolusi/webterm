@@ -207,7 +207,9 @@ describe('EditorNode biner & non-UTF-8', () => {
     expect(fake.state.loadMonaco).not.toHaveBeenCalled()
     expect(screen.queryByText('Save')).toBeNull()
     fireEvent.click(screen.getByText('Copy Path'))
+    expect(screen.getByText('Copy Path').getAttribute('aria-busy')).toBe('true')
     expect(clip.writeClipboard).toHaveBeenCalledWith('/x/app.json')
+    expect(await screen.findByText('Copied')).toBeTruthy()
   })
 
   it('non-utf8: editor read-only + banner, tanpa Save', async () => {

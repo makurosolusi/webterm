@@ -3,6 +3,7 @@
 // Nothing is stored until Save. Escape cancels. The pattern follows VS Code's settings list editor.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { normalizeClaudeCommand } from '../../shared/claudeLaunch/claudeLaunch.normalize'
 import { CLAUDE_PROFILE_LIMITS, type ClaudeLaunchProfile } from '../../shared/claudeLaunch/claudeLaunch.profiles'
@@ -124,7 +125,10 @@ export function ClaudeProfileEditor({ profile, taken, onSave, onCancel }: {
         </div>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={!valid}>{EDITOR_TEXT.save}</Button>
+        {/* Disabled Save says what is missing on hover/focus; the field errors stay quiet until touched. */}
+        <IconTooltip label={EDITOR_TEXT.save} disabled={!valid} disabledReason={errors.name ?? errors.command}>
+          <Button type="submit" size="sm" disabled={!valid}>{EDITOR_TEXT.save}</Button>
+        </IconTooltip>
         <Button type="button" size="sm" variant="ghost" onClick={onCancel}>{EDITOR_TEXT.cancel}</Button>
       </div>
     </form>

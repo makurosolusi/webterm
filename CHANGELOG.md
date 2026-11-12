@@ -283,6 +283,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Buttons that save, test, check, retry, delete, install or connect now show that they are working, then the result or the reason they failed with Retry, across Settings, the setup wizard and the rest of the app; a disabled button says why. The setup wizard no longer shows desktop notifications as on while the browser blocks them: it reads the browser's real permission, like Settings › Notifications, and says how to unblock it. Resetting the Claude launch profile list when the Claude provider still runs one of them now says which profile and why, instead of a bare error code.
 - On Linux and Windows, shortcuts that are written with Ctrl (such as Ctrl+Shift+` for New Terminal) now work. Before, they never fired there, Monaco editors read them as the Windows key, and a conflict between Ctrl+… and the same key recorded on the keyboard went unnoticed.
 - The View › Output menu now shows your current Output shortcut instead of always showing ⇧⌘U / Ctrl+Shift+U. The Clean view hint reads its key from the same list.
 - Canvas background: a gradient preset showed as selected after its angle was changed.

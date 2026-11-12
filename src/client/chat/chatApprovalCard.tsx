@@ -5,6 +5,7 @@
 // typed APPROVE phrase. The message part's state (live `approval.*` frames) settles the card.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { InboxApiError, inboxErrorMessage } from '../inboxApi'
@@ -54,6 +55,8 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
 
   // Refetch on mount and whenever a live frame moves the part: the server list is the truth.
   useEffect(() => { void refreshNeedsYou() }, [props.partState])
+  // Retry of a list that never loaded: busy while it refetches; the result is the card itself (or the same error line).
+  const reload = useAction(refreshNeedsYou, { label: 'Load approval', toast: 'never' })
 
   const act = async (action: Action): Promise<void> => {
     setBusy(true)
@@ -71,6 +74,9 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
       setBusy(false)
     }
   }
+  // The card carries the feedback of every answer: aria-busy + "Sending…" while it runs, then the settled
+  // badge, or the error line with Retry. `send` only starts it.
+  const send = (action: Action): void => { void act(action) }
 
   const settled = outcome ?? settledFromPart(props.partState) ?? (itemsLoaded && !item ? 'Expired' : null)
   if (settled !== null) {
@@ -86,7 +92,7 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
       <div className="needs-card" data-state={listError ? 'error' : 'loading'}>
         {listError ? (
           <span role="alert" className="needs-card__error">
-            {listError} <Button size="sm" variant="secondary" onClick={() => void refreshNeedsYou()}>Retry</Button>
+            {listError} <ActionButton size="sm" variant="secondary" action={reload} busyLabel="Retrying…">Retry</ActionButton>
           </span>
         ) : <span role="status">Loading approval…</span>}
       </div>
@@ -110,30 +116,30 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
         </label>
       )}
       <div className="needs-card__actions">
-        {can('approve') && <Button size="sm" disabled={busy || !confirmed} onClick={() => void act({ type: 'approve' })}>{approveLabel(item)}</Button>}
-        {can('deny') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act({ type: 'deny' })}>Deny</Button>}
+        {can('approve') && <Button size="sm" disabled={busy || !confirmed} onClick={() => send({ type: 'approve' })}>{approveLabel(item)}</Button>}
+        {can('deny') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => send({ type: 'deny' })}>Deny</Button>}
         {can('always') && (
           <IconTooltip label="Saves a permanent rule (only from this window, never from Telegram)" disabled={busy || !confirmed} disabledReason="confirm first">
-            <Button size="sm" variant="secondary" disabled={busy || !confirmed} onClick={() => void act({ type: 'always' })}>Always</Button>
+            <Button size="sm" variant="secondary" disabled={busy || !confirmed} onClick={() => send({ type: 'always' })}>Always</Button>
           </IconTooltip>
         )}
         {can('edit') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ mode: 'edit', text: JSON.stringify(item.args ?? null, null, 2) })}>Edit</Button>}
         {can('reply') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDraft({ mode: 'reply', text: '' })}>Reply</Button>}
-        {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} for 1 hour`} onClick={() => void act({ type: 'snooze', until: snoozeUntil('1h', now()) })}>Snooze 1h</Button>}
-        {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} until tomorrow`} onClick={() => void act({ type: 'snooze', until: snoozeUntil('tomorrow', now()) })}>Tomorrow</Button>}
-        {can('ignore') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act({ type: 'ignore' })}>{item.kind === 'notify' ? 'Dismiss' : 'Ignore'}</Button>}
+        {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} for 1 hour`} onClick={() => send({ type: 'snooze', until: snoozeUntil('1h', now()) })}>Snooze 1h</Button>}
+        {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} until tomorrow`} onClick={() => send({ type: 'snooze', until: snoozeUntil('tomorrow', now()) })}>Tomorrow</Button>}
+        {can('ignore') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => send({ type: 'ignore' })}>{item.kind === 'notify' ? 'Dismiss' : 'Ignore'}</Button>}
       </div>
       {busy && <span role="status" className="needs-card__status">Sending…</span>}
       {error && (
         <span role="alert" className="needs-card__error">
-          {error.message} {error.action && <Button size="sm" variant="secondary" disabled={busy} onClick={() => error.action && void act(error.action)}>Retry</Button>}
+          {error.message} {error.action && <Button size="sm" variant="secondary" disabled={busy} onClick={() => { if (error.action) send(error.action) }}>Retry</Button>}
         </span>
       )}
       {draft && <ItemDraft key={draft.mode} draft={draft} busy={busy || (draft.mode === 'edit' && !confirmed)}
         onText={(text) => setDraft({ ...draft, text })} onCancel={() => setDraft(null)}
         onSubmit={() => {
-          if (draft.mode === 'reply') return void act({ type: 'reply', text: draft.text })
-          try { void act({ type: 'edit', args: JSON.parse(draft.text) as unknown }) } catch { setError({ message: 'The edited arguments are not valid JSON.', action: null }) }
+          if (draft.mode === 'reply') return send({ type: 'reply', text: draft.text })
+          try { send({ type: 'edit', args: JSON.parse(draft.text) as unknown }) } catch { setError({ message: 'The edited arguments are not valid JSON.', action: null }) }
         }} />}
     </div>
   )

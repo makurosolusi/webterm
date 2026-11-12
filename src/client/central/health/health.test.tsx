@@ -177,9 +177,13 @@ describe('Health filters, dismiss and pages', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'False positive' }))
     fireEvent.change(within(form).getByRole('textbox', { name: HL.dismissNote }), { target: { value: 'generated file' } })
     fireEvent.click(confirm)
+    expect(confirm.getAttribute('aria-busy')).toBe('true')
+    expect(confirm.textContent).toBe('Dismissing…')
     await waitFor(() => expect(client.dismiss).toHaveBeenCalledWith('f1', 'False positive: generated file'))
     expect(await screen.findByText('Dismissed: False positive: generated file')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: HL.reopenLabel('File too large') }))
+    const reopen = screen.getByRole('button', { name: HL.reopenLabel('File too large') }) as HTMLButtonElement
+    await waitFor(() => expect(reopen.disabled).toBe(false))
+    fireEvent.click(reopen)
     await waitFor(() => expect(client.reopen).toHaveBeenCalledWith('f1'))
   })
 

@@ -105,14 +105,18 @@ export function useTelegramCard(projectId: string) {
     }
   }, [token, refresh])
 
-  const act = useCallback(async (fn: () => Promise<void>, failText: string = TG.errAction) => {
+  /** Runs one card action, then re-reads the state; resolves the failure sentence, or null when it worked. */
+  const act = useCallback(async (fn: () => Promise<void>, failText: string = TG.errAction): Promise<string | null> => {
     setError(null)
+    let failed: string | null = null
     try {
       await fn()
-    } catch {
-      if (alive.current) setError(failText)
+    } catch (e) {
+      console.warn('telegram card action failed', e instanceof Error ? e.message : 'error')
+      failed = failText
     }
     await refresh()
+    return failed
   }, [refresh])
 
   // Nama bot: detail server ("Tersambung sebagai @x"), lalu hasil connect, lalu tautan pairing.
@@ -121,12 +125,16 @@ export function useTelegramCard(projectId: string) {
 
   return {
     token, setToken, connected, status, tokenStored, connecting, error, pending, bindings, connect, pair, awayMinutes,
-    saveAwayMinutes: (minutes: number) => act(async () => { setAwayMinutes(await putForwarding(minutes)) }),
+    // No button of its own (saved on blur/Enter): its failure goes to the card's alert line.
+    saveAwayMinutes: async (minutes: number) => {
+      const failed = await act(async () => { setAwayMinutes(await putForwarding(minutes)) })
+      if (failed && alive.current) setError(failed)
+    },
     projectName: pair?.projectName ?? null,
     stopBot: () => act(async () => { await postEnabled(false); setBot(null) }),
     restart: () => act(async () => {
       // Token tersimpan tak terbaca -> server memberi needs-step (form token tampil): beri tahu sebabnya.
-      if ((await postEnabled(true)) !== 'on' && alive.current) setError(TG.errRestart)
+      if ((await postEnabled(true)) !== 'on') throw new Error('token_unusable')
     }, TG.errRestart),
     link: (c: PendingChat) => act(() => bindChat({ projectId, chatId: c.chatId, role: roleFor(c.chatId) })),
     ignore: (c: PendingChat) => act(() => ignorePending(c.chatId)),

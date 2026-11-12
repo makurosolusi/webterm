@@ -12,6 +12,7 @@ import { Handle, Position, useReactFlow, useStore, type NodeProps } from '@xyflo
 import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { IconTooltip } from '@/components/ui/icon-button'
+import { ActionResult, errorCause, useAction } from '@/components/ui/action'
 import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.types'
 import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus } from '../shared/workspace'
 import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
@@ -46,6 +47,20 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+/** Undo one hunk after a confirm: busy while it runs, then the result (or the failure with Retry). */
+function UndoHunk({ ask, undo }: { ask: () => boolean; undo: () => Promise<void> }) {
+  const act = useAction(undo, { label: 'Undo change', success: () => 'Undone', failure: errorCause })
+  const click = (): void => { if (ask()) void act.run() }
+  return (
+    <>
+      <IconTooltip label="Undo this change in the working tree">
+        <VscodeButton secondary disabled={act.busy} aria-busy={act.busy ? 'true' : 'false'} onClick={click}>{act.busy ? 'Undoing…' : 'Undo'}</VscodeButton>
+      </IconTooltip>
+      <ActionResult action={act} />
+    </>
+  )
+}
+
 function DiffNode({ id, data, selected }: NodeProps) {
   const rf = useReactFlow()
   const d = data as { cwd?: string; color?: string; name?: string; title?: string }
@@ -75,18 +90,18 @@ function DiffNode({ id, data, selected }: NodeProps) {
     try { setFile(await fetchFileDiff(root, path)) } catch (e) { setFile(null); setMsg(errText(e)) }
   }, [root])
 
-  const loadList = useCallback(async (offset = 0) => {
+  /** One page of the changed files; throws on failure. */
+  const fetchPage = useCallback(async (offset: number) => {
     if (!root) return
-    try {
-      const page = await fetchDiffList(root, offset)
-      setFiles((prev) => (offset === 0 ? page.files : [...prev, ...page.files]))
-      setNextOffset(page.nextOffset)
-      setTotal(page.total)
-      setMsg('')
-    } catch (e) {
-      setMsg(errText(e))
-    }
+    const page = await fetchDiffList(root, offset)
+    setFiles((prev) => (offset === 0 ? page.files : [...prev, ...page.files]))
+    setNextOffset(page.nextOffset)
+    setTotal(page.total)
+    setMsg('')
   }, [root])
+  const loadList = useCallback(async (offset = 0) => {
+    try { await fetchPage(offset) } catch (e) { setMsg(errText(e)) }
+  }, [fetchPage])
 
   const activeRef = useRef(active)
   activeRef.current = active
@@ -113,25 +128,33 @@ function DiffNode({ id, data, selected }: NodeProps) {
   useWordWrap(editor.wrapTarget, wrap, toggleWrap)
 
   const open = (path: string) => { setActive(path); void loadFile(path) }
-  const onUndo = async (hunkId: string, header: string) => {
-    if (!file || !window.confirm(`Undo this change in ${file.path}?\n${header}\nThe working-tree lines go back to HEAD.`)) return
-    try { await undoHunk(root, file.path, hunkId); refresh() } catch (e) { setMsg(errText(e)) }
+  const askUndo = (header: string): boolean => !!file && window.confirm(`Undo this change in ${file.path}?\n${header}\nThe working-tree lines go back to HEAD.`)
+  const onUndo = async (hunkId: string) => {
+    if (!file) return
+    await undoHunk(root, file.path, hunkId)
+    refresh()
   }
+  const loadMore = useAction(() => fetchPage(nextOffset ?? 0), { label: 'Load more changed files', success: () => 'Loaded', failure: errorCause })
   const addNote = () => {
     if (!file || !draft.trim()) return
     if (notes.length >= DIFF_NOTES_MAX) { setMsg(`At most ${DIFF_NOTES_MAX} notes; send some first.`); return }
     setNotes((ns) => [...ns, { id: randomId(), path: file.path, line: editor.line, body: draft.trim().slice(0, DIFF_NOTE_BODY_MAX) }])
     setDraft('')
   }
-  const onSend = async () => {
-    const refusal = sendRefusal(agent?.id ?? null, notes.length)
-    if (refusal || !agent) { setMsg(refusal ?? ''); return }
+  const moreClick = (): void => { void loadMore.run() }
+  // Through the server outbox: queued while the agent is busy, typed once its turn ends.
+  const send = useAction(async () => {
     const batch = notes
-    // Through the server outbox: queued while the agent is busy, typed once its turn ends.
-    try { await enqueueNotes(agent.id, batch) } catch (e) { setMsg(errText(e)); return }
+    await enqueueNotes(agent!.id, batch)
     const sent = new Set(batch.map((n) => n.id))
     setNotes((ns) => ns.filter((n) => !sent.has(n.id)))
-    setMsg(`Queued ${batch.length} note${batch.length === 1 ? '' : 's'} for the agent; it gets them as soon as its prompt is free.`)
+    return batch.length
+  }, { label: 'Send to agent', success: (n) => `Queued ${n} note${n === 1 ? '' : 's'} for the agent; it gets them as soon as its prompt is free.`, failure: errorCause })
+  // A refusal (no agent wired, no notes) is known before sending: it shows as the node message, nothing runs.
+  const onSend = (): void => {
+    const refusal = sendRefusal(agent?.id ?? null, notes.length)
+    if (refusal || !agent) { setMsg(refusal ?? ''); return }
+    void send.run()
   }
 
   const body = () => {
@@ -160,8 +183,8 @@ function DiffNode({ id, data, selected }: NodeProps) {
           <ToolbarContainer className="nodrag diff-node__actions">
             {sides && <WordWrapButton on={wrap} onToggle={toggleWrap} />}
             <IconTooltip label={sendTip}>
-              <VscodeButton secondary onClick={() => void onSend()}>
-                Send to agent ({notes.length})
+              <VscodeButton secondary disabled={send.busy} aria-busy={send.busy ? 'true' : 'false'} onClick={onSend}>
+                {send.busy ? 'Sending…' : `Send to agent (${notes.length})`}
               </VscodeButton>
             </IconTooltip>
             <IconTooltip label="Reload the changed files and the open diff">
@@ -173,6 +196,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
           </ToolbarContainer>
         </div>
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
+        {send.result && <div className="diff-node__msg nodrag"><ActionResult action={send} /></div>}
         {root && <Suspense fallback={null}><ScmPanel root={root} agentId={agent?.id ?? null} onChanged={refresh} /></Suspense>}
         <div className="node-body diff-node__body nodrag nowheel nokey">
           {!root ? (
@@ -192,7 +216,8 @@ function DiffNode({ id, data, selected }: NodeProps) {
                     </IconTooltip>
                   </li>
                 ))}
-                {nextOffset !== null && <li><VscodeButton secondary onClick={() => void loadList(nextOffset)}>Load more</VscodeButton></li>}
+                {nextOffset !== null && <li><VscodeButton secondary disabled={loadMore.busy} aria-busy={loadMore.busy ? 'true' : 'false'} onClick={moreClick}>{loadMore.busy ? 'Loading…' : 'Load more'}</VscodeButton></li>}
+                {loadMore.result && <li><ActionResult action={loadMore} /></li>}
               </ul>
               <div className="diff-node__main">
                 {body()}
@@ -206,11 +231,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
                         <IconTooltip label="Keep this change (hide it from the review)">
                           <VscodeButton secondary onClick={() => setKept((s) => new Set(s).add(h.id))}>Keep</VscodeButton>
                         </IconTooltip>
-                        {file?.undoable && (
-                          <IconTooltip label="Undo this change in the working tree">
-                            <VscodeButton secondary onClick={() => void onUndo(h.id, h.header)}>Undo</VscodeButton>
-                          </IconTooltip>
-                        )}
+                        {file?.undoable && <UndoHunk ask={() => askUndo(h.header)} undo={() => onUndo(h.id)} />}
                       </li>
                     ))}
                   </ul>

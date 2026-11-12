@@ -35,6 +35,7 @@ describe('Settings Download Chromium button', () => {
     renderSection(true)
     expect(screen.getByText(DOWNLOAD_TEXT.checking)).toBeTruthy()
     fireEvent.click(await screen.findByRole('button', { name: DOWNLOAD_TEXT.start }))
+    expect(screen.getByRole('button', { name: DOWNLOAD_TEXT.starting }).getAttribute('aria-busy')).toBe('true')
     expect(await screen.findByRole('progressbar', { name: DOWNLOAD_TEXT.progressLabel })).toBeTruthy()
     expect(screen.getByText(DOWNLOAD_TEXT.progress(0))).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: DOWNLOAD_TEXT.cancel }))

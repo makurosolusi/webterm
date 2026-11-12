@@ -31,6 +31,8 @@ export function EffortPicker({ levels, effort, thinking, onChange, disabled, com
   const shownEffort = pending?.value.effort ?? effort
   const shownThinking = pending?.value.thinking ?? thinking
   const hasLevels = !!levels?.length
+  // Pending spinner (role=status) and ChangeError with Retry carry the feedback; this only starts the change.
+  const setThinking = (c: boolean): void => { void run({ thinking: c }) }
   const summary = [hasLevels ? `Effort: ${shownEffort ? effortLabel(shownEffort) : 'Default'}` : undefined, `Extended thinking: ${shownThinking ? 'on' : 'off'}`]
     .filter(Boolean).join(' · ')
   const label = [hasLevels && shownEffort ? effortLabel(shownEffort) : undefined, shownThinking ? 'Thinking' : undefined].filter(Boolean).join(' · ') || 'Effort'
@@ -65,7 +67,7 @@ export function EffortPicker({ levels, effort, thinking, onChange, disabled, com
             )}
             {levels?.length === 0 && <DropdownMenu.Label className="act-menu__note">This model has no effort levels</DropdownMenu.Label>}
             <DropdownMenu.CheckboxItem className="act-menu__item act-menu__item--radio" checked={shownThinking}
-              onCheckedChange={(c) => void run({ thinking: c })}>
+              onCheckedChange={setThinking}>
               <DropdownMenu.ItemIndicator className="act-menu__check"><span className="codicon codicon-check" aria-hidden="true" /></DropdownMenu.ItemIndicator>
               Extended thinking
             </DropdownMenu.CheckboxItem>

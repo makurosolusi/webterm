@@ -7,6 +7,7 @@
 // only in component state: never in a log or storage, gone when the card closes.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Input } from '@/components/ui/input'
 import type { TokenStatus } from './tokenAccess.api.client'
 import { enableToken, fetchTokenStatus, rotateToken, tokenErrorText } from './tokenAccess.api.client'
@@ -21,7 +22,6 @@ function statusText(s: TokenStatus): string {
 export function TokenAccessCard(): React.JSX.Element {
   const [status, setStatus] = useState<TokenStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const [value, setValue] = useState<string | null>(null)
   const [copied, setCopied] = useState<boolean | null>(null)
 
@@ -30,20 +30,20 @@ export function TokenAccessCard(): React.JSX.Element {
   }
   useEffect(load, [])
 
-  const run = async (mint: () => Promise<string>, question: string): Promise<void> => {
-    if (!window.confirm(question)) return
-    setBusy(true)
-    setError(null)
+  /** Asks, then mints; resolves false when the user declined. The value goes to state only, never to the result line. */
+  const minted = (mint: () => Promise<string>, question: string) => async (): Promise<boolean> => {
+    if (!window.confirm(question)) return false
     try {
       setValue(await mint())
       setCopied(null)
-    } catch (e) {
-      setError(tokenErrorText(e))
+      return true
     } finally {
-      setBusy(false)
       load()
     }
   }
+  const resultOpts = { success: (ok: boolean) => (ok ? TOKEN_TEXT.shownBelow : TOKEN_TEXT.unchanged), failure: tokenErrorText }
+  const enable = useAction(minted(enableToken, TOKEN_TEXT.confirmEnable), { label: TOKEN_TEXT.enable, ...resultOpts })
+  const rotate = useAction(minted(rotateToken, TOKEN_TEXT.confirmRotate), { label: TOKEN_TEXT.rotate, ...resultOpts })
 
   const copy = (): void => {
     // No Clipboard API outside a secure context (http on another address): show the manual-copy hint.
@@ -62,11 +62,13 @@ export function TokenAccessCard(): React.JSX.Element {
       {status && !status.enforced && !status.canEnable ? <p className="text-xs opacity-70">{TOKEN_TEXT.offRemote}</p> : null}
       {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
       {value === null && status?.canEnable ? (
-        <Button size="sm" disabled={busy} onClick={() => void run(enableToken, TOKEN_TEXT.confirmEnable)}>{TOKEN_TEXT.enable}</Button>
+        <ActionButton size="sm" disabled={rotate.busy} action={enable} busyLabel={TOKEN_TEXT.enabling}>{TOKEN_TEXT.enable}</ActionButton>
       ) : null}
       {value === null && status?.enforced && status.source === 'file' ? (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(rotateToken, TOKEN_TEXT.confirmRotate)}>{TOKEN_TEXT.rotate}</Button>
+        <ActionButton variant="outline" size="sm" disabled={enable.busy} action={rotate} busyLabel={TOKEN_TEXT.rotating}>{TOKEN_TEXT.rotate}</ActionButton>
       ) : null}
+      <ActionResult action={enable} />
+      <ActionResult action={rotate} />
       {value !== null ? (
         <div className="flex flex-col gap-2">
           <p>{TOKEN_TEXT.valueIntro}</p>

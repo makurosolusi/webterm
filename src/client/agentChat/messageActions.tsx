@@ -17,6 +17,8 @@ export function CopyButton({ text, label }: { text: () => string; label: string 
     const t = setTimeout(() => setState('idle'), FEEDBACK_MS)
     return () => clearTimeout(t)
   }, [state])
+  // Copying is instant; the result is the Copied / Copy failed note (role=status) and icon.
+  const copy = (): void => { void writeClipboard(text()).then((ok) => setState(ok ? 'copied' : 'failed')) }
   const note = state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed' : ''
   return (
     <IconButton
@@ -25,7 +27,7 @@ export function CopyButton({ text, label }: { text: () => string; label: string 
       size="icon-xs"
       className="act-copy"
       data-state={state}
-      onClick={() => void writeClipboard(text()).then((ok) => setState(ok ? 'copied' : 'failed'))}
+      onClick={copy}
     >
       <span className={`codicon codicon-${state === 'copied' ? 'check' : state === 'failed' ? 'error' : 'copy'}`} aria-hidden="true" />
       {note && <span className="act-copy__note" role="status">{note}</span>}

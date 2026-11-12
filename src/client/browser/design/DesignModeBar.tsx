@@ -2,7 +2,7 @@
 // draws the highlight and keeps the picks), type a comment, "Send to agent". Imitates Cursor's
 // browser "select element" and v0/Lovable visual edit; the server half is src/server/browser/design.
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { BROWSER_REST_PREFIX } from '../../../shared/browser.contract'
@@ -40,20 +40,14 @@ const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-
 /** Shown only while Design Mode is on (`useDesignMode`): hint, Exit, comment box and "Send to agent". */
 export default function DesignModeBar({ nodeId, design }: { nodeId: string; design: DesignMode }) {
   const [comment, setComment] = useState('')
-  const [sending, setSending] = useState(false)
-  const [msg, setMsg] = useState<{ text: string; error: boolean } | null>(null)
-  const busy = sending || design.busy
-
-  const send = async () => {
-    setSending(true); setMsg(null)
-    try {
-      const r = await designCall<{ sentTo: string[] }>(nodeId, '/send', { comment })
-      setMsg({ text: DESIGN_TEXT.sent(r.sentTo.length), error: false })
-      setComment('')
-    } catch (e) {
-      setMsg({ text: e instanceof Error ? e.message : DESIGN_TEXT.failed, error: true })
-    } finally { setSending(false) }
-  }
+  const send = useAction(async () => {
+    const r = await designCall<{ sentTo: string[] }>(nodeId, '/send', { comment })
+    setComment('')
+    return r
+  }, { label: DESIGN_TEXT.send, success: (r) => DESIGN_TEXT.sent(r.sentTo.length), failure: (e) => (e instanceof Error ? errorCause(e) : DESIGN_TEXT.failed) })
+  const busy = send.busy || design.busy
+  // Exit: disabled with its reason + aria-busy while the toggle runs; a refusal keeps the bar open with `design.error`.
+  const exit = (): void => { void design.toggle() }
 
   return (
     <div className="nodrag flex flex-col gap-1 px-1 pb-1">
@@ -61,13 +55,14 @@ export default function DesignModeBar({ nodeId, design }: { nodeId: string; desi
         <span className="codicon codicon-inspect" aria-hidden="true" />
         <span className="text-xs font-semibold">{DESIGN_TEXT.toggleOn}</span>
         <span className="min-w-0 flex-1 truncate text-xs opacity-70">{DESIGN_TEXT.hint}</span>
-        <IconButton size="icon-xs" label={DESIGN_TEXT.exit} tooltip={DESIGN_TEXT.toggleHintOn} disabled={busy} disabledReason={DESIGN_TEXT.busyReason} onClick={() => void design.toggle()}>{icon('close')}</IconButton>
+        <IconButton size="icon-xs" label={DESIGN_TEXT.exit} tooltip={DESIGN_TEXT.toggleHintOn} disabled={busy} disabledReason={DESIGN_TEXT.busyReason} aria-busy={design.busy} onClick={exit}>{icon('close')}</IconButton>
       </div>
       <div className="flex items-start gap-1">
         <Textarea aria-label={DESIGN_TEXT.comment} placeholder={DESIGN_TEXT.placeholder} value={comment} maxLength={COMMENT_MAX} rows={1} onChange={(e) => setComment(e.target.value)} />
-        <Button size="xs" variant="secondary" disabled={busy} onClick={() => void send()}>{sending ? DESIGN_TEXT.sending : DESIGN_TEXT.send}</Button>
+        <ActionButton size="xs" variant="secondary" disabled={design.busy} action={send} busyLabel={DESIGN_TEXT.sending}>{DESIGN_TEXT.send}</ActionButton>
       </div>
-      {msg && <p role={msg.error ? 'alert' : 'status'} className={`m-0 text-xs ${msg.error ? 'text-(--vscode-errorForeground)' : ''}`}>{msg.text}</p>}
+      <ActionResult action={send} />
+      {design.error && <p role="alert" className="m-0 text-xs text-(--vscode-errorForeground)">{design.error}</p>}
     </div>
   )
 }

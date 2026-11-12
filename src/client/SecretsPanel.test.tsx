@@ -84,7 +84,9 @@ describe('Secrets (Settings › Rules & secrets)', () => {
     expect(value.type).toBe('password')
     fireEvent.change(value, { target: { value: VALUE } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(screen.getByText('NPM_TOKEN')).toBeTruthy())
+    expect((await screen.findByText('Saved NPM_TOKEN.')).closest('[data-action-result]')?.getAttribute('data-action-result')).toBe('ok')
     expect(writes[0]).toEqual({ method: 'PUT', url: '/api/secrets/NPM_TOKEN', body: { value: VALUE } })
     expect(value.value).toBe('')
     expect(document.body.textContent).not.toContain(VALUE)
@@ -100,5 +102,6 @@ describe('Secrets (Settings › Rules & secrets)', () => {
     fireEvent.change(screen.getByLabelText('Name (e.g. NPM_TOKEN)'), { target: { value: '9BAD' } })
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: VALUE } })
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/a capital letter first/)).toBeTruthy() // the disabled Save says why
   })
 })

@@ -11,6 +11,7 @@ import { applySettingsPatch, mergeSettingsPatches, type SettingsPatch } from '..
 import { createSettingsHistory, type SettingsChange, type SettingsHistory } from './settingsHistory'
 import { setCustomAgentBaseResolver, type AgentId, type BuiltinAgentId } from '../shared/workspace'
 import { createSaveStates, responseError } from './settingsSave'
+import { profileInUseError, rememberProfileNames } from './claudeLauncher/profileInUse.text'
 
 export const SAVE_COALESCE_MS = 300
 
@@ -86,7 +87,8 @@ async function putSettings(patch: SettingsPatch): Promise<void> {
     body,
     keepalive: fitsKeepalive(body, SETTINGS_KEEPALIVE_MAX_BYTES),
   })
-  if (!res.ok) throw await responseError(res, 'PUT /api/settings')
+  // A refused profile delete (Reset Setting on the profile list) says which profile and why, not the code.
+  if (!res.ok) throw (await profileInUseError(res)) ?? await responseError(res, 'PUT /api/settings')
 }
 
 /** Save state per settings key, for the `Field` showing that key (Saving… / Saved ✓ / error + Retry). */
@@ -234,6 +236,7 @@ export function useSettings(): UseSettings {
   }, [])
 
   const apply = useCallback((patch: SettingsPatch) => {
+    rememberProfileNames(current.claudeLaunchProfiles)
     current = applySettingsPatch(current, patch)
     setSettings(current)
     // Kirim patch, bukan snapshot penuh: server me-merge-nya, jadi dua tab yang menyetel kunci

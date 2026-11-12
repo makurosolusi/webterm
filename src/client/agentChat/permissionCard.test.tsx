@@ -58,6 +58,7 @@ describe('PermissionCard', () => {
     fireEvent.click(btn('Allow once'))
     expect(btn('Allow once').disabled).toBe(true)
     expect(btn('Deny').disabled).toBe(true)
+    expect(btn('Allow once').getAttribute('aria-busy')).toBe('true')
     expect(document.querySelector('.codicon-modifier-spin')).toBeTruthy()
     reject(new Error('HTTP 502'))
     expect((await screen.findByRole('alert')).textContent).toContain('Could not send your answer: HTTP 502')

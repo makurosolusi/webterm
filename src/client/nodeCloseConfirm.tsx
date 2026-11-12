@@ -15,12 +15,13 @@
 // Editors follow VS Code instead: a clean editor closes without asking, and one with unsaved
 // changes (editorDirty.ts) asks Save / Don't Save / Cancel. Focus starts on Save there, the
 // primary and non-destructive answer, so Enter saves; Don't Save never takes focus.
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import type { Node, OnBeforeDelete } from '@xyflow/react'
 import { VscodeDialog } from './components/vscode/vscodeDialog'
 import './nodeCloseConfirm.css'
 import { arrangeDialogButtons } from './components/vscode/vscodeDialogButtons'
 import { Button } from './components/ui/button'
+import { ActionButton, ActionResult, useAction } from './components/ui/action'
 import { isEditorDirty, saveEditor } from './editorDirty'
 
 /** What the dialog needs of a node: its id, kind (`type`) and title. */
@@ -130,17 +131,17 @@ function CloseDialog({ req }: { req: Pending }): React.JSX.Element {
 
 function SaveDialog({ req }: { req: Pending }): React.JSX.Element {
   const saveRef = useRef<HTMLButtonElement>(null)
-  const [saving, setSaving] = useState(false)
   const { title, files, body } = saveCopy(req.nodes)
   const dirty = req.nodes.filter(isDirtyEditor)
   // Close only when every write landed. A failed one keeps the whole close open; the editor shows
-  // its own "Couldn’t save" error, and the files that did save are now clean.
-  const saveAll = async (): Promise<void> => {
-    setSaving(true)
+  // its own "Couldn’t save" error (the dialog is gone by then), and the files that did save are now
+  // clean. The result line here only shows if saving itself threw, which leaves the dialog open.
+  const saveAll = useAction(async () => {
     const ok = (await Promise.all(dirty.map((n) => saveEditor(n.id)))).every(Boolean)
     answerNodeClose(ok)
-  }
-  const save = <Button key="save" ref={saveRef} disabled={saving} onClick={() => { void saveAll() }}>{dirty.length > 1 ? 'Save All' : 'Save'}</Button>
+  }, { label: 'Save' })
+  const saving = saveAll.busy
+  const save = <ActionButton key="save" ref={saveRef} action={saveAll} busyLabel="Saving…">{dirty.length > 1 ? 'Save All' : 'Save'}</ActionButton>
   const discard = <Button key="discard" variant="destructive" disabled={saving} onClick={() => answerNodeClose(true)}>{"Don't Save"}</Button>
   const cancel = <Button key="cancel" variant="secondary" disabled={saving} onClick={() => answerNodeClose(false)}>Cancel</Button>
   return (
@@ -151,6 +152,7 @@ function SaveDialog({ req }: { req: Pending }): React.JSX.Element {
       footer={arrangeDialogButtons([save, discard, cancel], 2)}
     >
       {files.length > 0 && <ul className="node-close-confirm__files">{files.map((f, i) => <li key={i}>{f}</li>)}</ul>}
+      <ActionResult action={saveAll} />
     </VscodeDialog>
   )
 }

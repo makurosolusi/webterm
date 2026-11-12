@@ -7,6 +7,8 @@
 // refusal (the profile is still in use) is shown on the row.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../../shared/settings'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
 import {
@@ -20,6 +22,7 @@ import type { ProfileInUse } from '../../shared/settings.patch'
 import { testClaudeLaunch, type LaunchTest } from './claudeLaunch.client'
 import { ClaudeProfileEditor, type ProfileDraft } from './ClaudeProfileEditor'
 import { LaunchSteps } from './LaunchSteps'
+import { profileInUseMessage } from './profileInUse.text'
 
 type LaunchSettings = Pick<Settings, 'claudeLaunchProfiles' | 'defaultClaudeProfileId' | 'centralClaudeProfileId'>
 
@@ -47,9 +50,10 @@ export const PROFILES_TEXT = {
   centralUsesHint: 'Which launch profile starts Central. Usually the same as new agents.',
   testFailed: (code: string): string => `Test could not run (${code}). Save, then try again.`,
   removing: 'Deleting…',
-  inUse: (name: string, reason: ProfileInUse): string => (reason === 'provider'
-    ? `"${name}" is the command the Claude provider runs (Custom command). Pick another command or mode there first.`
-    : reason === 'builtin' ? 'The built-in Default cannot be deleted.' : `"${name}" is still in use.`),
+  testPassed: 'Every check passed.',
+  testProblem: 'A check failed; see the steps below.',
+  addLocked: 'Save or cancel the open profile first.',
+  inUse: (name: string, reason: ProfileInUse): string => profileInUseMessage(name, reason),
   removeFailed: (name: string, code: string): string => `Could not delete "${name}" (${code}).`,
 }
 
@@ -66,7 +70,6 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange, effective }: {
   const [editing, setEditing] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState<string | null>(null)
   const [focusKey, setFocusKey] = useState<string | null>(null)
-  const [removal, setRemoval] = useState<{ id: string; error?: string } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (focusKey === null) return
@@ -88,20 +91,14 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange, effective }: {
     }
     close(id ? `edit-${id}` : 'add')
   }
+  /** Throws on refusal; the row's Delete action shows why. */
   const remove = async (p: ClaudeLaunchProfile): Promise<void> => {
-    setRemoval({ id: p.id })
-    try {
-      // Never leave a pointer at a deleted profile: it would silently fall back at the next launch.
-      await deleteLaunchProfile(p.id, {
-        ...(s.defaultClaudeProfileId === p.id ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
-        ...(s.centralClaudeProfileId === p.id ? { centralClaudeProfileId: '' } : {}),
-      })
-      setRemoval(null)
-      setFocusKey('add')
-    } catch (e) {
-      const error = e instanceof ProfileInUseError ? PROFILES_TEXT.inUse(p.name, e.reason) : PROFILES_TEXT.removeFailed(p.name, e instanceof Error ? e.message : 'error')
-      setRemoval({ id: p.id, error })
-    }
+    // Never leave a pointer at a deleted profile: it would silently fall back at the next launch.
+    await deleteLaunchProfile(p.id, {
+      ...(s.defaultClaudeProfileId === p.id ? { defaultClaudeProfileId: DEFAULT_CLAUDE_PROFILE.id } : {}),
+      ...(s.centralClaudeProfileId === p.id ? { centralClaudeProfileId: '' } : {}),
+    })
+    setFocusKey('add')
   }
   const takenBy = (id: string | null): string[] => all.filter((p) => p.id !== id).map((p) => p.name)
   return (
@@ -110,8 +107,7 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange, effective }: {
           {all.map((p) => (editing === p.id
             ? <ClaudeProfileEditor key={p.id} profile={p} taken={takenBy(p.id)} onSave={(d) => save(p.id, d)} onCancel={() => close(`edit-${p.id}`)} />
             : <ProfileRow key={p.id} profile={p} command={preview(s, p.id)} isDefault={defaultId === p.id} isCentral={centralId === p.id}
-                onEdit={() => setEditing(p.id)} onRemove={() => void remove(p)}
-                removing={removal?.id === p.id && removal.error === undefined} removeError={removal?.id === p.id ? removal.error : undefined}
+                onEdit={() => setEditing(p.id)} onRemove={() => remove(p)}
                 saved={justSaved === p.id ? {
                   useForCentral: () => { onChange({ centralClaudeProfileId: p.id }) },
                   dismiss: () => setJustSaved(null),
@@ -119,8 +115,10 @@ export function ClaudeLaunchProfilesCard({ settings: s, onChange, effective }: {
           {s.claudeLaunchProfiles.length === 0 && editing !== 'new' ? <p className="st-hint m-0">{PROFILES_TEXT.empty}</p> : null}
           {editing === 'new'
             ? <ClaudeProfileEditor taken={takenBy(null)} onSave={(d) => save(null, d)} onCancel={() => close('add')} />
-            : <Button size="sm" variant="secondary" className="self-start" data-focus-key="add" disabled={editing !== null}
-                onClick={() => { setJustSaved(null); setEditing('new') }}>{PROFILES_TEXT.add}</Button>}
+            : <IconTooltip label={PROFILES_TEXT.add} disabled={editing !== null} disabledReason={PROFILES_TEXT.addLocked}>
+                <Button size="sm" variant="secondary" className="self-start" data-focus-key="add" disabled={editing !== null}
+                  onClick={() => { setJustSaved(null); setEditing('new') }}>{PROFILES_TEXT.add}</Button>
+              </IconTooltip>}
         </div>
       </Field>
   )
@@ -135,30 +133,31 @@ export function CentralProfileField({ settings: s, onChange }: { settings: Launc
   )
 }
 
-function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemove, removing, removeError, saved }: {
+function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemove, saved }: {
   profile: ClaudeLaunchProfile
-  removing: boolean
-  removeError?: string
   command: string
   isDefault: boolean
   isCentral: boolean
   onEdit(): void
-  onRemove(): void
+  onRemove(): Promise<void>
   saved?: { useForCentral(): void; dismiss(): void }
 }): React.JSX.Element {
   const [test, setTest] = useState<LaunchTest | null>(null)
-  const [testError, setTestError] = useState<string | null>(null)
-  const [testing, setTesting] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const builtIn = p.id === DEFAULT_CLAUDE_PROFILE.id
-  const run = async (): Promise<void> => {
-    setTesting(true)
-    setTestError(null)
-    try { setTest(await testClaudeLaunch({ profileId: p.id })) } catch (e) {
-      setTest(null)
-      setTestError(PROFILES_TEXT.testFailed(e instanceof Error ? e.message : 'error'))
-    } finally { setTesting(false) }
-  }
+  const testAction = useAction(async () => {
+    setTest(null)
+    const r = await testClaudeLaunch({ profileId: p.id })
+    setTest(r)
+    return r
+  }, {
+    label: PROFILES_TEXT.test, ok: (r) => r.ok, success: (r) => (r.ok ? PROFILES_TEXT.testPassed : PROFILES_TEXT.testProblem),
+    failure: (e) => PROFILES_TEXT.testFailed(errorCause(e)),
+  })
+  const removeAction = useAction(onRemove, {
+    label: PROFILES_TEXT.remove,
+    failure: (e) => (e instanceof ProfileInUseError ? PROFILES_TEXT.inUse(p.name, e.reason) : PROFILES_TEXT.removeFailed(p.name, errorCause(e))),
+  })
   return (
     <section className="st-profile" aria-label={p.name} data-profile={p.id}>
       <div className="flex flex-wrap items-center gap-2">
@@ -168,14 +167,14 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
         {isCentral ? <span className="st-profile-badge">{PROFILES_TEXT.badgeCentral}</span> : null}
         <span className="flex-1" />
         {builtIn ? null : <Button size="xs" variant="ghost" data-focus-key={`edit-${p.id}`} onClick={onEdit}>{PROFILES_TEXT.edit}</Button>}
-        <Button size="xs" variant="outline" disabled={testing} onClick={() => void run()}>{testing ? PROFILES_TEXT.testing : PROFILES_TEXT.test}</Button>
+        <ActionButton size="xs" variant="outline" action={testAction} busyLabel={PROFILES_TEXT.testing}>{PROFILES_TEXT.test}</ActionButton>
         {builtIn ? null : <Button size="xs" variant="ghost" onClick={() => setConfirming(true)}>{PROFILES_TEXT.remove}</Button>}
       </div>
       <code className="st-mono st-profile-command">{command}</code>
       {confirming ? (
         <div role="alertdialog" aria-label={PROFILES_TEXT.confirmRemove(p.name)} className="flex flex-wrap items-center gap-2 text-xs">
           <span>{PROFILES_TEXT.confirmRemove(p.name)}</span>
-          <Button size="xs" variant="destructive" autoFocus disabled={removing} aria-busy={removing} onClick={onRemove}>{removing ? PROFILES_TEXT.removing : PROFILES_TEXT.remove}</Button>
+          <ActionButton size="xs" variant="destructive" autoFocus action={removeAction} busyLabel={PROFILES_TEXT.removing}>{PROFILES_TEXT.remove}</ActionButton>
           <Button size="xs" variant="ghost" onClick={() => setConfirming(false)}>{PROFILES_TEXT.cancel}</Button>
         </div>
       ) : null}
@@ -186,9 +185,9 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
           <Button size="xs" variant="ghost" onClick={saved.dismiss}>{PROFILES_TEXT.dismiss}</Button>
         </div>
       ) : null}
+      <ActionResult action={testAction} stamp="tested" />
       {test ? <LaunchSteps steps={test.steps} /> : null}
-      {testError ? <p role="alert" className="m-0 text-xs text-destructive">{testError}</p> : null}
-      {removeError ? <p role="alert" className="m-0 text-xs text-destructive">{removeError}</p> : null}
+      <ActionResult action={removeAction} />
     </section>
   )
 }

@@ -26,6 +26,9 @@ export const CONTROL_TEXT = {
   secretPlaceholder: 'New value (write-only)',
   notANumber: 'Enter a number.',
   saving: 'Saving…',
+  resetting: 'Resetting…',
+  saved: 'Saved.',
+  secretEmpty: 'Type a new value first.',
   writeFailed: (why: string): string => `Not saved: ${why}`,
   restart: {
     none: 'Applies immediately.',

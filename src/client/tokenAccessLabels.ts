@@ -13,6 +13,10 @@ export const TOKEN_TEXT = {
   offRemote: 'The token can only be turned on from a page opened directly on this computer (127.0.0.1).',
   enable: 'Enable token',
   rotate: 'Rotate token',
+  enabling: 'Enabling…',
+  rotating: 'Rotating…',
+  shownBelow: 'New token below. Copy it now.',
+  unchanged: 'Not changed.',
   confirmEnable:
     'Enable the automation token?\n\nThe token is shown only ONCE. Copy it now. Other signed-in browsers will be signed out.',
   confirmRotate:

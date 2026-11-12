@@ -4,8 +4,9 @@
 // pre-push report (ScmPanel.report.tsx); the server enforces every gate again, the UI only mirrors them.
 //
 // Collapsed by default and loads nothing until opened, so a Diff node costs no extra request.
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Button as VscodeButton } from '@/vscode/register'
+import { ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { commitMessageProblem, type ScmArea, type ScmEntry, type ScmHunk, type ScmReport, type ScmStatus } from '../server/gitScm.types'
 import { commitStaged, fetchHunks, fetchReport, fetchStatus, generateMessage, ScmApiError, sendFixToAgent, stagePath, unstagePath } from './ScmPanel.api'
 import { ScmReportSection } from './ScmPanel.report'
@@ -27,6 +28,10 @@ const GROUPS: { area: ScmArea; label: string }[] = [
 ]
 
 interface Failure { output: string; fixPrompt: string; attempt: string }
+type OpKind = 'stage' | 'generate' | 'commit'
+interface Op { kind: OpKind; fn: () => Promise<unknown>; done: string }
+const BUSY_TEXT = { generate: 'Generating…', commit: 'Committing…' }
+const busyOn = (on: boolean): 'true' | 'false' => (on ? 'true' : 'false')
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -35,7 +40,6 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
   const [report, setReport] = useState<ScmReport | null>(null)
   const [msg, setMsg] = useState('')
   const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [open, setOpen] = useState<{ path: string; area: 'staged' | 'unstaged'; hunks: ScmHunk[] } | null>(null)
 
@@ -48,36 +52,50 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
     fetchReport(root).then(setReport, (e) => setMsg(errText(e)))
   }
 
-  /** Runs one action, then reloads status (and the diff) whatever happened. */
-  const act = async (fn: () => Promise<unknown>, done?: string) => {
-    setBusy(true)
-    try { await fn(); setMsg(done ?? '') } catch (e) { setMsg(errText(e)) } finally { setBusy(false) }
-    await load()
-    onChanged?.()
+  // One operation at a time (they all touch the index): busy while it runs, then its result line,
+  // or the failure with Retry (which runs that same operation again). Status (and the diff) reload either way.
+  const pending = useRef<Op | null>(null)
+  const op = useAction(async () => {
+    const p = pending.current!
+    try { await p.fn() } finally { await load(); onChanged?.() }
+    return p.done
+  }, { label: 'Source control', success: (done) => done, failure: errorCause })
+  const busy = op.busy
+  const running = (kind: OpKind): boolean => busy && pending.current?.kind === kind
+  const act = (kind: OpKind, fn: () => Promise<unknown>, done: string): void => {
+    if (busy) return
+    pending.current = { kind, fn, done }
+    void op.run()
   }
 
-  const toggleHunks = async (path: string, area: 'staged' | 'unstaged') => {
+  const hunkReq = useRef<{ path: string; area: 'staged' | 'unstaged' }>({ path: '', area: 'unstaged' })
+  const hunks = useAction(async () => {
+    const { path, area } = hunkReq.current
+    setOpen({ path, area, hunks: await fetchHunks(root, path, area) })
+  }, { label: 'Show hunks', success: () => 'Hunks shown', failure: errorCause })
+  const toggleHunks = (path: string, area: 'staged' | 'unstaged'): void => {
     if (open?.path === path && open.area === area) { setOpen(null); return }
-    try { setOpen({ path, area, hunks: await fetchHunks(root, path, area) }) } catch (e) { setMsg(errText(e)) }
+    hunkReq.current = { path, area }
+    void hunks.run()
   }
   const hunkAction = (h: ScmHunk) => {
     if (!open) return
     const { path, area } = open
     setOpen(null)
-    void act(() => (area === 'staged' ? unstagePath(root, path, h.id) : stagePath(root, path, h.id)))
+    act('stage', () => (area === 'staged' ? unstagePath(root, path, h.id) : stagePath(root, path, h.id)), area === 'staged' ? 'Hunk unstaged.' : 'Hunk staged.')
   }
 
   const problem = commitMessageProblem(message)
   const staged = status?.staged.total ?? 0
-  const onGenerate = () => act(async () => {
+  const onGenerate = (): void => act('generate', async () => {
     const r = await generateMessage(root)
     setMessage(r.message)
     if (r.problem) throw new Error(`Suggested message needs editing: ${r.problem}`)
-  })
+  }, 'Message drafted.')
   const onCommit = () => {
     if (problem || !staged) return
     setFailure(null)
-    void act(async () => {
+    act('commit', async () => {
       try {
         await commitStaged(root, message)
         setMessage('')
@@ -107,11 +125,11 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
       ) : (
         <>
           {area !== 'untracked' && !e.sensitive && (
-            <VscodeButton secondary title="Show hunks" onClick={() => void toggleHunks(e.path, area === 'staged' ? 'staged' : 'unstaged')}>Hunks</VscodeButton>
+            <VscodeButton secondary title="Show hunks" disabled={hunks.busy} aria-busy={busyOn(hunks.busy)} onClick={() => toggleHunks(e.path, area === 'staged' ? 'staged' : 'unstaged')}>Hunks</VscodeButton>
           )}
           {area === 'staged'
-            ? <VscodeButton secondary disabled={busy} aria-label={`Unstage ${e.path}`} onClick={() => void act(() => unstagePath(root, e.path))}>Unstage</VscodeButton>
-            : <VscodeButton secondary disabled={busy} aria-label={`Stage ${e.path}`} onClick={() => void act(() => stagePath(root, e.path))}>Stage</VscodeButton>}
+            ? <VscodeButton secondary disabled={busy} aria-busy={busyOn(busy)} aria-label={`Unstage ${e.path}`} onClick={() => act('stage', () => unstagePath(root, e.path), `Unstaged ${e.path}.`)}>Unstage</VscodeButton>
+            : <VscodeButton secondary disabled={busy} aria-busy={busyOn(busy)} aria-label={`Stage ${e.path}`} onClick={() => act('stage', () => stagePath(root, e.path), `Staged ${e.path}.`)}>Stage</VscodeButton>}
         </>
       )}
     </li>
@@ -124,12 +142,13 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
         {status && <span className="scm-panel__branch"> {status.branch ?? '(detached)'}{status.upstream ? ` ↑${status.ahead} ↓${status.behind}` : ' (not published)'}</span>}
       </summary>
       {msg && <div className="scm-panel__msg" role="status">{msg}</div>}
+      {(op.result || hunks.result) && <div className="scm-panel__msg"><ActionResult action={op} /><ActionResult action={hunks} /></div>}
       <div className="scm-panel__commit">
         <textarea aria-label="Commit message" placeholder="feat(scope): describe the change" value={message} onChange={(e) => setMessage(e.target.value)} />
         {message && problem && <div className="scm-panel__problem" role="alert">{problem}</div>}
         <div className="scm-panel__actions">
-          <VscodeButton secondary disabled={busy || !staged} title="Draft a message from the staged changes" onClick={() => void onGenerate()}>Generate with AI</VscodeButton>
-          <VscodeButton disabled={busy || !staged || !!problem} onClick={onCommit}>Commit ({staged})</VscodeButton>
+          <VscodeButton secondary disabled={busy || !staged} aria-busy={busyOn(running('generate'))} title="Draft a message from the staged changes" onClick={onGenerate}>{running('generate') ? BUSY_TEXT.generate : 'Generate with AI'}</VscodeButton>
+          <VscodeButton disabled={busy || !staged || !!problem} aria-busy={busyOn(running('commit'))} onClick={onCommit}>{running('commit') ? BUSY_TEXT.commit : `Commit (${staged})`}</VscodeButton>
         </div>
       </div>
       {failure && (
@@ -149,7 +168,7 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
           {open.hunks.map((h) => (
             <li key={h.id}>
               <pre>{h.text}</pre>
-              <VscodeButton secondary disabled={busy} onClick={() => hunkAction(h)}>{open.area === 'staged' ? 'Unstage hunk' : 'Stage hunk'}</VscodeButton>
+              <VscodeButton secondary disabled={busy} aria-busy={busyOn(busy)} onClick={() => hunkAction(h)}>{open.area === 'staged' ? 'Unstage hunk' : 'Stage hunk'}</VscodeButton>
             </li>
           ))}
         </ul>

@@ -118,6 +118,7 @@ describe('ToolCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show full output' }))
     const btn = screen.getByRole('button', { name: /Loading full output/ }) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
+    expect(btn.getAttribute('aria-busy')).toBe('true')
     finish('done text')
     expect(await screen.findByText('done text')).toBeTruthy()
   })

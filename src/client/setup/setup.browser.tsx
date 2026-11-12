@@ -3,7 +3,8 @@
 // Continue writes the path (the server saves a download itself), then the `browser` capability (on
 // when a browser is chosen, off for "Don't use").
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { DisabledReason } from '@/components/ui/disabled-reason'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { ENV_BROWSER } from '../../shared/browser.contract'
@@ -13,7 +14,7 @@ import { ChromiumDownload } from '../ChromiumDownload'
 import { ChromiumPathField } from '../ChromiumPathField'
 import { useCapabilities } from '../useCapabilities'
 import { SETUP_TEXT } from './setup.labels'
-import { StepFooter, Tiles, type StepProps } from './setup.ui'
+import { LoadRetry, StepFooter, Tiles, type StepProps } from './setup.ui'
 
 const T = SETUP_TEXT.browser
 export type BrowserChoice = 'installed' | 'other' | 'download' | 'off'
@@ -29,6 +30,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
   const [downloaded, setDownloaded] = useState(false)
   const [picked, setPicked] = useState<string | null>(null)
   const [pathError, setPathError] = useState(false)
+  const check = useAction(recheck, { label: T.checkAgain, ok: (r) => r.ok, success: (r) => (r.ok ? T.stillNone : T.loadFailed), failure: () => T.loadFailed })
   // First load decides the default: a download already running, a found browser, else another path already saved, else off.
   useEffect(() => {
     if (!chromium || choice !== null) return
@@ -42,8 +44,8 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
     return (
       <div className="flex flex-col gap-3" data-setup-step="browser">
         <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
-        {error ? <Button size="sm" variant="outline" className="self-start" onClick={() => void refresh()}>{SETUP_TEXT.retry}</Button> : null}
-        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} disabled />
+        {error ? <LoadRetry load={refresh} /> : null}
+        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} locked={SETUP_TEXT.waitForLoad} />
       </div>
     )
   }
@@ -71,7 +73,10 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
   const locked = data.advanced.headlessForced === 'no_display'
   const headlessOn = locked || env.value(headlessKey) === 'on'
   // A finished download is already saved as the browser to use; Continue only turns the capability on.
-  const canContinue = choice === 'off' || (choice === 'installed' && !!picked) || (choice === 'other' && !!chromium.active) || (choice === 'download' && downloaded)
+  const continueLock = choice === 'installed' && !picked ? T.needPick : choice === 'other' && !chromium.active ? T.needPath : choice === 'download' && !downloaded ? T.needDownload : undefined
+  const headlessLock = locked ? T.headlessLocked : env.load.status !== 'ready' ? T.headlessLoading : undefined
+  // Feedback for the switch is the env save state below it (saving disables it, a failure says so).
+  const setHeadless = (v: boolean): void => { void env.write(headlessKey, v ? 'on' : null) }
 
   return (
     <div className="flex flex-col gap-3" data-setup-step="browser">
@@ -80,8 +85,9 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
           <p className="m-0">{T.noneFound}</p>
           <div className="flex items-center gap-2">
             <a className="underline" href={T.chromeUrl} target="_blank" rel="noreferrer">{T.getChrome}</a>
-            <Button size="sm" variant="outline" onClick={() => void recheck()}>{T.checkAgain}</Button>
+            <ActionButton size="sm" variant="outline" action={check} busyLabel={T.checking}>{T.checkAgain}</ActionButton>
           </div>
+          <ActionResult action={check} stamp="checked" />
         </div>
       ) : null}
       <Tiles<BrowserChoice> label={SETUP_TEXT.steps.browser} options={options} names={T} value={choice} onChange={setChoice} />
@@ -104,16 +110,17 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
       {choice === 'other' && pathError ? <p role="alert" className="m-0 text-xs text-destructive">{T.saveFailed}</p> : null}
       {choice !== 'off' ? (
         <div className="flex items-start gap-2">
-          <Switch id="setup-headless" checked={headlessOn} disabled={locked || env.load.status !== 'ready' || env.saveState(headlessKey)?.status === 'saving'}
-            onCheckedChange={(v) => void env.write(headlessKey, v ? 'on' : null)} />
+          <Switch id="setup-headless" checked={headlessOn} aria-describedby="setup-headless-reason"
+            disabled={headlessLock !== undefined || env.saveState(headlessKey)?.status === 'saving'} onCheckedChange={setHeadless} />
           <div className="flex flex-col">
             <Label htmlFor="setup-headless">{T.headless}</Label>
-            <span className="text-xs opacity-70">{locked ? T.headlessLocked : T.headlessHint}</span>
+            <span className="text-xs opacity-70">{T.headlessHint}</span>
+            {headlessLock ? <DisabledReason id="setup-headless-reason" reason={headlessLock} /> : null}
             {env.saveState(headlessKey)?.status === 'error' ? <span role="alert" className="text-xs text-destructive">{T.saveFailed}</span> : null}
           </div>
         </div>
       ) : null}
-      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} commit={commit} disabled={!canContinue} />
+      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} commit={commit} locked={continueLock} />
     </div>
   )
 }

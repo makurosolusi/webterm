@@ -87,7 +87,7 @@ describe('Working state', () => {
     })
     render(<MemoryView client={client} />)
     await edit()
-    expect((await screen.findByRole('alert')).textContent).toBe('Central changed this; review and try again')
+    expect((await screen.findByText('Central changed this; review and try again', { selector: '[data-action-result="failed"] span' }))).toBeTruthy()
     expect(await screen.findByText('v4')).toBeTruthy()
     expect((screen.getByRole('textbox', { name: 'Working state for All projects' }) as HTMLTextAreaElement).value).toBe('mine')
     fireEvent.click(screen.getByRole('button', { name: 'Save working state for All projects' }))
@@ -101,7 +101,10 @@ describe('Working state save errors', () => {
     render(<MemoryView client={client} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Edit working state for All projects' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save working state for All projects' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('This is too long to save. Shorten it and try again.')
+    const save = screen.getByRole('button', { name: 'Save working state for All projects' })
+    expect(save.getAttribute('aria-busy')).toBe('true')
+    expect(save.textContent).toBe('Saving…')
+    expect((await screen.findByText('This is too long to save. Shorten it and try again.', { selector: '[data-action-result="failed"] span' }))).toBeTruthy()
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
 
@@ -165,8 +168,9 @@ describe('Remembered rows', () => {
     render(<MemoryView client={fakeClient({ listMemory: list(twoRows), confirmMemory })} />)
     const first = await screen.findByRole('button', { name: 'Confirm memory: first' }) as HTMLButtonElement
     fireEvent.click(first)
-    const alert = await screen.findByRole('alert')
-    expect(alert.closest('li')?.textContent).toContain('one')
+    const item = (await screen.findByText('one')).closest('li') as HTMLElement
+    await waitFor(() => expect(item.querySelector('[data-action-result="failed"]')).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
     expect(first.disabled).toBe(false)
   })
 })

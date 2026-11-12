@@ -23,8 +23,10 @@ describe('task board settings and states', () => {
     await waitFor(() => expect((toggle as HTMLButtonElement).disabled).toBe(false))
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(client.setAutoDone).toHaveBeenCalledWith('p1', true))
     await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'))
+    expect(await screen.findByText('Saved')).toBeTruthy()
   })
 
   it('shows loading, then the empty sentence', async () => {

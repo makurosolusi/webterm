@@ -55,6 +55,7 @@ describe('PlanCard', () => {
     const setMode = vi.fn().mockRejectedValueOnce(new Error('HTTP 500')).mockResolvedValueOnce(undefined)
     const { answer } = setup('open', undefined, setMode)
     fireEvent.click(btn('Approve'))
+    expect(btn('Approve').getAttribute('aria-busy')).toBe('true')
     expect((await screen.findByRole('alert')).textContent).toContain('HTTP 500')
     fireEvent.click(btn('Retry'))
     await vi.waitFor(() => expect(setMode).toHaveBeenCalledTimes(2))

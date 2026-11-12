@@ -6,8 +6,8 @@
 // back (a render-time-only cycle).
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ActionButton, ActionResult, errorCause, useAction, type Action } from '@/components/ui/action'
 import { SettingsCombobox } from './SettingsCombobox'
 import { ctl, MEMORY_TEXT, type MemoryAct, memoryRequest } from './AgentMemory.api'
 
@@ -37,6 +37,24 @@ export const BOARD_TEXT = {
   proposedBy: (by: string) => `suggested by ${by}`,
 } as const
 
+/** Busy labels of the memory writes (shown on the button while it runs). */
+export const MEMORY_BUSY = {
+  confirm: 'Confirming…', confirmAll: 'Confirming…', dismiss: 'Dismissing…', review: 'Reviewing…', reject: 'Rejecting…', set: 'Setting…',
+  mute: 'Saving…', forget: 'Forgetting…', save: 'Saving…', add: 'Remembering…',
+} as const
+
+/** One memory write: busy while it runs, then the result, or the failure with its reason and Retry. */
+export function useMemoryAction(what: string, run: () => Promise<void>): Action<void> {
+  return useAction(run, { label: what, failure: (e) => MEMORY_TEXT.failed(what, errorCause(e)) })
+}
+
+type MemoryButtonProps = Omit<React.ComponentProps<typeof ActionButton>, 'action' | 'busyLabel' | 'children'> & { what: string; busyLabel: string; run: () => Promise<void> }
+/** A button for one memory write with its own result line (for buttons that stay mounted after the click). */
+export function MemoryButton({ what, busyLabel, run, ...props }: MemoryButtonProps): React.JSX.Element {
+  const action = useMemoryAction(what, run)
+  return <><ActionButton size="sm" {...props} action={action} busyLabel={busyLabel}>{what}</ActionButton><ActionResult action={action} /></>
+}
+
 const listOf = <T,>(v: unknown, key: string): T[] | null => (v && Array.isArray((v as Record<string, unknown>)[key]) ? (v as Record<string, T[]>)[key]! : null)
 
 /** The consolidator's proposals: each is a claim until confirmed; Dismiss forgets it (never proposed again). */
@@ -56,8 +74,8 @@ export function ProposalsSection({ act, tick }: { act: MemoryAct; tick: number }
       <h4 className="font-semibold">{BOARD_TEXT.proposalsTitle}</h4>
       <p className="opacity-70" title={BOARD_TEXT.tokens(state.used, state.cap)}>{BOARD_TEXT.proposalsIntro}</p>
       <div className="flex gap-1">
-        {confirmable.length > 1 ? <Button size="sm" onClick={() => void act(BOARD_TEXT.confirmAll, 'POST', `${PROPOSALS_PATH}/confirm-all`)}>{BOARD_TEXT.confirmAll}</Button> : null}
-        <Button size="sm" variant="secondary" onClick={() => void act(BOARD_TEXT.reviewNow, 'POST', `${PROPOSALS_PATH}/run`)}>{BOARD_TEXT.reviewNow}</Button>
+        {confirmable.length > 1 ? <MemoryButton what={BOARD_TEXT.confirmAll} busyLabel={MEMORY_BUSY.confirmAll} run={() => act(BOARD_TEXT.confirmAll, 'POST', `${PROPOSALS_PATH}/confirm-all`)} /> : null}
+        <MemoryButton variant="secondary" what={BOARD_TEXT.reviewNow} busyLabel={MEMORY_BUSY.review} run={() => act(BOARD_TEXT.reviewNow, 'POST', `${PROPOSALS_PATH}/run`)} />
       </div>
       {state.proposals.length === 0 ? <p className="opacity-70">{BOARD_TEXT.proposalsNone}</p> : (
         <ul className="flex flex-col gap-1">
@@ -66,8 +84,8 @@ export function ProposalsSection({ act, tick }: { act: MemoryAct; tick: number }
               <Badge variant="outline">{BOARD_TEXT.ops[p.op]}</Badge>
               <span className="flex-1 break-words">{p.text}{p.targetText ? <span className="opacity-70"> · {BOARD_TEXT.was(p.targetText)}</span> : null}</span>
               {p.untrusted ? <Badge variant="outline">{MEMORY_TEXT.untrusted}</Badge>
-                : <Button size="sm" onClick={() => void act(MEMORY_TEXT.confirm, 'POST', `${PROPOSALS_PATH}/${encodeURIComponent(p.id)}/confirm`)}>{MEMORY_TEXT.confirm}</Button>}
-              <Button size="sm" variant="secondary" onClick={() => void act(BOARD_TEXT.dismiss, 'POST', ctl(p.id, 'forget'))}>{BOARD_TEXT.dismiss}</Button>
+                : <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', `${PROPOSALS_PATH}/${encodeURIComponent(p.id)}/confirm`)} />}
+              <MemoryButton variant="secondary" what={BOARD_TEXT.dismiss} busyLabel={MEMORY_BUSY.dismiss} run={() => act(BOARD_TEXT.dismiss, 'POST', ctl(p.id, 'forget'))} />
             </li>
           ))}
         </ul>
@@ -103,8 +121,8 @@ export function BoardSection({ act, tick }: { act: MemoryAct; tick: number }): R
           {board.proposals.map((e) => (
             <li key={e.id} data-board-proposal={e.id} className="flex flex-wrap items-center gap-2">
               <span className="flex-1 break-words"><code>{e.key}</code>: {e.value} <span className="opacity-70">· {BOARD_TEXT.proposedBy(e.by)}</span></span>
-              <Button size="sm" onClick={() => void act(MEMORY_TEXT.confirm, 'POST', prop(e.id, 'confirm'))}>{MEMORY_TEXT.confirm}</Button>
-              <Button size="sm" variant="secondary" onClick={() => void act(BOARD_TEXT.reject, 'POST', prop(e.id, 'reject'))}>{BOARD_TEXT.reject}</Button>
+              <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', prop(e.id, 'confirm'))} />
+              <MemoryButton variant="secondary" what={BOARD_TEXT.reject} busyLabel={MEMORY_BUSY.reject} run={() => act(BOARD_TEXT.reject, 'POST', prop(e.id, 'reject'))} />
             </li>
           ))}
         </ul>
@@ -115,8 +133,8 @@ export function BoardSection({ act, tick }: { act: MemoryAct; tick: number }): R
             presets={[...new Set(board.entries.map((e) => e.key))].map((value) => ({ value }))} value={key} onDraft={setKey} onCommit={setKey} />
         </span>
         <Input aria-label={BOARD_TEXT.boardValue} value={value} maxLength={500} onChange={(e) => setValue(e.target.value)} className="min-w-32 flex-1" />
-        <Button size="sm" disabled={key.trim() === '' || value.trim() === ''}
-          onClick={() => { void act(BOARD_TEXT.boardSet, 'POST', BLACKBOARD_PATH, { key: key.trim(), value: value.trim() }); setValue('') }}>{BOARD_TEXT.boardSet}</Button>
+        <MemoryButton disabled={key.trim() === '' || value.trim() === ''} what={BOARD_TEXT.boardSet} busyLabel={MEMORY_BUSY.set}
+          run={async () => { await act(BOARD_TEXT.boardSet, 'POST', BLACKBOARD_PATH, { key: key.trim(), value: value.trim() }); setValue('') }} />
       </div>
     </div>
   )

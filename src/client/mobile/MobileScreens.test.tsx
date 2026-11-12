@@ -5,6 +5,13 @@ import { INBOX_ITEMS_PATH, type UnifiedItem } from '../chat/needsYouApi'
 import { MobileAgents } from './MobileAgents'
 import { MobileInbox } from './MobileInbox'
 import { tabFromHash } from './MobileApp'
+import { MobilePushCard } from './MobilePushCard'
+
+vi.mock('./mobile.push', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./mobile.push')>()),
+  syncPush: vi.fn(async () => true),
+  sendTestPush: vi.fn(async () => { throw new Error('push service down') }),
+}))
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const base = { source: 'agent', approvalKind: null, body: null, impact: null, args: null, count: 1 }
@@ -60,11 +67,34 @@ describe('MobileInbox', () => {
     expect(snooze.action.type).toBe('snooze')
     expect(snooze.action.until).toBeGreaterThanOrEqual(before + 3_600_000)
 
+    // The snoozed card stays busy (aria-busy, "Snoozing…") until its answer settles.
+    expect(screen.getByRole('button', { name: /Snoozing/ }).getAttribute('aria-busy')).toBe('true')
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Reply' }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Reply' }))
     fireEvent.change(screen.getByLabelText('Reply'), { target: { value: 'main' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
     await waitFor(() => expect(posts).toHaveLength(4))
     expect(posts[3]!.body).toEqual({ id: 'q1', action: { type: 'reply', text: 'main' } })
+  })
+  it('a failed answer stays on its card with the reason and Retry', async () => {
+    serve(() => ({ items: ITEMS }))
+    render(<MobileInbox pollMs={0} />)
+    const deny = (await screen.findAllByRole('button', { name: 'Deny' }))[1]!
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'gone' }), { status: 500 })))
+    fireEvent.click(deny)
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('Deny failed'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+})
+
+describe('MobilePushCard', () => {
+  it('a failed test push says why and offers Retry', async () => {
+    vi.stubGlobal('Notification', { permission: 'granted' })
+    render(<MobilePushCard support="ok" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Send test' }))
+    expect(screen.getByRole('button', { name: /Sending/ }).getAttribute('aria-busy')).toBe('true')
+    await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain('Send test failed'))
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 })
 
@@ -80,6 +110,7 @@ describe('MobileAgents', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send prompt' }))
     fireEvent.change(screen.getByLabelText('Prompt for Builder'), { target: { value: 'yes, ship it' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(screen.getByRole('button', { name: /Sending/ }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(posts).toHaveLength(1))
     expect(posts[0]!.url).toBe('/api/outbox')
     expect(posts[0]!.body).toMatchObject({ to: 'n1', body: 'yes, ship it' })

@@ -12,6 +12,7 @@ import { DOWNLOAD_TEXT } from '../advancedLabels'
 import { capabilityWrites, CONN_NOT_FOUND, CONN_OK, CONN_WRAPPER_SIGNED_OUT, DL_IDLE, fakeServer, type FakeServer } from './setup.fakeServer'
 import { PROVIDER_TEXT } from '../ClaudeProviderCard'
 import { SETUP_TEXT } from './setup.labels'
+import { NOTIFY_TEXT } from '../osNotify.settings'
 import { BasicsStep, CentralStep } from './setup.steps'
 import type { StepNav } from './setup.ui'
 
@@ -248,7 +249,9 @@ describe('Browser step', () => {
   it('a failed save shows the error and Retry; the step stays', async () => {
     const s = await step({ postFail: true })
     click(SETUP_TEXT.next)
-    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(screen.getByRole('button', { name: SETUP_TEXT.saving }).getAttribute('aria-busy')).toBe('true')
+    expect((await screen.findByRole('alert')).textContent).toContain(SETUP_TEXT.browser.saveFailed)
+    expect(document.querySelector('[data-action-result="failed"]')).toBeTruthy()
     expect(nav.next).not.toHaveBeenCalled()
     click(SETUP_TEXT.retry)
     await waitFor(() => expect(nav.next).toHaveBeenCalled())
@@ -259,7 +262,9 @@ describe('Browser step', () => {
     fakeServer({ capsFail: 1 })
     render(<BrowserStep nav={nav} />)
     expect(await screen.findByText(SETUP_TEXT.browser.loadFailed)).toBeTruthy()
+    expect(screen.getByText(SETUP_TEXT.waitForLoad)).toBeTruthy() // Continue says why it is locked
     click(SETUP_TEXT.retry)
+    expect(screen.getByRole('button', { name: SETUP_TEXT.retrying }).getAttribute('aria-busy')).toBe('true')
     expect(await screen.findByText(SETUP_TEXT.browser.installed)).toBeTruthy()
   })
 })
@@ -316,5 +321,34 @@ describe('Basics step', () => {
     window.removeEventListener('webterm:open-settings', opened)
     expect(screen.getByRole('button', { name: SETUP_TEXT.finish })).toBeTruthy()
     expect(await screen.findByText(/In use:/)).toBeTruthy()
+  })
+
+  const notifySwitch = (): HTMLElement => screen.getByRole('switch', { name: SETUP_TEXT.basics.notify })
+  const stubNotification = (permission: NotificationPermission, answer: NotificationPermission = permission): ReturnType<typeof vi.fn> => {
+    const requestPermission = vi.fn(async () => answer)
+    vi.stubGlobal('Notification', { permission, requestPermission })
+    return requestPermission
+  }
+
+  it('notifications blocked by the browser: switch off and locked with the unblock steps, even if the saved pref is on', async () => {
+    fakeServer()
+    localStorage.setItem('webterm.osNotify', JSON.stringify({ enabled: true }))
+    stubNotification('denied')
+    render(<BasicsStep nav={{ ...nav, index: 3 }} settings={DEFAULT_SETTINGS} update={vi.fn()} />)
+    expect(notifySwitch().getAttribute('aria-checked')).toBe('false')
+    expect((notifySwitch() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(NOTIFY_TEXT.blocked)).toBeTruthy()
+    localStorage.removeItem('webterm.osNotify')
+  })
+
+  it('turning notifications on asks the browser; a refusal keeps it off and says so', async () => {
+    fakeServer()
+    const ask = stubNotification('default', 'denied')
+    render(<BasicsStep nav={{ ...nav, index: 3 }} settings={DEFAULT_SETTINGS} update={vi.fn()} />)
+    fireEvent.click(notifySwitch())
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1))
+    expect((await screen.findByRole('alert')).textContent).toBe(NOTIFY_TEXT.refused)
+    expect(notifySwitch().getAttribute('aria-checked')).toBe('false')
+    localStorage.removeItem('webterm.osNotify')
   })
 })

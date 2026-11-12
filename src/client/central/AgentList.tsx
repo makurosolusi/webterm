@@ -2,6 +2,7 @@
 // opened on any board. Relay/close may come back as an approval request (R2 on a user-owned agent); the
 // decision itself happens in the Central chat's Needs-you list.
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -40,6 +41,19 @@ function OpenNode({ nodeId, label, gone }: { nodeId: string; label: string; gone
   )
 }
 
+const CLOSING = 'Closing…'
+
+/** Close one worker: busy while it runs, then the answer (done / approval requested) or the failure with Retry. */
+function CloseAgent({ id, close }: { id: string; close: () => Promise<string> }) {
+  const act = useAction(close, { label: `${CL.close} ${id}`, success: (t) => t, failure: (e) => centralErrorMessage(e, CL.actionFailed) })
+  return (
+    <>
+      <ActionButton type="button" size="sm" variant="secondary" aria-label={`${CL.close} ${id}`} action={act} busyLabel={CLOSING}>{CL.close}</ActionButton>
+      <ActionResult action={act} />
+    </>
+  )
+}
+
 interface WorkersProps { client: CentralControlClient; visible: boolean; projectId: string | undefined; showFinished: boolean; onShowFinished: (on: boolean) => void }
 
 function Workers({ client, visible, projectId, showFinished, onShowFinished }: WorkersProps) {
@@ -50,18 +64,18 @@ function Workers({ client, visible, projectId, showFinished, onShowFinished }: W
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
   const off = agents.code === AGENTS_OFF
 
-  const run = async (row: AgentRow, action: AgentAction, message?: string) => {
+  /** Runs the action and returns its answer in words; throws on failure. */
+  const act = async (row: AgentRow, action: AgentAction, message?: string): Promise<string> => {
+    const res = await client.agentAction(row.id, action, message)
+    if (res.status === 'needs_approval') void refreshNeedsYou()
+    else agents.reload()
+    setRelayFor(null)
+    setText('')
+    return res.status === 'needs_approval' ? CL.approvalRequested : CL.actionDone
+  }
+  const relay = async (row: AgentRow, message: string) => {
     try {
-      const res = await client.agentAction(row.id, action, message)
-      if (res.status === 'needs_approval') {
-        setNote({ ok: true, text: CL.approvalRequested })
-        void refreshNeedsYou()
-      } else {
-        setNote({ ok: true, text: CL.actionDone })
-        agents.reload()
-      }
-      setRelayFor(null)
-      setText('')
+      setNote({ ok: true, text: await act(row, 'relay', message) })
     } catch (err) {
       setNote({ ok: false, text: centralErrorMessage(err, CL.actionFailed) })
     }
@@ -87,12 +101,12 @@ function Workers({ client, visible, projectId, showFinished, onShowFinished }: W
               {!isTerminal(a.state) && (
                 <>
                   <Button type="button" size="sm" variant="secondary" aria-label={`${CL.relay} ${a.id}`} onClick={() => { setRelayFor(relayFor === a.id ? null : a.id); setNote(null) }}>{CL.relay}</Button>
-                  <Button type="button" size="sm" variant="secondary" aria-label={`${CL.close} ${a.id}`} onClick={() => void run(a, 'close')}>{CL.close}</Button>
+                  <CloseAgent id={a.id} close={() => act(a, 'close')} />
                 </>
               )}
             </span>
             {relayFor === a.id && (
-              <form className="ccp-relay" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void run(a, 'relay', text.trim()) }}>
+              <form className="ccp-relay" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void relay(a, text.trim()) }}>
                 <Input aria-label={CL.relayPrompt} placeholder={CL.relayPrompt} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
                 <Button type="submit" size="sm">{CL.relaySend}</Button>
               </form>

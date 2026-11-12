@@ -39,17 +39,15 @@ export function useNotifyPermission(): [Permission, () => void] {
   return [permission, () => setPermission(readPermission())]
 }
 
-/** Notifications section body. */
-export function NotificationsSection(): React.JSX.Element {
+/** Desktop notifications switch state: on only while granted; turning it on asks the browser first.
+ * Shared by Settings › Notifications and the setup wizard so both read the real permission. */
+export function useDesktopNotify(): { on: boolean; lock: Lock | undefined; refused: boolean; set(v: boolean): void } {
   const prefs = useNotifyPrefs()
   const [permission, refresh] = useNotifyPermission()
   const [refused, setRefused] = useState(false)
-
   const lock: Lock | undefined = permission === 'unsupported' ? { reason: NOTIFY_TEXT.unsupported }
     : permission === 'denied' ? { reason: NOTIFY_TEXT.blocked } : undefined
-  const on = permission === 'granted' && prefs.enabled
-
-  const onDesktop = (v: boolean): void => {
+  const set = (v: boolean): void => {
     setRefused(false)
     if (!v || permission === 'granted') { writeNotifyPrefs({ enabled: v }); return }
     // Saved "on" only once the browser grants it.
@@ -62,11 +60,18 @@ export function NotificationsSection(): React.JSX.Element {
       setRefused(true)
     })
   }
+  return { on: permission === 'granted' && prefs.enabled, lock, refused: refused && !lock, set }
+}
+
+/** Notifications section body. */
+export function NotificationsSection(): React.JSX.Element {
+  const prefs = useNotifyPrefs()
+  const { on, lock, refused, set: onDesktop } = useDesktopNotify()
 
   return (
     <div data-testid="notifications-section">
       <ToggleField id="st-osNotify" label={NOTIFY_TEXT.desktop} value={on} hint={NOTIFY_TEXT.desktopHint} lock={lock} onChange={onDesktop} />
-      {refused && !lock ? <p role="alert" className="st-hint">{NOTIFY_TEXT.refused}</p> : null}
+      {refused ? <p role="alert" className="st-hint">{NOTIFY_TEXT.refused}</p> : null}
       <ToggleField id="st-osNotifySound" label={NOTIFY_TEXT.sound} value={prefs.sound}
         hint={NOTIFY_TEXT.soundHint} onChange={(v) => writeNotifyPrefs({ sound: v })} />
     </div>

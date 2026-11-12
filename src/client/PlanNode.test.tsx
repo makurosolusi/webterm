@@ -91,6 +91,8 @@ describe('PlanNode', () => {
     const approve = await screen.findByRole('button', { name: 'Approve and run' })
     await waitFor(() => expect(approve.hasAttribute('disabled')).toBe(false))
     fireEvent.click(approve)
+    expect(approve.getAttribute('aria-busy')).toBe('true')
+    expect(approve.textContent).toBe('Starting…')
     await waitFor(() => expect(api.approvePlan).toHaveBeenCalledWith({ projectId: 'w1', repo: '/repo', title: 'Add login', tasks: DRAFT.tasks }))
     expect((await screen.findByTestId('worker', {}, SLOW)).textContent).toBe('/wt/x1')
     await waitFor(() => expect(latest.edges.map((e) => `${e.source}>${e.target}`)).toEqual(['p1>dag-x1']))

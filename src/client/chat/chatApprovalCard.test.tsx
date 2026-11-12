@@ -46,6 +46,8 @@ describe('ChatApprovalCard', () => {
     const { container } = render(<ChatApprovalCard approvalId="gate_1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Approve once' }))
     await waitFor(() => expect(container.querySelector('[data-state="deciding"]')).toBeTruthy())
+    expect(container.querySelector('.needs-card')?.getAttribute('aria-busy')).toBe('true')
+    expect(screen.getByRole('status').textContent).toBe('Sending…')
     expect((screen.getByRole('button', { name: 'Deny' }) as HTMLButtonElement).disabled).toBe(true)
     release()
     await waitFor(() => expect(screen.getByLabelText('Run migration: Approved')).toBeTruthy())
@@ -94,6 +96,7 @@ describe('ChatApprovalCard', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('boom')
     ledger.itemsFail = false
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(screen.getByRole('button', { name: /Retrying/ }).getAttribute('aria-busy')).toBe('true')
     expect(await screen.findByText('Run migration')).toBeTruthy()
   })
 

@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Textarea } from '@/components/ui/textarea'
 import type { TaskCard as TaskCardData } from '../../../shared/centralWork'
 import { focusCanvasNode } from '../../osNotify'
@@ -17,6 +18,10 @@ export interface TaskCardProps {
   onOpen: (id: string) => void
 }
 
+const BUSY = { approve: 'Approving…', retry: 'Retrying…', cancel: 'Cancelling…' } as const
+// The refusal's reason is the card's `refused` line; the result line adds the time and Retry.
+const outcome = (label: string) => ({ label, ok: (ok: boolean) => ok, success: (ok: boolean) => (ok ? 'Done' : `${label} failed`) })
+
 function signalText(card: TaskCardData): string | null {
   if (!card.assignment) return null
   return card.assignment.lastSignalAt === null ? TL.noSignal : TL.active(relativeTime(card.assignment.lastSignalAt))
@@ -30,9 +35,14 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
   const signal = signalText(card)
   const named = (action: string): string => TL.actionOn(action, card.title)
 
-  const run = async (action: TaskAction, body?: Record<string, string>): Promise<void> => {
-    if (await onAct(card.id, action, body)) { setMode('idle'); setNote('') }
+  const run = async (action: TaskAction, body?: Record<string, string>): Promise<boolean> => {
+    const ok = await onAct(card.id, action, body)
+    if (ok) { setMode('idle'); setNote('') }
+    return ok
   }
+  const approve = useAction(() => run('approve'), outcome(TL.approve))
+  const retry = useAction(() => run('retry'), outcome(TL.retryTask))
+  const cancel = useAction(() => run('cancel'), outcome(TL.cancel))
   const openFromCard = (event: MouseEvent<HTMLElement>): void => {
     if (!(event.target as Element).closest('button, textarea')) onOpen(card.id)
   }
@@ -67,18 +77,21 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
       {mode === 'cancel' && (
         <div className="task-card__actions" role="group" aria-label={TL.cancelConfirm}>
           <span className="task-card__meta">{TL.cancelConfirm}</span>
-          <Button type="button" size="xs" variant="destructive" disabled={busy} aria-label={named(TL.cancelYes)} onClick={() => void run('cancel')}>{TL.cancelYes}</Button>
+          <ActionButton type="button" size="xs" variant="destructive" disabled={busy} aria-label={named(TL.cancelYes)} action={cancel} busyLabel={BUSY.cancel}>{TL.cancelYes}</ActionButton>
           <Button type="button" size="xs" variant="secondary" onClick={() => setMode('idle')}>{TL.cancelNo}</Button>
         </div>
       )}
       {mode === 'idle' && legal.size > 0 && (
         <div className="task-card__actions">
-          {legal.has('approve') && <Button type="button" size="xs" disabled={busy} aria-label={named(TL.approve)} onClick={() => void run('approve')}>{TL.approve}</Button>}
+          {legal.has('approve') && <ActionButton type="button" size="xs" disabled={busy} aria-label={named(TL.approve)} action={approve} busyLabel={BUSY.approve}>{TL.approve}</ActionButton>}
           {legal.has('changes') && <Button type="button" size="xs" variant="secondary" disabled={busy} aria-label={named(TL.requestChanges)} onClick={() => setMode('note')}>{TL.requestChanges}</Button>}
-          {legal.has('retry') && <Button type="button" size="xs" disabled={busy} aria-label={named(TL.retryTask)} onClick={() => void run('retry')}>{TL.retryTask}</Button>}
+          {legal.has('retry') && <ActionButton type="button" size="xs" disabled={busy} aria-label={named(TL.retryTask)} action={retry} busyLabel={BUSY.retry}>{TL.retryTask}</ActionButton>}
           {legal.has('cancel') && <Button type="button" size="xs" variant="ghost" disabled={busy} aria-label={named(TL.cancel)} onClick={() => setMode('cancel')}>{TL.cancel}</Button>}
         </div>
       )}
+      <ActionResult action={approve} />
+      <ActionResult action={retry} />
+      <ActionResult action={cancel} />
     </article>
   )
 }

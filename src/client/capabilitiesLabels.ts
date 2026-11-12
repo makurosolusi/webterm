@@ -12,6 +12,7 @@ export const CAPABILITY_TEXT = {
   alsoTurnsOff: 'Also turns off:',
   offerQuestion: 'Turn it on now?',
   offerAction: 'Turn on',
+  offerBusy: 'Turning on…',
   offerTitle: (title: string): string => `Turn on ${title}`,
   confirmTitle: (label: string): string => `Turn on ${label}?`,
   confirmBody: 'This gives agents more control over this computer and the accounts you are signed in to. Only turn it on if you trust the agents that run.',

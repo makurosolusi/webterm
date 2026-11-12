@@ -1,8 +1,9 @@
 // Central's memory: the working state it reads each turn and what it remembers, with where each item came from.
 // Values that look like secrets are never rendered (defense in depth: the server already redacts, this only guards a miss).
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { relativeTime } from '../SessionHistory.model'
 import { openCentralSettings } from './LevelPanel'
 import { MemoryWorkingState } from './MemoryWorkingState'
@@ -32,24 +33,18 @@ const NOT_RUNNING = 'http_404'
 
 const isOff = (code: string | null): boolean => code !== null && (code.endsWith('_off') || code === NOT_RUNNING)
 const linkedTask = (m: MemoryRow): string | null => (m.sourceKind === 'task' ? m.sourceRef : m.sourceRef?.startsWith(TASK_PREFIX) ? m.sourceRef.slice(TASK_PREFIX.length) : null)
+const BUSY = { confirm: 'Confirming…', forget: 'Forgetting…' } as const
+
 const sourceOf = (m: MemoryRow): string | null => (m.sourceKind ? CL.memorySource(SOURCE_LABEL[m.sourceKind] ?? m.sourceKind) : null)
 
 function MemoryItem({ row, client }: { row: MemoryRow; client: CentralControlClient }) {
   const [confirmed, setConfirmed] = useState(false)
   const [forgotten, setForgotten] = useState(false)
   const [asking, setAsking] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const inFlight = useRef(false)
-  const act = async (fn: () => Promise<void>, done: () => void) => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setBusy(true)
-    setError(null)
-    try { await fn(); done() } catch (err) { setError(centralErrorMessage(err, CL.actionFailed)) }
-    inFlight.current = false
-    setBusy(false)
-  }
+  const failure = (err: unknown) => centralErrorMessage(err, CL.actionFailed)
+  const confirm = useAction(async () => { await client.confirmMemory(row.id); setConfirmed(true) }, { label: CL.memoryConfirm, failure })
+  const forget = useAction(async () => { await client.forgetMemory(row.id); setForgotten(true) }, { label: CL.memoryForget, failure })
+  const busy = confirm.busy || forget.busy
   if (forgotten) return <li className="ccp-row"><span className="ccp-row__meta" role="status">{CL.memoryForgotten}</span></li>
   const masked = looksSecret(row.value) || looksSecret(row.key)
   const name = masked ? row.id : row.key
@@ -61,17 +56,18 @@ function MemoryItem({ row, client }: { row: MemoryRow; client: CentralControlCli
       <span className="ccp-badge">{confirmed ? TRUST_LABEL.human : TRUST_LABEL[row.trust] ?? row.trust}</span>
       <span className="ccp-row__meta">{meta}</span>
       <span className="ccp-row__actions">
-        {row.status === 'claim' && row.trust !== 'external' && !confirmed && <Button type="button" size="sm" aria-label={CL.memoryConfirmLabel(name)} disabled={busy} onClick={() => void act(() => client.confirmMemory(row.id), () => setConfirmed(true))}>{CL.memoryConfirm}</Button>}
+        {row.status === 'claim' && row.trust !== 'external' && !confirmed && <ActionButton type="button" size="sm" aria-label={CL.memoryConfirmLabel(name)} disabled={busy} action={confirm} busyLabel={BUSY.confirm}>{CL.memoryConfirm}</ActionButton>}
         <Button type="button" size="sm" variant="secondary" aria-label={CL.memoryForgetLabel(name)} disabled={busy || asking} onClick={() => setAsking(true)}>{CL.memoryForget}</Button>
       </span>
       {asking && (
         <div role="alertdialog" aria-modal="false" aria-label={CL.memoryForgetLabel(name)} className="ccp-confirm">
           <p>{CL.memoryForgetPrompt}</p>
           <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => setAsking(false)}>{CL.memoryForgetCancel}</Button>
-          <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void act(() => client.forgetMemory(row.id), () => setForgotten(true))}>{CL.memoryForgetConfirm}</Button>
+          <ActionButton type="button" size="sm" variant="destructive" disabled={busy} action={forget} busyLabel={BUSY.forget}>{CL.memoryForgetConfirm}</ActionButton>
         </div>
       )}
-      {error && <p role="alert" className="ccp-error">{error}</p>}
+      <ActionResult action={confirm} />
+      <ActionResult action={forget} />
     </li>
   )
 }

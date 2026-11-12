@@ -2,7 +2,7 @@
 // start, progress (polled while the server downloads), cancel, failed + Retry, done. The server saves
 // the downloaded binary as the browser to use; `onDone` reloads the capabilities so the UI follows.
 import { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { ActionButton, useAction } from '@/components/ui/action'
 import type { ChromiumDownloadStatus } from '../shared/featureCapabilities'
 import { DOWNLOAD_TEXT as T } from './advancedLabels'
 import { chromiumDownload } from './capabilitiesApi'
@@ -21,7 +21,6 @@ export interface ChromiumDownloadProps {
 export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): React.JSX.Element {
   const [status, setStatus] = useState<ChromiumDownloadStatus | null>(null)
   const [unreachable, setUnreachable] = useState(false)
-  const [busy, setBusy] = useState(false)
   const cb = useRef({ onDone, onStatus })
   cb.current = { onDone, onStatus }
   const prev = useRef<ChromiumDownloadStatus['state'] | null>(null)
@@ -34,16 +33,19 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
     cb.current.onStatus?.(s)
   }
   const call = async (action: 'status' | 'start' | 'cancel'): Promise<void> => {
-    setBusy(action !== 'status')
     try {
       show(await chromiumDownload(action))
     } catch (e) {
       console.warn('chromium download: request failed', action, e instanceof Error ? e.message : 'error')
       setUnreachable(true)
-    } finally {
-      setBusy(false)
     }
   }
+  // Busy per button; the result is the state shown (progress, done, the error line with Retry). No minimum
+  // busy time: the next state replaces the button at once (Start -> progress with Cancel).
+  const start = useAction(() => call('start'), { label: T.start, toast: 'never', minBusyMs: 0 })
+  const cancel = useAction(() => call('cancel'), { label: T.cancel, toast: 'never', minBusyMs: 0 })
+  const retry = useAction(() => call(unreachable ? 'status' : 'start'), { label: T.retry, toast: 'never', minBusyMs: 0 })
+  const busy = start.busy || cancel.busy || retry.busy
 
   useEffect(() => { void call('status') }, []) // eslint-disable-line react-hooks/exhaustive-deps -- first read only
   useEffect(() => {
@@ -63,7 +65,7 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
             className="h-1.5 w-full overflow-hidden rounded bg-muted">
             <div className="h-full bg-primary transition-[width]" style={{ width: `${status.percent}%` }} />
           </div>
-          <Button size="sm" variant="outline" className="self-start" disabled={busy} onClick={() => void call('cancel')}>{T.cancel}</Button>
+          <ActionButton size="sm" variant="outline" className="self-start" disabled={busy} action={cancel} busyLabel={T.cancelling}>{T.cancel}</ActionButton>
         </>
       ) : null}
       {status?.state === 'done' ? (
@@ -72,13 +74,12 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
       {error ? <p role="alert" className="m-0 text-destructive">{error}</p> : null}
       {status?.state === 'idle' && !unreachable ? (
         <>
-          <Button size="sm" variant="secondary" className="self-start" disabled={busy} onClick={() => void call('start')}>{T.start}</Button>
+          <ActionButton size="sm" variant="secondary" className="self-start" disabled={busy} action={start} busyLabel={T.starting}>{T.start}</ActionButton>
           <span className="opacity-70">{T.hint}</span>
         </>
       ) : null}
       {status?.state === 'failed' || unreachable ? (
-        <Button size="sm" variant="outline" className="self-start" disabled={busy}
-          onClick={() => void call(unreachable ? 'status' : 'start')}>{T.retry}</Button>
+        <ActionButton size="sm" variant="outline" className="self-start" disabled={busy} action={retry} busyLabel={T.retrying}>{T.retry}</ActionButton>
       ) : null}
     </div>
   )

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -31,12 +32,27 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
   const [branch, setBranch] = useState('')
   const [base, setBase] = useState('')
   const [runSetup, setRunSetup] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<CreatedWorktree | null>(null)
+  // The dialog stays mounted while closed, so a failure line is hidden (not kept) once it is closed.
+  const [dismissed, setDismissed] = useState(0)
+  const create = useAction(async () => {
+    const name = wsName.trim()
+    if (worktree && !wsCwd.trim()) throw new Error('Pick the repository folder to branch from.')
+    if (!worktree) {
+      // Closed only once the workspace exists: a failure stays here, next to the input it is about.
+      await props.onCreateWorkspace(name, wsCwd.trim() || undefined)
+      close()
+      return
+    }
+    const created = await createWorktree({
+      repo: wsCwd.trim(), title: name, branch: branch.trim() || undefined, base: base.trim() || undefined, runSetup,
+    })
+    await props.onCreateWorkspace(name, created.path)
+    setResult(created) // keep the dialog open on the setup log until the user closes it
+  }, { label: 'Create workspace', failure: createErrorText })
   if (!props.open) return null
 
-  const reset = () => { setWsName(''); setWsCwd(''); setBranch(''); setBase(''); setError(null); setResult(null) }
+  const reset = () => { setWsName(''); setWsCwd(''); setBranch(''); setBase(''); setResult(null); setDismissed(create.result?.seq ?? 0) }
   const close = () => { reset(); props.onOpenChange(false) }
 
   const toggleWorktree = async (on: boolean) => {
@@ -48,30 +64,6 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
     if (ws?.cwd) setWsCwd((cur) => cur || ws.cwd!)
   }
 
-  const createWs = async () => {
-    const name = wsName.trim()
-    if (!name || busy) return
-    if (worktree && !wsCwd.trim()) { setError('Pick the repository folder to branch from.'); return }
-    setBusy(true); setError(null)
-    try {
-      if (!worktree) {
-        // Closed only once the workspace exists: a failure stays here, next to the input it is about.
-        await props.onCreateWorkspace(name, wsCwd.trim() || undefined)
-        close()
-        return
-      }
-      const created = await createWorktree({
-        repo: wsCwd.trim(), title: name, branch: branch.trim() || undefined, base: base.trim() || undefined, runSetup,
-      })
-      await props.onCreateWorkspace(name, created.path)
-      setResult(created) // keep the dialog open on the setup log until the user closes it
-    } catch (err) {
-      setError(createErrorText(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <Dialog open onOpenChange={(o) => (o ? props.onOpenChange(true) : close())}>
       <DialogContent>
@@ -80,7 +72,7 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
           <div className="dock-menu__form">
             <Input placeholder="name" autoFocus value={wsName}
               onChange={(e) => setWsName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void createWs() }} />
+              onKeyDown={(e) => { if (e.key === 'Enter' && wsName.trim()) void create.run() }} />
             <div className="dock-menu__form-row">
               <Input className="flex-1" placeholder={worktree ? 'repository folder' : 'cwd (optional)'} value={wsCwd}
                 onChange={(e) => setWsCwd(e.target.value)} />
@@ -100,8 +92,8 @@ export function WorkspaceDialog(props: WorkspaceDialogProps) {
                 </label>
               </>
             )}
-            {error && <div role="alert" className="text-(--vscode-errorForeground)">{error}</div>}
-            <Button onClick={() => void createWs()} disabled={busy || !wsName.trim()}>{busy ? (worktree ? 'Creating worktree…' : 'Creating…') : 'Create'}</Button>
+            {create.result && !create.result.ok && create.result.seq !== dismissed && <ActionResult action={create} />}
+            <ActionButton action={create} busyLabel={worktree ? 'Creating worktree…' : 'Creating…'} disabled={!wsName.trim()}>Create</ActionButton>
           </div>
         )}
       </DialogContent>

@@ -74,8 +74,14 @@ describe('SkillReview actions', () => {
     render(<SkillReview client={client} />)
     const reject = await button('Reject webterm-x 1')
     fireEvent.click(reject)
-    expect((await screen.findByRole('alert')).textContent).toContain('did not go through')
+    expect(reject.getAttribute('aria-busy')).toBe('true')
+    expect(reject.textContent).toBe('Rejecting…')
+    const failed = await screen.findByText(/did not go through/, { selector: '[data-action-result="failed"] span' })
+    expect(failed).toBeTruthy()
     expect(reject.disabled).toBe(false)
+    // The failure also offers Retry (toast), which runs the reject again.
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(client.rejectSkill).toHaveBeenCalledTimes(2))
   })
 
   it('offers rollback only when the server says one is possible, and no reject on active rows', async () => {
