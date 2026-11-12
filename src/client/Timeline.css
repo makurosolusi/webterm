@@ -25,6 +25,7 @@ button.timeline-group__label:hover, .timeline-line button:hover { text-decoratio
 .timeline-line > button:focus-visible, .timeline-group__label:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); }
 .timeline-line time { opacity: 0.6; font-variant-numeric: tabular-nums; }
 .timeline-line[data-untrusted='true'] .timeline-text { font-style: italic; }
+.timeline-line[data-tone='warning'] .timeline-text { color: var(--vscode-editorWarning-foreground, #cca700); }
 .timeline-count { opacity: 0.7; }
 .timeline-older { margin-top: 8px; font: inherit; }
 /* Checkpoints (F3-c): Rewind control, preview dialog, "not rewindable" chip. */

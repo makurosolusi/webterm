@@ -92,7 +92,7 @@ export function TimelinePanel({ workspaces, liveNodes, activeId = null, onFocusN
                 const target = ev ? checkpointTarget(ev) : null
                 const body = <><time>{timeOf(l.ts)}</time> <span className="timeline-text">{(ev && checkpointText(ev)) ?? l.text}</span>{l.count > 1 && <span className="timeline-count"> ×{l.count}</span>}</>
                 return (
-                  <li key={l.key} className="timeline-line" data-untrusted={l.untrusted ? 'true' : undefined}>
+                  <li key={l.key} className="timeline-line" data-untrusted={l.untrusted ? 'true' : undefined} data-tone={l.tone}>
                     {l.focusId ? <button type="button" onClick={() => onFocusNode(l.focusId!)}>{body}</button> : <span>{body}</span>}
                     {label && <NotRewindableChip label={label} />}
                     {target && <RewindControl workspaceId={target.workspaceId} seq={target.seq} />}
