@@ -1,5 +1,5 @@
-// "What agents remember": ONE list of everything remembered (`/api/memory2`), filtered by kind (All / Rules /
-// Facts / Past sessions), with Confirm / Edit / Mute / Forget per item and the Remember field on top.
+// "What agents remember": ONE list of everything remembered (`/api/memory2`), filtered by kind (the Kind
+// dropdown of Control › Memory, AgentMemoryFilters.tsx), with Confirm / Edit / Mute / Forget per item and the Remember field on top.
 // Rules typed here are procedural memory (`/api/awareness/procedural`, loaded into every agent session);
 // a rule an agent suggested is confirmed through that same route. Web-page suggestions can never be confirmed.
 // Below: what was proposed while agents were idle, the shared notes (AgentMemoryBoard.tsx), and the
@@ -90,13 +90,13 @@ function useNodeTitles(wanted: boolean): Map<string, string> | null {
 /** Which part of the panel to show (Control › Memory filter): everything, only suggestions, or only shared notes. */
 export type AgentMemoryPart = 'all' | 'suggested' | 'notes'
 
-export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): React.JSX.Element {
+/** `kind` filters the remembered list; `filters` (the Source / Kind bar) sits under the Remember field, or on top when that is hidden. */
+export function AgentMemory({ part = 'all', kind = 'all', filters }: { part?: AgentMemoryPart; kind?: MemoryKindFilter; filters?: React.ReactNode } = {}): React.JSX.Element {
   const [items, setItems] = useState<MemoryItem[] | null>(null)
   const [confirmable, setConfirmable] = useState<ReadonlySet<string>>(new Set())
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [text, setText] = useState('')
-  const [kind, setKind] = useState<MemoryKindFilter>('all')
   const [incognito, setIncognito] = useState<string[]>([])
   const [tick, setTick] = useState(0)
   const incognitoNodes = incognito.filter((r) => r.startsWith(NODE_PREFIX)).map((r) => r.slice(NODE_PREFIX.length))
@@ -125,6 +125,7 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
     setNodeIncognito(nodeId, false).then(setIncognito, (err: unknown) => setError(MEMORY_TEXT.failed(MEMORY_TEXT.leave, err instanceof Error ? err.message : String(err))))
   }
   const ready = items !== null
+  const listShown = ready && part === 'all'
 
   return (
     <section aria-label={MEMORY_TEXT.title} data-testid="agent-memory">
@@ -132,18 +133,15 @@ export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): 
       <p className="text-xs opacity-70">{MEMORY_TEXT.intro}</p>
       {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
       {!ready && !loadError ? <p role="status" className="text-xs opacity-70">{MEMORY_TEXT.loading}</p> : null}
-      {ready && part === 'all' ? (
+      {!listShown && filters ? <div className="mt-2 text-xs">{filters}</div> : null}
+      {listShown ? (
         <div className="mt-2 flex flex-col gap-1 text-xs" data-testid="memory-all">
           <div className="flex items-center gap-2">
             <Input aria-label={MEMORY_TEXT.add} placeholder={MEMORY_TEXT.placeholder} value={text} maxLength={300}
               onChange={(e) => setText(e.target.value)} className="min-w-0 flex-1" />
             <MemoryButton what={MEMORY_TEXT.add} busyLabel={MEMORY_BUSY.add} run={add} disabled={text.trim() === ''} />
           </div>
-          <div role="group" className="flex flex-wrap gap-1">
-            {(Object.keys(MEMORY_TEXT.kinds) as MemoryKindFilter[]).map((k) => (
-              <Button key={k} size="sm" variant={k === kind ? 'default' : 'secondary'} aria-pressed={k === kind} onClick={() => setKind(k)}>{MEMORY_TEXT.kinds[k]}</Button>
-            ))}
-          </div>
+          {filters}
           {items.length === 0 ? <p className="opacity-70">{MEMORY_TEXT.empty}</p> : (
             <ul className="flex flex-col gap-1">
               {items.map((m) => <MemoryRow key={m.id} m={m} confirmable={confirmable.has(m.id)} act={(what, path, body) => act(what, 'POST', path, body)} />)}
