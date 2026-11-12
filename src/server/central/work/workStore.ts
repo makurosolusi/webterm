@@ -12,6 +12,8 @@ const OPEN_ASSIGNMENTS_MAX = 200
 const INSTRUCTION_MAX_CHARS = 4000
 const DEPS_RULE = 'deps'
 const END_RULE = 'assignment.end'
+/** Same string as WORK_VERIFY_RULES.autoDone, kept literal so the store does not import the verifier. */
+const AUTO_DONE_RULE = 'auto_done'
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
@@ -92,6 +94,12 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
   const hasUnfinishedDeps = (taskId: string): boolean => getRow(db,
     `SELECT 1 AS one FROM central_task_dep d JOIN central_task b ON b.id = d.blocked_by_id WHERE d.task_id = ? AND b.status != 'done' LIMIT 1`, taskId) !== null
 
+  /** The latest move into done was the auto-done rule (a pruned history reads as "not automatic"). */
+  const doneAutomatically = (taskId: string): boolean => {
+    const row = getRow(db, "SELECT payload_json FROM event WHERE correlation_id = ? AND kind = 'work.task.done' ORDER BY seq DESC LIMIT 1", taskId)
+    return row !== null && (parseJson(row.payload_json) as { rule?: unknown } | null)?.rule === AUTO_DONE_RULE
+  }
+
   interface EventInput {
     kind: string; actor: WorkActor; task: TaskView; assignment?: AssignmentView | null
     from?: WorkStatus; to?: WorkStatus; reason?: string; rule?: string
@@ -136,6 +144,7 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     const edge = `${cur.status} -> ${to}`
     if (!canWorkTransition(cur.status, to)) throw new WorkError('illegal_transition', 'moveTask', cur.id, edge)
     if (to === 'done' && !mayMarkDone(options.actor)) throw new WorkError('done_forbidden', 'moveTask', cur.id, actorName(options.actor, options.rule))
+    if (cur.status === 'done' && !doneAutomatically(cur.id)) throw new WorkError('illegal_transition', 'moveTask', cur.id, `${edge} (only an auto-done task can be reopened)`)
     if (to === 'todo' && hasUnfinishedDeps(cur.id)) throw new WorkError('blocked_by_deps', 'moveTask', cur.id, edge)
     const assignment = assignmentOfMove(cur, options.assignmentId)
     if (execWrite(db, 'UPDATE central_task SET status = ?, updated_at = ? WHERE id = ? AND status = ?', to, now(), cur.id, cur.status) !== 1) {

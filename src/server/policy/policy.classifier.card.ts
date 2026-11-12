@@ -10,6 +10,7 @@ import { decideApproval } from '../ledger/ledgerApproval'
 import { LedgerError } from '../ledger/ledgerModel'
 import { CLASSIFIER_ACTOR, classifyGated, type Classifier, type ClassifyDeps, type GatedAction, type GatedOutcome } from './policy.classifier'
 import { createClaudeClassifier } from './policy.classifier.claude'
+import { automaticAction } from '../central/automaticAction'
 
 /** Inbox resolution text of a card the classifier approved. */
 export const autoApprovedText = (reason: string): string => `auto-approved by classifier: ${reason}`
@@ -45,7 +46,14 @@ export async function classifyCard(deps: CardDeps, a: GatedAction & { approvalId
   const outcome = await classifyGated({ classifier: deps.classifier ?? defaultClassifier(), record: deps.record ?? recordEvent, ...(deps.timeoutMs ? { timeoutMs: deps.timeoutMs } : {}), ...(deps.now ? { now: deps.now } : {}) }, a)
   if (outcome.effect !== 'allow') return outcome
   try {
-    return approveByClassifier(deps.db, a.approvalId, outcome.reason, deps.now) ? outcome : { ...outcome, effect: 'ask', reason: 'card already decided' }
+    if (!approveByClassifier(deps.db, a.approvalId, outcome.reason, deps.now)) return { ...outcome, effect: 'ask', reason: 'card already decided' }
+    // Posted here, not by the inbox sweep: the row is already resolved, so a 3 s sweep would never see it open.
+    automaticAction({ db: deps.db, ...(deps.now ? { now: deps.now } : {}), ...(deps.record ? { record: deps.record } : {}) }, {
+      name: 'classifier_approved', actor: CLASSIFIER_ACTOR, subject: `approval:${a.approvalId}`, projectId: a.projectId ?? null,
+      workspaceId: a.workspaceId ?? null, nodeId: a.nodeId ?? null,
+      text: `Approved ${a.capability} automatically: the classifier judged it safe (${outcome.reason}).`,
+    })
+    return outcome
   } catch (err) {
     log.warn('policy.classifier.approve_failed', 'classifier verdict could not be applied; the card keeps waiting', { ids: { requestId: a.approvalId }, cause: err instanceof Error ? err.message : String(err) })
     return { effect: 'ask', by: 'failure', reason: 'could not approve the card' }

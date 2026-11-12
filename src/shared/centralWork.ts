@@ -15,7 +15,8 @@ export const WORK_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]
   verifying: ['needs_review', 'running', 'failed', 'cancelled'],
   needs_review: ['done', 'todo', 'running', 'cancelled'],
   failed: ['todo', 'cancelled'],
-  done: [],
+  // Reopen: only a task the system marked done (auto-done) may go back; the store enforces that (workStore.ts).
+  done: ['todo'],
   cancelled: [],
 }
 
@@ -24,7 +25,7 @@ export function canWorkTransition(from: WorkStatus, to: WorkStatus): boolean {
   return WORK_TRANSITIONS[from].includes(to)
 }
 
-/** Statuses with no outgoing edge. */
+/** Closed statuses (done can only be reopened when it was automatic). */
 export const WORK_TERMINAL: readonly WorkStatus[] = ['done', 'cancelled']
 
 /** Board column of a task. */

@@ -53,6 +53,8 @@ export interface WorkSupervisorDeps {
   now(): number
   /** Runs at the end of every tick; the check-in engine lives on this one timer. */
   afterTick?(at: number): Promise<void>
+  /** Tells the user about a nudge or respawn it sent (automaticAction); `key` is unique per action. */
+  announce?(action: { name: 'work_nudge' | 'work_respawn'; text: string; key: string; task: TaskView; nodeId: string }): void
 }
 
 export interface WorkSupervisor {
@@ -67,7 +69,7 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 const terminalAgent = (state: AgentState): boolean => (AGENT_TERMINAL_STATES as readonly AgentState[]).includes(state)
 
 /** Applies the liveness rules to open assignments; deterministic, no model is called. */
-export function createWorkSupervisor({ store, ports, now, afterTick }: WorkSupervisorDeps): WorkSupervisor {
+export function createWorkSupervisor({ store, ports, now, afterTick, announce }: WorkSupervisorDeps): WorkSupervisor {
   let timer: ReturnType<typeof setInterval> | null = null
   let ticking = false
 
@@ -100,7 +102,8 @@ export function createWorkSupervisor({ store, ports, now, afterTick }: WorkSuper
     store.noteAssignment(a.id, RESPAWN_EVENT, { rule: vanished.name, reason: cause })
     store.touchSignal(a.id, 'respawn', at)
     const sent = await ports.chatSend(a, `Your session was interrupted. Continue the task "${titleOf(task)}" from where you left off.`)
-    if (!sent.ok) fail(task, vanished.name, `vanished: ${sent.code}`)
+    if (!sent.ok) return fail(task, vanished.name, `vanished: ${sent.code}`)
+    announce?.({ name: 'work_respawn', key: `auto:work_respawn:${a.id}:${a.restarts + 1}`, task, nodeId: a.nodeId, text: `Restarted the agent on "${titleOf(task)}" automatically: its session was interrupted (${cause}).` })
   }
 
   const nudge = async (a: AssignmentView, task: TaskView, quietMs: number, at: number): Promise<void> => {
@@ -121,6 +124,7 @@ export function createWorkSupervisor({ store, ports, now, afterTick }: WorkSuper
     }
     store.markNudged(a.id, at)
     store.noteAssignment(a.id, NUDGE_EVENT, { rule: WORK_LIVENESS_RULES.heartbeat.name, reason: `quiet for ${minutes} minutes` })
+    announce?.({ name: 'work_nudge', key: `auto:work_nudge:${a.id}:${at}`, task, nodeId: a.nodeId, text: `Nudged the agent on "${titleOf(task)}" automatically: it had been quiet for ${minutes} minutes.` })
   }
 
   const evaluate = async (a: AssignmentView, at: number): Promise<void> => {

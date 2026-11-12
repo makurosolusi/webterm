@@ -3,6 +3,7 @@
  * strict key allowlist, so a model cannot smuggle `trust`, `scope`, `projectId` or `status`; the
  * viewer project comes from the conversation id, never from input. All output is redacted.
  */
+import { automaticAction } from '../../automaticAction'
 import { MEMORY_ALL_SCOPES, MemoryRejectedError } from '../../../memory/memoryModel'
 import { getVisibleMemory, searchMemoryHybrid, type MemoryViewer } from '../../../memory/memoryHybrid'
 import { MAX_BODY_CHARS, MAX_REASON_CHARS, REMEMBER_KINDS, correctClaim, invalidateClaim, rememberClaim, rememberUser, type RememberContext } from '../../../memory/memoryRemember'
@@ -90,6 +91,13 @@ const remember: ToolDef = {
   validate: (input) => (onlyKeys(input, ['key', 'body', 'title', 'kind']) && typeof input.key === 'string' && typeof input.body === 'string' ? null : 'invalid_shape'),
   handler(ctx, input): ToolResult {
     const { record, deduped } = rememberClaim(ctx.db, rememberCtx(ctx), { key: input.key, body: input.body, title: input.title, kind: input.kind })
+    if (!deduped) {
+      automaticAction({ db: ctx.db, now: ctx.now }, {
+        name: 'memory_remembered', actor: 'central', subject: `memory:${record.id}`, projectId: record.projectId, noNotice: true,
+        text: `Central remembered "${record.title}" as an unverified claim: it noted it during a conversation.`,
+        undo: { label: 'Forget', method: 'POST', path: `/api/central/memory/${encodeURIComponent(record.id)}/forget` },
+      })
+    }
     return { ok: true, data: { id: record.id, deduped, status: record.status, trust: record.trust } }
   },
 }

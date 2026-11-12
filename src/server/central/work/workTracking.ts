@@ -21,6 +21,9 @@ import { createWorkSupervisor, type WorkSupervisorPorts } from './workSupervisor
 import { createWorkVerifier, WORK_VERIFY_RULES, type WorkVerifierDeps } from './workVerify'
 import { registerWorkMemory } from './workMemory'
 import { startWorkWatcher } from './workWatcher'
+import { automaticAction } from '../automaticAction'
+import { announceAutoDone } from './workAutoDoneOffer'
+import type { WorkMove } from './workModel'
 
 const log = createLogger('central.work')
 
@@ -65,6 +68,17 @@ function startCheckinTurn(db: Database): (turn: CheckinTurn) => string {
   }
 }
 
+/** The auto-done notice and record, with Reopen as its undo. */
+export function announceAutoDoneMove(db: Database, move: WorkMove, now: () => number): void {
+  if (move.to !== 'done' || move.rule !== WORK_VERIFY_RULES.autoDone) return
+  const { task } = move
+  automaticAction({ db, now }, {
+    name: 'auto_done', actor: 'system:work', subject: `task:${task.id}`, projectId: task.projectId, noticeKey: `auto:auto_done:${task.id}:${move.seq}`,
+    text: `Marked "${task.title}" done automatically: its check passed.`,
+    undo: { label: 'Reopen', method: 'POST', path: `/api/central/tasks/${encodeURIComponent(task.id)}/reopen` },
+  })
+}
+
 /** One per process: the verifier outlives a pause, so a bounce can tell a running verification from an orphaned one. */
 export function createWorkTracking({ db, sessions, now, noTimer, check, presence }: WorkTrackingDeps): { start(): () => void } {
   const store = createWorkStore(db, now)
@@ -74,6 +88,7 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     // A task that passed on an auto-done project is done a moment later: nothing to review, so nothing to announce.
     if (move.rule === WORK_VERIFY_RULES.passed && autoDone(move.task.projectId)) return
     noticeWorkMove(db, move, { now, ...(presence ? { presence } : {}) })
+    announceAutoDoneMove(db, move, now)
   })
   registerWorkMemory(db, now)
   const checkin = createWorkCheckin({
@@ -87,9 +102,17 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
   const afterTick = async (at: number): Promise<void> => {
     // Beside the check-in pass, not before it: a scan takes seconds and must not hold the liveness tick; it never throws.
     void health.autoScanDue(at)
+    try {
+      announceAutoDone(db, now) // a project created since the last pass gets its auto-done notice
+    } catch (err) {
+      log.warn('work.auto_done_offer_failed', 'auto-done offer pass failed', { error: err instanceof Error ? err.message : String(err) })
+    }
     await checkin.tick(at)
   }
-  const supervisor = createWorkSupervisor({ store, ports: productionPorts(db, sessions), now, afterTick })
+  const supervisor = createWorkSupervisor({
+    store, ports: productionPorts(db, sessions), now, afterTick,
+    announce: ({ name, text, key, task, nodeId }) => { automaticAction({ db, now }, { name, text, noticeKey: key, actor: 'system:work', subject: `task:${task.id}`, projectId: task.projectId, nodeId }) },
+  })
   return {
     start() {
       verifier.recoverInterrupted()

@@ -31,6 +31,7 @@ import { applyV29 } from './ledgerSchemaV29'
 import { applyV30 } from './ledgerSchemaV30'
 import { applyV31 } from './ledgerSchemaV31'
 import { applyV32 } from './ledgerSchemaV32'
+import { applyV33 } from './ledgerSchemaV33'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -100,4 +101,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 31, up: applyV31 },
   // v32: central_checkin_reason.not_before (a failed delegation waits for the turn that saw it); nullable, no backfill.
   { version: 32, up: applyV32 },
+  // v33: central_control admits `setting:<name>` rows with value_json (switches that must outlive event retention); rows kept.
+  { version: 33, up: applyV33 },
 ]

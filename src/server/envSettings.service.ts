@@ -27,6 +27,8 @@ export interface EnvSettings {
   apply(): void
   state(ctx: EnvContext): EnvStateV2
   update(change: EnvChange, ctx?: EnvContext): EnvUpdateResult
+  /** Flag keys the last `apply` filled from their `on` default (nobody set them); the boot notice reports them. */
+  defaultsApplied(): readonly string[]
 }
 
 export interface EnvSettingsDeps {
@@ -84,11 +86,13 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
     return undefined
   }
 
+  let filledByDefault: string[] = []
   function apply(): void {
     const loaded = locked ? { values: {}, unknownKept: {} } : loadOverrides()
     overrides = loaded.values
     unknownKept = loaded.unknownKept
     fileSecrets = new Set()
+    filledByDefault = []
     for (const spec of registry) {
       let value: string | undefined = overrides[spec.key]
       if (spec.kind === 'secret' && !locked) {
@@ -96,6 +100,7 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
         if (value !== undefined) fileSecrets.add(spec.key)
       }
       const next = value ?? base[spec.key] ?? defaultOnOf(spec)
+      if (value === undefined && base[spec.key] === undefined && next !== undefined) filledByDefault.push(spec.key)
       if (next === undefined) delete target[spec.key]
       else target[spec.key] = next
     }
@@ -176,5 +181,5 @@ export function createEnvSettings(deps: EnvSettingsDeps): EnvSettings {
     return { ok: true, state: state(ctx), restartRequired }
   }
 
-  return { apply, state, update }
+  return { apply, state, update, defaultsApplied: () => filledByDefault }
 }

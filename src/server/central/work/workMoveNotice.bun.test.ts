@@ -171,7 +171,7 @@ test('observers run after commit, and a rollback tells them nothing', async () =
   expect(s.statusOf(taskId)).toBe('running')
 })
 
-test('auto-done is read per task: flipping it applies at once, and an auto-done pass is not announced', async () => {
+test('auto-done is read per task: flipping it applies at once, and an auto-done pass is announced as done, not review', async () => {
   const s = setup()
   stops.push(s.tracking.start())
   s.away()
@@ -190,7 +190,8 @@ test('auto-done is read per task: flipping it applies at once, and an auto-done 
   const on = await pass('n-on')
   expect(s.statusOf(on)).toBe('done')
   expect(s.lastRule(on)).toBe('auto_done')
-  expect(s.notices()).toHaveLength(1)
+  // Not announced as "ready for review"; the automatic close itself is announced (with Reopen in its record).
+  expect(s.notices().slice(1)).toEqual([`Marked "title ${on}" done automatically: its check passed.`])
   writeAutoDone(s.db, 'p1', false, s.now())
   expect(s.statusOf(await pass('n-back'))).toBe('needs_review')
 })

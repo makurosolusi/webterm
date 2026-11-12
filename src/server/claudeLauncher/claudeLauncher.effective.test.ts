@@ -112,7 +112,8 @@ describe('command mode is the default profile', () => {
 describe('approval level -> auto-approver switch', () => {
   it('risky turns both on, always both off, never and other patches leave it', () => {
     const append = vi.fn()
-    const ledger = { db: {} as Database } // setClassifierSwitch only caches by it
+    // setClassifierSwitch caches by it and upserts its central_control row (a no-op statement here). test-only
+    const ledger = { db: { query: () => ({ run: () => ({ changes: 1 }) }) } as unknown as Database }
     applyApprovalLevelSwitch({ agentApprovalLevel: 'risky' }, ledger, { append })
     applyApprovalLevelSwitch({ agentApprovalLevel: 'always' }, ledger, { append })
     applyApprovalLevelSwitch({ agentApprovalLevel: 'never' }, ledger, { append })
