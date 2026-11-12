@@ -1,6 +1,7 @@
 // Bun-only, Chrome NYATA: jalur peluncuran produksi (flags + proxy SSRF + createPageTarget) tidak membawa tanda
 // otomasi yang membuat situs mencapnya bot. Skip bersih bila tak ada Chromium, atau mode headless (memang terdeteksi).
 import { afterAll, describe, expect, test } from 'bun:test'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type IncomingHttpHeaders } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -12,6 +13,7 @@ import { detectChromium, launchChromium } from './chromium.launch'
 import type { Launched } from './chromium.launch'
 import { createPageTarget, DEFAULT_VIEWPORT, setupConnection } from './browserHost.targets'
 import { allowKey } from './ssrf.allowlist'
+import { childEnv } from '../childEnv'
 import { startSsrfProxy } from './ssrf.proxy'
 
 const found = detectChromium(process.env)
@@ -21,6 +23,12 @@ const POLL_MS = 100
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const PAGE = `<body style="margin:0"><button id=b style="width:400px;height:300px" onclick="window.clicked=true">x</button>
 <div id=d></div><script>let n=0;(function f(){d.textContent=n++;requestAnimationFrame(f)})()</script></body>`
+
+// test:bun runs with a temp HOME, so on macOS the keychain search list has no login keychain: Chrome's lookup of
+// "Chrome Safe Storage" (cookie-store key) stalls ~15 s and holds the first request, so Page.navigate times out.
+// Production passes the real HOME (childEnv). The mock keychain keeps the test hermetic and leaves bot signals as they are.
+const spawnWithMockKeychain = (bin: string, args: string[]) =>
+  spawn(bin, [...args, '--use-mock-keychain'], { env: childEnv(), stdio: ['ignore', 'ignore', 'pipe'] })
 
 const cleanup: Array<() => unknown> = []
 afterAll(async () => { for (const c of cleanup.reverse()) await c() })
@@ -42,7 +50,7 @@ describe('Chrome nyata: tanpa tanda bot', () => {
     cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
     const launched: Launched = await launchChromium({
       bin: found?.path ?? '', profileDir: dir, proxyServer: `http://127.0.0.1:${proxy.port}`,
-    })
+    }, { spawn: spawnWithMockKeychain })
     cleanup.push(() => launched.kill())
     const cdp = await CdpClient.connect(launched.wsUrl)
     cleanup.push(() => cdp.close())
