@@ -3,11 +3,40 @@
 // not through the settings coalescer: a switch to Danger must carry `confirmDanger: true`, and the
 // server's 400 `confirm_required` must reopen the confirmation instead of failing silently.
 // Feedback uses the Settings save states (Saving… / Saved ✓ / error + Retry) under the key it writes.
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Settings } from '../shared/settings'
 import { approvalLevelOf, type ApprovalLevel } from '../shared/settings.approvalLevel'
 import { approvalLevelFor } from '../shared/settings.projectApprovalLevels'
+import { registerCommands, type Command } from './commandRegistry'
 import { reloadSettings, settingsSaves, settingsUrl } from './useSettings'
+
+/** Menu, select and cycle order: least to most autonomous (Ask → Auto → Danger). */
+export const MODE_ORDER: readonly ApprovalLevel[] = ['always', 'risky', 'never']
+/** The mode after `level` in MODE_ORDER, wrapping from Danger back to Ask. */
+export const nextApprovalLevel = (level: ApprovalLevel): ApprovalLevel => MODE_ORDER[(MODE_ORDER.indexOf(level) + 1) % MODE_ORDER.length]
+
+let cycleHandler: (() => void) | null = null
+/**
+ * Command: cycle the permission mode of the Central chat chip. Registered on import so Settings ›
+ * Keyboard Shortcuts lists it (and a user can bind it) even before a chip mounts; it acts through
+ * the mounted chip, so a move to Danger opens that chip's confirmation. No default chord: ⌘⇧M /
+ * Ctrl+Shift+M is the browser's own (Chrome: profile switcher; Firefox: Responsive Design Mode).
+ */
+export const CYCLE_APPROVAL_MODE_COMMAND: Command = {
+  id: 'permissions.cycleMode', label: 'Central: Cycle Permission Mode (Ask, Auto, Danger)', run: () => cycleHandler?.(),
+}
+registerCommands([CYCLE_APPROVAL_MODE_COMMAND])
+
+/** While mounted, the cycle command runs `cycle` (the latest one; the last mounted chip wins). */
+export function useCycleApprovalMode(cycle: () => void): void {
+  const ref = useRef(cycle)
+  ref.current = cycle
+  useEffect(() => {
+    const run = (): void => ref.current()
+    cycleHandler = run
+    return () => { if (cycleHandler === run) cycleHandler = null }
+  }, [])
+}
 
 /** Where a choice applies: every project, or one workspace (`level: null` there = back to all projects). */
 export type ApprovalTarget = { scope: 'global' } | { scope: 'workspace'; workspaceId: string }

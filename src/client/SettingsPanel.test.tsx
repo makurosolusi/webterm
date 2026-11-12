@@ -49,7 +49,7 @@ describe('SettingsPanel VS Code layout', () => {
 
     expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
     // Developer is hidden outside developer mode (./developerMode). Memory, Automations and Spending moved to the Control panel.
-    const labels = ['Appearance', 'Terminal', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'Health']
+    const labels = ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'Health']
     // Accessible name stays the title alone; the description is the item's accessible description.
     expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
@@ -66,7 +66,7 @@ describe('SettingsPanel VS Code layout', () => {
     expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Safety', 'System'])
     const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
     expect(byGroup).toEqual([
-      ['Appearance', 'Terminal', 'Canvas', 'Notifications'],
+      ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications'],
       ['Claude', 'Central'],
       ['Rules & secrets'],
       ['Account', 'Features', 'Health'],
@@ -199,10 +199,10 @@ describe('SettingsPanel keyboard', () => {
     fireEvent.keyDown(items[items.length - 1]!, { key: 'Home' })
     expect(document.activeElement).toBe(items[0])
     // Across a group heading: the last General item steps down into the first Agents item.
-    items[3]!.focus()
-    fireEvent.keyDown(items[3]!, { key: 'ArrowDown' })
+    items[4]!.focus()
+    fireEvent.keyDown(items[4]!, { key: 'ArrowDown' })
     expect(document.activeElement?.textContent).toContain('Claude')
-    expect(document.activeElement).toBe(items[4])
+    expect(document.activeElement).toBe(items[5])
   })
 })
 

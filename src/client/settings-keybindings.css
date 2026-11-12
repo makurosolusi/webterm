@@ -1,0 +1,83 @@
+/* Settings › Keyboard Shortcuts (SettingsKeybindings.tsx): filter + Reset all on top, one Field per
+ * command with the recordable chord and its source. Chips reuse the help overlay's `help-kbd`. */
+.st-kb-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.st-kb-filter {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.st-kb-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border, #454545));
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.st-kb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-kb-chord {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  min-width: 120px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.st-kb-record {
+  cursor: pointer;
+  border-color: var(--vscode-input-border, var(--vscode-panel-border, #454545));
+}
+
+.st-kb-record:hover {
+  background: var(--vscode-list-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.st-kb-record[aria-pressed='true'] {
+  border-color: var(--vscode-focusBorder, var(--accent));
+}
+
+.st-kb-record:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--accent));
+  outline-offset: -1px;
+}
+
+.st-kb-source {
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  font-size: 12px;
+}
+
+.st-kb-source[data-source='user'] {
+  color: var(--vscode-textLink-foreground, var(--accent));
+}
+
+.st-kb-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--st-warning, var(--vscode-editorWarning-foreground, #cca700));
+}

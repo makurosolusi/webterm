@@ -14,8 +14,10 @@ export type CommandScope = 'global' | 'editor' | 'terminal' | 'files' | 'canvas'
 
 export interface Command {
   id: string
-  /** "Category: Action", as VS Code words palette entries. */
+  /** "Category: Action", as VS Code words palette entries: the one label every menu, tooltip and list shows. */
   label: string
+  /** Group in Settings › Keyboard Shortcuts; default: the label's "Category:" prefix (`commandCategory`). */
+  category?: string
   /** Chord like `Mod+Shift+F` (`Mod` = ⌘ on macOS, Ctrl elsewhere). */
   defaultKey?: string
   /** Non-key trigger shown in the overlay, e.g. "Double-click edge". */
@@ -62,15 +64,23 @@ export function useRegisterCommands(list: Command[]): void {
 const MOD_ORDER = ['Mod', 'Ctrl', 'Meta', 'Alt', 'Shift']
 const KEY_ALIASES: Record<string, string> = { esc: 'Escape', del: 'Delete', cmd: 'Mod', command: 'Mod', control: 'Ctrl', option: 'Alt', plus: '+' }
 
-/** Canonical chord text (`mod+shift+f` → `Mod+Shift+F`); empty string for nothing usable. */
-export function normalizeChord(chord: string): string {
+/** Category of a command: its own, else the label's "Category:" prefix, else "General". */
+export const commandCategory = (c: Pick<Command, 'label' | 'category'>): string =>
+  c.category ?? /^([^:]{1,40}):\s/.exec(c.label)?.[1] ?? 'General'
+
+/**
+ * Canonical chord text (`mod+shift+f` → `Mod+Shift+F`); empty string for nothing usable. Off macOS
+ * `Ctrl` IS `Mod` (one physical key, and `eventChord` reports it as `Mod`), so it folds into `Mod`
+ * there: a chord written `Ctrl+Shift+\`` must equal the keydown, the conflict check and Monaco's CtrlCmd.
+ */
+export function normalizeChord(chord: string, isMac: boolean = isMacPlatform()): string {
   const parts = chord.split(/\+(?!$)/).map((p) => p.trim()).filter(Boolean)
   const mods = new Set<string>()
   let key = ''
   for (const raw of parts) {
     const p = KEY_ALIASES[raw.toLowerCase()] ?? raw
     const mod = MOD_ORDER.find((m) => m.toLowerCase() === p.toLowerCase())
-    if (mod) mods.add(mod)
+    if (mod) mods.add(mod === 'Ctrl' && !isMac ? 'Mod' : mod)
     else key = p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)
   }
   return key ? [...MOD_ORDER.filter((m) => mods.has(m)), key].join('+') : ''
@@ -96,13 +106,13 @@ export function eventChord(e: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | '
     e.altKey && 'Alt',
     e.shiftKey && 'Shift',
   ].filter(Boolean)
-  return normalizeChord([...mods, key].join('+'))
+  return normalizeChord([...mods, key].join('+'), isMac)
 }
 
 const MAC_LABELS: Record<string, string> = { Mod: '⌘', Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘', Backspace: '⌫', Delete: '⌦', Escape: 'Esc', Enter: '↩' }
 /** Chord split into display chips: symbols on macOS, words elsewhere. */
 export function chordKeys(chord: string, isMac: boolean): string[] {
-  return normalizeChord(chord).split('+').filter(Boolean).map((k) => (isMac ? MAC_LABELS[k] ?? k : k === 'Mod' ? 'Ctrl' : k))
+  return normalizeChord(chord, isMac).split('+').filter(Boolean).map((k) => (isMac ? MAC_LABELS[k] ?? k : k === 'Mod' ? 'Ctrl' : k))
 }
 /** One-line label (`⇧⌘F` / `Ctrl+Shift+F`) for palette rows and tooltips. */
 export const chordLabel = (chord: string, isMac: boolean): string => chordKeys(chord, isMac).join(isMac ? '' : '+')
@@ -110,9 +120,9 @@ export const chordLabel = (chord: string, isMac: boolean): string => chordKeys(c
 /* --- Effective bindings + conflicts --------------------------------------------------------- */
 
 /** The chord a command answers to: user override (`null` = removed) over its default. */
-export function effectiveKey(cmd: Command, overrides: KeybindingOverrides): string | undefined {
-  if (!cmd.fixed && Object.hasOwn(overrides, cmd.id)) return overrides[cmd.id] ? normalizeChord(overrides[cmd.id] as string) : undefined
-  return cmd.defaultKey ? normalizeChord(cmd.defaultKey) : undefined
+export function effectiveKey(cmd: Command, overrides: KeybindingOverrides, isMac: boolean = isMacPlatform()): string | undefined {
+  if (!cmd.fixed && Object.hasOwn(overrides, cmd.id)) return overrides[cmd.id] ? normalizeChord(overrides[cmd.id] as string, isMac) : undefined
+  return cmd.defaultKey ? normalizeChord(cmd.defaultKey, isMac) : undefined
 }
 
 /** Command ids that share a chord with another command in the same scope, per command id. */

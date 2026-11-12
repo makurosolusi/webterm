@@ -34,6 +34,7 @@ import { CentralSettingsSection } from './CentralSettingsSection'
 import type { CentralLinkTarget } from './centralSettings.registry'
 import { DeveloperSection } from './DeveloperSection'
 import { HealthSection } from './HealthSection'
+import { KeybindingsSection } from './SettingsKeybindings'
 import { RulesSection } from './RulesSection'
 import { normalizeQuery } from './SettingsFields'
 import { SETTINGS_SEARCH_INDEX, searchSettings, type SearchGroupId, type SettingsSearchEntry } from './settings.search'
@@ -71,6 +72,7 @@ interface SectionCtx {
 const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   appearance: (c) => <AppearanceSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined} />,
   terminal: (c) => <TerminalSection settings={c.s} onChange={c.onChange} />,
+  keyboard: () => <KeybindingsSection />,
   canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
   notifications: () => <NotificationsSection />,
   claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined} />,

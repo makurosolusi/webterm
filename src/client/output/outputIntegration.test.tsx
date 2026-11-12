@@ -13,8 +13,7 @@ import HelpOverlay from '../HelpOverlay'
 import WorkspaceBar from '../WorkspaceBar'
 import { isMacPlatform, terminalKeyAction } from '../terminalKeys'
 import type { TerminalKeyEvent } from '../terminalKeys'
-import { listCommands, useCommandKeybindings } from '../commandRegistry'
-import { outputShortcutLabel } from './outputChord'
+import { chordLabel, listCommands, useCommandKeybindings } from '../commandRegistry'
 import {
   OUTPUT_OPEN_KEY, outputPaletteCommands, publishOutputCounts, resetOutputStateForTest,
   useOutputPanelState,
@@ -59,8 +58,8 @@ describe('output shortcut', () => {
     const cmd = listCommands().find((c) => c.id === 'output.toggle')
     expect(cmd?.defaultKey).toBe('Mod+Shift+U')
     expect(cmd?.run).toBeTypeOf('function')
-    expect(outputShortcutLabel(true)).toBe('⇧⌘U')
-    expect(outputShortcutLabel(false)).toBe('Ctrl+Shift+U')
+    expect(chordLabel(cmd!.defaultKey!, true)).toBe('⌘⇧U')
+    expect(chordLabel(cmd!.defaultKey!, false)).toBe('Ctrl+Shift+U')
   })
 
   it('is handed back to the app by xterm instead of being typed into the shell', () => {
@@ -100,7 +99,7 @@ describe('status bar items', () => {
     expect(errors.textContent).toContain('3')
     fireEvent.keyDown(document, { key: 'Tab' }) // keyboard navigation: focus alone does not open a tooltip
     fireEvent.focus(errors)
-    expect(screen.getByRole('tooltip').textContent).toBe(`3 errors in the log — toggle Output ${outputShortcutLabel(isMacPlatform())}`)
+    expect(screen.getByRole('tooltip').textContent).toBe(`3 errors in the log — toggle Output ${chordLabel('Mod+Shift+U', isMacPlatform())}`)
     fireEvent.blur(errors)
     expect(screen.getByRole('button', { name: /1 warning$/ }).textContent).toContain('1')
     fireEvent.click(errors)

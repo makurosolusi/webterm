@@ -8,6 +8,7 @@ export const SETTINGS_GROUPS = ['General', 'Agents', 'Safety', 'System'] as cons
 export const SETTINGS_SECTIONS = [
   { id: 'appearance', group: 'General', label: 'Appearance', icon: 'symbol-color', description: 'Theme, colors, font, canvas background' },
   { id: 'terminal', group: 'General', label: 'Terminal', icon: 'terminal', description: 'Copy, shortcuts, history, shell' },
+  { id: 'keyboard', group: 'General', label: 'Keyboard Shortcuts', icon: 'keyboard', description: 'See, change and reset every shortcut' },
   { id: 'canvas', group: 'General', label: 'Canvas', icon: 'layout', description: 'Grid, quick move, projects folder' },
   { id: 'notifications', group: 'General', label: 'Notifications', icon: 'bell', description: 'Desktop notifications and sound' },
   { id: 'claude', group: 'Agents', label: 'Claude', icon: 'hubot', description: 'Connection, permissions, profiles' },
