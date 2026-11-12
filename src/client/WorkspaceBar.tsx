@@ -2,7 +2,7 @@
 //
 // Baris 1 (35px): brand, `VscodeMenuBar` (File / Help — urutan & label mengikuti VS Code; menu
 // yang tak punya padanan di webterm tidak dibuat), identitas workspace aktif di tengah, dan aksi
-// kanan (logout). Rename workspace memakai command center di tengah itu: input
+// kanan (menu akun). Rename workspace memakai command center di tengah itu: input
 // muncul di tempat yang sudah terlihat, bukan di dalam tab yang bisa tergulung keluar layar.
 //
 // Baris 2 (35px): `VscodeEditorTabBar` memuat satu tab per workspace — status dot sebagai ikon,
@@ -31,6 +31,7 @@ import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/Work
 import { openWorkspaceCanvasBackground } from './canvasBackground.open'
 import { setWorkspaceMuted, useNotifyPrefs } from './osNotify.prefs'
 import { openSetup } from './setup/setup.open'
+import { AccountMenu } from './AccountMenu'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol kebab-nya, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
@@ -54,7 +55,7 @@ export interface WorkspaceBarProps {
   onLogout?: () => void
   /** This browser holds a UI session (the `wt_ui` cookie), so there is something to sign out of. */
   showLogout?: boolean
-  /** Settings › Account (username, password, sessions, Sign out): the title-bar account button. */
+  /** Settings › Account: "Account settings" in the title-bar account menu (absent: no account system). */
   onOpenAccount?: () => void
   /** File > Settings…: membuka Settings. Opsional supaya pemakaian lama tetap valid. */
   onOpenSettings?: () => void
@@ -244,18 +245,7 @@ export default function WorkspaceBar({
 
         <div className="app-titlebar__actions">
           {titleActions}
-          {showLogout && (
-            <IconTooltip label={onOpenAccount ? 'Account: username, password, sessions, sign out' : 'Sign out and return to the sign-in screen'}>
-              <button
-                type="button"
-                className="titlebar__action"
-                aria-label={onOpenAccount ? 'Account' : 'Sign out'}
-                onClick={onOpenAccount ?? onLogout}
-              >
-                <span className={`codicon ${onOpenAccount ? 'codicon-account' : 'codicon-sign-out'}`} aria-hidden />
-              </button>
-            </IconTooltip>
-          )}
+          {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
         </div>
       </header>
 

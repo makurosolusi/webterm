@@ -48,11 +48,13 @@ describe('File > New Files Node', () => {
 })
 
 describe('Account and Sign out', () => {
-  it('the title-bar Account button opens Settings › Account; File has Account… and Sign out', () => {
+  it('the title-bar Account button opens the account menu (not Settings); File has Account… and Sign out', () => {
     const onOpenAccount = vi.fn()
     const onLogout = vi.fn()
     mount({ showLogout: true, onOpenAccount, onLogout })
-    fireEvent.click(screen.getByRole('button', { name: 'Account' }))
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Account' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(onOpenAccount).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Account settings' }))
     expect(onOpenAccount).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
