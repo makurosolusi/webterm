@@ -1,16 +1,16 @@
-// Data halaman awal browser: pintasan. Terpisah dari komponen supaya mengganti daftar situs cukup
-// menyentuh berkas ini (tanpa literal tersebar di UI). Mesin pencari: `shared/browser.omnibox.ts`.
+// Default start-page shortcuts (Chrome's NTP tiles). The user's own list lives in localStorage
+// (`browser.shortcuts.ts`); this list seeds it until the user edits it. Search engines: `shared/browser.omnibox.ts`.
 
-export interface Shortcut { id: string; label: string; url: string; initial: string; color: string }
+export interface Shortcut { id: string; label: string; url: string; /** Letter-fallback circle color; absent = neutral. */ color?: string }
 
-/** Pintasan di grid halaman awal (urutan = urutan tampil). Warna = latar ikon bulat berinisial. */
+/** Default tiles (order = display order). Color = background of the letter fallback while the favicon loads or fails. */
 export const SHORTCUTS: readonly Shortcut[] = [
-  { id: 'google', label: 'Google', url: 'https://www.google.com/', initial: 'G', color: '#4285f4' },
-  { id: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/', initial: 'Y', color: '#ff0000' },
-  { id: 'github', label: 'GitHub', url: 'https://github.com/', initial: 'G', color: '#24292f' },
-  { id: 'gmail', label: 'Gmail', url: 'https://mail.google.com/', initial: 'M', color: '#ea4335' },
-  { id: 'x', label: 'X', url: 'https://x.com/', initial: 'X', color: '#000000' },
-  { id: 'chatgpt', label: 'ChatGPT', url: 'https://chatgpt.com/', initial: 'C', color: '#10a37f' },
-  { id: 'reddit', label: 'Reddit', url: 'https://www.reddit.com/', initial: 'R', color: '#ff4500' },
-  { id: 'wikipedia', label: 'Wikipedia', url: 'https://www.wikipedia.org/', initial: 'W', color: '#636466' },
+  { id: 'google', label: 'Google', url: 'https://www.google.com/', color: '#4285f4' },
+  { id: 'youtube', label: 'YouTube', url: 'https://www.youtube.com/', color: '#ff0000' },
+  { id: 'github', label: 'GitHub', url: 'https://github.com/', color: '#24292f' },
+  { id: 'gmail', label: 'Gmail', url: 'https://mail.google.com/', color: '#ea4335' },
+  { id: 'x', label: 'X', url: 'https://x.com/', color: '#000000' },
+  { id: 'chatgpt', label: 'ChatGPT', url: 'https://chatgpt.com/', color: '#10a37f' },
+  { id: 'reddit', label: 'Reddit', url: 'https://www.reddit.com/', color: '#ff4500' },
+  { id: 'wikipedia', label: 'Wikipedia', url: 'https://www.wikipedia.org/', color: '#636466' },
 ]

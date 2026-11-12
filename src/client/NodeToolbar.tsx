@@ -8,8 +8,9 @@ import { useFitCount } from './nodeToolbar.overflow'
 const Codicon = ({ name }: { name: string }) => <span className={cn('codicon', `codicon-${name}`)} aria-hidden="true" />
 
 export interface NodeToolbarProps {
-  onRefresh: () => void
-  searchOpen: boolean; onToggleSearch: () => void
+  /** Omit when the node type has no view refresh / search (the row and button are hidden, not dead). */
+  onRefresh?: () => void
+  searchOpen?: boolean; onToggleSearch?: () => void
   micActive?: boolean; onToggleMic?: () => void      // node dengan input teks saja — omit button if undefined
   commentsOpen: boolean; onToggleComments: () => void; commentCount?: number
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
@@ -63,17 +64,17 @@ export default function NodeToolbar(props: NodeToolbarProps) {
 
   // Inline actions in priority order: the ones past `fit` overflow into the menu.
   const inline: { key: string; node: ReactNode; menuItem: VscodeMenuItem }[] = [
-    {
+    ...(props.onToggleSearch ? [{
       key: 'search',
       node: (
         <ToolbarButton
           label="Search" title="Search" data-title="Search"
-          toggleable checked={props.searchOpen}
+          toggleable checked={Boolean(props.searchOpen)}
           onClick={props.onToggleSearch}
         ><Codicon name="search" /></ToolbarButton>
       ),
-      menuItem: { type: 'item', id: 'search', label: 'Search', checked: props.searchOpen, onSelect: props.onToggleSearch },
-    },
+      menuItem: { type: 'item', id: 'search', label: 'Search', checked: props.searchOpen, onSelect: props.onToggleSearch } as const,
+    }] : []),
     ...(props.hideMaximize ? [] : [{
       key: 'maximize',
       node: (
@@ -91,7 +92,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
 
   const moreItems: VscodeMenuItem[] = [
     ...(overflow.length ? [...overflow, { type: 'separator' } as const] : []),
-    { type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh },
+    ...(props.onRefresh ? [{ type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh } as const] : []),
     ...(props.onToggleMic
       ? [{ type: 'item', id: 'mic', label: 'Dictate', checked: Boolean(props.micActive), onSelect: props.onToggleMic } as const]
       : []),

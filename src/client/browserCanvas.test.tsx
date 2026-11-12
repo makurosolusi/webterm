@@ -2,13 +2,13 @@
 // Node browser di canvas App yang SUNGGUHAN: flag server mati = tidak ada jejaknya (menu, dock,
 // request, socket); flag menyala = baris "Browser" lahir, node ter-mount, socket terikat workspace.
 // Chromium dan server tidak ada: fetch dan WebSocket dipalsukan.
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BROWSER_WS_PATH, type BrowserStatusResp } from '../shared/browser.contract'
 import { resetBrowserStatusCache } from './browser.feature'
 import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { resetCapabilitiesCache } from './useCapabilities'
-import { COOKIE_MENU_TEXT, COOKIE_TEXT, TOOLBAR_TEXT } from './browser.uxText'
+import { COOKIE_MENU_TEXT, COOKIE_TEXT, TOOLBAR_MENU_TEXT, TOOLBAR_TEXT } from './browser.uxText'
 import { MENU_LABELS } from './canvasMenu.model'
 // The Layers side bar's empty state offers the same "New Terminal" / "New Agent" buttons as the
 // canvas menu; these queries mean the menu row, so the side bar is left out.
@@ -135,7 +135,7 @@ describe('flag browser menyala', () => {
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
   })
 
-  it('impor cookie lewat menu ⋯ node: Import Cookies ▸ From File… + catatan Google membuka dialog; tombol lama hilang', async () => {
+  it('impor cookie lewat menu ⋮ toolbar: Import Cookies ▸ From File… + catatan Google membuka dialog; header node hanya aksi node', async () => {
     await mountCanvas({ nodes: [], dirs: {}, browserStatus: { ...STATUS, cookieImportEnabled: true } })
     stubWs()
     fireEvent.click(screen.getByLabelText('Add node'))
@@ -143,7 +143,13 @@ describe('flag browser menyala', () => {
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
     const node = document.querySelector('.react-flow__node-browser') as HTMLElement
     expect(screen.queryByRole('button', { name: COOKIE_TEXT.title })).toBeNull() // tombol ghost "Cookies" sudah diganti menu
+    // Header "…" = node actions only: no page rows (cookies, reload) and no dead Search.
     fireEvent.click(node.querySelector('[data-title="More Actions…"]') as HTMLElement)
+    await screen.findByText(/^Comments/)
+    for (const page of [COOKIE_MENU_TEXT.importCookies, 'Refresh view', 'Search']) expect(screen.queryByText(page)).toBeNull()
+    expect(node.querySelector('[data-title="Search"]')).toBeNull()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    fireEvent.click(within(node).getByRole('button', { name: TOOLBAR_TEXT.more }))
     fireEvent.click(await screen.findByText(COOKIE_MENU_TEXT.importCookies))
     const fromFile = await screen.findByText(COOKIE_MENU_TEXT.fromFile)
     expect(screen.getByText(COOKIE_MENU_TEXT.googleNote)).not.toBeNull()
@@ -152,14 +158,14 @@ describe('flag browser menyala', () => {
     expect(await screen.findByRole('dialog', { name: COOKIE_TEXT.title })).not.toBeNull()
   })
 
-  it('impor cookie mati di server: menu ⋯ tanpa Import Cookies', async () => {
+  it('impor cookie mati di server: menu ⋮ tanpa Import Cookies', async () => {
     await mountCanvas({ nodes: [], dirs: {}, browserStatus: STATUS })
     stubWs()
     fireEvent.click(screen.getByLabelText('Add node'))
     fireEvent.click(await screen.findByRole('option', { name: 'Browser' }))
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
-    fireEvent.click(document.querySelector('.react-flow__node-browser [data-title="More Actions…"]') as HTMLElement)
-    await screen.findByText('Refresh view')
+    fireEvent.click(within(document.querySelector('.react-flow__node-browser') as HTMLElement).getByRole('button', { name: TOOLBAR_TEXT.more }))
+    await screen.findByText(TOOLBAR_MENU_TEXT.copyUrl)
     expect(screen.queryByText(COOKIE_MENU_TEXT.importCookies)).toBeNull()
   })
 })

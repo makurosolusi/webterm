@@ -1,5 +1,6 @@
-// "⋯" menu at the end of the browser toolbar (Chrome's kebab / VS Code Simple Browser overflow): zoom, device
-// mode, Shields, Design Mode, copy/open URL and agent control. Rarely used controls live here so the row stays one line.
+// "⋮" menu at the end of the browser toolbar (Chrome's kebab): zoom, device mode, Shields, Design Mode, console,
+// copy/open URL, agent control and the caller's extra rows (Import Cookies). The node has no other page-actions menu;
+// the header's "…" holds node actions only. Rarely used controls live here so the row stays one line.
 import { useRef, useState } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
 import { VscodeMenu } from './components/vscode/vscodeMenu'
@@ -32,6 +33,8 @@ export interface BrowserToolbarMenuProps {
   console?: ConsoleSlot
   /** Reports a failed action (e.g. clipboard) in the toolbar's alert line. */
   onError: (message: string) => void
+  /** Rows appended after a separator (browser-wide actions such as Import Cookies). */
+  extraItems?: VscodeMenuItem[]
 }
 
 /** Display form of the console chord (Chrome's ⌥⌘J), static like the menu's other hints. */
@@ -39,7 +42,7 @@ const CONSOLE_KEY = '⌥⌘J'
 
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
-/** The ⋯ button, its menu, and the popovers a row opens (device picker, agent offer) anchored to the button. */
+/** The ⋮ button, its menu, and the popovers a row opens (device picker, agent offer) anchored to the button. */
 export default function BrowserToolbarMenu(p: BrowserToolbarMenuProps) {
   const btn = useRef<HTMLSpanElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
@@ -83,13 +86,14 @@ export default function BrowserToolbarMenu(p: BrowserToolbarMenuProps) {
   } else if (p.onEnableAgent) {
     items.push({ type: 'separator' }, { type: 'item', id: 'agent-offer', label: M.agentOffer, onSelect: () => setPop('agent') })
   }
+  if (p.extraItems?.length) items.push({ type: 'separator' }, ...p.extraItems)
 
   return (
     <span ref={btn} className="inline-flex">
       <IconButton
         size="icon-xs" label={TOOLBAR_TEXT.more} tooltip={TOOLBAR_TIP.more} aria-haspopup="menu" aria-expanded={menuAt !== null}
         onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.right - 200, y: r.bottom }) }}
-      >{icon('ellipsis')}</IconButton>
+      >{icon('kebab-vertical')}</IconButton>
       {menuAt && <VscodeMenu open anchor={menuAt} items={items} minWidth={200} onClose={() => setMenuAt(null)} ariaLabel={TOOLBAR_TEXT.menu} />}
       {pop === 'device' && p.onDevice && btn.current && (
         <BrowserDevicePopover anchor={btn.current} value={p.device} onChange={p.onDevice} onClose={() => setPop(null)} />

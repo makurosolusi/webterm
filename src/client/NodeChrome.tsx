@@ -30,8 +30,9 @@ export interface NodeChromeProps {
   pill?: ReactNode                // <UsagePill/> for agent; omit for terminal
   comments: Comment[]; onAddComment: (text: string) => void
   // toolbar passthrough (NodeChrome owns comments open-state internally):
-  onRefresh: () => void
-  searchOpen: boolean; onToggleSearch: () => void
+  /** Omit both when the node type has no such action (browser: reload and find live in its own toolbar). */
+  onRefresh?: () => void
+  searchOpen?: boolean; onToggleSearch?: () => void
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   onClose: () => void
   onStop?: () => void             // agent only: Stop button in the toolbar
