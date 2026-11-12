@@ -14,24 +14,26 @@ export function filesSourceOf(s: Pick<ReactFlowState, 'edges' | 'nodeLookup'>, e
   return null
 }
 
-/** "Show in Files": pilih, tampilkan, dan fokuskan node Files asal editor `editorId`; tersembunyi bila tak ada. */
-export function ShowInFilesButton({ editorId }: { editorId: string }) {
+/** "Show in Files" for editor `editorId`: selects, reveals and focuses its source Files node; null when there is none. */
+export function useShowInFiles(editorId: string): (() => void) | null {
   const rf = useReactFlow()
   // Selector sempit: hanya string id yang dibandingkan, jadi perubahan edge/node lain tidak me-render editor.
   const source = useStore(useCallback((s: ReactFlowState) => filesSourceOf(s, editorId), [editorId]))
   if (!source) return null
+  return () => {
+    const n = rf.getNode(source)
+    if (!n) return
+    selectOnly(rf, source)
+    revealNode(rf, source, rectOfNode(n))
+  }
+}
+
+/** "Show in Files" header button; tersembunyi bila tak ada node Files asal. */
+export function ShowInFilesButton({ editorId }: { editorId: string }) {
+  const show = useShowInFiles(editorId)
+  if (!show) return null
   return (
-    <IconButton
-      size="icon-xs"
-      className="nodrag"
-      label="Show in Files"
-      onClick={() => {
-        const n = rf.getNode(source)
-        if (!n) return
-        selectOnly(rf, source)
-        revealNode(rf, source, rectOfNode(n))
-      }}
-    >
+    <IconButton size="icon-xs" className="nodrag" label="Show in Files" onClick={show}>
       <span className="codicon codicon-folder-opened" aria-hidden="true" />
     </IconButton>
   )

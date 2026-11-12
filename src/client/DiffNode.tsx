@@ -25,7 +25,9 @@ import { getStatus, subscribeStatus } from './ws'
 const ScmPanel = lazy(() => import('./ScmPanel').then((m) => ({ default: m.ScmPanel })))
 import './DiffNode.css'
 import { NodeNameLabel } from './nodeName.label'
-import { effectiveWrap, useWordWrap, WordWrapButton } from './editorWrap'
+import { effectiveWrap, useWordWrap, useWrapChord, WordWrapButton, wrapChordLabel } from './editorWrap'
+import { useNodeHost } from './tabLayout.context'
+import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
 
 const STATUS_LETTER: Record<GitChangeStatus, string> = { added: 'A', modified: 'M', deleted: 'D', renamed: 'R', untracked: 'U' }
 const TURN_ENDED: readonly (AgentStatus | undefined)[] = ['waiting', 'done']
@@ -167,11 +169,20 @@ function DiffNode({ id, data, selected }: NodeProps) {
   const hunks = file?.hunks.filter((h) => !kept.has(h.id)) ?? []
   // The click's own refusal doubles as the hint, so the tooltip says what the click will do.
   const sendTip = sendRefusal(agent?.id ?? null, notes.length) ?? 'Send all notes to the wired agent as one message'
+  const wrapKey = wrapChordLabel(useWrapChord())
+  // Tab mode: the tab is the header, so the header's actions move to the tab strip and tab menu.
+  const nodeHost = useNodeHost()
+  const tabActions: TabAction[] = [
+    ...(sides ? [{ id: 'wrap', label: 'Word wrap', tooltip: wrapKey ? `Toggle word wrap (${wrapKey})` : 'Toggle word wrap', icon: 'word-wrap', checked: wrap, onSelect: toggleWrap }] : []),
+    { id: 'send', label: send.busy ? 'Sending…' : `Send to agent (${notes.length})`, tooltip: sendTip, disabled: send.busy, busy: send.busy, onSelect: onSend },
+    { id: 'refresh', label: 'Refresh', tooltip: 'Reload the changed files and the open diff', icon: 'refresh', onSelect: refresh },
+  ]
 
   return (
     <>
       <NodeLayoutResizer minWidth={420} minHeight={260} color={swatch} />
       <div className={`term-node diff-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+        {nodeHost.inTab ? <TabNodeActions id={id} visible={nodeHost.visible} items={[]} actions={tabActions} /> : (
         <div className="node-header">
           <span className="node-title diff-node__title" title={root}>
             <span className="codicon codicon-git-compare" aria-hidden="true" />
@@ -195,6 +206,7 @@ function DiffNode({ id, data, selected }: NodeProps) {
             </IconTooltip>
           </ToolbarContainer>
         </div>
+        )}
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
         {send.result && <div className="diff-node__msg nodrag"><ActionResult action={send} /></div>}
         {root && <Suspense fallback={null}><ScmPanel root={root} agentId={agent?.id ?? null} onChanged={refresh} /></Suspense>}

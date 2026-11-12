@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { KIND_ICON, nodeRowLabel } from './nodeList'
+import { KIND_ICON, NODE_KIND_LABEL, nodeRowLabel } from './nodeList'
+import { sessionLabel } from './sessionList'
 import type { WsNode } from '../shared/workspace'
 
 const node = (id: string, kind: WsNode['kind'] = 'terminal', extra: Partial<WsNode> = {}): WsNode => ({
@@ -30,6 +31,29 @@ describe('nodeRowLabel', () => {
   it('is the label without the node name (the tab strip shows the name itself); a legacy auto title falls back to the kind', () => {
     expect(nodeRowLabel(node('n1', 'terminal', { name: 'Mango', title: 'api' }))).toBe('api')
     expect(nodeRowLabel(node('n2', 'agent', { name: 'Otter', agentId: 'claude', title: 'brisk-otter' }))).toBe('Claude Code')
+  })
+})
+
+describe('nodeRowLabel per kind (untitled)', () => {
+  // Every kind, untitled and without a path: its own label, never another kind's ("Terminal").
+  const EXPECTED: Record<WsNode['kind'], string> = {
+    terminal: 'Terminal', agent: 'Agent', agentChat: 'Agent Chat', files: 'Files', editor: 'Editor',
+    browser: 'Browser', diff: 'Changes', plan: 'Plan', app: 'App',
+  }
+  it('covers every kind', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual(Object.keys(NODE_KIND_LABEL).sort())
+  })
+  for (const kind of Object.keys(EXPECTED) as WsNode['kind'][]) {
+    it(`${kind} → ${EXPECTED[kind]}`, () => {
+      expect(nodeRowLabel(node('n1', kind))).toBe(EXPECTED[kind])
+      expect(nodeRowLabel(node('n1', kind, { title: '  ' }))).toBe(EXPECTED[kind])
+    })
+  }
+
+  it('an Agent Chat is "Agent Chat" even with its agentId, in tabs and in the sidebar', () => {
+    const chat = node('n1', 'agentChat', { agentId: 'claude', name: 'Orchid' })
+    expect(nodeRowLabel(chat)).toBe('Agent Chat')
+    expect(sessionLabel(chat)).toBe('Orchid · Agent Chat')
   })
 })
 

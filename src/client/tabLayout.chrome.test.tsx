@@ -108,7 +108,7 @@ describe('tab mode chrome', () => {
     mount()
     expect(tab('Cougar').textContent).toBe('Cougar')
     expect(tab('Cougar').title).toBe('Cougar · Browser')
-    expect(tab('Orchid').title).toMatch(/^Orchid · .*Agent Chat$/)
+    expect(tab('Orchid').title).toBe('Orchid · Agent Chat')
     expect(screen.getByRole('button', { name: 'New node…' })).toBeTruthy()
   })
 })

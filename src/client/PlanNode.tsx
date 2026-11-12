@@ -15,6 +15,8 @@ import { usePlanNode } from './PlanNode.hooks'
 import { estimateText, removeTask, type TaskStatus } from './PlanNode.model'
 import './PlanNode.css'
 import { NodeNameLabel } from './nodeName.label'
+import { useNodeHost } from './tabLayout.context'
+import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
 
 export const PLAN_TEXT = {
   drafting: 'Drafting a plan… Claude reads the repo only; nothing is changed.',
@@ -71,6 +73,17 @@ function PlanNode({ id, data, selected }: NodeProps) {
   const gates = tasks.filter((t) => t.kind === 'gate').length
   const pendingGates = view?.gates.filter((g) => g.status === 'pending').length ?? 0
   const title = view?.dag.title ?? draft?.title ?? 'Plan'
+  // Tab mode: the tab is the header, so the header's actions move to the tab strip and tab menu.
+  const host = useNodeHost()
+  const tabActions: TabAction[] = [
+    ...(draft && !view && editing === null ? [{ id: 'edit', label: PLAN_TEXT.edit, onSelect: () => setEditing(JSON.stringify(draft.tasks, null, 2)) }] : []),
+    ...(editing !== null ? [{ id: 'apply', label: apply.busy ? PLAN_TEXT.applying : PLAN_TEXT.apply, disabled: apply.busy, busy: apply.busy, onSelect: onApply }] : []),
+    ...(!plan.dagId && (draft || plan.error) ? [{ id: 'redraft', label: PLAN_TEXT.redraft, onSelect: redraft }] : []),
+    ...(draft && !plan.dagId ? [{
+      id: 'approve', label: approve.busy ? PLAN_TEXT.approving : PLAN_TEXT.approve, tooltip: PLAN_TEXT.approveHint, primary: true,
+      disabled: busy || editing !== null || !preview || !plan.projectId, busy: approve.busy, onSelect: onApprove,
+    }] : []),
+  ]
 
   const body = () => {
     if (!plan.workspaceId && !plan.dagId) return <p className="plan-node__notice">{PLAN_TEXT.noWorkspace}</p>
@@ -84,6 +97,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
     <>
       <NodeLayoutResizer minWidth={420} minHeight={240} color={swatch} />
       <div className={`term-node plan-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+        {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} /> : (
         <div className="node-header">
           <span className="node-title plan-node__title" title={plan.intent}>
             <span className="codicon codicon-type-hierarchy" aria-hidden="true" />
@@ -102,6 +116,7 @@ function PlanNode({ id, data, selected }: NodeProps) {
             <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
           </ToolbarContainer>
         </div>
+        )}
         <div className="plan-node__summary nodrag">
           <span className="plan-node__intent">{plan.intent}</span>
           {tasks.length > 0 && <span>{tasks.length} task{tasks.length === 1 ? '' : 's'} · {waves.length} wave{waves.length === 1 ? '' : 's'} · {gates} gate{gates === 1 ? '' : 's'}</span>}

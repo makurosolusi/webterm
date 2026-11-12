@@ -1,6 +1,6 @@
 // Name and glyph of ANY node kind (files and editors included, unlike `./sessionList`), as shown by
 // the node tab strip above the canvas and by tab mode.
-import { sessionTitle } from './sessionList'
+import { SESSION_KINDS, sessionTitle } from './sessionList'
 import { isAutoName } from './nodeIdentity'
 import { folderTitle } from './fileBrowse'
 import { fileBaseName } from './editorFile'
@@ -40,6 +40,6 @@ export function nodeRowLabel(n: WsNode): string {
   if (title) return title
   if (n.kind === 'files') return n.dirPath ? folderTitle(n.dirPath) : NODE_KIND_LABEL.files
   if (n.kind === 'editor') return n.filePath ? fileBaseName(n.filePath) : NODE_KIND_LABEL.editor
-  if (n.kind === 'browser') return NODE_KIND_LABEL.browser
-  return sessionTitle(n)
+  // Only sessions are named by `sessionTitle` (its fallback is "Terminal"); the rest by their kind.
+  return SESSION_KINDS.includes(n.kind) ? sessionTitle(n) : NODE_KIND_LABEL[n.kind]
 }

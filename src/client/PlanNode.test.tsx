@@ -2,7 +2,7 @@
 // Plan node DOM (F4-f): an intent drafts once, the draft shows waves/gates/estimate and nothing is
 // created until Approve; after approval each dispatched worker appears as a node cabled to the plan.
 // The `/api/dag` client is faked; no planner, no Claude.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Edge, type Node } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
@@ -10,7 +10,9 @@ import './vscode/test-setup'
 const api = vi.hoisted(() => ({ startPlan: vi.fn(), fetchPlan: vi.fn(), previewPlan: vi.fn(), approvePlan: vi.fn(), fetchDag: vi.fn() }))
 vi.mock('./PlanNode.api', () => api)
 
-import PlanNode from './PlanNode'
+import PlanNode, { PLAN_TEXT } from './PlanNode'
+import { NodeHostContext } from './tabLayout.context'
+import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
 
 // test-only: jsdom has no ResizeObserver; React Flow renders unmeasured nodes, which is all this needs.
 beforeAll(() => {
@@ -41,8 +43,15 @@ function Canvas({ init }: { init: Node[] }) {
   return <div style={{ width: 1200, height: 800 }}><ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} nodeTypes={nodeTypes} /></div>
 }
 
-const mount = (plan: Record<string, unknown>) =>
-  render(<ReactFlowProvider><Canvas init={[{ id: 'p1', type: 'plan', position: { x: 0, y: 0 }, width: 640, height: 460, data: { plan } }]} /></ReactFlowProvider>)
+const mount = (plan: Record<string, unknown>, inTab = false) =>
+  render(
+    <ReactFlowProvider>
+      <div ref={setEditorActionsSlot} data-slot="tab-editor-actions" />
+      <NodeHostContext.Provider value={{ inTab, visible: true, maximized: false }}>
+        <Canvas init={[{ id: 'p1', type: 'plan', position: { x: 0, y: 0 }, width: 640, height: 460, data: { plan } }]} />
+      </NodeHostContext.Provider>
+    </ReactFlowProvider>,
+  )
 const planData = () => (latest.nodes.find((n) => n.id === 'p1')?.data as { plan: Record<string, unknown> }).plan
 
 function draftReady() {
@@ -108,5 +117,32 @@ describe('PlanNode', () => {
     expect((await screen.findByRole('alert', {}, SLOW)).textContent).toContain('no structured output')
     fireEvent.click(screen.getByRole('button', { name: 'Draft again' }))
     await waitFor(() => expect(api.startPlan).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('PlanNode in tab mode', () => {
+  const strip = () => within(document.querySelector<HTMLElement>('[data-slot="tab-editor-actions"]')!)
+  const labels = () => strip().getAllByRole('button').map((b) => b.textContent)
+
+  it('renders no own header; Edit JSON, Draft again and Approve sit in the strip and the tab menu', async () => {
+    draftReady()
+    const { container } = mount({ intent: 'x y', workspaceId: 'w1', draft: DRAFT, projectId: 'w1', repo: '/repo' }, true)
+    await screen.findByLabelText('Task ask')
+    expect(container.querySelector('.plan-node .node-header')).toBeNull()
+    expect(labels()).toEqual([PLAN_TEXT.edit, PLAN_TEXT.redraft, PLAN_TEXT.approve])
+    expect(tabNodeMenuItems('p1').map((r) => (r.type === 'item' ? r.label : r.type))).toEqual([PLAN_TEXT.edit, PLAN_TEXT.redraft, PLAN_TEXT.approve])
+    // Editing swaps Edit for Apply and keeps Approve disabled until the edits are applied.
+    fireEvent.click(strip().getByRole('button', { name: PLAN_TEXT.edit }))
+    expect(labels()).toEqual([PLAN_TEXT.apply, PLAN_TEXT.redraft, PLAN_TEXT.approve])
+    expect((strip().getByRole('button', { name: PLAN_TEXT.approve }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('keeps its own header on the canvas and publishes nothing', async () => {
+    draftReady()
+    const { container } = mount({ intent: 'x y', workspaceId: 'w1', draft: DRAFT, projectId: 'w1', repo: '/repo' })
+    await screen.findByLabelText('Task ask')
+    expect(container.querySelector('.plan-node .node-header .codicon-close')).not.toBeNull()
+    expect(strip().queryAllByRole('button')).toHaveLength(0)
+    expect(tabNodeMenuItems('p1')).toEqual([])
   })
 })
