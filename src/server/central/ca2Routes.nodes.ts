@@ -43,14 +43,14 @@ function centralNodes(h: Ca2Handle, ids: string[]): Set<string> {
   return found
 }
 
-/** Paginated board nodes plus every project (for the filter); status is read for the returned page only. */
+/** Paginated board nodes plus every project (for the filter, and its board and folder for Health's open file); status is read for the returned page only. */
 export async function nodesView(h: Ca2Handle, q: URLSearchParams, deps: BoardDeps = LIVE_BOARD): Promise<RouteResult> {
   const page = pageOf(q)
   if (!page) return { status: 400, body: { error: 'invalid_page' } }
   const workspaces = listWorkspaces()
   if (workspaces === null) return { status: FEATURE_OFF, body: { error: 'workspaces_off' } }
   const projectOf = new Map(allRows(h.db, 'SELECT id, workspace_id FROM project').map((r) => [String(r.workspace_id), String(r.id)]))
-  const projects = workspaces.filter((w) => w.id).map((w) => ({ id: projectOf.get(w.id as string) ?? (w.id as string), workspaceId: w.id as string, name: text(w.name) }))
+  const projects = workspaces.filter((w) => w.id).map((w) => ({ id: projectOf.get(w.id as string) ?? (w.id as string), workspaceId: w.id as string, name: text(w.name), cwd: w.cwd || null }))
   const wanted = q.get('projectId')?.trim()
   const candidates = projects.filter((p) => !wanted || p.id === wanted).flatMap((p) => {
     const stored = workspaces.find((w) => w.id === p.workspaceId)?.nodes
@@ -77,5 +77,5 @@ export async function nodesView(h: Ca2Handle, q: URLSearchParams, deps: BoardDep
     const title = typeof node.title === 'string' && node.title ? node.title : name
     return { nodeId: id, workspaceId: project.workspaceId, projectId: project.id, projectName: project.name, kind: String(node.kind), title: text(title), live, status }
   })
-  return { status: 200, body: { items, projects: projects.map(({ id, name }) => ({ id, name })) } }
+  return { status: 200, body: { items, projects: projects.map(({ id, name, workspaceId, cwd }) => ({ id, name, workspaceId, cwd })) } }
 }

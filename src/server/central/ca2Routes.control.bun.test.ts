@@ -140,7 +140,13 @@ describe('board nodes', () => {
     stored(boards)
     const res = (await get('/api/central/nodes?projectId=p2'))?.body as { items: Array<{ nodeId: string }>; projects: unknown }
     expect(res.items.map((r) => r.nodeId)).toEqual(['chat2'])
-    expect(res.projects).toEqual([{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }])
+    expect(res.projects).toEqual([{ id: 'p1', name: 'One', workspaceId: 'w1', cwd: null }, { id: 'p2', name: 'Two', workspaceId: 'w2', cwd: null }])
+  })
+
+  it("returns each project's board and folder, null when the board has no folder", async () => {
+    stored([{ id: 'w1', name: 'One', cwd: '/work/one', nodes: [] }, { id: 'w2', name: 'Two', cwd: '', nodes: [] }])
+    const res = (await get('/api/central/nodes'))?.body as { projects: unknown }
+    expect(res.projects).toEqual([{ id: 'p1', name: 'One', workspaceId: 'w1', cwd: '/work/one' }, { id: 'p2', name: 'Two', workspaceId: 'w2', cwd: null }])
   })
 
   it('works with agents off', async () => {

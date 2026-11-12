@@ -49,7 +49,9 @@ export interface BoardNodeRow {
   status: string | null
 }
 
-export interface BoardNodesPage { items: BoardNodeRow[]; projects: Array<{ id: string; name: string }> }
+/** A project for the filter; `workspaceId`/`cwd` are null from an older server or a board without a folder. */
+export interface BoardProject { id: string; name: string; workspaceId?: string | null; cwd?: string | null }
+export interface BoardNodesPage { items: BoardNodeRow[]; projects: BoardProject[] }
 
 export type AgentAction = 'relay' | 'close'
 
