@@ -30,6 +30,8 @@ export class WsEventSource extends EventTarget {
   onerror: ((event: Event) => void) | null = null
   /** The server holds a subscription for this id (a sub went out and no end came back). */
   subscribed = false
+  /** HTTP status of the `sse.end` that ended this stream (403 refused, 404 unknown node, ...); unset after a socket drop. */
+  status: number | undefined
 
   constructor(readonly url: string, private readonly sendIfOpen: SendIfOpen) { super() }
 
@@ -50,8 +52,9 @@ export class WsEventSource extends EventTarget {
   }
 
   /** The stream is over on the server side: `readyState` as EventSource leaves it, then `error`. */
-  fail(readyState: number): void {
+  fail(readyState: number, status?: number): void {
     streams.delete(this.id)
+    this.status = status
     this.subscribed = false
     this.readyState = readyState
     this.emit(new Event('error'))
@@ -92,7 +95,7 @@ export function dispatchStreamFrame(msg: ServerMsg): msg is StreamFrame {
     s.emit(new MessageEvent(msg.event, { data: msg.data, lastEventId: msg.lastId }))
   } else {
     // A 200 that ended is a stream EventSource would retry; any other status is a refusal it gives up on.
-    s.fail(msg.status === 200 ? STREAM_CONNECTING : STREAM_CLOSED)
+    s.fail(msg.status === 200 ? STREAM_CONNECTING : STREAM_CLOSED, msg.status)
   }
   return true
 }

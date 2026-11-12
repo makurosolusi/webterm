@@ -64,6 +64,13 @@ export function statusLabel(s: AgentChatState, stream: ChatStreamStatus): string
   }
 }
 
+/** Why the stream was refused, for "Could not connect to Claude: <reason>". */
+export function refusedReason(status: number): string {
+  if (status === 403) return 'the server refused this page (403). Reload the page or sign in again.'
+  if (status === 404) return 'this chat node is not on the server yet (404). Reload the board.'
+  return `the server answered ${status}.`
+}
+
 /** Collects SSE events and applies them once per animation frame (a token burst = one render). */
 function useBatchedEvents(apply: (events: AgentChatEvent[]) => void) {
   const queue = useRef<AgentChatEvent[]>([])
@@ -117,10 +124,14 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
   }, [noteEvents])
   const batch = useBatchedEvents(apply)
 
+  // A stream the server keeps refusing stops retrying (chatStream.ts) and says why; Retry reopens it.
+  const [refused, setRefused] = useState<number | null>(null)
+  const [streamRun, setStreamRun] = useState(0)
   useEffect(() => {
-    const s = transport.stream({ after: 0, onEvent: batch.push, onStatus: setStream })
+    const s = transport.stream({ after: 0, onEvent: batch.push, onStatus: setStream, onRefused: setRefused })
     return () => { s.close(); batch.cancel() }
-  }, [transport, batch])
+  }, [transport, batch, streamRun])
+  const retryStream = (): void => { setRefused(null); setStream('connecting'); setStreamRun((n) => n + 1) }
 
   const loadHistory = useCallback((before?: number) => {
     historyAbort.current?.abort()
@@ -200,7 +211,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
 
   return (
     <section className="agent-chat nodrag nowheel" aria-label="Agent chat" ref={sectionRef}>
-      {stream === 'reconnecting' && opened && (
+      {stream === 'reconnecting' && opened && refused === null && (
         <div className="agent-chat-banner" role="status">
           <span className="chat-progress" aria-hidden="true" />
           <span>Connection lost. Reconnecting…</span>
@@ -229,7 +240,14 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
               <Button variant="secondary" size="xs" onClick={() => loadHistory(state.historyNext ?? undefined)}>Retry</Button>
             </div>
           )}
-          {empty && !history.loading && (
+          {refused !== null && (
+            <div className="chat-error" role="alert">
+              <span className="codicon codicon-error" aria-hidden="true" />
+              <span>{`Could not connect to Claude: ${refusedReason(refused)}`}</span>
+              <Button variant="secondary" size="xs" onClick={retryStream}>Retry</Button>
+            </div>
+          )}
+          {empty && !history.loading && refused === null && (
             <p className="chat-empty">{opened ? 'Ask Claude anything about this folder.' : 'Connecting to Claude…'}</p>
           )}
           <AgentChatThread state={state} actions={actions} />

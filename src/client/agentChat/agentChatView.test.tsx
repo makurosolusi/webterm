@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentChatApiError } from './agentChatTransport'
 import { fakeAgentChatTransport, initEvent } from './agentChatTransport.fake'
@@ -65,6 +65,18 @@ describe('AgentChatView', () => {
     emit({ seq: 3, t: 'status', status: 'interrupted' })
     await waitFor(() => expect(screen.queryByText('streaming')).toBeNull())
     expect(screen.getByText('Let me look')).toBeTruthy()
+  })
+
+  it('a stream the server keeps refusing shows why with Retry, not "Connecting" forever', async () => {
+    const { t } = setup()
+    expect(screen.getByText('Connecting to Claude…')).toBeTruthy()
+    act(() => t.stream.mock.calls[0]![0].onRefused?.(403))
+    expect(await screen.findByText(/^Could not connect to Claude: the server refused this page \(403\)/)).toBeTruthy()
+    expect(screen.queryByText('Connecting to Claude…')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(t.stream).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText(/Could not connect to Claude/)).toBeNull()
+    expect(screen.getByText('Connecting to Claude…')).toBeTruthy()
   })
 
   it('keeps a failed message in a sticky error with Retry', async () => {
