@@ -77,15 +77,14 @@ describe('fsApi dispatcher', () => {
     expect(await fsApiRoute('/api/other/list', 'GET', q(), noBody)).toBeNull()
   })
 
-  it('capabilities mencerminkan env (default L11: baca-saja on, mutate/upload off, listMax 5000)', async () => {
+  it('capabilities mencerminkan env (default maksimal: semua on termasuk mutate/upload, listMax 5000)', async () => {
     const def = await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody)
-    expect(def).toEqual({ status: 200, body: { ok: true, mutate: false, viewers: true, watch: true, git: true, quickOpen: true, upload: false, listMax: 5000 } })
+    expect(def).toEqual({ status: 200, body: { ok: true, mutate: true, viewers: true, watch: true, git: true, quickOpen: true, upload: true, listMax: 5000 } })
     process.env[FILES_FLAG.GIT_STATUS] = 'off'
-    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ git: false, viewers: true })
-    process.env[FILES_FLAG.MUTATE] = 'on'
-    process.env[FILES_FLAG.UPLOAD] = 'on'
+    process.env[FILES_FLAG.MUTATE] = 'off'
+    process.env[FILES_FLAG.UPLOAD] = 'off'
     process.env.WEBTERM_FILES_LIST_MAX = '100'
-    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ mutate: true, upload: true, git: false, viewers: true, listMax: 100 })
+    expect((await fsApiRoute('/api/fs/capabilities', 'GET', q(), noBody))?.body).toMatchObject({ mutate: false, upload: false, git: false, viewers: true, listMax: 100 })
   })
 
   it('FsFail dipetakan ke status: create ke file ada -> 409 EEXIST dan isi lama utuh', async () => {

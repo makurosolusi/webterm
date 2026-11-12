@@ -130,7 +130,10 @@ test('the existing reaper timer runs retention, and a failing retention never st
   let brokenLeases = 0
   const errors: unknown[] = []
   const stopBroken = startLedgerReaper({ task: { sweepExpiredLeases: () => { brokenLeases++ } }, retention: broken }, 5, (err) => { errors.push(err) })
-  await new Promise((resolve) => setTimeout(resolve, 40))
+  // Test timing fix: wait for two ticks of each timer (bounded) instead of a fixed 40ms sleep, which a loaded
+  // full-suite run can overrun before the 5ms interval has fired twice.
+  const deadline = Date.now() + 2000
+  while ((leases < 2 || brokenLeases < 2) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5))
   stopOk(); stopBroken()
   expect(ids(db, 'SELECT id FROM agent_outbox')).toEqual([])
   expect(leases >= 2).toBe(true)
