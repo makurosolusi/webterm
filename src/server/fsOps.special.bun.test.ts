@@ -12,6 +12,16 @@ import { readBinary, readErrorResult, readTextMeta } from './fsOps'
 
 const root = mkdtempSync(join(tmpdir(), 'webterm-fsspecial-'))
 const writers: ChildProcess[] = []
+/** Hard lifetime of every FIFO writer, enforced inside its own shell so it holds even if this process dies. */
+const WRITER_MAX_LIFETIME_S = 30
+
+/** Spawn `cmd` (a FIFO writer that may block forever on open) under an in-shell SIGKILL watchdog. */
+function writer(cmd: string): void {
+  // ponytail: the watchdog kills `$$` by PID after the bound even if cmd already exited; PID reuse
+  // within 30s is the ceiling. `exec` makes `$$` the writer itself, so afterAll's kill hits it directly.
+  const script = `(sleep ${WRITER_MAX_LIFETIME_S}; kill -9 $$ 2>/dev/null) & exec ${cmd}`
+  writers.push(spawn('sh', ['-c', script], { stdio: 'ignore' }))
+}
 afterAll(() => {
   for (const w of writers) w.kill('SIGKILL')
   rmSync(root, { recursive: true, force: true })
@@ -38,13 +48,13 @@ describe('content reads refuse non-regular files within 1s (sec-208-5)', () => {
       const p = fifo(`idle-${verb}.png`)
       const got = await outcome(() => read(p))
       // On a regression the pending open() would keep the process alive; give it its writer.
-      if (got === TIMEOUT) writers.push(spawn('sh', ['-c', `: > "${p}"`]))
+      if (got === TIMEOUT) writer(`true > "${p}"`)
       expect(got).toBe(400)
     })
 
     test(`${verb}: a FIFO fed past the binary cap -> 400, the cap cannot be bypassed`, async () => {
       const p = fifo(`fed-${verb}.bin`)
-      writers.push(spawn('sh', ['-c', `head -c ${FS_READ_BINARY_MAX_BYTES + 8 * 1024 * 1024} /dev/zero > "${p}"`]))
+      writer(`head -c ${FS_READ_BINARY_MAX_BYTES + 8 * 1024 * 1024} /dev/zero > "${p}"`)
       expect(await outcome(() => read(p))).toBe(400)
     })
 
