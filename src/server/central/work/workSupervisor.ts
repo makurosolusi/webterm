@@ -17,15 +17,19 @@ const RESPAWN_EVENT = 'work.assignment.respawn'
 const NUDGE_EVENT = 'work.assignment.nudge'
 const SESSION_GONE_STATUSES: readonly WorkStatus[] = ['assigned', 'running', 'stalled', 'waiting_input']
 
-/** Named liveness rules and their thresholds (docs/decisions/central-orchestrator.md 4C). */
+/**
+ * Named liveness rules and their thresholds (docs/decisions/central-orchestrator.md 4C). These only catch an agent that
+ * hung or went quiet: a report, a failure, an exit or a question reaches Central as an event (workCheckin `onMove`).
+ * Any hook (tool use, prompt, notification) counts as a signal, so a working agent never reaches these.
+ */
 export const WORK_LIVENESS_RULES = {
-  startup: { name: 'startup', afterMs: 2 * MINUTE_MS },
-  heartbeat: { name: 'heartbeat', afterMs: 10 * MINUTE_MS },
-  stalled: { name: 'stalled', afterMs: 20 * MINUTE_MS },
+  startup: { name: 'startup', afterMs: MINUTE_MS },
+  heartbeat: { name: 'heartbeat', afterMs: 3 * MINUTE_MS },
+  stalled: { name: 'stalled', afterMs: 6 * MINUTE_MS },
   vanished: { name: 'vanished', maxRespawnsPerAssignment: 1 },
   restartLimit: { name: 'restart_limit', maxPerTask: 2, windowMs: 60 * MINUTE_MS },
   /** Open duties (workEscalation.ts): Central gets `graceMs` to fix a failed send in the turn that saw it; after `afterMs` the user is told. */
-  escalate: { name: 'escalate', graceMs: 2 * MINUTE_MS, afterMs: 15 * MINUTE_MS },
+  escalate: { name: 'escalate', graceMs: MINUTE_MS, afterMs: 15 * MINUTE_MS },
 } as const
 
 /** End reason when a session died and the server has no way to relaunch it. */
@@ -44,7 +48,8 @@ export interface WorkSupervisorPorts {
   chatNodeGone(assignment: AssignmentView): boolean
   /** Sends a user message; the pool reopens a closed session. */
   chatSend(assignment: AssignmentView, text: string): Promise<WorkSendResult>
-  agentOf(agentId: string): { state: AgentState; endReason: string | null } | null
+  /** `lastEventAt` = the agent's last state change (e.g. launched after its approval card), a floor for the quiet clock. */
+  agentOf(agentId: string): { state: AgentState; endReason: string | null; lastEventAt?: number | null } | null
 }
 
 export interface WorkSupervisorDeps {
@@ -134,7 +139,8 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
     if (SESSION_GONE_STATUSES.includes(task.status) && sessionGone(a)) return vanish(a, task, 'session gone', at)
     if (a.channel === 'chat' && ports.chatBusy(a.nodeId)) return
     const { startup, heartbeat, stalled } = WORK_LIVENESS_RULES
-    const since = a.lastSignalAt ?? a.startedAt
+    // A spawn parked on its card starts its clock when it launched, not when the card was raised.
+    const since = Math.max(a.lastSignalAt ?? a.startedAt, (a.channel === 'spawn' ? agentOf(a)?.lastEventAt : null) ?? 0)
     const quiet = at - since
     if (task.status === 'assigned' && a.lastSignalAt === null && quiet >= startup.afterMs) {
       store.moveTask(task.id, 'stalled', { actor: SYSTEM, rule: startup.name, reason: 'no signal since started', assignmentId: a.id })
@@ -170,7 +176,7 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
       try {
         const task = store.getTask(a.taskId)
         // SessionEnd fires before the PTY is gone (and on /clear, where it stays): the exit event or the tick decides.
-        if (task && (a.channel === 'chat' || sessionGone(a))) await vanish(a, task, cause, now())
+        if (task && SESSION_GONE_STATUSES.includes(task.status) && (a.channel === 'chat' || sessionGone(a))) await vanish(a, task, cause, now())
       } catch (err) {
         log.error('work.vanish_failed', `session end of assignment ${a.id} could not be handled`, { assignmentId: a.id, taskId: a.taskId, nodeId: a.nodeId, error: errorText(err) })
       }

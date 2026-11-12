@@ -1,9 +1,10 @@
 // Production `AgentHost` (WS-19): maps the executor's host port onto the worktree service and the
 // session port. Everything it runs is server-built: kind -> launch line / argv comes from tables,
-// the cwd comes from the worktree allocation, and the prompt never carries free model text.
+// the cwd comes from the worktree allocation. The boot prompt is a server template plus the stored board
+// task (title + objective Central wrote with task.create), passed through the handoff filter.
 import type { WorkerSessionPort } from '../../orchestrator/workerRuntimeSession'
 import type { WorktreeService } from '../../orchestrator/worktree'
-import { AGENT_ENVELOPE, spawnParentOf } from './agentExecutor'
+import { AGENT_ENVELOPE, agentNodeId, spawnParentOf } from './agentExecutor'
 import type { AgentHost } from './agentExecutor'
 import type { AgentRecord, AgentRunner } from '../contracts'
 import { AGENT_KIND_UNKNOWN, type AgentCatalog } from './agentCatalog'
@@ -12,6 +13,8 @@ import type { CanvasPush } from '../../canvas/canvasPush'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { joinArgv } from '../../../shared/claudeLaunch/shellQuote'
 import { agentSessionId, ensureAgentNode } from './agentCanvas'
+
+const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
 
 /** Worker owner label stored on the worktree allocation. */
 export const AGENT_WORKTREE_OWNER = 'central'
@@ -25,8 +28,8 @@ export interface AgentHostDeps {
   repoOf(projectId: string): string | null
   /** Kind catalog: launch line, headless argv, tier and env of every spawnable kind. */
   catalog: AgentCatalog
-  /** Optional human-set task title; only server data, never model text. */
-  taskTitle?(agent: AgentRecord): string | null
+  /** The board task the agent was started on (title + objective, as stored by task.create); null = none or not found. */
+  task?(agent: AgentRecord): { title: string; objective: string } | null
   /** The `agent.spawn` path (F2-h); default = the process-wide spawner (depth, caps, lineage, events). */
   spawn?: typeof spawnAgent
   /** Board writer: a PTY agent is added as a canvas node; absent = no node (tests, headless boot). */
@@ -37,11 +40,17 @@ export { spawnParentOf }
 
 /** Builds the host over injected sessions/worktrees (real ones in `ca2Boot`, fakes in tests). */
 export function createAgentHost(deps: AgentHostDeps): AgentHost {
-  const titleOf = (agent: AgentRecord): string => deps.taskTitle?.(agent) ?? `${agent.role} ${agent.kind}`
+  const taskOf = (agent: AgentRecord) => (agent.taskId ? deps.task?.(agent) ?? null : null)
+  const titleOf = (agent: AgentRecord): string => taskOf(agent)?.title ?? `${agent.role} ${agent.kind}`
+  /** The first message carries everything: who it is, where, the task, and how its result reaches Central. */
   const initialPrompt = (agent: AgentRecord): string => {
-    const title = deps.taskTitle?.(agent)
-    const task = agent.taskId ? `Task ${agent.taskId}${title ? `: ${title}` : ''}.` : 'No task attached.'
-    return `${AGENT_ENVELOPE}\nRole: ${agent.role}. ${task} Work only inside this worktree; do not merge or push.`
+    const where = `You are a ${agent.role} agent started by webterm Central (agent ${agent.id}, canvas node ${agentNodeId(agent.id)}, project ${agent.projectId}).`
+    const rules = 'Work only inside this worktree; do not merge or push.'
+    if (!agent.taskId) return `${AGENT_ENVELOPE}\n${where} No task attached yet: reply only READY and wait; Central sends the task as your next message. ${rules}`
+    const task = taskOf(agent)
+    return [`${AGENT_ENVELOPE}`, where, `Task ${agent.taskId}${task ? `: ${task.title}` : ''}.`, ...(task?.objective ? [task.objective.replace(CONTROL_CHARS, '')] : []),
+      `When you finish, end with a line \`RESULT:\` and your result. webterm reports it to Central automatically, so do not wait for a reply. If you are blocked or need a decision, say so and stop; that reaches Central too.`,
+      rules].join('\n')
   }
   const place = (agent: AgentRecord, nodeId: string, cwd: string, cmd: string): void =>
     ensureAgentNode(deps.canvas, deps.repoOf(agent.projectId), { agent, nodeId, cwd, cmd, title: titleOf(agent) })

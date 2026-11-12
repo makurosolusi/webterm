@@ -22,6 +22,8 @@ export interface BrowserToolDeps {
   listDomains(workspaceId: string): Array<{ domain: string }>
   /** Calls the agent control path (`handleBrowserControl`) with a capability minted for `nodeId`. */
   control(nodeId: string, verb: 'navigate' | 'click' | 'type', body: Record<string, unknown>): Promise<{ status: number; body?: unknown }>
+  /** Opens browser node `nodeId` beside agent node `requesterId`, cabled to it; absent = no `browser_open`. */
+  open?(requesterId: string, nodeId: string): Promise<{ ok: true; started: boolean } | { ok: false; code: string }>
 }
 
 export type NodeLookup = { ok: true; workspaceId: string; nodeIds: string[] } | { ok: false; code: string }

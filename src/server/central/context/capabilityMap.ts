@@ -20,11 +20,12 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['browse yourself', ['browser_act']],
   ['project health', ['health.scan']],
   ['remember', ['memory.remember']],
-  ['check later', ['reminder.set']],
+  // Delegated work reports by itself (a check-in); reminders are only for what time alone can tell.
+  ['follow up later (not delegated work)', ['reminder.set']],
 ]
 const WORST: readonly Access[] = ['auto', 'asks', 'blocked', 'off']
-/** A playbook asks when any step asks: its own tier says nothing about the spawn card inside. */
-const CHAINS = new Map(PLAYBOOKS.map((pb) => [playbookTool(pb.id), pb.steps.map((s) => s.tool)]))
+/** A playbook asks when any required step asks: its own tier says nothing about the spawn card inside. */
+const CHAINS = new Map(PLAYBOOKS.map((pb) => [playbookTool(pb.id), pb.steps.filter((s) => !s.optional).map((s) => s.tool)]))
 
 /** Renders the map from catalog rows; goals whose tools are not registered are left out. */
 export function renderCapabilityMap(tools: readonly MapTool[]): string {

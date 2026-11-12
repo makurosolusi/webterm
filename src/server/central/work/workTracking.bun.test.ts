@@ -57,3 +57,41 @@ test('recovery reaches past one page of verifying tasks', () => {
   s.start()()
   expect(ids.filter((id) => s.statusOf(id) !== 'needs_review')).toEqual([])
 })
+
+// Event-driven ends and the PTY finish path: a real agent store on the same db, no tick and no timer.
+const { createAgentStore } = await import('../agents/agentStore')
+const { startAgentPtyWatcher } = await import('../agents/agentPtyWatcher')
+
+function withAgent(s: ReturnType<typeof setup>, status: 'assigned' | 'running') {
+  const agents = createAgentStore(s.db, s.now)
+  agents.create({ id: 'ag-1', projectId: 'p1', kind: 'claude', role: 'worker', runner: 'pty', owner: 'central:c', reqId: 'r1', taskId: 'x' })
+  for (const to of ['provisioning', 'starting', 'working'] as const) agents.transition('ag-1', to, to === 'working' ? { nodeId: 'c-ag-1' } : {})
+  const { taskId } = s.assigned(status, { channel: 'spawn', agentId: 'ag-1', nodeId: 'c-ag-1', acceptance: 'review' })
+  return { agents, taskId }
+}
+
+test('an agent that ends (spawn failure, exit, cancel) fails its task at once, with no tick', async () => {
+  const s = setup()
+  s.start()
+  const { agents, taskId } = withAgent(s, 'running')
+  agents.transition('ag-1', 'failed', { reason: 'spawn_failed:runner' })
+  await settle()
+  expect(s.statusOf(taskId)).toBe('failed')
+  // The move queued a wake that is due now, so the check-in pass sends it without the 5-minute window.
+  const wake = s.db.query("SELECT kind, not_before AS notBefore, created_at AS createdAt FROM central_checkin_reason WHERE dedupe_key LIKE 'wake:%'").get() as { kind: string; notBefore: number; createdAt: number } | null
+  expect(wake?.kind).toBe('task_failed')
+  expect(Number(wake?.notBefore) <= s.now()).toBe(true)
+})
+
+test('a PTY agent that finishes its turn reaches reported, then needs_review, and stays promptable (candidate_done)', async () => {
+  const s = setup()
+  s.start()
+  const { agents, taskId } = withAgent(s, 'running')
+  const stopPty = startAgentPtyWatcher({ db: s.db, store: agents, now: s.now, bus: eventBus })
+  stops.push(stopPty)
+  eventBus.publish(event('hook.Stop', {}, 'c-ag-1'))
+  await settle()
+  expect(s.store.timeline(taskId).map((e) => e.to).filter(Boolean)).toEqual(expect.arrayContaining(['reported', 'needs_review']))
+  expect(s.statusOf(taskId)).toBe('needs_review')
+  expect(agents.get('ag-1')?.state).toBe('candidate_done')
+})

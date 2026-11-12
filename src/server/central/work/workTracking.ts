@@ -14,6 +14,8 @@ import { createLogger } from '../../logs'
 import { createHealthReview } from '../health/healthReview'
 import { healthServiceFor } from '../health/healthService'
 import { createHealthStore } from '../health/healthStore'
+import { onAgentEnded } from '../agents/agentStore'
+import { agentNodeId } from '../agents/agentExecutor'
 import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
 import { readAutoDone } from './workSettings'
 import { createWorkStore, onWorkMove } from './workStore'
@@ -54,8 +56,8 @@ function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervi
       return (await import('../../agentChat/agentChat.runtime')).agentChatPort().send(ws.workspaceId, a.nodeId, text)
     },
     agentOf: (agentId) => {
-      const row = getRow(db, 'SELECT state, end_reason FROM central_agents WHERE id = ?', agentId)
-      return row ? { state: row['state'] as AgentState, endReason: row['end_reason'] === null ? null : String(row['end_reason']) } : null
+      const row = getRow(db, 'SELECT state, end_reason, last_event_at FROM central_agents WHERE id = ?', agentId)
+      return row ? { state: row['state'] as AgentState, endReason: row['end_reason'] === null ? null : String(row['end_reason']), lastEventAt: row['last_event_at'] === null ? null : Number(row['last_event_at']) } : null
     },
   }
 }
@@ -95,7 +97,16 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     db, store, now, settings: productionCheckinSettings, submit: startCheckinTurn(db),
     notice: (key, text, conversationId) => appendCentralNotice(db, { key, text, conversationId, now }),
   })
-  onWorkMove(db, checkin.onMove)
+  // A reason due now (delegated work reported, failed, needs input) runs the check-in pass at once instead of on the next 30 s tick
+  // (off with the timers: the pass reads the production settings row).
+  let kick: ReturnType<typeof setTimeout> | null = null
+  onWorkMove(db, (move) => {
+    if (!checkin.onMove(move) || kick || noTimer) return
+    kick = setTimeout(() => {
+      kick = null
+      checkin.tick().catch((err: unknown) => log.error('work.checkin_failed', `immediate check-in after task ${move.task.id} moved to ${move.to} failed`, { taskId: move.task.id, error: err instanceof Error ? err.message : String(err) }))
+    }, 0)
+  })
   const cwdOf = (projectId: string): string | null => projectRepo(db, projectId)
   onWorkMove(db, createHealthReview({ db, store: createHealthStore(db, now), now, cwdOf }).onMove)
   const health = healthServiceFor(db, now)
@@ -117,8 +128,13 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     start() {
       verifier.recoverInterrupted()
       const unwatch = startWorkWatcher({ store, now, onReported: verifier.run, onSessionEnded: supervisor.sessionEnded })
+      // An agent that exited, failed to spawn or was cancelled settles its task now (failed + wake), not on the next tick.
+      const unAgents = onAgentEnded(db, (agent) => {
+        const a = store.openAssignmentOfNode(agent.nodeId ?? agentNodeId(agent.id))
+        if (a?.agentId === agent.id) queueMicrotask(() => { void supervisor.sessionEnded(a, `agent_${agent.state}`) })
+      })
       if (!noTimer) supervisor.start()
-      return () => { unwatch(); supervisor.stop() }
+      return () => { unwatch(); unAgents(); supervisor.stop() }
     },
   }
 }

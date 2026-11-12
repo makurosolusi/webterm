@@ -27,6 +27,7 @@ import { createViewerHub } from './browserWs.viewers'
 import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
+import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
@@ -138,6 +139,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   host.onState((s) => { if (s.live === 'discarded') design.forget(s.id) }) // page gone = its injected script is gone too
   d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
+  const openDeps: AgentOpenDeps = { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId) }
   return {
     status,
     state: (id) => host.state(id),
@@ -153,8 +155,9 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
-      open: { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId) },
+      open: openDeps,
     }),
+    openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed),
     async shutdown() {
       if (down) return
       down = true

@@ -11,11 +11,12 @@ const SESSION_END_RULE = 'session_end'
 const REVIEWABLE: readonly WorkStatus[] = ['reported', 'verifying', 'needs_review']
 const INTERRUPTIBLE: readonly WorkStatus[] = ['assigned', 'running', 'stalled', 'waiting_input']
 
-type Signal = 'busy' | 'stop' | 'failure' | 'input' | 'end'
+/** `activity` only proves the agent is alive (a subagent's tool use): it touches the signal, never the status. */
+type Signal = 'busy' | 'stop' | 'failure' | 'input' | 'end' | 'activity'
 interface Move { from: readonly WorkStatus[]; to: WorkStatus; rule: string }
 
 /** The named rule behind every status change a signal can cause. */
-export const WORK_SIGNAL_MOVES: Readonly<Record<Exclude<Signal, 'end'>, Move>> = {
+export const WORK_SIGNAL_MOVES: Readonly<Record<Exclude<Signal, 'end' | 'activity'>, Move>> = {
   busy: { from: ['assigned', 'stalled', 'waiting_input', 'reported', 'needs_review', 'verifying'], to: 'running', rule: 'activity' },
   // Stalled counts too: an agent that went quiet and then finished must not stay stalled forever.
   stop: { from: ['running', 'stalled'], to: 'reported', rule: 'stop_without_report' },
@@ -28,14 +29,15 @@ function signalOf(event: SenseEvent): Signal | null {
   switch (event.kind) {
     case 'hook.UserPromptSubmit':
     case 'agentChat.turn_start': return 'busy'
-    // A subagent's tool use can land after its parent stopped; only the parent's own counts.
+    // A subagent's tool use can land after its parent stopped: it proves life (a long subagent run is not a stall) but moves nothing.
     case 'hook.PreToolUse':
-    case 'hook.PostToolUse': return payload.subagent ? null : 'busy'
+    case 'hook.PostToolUse': return payload.subagent ? 'activity' : 'busy'
     case 'hook.Stop': return 'stop'
     case 'hook.StopFailure': return 'failure'
     case 'agentChat.turn_end': return payload.outcome === 'ok' ? 'stop' : 'failure'
     case 'hook.PermissionRequest':
     case 'agentChat.needs_input': return 'input'
+    // idle_prompt and the like mean the agent sits idle, so they prove nothing.
     case 'hook.Notification': return NEEDS_INPUT.has(String(payload.notificationType)) ? 'input' : null
     case 'hook.SessionEnd':
     case 'pty.exit':
@@ -61,6 +63,7 @@ export function startWorkWatcher({ store, now, bus = eventBus, onReported, onSes
     if (!assignment || !store.touchSignal(assignment.id, event.kind, now())) return
     const task = store.getTask(assignment.taskId)
     if (!task) return
+    if (signal === 'activity') return
     if (signal === 'end') {
       if (REVIEWABLE.includes(task.status)) store.endAssignment(assignment.id, SESSION_END_RULE, undefined, { actor: SYSTEM, rule: SESSION_END_RULE })
       else if (INTERRUPTIBLE.includes(task.status)) onSessionEnded(assignment, event.kind)

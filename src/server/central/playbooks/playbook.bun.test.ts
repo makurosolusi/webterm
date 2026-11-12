@@ -20,6 +20,7 @@ const { ALLOW_ALL_GUARD } = await import('../tools/toolExec')
 const { PLAYBOOKS, playbookById } = await import('./playbook.defs')
 const { REPLAY_WINDOW_MS, resumeOnApproval, runPlaybook, watchPlaybookApprovals } = await import('./playbook.run')
 const { createPlaybookDefs } = await import('./playbook.tools')
+const { createWorkStore } = await import('../work/workStore')
 type Db = ReturnType<typeof freshDb>
 type Ctx = import('../tools/toolTypes').ToolCtx
 type Exec = import('../tools/toolTypes').ExecResult
@@ -33,7 +34,7 @@ const deps = {
   exec: async (ctx: Ctx, tool: string, args: Record<string, unknown>): Promise<Exec> => {
     calls.push({ tool, args, ctx })
     const next = script[tool]?.shift()
-    return next ?? { ok: true, tool, data: tool === 'task.create' ? { taskId: 'task-1' } : tool === 'agent.spawn' ? { agentId: 'ag-1', state: 'working' } : {} }
+    return next ?? { ok: true, tool, data: tool === 'task.create' ? { taskId: 'task-1' } : tool === 'agent.spawn' ? { agentId: 'ag-1', state: 'working' } : tool === 'browser_open' ? { nodeId: args.nodeId } : {} }
   },
   record: (e: { kind: string; payload?: unknown }) => { records.push(`${e.kind} ${JSON.stringify((e.payload as { text?: string }).text)}`) },
 }
@@ -48,41 +49,62 @@ beforeEach(() => { db = freshDb(); clock = T0; calls = []; script = {}; records.
 afterEach(() => db.close())
 afterAll(() => rmSync(root, { recursive: true, force: true }))
 
+const objective = (i = 0) => String(calls.filter((c) => c.tool === 'task.create')[i]?.args.objective)
+
 describe('registry', () => {
-  test('three playbooks, each one Central tool over task.create -> agent.spawn -> agent.prompt', () => {
+  test('three playbooks, each one Central tool; the brief rides the spawn, nothing is prompted after it', () => {
     expect(createPlaybookDefs().map((d) => d.name)).toEqual(['playbook.review', 'playbook.code_change', 'playbook.web_research'])
-    for (const p of PLAYBOOKS) expect(p.steps.map((s) => s.tool)).toEqual(['task.create', 'agent.spawn', 'agent.prompt'])
+    expect(Object.fromEntries(PLAYBOOKS.map((p) => [p.id, p.steps.map((s) => s.tool)]))).toEqual({
+      review: ['task.create', 'agent.spawn'], code_change: ['task.create', 'agent.spawn'], web_research: ['task.create', 'agent.spawn', 'browser_open'],
+    })
+    const usage = String(createPlaybookDefs().find((d) => d.name === 'playbook.web_research')?.usage)
+    expect(usage).toContain('status started')
+    expect(usage).toContain('do not poll')
   })
 
-  test('web_research: the task carries the brief, the agent the task, the steer opens the browser at the url', async () => {
+  test('web_research: task.create (brief) -> spawn on the task -> browser opened and cabled -> no prompt; status started', async () => {
     const r = await runPlaybook(ctx, pb('web_research'), { goal: 'analyse GitHub trending today', url: 'https://github.com/trending' }, 'p1', deps)
-    expect(r).toMatchObject({ ok: true, data: { taskId: 'task-1', step: 'agent.prompt', status: 'done', agentId: 'ag-1' } })
-    const [task, spawn, prompt] = calls
+    const runId = String(r.data?.runId)
+    expect(r).toMatchObject({ ok: true, data: { taskId: 'task-1', step: 'browser_open', status: 'started', agentId: 'ag-1' } })
+    expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn', 'browser_open'])
+    const [task, spawn, browser] = calls
     expect(task?.args).toMatchObject({ projectId: 'p1', title: 'web research: analyse GitHub trending today', acceptance: 'review' })
-    expect(spawn?.args).toMatchObject({ projectId: 'p1', role: 'worker', kind: 'claude', taskId: 'task-1', requestId: `pb-${String(r.data?.runId)}` })
-    expect(prompt?.args).toMatchObject({ agentRef: 'ag-1', mode: 'steer', taskId: 'task-1' })
-    const text = String(prompt?.args.text)
-    expect(text).toContain('webterm-browser open https://github.com/trending')
+    expect(spawn?.args).toMatchObject({ projectId: 'p1', role: 'worker', kind: 'claude', taskId: 'task-1', requestId: `pb-${runId}` })
+    expect(browser?.args).toEqual({ projectId: 'p1', agentRef: 'ag-1', nodeId: `br-${runId}` })
+    const text = objective()
+    expect(text).toContain(`browser node br-${runId}`)
+    expect(text).toContain('webterm-browser navigate')
+    expect(text).toContain('https://github.com/trending')
     expect(text).toContain('RESULT:')
     expect(text).toContain('Sources')
     expect(text).toMatch(/Objective: .*Output format: .*Boundaries: /s)
+    expect(String(r.data?.note)).toContain(`browser node br-${runId}`)
+    expect(String(r.data?.note)).toContain('do not poll it or set a reminder')
     expect(records).toEqual(['auto.playbook_started "Central started web research: analyse GitHub trending today"'])
   })
 
   test('web_research without a url searches for the goal', async () => {
     await runPlaybook(ctx, pb('web_research'), { goal: 'best sqlite orm' }, 'p1', deps)
-    expect(String(calls[2]?.args.text)).toContain('webterm-browser open https://duckduckgo.com/?q=best%20sqlite%20orm')
+    expect(objective()).toContain('https://duckduckgo.com/?q=best%20sqlite%20orm')
+  })
+
+  test('without browser tools the research still starts; the agent opens its own browser', async () => {
+    script['browser_open'] = [{ ok: false, tool: 'browser_open', code: 'unknown_tool' }]
+    const r = await runPlaybook(ctx, pb('web_research'), { goal: 'x' }, 'p1', deps)
+    expect(r).toMatchObject({ ok: true, data: { status: 'started' } })
+    expect(JSON.parse(String(runRow().saved_json)).browser).toEqual({ error: 'unknown_tool' })
+    expect(objective()).toContain('webterm-browser open <url>')
   })
 
   test('code_change uses a worker, review a reviewer that may not change files', async () => {
     await runPlaybook(ctx, pb('code_change'), { goal: 'fix the login redirect' }, 'p1', deps)
     expect(calls[1]?.args.role).toBe('worker')
-    expect(String(calls[2]?.args.text)).toContain('do not push')
+    expect(objective()).toContain('do not push')
     calls = []
     await runPlaybook(ctx, pb('review'), { target: 'PR #42' }, 'p1', deps)
     expect(calls[1]?.args.role).toBe('reviewer')
-    expect(String(calls[2]?.args.text)).toContain('Objective: Review PR #42')
-    expect(String(calls[2]?.args.text)).toContain('Read only')
+    expect(objective()).toContain('Objective: Review PR #42')
+    expect(objective()).toContain('Read only')
   })
 
   test('only the spawn step sees a guard approval_required as a pass; other steps keep the verdict', async () => {
@@ -90,7 +112,7 @@ describe('registry', () => {
     const deny = { check: () => ({ ok: false as const, code: 'level_denied' }) }
     const req = { tool: 't', tier: 'R2' as const, input: {} }
     await runPlaybook({ ...ctx, guard: strict }, pb('code_change'), { goal: 'y' }, 'p1', deps)
-    expect(calls.map((c) => [c.tool, c.ctx.guard.check(req).ok])).toEqual([['task.create', false], ['agent.spawn', true], ['agent.prompt', false]])
+    expect(calls.map((c) => [c.tool, c.ctx.guard.check(req).ok])).toEqual([['task.create', false], ['agent.spawn', true]])
     calls = []
     await runPlaybook({ ...ctx, guard: deny }, pb('code_change'), { goal: 'z' }, 'p1', deps)
     expect(calls[1]?.ctx.guard.check(req)).toEqual({ ok: false, code: 'level_denied' })
@@ -104,6 +126,8 @@ describe('approval cursor', () => {
     decideApproval({ db, now: () => clock }, id, { actor: 'human:test', approve, digest: String(d.action_digest), nonce: String(d.nonce) })
   }
   const parkOnCard = async () => {
+    // The board task the fake task.create names, so the queued check-in can point at it.
+    createWorkStore(db, () => clock).createTask({ id: 'task-1', projectId: 'p1', title: 'web research', objective: 'o', actor: { kind: 'central' } })
     card('agent-ag-1')
     script['agent.spawn'] = [{ ok: false, tool: 'agent.spawn', code: 'approval_required', data: { agentId: 'ag-1', approvalId: 'agent-ag-1', approvalStatus: 'pending' } }]
     return runPlaybook(ctx, pb('web_research'), { goal: 'compare bun and node' }, 'p1', deps)
@@ -126,7 +150,9 @@ describe('approval cursor', () => {
     } finally { stop() }
     expect(runRow()).toMatchObject({ status: 'done', step_index: 3 })
     // task.create ran once; the spawn retried with the same requestId (the executor's own card resolves it).
-    expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn', 'agent.spawn', 'agent.prompt'])
+    expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn', 'agent.spawn', 'browser_open'])
+    // Nobody waits on a resumed run: its outcome is queued for Central as a check-in.
+    expect(rows(db, "SELECT kind, task_id FROM central_checkin_reason")).toEqual([{ kind: 'playbook_result', task_id: 'task-1' }])
     expect(calls[2]?.args.requestId).toBe(calls[1]?.args.requestId)
     expect(calls[2]?.args.requestId).toBe(`pb-${String(r.data?.runId)}`)
     expect(records.at(-1)).toBe('auto.playbook_resumed "Central resumed web research after approval: compare bun and node"')
@@ -141,12 +167,16 @@ describe('approval cursor', () => {
     expect(await resumeOnApproval(db, ctxFor, approval, deps)).toBeNull()
     expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn'])
     expect(records.at(-1)).toContain('auto.playbook_stopped')
+    const reason = getRow(db, 'SELECT kind, text, not_before, created_at FROM central_checkin_reason') as Record<string, unknown>
+    expect(reason).toMatchObject({ kind: 'playbook_result' })
+    expect(String(reason.text)).toContain('approval_rejected')
+    expect(Number(reason.not_before) <= clock).toBe(true)
   })
 
   test('a retry of the same call resumes the parked run instead of starting a second one', async () => {
     await parkOnCard()
     const again = await runPlaybook(ctx, pb('web_research'), { goal: 'compare bun and node' }, 'p1', deps)
-    expect(again).toMatchObject({ ok: true, data: { status: 'done' } })
+    expect(again).toMatchObject({ ok: true, data: { status: 'started' } })
     expect(rows(db, 'SELECT id FROM central_playbook_run')).toHaveLength(1)
     expect(calls.filter((c) => c.tool === 'task.create')).toHaveLength(1)
   })
@@ -156,17 +186,17 @@ describe('receipts', () => {
   test('a finished identical call replays its receipt inside the window, runs anew after it', async () => {
     const first = await runPlaybook(ctx, pb('review'), { target: 'branch x' }, 'p1', deps)
     const replay = await runPlaybook(ctx, pb('review'), { target: 'branch x' }, 'p1', deps)
-    expect(replay.data).toMatchObject({ runId: first.data?.runId, status: 'done', replayed: true })
+    expect(replay.data).toMatchObject({ runId: first.data?.runId, status: 'started', replayed: true })
     clock += REPLAY_WINDOW_MS + 1
     const fresh = await runPlaybook(ctx, pb('review'), { target: 'branch x' }, 'p1', deps)
     expect(fresh.data?.runId).not.toBe(first.data?.runId)
   })
 
   test('a failing step stops the run with its code and step', async () => {
-    script['agent.prompt'] = [{ ok: false, tool: 'agent.prompt', code: 'session_gone' }]
+    script['agent.spawn'] = [{ ok: false, tool: 'agent.spawn', code: 'spawn_failed' }]
     const r = await runPlaybook(ctx, pb('code_change'), { goal: 'add a flag' }, 'p1', deps)
-    expect(r).toMatchObject({ ok: false, code: 'session_gone', data: { taskId: 'task-1', step: 'agent.prompt', status: 'failed' } })
-    expect(runRow()).toMatchObject({ status: 'failed', code: 'session_gone', step_index: 2 })
+    expect(r).toMatchObject({ ok: false, code: 'spawn_failed', data: { taskId: 'task-1', step: 'agent.spawn', status: 'failed' } })
+    expect(runRow()).toMatchObject({ status: 'failed', code: 'spawn_failed', step_index: 1 })
   })
 
   test('the tool validates its input: required goal, http(s) url, no unknown keys', () => {
@@ -183,12 +213,12 @@ describe('waiting for the approved agent to become active', () => {
   const provisioning = (): Exec => ({ ok: true, tool: 'agent.spawn', data: { agentId: 'ag-1', state: 'provisioning' } })
   const status = (state: string, endedAt: number | null = null): Exec => ({ ok: true, tool: 'agent.status', data: { agentId: 'ag-1', state, endedAt } })
 
-  test('polls agent.status until the agent works, then prompts', async () => {
+  test('polls agent.status until the agent works, then cables its browser', async () => {
     script['agent.spawn'] = [provisioning()]
     script['agent.status'] = [status('provisioning'), status('starting'), status('working')]
     const r = await runPlaybook(ctx, pb('web_research'), { goal: 'trending repos' }, 'p1', waitDeps)
-    expect(r).toMatchObject({ ok: true, data: { status: 'done' } })
-    expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn', 'agent.status', 'agent.status', 'agent.status', 'agent.prompt'])
+    expect(r).toMatchObject({ ok: true, data: { status: 'started' } })
+    expect(calls.map((c) => c.tool)).toEqual(['task.create', 'agent.spawn', 'agent.status', 'agent.status', 'agent.status', 'browser_open'])
     expect(calls[2]?.args).toEqual({ projectId: 'p1', agentRef: 'ag-1' })
     expect(sleeps).toBe(2)
   })
@@ -197,9 +227,9 @@ describe('waiting for the approved agent to become active', () => {
     script['agent.spawn'] = [provisioning()]
     script['agent.status'] = Array.from({ length: 10 }, () => status('provisioning'))
     const r = await runPlaybook(ctx, pb('web_research'), { goal: 'slow agent' }, 'p1', waitDeps)
-    expect(r).toMatchObject({ ok: false, code: 'agent_not_active', data: { status: 'failed', step: 'agent.prompt', message: 'agent ag-1 did not become active within 6 s (last state provisioning)' } })
+    expect(r).toMatchObject({ ok: false, code: 'agent_not_active', data: { status: 'failed', step: 'browser_open', message: 'agent ag-1 did not become active within 6 s (last state provisioning)' } })
     expect(calls.filter((c) => c.tool === 'agent.status')).toHaveLength(4) // 0, 2, 4, 6 s
-    expect(calls.some((c) => c.tool === 'agent.prompt')).toBe(false)
+    expect(calls.some((c) => c.tool === 'browser_open')).toBe(false)
     expect(runRow()).toMatchObject({ status: 'failed', code: 'agent_not_active' })
     expect(records.at(-1)).toBe('auto.playbook_stopped "Central stopped web research (agent ag-1 did not become active within 6 s (last state provisioning)): slow agent"')
   })
@@ -207,8 +237,8 @@ describe('waiting for the approved agent to become active', () => {
   test('an agent that ended stops the wait at once', async () => {
     script['agent.spawn'] = [provisioning()]
     script['agent.status'] = [status('failed', T0)]
-    const r = await runPlaybook(ctx, pb('code_change'), { goal: 'x' }, 'p1', waitDeps)
-    expect(r).toMatchObject({ ok: false, code: 'agent_not_active', data: { message: 'agent ag-1 ended (failed) before it got its brief' } })
+    const r = await runPlaybook(ctx, pb('web_research'), { goal: 'x' }, 'p1', waitDeps)
+    expect(r).toMatchObject({ ok: false, code: 'agent_not_active', data: { message: 'agent ag-1 ended (failed) before it was ready' } })
     expect(sleeps).toBe(0)
   })
 })

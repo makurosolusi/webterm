@@ -218,7 +218,9 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const id = nextCardId(agent)
     let challenge: { id: string }
     try {
-      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(agent.taskId ? { taskId: agent.taskId } : {}) })
+      // `approval.task_id` references the ledger `task` table; a Central board task id (central_task) stays in the request only.
+      const ledgerTask = agent.taskId && getRow(db, 'SELECT 1 AS one FROM task WHERE id = ?', agent.taskId) ? agent.taskId : null
+      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(ledgerTask ? { taskId: ledgerTask } : {}) })
     } catch (err) {
       // Without a card the agent must not stay launchable: close the row and surface a code, not the message.
       tryMove(agent.id, 'cancelled', { reason: `approval_request_failed:${err instanceof Error ? err.name : 'unknown'}` })

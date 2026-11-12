@@ -10,6 +10,7 @@ import { handleBrowserControl } from '../../../browser/browserControl.handler'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { BROWSER_TOOLS_FLAG, type BrowserToolDeps, browserNodesOf, createBrowserStatusDef } from './browser.status'
+import { createBrowserOpenDef } from './browser.open'
 import { obj, S } from '../../../capability/capability.schema'
 
 /** Env flag (agent control of browser nodes) that gates `browser_act` on top of the browser feature flag; read via
@@ -89,9 +90,9 @@ export function createBrowserActDef(deps: BrowserToolDeps): ToolDef {
   }
 }
 
-/** Both browser tools; the status def is R0 and the act def additionally needs `WEBTERM_BROWSER_AGENT` not `off`. */
+/** The browser tools; status is R0, act and open additionally need `WEBTERM_BROWSER_AGENT` not `off` (open only when the runtime can open nodes). */
 export function createBrowserDefs(deps: BrowserToolDeps): ToolDef[] {
-  return [createBrowserStatusDef(deps), createBrowserActDef(deps)]
+  return [createBrowserStatusDef(deps), createBrowserActDef(deps), ...(deps.open ? [createBrowserOpenDef(deps.open)] : [])]
 }
 
 export { BROWSER_TOOLS_FLAG }

@@ -125,3 +125,18 @@ describe('browser tools boot wiring', () => {
     expect(allows(rec, 'browser.act', 'node:b2')).toBe(false)
   })
 })
+
+describe('browser open port (browser_open)', () => {
+  const { createBrowserToolDeps } = require('./ca2Boot.browser') as typeof import('./ca2Boot.browser')
+  type Opened = Awaited<ReturnType<NonNullable<BrowserRuntime['openFor']>>>
+  const port = (made: Opened | null) => createBrowserToolDeps({ WEBTERM_BROWSER: 'on' }, {
+    store: new CapabilityStore(),
+    active: () => (made === null ? null : ({ openFor: async () => made } as unknown as BrowserRuntime)),
+  })?.open
+  it('maps the runtime outcome: started, on the board but not started, refused, and no runtime', async () => {
+    expect(await port({ ok: true, nodeId: 'b', url: '' })?.('c-a', 'b')).toEqual({ ok: true, started: true })
+    expect(await port({ ok: false, nodeId: 'b', startError: new Error('max_live') })?.('c-a', 'b')).toEqual({ ok: true, started: false })
+    expect(await port({ ok: false, result: { status: 403, body: { error: 'disabled' } } })?.('c-a', 'b')).toEqual({ ok: false, code: 'disabled' })
+    expect(await port(null)?.('c-a', 'b')).toEqual({ ok: false, code: 'disabled' })
+  })
+})

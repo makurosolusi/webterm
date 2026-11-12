@@ -1,5 +1,5 @@
 // Central's self-started turns. Deterministic rules queue durable reasons (`central_checkin_reason`); the supervisor tick
-// delivers them as ONE turn per 5-minute window (a due reminder does not wait for it), and only when nobody is mid-turn,
+// delivers them as ONE turn per 5-minute window (a due reminder, duty or delegated-work report does not wait for it), and only when nobody is mid-turn,
 // Central is not halted and today's budget allows it. No model is asked whether to wake, and no clock alone ever starts a turn.
 import type { Database } from 'bun:sqlite'
 import { CHECKIN_DAILY_LIMITS, DEFAULT_CHECKIN_DAILY_LIMIT, type CheckinSettings } from '../../../shared/centralWork'
@@ -32,9 +32,17 @@ const ACTOR = 'system:checkin'
 const DELEGATION_RULE = 'delegation'
 const ASSIGNMENT_OPEN_EVENT = 'work.assignment.open'
 const RETRY_CODES: readonly string[] = ['central_runtime_off', 'conversation_busy', 'budget_exhausted']
+/** Where a Central-started attempt lands that Central must hear about at once (push, not a poll), and the reason kind it queues. */
+const WAKE_KINDS: Partial<Record<WorkMove['to'], ReasonKind>> = {
+  reported: 'task_report', needs_review: 'task_report', failed: 'task_failed', stalled: 'task_stalled', waiting_input: 'task_input', blocked: 'task_blocked',
+}
+const WAKE_WHAT: Partial<Record<WorkMove['to'], string>> = {
+  reported: 'reported back', needs_review: 'finished and is ready for review', failed: 'failed', stalled: 'went quiet and is stalled',
+  waiting_input: 'is waiting for input (a question or a permission prompt)', blocked: 'is blocked',
+}
 
-/** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts. */
-export type ReasonKind = 'task_stalled' | 'task_failed' | 'task_duty' | 'reminder_due' | 'task_overdue' | 'task_handoff' | 'health_finding' | 'health_changed'
+/** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts, `playbook_result` by playbooks/playbook.run.ts. */
+export type ReasonKind = 'task_stalled' | 'task_failed' | 'task_duty' | 'reminder_due' | 'task_overdue' | 'task_report' | 'task_input' | 'task_blocked' | 'playbook_result' | 'health_finding' | 'health_changed'
 interface Reason { id: string; kind: ReasonKind; projectId: string | null; taskId: string | null; text: string; createdAt: number; notBefore: number | null }
 type Enabled = Omit<CheckinSettings, 'usedToday'>
 
@@ -71,8 +79,8 @@ export interface WorkCheckinDeps {
 }
 
 export interface WorkCheckin {
-  /** Records the reason a task move needs a decision; called for every committed move. */
-  onMove(move: WorkMove): void
+  /** Records the reason a task move needs a decision; called for every committed move. True = a reason that is due now was queued. */
+  onMove(move: WorkMove): boolean
   /** Evaluates the time triggers and delivers what is ready. */
   tick(at?: number): Promise<void>
 }
@@ -110,15 +118,18 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   const projectName = (id: string): string => String(getRow(db, 'SELECT name FROM project WHERE id = ?', id)?.name ?? id)
   const taskLabel = (title: string, projectId: string): string => `task "${previewText(title, TITLE_CHARS) ?? 'untitled'}" in project ${projectName(projectId)}`
 
-  /** Central started the attempt and others in the project are waiting on, or queued behind, this task. */
-  const handoffOf = (move: WorkMove): string | null => {
+  /** The current attempt when Central started it (a delegated agent), else null. */
+  const centralAttempt = (move: WorkMove) => {
     const attempt = store.assignmentsOfTask(move.task.id, 1)[0]
     if (!attempt) return null
-    const byCentral = store.timeline(move.task.id, { limit: TIMELINE_MAX }).some((e) => e.kind === ASSIGNMENT_OPEN_EVENT && e.assignmentId === attempt.id && e.actor === 'central')
-    if (!byCentral) return null
-    const waiting = getRow(db, `SELECT 1 AS one FROM central_task t WHERE t.project_id = ? AND t.id != ? AND (t.status = 'todo'
-      OR (t.status = 'blocked' AND EXISTS (SELECT 1 FROM central_task_dep d WHERE d.task_id = t.id AND d.blocked_by_id = ?))) LIMIT 1`, move.task.projectId, move.task.id, move.task.id)
-    return waiting ? attempt.id : null
+    return store.timeline(move.task.id, { limit: TIMELINE_MAX }).some((e) => e.kind === ASSIGNMENT_OPEN_EVENT && e.assignmentId === attempt.id && e.actor === 'central') ? attempt : null
+  }
+
+  /** What happened to the delegated work and how Central reads its result. */
+  const wakeText = (move: WorkMove, agentId: string | null, nodeId: string): string => {
+    const { task } = move
+    const read = agentId ? `agent.read ${agentId} (its output) and task.get ${task.id}` : `task.get ${task.id} and node.inspect ${nodeId}`
+    return `${taskLabel(task.title, task.projectId)} ${WAKE_WHAT[move.to] ?? move.to}${move.reason ? ` (${move.reason})` : ''}; read the result with ${read}`
   }
 
   /** A send that did not happen: the new card fails, an existing one goes back to `todo` (not the reopen of a failed card). */
@@ -210,12 +221,16 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
       if (move.rule === DELEGATION_RULE && sendFailed(move)) {
         const reason = move.reason ? ` (${move.reason})` : ''
         enqueue(`duty:${move.seq}`, 'task_duty', task.projectId, task.id, `the prompt for ${taskLabel(task.title, task.projectId)} was not submitted${reason}; it is listed under Open duties`, now() + WORK_LIVENESS_RULES.escalate.graceMs)
-      } else if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
-        enqueue(`move:${move.seq}`, move.to === 'stalled' ? 'task_stalled' : 'task_failed', task.projectId, task.id, `${taskLabel(task.title, task.projectId)} ${move.to}${move.reason ? ` (${move.reason})` : ''}`)
-      } else if (move.to === 'reported' || move.to === 'needs_review') {
-        const attempt = handoffOf(move)
-        if (attempt) enqueue(`handoff:${attempt}`, 'task_handoff', task.projectId, task.id, `${taskLabel(task.title, task.projectId)} reached ${move.to}; other tasks in the project are waiting for a next step`)
+        return false
       }
+      const kind = WAKE_KINDS[move.to]
+      const attempt = kind ? centralAttempt(move) : null
+      // Delegated work reports by itself: due at once (no window), keyed per move so a second report of the same attempt wakes again.
+      if (kind && attempt) return enqueue(`wake:${move.seq}`, kind, task.projectId, task.id, wakeText(move, attempt.agentId, attempt.nodeId), now())
+      if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
+        enqueue(`move:${move.seq}`, move.to === 'stalled' ? 'task_stalled' : 'task_failed', task.projectId, task.id, `${taskLabel(task.title, task.projectId)} ${move.to}${move.reason ? ` (${move.reason})` : ''}`)
+      }
+      return false
     },
     async tick(at = now()) {
       fireReminders(at)

@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws'
 import type { BrowserState, BrowserStatusResp } from '../../shared/browser.contract'
 import type { BrowserApiResult } from '../browserApi'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
+import type { AgentOpened } from './browser.agentOpen'
 
 export interface BrowserRuntime {
   status(): BrowserStatusResp
@@ -15,6 +16,8 @@ export interface BrowserRuntime {
   gateway(ws: WebSocket, workspaceId: string): void
   /** `/api/browser/*`; null = bukan prefix itu. */
   api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
+  /** Server-side `open` for a canvas agent: browser node `nodeId` beside `requesterId`, cabled to it, page started (Central playbooks). */
+  openFor?(requesterId: string, nodeId: string): Promise<AgentOpened>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
   /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */
