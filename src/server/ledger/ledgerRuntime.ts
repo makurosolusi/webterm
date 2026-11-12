@@ -131,6 +131,10 @@ export function startLedgerRuntime(opts: {
 export interface ReaperLedger {
   task: { sweepExpiredLeases(limit?: number, now?: number): unknown }
   retention?: { tick(now?: number): { changed: Record<string, number>; more: boolean } | null }
+  /** File-manager trash sweep (fsBoot.ts createTrashReaper); throttles itself and never throws. */
+  trash?: { tick(now?: number): unknown }
+  /** Told what a retention sweep removed (only when something was); the Central notice lives outside the ledger. */
+  onRetention?(changed: Record<string, number>): void
 }
 
 /**
@@ -165,7 +169,9 @@ export function startLedgerReaper(
       const rows = Object.values(report.changed).reduce((a, b) => a + b, 0)
       ledgerMetrics.inc('retention_rows', rows)
       log.info('ledger.retention', 'ledger retention swept old rows', { ...report.changed, backlog: report.more })
+      ledger.onRetention?.(report.changed)
     })
+    guarded(() => ledger.trash?.tick())
   }, intervalMs)
   ;(timer as unknown as { unref?: () => void }).unref?.()
   return () => {

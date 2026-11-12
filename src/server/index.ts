@@ -8,7 +8,7 @@ import { serveTerminalSocket } from './terminalSocket'
 import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
-import { sweepTrashOnBoot } from './fsBoot'
+import { createTrashReaper, sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
@@ -55,6 +55,7 @@ import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { backfillSetup } from './setupBackfill'
 import { flushBootChanges, queueBootChange } from './bootChanges'
+import { announceRetentionSweep } from './central/retentionNotice'
 import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
 import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
 import { pruneCanvasBackgrounds } from './canvasBackground.gc'
@@ -110,7 +111,7 @@ try {
 }
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
-  startLedgerReaper(ledgerRuntime.ledger)
+  startLedgerReaper({ task: ledgerRuntime.ledger.task, retention: ledgerRuntime.ledger.retention, trash: createTrashReaper(), onRetention: (changed) => announceRetentionSweep(changed) })
   try { flushBootChanges(ledgerRuntime.db) } catch (e) { log.warn('boot.changes_notice_failed', 'Cannot post the startup changes notice', { cause: e instanceof Error ? e.message : String(e) }) }
 }
 

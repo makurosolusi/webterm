@@ -15,7 +15,7 @@ import { isAutoMode, isDangerMode, isPermissionKind, permissionText, type LineTo
 export type TimelineEvent = SenseEvent
 export type GroupMode = 'task' | 'node' | 'workspace'
 /** Kind filter values: an event family, or everything. */
-export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge' | 'permissions'
+export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge' | 'permissions' | 'auto'
 
 export interface TimelineFilter { workspaceId: string; kind: KindFilter; nodeId: string }
 export const NO_FILTER: TimelineFilter = { workspaceId: '', kind: 'all', nodeId: '' }
@@ -39,6 +39,10 @@ export interface TimelineLine {
   untrusted: boolean
   /** 'warning' = the agent acted without asking (Danger) or a loop was stopped. */
   tone?: LineTone
+  /** Done by the system on its own (`auto.*`): tagged "Automatic". */
+  auto?: true
+  /** High-volume kind whose consecutive run this line summarises (its text holds the count). */
+  run?: string
 }
 
 export interface TimelineGroup {
@@ -53,7 +57,7 @@ export interface TimelineGroup {
 }
 
 export const KIND_LABELS: Record<KindFilter, string> = {
-  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables', permissions: 'Permissions',
+  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables', permissions: 'Permissions', auto: 'Automatic',
 }
 export const GROUP_LABELS: Record<GroupMode, string> = { task: 'Task', node: 'Node', workspace: 'Workspace' }
 
@@ -94,7 +98,28 @@ export function workspaceOf(e: TimelineEvent, ctx: TimelineContext): string | nu
   return best?.id ?? null
 }
 
-type Described = { text: string; focusId: string | null; tone?: LineTone }
+type Described = { text: string; focusId: string | null; tone?: LineTone; auto?: true }
+
+/** Automatic actions the system takes on its own; the list grows server-side, so any `auto.*` counts. */
+export const isAutoKind = (kind: string): boolean => kind.startsWith('auto.')
+/** High-volume automatic kinds: a consecutive run collapses into one summary line. */
+const RUN_SUMMARY: Partial<Record<string, (n: number) => string>> = {
+  'auto.mail_delivered': (n) => `Delivered ${n} messages to agents`,
+}
+/** Readable name for an `auto.*` kind without `text` (old or unknown payloads): "auto.task_done" -> "Automatic: task done". */
+export const autoKindName = (kind: string): string => `Automatic: ${kind.slice(5).replace(/[_.]+/g, ' ').trim() || 'action'}`
+
+export interface AutoUndo { label: string; method: 'POST'; path: string; body?: Record<string, unknown> }
+/** The undo request an `auto.*` event offers; null when absent or malformed (only same-origin `/api/` POSTs). */
+export function autoUndoOf(e: TimelineEvent): AutoUndo | null {
+  if (!isAutoKind(e.kind)) return null
+  const u = rec(rec(e.payload).undo)
+  const label = str(u.label)
+  const path = str(u.path)
+  if (!label || u.method !== 'POST' || !path?.startsWith('/api/')) return null
+  const body = typeof u.body === 'object' && u.body !== null && !Array.isArray(u.body) ? (u.body as Record<string, unknown>) : undefined
+  return { label, method: 'POST', path, ...(body ? { body } : {}) }
+}
 
 /** Tool plus its (server-redacted, capped) input; old events carry no input. */
 const toolWithInput = (tool: string, p: Rec): string => { const input = str(p.input); return input ? `${tool} ${input}` : tool }
@@ -173,6 +198,8 @@ export function describeEvent(e: TimelineEvent, ctx: TimelineContext): Described
     return { text: fsText(p, ctx.workspaces.find((w) => w.id === wsId)), focusId: null }
   }
   if (e.kind === 'edge.change') return edgeText(p, ctx)
+  if (isAutoKind(e.kind)) return { text: str(p.text) ?? autoKindName(e.kind), focusId: e.nodeId, auto: true }
+  if (e.kind === 'work.auto_done_set' && str(p.text)) return { text: str(p.text)!, focusId: e.nodeId }
   return { text: e.subject ? `${e.kind} (${e.subject})` : e.kind, focusId: e.nodeId }
 }
 
@@ -198,7 +225,7 @@ export function groupEvents(events: readonly TimelineEvent[], mode: GroupMode, c
   }
   events.forEach((e, i) => {
     const wsId = workspaceOf(e, ctx)
-    const { text, focusId, tone } = describeEvent(e, ctx)
+    const { text, focusId, tone, auto } = describeEvent(e, ctx)
     let g: TimelineGroup
     if (mode === 'workspace' || !e.nodeId) {
       g = ensure(`ws:${wsId ?? ''}`, () => ({ label: wsName(wsId), workspaceId: wsId, focusId: null }))
@@ -217,8 +244,10 @@ export function groupEvents(events: readonly TimelineEvent[], mode: GroupMode, c
       if (e.kind === 'hook.Stop' && openTurn.get(id) === g) { g.running = false; openTurn.delete(id) }
     }
     const last = g.lines[g.lines.length - 1]
-    if (last && last.text === text && last.focusId === focusId) { last.count += 1; last.ts = e.ts }
-    else g.lines.push({ key: keyOf(e, i), ts: e.ts, text, focusId, count: 1, untrusted: e.trust === 'untrusted', ...(tone ? { tone } : {}) })
+    const summary = RUN_SUMMARY[e.kind]
+    if (summary && last && last.run === e.kind) { last.count += 1; last.ts = e.ts; last.text = summary(last.count) }
+    else if (!summary && last && !last.run && last.text === text && last.focusId === focusId) { last.count += 1; last.ts = e.ts }
+    else g.lines.push({ key: keyOf(e, i), ts: e.ts, text, focusId, count: 1, untrusted: e.trust === 'untrusted', ...(tone ? { tone } : {}), ...(auto ? { auto } : {}), ...(summary ? { run: e.kind } : {}) })
     g.lastTs = Math.max(g.lastTs, e.ts)
   })
   return [...groups.values()].sort((a, b) => b.lastTs - a.lastTs)

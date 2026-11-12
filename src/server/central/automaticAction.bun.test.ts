@@ -200,3 +200,16 @@ test('a self-started autonomy run is announced before it runs', async () => {
   expect(notices()).toEqual(['Central started a worker on its own for "i1": it is the next item in the project\'s plan.'])
   expect(records('auto.autonomy_run')).toHaveLength(1)
 })
+
+test('retention sweep: one notice per day naming what was removed; nothing removed = nothing posted', async () => {
+  const { announceRetentionSweep } = await import('./retentionNotice')
+  announceRetentionSweep({}, now, db)
+  announceRetentionSweep({ central_message: 120, central_skill: 3 }, now, db)
+  clock += 3_600_000
+  announceRetentionSweep({ event: 7 }, now, db) // same day: recorded, no second notice
+  expect(notices()).toEqual(['Cleaned up old records: 120 chat messages and notices, 3 skill proposals. They were past their keep period.'])
+  expect(records('auto.retention_sweep').map((r) => r.text)).toEqual([
+    'Cleaned up old records: 120 chat messages and notices, 3 skill proposals. They were past their keep period.',
+    'Cleaned up old records: 7 audit entries. They were past their keep period.',
+  ])
+})
