@@ -40,7 +40,8 @@ describe('default profile override', () => {
     expect(cmdOf('b')).toBe('envman -e claude:b -- claude')
     registerClaudeLaunchSettings(() => ({ ...SETTINGS, defaultClaudeProfileId: 'b' }))
     expect(cmdOf('b')).toBe('envman -e claude:a -- claude')
-    expect(cmdOf('default')).toBe('claude')
+    // Default recorded while command mode is on = made before the default followed the command: it follows too.
+    expect(cmdOf('default')).toBe('envman -e claude:a -- claude')
     registerDefaultProfileOverride(() => undefined)
     expect(cmdOf('b')).toBe('envman -e claude:b -- claude')
   })

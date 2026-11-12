@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 // The real App with a Settings deep link to one setting (`?settings=<section>&field=<id>`): a reload
 // keeps the field and reveals it, a link writes it (push: Back closes, Forward reopens on it), and a
-// plain section change replaces the entry without it.
+// plain section change replaces the entry without it. The links use the retired Agent page and
+// `skipApprovals`, so they also check the redirect to Claude › agentApprovalLevel.
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { HARNESS_WS_ID, harnessNavigate, harnessUrl, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
@@ -28,33 +29,33 @@ beforeEach(() => {
 afterEach(() => { unmountCanvas(); delete (Element.prototype as Partial<Element>).scrollIntoView })
 
 describe('Settings field in the URL', () => {
-  it('a reload with `&field=` keeps it and reveals the setting', async () => {
+  it('a reload with an old `&field=` link lands on the moved setting and reveals it', async () => {
     await mountCanvas(fx(`${BOARD}?settings=agent&field=skipApprovals`))
-    await waitFor(() => expect(scrolled).toContain(field('skipApprovals')))
-    const el = field('skipApprovals')!
+    await waitFor(() => expect(scrolled).toContain(field('agentApprovalLevel')))
+    const el = field('agentApprovalLevel')!
     expect(el.classList.contains(REVEAL_CLASS)).toBe(true)
     expect(el.contains(document.activeElement)).toBe(true)
-    expect(harnessUrl).toBe(`${BOARD}?settings=agent&field=skipApprovals`)
+    expect(harnessUrl).toBe(`${BOARD}?settings=claude&field=agentApprovalLevel`)
   })
 
   it('an unknown field is dropped from the URL; the section still opens', async () => {
     await mountCanvas(fx(`${BOARD}?settings=agent&field=nope`))
     await screen.findByRole('button', { name: 'Close settings' })
-    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=agent`))
+    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=claude`))
   })
 
   it('openSettingsAt pushes section + field; Back closes, Forward reopens on the same field', async () => {
     await mountCanvas(fx(BOARD))
     act(() => openSettingsAt('agent', 'skipApprovals'))
-    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=agent&field=skipApprovals`))
-    await waitFor(() => expect(scrolled).toContain(field('skipApprovals')))
+    await waitFor(() => expect(harnessUrl).toBe(`${BOARD}?settings=claude&field=agentApprovalLevel`))
+    await waitFor(() => expect(scrolled).toContain(field('agentApprovalLevel')))
     await back()
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Close settings' })).toBeNull())
     expect(harnessUrl).toBe(BOARD)
     scrolled = []
     await forward()
-    await waitFor(() => expect(scrolled).toContain(field('skipApprovals')))
-    expect(harnessUrl).toBe(`${BOARD}?settings=agent&field=skipApprovals`)
+    await waitFor(() => expect(scrolled).toContain(field('agentApprovalLevel')))
+    expect(harnessUrl).toBe(`${BOARD}?settings=claude&field=agentApprovalLevel`)
   })
 
   it('picking another section replaces the entry and clears the field', async () => {

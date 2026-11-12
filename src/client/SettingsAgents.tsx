@@ -1,4 +1,4 @@
-// Section Agent: `customAgents` (daftar record) butuh lebih dari satu input. Bentuknya mengikuti
+// Settings › Claude › Advanced (dulu section Agent): `customAgents` (daftar record) butuh lebih dari satu input. Bentuknya mengikuti
 // nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: satu kartu per agent
 // custom. Claude's launch command lives in the launch profiles card; other CLIs have no builtin row.
 import type { CustomAgent, Settings } from '../shared/settings'
@@ -6,29 +6,16 @@ import {
   AGENT_CONFIG,
   BUILTIN_AGENT_IDS,
   FALLBACK_AGENT_COLOR,
-  type AgentPermissionMode,
   type BuiltinAgentId,
 } from '../shared/workspace'
-import { ColorField, Field, SelectField, TextField, ToggleField } from './SettingsFields'
+import { ColorField, Field, SelectField, TextField } from './SettingsFields'
 import { ComboboxField } from './SettingsPickerFields'
 import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
-import { ClaudeLaunchProfilesCard } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import type { SettingsPatch } from '../shared/settings.patch'
-import { ModelsSettings } from './SettingsModels'
 
-const PERMISSION_OPTIONS: readonly { value: AgentPermissionMode; label: string }[] = [
-  { value: 'manual', label: 'Ask before every action' },
-  { value: 'auto', label: 'Auto (default)' },
-  { value: 'acceptEdits', label: 'Approve file edits automatically' },
-  { value: 'plan', label: 'Plan only, change nothing' },
-  { value: 'bypassPermissions', label: 'Never ask (no prompts)' },
-]
-
-const SKIP_APPROVALS_HINT = 'Central and every Claude agent act without asking you first. Fastest, but nothing stops a wrong action before it runs. Hard stops still apply: Stop Central, paused projects, budgets and your deny rules. Agents already running keep their current mode.'
-const PERMISSION_HINT = 'Used by Claude sessions at START — passed as --permission-mode at launch. Shift+Tab can still cycle modes at runtime.'
-
-export function AgentSettings({
+/** Settings › Claude › Advanced: which agents the Add menu offers, and custom agent CLIs. */
+export function CustomAgentsSettings({
   settings: s,
   onChange,
 }: {
@@ -66,34 +53,6 @@ export function AgentSettings({
 
   return (
     <>
-      <ToggleField
-        id="st-skipApprovals"
-        setting="skipApprovals"
-        label="Skip approvals"
-        hint={SKIP_APPROVALS_HINT}
-        tone={s.skipApprovals ? 'warning' : undefined}
-        value={s.skipApprovals}
-        onChange={(v) => onChange({ skipApprovals: v })}
-      />
-      <SelectField
-        id="st-claudePermissionMode"
-        setting="claudePermissionMode"
-        label="Claude permission mode"
-        hint={PERMISSION_HINT}
-        value={s.claudePermissionMode}
-        options={PERMISSION_OPTIONS}
-        lock={s.skipApprovals ? { reason: 'Skip approvals is on, so agents start without asking.', fix: { label: 'Turn off Skip approvals to choose', run: () => onChange({ skipApprovals: false }) } } : undefined}
-        onChange={(v) => onChange({ claudePermissionMode: v })}
-      />
-      <ToggleField
-        id="st-hookReplyApprovals"
-        setting="hookReplyApprovals"
-        label="Hook approvals from the canvas"
-        hint="When on, Claude permission requests wait briefly so you can Approve or Deny right from the canvas. If unanswered, Claude asks in its terminal as usual. Off = Claude always asks in the terminal."
-        value={s.hookReplyApprovals}
-        onChange={(v) => onChange({ hookReplyApprovals: v })}
-      />
-
       <Field
         label="Agents in the Add menu"
         hint="Turn off agents you don’t use to keep the Add menu short."
@@ -111,12 +70,9 @@ export function AgentSettings({
         </div>
       </Field>
 
-      <ClaudeLaunchProfilesCard settings={s} onChange={onChange} />
-
-      <ModelsSettings settings={s} onChange={onChange} />
-
       <Field
-        label="Agent custom"
+        label="Custom agents"
+        field="customAgents"
         hint="Bring your own agent CLI, or wrap a builtin harness (e.g. Claude) to route inference through your proxy. Env variables are NOT available here — webterm settings travel over HTTP, and env is the only place credentials would land."
         block
       >

@@ -30,6 +30,7 @@ import { normalizeKeybindings } from './settings.keybindings'
 import { normalizeProjectModels } from './settings.projectModels'
 import { normalizeInputHistory } from './settings.inputHistory'
 import { DEFAULT_SETUP, normalizeSetup, type SetupState } from './settings.setup'
+import { DEFAULT_APPROVAL_LEVEL, approvalLevelOf, approvalLevelPatch } from './settings.approvalLevel'
 
 export type { TerminalCursorStyle, TerminalShortcutPolicy, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
@@ -137,6 +138,9 @@ export const DEFAULT_SETTINGS: Settings = {
   claudePermissionMode: 'auto',
   hookReplyApprovals: true,
   skipApprovals: true,
+  // The default level decides the three keys above (one line in settings.approvalLevel.ts).
+  ...approvalLevelPatch(DEFAULT_APPROVAL_LEVEL),
+  agentApprovalLevel: DEFAULT_APPROVAL_LEVEL,
   centralCheckins: true,
   centralCheckinDailyLimit: 10,
   projectModels: {},
@@ -225,5 +229,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents
   if (agents.errors.length) onInvalidAgents?.(agents.errors)
+  // Derived, never trusted from storage: the keys it maps to are the source of truth.
+  out.agentApprovalLevel = approvalLevelOf(out)
   return out
 }

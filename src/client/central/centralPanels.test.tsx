@@ -67,22 +67,22 @@ describe('LevelPanel', () => {
     expect(seen).toEqual([{ section: 'central', field: 'central.level' }])
   })
 
-  it('says approvals are skipped when the setting is on, and "Change" opens Settings › Agent', async () => {
+  it('says approvals are skipped when the setting is on, and "Change" opens Settings › Claude › permissions', async () => {
     const seen: unknown[] = []
     const on = (e: Event): void => { seen.push((e as CustomEvent).detail) }
     window.addEventListener('webterm:open-settings', on)
     render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, skipApprovals: true }}><LevelPanel client={fakeClient()} /></SettingsProvider>)
     expect(screen.getByText(/Approvals: skipped — Central acts without asking/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Change in Agent settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Change in Claude settings' }))
     window.removeEventListener('webterm:open-settings', on)
-    expect(seen).toEqual([{ section: 'agent', field: 'skipApprovals' }])
+    expect(seen).toEqual([{ section: 'claude', field: 'agentApprovalLevel' }])
   })
 
   it('shows no approvals line when the setting is off', async () => {
     render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, skipApprovals: false }}><LevelPanel client={fakeClient()} /></SettingsProvider>)
     await screen.findByTestId('level-effective')
     expect(screen.queryByText(/Approvals: skipped/)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Change in Agent settings' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Change in Claude settings' })).toBeNull()
   })
 
   it('surfaces a load error as an alert', async () => {

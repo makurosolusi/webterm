@@ -27,7 +27,7 @@ import {
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
-import { AgentSettings } from './SettingsAgents'
+import { ClaudeSettingsSection } from './ClaudeSettingsSection'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { CentralSettingsSection } from './CentralSettingsSection'
 import type { CentralLinkTarget } from './centralSettings.registry'
@@ -72,7 +72,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   terminal: (c) => <TerminalSection settings={c.s} onChange={c.onChange} />,
   canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
   notifications: () => <NotificationsSection />,
-  agent: (c) => <AgentSettings settings={c.s} onChange={c.onChange} />,
+  claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} />,
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
   rules: () => <RulesSection />,
   memory: () => <MemorySection />,

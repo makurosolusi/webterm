@@ -15,8 +15,9 @@ export interface ControlView {
 /** Daily counters and limits; a limit of 0 means unlimited for tokens, none allowed for spawns. */
 export interface BudgetView {
   day: string
-  used: { tokens: number; spawns: number }
-  limits: { tokens: number; spawns: number }
+  /** `costMicros`: spent today / the daily spending limit (0 = none); absent from an older server. */
+  used: { tokens: number; spawns: number; costMicros?: number }
+  limits: { tokens: number; spawns: number; costMicros?: number }
 }
 
 /** `GET /api/central/status`: budget plus the model in use (drives the P12 privacy label). */

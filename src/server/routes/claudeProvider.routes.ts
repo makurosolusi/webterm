@@ -17,12 +17,13 @@ export const claudeProviderRoutes: ApiRoute[] = [
     name: 'claude-provider',
     match: (c) => c.path === '/api/claude-provider' || c.path === '/api/claude-provider/detect' || c.path === '/api/claude-provider/reset',
     handle: async (c) => {
-      const [{ providerRoute }, { isValidNodeToken }, { sessions }] = await Promise.all([
-        import('../claudeProvider/claudeProvider.api'), import('../hooksTokens'), import('../sessions'),
+      const [{ providerRoute }, { isValidNodeToken }, { sessions }, { db }] = await Promise.all([
+        import('../claudeProvider/claudeProvider.api'), import('../hooksTokens'), import('../sessions'), import('../db'),
       ])
       return send(c.res, await providerRoute(c.req, c.url, {
         isNodeToken: isValidNodeToken,
         sessionsBefore: (t) => sessions.claudeSessionsStartedBefore(t),
+        defaults: { get: () => db.getSettings().defaultClaudeProfileId, set: (id) => { db.saveSettings({ defaultClaudeProfileId: id }) } },
       }))
     },
   },

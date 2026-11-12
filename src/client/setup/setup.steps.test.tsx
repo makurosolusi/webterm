@@ -55,7 +55,7 @@ describe('Claude step', () => {
     expect(screen.getByRole('button', { name: test.again })).toBeTruthy()
     expect(s.calls.some((c) => c.url === '/api/claude-launch/test')).toBe(false)
     expect(screen.getByText(SETUP_TEXT.claude.intro)).toBeTruthy()
-    expect(await screen.findByRole('region', { name: 'Claude provider' })).toBeTruthy()
+    expect(await screen.findByRole('region', { name: 'Connection' })).toBeTruthy()
     expect(screen.getByText(SETUP_TEXT.changeLater(SETUP_TEXT.claude.where))).toBeTruthy()
   })
 

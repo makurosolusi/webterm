@@ -34,8 +34,8 @@ describe('parseAppRoute', () => {
   })
 
   it('reads `&field=` only with a section and only for a known setting id', () => {
-    expect(parseAppRoute('/', '?settings=central&field=central.profile').field).toBe('central.profile')
-    expect(parseAppRoute('/', '?settings=agent&field=skipApprovals').field).toBe('skipApprovals')
+    expect(parseAppRoute('/', '?settings=central&field=central.level').field).toBe('central.level')
+    expect(parseAppRoute('/', '?settings=claude&field=agentApprovalLevel').field).toBe('agentApprovalLevel')
     expect(parseAppRoute('/', '?settings=capabilities&field=capability.telegram').field).toBe('capability.telegram')
     expect(parseAppRoute('/', '?settings=central&field=nope').field).toBeNull()
     expect(parseAppRoute('/', '?settings=central&field="]x').field).toBeNull() // never reaches a CSS selector
@@ -48,11 +48,22 @@ describe('parseAppRoute', () => {
   })
 })
 
+describe('moved settings', () => {
+  it('a legacy page id or a moved field lands on the new page with the new field', () => {
+    expect(parseAppRoute('/', '?settings=agent&field=skipApprovals')).toMatchObject({ settings: 'claude', field: 'agentApprovalLevel' })
+    expect(parseAppRoute('/', '?settings=agent&field=claudeLaunchProfiles')).toMatchObject({ settings: 'claude', field: 'claudeLaunchProfiles' })
+    expect(parseAppRoute('/', '?settings=central&field=central.profile')).toMatchObject({ settings: 'claude', field: 'centralClaudeProfileId' })
+    expect(parseAppRoute('/', '?settings=central&field=central.contextWindow')).toMatchObject({ settings: 'central', field: 'central.central' })
+    expect(parseAppRoute('/', '?settings=central&field=central.askEachWorker')).toMatchObject({ settings: 'central', field: 'central.level' })
+    expect(parseAppRoute('/', '?settings=agent')).toMatchObject({ settings: 'claude', field: null })
+  })
+})
+
 describe('buildAppHref', () => {
   it('round-trips through parse with a fixed param order', () => {
-    const route: AppRoute = { workspaceId: 'a b', settings: 'central', field: 'central.profile', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true, setup: 'browser' }
+    const route: AppRoute = { workspaceId: 'a b', settings: 'central', field: 'central.level', ctab: 'memory', panel: 'tasks', view: 'kanban', help: true, setup: 'browser' }
     const href = buildAppHref(route)
-    expect(href).toBe('/w/a%20b?settings=central&field=central.profile&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
+    expect(href).toBe('/w/a%20b?settings=central&field=central.level&ctab=memory&panel=tasks&view=kanban&help=1&setup=browser')
     const [path, search] = href.split('?')
     expect(parseAppRoute(path, `?${search}`)).toEqual(route)
     expect(buildAppHref(parseAppRoute('/', '?help=1&settings=canvas'))).toBe('/?settings=canvas&help=1')

@@ -130,7 +130,7 @@ describe('ClaudeLaunchProfilesCard', () => {
     expect(save().disabled).toBe(true)
   })
 
-  it('Save stores the profile through onChange, the row appears, and Use for Central / new agents set the pointers', () => {
+  it('Save stores the profile through onChange, the row appears, and Use for Central sets that pointer (agents follow the Connection)', () => {
     const spy = setup()
     openAdd()
     type('Name', '  Work  ')
@@ -145,9 +145,19 @@ describe('ClaudeLaunchProfilesCard', () => {
     expect(spy).toHaveBeenLastCalledWith({ centralClaudeProfileId: saved!.id })
     expect(within(row('Work')).getByText('Central')).toBeTruthy()
     expect(within(row('Default')).queryByText('Central')).toBeNull()
-    fireEvent.click(within(row('Work')).getByRole('button', { name: 'Use for new Claude agents' }))
-    expect(spy).toHaveBeenLastCalledWith({ defaultClaudeProfileId: saved!.id })
-    expect(within(row('Work')).getByText('Default for new agents')).toBeTruthy()
+    expect(within(row('Work')).queryByRole('button', { name: 'Use for new Claude agents' })).toBeNull()
+  })
+
+  it('badges come from the server truth when given (command mode), not the stored default', () => {
+    const effective = {
+      agents: { profileId: 'm', name: 'Malik', command: MALIK.command },
+      central: { profileId: 'm', name: 'Malik', command: MALIK.command, source: 'default' as const },
+      credential: 'command' as const, deviations: [],
+    }
+    render(<ClaudeLaunchProfilesCard settings={{ ...DEFAULT_SETTINGS, claudeLaunchProfiles: [MALIK] }} onChange={vi.fn()} effective={effective} />)
+    expect(within(row('Malik')).getByText('Default for new agents')).toBeTruthy()
+    expect(within(row('Malik')).getByText('Central')).toBeTruthy()
+    expect(within(row('Default')).queryByText('Default for new agents')).toBeNull()
   })
 
   it('Edit reuses the editor prefilled; Delete asks first, then resets pointers', async () => {

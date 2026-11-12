@@ -50,9 +50,9 @@ export const CENTRAL_SETTINGS_SECTION = 'central'
 /** Opens Settings › Central Agent (the one place the level is set) revealing the `field` row. */
 export const openCentralSettings = (field: CentralFieldId): void => openSettingsAt(CENTRAL_SETTINGS_SECTION, `central.${field}`)
 
-/** Settings section id of the Agent section, where Skip approvals lives. */
-export const AGENT_SETTINGS_SECTION = 'agent'
-const openAgentSettings = (): void => openSettingsAt(AGENT_SETTINGS_SECTION, 'skipApprovals')
+/** Settings section id of the Claude section, where the approval level ("Never ask") lives. */
+export const AGENT_SETTINGS_SECTION = 'claude'
+const openAgentSettings = (): void => openSettingsAt(AGENT_SETTINGS_SECTION, 'agentApprovalLevel')
 
 /** Below L2 Central cannot change anything, so skipping approvals does not alter what the level means. */
 const skipApplies = (level: ControlView['effective']): boolean => level !== 'off' && level !== 'observe'

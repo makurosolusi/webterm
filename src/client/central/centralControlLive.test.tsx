@@ -89,7 +89,7 @@ describe('Status honesty', () => {
     expect(screen.queryByText(/asks? (you )?before/)).toBeNull()
     expect(screen.queryByText(/Approvals: skipped/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Change in Central settings' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Change in Agent settings' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Change in Claude settings' })).toBeTruthy()
   })
 
   it('keeps the plain level meaning when approvals are on', async () => {

@@ -1,4 +1,4 @@
-// Settings › Central Agent › Daily spending limit (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
+// Settings › Central › Daily spending limit (the one daily cap; it also pauses routines, plans and bake-offs) (dollars) over the existing env override `WEBTERM_CENTRAL_DAILY_COST_MICROS`,
 // written through the same `/api/settings/env` PUT Settings › Developer uses: no env advice, the field is the switch.
 import { useEffect, useState } from 'react'
 import type { EnvStateV2 } from '../shared/envSettings.contract'
@@ -6,6 +6,7 @@ import { request } from './inboxTransport'
 import { Field } from './SettingsFields'
 import { SettingsCombobox } from './SettingsCombobox'
 import { COST_CAP_FIELD_ID, COST_CAP_PRESETS } from './settingsPresets'
+import { centralControlApi } from './central/centralControlApi'
 
 export const COST_CAP_KEY = 'WEBTERM_CENTRAL_DAILY_COST_MICROS'
 const ENV_PATH = '/api/settings/env'
@@ -30,6 +31,12 @@ const microsToDollars = (micros: string): string => {
   return Number.isFinite(n) && n > 0 ? String(n / MICROS_PER_DOLLAR) : ''
 }
 
+/** "Spent today: $1.20 of $5.00" (no limit: "Spent today: $1.20"). */
+export function spentLine(usedMicros: number, limitMicros: number): string {
+  const usd = (m: number): string => '$' + (m / MICROS_PER_DOLLAR).toFixed(2)
+  return limitMicros > 0 ? 'Spent today: ' + usd(usedMicros) + ' of ' + usd(limitMicros) : 'Spent today: ' + usd(usedMicros)
+}
+
 type Load = { status: 'loading' } | { status: 'error'; error: string } | { status: 'ready'; editable: boolean; reason?: string }
 
 /** The cost cap as a dollars combobox (presets + recent); commits on pick/blur/Enter, empty clears to unlimited. `disabledReason` = shown, field locked. */
@@ -49,6 +56,12 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
     }).catch((err: unknown) => setLoad({ status: 'error', error: err instanceof Error ? err.message : String(err) }))
   }
   useEffect(read, [])
+  // Live "spent / limit" from Central's own budget counter; Central off (no status) = no line.
+  const [spent, setSpent] = useState<string | null>(null)
+  const readSpent = (): void => {
+    centralControlApi.getStatus().then((st) => setSpent(spentLine(st.budget.used.costMicros ?? 0, st.budget.limits.costMicros ?? 0))).catch(() => setSpent(null))
+  }
+  useEffect(readSpent, [])
 
   const commit = async (text: string): Promise<void> => {
     const micros = dollarsToMicros(text)
@@ -60,6 +73,7 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
       await request(ENV_PATH, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(change) })
       const next = micros === null ? '' : String(micros / MICROS_PER_DOLLAR)
       setSaved(next)
+      readSpent()
     } catch (err) {
       setSaveError(`Could not save the limit: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -73,11 +87,12 @@ export function CostLimitField({ disabledReason }: { disabledReason?: string } =
       label="Daily spending limit"
       htmlFor="st-costLimit"
       field="central.costLimit"
-      hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% Central pauses until tomorrow (UTC) or until you raise the limit."
+      hint="Dollars per UTC day; empty = no limit. At 80% work moves to cheaper models, at 100% Central, routines, plans and bake-offs pause until tomorrow (UTC) or until you raise the limit."
     >
       <span className="st-unit">$</span>
       <SettingsCombobox id="st-costLimit" fieldId={COST_CAP_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
         value={saved} disabled={disabled} validate={validateDollars} onCommit={(v) => void commit(v)} />
+      {spent ? <span className="st-hint" role="status" data-spent>{spent}</span> : null}
       {disabledReason ? <span className="st-hint" data-reason>{disabledReason}</span> : null}
       {load.status === 'loading' ? <span className="st-hint" role="status">Loading…</span> : null}
       {saving ? <span className="st-hint" role="status">Saving…</span> : null}
