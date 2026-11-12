@@ -70,6 +70,8 @@ export interface AgentChatStreamOptions {
   after: number
   onEvent: (e: AgentChatEvent) => void
   onStatus: (s: ChatStreamStatus) => void
+  /** The server kept refusing the stream (HTTP status); retrying stopped (chatStream.ts `onRefused`). */
+  onRefused?: (status: number) => void
 }
 
 /** Everything the view needs from the server; tests pass a fake. */

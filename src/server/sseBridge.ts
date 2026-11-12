@@ -10,6 +10,8 @@
 import { EventEmitter } from 'node:events'
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import type { ServerMsg } from '../shared/protocol'
+import { sameOrigin } from './auth'
+import { firstHeader } from './httpHeaders'
 import { createLogger } from './logs'
 
 /** The SSE routes the client streams over the socket; anything else is refused before it runs. */
@@ -47,6 +49,17 @@ function streamHeaders(upgrade: IncomingHttpHeaders): IncomingHttpHeaders {
     out[k] = v
   }
   out.accept = 'text/event-stream'
+  // Fetch metadata of the bridged GET, derived from what the upgrade already proved. Every browser
+  // sends Origin on a WebSocket handshake (RFC 6455 §4.1), but `Sec-Fetch-Site` only on some handshakes
+  // (engines differ), so a uiOnly route (Agent Chat) refused every bridged stream from
+  // those browsers with 403 and the node sat on "Connecting to Claude…". A same-origin Origin is
+  // the fact `Sec-Fetch-Site: same-origin` stands for, and the /ws upgrade only got here on one
+  // (humanUpgradeOriginOk) or on the root token. This weakens nothing: a non-browser can forge
+  // Origin exactly as easily as Sec-Fetch-Site, and uiOnlyDenial still refuses any agent
+  // credential (node / capability token) and still demands the HttpOnly `wt_ui` session; a
+  // cross-origin Origin fails sameOrigin() and gets no metadata from here.
+  const origin = firstHeader(upgrade.origin)
+  if (origin && sameOrigin(upgrade)) out['sec-fetch-site'] = 'same-origin'
   return out
 }
 

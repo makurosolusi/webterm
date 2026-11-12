@@ -74,6 +74,9 @@ test('a socket drop fires onerror (CONNECTING, like a dropped EventSource); a re
   expect(errors).toEqual([`refused:${STREAM_CLOSED}`])
   sock().onclose!()
   expect(errors).toEqual([`refused:${STREAM_CLOSED}`, `dropped:${STREAM_CONNECTING}`])
+  // The refusal keeps its HTTP status for the consumer; a drop has none.
+  expect(refused.status).toBe(403)
+  expect(dropped.status).toBeUndefined()
   // The consumer closes and reopens on its own schedule: no unsub for a subscription the drop already ended.
   dropped.close()
   expect(sock().msgs().filter((m) => m.t === 'sse.unsub')).toEqual([])

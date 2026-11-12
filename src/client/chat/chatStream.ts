@@ -23,7 +23,18 @@ export interface SseFeed<E extends { seq: number }> {
   reapply?: (event: E) => boolean
 }
 
-export type SseStreamOptions<E> = Omit<ChatStreamOptions, 'onEvent'> & { onEvent: (event: E) => void }
+/** How long a stream keeps retrying refusals (403, 404, ...) with no open in between before it gives up. */
+export const STREAM_REFUSED_GIVE_UP_MS = 15_000
+
+export type SseStreamOptions<E> = Omit<ChatStreamOptions, 'onEvent'> & {
+  onEvent: (event: E) => void
+  /**
+   * The server kept refusing this stream (HTTP `status`) for `STREAM_REFUSED_GIVE_UP_MS`: retrying
+   * stops and the caller shows why. A short refusal still retries (a node 404s until the board
+   * saves). Without this handler the stream retries refusals forever, as before.
+   */
+  onRefused?: (status: number) => void
+}
 
 export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts: SseStreamOptions<E>): ChatStream {
   const create =
@@ -32,6 +43,8 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
   let source: ChatEventSource | null = null
   let lastSeq = opts.after !== undefined && opts.after > 0 ? opts.after : 0
   let attempts = 0
+  /** When the first refusal since the last open arrived; null = none. */
+  let refusedSince: number | null = null
   let closed = false
   let cancelRetry = (): void => {}
   let cancelStart = (): void => {}
@@ -104,6 +117,7 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
     next.onopen = () => {
       if (closed) return
       attempts = 0
+      refusedSince = null
       status('open')
     }
     // `onerror` is the handler for EVERY `error` event, and the server names a failed turn's frame
@@ -111,6 +125,19 @@ export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts:
     // reconnect: an endless "Reconnecting…" and a failed reply that never showed why.
     next.onerror = (event) => {
       if (typeof (event as MessageEvent | undefined)?.data === 'string') return
+      // A refusal (`sse.end` with a non-200 status, ws.streams.ts) is not a dropped connection.
+      const refused = (next as { status?: number }).status
+      if (opts.onRefused && typeof refused === 'number' && refused !== 200) {
+        refusedSince ??= Date.now()
+        if (Date.now() - refusedSince >= STREAM_REFUSED_GIVE_UP_MS) {
+          // Stopped, not `closed`: the caller's refusal UI (with its own Retry) says what happened.
+          closed = true
+          cancelRetry()
+          cleanup()
+          opts.onRefused(refused)
+          return
+        }
+      }
       reconnect()
     }
     for (const type of feed.eventTypes) {
