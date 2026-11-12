@@ -28,6 +28,16 @@ const ALLOW: readonly { file: string; text: string; reason: string }[] = [
     reason: 'detector for Indonesian prompt-injection phrasing; never shown to anyone' },
 ]
 
+/**
+ * Seluruh file dikecualikan: hanya kosakata INPUT user (pencocok intent), bukan teks produk. Sempit by design:
+ * file wajib berisi konstanta RegExp saja (test di bawah menolak string/template), jadi teks produk tak bisa
+ * menumpang di sini.
+ */
+const USER_INPUT_VOCAB: readonly { file: string; reason: string }[] = [
+  { file: 'server/central/playbooks/playbook.intentWords.ts',
+    reason: 'Indonesian intent keywords matched against user messages; never shown to anyone' },
+]
+
 /** Buang komentar `//`, `/* *\/` dan baris komentar SQL `-- ` di dalam template; string, template, regex utuh. */
 function stripComments(src: string): string {
   let out = ''
@@ -116,8 +126,17 @@ describe('product text is English', () => {
     for (const a of ALLOW) expect(readFileSync(join(SRC, a.file), 'utf8'), `${a.file}: ${a.reason}`).toContain(a.text)
   })
 
+  it('user-input vocabulary files exist and hold only regex constants (no product text can hide there)', () => {
+    for (const v of USER_INPUT_VOCAB) {
+      const code = stripComments(readFileSync(join(SRC, v.file), 'utf8'))
+      expect(code, `${v.file}: ${v.reason}`).not.toMatch(/['"`]/)
+      expect(code).toMatch(/\/\\b\(/)
+    }
+  })
+
   it('no Indonesian words in product text', () => {
-    const offenders = sourceFiles().flatMap((f) => {
+    const vocab = new Set(USER_INPUT_VOCAB.map((v) => v.file))
+    const offenders = sourceFiles().filter((f) => !vocab.has(f)).flatMap((f) => {
       const allow = ALLOW.filter((a) => a.file === f).map((a) => a.text)
       return indonesianHits(readFileSync(join(SRC, f), 'utf8'), allow).map((h) => `${f}:${h}`)
     })

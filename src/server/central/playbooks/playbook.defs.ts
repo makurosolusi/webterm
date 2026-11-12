@@ -5,6 +5,7 @@
 import { type JsonSchema, obj, S } from '../../capability/capability.schema'
 import type { Brief } from '../../dag/dag.model'
 import type { Tier, ToolInput } from '../tools/toolTypes'
+import { CODE_CHANGE_WORDS, REVIEW_WORDS, WEB_RESEARCH_WORDS } from './playbook.intentWords'
 
 /** Results of earlier steps by `saveAs` name (their `data`). */
 export type Saved = Record<string, Record<string, unknown> | undefined>
@@ -70,7 +71,7 @@ const RESULT_LINE = 'End with a line `RESULT:` followed by'
 const webResearch = delegate({
   id: 'web_research', label: 'web research', subject: 'goal', tier: 'R1',
   summary: 'Research the web: a task, an agent with its own cabled browser, a fixed brief; reports RESULT with sources.',
-  match: [/\b(analisa|analisis|analy[sz]e|analysis|riset|research|cari(kan)?|bandingkan|compare|trending|investigate|look\s+up|browse|telusuri)\b/i],
+  match: [WEB_RESEARCH_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), url: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
   brief: (p) => ({
     objective: p.goal ?? '',
@@ -83,7 +84,7 @@ const webResearch = delegate({
 const codeChange = delegate({
   id: 'code_change', label: 'code change', subject: 'goal', tier: 'R1',
   summary: 'Change code: a task, a worker agent in its own worktree, a fixed brief; reports RESULT with files and checks.',
-  match: [/\b(perbaiki|betulkan|fix|implement\w*|tambah\w*|refactor\w*|ubah|bikin\s+fitur|add\s+(a\s+)?feature)\b/i],
+  match: [CODE_CHANGE_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
   brief: (p) => ({
     objective: p.goal ?? '',
@@ -96,7 +97,7 @@ const codeChange = delegate({
 const review = delegate({
   id: 'review', label: 'review', subject: 'target', tier: 'R1',
   summary: 'Review a PR, branch, diff or path: a task, a reviewer agent, a fixed brief; reports RESULT findings.',
-  match: [/\b(review|periksa|cek\s+kode|pull\s+request|PR|diff)\b/i],
+  match: [REVIEW_WORDS],
   params: obj({ target: S.str(MAX_GOAL), kind: S.str(100) }, ['target']), required: ['target'],
   brief: (p) => ({
     objective: `Review ${p.target ?? ''}`,
