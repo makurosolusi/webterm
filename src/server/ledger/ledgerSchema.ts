@@ -29,6 +29,7 @@ import { applyV27 } from './ledgerSchemaV27'
 import { applyV28 } from './ledgerSchemaV28'
 import { applyV29 } from './ledgerSchemaV29'
 import { applyV30 } from './ledgerSchemaV30'
+import { applyV31 } from './ledgerSchemaV31'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -94,4 +95,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 29, up: applyV29 },
   // v30: central_finding + central_health_scan (project health advice with evidence); additive, nothing to backfill.
   { version: 30, up: applyV30 },
+  // v31: central_checkin_reason.not_before (a failed delegation waits for the turn that saw it); nullable, no backfill.
+  { version: 31, up: applyV31 },
 ]

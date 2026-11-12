@@ -114,7 +114,7 @@ describe('health check-in reasons', () => {
     const checkin = createWorkCheckin({
       db: r.db, store: createWorkStore(r.db, () => r.clock.t), now: () => r.clock.t, env: {},
       settings: { read: async () => conf, write: async () => {} },
-      submit: (t) => { turns.push(t); return `turn-${turns.length}` }, notice: () => {},
+      submit: (t) => { turns.push(t); return `turn-${turns.length}` }, notice: () => true,
     })
     await checkin.tick(T0 + CHECKIN_WINDOW_MS)
     expect(turns).toEqual([])

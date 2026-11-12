@@ -13,6 +13,9 @@ import { budgetExhausted, budgetLimits, readBudget, utcDay } from '../guard/budg
 import { effectiveLevelOf } from '../guard/levelStore'
 import type { WorkMove, WorkStore } from './workModel'
 import { dueReminders, markReminderFired } from './workReminders'
+import { DUTY_STATUSES } from './workDuties'
+import { escalateDuties } from './workEscalation'
+import { WORK_LIVENESS_RULES } from './workSupervisor'
 
 /** Reasons this close together become one turn; the oldest waits this long before anything is sent, unless a reminder is due. */
 export const CHECKIN_WINDOW_MS = 5 * 60_000
@@ -25,14 +28,14 @@ const TITLE_CHARS = 80
 const TIMELINE_MAX = 500
 const REASON_CHARS = 700
 const ACTOR = 'system:checkin'
-// Central sees a failed send in its own tool receipt; waking it about that would answer itself.
+// A failed send is in Central's own tool receipt first, so its wake waits `escalate.graceMs` for that turn to act.
 const DELEGATION_RULE = 'delegation'
 const ASSIGNMENT_OPEN_EVENT = 'work.assignment.open'
 const RETRY_CODES: readonly string[] = ['central_runtime_off', 'conversation_busy', 'budget_exhausted']
 
 /** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts. */
-export type ReasonKind = 'task_stalled' | 'task_failed' | 'reminder_due' | 'task_overdue' | 'task_handoff' | 'health_finding' | 'health_changed'
-interface Reason { id: string; kind: ReasonKind; projectId: string | null; taskId: string | null; text: string; createdAt: number }
+export type ReasonKind = 'task_stalled' | 'task_failed' | 'task_duty' | 'reminder_due' | 'task_overdue' | 'task_handoff' | 'health_finding' | 'health_changed'
+interface Reason { id: string; kind: ReasonKind; projectId: string | null; taskId: string | null; text: string; createdAt: number; notBefore: number | null }
 type Enabled = Omit<CheckinSettings, 'usedToday'>
 
 /** The two user settings, read on every tick so a change applies live. */
@@ -62,8 +65,8 @@ export interface WorkCheckinDeps {
   settings: CheckinSettingsPort
   /** Starts the turn and returns its id; throws when it could not. */
   submit(turn: CheckinTurn): string
-  /** Idempotent by `key`. */
-  notice(key: string, text: string, conversationId: string): void
+  /** Idempotent by `key`; returns whether the notice was new. */
+  notice(key: string, text: string, conversationId: string): boolean
   env?: Record<string, string | undefined>
 }
 
@@ -74,18 +77,18 @@ export interface WorkCheckin {
   tick(at?: number): Promise<void>
 }
 
-const toReason = (r: Row): Reason => ({ id: String(r.id), kind: r.kind as ReasonKind, projectId: r.project_id === null ? null : String(r.project_id), taskId: r.task_id === null ? null : String(r.task_id), text: String(r.text), createdAt: Number(r.created_at) })
+const toReason = (r: Row): Reason => ({ id: String(r.id), kind: r.kind as ReasonKind, projectId: r.project_id === null ? null : String(r.project_id), taskId: r.task_id === null ? null : String(r.task_id), text: String(r.text), createdAt: Number(r.created_at), notBefore: r.not_before === null ? null : Number(r.not_before) })
 
-/** One reason to queue; a second one with the same `dedupeKey` is dropped. */
-export interface CheckinReasonInput { kind: ReasonKind; dedupeKey: string; projectId: string | null; taskId: string | null; text: string; now: number }
+/** One reason to queue; a second one with the same `dedupeKey` is dropped. `notBefore` holds it back and, once due, sends it without the window. */
+export interface CheckinReasonInput { kind: ReasonKind; dedupeKey: string; projectId: string | null; taskId: string | null; text: string; now: number; notBefore?: number }
 
 /**
  * Queues a durable check-in reason. Delivery (window, daily limit, on/off setting, halted projects) is the tick's job,
  * so callers outside the engine only record why Central should look. Returns whether a new row was written.
  */
 export function queueCheckinReason(db: Database, r: CheckinReasonInput): boolean {
-  return execWrite(db, `INSERT INTO central_checkin_reason (id, dedupe_key, kind, project_id, task_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedupe_key) DO NOTHING`,
-    newId(), r.dedupeKey, r.kind, r.projectId, r.taskId, previewText(r.text, REASON_CHARS) ?? r.dedupeKey, r.now) > 0
+  return execWrite(db, `INSERT INTO central_checkin_reason (id, dedupe_key, kind, project_id, task_id, text, created_at, not_before) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(dedupe_key) DO NOTHING`,
+    newId(), r.dedupeKey, r.kind, r.projectId, r.taskId, previewText(r.text, REASON_CHARS) ?? r.dedupeKey, r.now, r.notBefore ?? null) > 0
 }
 
 /** The labelled prompt of a check-in; reasons are one JSON line each, so agent-written text cannot break out of the fence. */
@@ -101,9 +104,8 @@ export function checkinPrompt(reasons: readonly { kind: string; projectId: strin
 export function createWorkCheckin({ db, store, now, settings, submit, notice, env }: WorkCheckinDeps): WorkCheckin {
   const ctx = { db, now }
 
-  const enqueue = (dedupeKey: string, kind: ReasonKind, projectId: string | null, taskId: string | null, text: string): void => {
-    queueCheckinReason(db, { kind, dedupeKey, projectId, taskId, text, now: now() })
-  }
+  const enqueue = (dedupeKey: string, kind: ReasonKind, projectId: string | null, taskId: string | null, text: string, notBefore?: number): boolean =>
+    queueCheckinReason(db, { kind, dedupeKey, projectId, taskId, text, now: now(), ...(notBefore === undefined ? {} : { notBefore }) })
 
   const projectName = (id: string): string => String(getRow(db, 'SELECT name FROM project WHERE id = ?', id)?.name ?? id)
   const taskLabel = (title: string, projectId: string): string => `task "${previewText(title, TITLE_CHARS) ?? 'untitled'}" in project ${projectName(projectId)}`
@@ -133,18 +135,27 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
 
   const halted = (projectId: string | null): boolean => effectiveLevelOf(db, projectId, env ?? process.env) === 'off'
 
-  const queued = (at: number): Reason[] => {
-    // ponytail: only the oldest SCAN_LIMIT are looked at; a halted project with more than that holds up the rest until it resumes.
-    const all = allRows(db, 'SELECT * FROM central_checkin_reason WHERE sent_at IS NULL ORDER BY created_at, id LIMIT ?', SCAN_LIMIT).map(toReason)
-    const open = all.filter((r) => r.projectId === null || !halted(r.projectId))
-    const reminders = open.filter((r) => r.kind === 'reminder_due')
-    const windowOver = open.length > 0 && (open[0] as Reason).createdAt + CHECKIN_WINDOW_MS <= at
-    if (reminders.length === 0 && !windowOver) return []
-    // Reminders lead so a long backlog cannot push one past the batch cap and off this tick.
-    return [...reminders, ...open.filter((r) => r.kind !== 'reminder_due')].slice(0, BATCH_MAX)
+  /** A duty fixed before its wake went out (Enter pressed, resent, cancelled) needs no turn: it is settled unsent. */
+  const dutyResolved = (r: Reason, at: number): boolean => {
+    if (r.kind !== 'task_duty' || r.taskId === null) return false
+    const status = getRow(db, 'SELECT status FROM central_task WHERE id = ?', r.taskId)?.status
+    if ((DUTY_STATUSES as readonly unknown[]).includes(status)) return false
+    execWrite(db, 'UPDATE central_checkin_reason SET sent_at = ? WHERE id = ?', at, r.id)
+    return true
   }
 
-  const targetOf = (batch: readonly Reason[]): string => {
+  const queued = (at: number): Reason[] => {
+    // ponytail: only the oldest SCAN_LIMIT are looked at; a halted project with more than that holds up the rest until it resumes.
+    const all = allRows(db, 'SELECT * FROM central_checkin_reason WHERE sent_at IS NULL AND (not_before IS NULL OR not_before <= ?) ORDER BY created_at, id LIMIT ?', at, SCAN_LIMIT).map(toReason)
+    const open = all.filter((r) => (r.projectId === null || !halted(r.projectId)) && !dutyResolved(r, at))
+    // A due reminder or duty does not wait for the window; they lead so a long backlog cannot push one past the batch cap.
+    const urgent = open.filter((r) => r.kind === 'reminder_due' || r.notBefore !== null)
+    const windowOver = open.length > 0 && (open[0] as Reason).createdAt + CHECKIN_WINDOW_MS <= at
+    if (urgent.length === 0 && !windowOver) return []
+    return [...urgent, ...open.filter((r) => !urgent.includes(r))].slice(0, BATCH_MAX)
+  }
+
+  const targetOf = (batch: readonly { projectId: string | null }[]): string => {
     const only = batch[0]?.projectId ?? null
     if (only === null || batch.some((r) => r.projectId !== only)) return GLOBAL_CONVERSATION_ID
     const id = `${PROJECT_CONVERSATION_PREFIX}${only}`
@@ -174,7 +185,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
     if (batch.length === 0) return
     if (halted(null)) return
     const blocked = budgetBlock(at, limit)
-    if (blocked !== null) return notice(`checkin-paused:${localDayStart(at)}`, `Central check-ins are paused until tomorrow: ${blocked}.`, GLOBAL_CONVERSATION_ID)
+    if (blocked !== null) { notice(`checkin-paused:${localDayStart(at)}`, `Central check-ins are paused until tomorrow: ${blocked}.`, GLOBAL_CONVERSATION_ID); return }
     const conversationId = targetOf(batch)
     if (getConversation(db, conversationId)?.activeTurnId) return
     const head = (batch[0] as Reason).text
@@ -193,7 +204,10 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   return {
     onMove(move) {
       const { task } = move
-      if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
+      if (move.to === 'failed' && move.rule === DELEGATION_RULE) {
+        const reason = move.reason ? ` (${move.reason})` : ''
+        enqueue(`duty:${move.seq}`, 'task_duty', task.projectId, task.id, `the prompt for ${taskLabel(task.title, task.projectId)} was not submitted${reason}; it is listed under Open duties`, now() + WORK_LIVENESS_RULES.escalate.graceMs)
+      } else if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
         enqueue(`move:${move.seq}`, move.to === 'stalled' ? 'task_stalled' : 'task_failed', task.projectId, task.id, `${taskLabel(task.title, task.projectId)} ${move.to}${move.reason ? ` (${move.reason})` : ''}`)
       } else if (move.to === 'reported' || move.to === 'needs_review') {
         const attempt = handoffOf(move)
@@ -204,6 +218,13 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
       fireReminders(at)
       enqueueOverdue(at)
       const { enabled, dailyLimit } = await settings.read()
+      const wakeable = enabled && !halted(null) && budgetBlock(at, dailyLimit) === null
+      const canWake = (projectId: string): boolean => wakeable && !halted(projectId)
+      escalateDuties({
+        db, canWake, projectName,
+        enqueue: (key, d, text) => enqueue(key, 'task_duty', d.projectId, d.taskId, text),
+        notice: (key, text, projectId) => notice(key, text, targetOf([{ projectId }])),
+      }, at)
       if (enabled) await deliver(at, dailyLimit)
     },
   }

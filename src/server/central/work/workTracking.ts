@@ -78,7 +78,7 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
   registerWorkMemory(db, now)
   const checkin = createWorkCheckin({
     db, store, now, settings: productionCheckinSettings, submit: startCheckinTurn(db),
-    notice: (key, text, conversationId) => { appendCentralNotice(db, { key, text, conversationId, now }) },
+    notice: (key, text, conversationId) => appendCentralNotice(db, { key, text, conversationId, now }),
   })
   onWorkMove(db, checkin.onMove)
   const cwdOf = (projectId: string): string | null => projectRepo(db, projectId)

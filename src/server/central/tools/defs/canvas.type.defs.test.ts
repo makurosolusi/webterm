@@ -209,6 +209,28 @@ describe('canvas.type delegation', () => {
     expect(typed.filter(([id, d]) => id === 'n3' && d === '\r')).toHaveLength(2)
     expect(tasks()[0]?.status).toBe('failed')
     expect(store().openAssignmentOfNode('n3')).toBeNull()
+    expect(store().assignmentsOfTask(tasks()[0]!.id)[0]).toMatchObject({ endReason: 'send_failed', result: { reason: 'not_started', textLeftInBox: true } })
+  })
+
+  // Root cause of the lost prompt: an Enter rescue was untracked, so the card stayed failed after the agent started.
+  it('Enter alone with a taskId on a Claude node reopens tracking without retyping', async () => {
+    claude.on = true
+    claude.enterWorks = false
+    await type({ nodeId: 'n3', text: 'analyse trending' })
+    const failed = tasks()[0]!
+    claude.enterWorks = true
+    typed = []
+    const res = await type({ nodeId: 'n3', keys: ['Enter'], taskId: failed.id })
+    expect(res).toMatchObject({ ok: true, data: { taskId: failed.id, assignmentId: expect.any(String) } })
+    expect(typed).toEqual([['n3', '\r']])
+    expect(store().getTask(failed.id)?.status).toBe('assigned')
+    expect(store().openAssignmentOfNode('n3')).toMatchObject({ taskId: failed.id, instruction: '(resubmit)', attempt: 2 })
+  })
+
+  it('Enter without a taskId, or on a plain terminal, stays untracked', async () => {
+    await type({ nodeId: 'n3', keys: ['Enter'] })
+    expect(await type({ nodeId: 'n1', keys: ['Enter'], taskId: 'anything' })).toMatchObject({ ok: true, data: { tracked: false } })
+    expect(tasks()).toEqual([])
   })
 
   it('refuses a node busy on another task', async () => {

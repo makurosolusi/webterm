@@ -18,10 +18,12 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, choose "Ask for risky things" in Settings › Claude › Permissions (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
+- Ledger schema v31 adds a nullable `not_before` column to `central_checkin_reason`; existing databases are upgraded in place, nothing to backfill.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
+- Central now keeps a list of the delegations it owns that are stuck or failed, acts on them, and tells you when it cannot fix one.
 - Settings › Appearance: Theme (System follows your computer's light or dark mode, or Light / Dark), terminal colors with a small preview, Font (only fonts installed on this computer), font size, cursor style and blink, and the canvas background with one "This workspace: Same as all workspaces / Custom" choice.
 - Settings › Notifications: desktop notifications show the browser's real permission (blocked says how to allow it, and is never saved as on) plus the sound. Mute a single workspace from its menu: right-click the tab › Mute Notifications.
 - Settings › Health: every "fix it in Settings" hint from Doctor is a link to that exact setting, a Fix shows its result, the data folder is listed, and "Show developer tools" (or `?dev=1`) shows the Developer page.
