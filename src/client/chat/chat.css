@@ -2,7 +2,8 @@
    `chat-`; there are no global element rules. Colors come from `--vscode-*` variables with
    fallbacks, so the panel still reads on a host that has not loaded the theme sheet.
 
-   No bubbles: each turn is a flat block with a role icon and a bold name. Widgets (tool and
+   Replies are flat blocks with no per-message header (Claude.ai, ChatGPT); your own messages are bubbles
+   (chatBubbles.css); actions and the reply's model line show on hover/focus (chatMessageActions.css). Widgets (tool and
    proposal cards, code blocks) are 1px-border boxes with a 4px radius and no shadow. */
 
 .chat-panel {
@@ -197,7 +198,7 @@
   padding: 8px 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overscroll-behavior: contain;
 }
 .chat-empty {
@@ -227,32 +228,22 @@
 .chat-jump:hover { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
 
 .chat-message { display: flex; flex-direction: column; gap: 4px; max-width: 100%; }
-.chat-message__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-}
-.chat-message__icon { flex: none; font-size: 16px; color: var(--vscode-icon-foreground, inherit); }
-.chat-message__role { font-size: 13px; font-weight: 600; }
 .chat-message.is-optimistic { opacity: 0.72; }
-.chat-message__live,
 .chat-message__failed,
 .chat-message__cancelled { font-size: 12px; }
-.chat-message__live { color: var(--vscode-descriptionForeground, #9d9d9d); }
 .chat-message__failed { color: var(--vscode-errorForeground, #f48771); }
 .chat-message__cancelled { color: var(--vscode-editorWarning-foreground, #cca700); }
-/* Per-turn cost chip and the conversation's model badge: small, muted, never wrap. */
+/* Per-turn meta (hover row) and the conversation's model badge: small, muted, never wrap. */
 .chat-cost-chip,
 .chat-model-badge {
-  margin-left: auto;
   font-size: 11px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--vscode-descriptionForeground, #9d9d9d);
 }
-/* Turn body is indented under the 16px role icon, as in the Chat view. */
-.chat-message > :not(.chat-message__meta) { margin-left: 22px; }
+/* Central controls in the composer row: no header-era auto margins (central.css), the row lays them out. */
+.chat-composer__toolbar .ccm-meter,
+.chat-composer__toolbar .ccm-chip { margin-left: 0; }
 
 .chat-text {
   margin: 0;
@@ -395,22 +386,33 @@
   padding: 8px 20px 12px;
   container: chat-composer / inline-size;
 }
-/* Quiet controls under the box (Central: permission mode), like Claude Code's mode line. */
-.chat-composer__toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 4px; font-size: 12px; }
+/* One box: the textarea on top, the control row (attach, mode, model, effort, context, Send/Stop) at its
+   bottom edge, as in Claude.ai and Cursor. The row wraps on a narrow box instead of overflowing it. */
 .chat-composer__box {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 4px;
   box-sizing: border-box;
-  padding: 4px 4px 4px 8px;
+  padding: 6px 6px 4px 8px;
   border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--vscode-input-background, #3c3c3c);
 }
+.chat-composer__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground, #9d9d9d);
+  font-size: 12px;
+}
+.chat-composer__actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .chat-composer__box:focus-within { border-color: var(--vscode-focusBorder, #007fd4); }
 .chat-composer__input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   max-height: 9em;
   margin: 0;
   padding: 3px 0;
@@ -441,6 +443,11 @@
 }
 .chat-composer__send:hover:not(:disabled) { background: var(--vscode-button-hoverBackground, #026ec1); }
 .chat-composer__send:disabled { opacity: 0.4; }
+.chat-composer__stop {
+  background: var(--vscode-button-secondaryBackground, #313131);
+  color: var(--vscode-button-secondaryForeground, #cccccc);
+}
+.chat-composer__stop:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, #3c3c3c); }
 
 .chat-panel :focus-visible {
   outline: 1px solid var(--vscode-focusBorder, #007fd4);

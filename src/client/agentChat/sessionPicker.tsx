@@ -1,4 +1,4 @@
-// Conversation history of the agent chat footer (Claude Code VS Code "Past conversations").
+// Conversation history of the agent chat node header (Claude Code VS Code "Past conversations").
 import { useEffect, useState } from 'react'
 import { Popover } from 'radix-ui'
 import { Button } from '@/components/ui/button'
@@ -68,7 +68,7 @@ export function SessionPicker({ loadSessions, onResume, onNew, disabled, compact
         </Popover.Trigger>
       </IconTooltip>
       <Popover.Portal container={portalContainer()}>
-        <Popover.Content className="act-menu act-sessions" side="top" align="start" sideOffset={4} aria-label="Conversation history">
+        <Popover.Content className="act-menu act-sessions" side="bottom" align="end" sideOffset={4} aria-label="Conversation history">
           <div className="act-sessions__bar">
             <Input className="act-sessions__search" value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations" aria-label="Search conversations" autoFocus />

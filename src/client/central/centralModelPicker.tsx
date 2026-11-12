@@ -1,4 +1,4 @@
-// The Central chat header's model picker: the badge ("sonnet · medium · T2") is the trigger, its menu
+// The Central chat composer's model picker: the badge ("sonnet · medium · T2") is the trigger, its menu
 // picks the conversation's model + effort (Claude Code's `/model` picker); bare `/model` opens it.
 import { useEffect, useRef, useState } from 'react'
 import { DropdownMenu } from 'radix-ui'
@@ -87,7 +87,7 @@ function Picker({ conversationId, refreshKey, openRequest, onModelSet, load = fe
           </DropdownMenu.Trigger>
         </IconTooltip>
         <DropdownMenu.Portal container={portalContainer()}>
-          <DropdownMenu.Content className="act-menu" side="bottom" align="end" sideOffset={4}>
+          <DropdownMenu.Content className="act-menu" side="top" align="start" sideOffset={4}>
             {loading && <DropdownMenu.Label className="act-menu__note" role="status">Loading model…</DropdownMenu.Label>}
             {loadError && (
               <>

@@ -7,6 +7,8 @@ import { OFFLINE_REASON } from '../useConnection'
 import { setConnection } from '../ws.connection'
 import { DEFAULT_SETTINGS, mergeSettings } from '../../shared/settings'
 import { SettingsProvider } from '../useSettings'
+import { ApprovalModeChip } from '../ApprovalModeControl'
+import { centralChatAttach } from './chatCentralAttach'
 
 afterEach(cleanup)
 
@@ -89,7 +91,7 @@ describe('ChatComposer', () => {
     expect(screen.queryByLabelText('Send message')).toBeNull()
     fireEvent.click(screen.getByLabelText('Stop turn'))
     expect(onStop).toHaveBeenCalledTimes(1)
-    expect(tipOf(screen.getByLabelText('Stop turn'))).toBe('Stop the running turn')
+    expect(tipOf(screen.getByLabelText('Stop turn'))).toBe('Stop the running turn Esc')
     expect(screen.getByLabelText('Stop turn').querySelector('.codicon-debug-stop')).not.toBeNull()
   })
 
@@ -115,15 +117,28 @@ describe('ChatComposer', () => {
     expect(onStop).toHaveBeenCalledTimes(1)
   })
 
-  it('permissionMode puts the mode button in the toolbar under the box; without it there is none', () => {
-    const { unmount } = render(<ChatComposer busy={false} onSend={() => {}} onStop={() => {}} />)
-    expect(screen.queryByRole('button', { name: /^Permission mode/ })).toBeNull()
-    unmount()
+  it('toolbar controls sit on the bottom row inside the box, between attach and Send', () => {
     const s = mergeSettings({ ...DEFAULT_SETTINGS, projectApprovalLevels: { w1: 'never' } })
-    render(<SettingsProvider value={s}><ChatComposer busy={false} onSend={() => {}} onStop={() => {}} permissionMode={{ workspaceId: 'w1' }} /></SettingsProvider>)
+    render(<SettingsProvider value={s}><ChatComposer busy={false} onSend={() => {}} onStop={() => {}} attach={centralChatAttach}
+      toolbar={<ApprovalModeChip workspaceId="w1" />} /></SettingsProvider>)
     const mode = screen.getByRole('button', { name: 'Permission mode: Danger (this project)' })
-    expect(mode.closest('.chat-composer__toolbar')).toBeTruthy()
-    expect(mode.closest('.chat-composer__box')).toBeNull()
+    const row = mode.closest('.chat-composer__toolbar') as HTMLElement
+    expect(row.closest('.chat-composer__box')).toBeTruthy()
+    const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))
+    expect(buttons).toEqual(['Attach files', 'Permission mode: Danger (this project)', 'Send message'])
+    expect(row.compareDocumentPosition(box()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // textarea above the row
+  })
+
+  it('busy: Stop replaces Send; running (queues): Stop, and Send joins it once there is text', () => {
+    const { rerender } = render(<ChatComposer busy onSend={() => {}} onStop={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Stop turn' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
+    rerender(<ChatComposer busy={false} running onSend={() => {}} onStop={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Stop turn' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull()
+    type('next')
+    expect(screen.getByRole('button', { name: 'Stop turn' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeTruthy()
   })
 
   it('offline: Send is disabled with the reason, the draft stays editable and is kept for later', () => {

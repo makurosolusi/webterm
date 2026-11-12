@@ -39,13 +39,13 @@ describe('/model', () => {
   })
 })
 
-describe('per-turn cost chip', () => {
+describe('per-turn meta (model, tier; cost on hover)', () => {
   const usage = { inputTokens: 100, outputTokens: 50, cacheReadTokens: 800, cacheWriteTokens: 100, costMicros: 12_345, model: 'claude-sonnet-5-5', tier: 'T2', effort: 'medium' }
 
-  it('renders model alias, tier and cost, with the cache share on hover', () => {
+  it('renders model alias and tier; the cost and cache share only on hover', () => {
     render(<ChatCostChip usage={usage} />)
-    const chip = screen.getByText('sonnet · T2 · $0.01')
-    expect(chip.getAttribute('title')).toBe('80% of input from cache · 1.0k in / 50 out · medium effort')
+    const chip = screen.getByText('sonnet · T2')
+    expect(chip.getAttribute('title')).toBe('$0.01 · 80% of input from cache · 1.0k in / 50 out · medium effort')
     expect(cacheShare({ ...usage, inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(0)
   })
 

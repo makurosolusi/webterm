@@ -1,5 +1,5 @@
 // Wiring of the Agent Chat controls around one view: the composer's "/" and "@" completion, the
-// footer (model / effort / history), the commands the chat answers itself (`/model`, `/resume`,
+// composer row (model / effort) and header history, the commands the chat answers itself (`/model`, `/resume`,
 // `/clear`), and what the node persists (session id, model / effort / thinking).
 //
 // Config persistence: the server keeps model / effort / thinking in memory only, so the node is the
@@ -13,7 +13,7 @@ import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import type { ChatStreamStatus } from '../chat/chatTypes'
 import { chatErrorMessage } from '../chat/chatTransport'
 import { search } from '../fsClient'
-import type { AgentChatFooterProps } from './agentChatFooter'
+import type { AgentChatToolbarProps } from './agentChatToolbar'
 import { interceptOf, LOCAL_COMMANDS } from './agentChatIntercept'
 import type { AgentChatState } from './agentChatStore'
 import { AgentChatApiError, type AgentChatTransport } from './agentChatTransport'
@@ -55,7 +55,7 @@ export interface AgentChatControlsInput {
 export function useAgentChatControls(input: AgentChatControlsInput) {
   const { transport, state, stream, cwd, chatConfig, onNodeData } = input
   const [error, setError] = useState<string | null>(null)
-  const [openPicker, setOpenPicker] = useState<AgentChatFooterProps['openPicker']>()
+  const [openPicker, setOpenPicker] = useState<AgentChatToolbarProps['openPicker']>()
   const [syncing, setSyncing] = useState(false)
   const stored = useRef(chatConfig)
   stored.current = chatConfig
@@ -128,7 +128,7 @@ export function useAgentChatControls(input: AgentChatControlsInput) {
     return true
   }
 
-  const footer: Omit<AgentChatFooterProps, 'modePicker'> = {
+  const footer: Omit<AgentChatToolbarProps, 'modePicker'> = {
     config: state.config ?? (chatConfig ? { thinking: true, ...chatConfig } : undefined),
     context: state.context,
     costUsd: state.costUsd,

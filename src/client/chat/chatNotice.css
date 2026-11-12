@@ -1,0 +1,19 @@
+/* System notice line (chatNotice.tsx): centered, muted, one size smaller than the thread. */
+.chat-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 8px;
+  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.chat-notice > .codicon { flex: none; font-size: 14px; line-height: 16px; }
+.chat-notice--warn > .codicon { color: var(--vscode-editorWarning-foreground, #cca700); }
+.chat-notice--error { color: var(--vscode-errorForeground, #f48771); }

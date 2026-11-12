@@ -1,30 +1,21 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { AgentChatModel } from '../../shared/agentChat.wire'
-import { AgentChatFooter, FOOTER_COMPACT_PX, type AgentChatFooterProps } from './agentChatFooter'
+import { AgentChatHistory, AgentChatToolbar, type AgentChatToolbarProps } from './agentChatToolbar'
 
-// jsdom has no layout: a ResizeObserver stand-in whose callbacks the test fires with a width.
-const observers: ResizeObserverCallback[] = []
-const g = globalThis as { ResizeObserver?: unknown }
-const saved = g.ResizeObserver
 beforeAll(() => {
-  g.ResizeObserver = class { constructor(cb: ResizeObserverCallback) { observers.push(cb) } observe() {} unobserve() {} disconnect() {} }
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
   Element.prototype.hasPointerCapture ??= () => false
   Element.prototype.scrollIntoView ??= () => undefined
 })
-afterAll(() => { g.ResizeObserver = saved })
-afterEach(() => { cleanup(); observers.length = 0 })
-
-const resize = (width: number) => act(() => {
-  observers.forEach((cb) => cb([{ contentRect: { width } } as ResizeObserverEntry], {} as ResizeObserver))
-})
+afterEach(cleanup)
 const MODELS: AgentChatModel[] = [ // test-only
   { value: 'default', displayName: 'Auto (ladder: Sonnet · medium)', efforts: ['low', 'high'] },
   { value: 'haiku', displayName: 'Haiku' },
 ]
-function mount(over: Partial<AgentChatFooterProps> = {}) {
-  const props: AgentChatFooterProps = {
+function mount(over: Partial<AgentChatToolbarProps> = {}) {
+  const props: AgentChatToolbarProps = {
     modePicker: <span>MODE</span>,
     config: { thinking: false },
     context: { used: 100, window: 1000 },
@@ -37,21 +28,22 @@ function mount(over: Partial<AgentChatFooterProps> = {}) {
     onNewSession: vi.fn(async () => undefined),
     ...over,
   }
-  return { props, ...render(<AgentChatFooter {...props} />) }
+  return { props, ...render(<div data-testid="row"><AgentChatToolbar {...props} /><AgentChatHistory {...props} /></div>) }
 }
-const footer = () => document.querySelector('footer')!
+const row = () => screen.getByTestId('row')
 const modelTrigger = () => screen.getByRole('button', { name: /^Model:/ })
 const effortTrigger = () => screen.getByRole('button', { name: /^Effort and thinking/ })
 
-describe('AgentChatFooter', () => {
-  it('composes mode slot, pickers, meter, cost and tokens in a wide footer', async () => {
+describe('AgentChatToolbar', () => {
+  it('composes mode slot, model name as text, effort and meter; cost and tokens only in the meter tooltip', async () => {
     mount()
-    expect(footer().textContent).toContain('MODE')
+    expect(row().textContent).toContain('MODE')
     expect(await screen.findByText('Auto (ladder: Sonnet · medium)')).toBeTruthy() // unset model = the ladder's default label
-    expect(screen.getByRole('button', { name: 'Conversation history' }).textContent).toBe('History')
+    expect(modelTrigger().textContent).toContain('Auto (ladder: Sonnet · medium)')
     expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('10')
-    expect(footer().textContent).toContain('$0.0123')
-    expect(footer().textContent).toContain('1,200 in · 34 out')
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toContain('Session cost $0.0123 · last turn 1,200 in · 34 out')
+    expect(row().textContent).not.toContain('$0.0123')
+    expect(screen.getByRole('button', { name: 'Conversation history' }).textContent).toBe('') // header icon button
   })
 
   it('prefetches models once even with an inline loader, and passes the current model levels to the effort picker', async () => {
@@ -59,8 +51,8 @@ describe('AgentChatFooter', () => {
     const { rerender, props } = mount({ loadModels })
     await vi.waitFor(() => expect(loadModels).toHaveBeenCalled())
     await act(async () => {}) // let the prefetch land (the unset-model label shows before it)
-    rerender(<AgentChatFooter {...props} loadModels={() => loadModels()} />)
-    rerender(<AgentChatFooter {...props} loadModels={() => loadModels()} />)
+    rerender(<div data-testid="row"><AgentChatToolbar {...props} loadModels={() => loadModels()} /></div>)
+    rerender(<div data-testid="row"><AgentChatToolbar {...props} loadModels={() => loadModels()} /></div>)
     expect(loadModels).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(effortTrigger(), { key: 'Enter' })
     expect(screen.getAllByRole('menuitemradio').map((r) => r.textContent)).toEqual(['Low', 'High'])
@@ -85,19 +77,11 @@ describe('AgentChatFooter', () => {
     expect(props.onConfigChange).toHaveBeenLastCalledWith({ effort: 'high' })
   })
 
-  it('collapses labels to icons and hides the token count when narrow, and restores them when wide', async () => {
-    mount()
+  it('shows the effort compactly: the level word, thinking as the lit bulb', async () => {
+    mount({ config: { effort: 'high', thinking: true } })
     await screen.findByText('Auto (ladder: Sonnet · medium)')
-    resize(FOOTER_COMPACT_PX - 1)
-    expect(footer().dataset.compact).toBe('true')
-    expect(modelTrigger().textContent).toBe('')
-    expect(screen.getByRole('button', { name: 'Conversation history' }).textContent).toBe('')
-    expect(screen.getByRole('meter').textContent).toBe('')
-    expect(footer().textContent).not.toContain('34 out')
-    expect(footer().textContent).toContain('$0.0123')
-    resize(FOOTER_COMPACT_PX + 100)
-    expect(footer().dataset.compact).toBeUndefined()
-    expect(modelTrigger().textContent).toContain('Auto (ladder: Sonnet · medium)')
+    expect(effortTrigger().textContent).toBe('High')
+    expect(effortTrigger().querySelector('.codicon-lightbulb-sparkle')).not.toBeNull()
   })
 
   it('disabled disables the model, effort and history triggers', () => {

@@ -1,4 +1,6 @@
-// Per-turn cost chip on a Central reply: model alias, ladder tier and cost; cache share and tokens on hover.
+// Per-turn meta of a Central reply (in its hover action row): model alias and ladder tier. The cost is kept
+// out of sight on purpose (the user asked not to have spend in their face): it is only in the tooltip and the
+// accessible name, with the cache share and tokens.
 import type { ChatUsage } from './chatTypes'
 
 const ALIASES = ['haiku', 'sonnet', 'opus', 'fable'] as const
@@ -24,7 +26,7 @@ export function cacheShare(u: ChatUsage): number {
 }
 
 export function ChatCostChip({ usage }: { usage: ChatUsage }) {
-  const parts = [modelAlias(usage.model), usage.tier, costText(usage.costMicros)].filter(Boolean)
-  const title = `${cacheShare(usage)}% of input from cache · ${compact(usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens)} in / ${compact(usage.outputTokens)} out${usage.effort ? ` · ${usage.effort} effort` : ''}`
-  return <span className="chat-cost-chip" title={title} aria-label={`Turn cost: ${parts.join(', ')}. ${title}`}>{parts.join(' · ')}</span>
+  const parts = [modelAlias(usage.model), usage.tier].filter(Boolean)
+  const title = `${costText(usage.costMicros)} · ${cacheShare(usage)}% of input from cache · ${compact(usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens)} in / ${compact(usage.outputTokens)} out${usage.effort ? ` · ${usage.effort} effort` : ''}`
+  return <span className="chat-cost-chip" title={title} aria-label={`Turn: ${parts.join(', ')}. ${title}`}>{parts.join(' · ')}</span>
 }

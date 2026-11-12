@@ -1,10 +1,15 @@
-// Message thread + minimal tool card for the chat panel (RND/11 §3).
+// Message thread + minimal tool card for the chat panel (RND/11 §3). Replies have no per-message header:
+// Copy and the quiet model/tier/memories meta sit in a hover/focus action row (chatMessageActions), and a
+// system message is one centered notice line (chatNotice).
 //
 // `role="log"` announces completed messages, not every token; deltas are visual only. Markdown
 // goes through the shared sanitizer (`../markdown`), never raw HTML. Auto-scroll only sticks when
 // the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChatApprovalCard } from './chatApprovalCard'
+import { CopyButton, MessageActionRow } from './chatMessageActions'
+import { ChatNotice } from './chatNotice'
+import { useStickToBottom } from './chatStickToBottom'
 import { ChatCostChip } from './chatCostChip'
 import { TurnMemoryChip } from '../central/turnMemoryChip'
 import ChatMarkdown from './chatMarkdown'
@@ -16,13 +21,6 @@ import { openSettingsAt } from '../settings.link'
 import './chatBubbles.css'
 
 const NEAR_BOTTOM_PX = 80
-
-/** Turn-header icon and display name per role, as in the VS Code Chat view (your own messages are a bubble instead). */
-const ROLE_HEADER: Record<Exclude<ChatMessage['role'], 'human'>, { icon: string; name: string }> = {
-  assistant: { icon: 'sparkle', name: 'Central agent' },
-  tool: { icon: 'sparkle', name: 'Central agent' },
-  system: { icon: 'info', name: 'System' },
-}
 
 /** A failure reason is a sentence, not a log: anything longer is cut. */
 const MAX_REASON = 500
@@ -117,6 +115,7 @@ function HumanBubble(props: { message: ChatMessage; onRetry?: (() => void) | und
         ))}
       </div>
       {message.state === 'failed' && <FailedNote onRetry={props.onRetry} text="Not sent" />}
+      {message.state !== 'failed' && <Actions message={message} />}
     </div>
   )
 }
@@ -135,35 +134,45 @@ function FailedNote(props: { text?: string; onRetry?: (() => void) | undefined }
   )
 }
 
+/** Hover/focus row: Copy when there is text; on a settled reply the model · tier meta and the memories chip.
+ *  No Regenerate or Edit: the Central API has no endpoint to replay or edit a turn (only send and cancel). */
+function Actions({ message }: { message: ChatMessage }) {
+  const text = messageText(message)
+  const meta = message.role !== 'human' && message.usage && message.state !== 'streaming' && (
+    <>
+      <ChatCostChip usage={message.usage} />
+      {message.turnId && <TurnMemoryChip turnId={message.turnId} />}
+    </>
+  )
+  if (!text && !meta) return null
+  return <MessageActionRow meta={meta || undefined}>{text && <CopyButton text={() => text} label="Copy message" />}</MessageActionRow>
+}
+
 function MessageRow(props: { message: ChatMessage; segments: Segment[]; onRetry?: (() => void) | undefined; imageUrl?: ImageUrl }) {
   const { message } = props
   if (message.role === 'human') return <HumanBubble message={message} onRetry={props.onRetry} imageUrl={props.imageUrl} />
-  const assistant = message.role === 'assistant' || message.role === 'tool'
-  const header = ROLE_HEADER[message.role]
+  // A plain-text system message is a notice line; one carrying a card or an error keeps the full row below.
+  if (message.role === 'system' && message.parts.length > 0 && message.parts.every((p) => p.type === 'text' || p.type === 'notice')) {
+    const text = message.parts.map((p) => ('text' in p ? p.text : '')).filter(Boolean).join(' ')
+    return <ChatNotice text={clip(text, MAX_REASON)} time={message.createdAt} />
+  }
   return (
     <div
       className={`chat-message chat-message--${message.role}${message.optimistic ? ' is-optimistic' : ''}`}
       data-state={message.state}
       aria-label={`${message.role} message`}
     >
-      <div className="chat-message__meta">
-        <span className={`chat-message__icon codicon codicon-${header.icon}`} aria-hidden="true" />
-        <span className="chat-message__role">{header.name}</span>
-        {message.state === 'streaming' && <span className="chat-message__live">streaming</span>}
-        {message.state === 'failed' && <span className="chat-message__failed">failed</span>}
-        {message.state === 'cancelled' && <span className="chat-message__cancelled">cancelled</span>}
-        {message.usage && message.state !== 'streaming' && <ChatCostChip usage={message.usage} />}
-        {message.usage && message.state !== 'streaming' && message.turnId && <TurnMemoryChip turnId={message.turnId} />}
-      </div>
       {props.segments.map((seg, index) =>
         seg.kind === 'tools'
           ? <ToolGroup key={`group-${seg.tools[0]?.toolCallId ?? index}`} tools={seg.tools} />
-          : <PartView key={`${message.id}-${index}`} part={seg.part} assistant={assistant} />,
+          : <PartView key={`${message.id}-${index}`} part={seg.part} assistant />,
       )}
       {message.state === 'failed' && !message.parts.some((part) => part.type === 'error') && (
         <div className="chat-error-inline">The reply failed before it finished.</div>
       )}
+      {message.state === 'cancelled' && <span className="chat-message__cancelled">Cancelled</span>}
       {message.state === 'failed' && props.onRetry && <FailedNote onRetry={props.onRetry} />}
+      {message.state !== 'streaming' && <Actions message={message} />}
     </div>
   )
 }
@@ -207,10 +216,7 @@ export default function ChatMessages(props: ChatMessagesProps) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
   }
 
-  useEffect(() => {
-    const el = scrollRef.current
-    if (el && atBottom) el.scrollTop = el.scrollHeight
-  }, [props.messages, atBottom])
+  useStickToBottom(scrollRef, atBottom, props.messages)
 
   const jump = (): void => {
     const el = scrollRef.current

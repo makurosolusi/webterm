@@ -113,4 +113,6 @@
 .acc-radio__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--vscode-checkbox-foreground, #ccc); }
 .acc-plan__body { max-height: 320px; overflow: auto; }
 
-.acc-mode { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.acc-mode { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+/* Bypass permissions: red text + warning icon, no box (like the Central Danger chip). */
+.acc-mode[data-mode='bypassPermissions'] .acc-mode__trigger { color: var(--vscode-errorForeground, #f48771); }

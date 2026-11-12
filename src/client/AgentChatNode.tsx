@@ -31,6 +31,8 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
   const expandedH = useRef(height ?? DEFAULT_H)
   // Reported by the view (its reducer holds the chat status); per node, gates "Open as terminal".
   const [busy, setBusy] = useState(false)
+  // Header slot the view portals its conversation history button into (not a composer control).
+  const [headerHost, setHeaderHost] = useState<HTMLSpanElement | null>(null)
   // Selected = watched, as in AgentNode: a turn that ends while you sit here is neither unread nor notified.
   useEffect(() => {
     if (!selected) return
@@ -55,7 +57,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
-          extraHeader={<ClaudeViewButton nodeId={id} to="terminal" busy={busy} />}
+          extraHeader={<><span ref={setHeaderHost} className="agent-chat-head-slot nodrag" /><ClaudeViewButton nodeId={id} to="terminal" busy={busy} /></>}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // No refresh or search in the chat shell yet; the buttons stay because NodeToolbar is shared.
           onRefresh={() => undefined}
@@ -64,7 +66,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
         />
         <div className="node-body">
           <Suspense fallback={<LazyPaneFallback />}>
-            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} onBusy={setBusy} />
+            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} onNodeData={onNodeData} onBusy={setBusy} headerHost={headerHost} />
           </Suspense>
         </div>
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}

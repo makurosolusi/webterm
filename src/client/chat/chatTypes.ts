@@ -47,6 +47,8 @@ export interface ChatMessage {
   optimistic?: boolean
   /** Assistant replies: the turn's usage, from history or the `done` frame. */
   usage?: ChatUsage
+  /** Server time (epoch ms) the row was stored; absent on the optimistic echo. */
+  createdAt?: number
 }
 
 export interface ChatConversation {

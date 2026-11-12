@@ -7,7 +7,7 @@
   min-height: 0;
   font-size: 13px;
 }
-.agent-chat .chat-thread { padding: 8px 12px 12px; gap: 12px; }
+.agent-chat .chat-thread { padding: 8px 12px 12px; gap: 10px; }
 .agent-chat .chat-error { margin: 4px 12px 6px; }
 
 .agent-chat-banner {
@@ -30,16 +30,6 @@
 .agent-chat-thinking > p { margin: 4px 0 0; white-space: pre-wrap; opacity: 0.8; }
 .agent-chat-muted { color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d)); }
 
-.agent-chat-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
-}
-.agent-chat-notice--warn > .codicon { color: var(--vscode-editorWarning-foreground, #cca700); }
-.agent-chat-notice--error > .codicon { color: var(--vscode-errorForeground, #f48771); }
-
 .agent-chat-status {
   display: flex;
   align-items: center;
@@ -57,18 +47,7 @@
   font-size: 12px;
 }
 
-.agent-chat-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  padding: 2px 12px 6px;
-  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
-  font-size: 11px;
-}
-.agent-chat-footer__item { font-variant-numeric: tabular-nums; }
-
-/* User images in the thread (agentChatThread UserImage) and the sending line. */
+/* User images in the thread (agentChatThread UserImage). */
 .agent-chat-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .agent-chat-image {
   display: block;
@@ -78,14 +57,9 @@
   border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
   border-radius: 4px;
 }
-.agent-chat-sending {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
-}
 .agent-chat-banner--warn > .codicon { color: var(--vscode-editorWarning-foreground, #cca700); }
 .agent-chat-banner--error > .codicon { color: var(--vscode-errorForeground, #f48771); }
 .agent-chat-banner--warn, .agent-chat-banner--error { color: var(--vscode-foreground, inherit); }
+.agent-chat .chat-composer { padding: 4px 12px 8px; }
+/* Node header slot for the history button (AgentChatNode `extraHeader`). */
+.agent-chat-head-slot { display: inline-flex; align-items: center; }

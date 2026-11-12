@@ -1,8 +1,11 @@
-// Body of one agent chat node (PLAN/AGENT-CHAT.md W2): live SSE timeline, status line with Stop,
-// usage-limit notice, edit / rewind (agentChatBranch), todo and task panels, composer with "/" and "@"
-// completion, and the footer (mode, model, effort, history, context, cost); the controls live in
+// Body of one agent chat node (PLAN/AGENT-CHAT.md W2): live SSE timeline, status line ("Thinking…"),
+// usage-limit notice, edit / rewind / regenerate (agentChatBranch), todo and task panels, and the shared
+// composer (chat/chatComposer) with "/" and "@" completion whose bottom row holds attach, mode, model,
+// effort, context meter and Send/Stop. History goes to the node header (`headerHost`). The controls live in
 // useAgentChatControls. One reducer per mounted view; the stream closes on unmount.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useStickToBottom } from '../chat/chatStickToBottom'
 import ChatComposer from '../chat/chatComposer'
 import { useDisconnected } from '../useConnection'
 import type { ComposerImage } from '../chat/chatAttach'
@@ -18,7 +21,7 @@ import { agentChatReducer, initialAgentChatState, isBusyStatus, runningToolName,
 import { createAgentChatTransport, type AgentChatTransport } from './agentChatTransport'
 import { AgentChatThread, type ThreadActions } from './agentChatThread'
 import { ModePicker } from './modePicker'
-import { AgentChatFooter } from './agentChatFooter'
+import { AgentChatHistory, AgentChatToolbar } from './agentChatToolbar'
 import { TodoPanel } from './todoPanel'
 import { TasksPanel } from './tasksPanel'
 import { RateLimitNotice } from './rateLimitNotice'
@@ -47,6 +50,8 @@ export interface AgentChatViewProps {
   onBusy?: (busy: boolean) => void
   /** Test seam; defaults to the HTTP + SSE transport of `nodeId`. */
   transport?: AgentChatTransport
+  /** Slot in the node header for the conversation history button (null until the header mounts). */
+  headerHost?: HTMLElement | null
 }
 
 /** Status line text, or null when there is nothing to say. */
@@ -96,7 +101,7 @@ function useBatchedEvents(apply: (events: AgentChatEvent[]) => void) {
   return useMemo(() => ({ push, cancel }), [push, cancel])
 }
 
-export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, onNodeData, onBusy, transport: injected }: AgentChatViewProps) {
+export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, onNodeData, onBusy, transport: injected, headerHost }: AgentChatViewProps) {
   const transport = useMemo(() => injected ?? createAgentChatTransport(nodeId), [injected, nodeId])
   const [state, dispatch] = useReducer(agentChatReducer, nodeId, initialAgentChatState)
   const [stream, setStream] = useState<ChatStreamStatus>('connecting')
@@ -160,13 +165,15 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
     return () => historyAbort.current?.abort()
   }, [opened, loadHistory])
 
-  // Pinned to the bottom unless the user scrolled up; a prepended history page keeps the view still.
+  // A prepended history page keeps the view still; otherwise pinned to the bottom unless the user scrolled up,
+  // also when the composer or a panel under the list grows (useStickToBottom).
   useLayoutEffect(() => {
     const el = scrollRef.current
-    if (!el) return
-    if (keepFromBottom.current !== null) { el.scrollTop = el.scrollHeight - keepFromBottom.current; keepFromBottom.current = null }
-    else if (atBottom) el.scrollTop = el.scrollHeight
-  }, [state, atBottom])
+    if (!el || keepFromBottom.current === null) return
+    el.scrollTop = el.scrollHeight - keepFromBottom.current
+    keepFromBottom.current = null
+  }, [state])
+  useStickToBottom(scrollRef, atBottom, state)
 
   const busy = isBusyStatus(state.status)
   const offline = useDisconnected() // Retry below re-sends; the composer under it says why (OFFLINE_REASON)
@@ -183,6 +190,15 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
       (err: unknown) => { setSending(false); setSendError({ text, images, message: why(err) }) },
     )
   }
+  // Regenerate = fork before the prompt and send it again: a fresh reply on a new branch (same path as Edit).
+  const regenerate = useCallback((id: string, text: string): void => {
+    setSendError(null)
+    setSending(true)
+    transport.fork(id, text, []).then(
+      () => setSending(false),
+      (err: unknown) => { setSending(false); setSendError({ text, images: [], message: why(err) }) },
+    )
+  }, [transport])
   const stop = (): void => {
     setStopError(null)
     transport.interrupt().catch((err: unknown) => setStopError(why(err)))
@@ -193,7 +209,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
     loadFull: (id) => transport.toolResult(id),
     imageUrl: (ref) => transport.imageUrl(ref),
     branch: { edit: branch.edit, rewind: branch.rewind },
-  }), [transport, branch.edit, branch.rewind])
+    regenerate,
+  }), [transport, branch.edit, branch.rewind, regenerate])
 
   const jump = (): void => {
     const el = scrollRef.current
@@ -205,7 +222,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
     if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX)
   }
 
-  const label = statusLabel(state, stream)
+  const label = sending ? 'Sending…' : statusLabel(state, stream)
   const empty = state.order.length === 0
   const mode = state.mode ?? permissionMode ?? DEFAULT_MODE
 
@@ -260,11 +277,11 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
         )}
       </div>
 
+      {/* Working indicator; Stop is the composer's primary button while a turn runs. */}
       {label && (
-        <div className={`agent-chat-status agent-chat-status--${state.status}`}>
-          {busy ? <span className="chat-progress" aria-hidden="true" /> : <span className="chat-status-dot" aria-hidden="true" />}
+        <div className={`agent-chat-status agent-chat-status--${state.status}`} role="status">
+          {busy || sending ? <span className="chat-progress" aria-hidden="true" /> : <span className="chat-status-dot" aria-hidden="true" />}
           <span className="agent-chat-status__label" aria-live="polite">{label}</span>
-          {busy && <IconButton label="Stop" tooltip="Stop the running turn" size="icon-xs" onClick={stop}><span className="codicon codicon-debug-stop" aria-hidden="true" /></IconButton>}
         </div>
       )}
 
@@ -298,21 +315,15 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
         </div>
       )}
 
-      {sending && (
-        <div className="agent-chat-sending" role="status">
-          <span className="chat-progress" aria-hidden="true" />
-          <span>Sending…</span>
-        </div>
-      )}
       {branch.rewindId && <RewindPanel transport={transport} messageId={branch.rewindId} onClose={branch.closeRewind} />}
       {branch.editing && <EditBanner onCancel={branch.cancelEdit} />}
       <TodoPanel todos={state.todos} />
       <TasksPanel tasks={state.tasks} onStop={(id) => transport.stopTask(id)} />
       <ChatComposer busy={false} seed={branch.editing?.seed} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
         completion={controls.completion} maxLength={AGENT_CHAT_TEXT_MAX}
-        placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'} />
-
-      <AgentChatFooter modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />} {...controls.footer} />
+        placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'}
+        toolbar={<AgentChatToolbar modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />} {...controls.footer} />} />
+      {headerHost && createPortal(<AgentChatHistory modePicker={null} {...controls.footer} />, headerHost)}
     </section>
   )
 }

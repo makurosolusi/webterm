@@ -1,4 +1,4 @@
-// Effort + extended thinking menu of the agent chat footer (Claude Code VS Code "thinking" control).
+// Effort + extended thinking menu of the agent chat composer row (Claude Code VS Code "thinking" control).
 import { DropdownMenu } from 'radix-ui'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { portalContainer } from '@/components/vscode/portalContainer'
@@ -14,8 +14,6 @@ export interface EffortPickerProps {
   thinking: boolean
   onChange: (patch: Partial<AgentChatConfig>) => Promise<void>
   disabled?: boolean
-  /** Icon-only trigger for narrow nodes. */
-  compact?: boolean
 }
 
 /** "high" → "High". */
@@ -26,7 +24,7 @@ const describe = (patch: Partial<AgentChatConfig>): string =>
   patch.effort !== undefined ? `effort ${effortLabel(patch.effort)}` : `thinking ${patch.thinking ? 'on' : 'off'}`
 
 /** Effort radio group (only when the model has levels) and an "Extended thinking" toggle; reverts on a failed change. */
-export function EffortPicker({ levels, effort, thinking, onChange, disabled, compact }: EffortPickerProps) {
+export function EffortPicker({ levels, effort, thinking, onChange, disabled }: EffortPickerProps) {
   const { pending, failed, run, dismiss } = usePendingChange(onChange)
   const shownEffort = pending?.value.effort ?? effort
   const shownThinking = pending?.value.thinking ?? thinking
@@ -35,7 +33,8 @@ export function EffortPicker({ levels, effort, thinking, onChange, disabled, com
   const setThinking = (c: boolean): void => { void run({ thinking: c }) }
   const summary = [hasLevels ? `Effort: ${shownEffort ? effortLabel(shownEffort) : 'Default'}` : undefined, `Extended thinking: ${shownThinking ? 'on' : 'off'}`]
     .filter(Boolean).join(' · ')
-  const label = [hasLevels && shownEffort ? effortLabel(shownEffort) : undefined, shownThinking ? 'Thinking' : undefined].filter(Boolean).join(' · ') || 'Effort'
+  // Compact: the effort word only; the bulb icon (lit = extended thinking) says the rest, the tooltip spells it out.
+  const label = hasLevels && shownEffort ? effortLabel(shownEffort) : shownThinking ? 'Thinking' : 'Effort'
 
   return (
     <span className="act-picker">
@@ -44,7 +43,7 @@ export function EffortPicker({ levels, effort, thinking, onChange, disabled, com
           <DropdownMenu.Trigger asChild disabled={disabled || !!pending}>
             <button type="button" className="act-trigger" aria-label={`Effort and thinking: ${summary}`}>
               <span className={`codicon ${shownThinking ? 'codicon-lightbulb-sparkle' : 'codicon-lightbulb'}`} aria-hidden="true" />
-              {!compact && <span className="act-trigger__label">{label}</span>}
+              <span className="act-trigger__label act-trigger__label--effort">{label}</span>
               <span className="codicon codicon-chevron-down" aria-hidden="true" />
             </button>
           </DropdownMenu.Trigger>

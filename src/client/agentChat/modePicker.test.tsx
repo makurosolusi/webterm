@@ -5,26 +5,35 @@ import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import { ModePicker } from './modePicker'
 
 afterEach(cleanup)
-// jsdom lacks the pointer-capture and scroll APIs the Radix Select calls when it opens.
+// jsdom lacks the ResizeObserver, pointer-capture and scroll APIs the Radix menu calls when it opens.
 beforeAll(() => {
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
   Element.prototype.hasPointerCapture ??= () => false
   Element.prototype.releasePointerCapture ??= () => undefined
   Element.prototype.scrollIntoView ??= () => undefined
 })
 
-const trigger = () => screen.getByRole('combobox', { name: 'Permission mode' })
+const trigger = () => screen.getByRole('button', { name: /^Permission mode/ })
 const choose = (label: string) => {
   fireEvent.keyDown(trigger(), { key: 'Enter' })
-  fireEvent.click(screen.getByRole('option', { name: label }))
+  fireEvent.click(screen.getByRole('menuitemradio', { name: label }))
 }
 
 describe('ModePicker', () => {
-  it('labels the current mode like Claude Code and lists every mode', () => {
+  it('is a compact chip (short word, full label as its name) whose menu lists every mode like Claude Code', () => {
     render(<ModePicker mode="manual" onChange={vi.fn(async () => undefined)} />)
-    expect(trigger().textContent).toContain('Ask before edits')
+    expect(trigger().textContent).toBe('Ask')
+    expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Ask before edits')
+    expect(screen.queryByRole('combobox')).toBeNull() // no boxed select
     fireEvent.keyDown(trigger(), { key: 'Enter' })
-    expect(screen.getAllByRole('option').map((o) => o.textContent))
+    expect(screen.getAllByRole('menuitemradio').map((o) => o.textContent))
       .toEqual(['Ask before edits', 'Edit automatically', 'Plan mode', 'Auto mode', 'Bypass permissions'])
+  })
+
+  it('marks Bypass permissions as the danger mode', () => {
+    const { container } = render(<ModePicker mode="bypassPermissions" onChange={vi.fn(async () => undefined)} />)
+    expect(trigger().textContent).toBe('Bypass')
+    expect(container.querySelector('[data-mode="bypassPermissions"] .codicon-warning')).not.toBeNull()
   })
 
   it('calls onChange, shows pending, then the error with Retry', async () => {
@@ -36,11 +45,11 @@ describe('ModePicker', () => {
     choose('Plan mode')
     expect(onChange).toHaveBeenCalledWith<[AgentPermissionMode]>('plan')
     expect(screen.getByRole('status', { name: 'Changing mode' })).toBeTruthy()
-    expect(trigger().textContent).toContain('Plan mode')
+    expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Plan mode')
     expect((trigger() as HTMLButtonElement).disabled).toBe(true)
     reject(new Error('HTTP 409'))
     expect((await screen.findByRole('alert')).textContent).toContain('Could not switch to Plan mode: HTTP 409')
-    expect(trigger().textContent).toContain('Ask before edits')
+    expect(trigger().textContent).toBe('Ask')
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(onChange).toHaveBeenLastCalledWith('plan')
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())

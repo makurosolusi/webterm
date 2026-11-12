@@ -180,6 +180,12 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Central chat and Agent Chat share one composer: the model, effort, context meter, permission mode, attach "+" and Send/Stop now sit on the bottom row inside the message box. Central's header keeps only the status.
+- Replies no longer carry a per-message header ("Central agent", "Claude"). Copy shows on hover or keyboard focus; on a Central reply that row also shows the model and tier, and the turn cost appears only in its tooltip.
+- System notices in both chats are one compact centered line; the time is in its tooltip.
+- Agent Chat: the permission mode is a small chip ("Ask", "Plan", "Bypass" in red), the model shows its name as text, effort shows as one word, and conversation history moved to the node header. Session cost and tokens moved into the context meter tooltip.
+- Agent Chat: while a turn runs, Stop replaces Send (Send comes back once you type, to queue a message); "Sending…" and "Thinking…" share the status line. The newest reply offers Regenerate, which asks again on a new branch.
+- Central chat: the "Refresh conversations" header button is gone; the list reloads each time the panel opens, and a failed load keeps its Retry.
 - Tab layout matches VS Code editor groups: the node's own header is gone (the tab is the header and its × the only close), the active tab's actions (Search, More Actions…) sit at the right end of the tab strip and in the tab's right-click menu, tabs size to their name (80-240px) with the node type in the tooltip, and the canvas/tabs switch appears once, in the workspace bar.
 - Control › Memory filters with two dropdowns, Source and Kind, under the Remember field, instead of two stacked pill rows; Kind applies when Source is All.
 - The browser node's new-tab page works like Chrome's: typing in its search box moves straight into the address bar (one address input), shortcut tiles show the site's icon and can be added, edited (hover ⋮ or right-click) and removed, recent pages show their icon under an aligned heading, the address bar shows a search icon until a page loads, Agents is an icon toggle with an on/driving dot, and page actions (including Import Cookies) live in one ⋮ menu at the end of the toolbar while the node header's … keeps node actions only.
@@ -308,6 +314,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Agent Chat and Central chat: the newest message is no longer hidden under the composer when the box, the status line or a panel below the list grows, or when a reply grows after it renders.
 - The Control side bar no longer scrolls sideways at narrow widths: its tab row stays pinned at the top while only the tab content scrolls, tabs that do not fit scroll inside the tab row (the active one is kept in view), and each Memory item shows its text at full width with its badge and Edit / Mute / Forget in one row underneath.
 - An Agent Chat node no longer sits on "Connecting to Claude…" forever in browsers that leave fetch metadata (`Sec-Fetch-Site`) off the WebSocket handshake; a stream the server keeps refusing now says why, with Retry.
 - Central chat replies keep their order after a reload: text written before and after a run of tool calls stays as separate paragraphs with the "Used N tools" row between them, instead of one glued paragraph with the tools after it. The chat status row is now a fixed opaque band, so no message line shows behind it.

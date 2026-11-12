@@ -1,4 +1,4 @@
-// Model dropdown of the agent chat footer (Claude Code VS Code "model" picker), plus the
+// Model dropdown of the agent chat composer row (Claude Code VS Code "model" picker), plus the
 // pending/failure pattern the footer's other pickers share.
 import { useEffect, useState } from 'react'
 import { DropdownMenu } from 'radix-ui'
@@ -48,14 +48,13 @@ export interface ModelPickerProps {
   value?: string
   onChange: (value: string) => Promise<void>
   disabled?: boolean
-  /** Icon-only trigger for narrow nodes. */
-  compact?: boolean
   /** Bump to open the menu from outside (the `/model` command); ignored while disabled. */
   openRequest?: number
 }
 
 /** Model dropdown: loads on open (loading / error + Retry), checks the current model, reverts on a failed change. */
-export function ModelPicker({ loadModels, models: known, value, onChange, disabled, compact, openRequest }: ModelPickerProps) {
+/** The trigger always shows the model name as text (truncated on a narrow row), never an icon only. */
+export function ModelPicker({ loadModels, models: known, value, onChange, disabled, openRequest }: ModelPickerProps) {
   const [loaded, setLoaded] = useState<AgentChatModel[]>()
   const models = known ?? loaded
   const [loading, setLoading] = useState(false)
@@ -82,9 +81,8 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
       <DropdownMenu.Root modal={false} open={open} onOpenChange={openChange}>
         <IconTooltip label={`Model: ${name}`} disabled={disabled || !!pending} disabledReason={pending ? 'switching model' : undefined}>
           <DropdownMenu.Trigger asChild disabled={disabled || !!pending}>
-            <button type="button" className="act-trigger" aria-label={`Model: ${name}`}>
-              <span className="codicon codicon-hubot" aria-hidden="true" />
-              {!compact && <span className="act-trigger__label">{name}</span>}
+            <button type="button" className="act-trigger act-trigger--model" aria-label={`Model: ${name}`}>
+              <span className="act-trigger__label">{name}</span>
               <span className="codicon codicon-chevron-down" aria-hidden="true" />
             </button>
           </DropdownMenu.Trigger>
