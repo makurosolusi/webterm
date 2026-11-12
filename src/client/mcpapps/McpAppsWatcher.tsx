@@ -10,6 +10,7 @@ import { useReactFlow, type Node } from '@xyflow/react'
 import { claimApps } from './mcpApp.api'
 import { afterPageLoad } from '../pageLoad'
 import { scheduleStreamRetry, streamPaused } from '../ws.connection'
+import { STREAM_CLOSED, openEventStream, type WsEventSource } from '../ws'
 
 export const APP_NODE_KIND = 'app'
 /** Must match APP_PUBLISHED_EVENT in src/server/mcpapps/mcpApp.publish.ts. */
@@ -49,7 +50,7 @@ export default function McpAppsWatcher() {
       }
     }
     let poll: ReturnType<typeof setInterval> | null = null
-    let source: EventSource | null = null
+    let source: WsEventSource | null = null
     let attempts = 0
     let cancelRetry = (): void => {}
     // A tick while the server is unreachable would only fail; the reconnect's onopen claims anyway.
@@ -57,14 +58,14 @@ export default function McpAppsWatcher() {
       poll ??= setInterval(() => { if (!streamPaused()) void claim() }, APP_FALLBACK_POLL_MS)
     }
     const open = (): void => {
-      const next = new EventSource(APP_STREAM_URL)
+      const next = openEventStream(APP_STREAM_URL)
       source = next
       next.onopen = () => { attempts = 0; void claim() }
       next.addEventListener('sense', () => void claim())
       // CLOSED = refused (non-200): poll slowly. Otherwise the browser would retry on its own fixed
       // interval, unjittered and blind to the socket; close it and reopen on the shared schedule.
       next.onerror = () => {
-        const refused = next.readyState === EventSource.CLOSED
+        const refused = next.readyState === STREAM_CLOSED
         next.close()
         source = null
         if (refused) { startPoll(); return }
@@ -72,9 +73,7 @@ export default function McpAppsWatcher() {
         cancelRetry = scheduleStreamRetry(attempts++, open)
       }
     }
-    let cancelStart = (): void => {}
-    if (typeof EventSource !== 'undefined') cancelStart = afterPageLoad(open)
-    else startPoll()
+    const cancelStart = afterPageLoad(open)
     void claim()
     return () => { cancelStart(); cancelRetry(); source?.close(); if (poll) clearInterval(poll) }
   }, [rf])

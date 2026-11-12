@@ -20,7 +20,11 @@ export interface FsUnwatchMsg { t: 'fsunwatch'; dir: string }
 // App-level heartbeat: the server answers `pong` with the same `id`. Browsers cannot see ws-level
 // pings, so this is how a tab detects a half-open socket (no pong in time = reconnect).
 export interface PingMsg { t: 'ping'; id: string }
-export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg | DetachMsg | FsWatchMsg | FsUnwatchMsg | PingMsg
+// Server-sent event streams carried on this socket instead of an EventSource each (HTTP/1.1 allows
+// 6 connections per host across all tabs; a WebSocket does not count). `url` = a GET /api/ SSE route.
+export interface StreamSubMsg { t: 'sse.sub'; id: string; url: string }
+export interface StreamUnsubMsg { t: 'sse.unsub'; id: string }
+export type ClientMsg = OpenMsg | InputMsg | ResizeMsg | CloseMsg | DetachMsg | FsWatchMsg | FsUnwatchMsg | PingMsg | StreamSubMsg | StreamUnsubMsg
 
 // `seq` = nomor urut potongan dari `OutputLog`. Additif dan opsional supaya server lama/client lama
 // tetap saling bicara; kehadirannya membuat client bisa tahu ada potongan yang hilang saat re-attach.
@@ -63,7 +67,13 @@ export interface WorkspacesMsg { t: 'workspaces' }
 export interface PongMsg { t: 'pong'; id: string }
 // First frame on every connection: `bootId` changes per server process start, `build` per release/rebuild.
 export interface HelloMsg { t: 'hello'; bootId: string; build: string }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | PongMsg | HelloMsg
+// Stream `id` answered 200 text/event-stream (EventSource `open`).
+export interface StreamOpenMsg { t: 'sse.open'; id: string }
+// One dispatched SSE event; `lastId` = the stream's last `id:` so far (EventSource `lastEventId`).
+export interface StreamEventMsg { t: 'sse.ev'; id: string; event: string; data: string; lastId: string }
+// The stream ended (`status` 200) or was refused (its HTTP status). Nothing follows for this id.
+export interface StreamEndMsg { t: 'sse.end'; id: string; status: number }
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
 
 export const WS_PATH = '/ws'
 /** `{bootId, build}` behind the /api gate: lets a failing socket tell "server down" from "credential refused". */

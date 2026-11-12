@@ -3,6 +3,8 @@
 // socket is down, one reopen from the same `afterSeq` cursor on connected, and unmount cancels.
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// test-only: the stream rides the shared socket in the app; here it is the stubbed global EventSource fake.
+vi.mock('./ws', async (orig) => ({ ...(await orig<typeof import('./ws')>()), openEventStream: (url: string) => new (globalThis as unknown as { EventSource: new (u: string) => unknown }).EventSource(url) }))
 import { STREAM_REOPEN_JITTER_MS, setConnection } from './ws.connection'
 
 const status = vi.hoisted(() => ({ getJson: vi.fn() }))

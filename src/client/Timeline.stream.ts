@@ -8,6 +8,7 @@ import { mergeEvents, type TimelineEvent } from './Timeline.model'
 import { getJson } from './Timeline.status'
 import { afterPageLoad } from './pageLoad'
 import { scheduleStreamRetry } from './ws.connection'
+import { openEventStream, type WsEventSource } from './ws'
 
 export const STREAM_URL = '/api/events/stream'
 export const HISTORY_URL = '/api/events/history'
@@ -55,7 +56,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
   useEffect(() => {
     if (!enabled) return
     let stopped = false
-    let source: EventSource | null = null
+    let source: WsEventSource | null = null
     let cancelRetry = (): void => {}
     let attempts = 0
     let lastSeq = 0
@@ -89,7 +90,7 @@ export function useTimelineFeed(enabled: boolean): TimelineFeed {
         retry()
         return
       }
-      const next = new EventSource(`${STREAM_URL}?afterSeq=${lastSeq}`)
+      const next = openEventStream(`${STREAM_URL}?afterSeq=${lastSeq}`)
       source = next
       next.onopen = () => { if (stopped) return; attempts = 0; setError(null); setConnection('open'); setEpoch((n) => n + 1) }
       next.addEventListener('sense', (msg) => {

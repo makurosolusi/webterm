@@ -13,8 +13,10 @@ import { type ConnectionPhase, getConnection, reconnectDelay, setConnection, set
 import { dispatchBroadcast, notifyReconnect } from './ws.listeners'
 import { browserOffline, createHeartbeat, installWakeTriggers } from './ws.liveness'
 import { noteClientMsg, noteServerMsg } from './nodeActivity.store'
+import { addStream, dispatchStreamFrame, streamsSocketClosed, streamsSocketOpened, __resetStreamsForTests, type WsEventSource } from './ws.streams'
 
 export { replayOpen } from './ws.replayOpen'
+export { STREAM_CLOSED, STREAM_CONNECTING, STREAM_OPEN, type WsEventSource } from './ws.streams'
 export { getStatus, onReconnect, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
 
 interface Sub {
@@ -159,6 +161,7 @@ function socketClosed(): void {
   ws = null
   opened = false
   heartbeat.stop()
+  streamsSocketClosed()
   scheduleReconnect()
   if (failedConnect) probeAuth()
 }
@@ -192,6 +195,7 @@ function connect() {
     const pending = [...queue.values()]
     queue.clear()
     for (const m of pending) ws!.send(JSON.stringify(m))
+    streamsSocketOpened()
     if (wasReconnect) notifyReconnect()
   }
   ws.onmessage = (ev) => {
@@ -204,7 +208,7 @@ function connect() {
     }
     if (msg.t === 'pong') { heartbeat.pong(msg.id); return }
     if (msg.t === 'hello') { noteHello(msg); return }
-    if (dispatchBroadcast(msg)) return
+    if (dispatchBroadcast(msg) || dispatchStreamFrame(msg)) return
     const sub = subs.get(msg.id)
     if (!sub) return
     if (msg.t === 'reset') {
@@ -247,9 +251,19 @@ export function __resetWsForTests(): void {
   heartbeat.stop()
   uninstallTriggers?.(); uninstallTriggers = null
   if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); ws = null }
-  subs.clear(); queue.clear(); closedByUs.clear()
+  subs.clear(); queue.clear(); closedByUs.clear(); __resetStreamsForTests()
   everConnected = opened = authStopped = probing = eager = false; attempts = 0; pageBuild = undefined
   setConnection({ phase: 'connecting', attempt: 0, bootId: undefined, build: undefined, serverRestartedAt: undefined, buildChanged: false })
+}
+
+/**
+ * An EventSource-compatible stream of GET `url` (an /api/ SSE route), carried on this socket so it
+ * holds no HTTP connection (ws.streams.ts). Use it instead of `new EventSource(url)`.
+ */
+export function openEventStream(url: string): WsEventSource {
+  const stream = addStream(url, (m) => { if (!isOpen()) return false; ws!.send(JSON.stringify(m)); return true })
+  if (!ws && !reconnectTimer && !authStopped) connect()
+  return stream
 }
 
 export function send(msg: ClientMsg) {

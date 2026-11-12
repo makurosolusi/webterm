@@ -4,6 +4,7 @@ import type { Sessions } from './sessions'
 import type { fsWatchHub } from './fsWatch'
 import { createLogger } from './logs'
 import type { ServerIdentity } from './health.api'
+import { createStreamBridge, type StreamDispatch, type UpgradeIdentity } from './sseBridge'
 
 /**
  * One terminal WebSocket (`/ws`): message dispatch plus the two guards a long-lived socket needs.
@@ -38,6 +39,8 @@ export interface TerminalSocketDeps {
   clients: () => number
   /** Sent as the first frame (`hello`); absent in tests that do not care. */
   identity?: ServerIdentity
+  /** SSE routes over this socket (`sse.sub`): the upgrade's identity + the HTTP gate/dispatcher. Absent = refused. */
+  streams?: { upgrade: UpgradeIdentity; dispatch: StreamDispatch }
 }
 
 type Socket = Pick<WebSocket, 'readyState' | 'OPEN' | 'bufferedAmount' | 'send' | 'ping' | 'terminate' | 'on'>
@@ -72,6 +75,7 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
   }
 
   if (deps.identity) send({ t: 'hello', bootId: deps.identity.bootId, build: deps.identity.build })
+  const streams = deps.streams ? createStreamBridge(deps.streams.upgrade, send, deps.streams.dispatch, () => ws.bufferedAmount) : null
 
   let alive = true
   ws.on('pong', () => { alive = true })
@@ -98,7 +102,11 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
     if (msg?.t === 'ping') { send({ t: 'pong', id: String(msg.id) }); return }
     try {
       // fswatch/fsunwatch are not PTY sessions; with the watch capability off they are ignored.
-      if (msg.t === 'fswatch' || msg.t === 'fsunwatch') {
+      if (msg.t === 'sse.sub' || msg.t === 'sse.unsub') {
+        if (msg.t === 'sse.unsub') streams?.unsub(msg.id)
+        else if (streams) streams.sub(msg.id, msg.url)
+        else send({ t: 'sse.end', id: String(msg.id), status: 404 })
+      } else if (msg.t === 'fswatch' || msg.t === 'fsunwatch') {
         if (deps.watchOn() && typeof msg.dir === 'string') deps.fsWatchHub[msg.t === 'fswatch' ? 'watch' : 'unwatch'](send, msg.dir)
       } else deps.sessions.handle(msg, send)
     } catch (err) {
@@ -111,6 +119,7 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
     clearInterval(sweep)
     deps.sessions.detach(send)
     deps.fsWatchHub.dropClient(send)
+    streams?.closeAll()
     wsLog.info('ws.disconnect', 'WebSocket client disconnected', { code, reason: reason.toString().slice(0, 120) })
   })
 }

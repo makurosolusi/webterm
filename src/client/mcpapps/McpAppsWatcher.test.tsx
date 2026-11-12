@@ -4,6 +4,8 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, useNodesState, type Node } from '@xyflow/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+// test-only: the stream rides the shared socket in the app; here it is the stubbed global EventSource fake.
+vi.mock('../ws', async (orig) => ({ ...(await orig<typeof import('../ws')>()), openEventStream: (url: string) => new (globalThis as unknown as { EventSource: new (u: string) => unknown }).EventSource(url) }))
 
 const api = vi.hoisted(() => ({ fetchAppView: vi.fn(), callAppTool: vi.fn(), claimApps: vi.fn() }))
 vi.mock('./mcpApp.api', () => api)

@@ -7,6 +7,7 @@
 import { LOG_LEVELS, type LogChannelInfo, type LogEntry, type LogLevel, type LogQueryResult } from '../../shared/logEntry'
 import { afterPageLoad } from '../pageLoad'
 import { scheduleStreamRetry } from '../ws.connection'
+import { openEventStream, type WsEventSource } from '../ws'
 
 export type LogConnection = 'connecting' | 'open' | 'closed'
 
@@ -36,7 +37,7 @@ let refs = 0
 let generation = 0
 let lastSeq = 0
 let attempts = 0
-let source: EventSource | null = null
+let source: WsEventSource | null = null
 let cancelRetry = (): void => {}
 let cancelStart = (): void => {}
 let channelCounts = new Map<string, number>()
@@ -148,7 +149,7 @@ async function connect(gen: number): Promise<void> {
     const level = await backfill()
     if (gen !== generation) return
     emit({ level })
-    const next = new EventSource(`${LOGS_PATH}/stream?afterSeq=${lastSeq}`)
+    const next = openEventStream(`${LOGS_PATH}/stream?afterSeq=${lastSeq}`)
     source = next
     next.onopen = () => {
       if (gen !== generation) return
@@ -165,7 +166,7 @@ async function connect(gen: number): Promise<void> {
     })
     next.onerror = () => scheduleRetry(gen)
   } catch {
-    // Backfill or EventSource construction failed: surface 'closed' and retry with backoff.
+    // Backfill or stream construction failed: surface 'closed' and retry with backoff.
     scheduleRetry(gen)
   }
 }

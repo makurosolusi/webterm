@@ -6,11 +6,13 @@
 // carries `?after=<lastSeq>` (the server treats it like `Last-Event-ID`), and the `id:` line is
 // also read as the cursor. EventSource cannot set headers; it needs none: the browser sends the
 // HttpOnly `wt_ui` cookie, and the server never reads a token from the query.
+// The stream rides the shared WebSocket (`openEventStream`), not an HTTP connection of its own.
 import type { ChatEvent, ChatEventSource, ChatStream, ChatStreamOptions, ChatStreamStatus } from './chatTypes'
 import { CHAT_EVENT_TYPES, CHAT_PATH } from './chatTransport'
 import { parseEventFrame } from './chatWire'
 import { afterPageLoad } from '../pageLoad'
 import { scheduleStreamRetry } from '../ws.connection'
+import { openEventStream } from '../ws'
 
 /** What differs between SSE feeds: the URL, the `event:` names and the frame parser. */
 export interface SseFeed<E extends { seq: number }> {
@@ -25,7 +27,7 @@ export type SseStreamOptions<E> = Omit<ChatStreamOptions, 'onEvent'> & { onEvent
 
 export function openSseStream<E extends { seq: number }>(feed: SseFeed<E>, opts: SseStreamOptions<E>): ChatStream {
   const create =
-    opts.createSource ?? ((url: string) => new EventSource(url) as unknown as ChatEventSource)
+    opts.createSource ?? ((url: string) => openEventStream(url) as unknown as ChatEventSource)
   const handlers = new Map<string, (event: MessageEvent) => void>()
   let source: ChatEventSource | null = null
   let lastSeq = opts.after !== undefined && opts.after > 0 ? opts.after : 0

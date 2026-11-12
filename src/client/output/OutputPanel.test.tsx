@@ -1,6 +1,8 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// test-only: the stream rides the shared socket in the app; here it is the stubbed global EventSource fake.
+vi.mock('../ws', async (orig) => ({ ...(await orig<typeof import('../ws')>()), openEventStream: (url: string) => new (globalThis as unknown as { EventSource: new (u: string) => unknown }).EventSource(url) }))
 import { OutputPanel } from './OutputPanel'
 import { FakeEventSource, installFakeLogServer, makeEntry } from './outputTestKit'
 
