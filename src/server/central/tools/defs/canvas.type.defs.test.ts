@@ -27,11 +27,26 @@ let f: Fixture
 let unregister = (): void => undefined
 let typed: Array<[string, string]>
 // Writes and pauses land in one log so a test can see the pause sit between the two writes.
-const fake: TypeSessions = { isLive: (id) => id !== 'n4', input: (id, data) => { typed.push([id, data]) } }
+// By default every node submits like a plain shell (one write); `claude.on` makes n3 a Claude composer
+// whose screen shows the typed draft and whose Enter starts it only when `claude.enterWorks`.
+const claude = { on: false, enterWorks: true, draft: undefined as string | undefined }
+const RULE = '─'.repeat(40)
+const box = (draft?: string): string => ['', RULE, draft === undefined ? '❯ \x1b[2mTry "x"\x1b[22m' : `❯ ${draft}`, RULE].join('\n')
+const fake: TypeSessions = {
+  isLive: (id) => id !== 'n4',
+  input: (id, data) => {
+    typed.push([id, data])
+    if (claude.on && id === 'n3') claude.draft = data === '\r' ? (claude.enterWorks ? undefined : claude.draft) : (claude.draft ?? '') + data
+  },
+  statusOf: () => undefined,
+  screenSource: () => ({ data: '', cols: 80, rows: 24 }),
+  agentIdOf: (id) => (claude.on && id === 'n3' ? 'claude' : undefined),
+}
+const render = async (): Promise<string> => box(claude.draft)
 const sleep = async (ms: number): Promise<void> => { typed.push(['sleep', String(ms)]) }
 
 beforeEach(() => {
-  f = openFixture(); seedPortfolio(f.db); typed = []
+  f = openFixture(); seedPortfolio(f.db); typed = []; Object.assign(claude, { on: false, enterWorks: true, draft: undefined })
   unregister = registerWorkspaceLookup((id) => (id === 'w-p1' ? { id, name: 'Alpha WS', cwd: '/srv/alpha', nodes: BOARD } : null))
   // ag1 is a live worker; ag2 has ended (its node is an ordinary leftover).
   f.db.exec(`INSERT INTO central_agents (id, project_id, kind, runner, state, owner, started_at) VALUES
@@ -41,7 +56,7 @@ afterEach(() => { unregister(); f.close() })
 
 function ctx(maxTier: Tier = 'R2', env: Record<string, string> = { [READ_TOOLS_FLAG]: 'on' }): ToolCtx {
   const registry = createRegistry()
-  createCanvasTypeDefs({ sessions: async () => fake, sleep }).forEach((d) => registry.register(d))
+  createCanvasTypeDefs({ sessions: async () => fake, sleep, render }).forEach((d) => registry.register(d))
   return { db: f.db, registry, guard: ALLOW_ALL_GUARD, maxTier, conversationId: 'central:global', now: () => 1, env }
 }
 const type = (input: Record<string, unknown>, c = ctx()) => execTool(c, 'canvas.type', { projectId: 'p1', ...input })
@@ -175,6 +190,23 @@ describe('canvas.type delegation', () => {
     const original = fake.input
     fake.input = () => { throw new Error('pty gone') }
     try { expect((await type({ nodeId: 'n3', text: 'go' })).ok).toBe(false) } finally { fake.input = original }
+    expect(tasks()[0]?.status).toBe('failed')
+    expect(store().openAssignmentOfNode('n3')).toBeNull()
+  })
+
+  it('a Claude node gets its Enter as a separate write once the text is on screen', async () => {
+    claude.on = true
+    expect(await type({ nodeId: 'n3', text: 'analyse trending' })).toMatchObject({ ok: true, data: { submitted: true } })
+    expect(typed.filter(([id]) => id === 'n3')).toEqual([['n3', 'analyse trending'], ['n3', '\r']])
+    expect(store().openAssignmentOfNode('n3')).toMatchObject({ channel: 'terminal' })
+  })
+
+  it('a prompt that never starts is reported not_started and the card is failed, not sent', async () => {
+    claude.on = true
+    claude.enterWorks = false
+    const res = await type({ nodeId: 'n3', text: 'analyse trending' })
+    expect(res).toMatchObject({ ok: false, code: 'not_started', data: { nodeId: 'n3', hint: expect.stringContaining('node.inspect') } })
+    expect(typed.filter(([id, d]) => id === 'n3' && d === '\r')).toHaveLength(2)
     expect(tasks()[0]?.status).toBe('failed')
     expect(store().openAssignmentOfNode('n3')).toBeNull()
   })

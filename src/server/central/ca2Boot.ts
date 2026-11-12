@@ -162,7 +162,14 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     handle.toolNames.push(...registerCa2Tools(registry, {
       ...(executor ? { executor, deliver: createMailDeliver({ db, store: createMailStore(db, now), port: {
         statusOf: (ref) => { const node = nodeOf(ref); return node ? sessions.statusOf(node) ?? null : null },
-        type: (ref, text) => { const node = nodeOf(ref); if (!node || !sessions.isLive(node)) return false; sessions.input(node, `${text}\r`); return true },
+        type: async (ref, text) => {
+          const node = nodeOf(ref)
+          if (!node || !sessions.isLive(node)) return false
+          const sent = await sessions.submit(node, text)
+          // Not marked delivered: the mail stays for the next flush.
+          if (!sent.ok) log.warn('ca2.mail_not_started', `mail to ${ref} not started: ${sent.reason}`, { ref, nodeId: node, reason: sent.reason })
+          return sent.ok
+        },
       } }) } : {}),
       openKb: () => (kb ??= openKnowledgeDb(join(dir, KNOWLEDGE_FILE))),
       ...(skills ? { skills: () => skills } : {}),

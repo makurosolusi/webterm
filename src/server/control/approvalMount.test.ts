@@ -66,6 +66,8 @@ function deps(): ControlDeps {
       statusOf: () => undefined,
       getExit: () => undefined,
       getTerminal: () => '',
+      screenSource: () => undefined,
+      agentIdOf: () => undefined,
       isLive: () => false,
     },
     capabilities: {

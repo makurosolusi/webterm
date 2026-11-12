@@ -1,5 +1,6 @@
 import type { AssignmentView, TaskView, WorkStatus } from '../../../shared/centralWork'
 import { previewText } from '../../events/producers'
+import type { SubmitResult } from '../../agentSubmit'
 import { createLogger } from '../../logs'
 import { AGENT_TERMINAL_STATES, type AgentState } from '../contracts'
 import { finishTask } from './workLifecycle'
@@ -33,7 +34,8 @@ export type WorkSendResult = { ok: true } | { ok: false; code: string; hint?: st
 /** What the rules need from sessions, Agent Chat and the agent registry. */
 export interface WorkSupervisorPorts {
   isLive(nodeId: string): boolean
-  input(nodeId: string, text: string): void
+  /** Types and submits a prompt, confirmed started for Claude (`agentSubmit.ts`). */
+  submit(nodeId: string, text: string): Promise<SubmitResult>
   /** A chat turn is running right now. */
   chatBusy(nodeId: string): boolean
   /** The chat node is gone from its workspace. */
@@ -108,7 +110,8 @@ export function createWorkSupervisor({ store, ports, now, afterTick }: WorkSuper
         if (!sent.ok) throw new Error(sent.code)
       } else {
         if (!ports.isLive(a.nodeId)) throw new Error('session not live')
-        ports.input(a.nodeId, `${text}\r`)
+        const sent = await ports.submit(a.nodeId, text)
+        if (!sent.ok) throw new Error(`${sent.reason}: ${sent.message}`)
       }
     } catch (err) {
       log.warn('work.nudge_failed', `nudge of task ${task.id} failed`, { taskId: task.id, assignmentId: a.id, nodeId: a.nodeId, error: errorText(err) })

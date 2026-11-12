@@ -26,7 +26,7 @@ function setup(skipApprovals = false) {
   const host: AgentHost = {
     runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
     openPty: async (_a, _cwd, nodeId) => { sessions.add(nodeId) }, headlessArgv: () => null,
-    send: async () => undefined, scrollback: async () => [], closePty: async () => undefined, hasSession: (n) => sessions.has(n),
+    send: async () => ({ ok: true as const, started: true as const }), scrollback: async () => [], closePty: async () => undefined, hasSession: (n) => sessions.has(n),
   }
   const ex = createAgentExecutor({ db, guard, host, now })
   const registry = createRegistry()

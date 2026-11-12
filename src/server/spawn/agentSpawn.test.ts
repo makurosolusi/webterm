@@ -92,10 +92,10 @@ describe('agent.spawn lineage, events and names', () => {
   it('registers lineage and appends one agent.spawn event without the prompt', async () => {
     const r = rig()
     const inputs: string[] = []
-    const res = await r.spawner.spawn({ door: 'orchestrator', mode: 'pty', parent: 'central', nodeId: 'w1', workspaceId: 'ws1', prompt: 'secret task', title: 'Fix login' }, { ...r.io, input: (_n, t) => { inputs.push(t) } })
+    const res = await r.spawner.spawn({ door: 'orchestrator', mode: 'pty', parent: 'central', nodeId: 'w1', workspaceId: 'ws1', prompt: 'secret task', title: 'Fix login' }, { ...r.io, submit: async (_n, t, o) => { inputs.push(`${t} ready<=${o?.readyMs}`); return { ok: true, started: true } } })
     expect(res).toMatchObject({ ok: true, name: 'Fix login' })
     expect(r.lineage.get('node:w1')).toBe('central')
-    expect(inputs).toEqual(['secret task\r'])
+    expect(inputs).toEqual(['secret task ready<=30000'])
     expect(r.events).toEqual([{ kind: 'agent.spawn', actor: 'central', subject: 'node:w1', payload: { kind: 'claude', mode: 'pty', door: 'orchestrator', depth: 1, name: 'Fix login' } }])
     expect(JSON.stringify(r.events)).not.toContain('secret')
   })
