@@ -171,6 +171,16 @@ button.vscode-status-bar__item:focus-visible {
 .vscode-editor-tabs[data-overflowing='true'] {
   mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
+.vscode-editor-tabs__list { display: contents; }
+/* After the last tab; `sticky` keeps it at the visible right edge once the tabs overflow. */
+.vscode-editor-tabs__trailing {
+  position: sticky; right: 0; z-index: 1; display: flex; flex: none; align-items: stretch;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+}
+/* With a sticky trailing action the right edge is never cut off, so only the left edge fades. */
+.vscode-editor-tabs[data-overflowing='true']:has(> .vscode-editor-tabs__trailing) {
+  mask-image: linear-gradient(to right, transparent 0, #000 12px);
+}
 .vscode-editor-tab {
   position: relative; display: flex; flex: none; align-items: stretch;
   box-sizing: border-box; height: var(--editor-tabs-h, 35px); border-top: 1px solid transparent;

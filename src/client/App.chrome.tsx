@@ -95,7 +95,7 @@ export function AppWorkspaceBar({
       {...pass}
       liveActiveNodes={liveNodes}
       onNewWorkspace={onNewProject}
-      onRenameWorkspace={(id, name) => void onRenameWorkspace(id, name)}
+      onRenameWorkspace={onRenameWorkspace}
       onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
       onOpenSettings={() => setShowSettings(true)}
       onOpenHelp={() => setShowHelp(true)}

@@ -227,3 +227,21 @@ describe('chatStore failed turn', () => {
   })
 
 })
+
+describe('chatStore text around tool calls', () => {
+  it('keeps text before and after a tool run as separate parts, in event order', () => {
+    const ids = { turnId: 't1', messageId: 'm-a' }
+    const state = reduce([
+      { type: 'event', event: event(1, 'part.delta', { ...ids, payload: { delta: 'I will close it' } }) },
+      { type: 'event', event: event(2, 'part.delta', { ...ids, payload: { delta: ' now.' } }) },
+      { type: 'event', event: event(3, 'tool.requested', { ...ids, payload: { toolCallId: 'c1', name: 'node_close' } }) },
+      { type: 'event', event: event(4, 'tool.completed', { ...ids, payload: { toolCallId: 'c1', name: 'node_close', ok: false } }) },
+      { type: 'event', event: event(5, 'part.delta', { ...ids, payload: { delta: 'Canvas is empty.' } }) },
+    ])
+    const parts = state.messages[0]!.parts
+    expect(parts.map((p) => p.type)).toEqual(['text', 'tool', 'text'])
+    expect(parts[0]).toEqual({ type: 'text', text: 'I will close it now.' })
+    expect(parts[1]).toMatchObject({ toolCallId: 'c1', state: 'failed' })
+    expect(parts[2]).toEqual({ type: 'text', text: 'Canvas is empty.' })
+  })
+})
