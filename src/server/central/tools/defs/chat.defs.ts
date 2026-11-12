@@ -71,7 +71,7 @@ const NODE_USAGE = '"nodeId":"<Agent Chat node id or name from node.list, e.g. P
 export function createChatDefs(deps: ChatDefsDeps): ToolDef[] {
   const send: ToolDef = {
     name: 'chat.send',
-    summary: 'Send a message to an Agent Chat node, starting its session if needed. Asks the user.',
+    summary: 'Send a message to an Agent Chat node, starting its session if needed. Approval: project mode.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     usage: `{"projectId":"<id>",${NODE_USAGE},"text":"<1-${MAX_CHAT_TEXT} chars>","taskId":"<optional task this continues>"}. Sends the text as the user's next message in that chat; `
@@ -121,7 +121,7 @@ export function createChatDefs(deps: ChatDefsDeps): ToolDef[] {
 
   const mode: ToolDef = {
     name: 'chat.mode',
-    summary: 'Switch the permission mode of an Agent Chat node (manual, auto, acceptEdits, plan). Asks the user.',
+    summary: 'Switch the permission mode of an Agent Chat node (manual, auto, acceptEdits, plan). Approval: project mode.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     usage: `{"projectId":"<id>",${NODE_USAGE},"mode":${CHAT_MODES.map((m) => `"${m}"`).join('|')}}. manual = asks before tools (Claude Code's `

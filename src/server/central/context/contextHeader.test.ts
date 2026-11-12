@@ -3,7 +3,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.
 import { registerWorkspaceLookup, type WorkspaceRecord } from '../workspaceLookup'
 import { createWorkStore } from '../work/workStore'
 import { createHealthStore } from '../health/healthStore'
-import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace } from './contextHeader'
+import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace, registerApprovalSettings } from './contextHeader'
 
 let f: Fixture
 let workspaces: WorkspaceRecord[]
@@ -61,6 +61,24 @@ describe('state header: viewing', () => {
       active = a; workspaces = [...list]
       expect(buildStateHeader(f.db, 'central:project:p1')).toContain('"viewing":')
     }
+  })
+})
+
+// Policy lock (root cause: Central was never told the approval level, so it proposed actions even in Danger).
+describe('state header: approval mode per project', () => {
+  const modes = (): Record<string, unknown> => Object.fromEntries((parse(buildStateHeader(f.db, 'central:global')).projects as Array<{ id: string; approval?: string }>).map((p) => [p.id, p.approval]))
+
+  it('shows each project override, the global level as fallback, and follows a global change', () => {
+    // Live workspaces: w-p1 (project p1) and ws-wibu (its own project). test-only settings below.
+    let settings = { skipApprovals: false, claudePermissionMode: 'auto' as const, projectApprovalLevels: { 'ws-wibu': 'never' as const } as Record<string, 'always' | 'risky' | 'never'> }
+    undo.push(registerApprovalSettings(() => settings))
+    expect(modes()).toEqual({ p1: 'auto', 'ws-wibu': 'danger' })
+    settings = { ...settings, skipApprovals: true, projectApprovalLevels: { 'w-p1': 'always' } }
+    expect(modes()).toEqual({ p1: 'ask', 'ws-wibu': 'danger' })
+  })
+
+  it('omits the mode when no settings source is registered', () => {
+    expect(Object.values(modes()).every((m) => m === undefined)).toBe(true)
   })
 })
 

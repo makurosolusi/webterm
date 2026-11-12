@@ -194,7 +194,7 @@ const taskCancel: ToolDef = {
 export function createTaskWorkDefs(deps: ChatDefsDeps & Pick<CanvasTypeDeps, 'sessions'>): ToolDef[] {
   const taskAssign: ToolDef = {
     name: 'task.assign',
-    summary: 'Hand a task to an Agent Chat or Claude terminal node and track it. Asks the user.',
+    summary: 'Hand a task to an Agent Chat or Claude terminal node and track it. Approval: project mode.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     usage: `{"projectId":"<id>","taskId":"<id>","nodeId":"<node id or name from node.list>","instruction":"<1-${MAX_CHAT_TEXT} chars>"}. `

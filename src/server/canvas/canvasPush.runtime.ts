@@ -3,13 +3,14 @@
 // and the teardown that ends a removed node's sessions/page (kept out of here so this module does
 // not pull the PTY and browser runtimes into everything that imports it).
 import type { ServerMsg } from '../../shared/protocol'
-import { registerActiveWorkspace } from '../central/context/contextHeader'
+import { registerActiveWorkspace, registerApprovalSettings } from '../central/context/contextHeader'
 import { db } from '../db'
 import { createCanvasPush, type CanvasNode, type CanvasPush } from './canvasPush'
 
 // Central's state header names the workspace the user is viewing; the id lives in webterm.db (`app.active`),
 // not in the ledger the header reads, so this module (loaded at boot by index.ts) wires the source.
 registerActiveWorkspace(() => db.getActive())
+registerApprovalSettings(() => db.getSettings())
 
 let broadcastFn: (msg: ServerMsg) => void = () => {}
 let teardownFn: (nodes: CanvasNode[]) => void = () => {}

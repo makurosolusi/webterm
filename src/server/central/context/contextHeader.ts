@@ -2,8 +2,9 @@
 // fixed order. It carries the clock, so it must stay after the stable prefix (promptPrefix.ts), which is
 // what keeps the provider cache alive. Details are read on demand through tools.
 import type { Database } from 'bun:sqlite'
-import { getRow } from '../../ledger/ledgerCore'
+import { allRows, getRow } from '../../ledger/ledgerCore'
 import { livePortfolio, projectWorkspace } from '../workspaceLookup'
+import { approvalLevelFor, approvalModeName, type ApprovalModeName, type ApprovalSettings } from '../../../shared/settings.projectApprovalLevels'
 import { scopeFromConversationId } from '../conversationModel'
 import { MAX_OPEN_ASSIGNMENTS, duties, healthLine, openWork } from './contextHeaderWork'
 
@@ -25,6 +26,26 @@ let activeSource: () => string | null = () => null
 export function registerActiveWorkspace(get: () => string | null): () => void {
   activeSource = get
   return () => { activeSource = () => null }
+}
+
+// Approval settings live in webterm.db too, so they come through the same kind of port (canvasPush.runtime.ts).
+let settingsSource: () => ApprovalSettings | null = () => null
+
+/** Registers where the approval settings are read from; returns the unregister. */
+export function registerApprovalSettings(get: () => ApprovalSettings | null): () => void {
+  settingsSource = get
+  return () => { settingsSource = () => null }
+}
+
+/** Approval mode per project id (its workspace override, else the global level); empty without settings. */
+function approvalModes(ledger: Database, projectIds: string[]): Map<string, ApprovalModeName> {
+  const out = new Map<string, ApprovalModeName>()
+  const s = settingsSource()
+  if (!s || projectIds.length === 0) return out
+  const rows = allRows(ledger, `SELECT id, workspace_id FROM project WHERE id IN (${projectIds.map(() => '?').join(',')})`, ...projectIds)
+  const ws = new Map(rows.map((r) => [String(r['id']), r['workspace_id'] == null ? null : String(r['workspace_id'])]))
+  for (const id of projectIds) out.set(id, approvalModeName(approvalLevelFor(s, ws.get(id) ?? null)))
+  return out
 }
 
 /** The project of the workspace the user is viewing; null when none is active or it no longer exists. */
@@ -54,7 +75,9 @@ export function buildStateHeader(db: Database, conversationId: string, now = Dat
   const scope = scopeFromConversationId(conversationId)
   const page = livePortfolio(db, { limit: PROJECT_FETCH_LIMIT })
   const viewing = viewingProject(db)
-  const projects = page.items.map((p) => ({ approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status }))
+  const modes = approvalModes(db, page.items.map((p) => p.id))
+  // `approval` = the mode that decides whether a tool call shows a card (ask) or just runs (auto/danger).
+  const projects = page.items.map((p) => ({ approval: modes.get(p.id), approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status }))
   const work = openWork(db, now)
   const openDuties = duties(db, now)
   const time = headerClock(now, timeZone)

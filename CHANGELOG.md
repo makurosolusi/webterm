@@ -296,6 +296,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Central now acts instead of proposing: it sees each project's approval mode (Ask, Auto, Danger) and calls the tool in the same turn, so in Danger it no longer asks "shall I type it?" for things it can do. When the mode needs approval, the card appears on its own.
 - The release binary now starts webterm's tool server, so Central and agents have their webterm tools. If the tool server still fails to start for a Central turn, the turn stops with "Central's tools did not start" instead of the model answering without tools, and Settings › Health has a new "webterm tool server (MCP)" check. `webterm eval run` works from the release binary too.
 - Central's built-in skills (webterm-central-basics, webterm-approval-flow, webterm-project-status, webterm-skill-authoring) now install from the release binary too. Before, they were read from a source folder that does not exist inside the binary, so Central started with no built-in skills.
 - Central no longer refuses a turn because the Claude check was slow or inconclusive (for example a wrapper such as envman that fetches its environment first). Only a missing command or a signed-out login stops the turn, and the message then names the launch profile, says which step failed, and links to Settings › Claude › Connection test. A failed check is no longer remembered, so Retry checks again, and the server log records the step, profile, duration and whether it timed out.

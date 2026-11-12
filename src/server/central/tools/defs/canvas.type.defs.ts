@@ -120,7 +120,7 @@ export async function typeInto(ctx: ToolCtx, projectId: string | undefined, sess
 export function createCanvasTypeDefs(deps: CanvasTypeDeps): ToolDef[] {
   const type: ToolDef = {
     name: 'canvas.type',
-    summary: 'Type text and/or press keys (Escape, Ctrl+C, arrows) in a terminal or Claude node; it is a real shell. Asks the user.',
+    summary: 'Type text and/or press keys (Escape, Ctrl+C, arrows) in a terminal or Claude node (real shell). Approval: project mode.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     usage: `{"projectId":"<id>","nodeId":"<node id or name from node.list, e.g. Mango>","text":"<optional, 1-${MAX_PROMPT_CHARS} chars>",`
