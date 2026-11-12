@@ -181,6 +181,7 @@ Operator notes:
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
 - Control › Automations › Routines: "New routine" sits on the heading row, your routines come first, templates are stacked cards with "Use template" (suggestions under "No routines yet", collapsed under "Templates" once you have routines), the intro is one sentence with details in an (i) popover, and the panel fits a 300px side bar without cut-off text.
+- Control › Spending: one column in a narrow panel so names show in full, plain model names ("Opus 5.5") and agent names (a closed agent reads "Agent (deleted)"), Central listed once, a thin share bar on each row, amounts below a cent read "<$0.01", and Today / 7 days is one segmented control you can move with the arrow keys.
 - Control › Memory: "Waiting for your OK" sits on top with a count and shrinks to one muted line when empty; long explanations moved into (i) popovers.
 - Control › Memory: a search box with a count ("1 of 3 shown"); adding is behind "+ Add memory".
 - Control › Memory: look-alike memories get one "2 memories look alike · Merge" line. Merge lets you edit the kept text, then forgets the other only after you confirm (it cannot be undone).
