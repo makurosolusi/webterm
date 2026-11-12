@@ -206,7 +206,7 @@ describe('Control › Memory: one surface, one filter bar', () => {
     return client
   }
 
-  it('has no pill or tab rows, only the Source and Kind dropdowns under the Remember field', async () => {
+  it('has no pill or tab rows, only the Source and Kind dropdowns under the search field', async () => {
     stub()
     renderTab()
     expect(await screen.findByText('Rule one')).toBeTruthy()
@@ -216,7 +216,7 @@ describe('Control › Memory: one surface, one filter bar', () => {
     expect(tab.querySelectorAll('[aria-pressed]')).toHaveLength(0)
     expect(trigger('Source').textContent).toBe('Source: All')
     expect(trigger('Kind').textContent).toBe('Kind: All')
-    const add = screen.getByRole('textbox', { name: 'Remember' })
+    const add = screen.getByRole('searchbox', { name: 'Search memories' })
     expect(add.compareDocumentPosition(screen.getByTestId('memory-filters')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

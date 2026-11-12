@@ -1,11 +1,15 @@
-// F5-b sections of the "What agents remember" panel (AgentMemory.tsx): "Waiting for your OK", what the
+// F5-b sections of the "What agents remember" panel (AgentMemory.tsx): "Waiting for your OK" (top of the panel, one
+// muted line when empty), what the
 // sleep-time consolidator proposed while agents were idle (Confirm all / per item / Dismiss = forget, so it is
 // never proposed again), and "Shared notes", the blackboard (goal status, decisions) with agent proposals
 // waiting for Confirm / Reject. The note key is picked from the keys already on the board (or typed).
 // Split out of AgentMemory.tsx for the file-size budget; it imports the panel's request helper and labels
 // back (a render-time-only cycle).
 import { useEffect, useState } from 'react'
+import { Popover } from 'radix-ui'
 import { Badge } from '@/components/ui/badge'
+import { IconButton } from '@/components/ui/icon-button'
+import { portalContainer } from '@/components/vscode/portalContainer'
 import { Input } from '@/components/ui/input'
 import { ActionButton, ActionResult, errorCause, useAction, type Action } from '@/components/ui/action'
 import { SettingsCombobox } from './SettingsCombobox'
@@ -26,11 +30,12 @@ export interface BoardEntry { id: string; key: string; value: string; status: st
 export const BOARD_TEXT = {
   proposalsTitle: 'Waiting for your OK',
   proposalsIntro: 'Suggested from recent sessions while agents were idle. Nothing here is remembered until you confirm it.',
-  proposalsNone: 'Nothing is waiting.', confirmAll: 'Confirm all', dismiss: 'Dismiss', reviewNow: 'Review',
+  proposalsAbout: 'About suggestions waiting for your OK',
+  proposalsNone: 'Nothing waiting for your OK', confirmAll: 'Confirm all', dismiss: 'Dismiss', reviewNow: 'Review',
   ops: { add: 'new', update: 'update', invalidate: 'no longer true' } as Record<MemoryProposal['op'], string>,
   was: (text: string) => `was: ${text}`,
   tokens: (used: number, cap: number) => `Used in the last 24 h: ${used.toLocaleString()} of ${cap.toLocaleString()} tokens`,
-  boardTitle: 'Shared notes',
+  boardTitle: 'Shared notes', boardAbout: 'About shared notes',
   boardIntro: 'Notes agents share on this board, such as goal status and decisions. Changes agents suggest wait here for you.',
   boardNone: 'No shared notes yet.', boardKey: 'Key', boardValue: 'Value', boardSet: 'Set', reject: 'Reject',
   boardPlaceholder: 'goal:auth/status',
@@ -55,6 +60,30 @@ export function MemoryButton({ what, busyLabel, run, ...props }: MemoryButtonPro
   return <><ActionButton size="sm" {...props} action={action} busyLabel={busyLabel}>{what}</ActionButton><ActionResult action={action} /></>
 }
 
+/** (i) button whose popover holds a section's longer explanation, so the panel shows short titles only. */
+export function InfoHint({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <IconButton label={label} size="icon-sm"><span className="codicon codicon-info" aria-hidden="true" /></IconButton>
+      </Popover.Trigger>
+      <Popover.Portal container={portalContainer()}>
+        <Popover.Content className="ccm-popover" align="start" sideOffset={4} aria-label={label}>{children}</Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  )
+}
+
+/** Short section title with its (i) explanation, on one line. */
+export function SectionTitle({ title, about, children, extra }: { title: string; about: string; children: React.ReactNode; extra?: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-1">
+      <h4 className="m-0 font-semibold"><span>{title}</span>{extra}</h4>
+      <InfoHint label={about}>{children}</InfoHint>
+    </div>
+  )
+}
+
 const listOf = <T,>(v: unknown, key: string): T[] | null => (v && Array.isArray((v as Record<string, unknown>)[key]) ? (v as Record<string, T[]>)[key]! : null)
 
 /** The consolidator's proposals: each is a claim until confirmed; Dismiss forgets it (never proposed again). */
@@ -68,29 +97,31 @@ export function ProposalsSection({ act, tick }: { act: MemoryAct; tick: number }
     }).catch(() => setState(null)) // ledger off: the section is hidden, the rest of the panel still works
   }, [tick])
   if (!state) return null
+  // Empty: one muted line, no heading, intro or buttons.
+  if (state.proposals.length === 0) return <p data-testid="memory-proposals" className="m-0 mt-2 text-xs opacity-70">{BOARD_TEXT.proposalsNone}</p>
   const confirmable = state.proposals.filter((p) => !p.untrusted)
   return (
-    <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-proposals">
-      <h4 className="font-semibold">{BOARD_TEXT.proposalsTitle}</h4>
-      <p className="opacity-70" title={BOARD_TEXT.tokens(state.used, state.cap)}>{BOARD_TEXT.proposalsIntro}</p>
+    <div className="mt-2 flex flex-col gap-1 text-xs" data-testid="memory-proposals">
+      <SectionTitle title={BOARD_TEXT.proposalsTitle} about={BOARD_TEXT.proposalsAbout}
+        extra={<Badge variant="secondary" className="ml-1">{state.proposals.length}</Badge>}>
+        <p>{BOARD_TEXT.proposalsIntro}</p><p>{BOARD_TEXT.tokens(state.used, state.cap)}</p>
+      </SectionTitle>
       <div className="flex flex-wrap gap-1">
         {confirmable.length > 1 ? <MemoryButton what={BOARD_TEXT.confirmAll} busyLabel={MEMORY_BUSY.confirmAll} run={() => act(BOARD_TEXT.confirmAll, 'POST', `${PROPOSALS_PATH}/confirm-all`)} /> : null}
         <MemoryButton variant="secondary" what={BOARD_TEXT.reviewNow} busyLabel={MEMORY_BUSY.review} run={() => act(BOARD_TEXT.reviewNow, 'POST', `${PROPOSALS_PATH}/run`)} />
       </div>
-      {state.proposals.length === 0 ? <p className="opacity-70">{BOARD_TEXT.proposalsNone}</p> : (
-        <ul className="flex flex-col gap-1">
-          {state.proposals.map((p) => (
-            <li key={p.id} data-proposal={p.id} className="flex flex-wrap items-center gap-1 border-b border-(--vscode-panel-border) py-1">
-              <span className="basis-full break-words [overflow-wrap:anywhere]">{p.text}{p.targetText ? <span className="opacity-70"> · {BOARD_TEXT.was(p.targetText)}</span> : null}</span>
-              <Badge variant="outline">{BOARD_TEXT.ops[p.op]}</Badge>
-              <span className="flex-1" />
-              {p.untrusted ? <Badge variant="outline">{MEMORY_TEXT.untrusted}</Badge>
-                : <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', `${PROPOSALS_PATH}/${encodeURIComponent(p.id)}/confirm`)} />}
-              <MemoryButton variant="secondary" what={BOARD_TEXT.dismiss} busyLabel={MEMORY_BUSY.dismiss} run={() => act(BOARD_TEXT.dismiss, 'POST', ctl(p.id, 'forget'))} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {state.proposals.map((p) => (
+          <li key={p.id} data-proposal={p.id} className="flex flex-wrap items-center gap-1 border-b border-(--vscode-panel-border) py-1">
+            <span className="basis-full break-words [overflow-wrap:anywhere]">{p.text}{p.targetText ? <span className="opacity-70"> · {BOARD_TEXT.was(p.targetText)}</span> : null}</span>
+            <Badge variant="outline">{BOARD_TEXT.ops[p.op]}</Badge>
+            <span className="flex-1" />
+            {p.untrusted ? <Badge variant="outline">{MEMORY_TEXT.untrusted}</Badge>
+              : <MemoryButton what={MEMORY_TEXT.confirm} busyLabel={MEMORY_BUSY.confirm} run={() => act(MEMORY_TEXT.confirm, 'POST', `${PROPOSALS_PATH}/${encodeURIComponent(p.id)}/confirm`)} />}
+            <MemoryButton variant="secondary" what={BOARD_TEXT.dismiss} busyLabel={MEMORY_BUSY.dismiss} run={() => act(BOARD_TEXT.dismiss, 'POST', ctl(p.id, 'forget'))} />
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -110,15 +141,14 @@ export function BoardSection({ act, tick }: { act: MemoryAct; tick: number }): R
   const prop = (id: string, verb: string): string => `${BLACKBOARD_PATH}/proposals/${encodeURIComponent(id)}/${verb}`
   return (
     <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-blackboard">
-      <h4 className="font-semibold">{BOARD_TEXT.boardTitle}</h4>
-      <p className="opacity-70">{BOARD_TEXT.boardIntro}</p>
-      {board.entries.length === 0 ? <p className="opacity-70">{BOARD_TEXT.boardNone}</p> : (
-        <ul className="flex flex-col gap-1">
+      <SectionTitle title={BOARD_TEXT.boardTitle} about={BOARD_TEXT.boardAbout}><p>{BOARD_TEXT.boardIntro}</p></SectionTitle>
+      {board.entries.length === 0 ? <p className="m-0 opacity-70">{BOARD_TEXT.boardNone}</p> : (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {board.entries.map((e) => <li key={e.id} data-board={e.key} className="[overflow-wrap:anywhere]"><code>{e.key}</code>: {e.value}</li>)}
         </ul>
       )}
       {board.proposals.length > 0 ? (
-        <ul className="flex flex-col gap-1">
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {board.proposals.map((e) => (
             <li key={e.id} data-board-proposal={e.id} className="flex flex-wrap items-center justify-end gap-1 py-1">
               <span className="basis-full break-words [overflow-wrap:anywhere]"><code>{e.key}</code>: {e.value} <span className="opacity-70">· {BOARD_TEXT.proposedBy(e.by)}</span></span>

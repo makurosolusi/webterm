@@ -72,11 +72,20 @@ describe('flag gate', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
     const client = fakeClient()
     render(<CentralControlPanel open enabled={false} client={client} tab="status" />)
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Memory', 'Automations', 'Spending'])
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Memory', 'Automations'])
     expect(screen.getByRole('tab', { name: 'Memory' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.queryByRole('button', { name: 'Central' })).toBeNull() // Central's own memory filter needs Central
     expect(client.getControl).not.toHaveBeenCalled()
     expect(client.listMemory).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('Spending is not a default tab but opens, as the active tab, from a link (Settings search, ?ctab=spending)', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
+    const { rerender } = render(<CentralControlPanel open enabled={false} client={fakeClient()} tab="memory" />)
+    expect(screen.queryByRole('tab', { name: 'Spending' })).toBeNull()
+    rerender(<CentralControlPanel open enabled={false} client={fakeClient()} tab="spending" />)
+    expect(screen.getByRole('tab', { name: 'Spending' }).getAttribute('aria-selected')).toBe('true')
     vi.unstubAllGlobals()
   })
 
@@ -90,7 +99,8 @@ describe('CentralControlPanel', () => {
   it('has tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
     render(<CentralControlPanel open enabled client={fakeClient()} />)
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills', 'Memory', 'Automations', 'Spending', 'Health'])
+    // Spending is off the default strip (cost is not a priority).
+    expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills', 'Memory', 'Automations', 'Health'])
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')
