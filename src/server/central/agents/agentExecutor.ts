@@ -18,6 +18,7 @@ import { modelFlags, spawnAgent } from '../../spawn/agentSpawn'
 import { pickModel } from '../../models/modelPick'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
+import { settleExecTask } from '../work/workLifecycle'
 
 /** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
@@ -156,8 +157,16 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     handles.delete(agent.id)
     finished.set(agent.id, outcome.tail)
     const to: AgentState = outcome.timedOut ? 'timed_out' : outcome.exitCode === 0 ? 'candidate_done' : 'failed'
-    const moved = tryMove(agent.id, to, { reason: outcome.timedOut ? 'exec_timeout' : `exec_exit_${outcome.exitCode ?? 'none'}` })
+    const reason = outcome.timedOut ? 'exec_timeout' : `exec_exit_${outcome.exitCode ?? 'none'}`
+    const moved = tryMove(agent.id, to, { reason })
     if (moved) audit(moved, 'exec.exit', { to, exitCode: outcome.exitCode })
+    // A headless run sends no hooks, so its exit is its report: the board task moves now (reported or failed), which wakes
+    // Central, instead of stalling on the liveness rules. Same tick as the agent move, before the end observer's sweep.
+    if (moved) {
+      try { settleExecTask(db, now, agent.nodeId ?? agentNodeId(agent.id), { ok: to === 'candidate_done', reason }) } catch (err) {
+        audit(moved, 'exec.task_error', { error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' })
+      }
+    }
     // Exit 0 is the worker's claim; acceptance comes only from the verifier's evidence.
     if (moved?.state === 'candidate_done') void settleCandidate(settleDeps, moved).catch((err: unknown) => audit(moved, 'verify.error', { error: err instanceof Error ? err.name : 'unknown' }))
   }

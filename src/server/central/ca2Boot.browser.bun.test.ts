@@ -134,8 +134,8 @@ describe('browser open port (browser_open)', () => {
     active: () => (made === null ? null : ({ openFor: async () => made } as unknown as BrowserRuntime)),
   })?.open
   it('maps the runtime outcome: started, on the board but not started, refused, and no runtime', async () => {
-    expect(await port({ ok: true, nodeId: 'b', url: '' })?.('c-a', 'b')).toEqual({ ok: true, started: true })
-    expect(await port({ ok: false, nodeId: 'b', startError: new Error('max_live') })?.('c-a', 'b')).toEqual({ ok: true, started: false })
+    expect(await port({ ok: true, nodeId: 'b', url: '' })?.('c-a', 'b')).toEqual({ ok: true, started: true, nodeId: 'b' })
+    expect(await port({ ok: false, nodeId: 'b', startError: new Error('max_live') })?.('c-a', 'b')).toEqual({ ok: true, started: false, nodeId: 'b' })
     expect(await port({ ok: false, result: { status: 403, body: { error: 'disabled' } } })?.('c-a', 'b')).toEqual({ ok: false, code: 'disabled' })
     expect(await port(null)?.('c-a', 'b')).toEqual({ ok: false, code: 'disabled' })
   })

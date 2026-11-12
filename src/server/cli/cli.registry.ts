@@ -7,6 +7,7 @@ import { createCapabilityIndex, type CapabilitySpec, type Tier } from '../capabi
 import type { JsonSchema } from '../capability/capability.schema'
 import { CONTROL_CAPABILITIES } from '../capability/control.capabilities'
 import { GIT_CAPABILITIES } from '../capability/git.capabilities'
+import { REPORT_CAPABILITIES } from '../capability/report.capabilities'
 import type { Effect } from '../policy/policy.model'
 import { SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
 
@@ -14,7 +15,7 @@ import { SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
 export const AGENT_CONTEXT_SCHEMA_VERSION = 1
 
 /** Capabilities reachable through `/api/tools/:name`; Central-only tools have no route and stay out. */
-export const TOOL_INDEX = createCapabilityIndex([...CONTROL_CAPABILITIES, ...GIT_CAPABILITIES, ...SECRET_CAPABILITIES].filter((c) => c.route))
+export const TOOL_INDEX = createCapabilityIndex([...CONTROL_CAPABILITIES, ...GIT_CAPABILITIES, ...SECRET_CAPABILITIES, ...REPORT_CAPABILITIES].filter((c) => c.route))
 
 /** What `whats-new` compares: the parts of a capability an agent depends on. */
 export interface RegistryEntry { name: string; summary: string; tier: Tier; scope: string; input: JsonSchema; destructive: boolean }

@@ -9,6 +9,7 @@ import type { AgentVerbs } from './browserAgent.verbs.ctx'
 import { handleBrowserControl } from './browserControl.handler'
 import type { BrowserControlDeps } from './browserControl.handler'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
+import { openAgentBrowser } from './browser.agentOpen'
 
 let board: Workspace
 let adds: CanvasAddInput[]
@@ -115,5 +116,31 @@ describe('agent verb open', () => {
     const d = deps({ open: undefined })
     expect(await call('navigate', { url: 'https://example.test/' }, 'a1', d)).toMatchObject({ status: 404, body: { error: 'no_linked_browser' } })
     expect(await call('open', {}, 'a1', d)).toMatchObject({ status: 503, body: { error: 'open_unavailable' } })
+  })
+})
+
+describe('Central pre-assigned browser vs the agent\'s own open (playbook.web_research race)', () => {
+  const openFor = () => openAgentBrowser({ canvas: async () => canvas, start, newId: () => 'br-run1' }, 'a1', () => true, 'cabled')
+  const browsers = () => board.nodes.filter((n) => n.kind === 'browser').map((n) => n.id)
+
+  it('the agent opens first: Central reuses that node instead of adding br-<runId>', async () => {
+    await call('navigate', { url: 'https://example.test/' })
+    expect(await openFor()).toMatchObject({ ok: true, nodeId: 'nb1', reused: true })
+    expect(browsers()).toEqual(['nb1'])
+  })
+
+  it('both at once: one node, and the agent navigates the one Central opened', async () => {
+    const [central, agent] = await Promise.all([openFor(), call('open', { url: 'https://example.test/' })])
+    expect(central).toMatchObject({ ok: true, nodeId: 'br-run1' })
+    expect(agent).toMatchObject({ status: 200, body: { data: { nodeId: 'br-run1' } } })
+    expect(browsers()).toEqual(['br-run1'])
+    expect(calls).toEqual([['navigate', 'br-run1', { url: 'https://example.test/' }]])
+  })
+
+  it('an agent open without one from Central still adds its own node', async () => {
+    board.nodes.push({ id: 'h1', kind: 'browser', x: 0, y: 0 })
+    board.bridges.push({ id: 'bridge-a1-h1', source: 'a1', target: 'h1', kind: 'context' })
+    await call('open')
+    expect(browsers()).toEqual(['h1', 'nb1'])
   })
 })

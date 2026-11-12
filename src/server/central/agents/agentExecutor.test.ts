@@ -9,6 +9,7 @@ import { createAgentSpawner } from '../../spawn/agentSpawn'
 import { SERVER_VERIFIED_BY } from '../../orchestrator/orchestratorModel'
 import { judgeCompletion } from '../../verifier/verifier.judge'
 import type { VerifyAgentCompletion } from './agentVerify'
+import { createWorkStore } from '../work/workStore'
 
 const T0 = 1_700_000_000_000
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -224,6 +225,18 @@ describe('exec runner agents', { timeout: 20_000 }, () => {
     const id2 = String((await bad.ex.spawn(bad.input())).data?.agentId)
     await until(() => SETTLED.includes(bad.ex.store.get(id2)?.state ?? ''))
     expect(bad.ex.store.get(id2)).toMatchObject({ state: 'failed', endReason: 'exec_exit_2' })
+  })
+  it('a headless exit moves its board task: exit 0 to reported, a failure to failed (no hooks, so no stall)', async () => {
+    for (const [script, status] of [['setTimeout(()=>process.exit(0),300)', 'reported'], ['setTimeout(()=>process.exit(3),300)', 'failed']] as const) {
+      const s = setup(undefined, headless(script))
+      const work = createWorkStore(s.f.db, () => T0)
+      const task = work.createTask({ projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+      const id = String((await s.ex.spawn(s.input())).data?.agentId)
+      work.openAssignment({ taskId: task.id, nodeId: agentNodeId(id), channel: 'spawn', agentId: id, instruction: 'do it', actor: { kind: 'central' } })
+      await until(() => work.getTask(task.id)?.status === status)
+      expect(work.getTask(task.id)?.status).toBe(status)
+      expect(work.timeline(task.id).some((e) => e.kind === `work.task.${status}` && e.rule === 'exec_exit')).toBe(true)
+    }
   })
   it('a kind without a headless form fails the spawn instead of hanging', async () => {
     const s = setup(undefined, { runnerFor: () => 'exec', headlessArgv: () => null })

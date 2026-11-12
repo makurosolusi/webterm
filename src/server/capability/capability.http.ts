@@ -17,6 +17,7 @@ import { askByDefault, listByDefault } from '../secrets/secret.broker'
 import { isSecretCapability } from '../secrets/secret.capabilities'
 import { SECRET_SUBJECT_PREFIX } from '../secrets/secret.store'
 import { callFingerprint, createMemoryReceiptLog, runOnce, type Receipt } from './capability.receipt'
+import { AGENT_REPORT_CAPABILITY, reportByDefault } from './report.capabilities'
 
 export type { ToolsDeps }
 export const TOOLS_BODY_MAX_BYTES = 256 * 1024
@@ -53,6 +54,7 @@ function agentContext(deps: ToolsDeps, principal: Principal, board: readonly Wor
       const s = secretDefaults(principal, cap.name)
       return judge(deps, principal, cap, s.resource, s.cable, false).effect
     }
+    if (cap.name === AGENT_REPORT_CAPABILITY) return judge(deps, principal, cap, undefined, reportByDefault(principal), false).effect
     const cabled = cable?.find((g) => wildcardMatch(g.capability, cap.name))?.scope
     return judge(deps, principal, cap, cabled, cable, false).effect
   })

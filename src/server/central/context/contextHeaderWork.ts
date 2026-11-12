@@ -7,6 +7,7 @@ import { createHealthStore } from '../health/healthStore'
 import { taskCards } from '../work/workBoard'
 import { listDuties } from '../work/workDuties'
 import { createWorkStore } from '../work/workStore'
+import { AGENT_REPORT_EVENT } from '../work/workLifecycle'
 
 /** Open assignments listed per project before the shrink. */
 export const MAX_OPEN_ASSIGNMENTS = 8
@@ -21,13 +22,15 @@ const DAY_MS = 24 * HOUR_MS
 /** Open duties in the header, newest first; the section is never shrunk. */
 export const MAX_DUTIES = 5
 const MAX_REASON = 60
+const MAX_REPORT = 120
 /** Projects named in the global health line. */
 const MAX_HEALTH_PROJECTS = 5
 const LIVE_GOALS = ['active', 'proposed']
 const OPEN_STATUSES = WORK_STATUSES.filter((s) => !WORK_TERMINAL.includes(s))
 
 export interface NeedsYou { waiting_input: number; needs_review: number; stalled: number; failed: number }
-export interface OpenAssignment { task: string; node: string; status: WorkStatus; quietMin: number }
+/** `report` = the agent's latest `webterm report` on this attempt's task (any kind), so progress shows without a wake. */
+export interface OpenAssignment { task: string; node: string; status: WorkStatus; quietMin: number; report?: string }
 export interface ProjectWork {
   id: string
   name: string
@@ -90,13 +93,23 @@ export function openWork(db: Database, now: number): OpenWork {
     if (entry) entry.liveAgents = Number(r.n)
   }
   const signalAt = new Map<OpenAssignment, number>()
+  const taskOf = new Map<OpenAssignment, string>()
   for (const card of taskCards(db, createWorkStore(db, () => now).listTasks({ statuses: OPEN_STATUSES, limit: TASK_FETCH_LIMIT }))) {
     const a = card.assignment
     if (a === null || a.endedAt !== null) continue
     const at = a.lastSignalAt ?? a.startedAt
     const open = { task: redactSecrets(card.title).slice(0, MAX_TITLE), node: (card.nodeName ?? a.nodeId).slice(0, MAX_NODE), status: card.status, quietMin: Math.max(0, Math.floor((now - at) / MINUTE_MS)) }
     signalAt.set(open, at)
+    taskOf.set(open, card.id)
     byProject.get(card.projectId)?.open.push(open)
+  }
+  // Latest report per open task, one grouped query (SQLite takes the bare column from the MAX(seq) row).
+  const openTaskIds = [...taskOf.values()]
+  if (openTaskIds.length > 0) {
+    const reports = new Map(allRows(db, `SELECT correlation_id, json_extract(payload_json, '$.reason') AS reason, MAX(seq) AS seq FROM event
+      WHERE kind = ? AND correlation_id IN (${openTaskIds.map(() => '?').join(',')}) GROUP BY correlation_id`, AGENT_REPORT_EVENT, ...openTaskIds)
+      .map((r) => [String(r.correlation_id), redactSecrets(String(r.reason ?? '')).slice(0, MAX_REPORT)]))
+    for (const [open, taskId] of taskOf) { const report = reports.get(taskId); if (report) open.report = report }
   }
   const projects = [...byProject.values()].filter((p) => withOpen.has(p.id))
   for (const p of projects) p.open = p.open.sort((a, b) => (signalAt.get(a) as number) - (signalAt.get(b) as number) || a.task.localeCompare(b.task)).slice(0, MAX_OPEN_ASSIGNMENTS)

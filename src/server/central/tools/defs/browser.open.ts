@@ -36,7 +36,7 @@ export function createBrowserOpenDef(open: NonNullable<BrowserToolDeps['open']>)
       const nodeId = typeof input.nodeId === 'string' ? input.nodeId : `br-${crypto.randomUUID()}`
       const made = await open(agentNode, nodeId)
       if (!made.ok) return { ok: false, code: made.code, data: { agentId, agentNode } }
-      return { ok: true, data: { nodeId, agentId, agentNode, started: made.started } }
+      return { ok: true, data: { nodeId: made.nodeId ?? nodeId, agentId, agentNode, started: made.started } }
     },
   }
 }

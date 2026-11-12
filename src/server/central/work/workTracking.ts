@@ -25,6 +25,7 @@ import { registerWorkMemory } from './workMemory'
 import { startWorkWatcher } from './workWatcher'
 import { automaticAction } from '../automaticAction'
 import { announceAutoDone } from './workAutoDoneOffer'
+import { AGENT_REPORT_RULE, EXEC_EXIT_RULE } from './workLifecycle'
 import type { WorkMove } from './workModel'
 
 const log = createLogger('central.work')
@@ -91,6 +92,10 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     if (move.rule === WORK_VERIFY_RULES.passed && autoDone(move.task.projectId)) return
     noticeWorkMove(db, move, { now, ...(presence ? { presence } : {}) })
     announceAutoDoneMove(db, move, now)
+  })
+  // A report (`webterm report --done`) or a headless exit reaches `reported` outside the hook watcher: verify it the same way.
+  onWorkMove(db, (move) => {
+    if (move.to === 'reported' && (move.rule === AGENT_REPORT_RULE || move.rule === EXEC_EXIT_RULE)) queueMicrotask(() => { void verifier.run(move.task.id) })
   })
   registerWorkMemory(db, now)
   const checkin = createWorkCheckin({
