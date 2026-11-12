@@ -105,7 +105,7 @@ describe('CentralControlPanel', () => {
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Abilities' }), { button: 0 })
-    expect(await screen.findByText('Everything Central can do at your current level.')).toBeTruthy()
+    expect((await screen.findByTestId('ability-summary')).textContent).toMatch(/^Level 2/)
   })
 
   it('shows no privacy label for a non-free model', async () => {
