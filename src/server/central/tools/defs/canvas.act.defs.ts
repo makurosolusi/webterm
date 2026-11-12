@@ -127,7 +127,7 @@ function buildNode(kind: Kind, cwd: string | undefined, title: string | undefine
 export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
   const close: ToolDef = {
     name: 'canvas.close',
-    summary: 'Close canvas nodes (terminals, browsers, files...) of a project workspace by ids or names; asks the user.',
+    summary: 'Close canvas nodes (terminals, browsers, files...) of a project workspace by ids or names. Approval: project mode.',
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     usage: '{"projectId":"<id>","nodeIds":["<node id or name from node.list, e.g. Mango>", ... 1-50],"reason":"<why, <=200 chars>"}. '

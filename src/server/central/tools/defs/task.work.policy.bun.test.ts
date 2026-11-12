@@ -62,3 +62,11 @@ test('the store refuses done from Central whatever a tool tries', () => {
   try { store.moveTask('t', 'done', { actor: { kind: 'central' } }) } catch (err) { code = err instanceof WorkError ? err.code : 'other' }
   expect(code).toBe('done_forbidden')
 })
+
+// Policy lock (root cause: summaries said "Asks the user." so Central proposed instead of acting, even in
+// Danger mode). Whether a call asks is the project's approval mode, which the State header carries.
+test('no registered tool claims it always asks the user', () => {
+  for (const def of everyTool().list()) {
+    expect(`${def.name}: ${def.summary} ${def.usage}`).not.toMatch(/asks the user/i)
+  }
+})

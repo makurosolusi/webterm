@@ -47,6 +47,15 @@ describe('centralQueryOptions', () => {
     expect(CENTRAL_STEWARD_PROMPT).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 
+  // Policy lock (root cause: Central proposed "shall I type /model?" even in Danger mode, where no card is shown).
+  it('tells Central to act instead of proposing, and how to switch an agent model', () => {
+    expect(CENTRAL_STEWARD_PROMPT).toContain('Act, do not propose')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('Never end with "shall I...?"')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('If the mode needs approval, just call the tool; webterm shows the card.')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('approval mode (ask, auto, danger)')
+    expect(CENTRAL_STEWARD_PROMPT).toMatch(/chat\.config for an Agent Chat node; for a Claude terminal node, canvas\.type the text "\/model <alias>" then press Enter/)
+  })
+
   it('resumes instead of creating a session when a sessionRef exists, and adds model and budget', () => {
     const o = centralQueryOptions({ ...base, sessionRef: ' sess-9 ', model: 'sonnet', maxBudgetUsd: 0.5 })
     expect(o.resume).toBe('sess-9')
