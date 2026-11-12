@@ -19,6 +19,8 @@ import { centralChatAttach, centralParts, centralWire } from './chatCentralAttac
 import type { ChatPart } from './chatTypes'
 import { type CentralChatHost, useCentralChatCommands } from '../central/centralChatCommands'
 import { CentralModelPicker } from '../central/centralModelPicker'
+import { ApprovalModeChip } from '../ApprovalModeControl'
+import { useActiveWorkspaceId } from '../activeWorkspace.context'
 import { CentralContextMeter } from '../central/centralContextMeter'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
@@ -187,6 +189,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const modelSet = (): void => setModelKey((k) => k + 1)
   const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }), conversation.id, modelSet)
   const error = state.error ?? historyError
+  const workspaceId = useActiveWorkspaceId()
   const settledKey = modelKey + (busy ? 0 : state.lastEventSeq)
 
   return (
@@ -197,6 +200,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
           : <span className="chat-status-dot" aria-hidden="true" />}
         <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
         {props.commands && <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />}
+        {props.commands && <ApprovalModeChip workspaceId={workspaceId} />}
         {props.commands && <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
           openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />}
       </header>

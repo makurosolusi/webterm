@@ -10,6 +10,8 @@ import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
 import { CLAUDE_TEXT } from './ClaudeSettingsSection'
+import { APPROVAL_TEXT } from './ApprovalModeControl'
+import { APPROVAL_LEVEL_TEXT } from '../shared/settings.approvalLevel'
 import { HEALTH_TEXT } from './controlPanelLabels'
 import { MODELS_TEXT } from './SettingsModels'
 import { NOTIFY_TEXT } from './osNotify.settings'
@@ -35,6 +37,9 @@ export interface SettingsSearchEntry {
 }
 
 const kw = (words: string): readonly string[] => words.split(' ')
+/** Every level hint, so a search for words in them ("undone", "Deny rules") finds the permission rows. */
+const APPROVAL_HINTS = Object.values(APPROVAL_LEVEL_TEXT).map((t) => t.hint).join(' ')
+
 const e = (page: SectionId, field: SettingsFieldId | undefined, label: string, hint?: string, words?: string): SettingsSearchEntry =>
   ({ page, field, label, hint, keywords: words ? kw(words) : undefined })
 
@@ -84,7 +89,8 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
   e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
   e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
-  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Danger.', 'permission permissions approval approvals skip yolo ask dangerous hook'),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Danger.', `permission permissions mode approval approvals skip yolo ask auto danger dangerous bypass hook ${APPROVAL_HINTS}`),
+  e('claude', 'projectApprovalLevels', APPROVAL_TEXT.projectLabel, APPROVAL_TEXT.projectHint, `permission mode project override ask auto danger ${APPROVAL_HINTS}`),
   e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
   e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),
   e('claude', 'claudePermissionMode', 'Claude permission mode', CLAUDE_TEXT.rawModeHint, 'permission-mode approval plan'),

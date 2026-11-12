@@ -6,6 +6,7 @@ import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from './ca2Boot'
 import { ca2Dispatch, isCa2Path } from './ca2Routes'
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from './context/rotationPolicy'
 import { freshDb, rows, run, T0 } from './guard/controlGuard.testutil'
 import { CORE_DEFS } from './tools/defs/core.defs'
 import { createRegistry } from './tools/toolRegistry'
@@ -191,13 +192,14 @@ describe('GET /context', () => {
   })
 
   it('is empty before the first finished turn', async () => {
-    expect((await call('GET', '/context?conversationId=c1')).body).toEqual({ tokens: null, window: 128_000, percent: null, lastCompaction: null })
+    expect((await call('GET', '/context?conversationId=c1')).body).toEqual({ tokens: null, window: DEFAULT_CONTEXT_WINDOW_TOKENS, percent: null, lastCompaction: null })
   })
 
   it('reports the last measured size against the window', async () => {
     turn('t1', 'c1', { ctx: 10_000, at: 1 })
-    turn('t2', 'c1', { ctx: 64_000, at: 2 })
-    expect((await call('GET', '/context?conversationId=c1')).body).toMatchObject({ tokens: 64_000, window: 128_000, percent: 50 })
+    turn('t2', 'c1', { ctx: 100_000, at: 2 })
+    // The window is the model's (200K for a plain id), no longer a fixed 128K.
+    expect((await call('GET', '/context?conversationId=c1')).body).toMatchObject({ tokens: 100_000, window: DEFAULT_CONTEXT_WINDOW_TOKENS, percent: 50 })
   })
 
   it('takes the newest compaction of this conversation only, redacted', async () => {

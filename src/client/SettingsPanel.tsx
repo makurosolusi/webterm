@@ -73,7 +73,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   terminal: (c) => <TerminalSection settings={c.s} onChange={c.onChange} />,
   canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
   notifications: () => <NotificationsSection />,
-  claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} />,
+  claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined} />,
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
   rules: (c) => <RulesSection workspaceId={c.projectId} workspaces={c.workspaces} />,
   capabilities: (c) => <CapabilitiesSection projectId={c.projectId} settings={c.s} onChange={c.onChange} />,

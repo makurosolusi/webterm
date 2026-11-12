@@ -62,6 +62,8 @@ export interface HarnessOptions {
   maxTokens?: number
   /** Extra test-only tools next to the core ones. */
   tools?: readonly ToolDef[]
+  /** Extra guard env (e.g. `WEBTERM_CENTRAL_DAILY_TOKENS`), merged over the default guard env. */
+  guardEnv?: Record<string, string>
 }
 
 export interface ToolReceipt { name: string; ok: boolean; errorCode?: string; output?: Record<string, unknown> }
@@ -173,10 +175,11 @@ export async function createHarness(options: HarnessOptions): Promise<GoldenHarn
     writeFileSync(turnsFile, JSON.stringify(turns))
     rmSync(counterFile, { force: true })
     const db = openLedgerDb(dbPath)
-    const guard = createControlGuard({ db, now: Date.now, env: GUARD_ENV })
+    const guardEnv = { ...GUARD_ENV, ...options.guardEnv }
+    const guard = createControlGuard({ db, now: Date.now, env: guardEnv })
     deps = {
       policy: null, workspaces: () => [], browser: null, gitDiff: async () => null, events: createEventLog(db),
-      central: { db, registry, env: GUARD_ENV, guard }, capability: (t) => capabilityStore.verify(t),
+      central: { db, registry, env: guardEnv, guard }, capability: (t) => capabilityStore.verify(t),
     }
     const mcp = createCentralMcpLink({ dir: join(dir, 'mcp'), port, approvalWaitMs: 0, command: { command: process.execPath, args: [MCP_MAIN] } })
     const runtime = new ClaudeRuntime({

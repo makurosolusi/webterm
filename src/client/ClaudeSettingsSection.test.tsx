@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Settings › Claude: the effective-launch line and profile badges come from the server (command mode
-// included), Central's own pick shows as a deviation, the one permissions choice writes `agentApprovalLevel`,
+// included), Central's own pick shows as a deviation, the permissions choice saves `agentApprovalLevel` through ApprovalModeControl,
 // the raw permission mode sits under Advanced locked by "Danger", and no Claude bits are left elsewhere.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -86,17 +86,11 @@ describe('Connection', () => {
 describe('Permissions', () => {
   const level = () => screen.getByLabelText('How much may agents do on their own?') as HTMLSelectElement
 
-  it('one select with three levels; each writes the mapped runtime keys', () => {
-    const spy = vi.fn()
-    render(<Harness spy={spy} />)
-    expect([...level().options].map((o) => o.textContent)).toEqual(['Danger', 'Auto', 'Ask'])
-    fireEvent.change(level(), { target: { value: 'risky' } })
-    expect(spy).toHaveBeenLastCalledWith({ agentApprovalLevel: 'risky' })
-    expect(keys()).toEqual({ skip: false, mode: 'auto', level: 'risky' })
+  it('one select with Ask, Auto, Danger; a choice is saved straight to the server (ApprovalModeControl)', async () => {
+    render(<Harness />)
+    expect([...level().options].map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
     fireEvent.change(level(), { target: { value: 'always' } })
-    expect(keys()).toEqual({ skip: false, mode: 'manual', level: 'always' })
-    fireEvent.change(level(), { target: { value: 'never' } })
-    expect(keys()).toMatchObject({ skip: true, level: 'never' })
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u, i]) => u === '/api/settings' && (i as RequestInit | undefined)?.body === JSON.stringify({ agentApprovalLevel: 'always' }))).toBe(true))
   })
 
   it('"Danger" reads as a warning; the separate skip / hook switches are gone', () => {

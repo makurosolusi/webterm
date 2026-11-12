@@ -12,7 +12,9 @@ import { createHarness, GOLDEN_CONVERSATION, GOLDEN_PROJECT, setDailyUsage, type
 const PROPOSAL_AUDITS = `SELECT COUNT(*) AS c FROM event WHERE kind = 'central.proposal'`
 /** Longer than stopping the child takes, so a call after it only happens if the runtime failed to stop the turn. */
 const AFTER_LIMIT_PAUSE_MS = 1_500
-const DAY = budgetLimits({})
+/** The day token budget defaults to none (the dollar cap is the budget), so this suite sets one. */
+const DAY_TOKEN_ENV = { WEBTERM_CENTRAL_DAILY_TOKENS: '1000000' } // test-only
+const DAY = budgetLimits(DAY_TOKEN_ENV)
 const lateCall = () => [{ pause: AFTER_LIMIT_PAUSE_MS }, proposeGoal(goalInput(GOLDEN_PROJECT, 'Must not exist'))]
 
 let msg = 0
@@ -59,6 +61,7 @@ test('G7 step budget per turn: the round over the cap stops the turn before its 
 test('G7 day token budget: the MCP call is refused with no effect and audited; under the cap it works', async () => {
   const h = await createHarness({
     turns: [[proposeGoal(goalInput(GOLDEN_PROJECT, 'Over budget'))], [proposeGoal(goalInput(GOLDEN_PROJECT, 'Under budget'))]],
+    guardEnv: DAY_TOKEN_ENV,
   })
   try {
     setDailyUsage(h.db, { tokens: DAY.tokens, spawns: 0 })
