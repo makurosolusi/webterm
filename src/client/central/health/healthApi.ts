@@ -1,10 +1,13 @@
 // Health tab transport: project health summary, findings pages, scans and dismiss/reopen.
-import type { FindingView, HealthScanView, HealthSummary } from '../../../shared/centralHealth'
+import type { FindingStatus, FindingView, HealthScanView, HealthSummary } from '../../../shared/centralHealth'
+import { fetchWorkspaces } from '../../api'
 import { request } from '../../inboxTransport'
 import { InboxApiError } from '../../inboxTypes'
 import { CENTRAL_API, centralControlApi } from '../centralControlApi'
-import type { FindingFilter } from './healthModel'
+import type { FindingFilter, HealthProject } from './healthModel'
 
+/** Server page cap (`MAX_PAGE`): tab counts read at most this many. */
+const COUNT_CAP = 200
 const HEALTH_PATH = `${CENTRAL_API}/health`
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
@@ -16,7 +19,9 @@ export interface AnalysisView { scan: HealthScanView | null; running: boolean; r
 
 /** What the Health tab needs from the server. */
 export interface HealthClient {
-  listProjects(signal?: AbortSignal): Promise<Array<{ id: string; name: string }>>
+  listProjects(signal?: AbortSignal): Promise<HealthProject[]>
+  /** Findings in `status`, counted up to the server page cap (`more` = at least that many). */
+  countFindings(projectId: string, status: FindingStatus, signal?: AbortSignal): Promise<{ count: number; more: boolean }>
   getSummary(projectId: string, signal?: AbortSignal): Promise<HealthSummaryView>
   listFindings(projectId: string, filter: FindingFilter, range: { limit: number; offset: number }, signal?: AbortSignal): Promise<FindingPage>
   scan(projectId: string): Promise<void>
@@ -38,7 +43,23 @@ const finding = (body: Partial<FindingView> | undefined, what: string): FindingV
 /** Default client over the live server. */
 export const healthApi: HealthClient = {
   async listProjects(signal) {
-    return (await centralControlApi.listBoardNodes(0, undefined, signal)).projects
+    // The folder opens a finding's file; without it the row still works, only Open file is off.
+    const [{ projects }, workspaces] = await Promise.all([
+      centralControlApi.listBoardNodes(0, undefined, signal),
+      fetchWorkspaces().catch((err: unknown) => { console.warn('health: reading workspace folders failed', err); return [] }),
+    ])
+    // ponytail: a ledger project id is not its workspace id and the route does not return that link, so
+    // a unique name match stands in; return `workspaceId` from the board-nodes route if names collide.
+    return projects.map((p) => {
+      const named = workspaces.filter((w) => w.name === p.name)
+      const ws = workspaces.find((w) => w.id === p.id) ?? (named.length === 1 ? named[0] : undefined)
+      return ws?.cwd ? { ...p, root: ws.cwd } : p
+    })
+  },
+  async countFindings(projectId, status, signal) {
+    // ponytail: counts by reading one capped page; add a count to the summary route if pages get heavy.
+    const page = await healthApi.listFindings(projectId, { status }, { limit: COUNT_CAP, offset: 0 }, signal)
+    return { count: page.items.length, more: page.hasMore }
   },
   async getSummary(projectId, signal) {
     const body = await request<Partial<HealthSummaryView>>(`${HEALTH_PATH}/summary?${query({ projectId })}`, { signal })

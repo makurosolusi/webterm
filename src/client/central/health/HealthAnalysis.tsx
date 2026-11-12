@@ -1,4 +1,5 @@
-// Deep analysis control of the Health tab: start (costs model spend), running, cooldown, failed and last-result states.
+// Deep analysis control of the Health header: start, running, cooldown, failed and last-result states. The cost
+// note lives in the header's (i) explanation, not beside the button.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { relativeTime } from '../../SessionHistory.model'
@@ -55,7 +56,6 @@ export function HealthAnalysis({ client, projectId, visible, onFinished }: { cli
       <Button type="button" size="sm" variant="secondary" disabled={running || coolingUntil !== null} aria-busy={running} onClick={() => void start()}>
         {running && <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />}{running ? HL.analyzing : HL.analyze}
       </Button>
-      <span className="ccp-row__meta">{HL.analyzeCost}</span>
       {coolingUntil !== null && <span className="ccp-row__meta">{HL.analyzeAgain(clock(coolingUntil))}</span>}
       {!running && last?.status === 'done' && (
         <span className="ccp-row__meta">{HL.lastAnalysis(relativeTime(last.finishedAt ?? last.startedAt), last.opened)}{dropped > 0 && ` · ${HL.droppedClaims(dropped)}`}</span>
