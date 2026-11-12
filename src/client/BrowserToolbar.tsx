@@ -1,7 +1,8 @@
 // Toolbar of a browser node, one row like Chrome/Arc/VS Code Simple Browser: back, forward, reload↔stop, the address
-// field (site-info icon, zoom pill, Shields chip inside it; Enter navigates, recent pages as suggestions), the console
-// error badge, the agent pill and "⋯" for the rest. No server state here (everything via props). Narrow nodes drop
-// forward and the in-field extras by container query (browser.css `.browser-toolbar`); the ⋯ menu still has them.
+// field (search icon on an empty page, site-info icon on a loaded one, zoom pill, Shields chip; Enter navigates, recent
+// pages as suggestions), the console error badge, the icon-only Agents toggle and Chrome's "⋮" for page actions — the
+// only browser menu (the node header's "…" keeps node actions). No server state here (everything via props). Narrow
+// nodes drop forward and the in-field extras by container query (browser.css `.browser-toolbar`); ⋮ still has them.
 import { useEffect, useId, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
@@ -17,6 +18,8 @@ import type { DeviceChoice } from '../shared/browser.devices'
 import { CONSOLE_COMMAND_ID, CONSOLE_TEXT } from './BrowserConsole'
 import type { ConsoleSlot } from './BrowserConsole'
 import type { DesignMode } from './browser/design/useDesignMode'
+import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
+import { isBlankUrl } from './browser.useGoto'
 
 export interface BrowserToolbarProps {
   state?: BrowserState
@@ -43,19 +46,22 @@ export interface BrowserToolbarProps {
   console?: ConsoleSlot
   /** Design Mode state (menu toggle shown only when given). */
   design?: DesignMode
+  /** Extra page/browser rows at the end of the ⋮ menu (e.g. Import Cookies). */
+  menuItems?: VscodeMenuItem[]
 }
 
 const icon = (name: string) => <span className={`codicon codicon-${name}`} aria-hidden="true" />
 
-/** Site-info kind from the page URL scheme, like Chrome's lock / "Not secure" chip. */
+/** Site-info kind from the page URL scheme, like Chrome's lock / "Not secure" chip; no page yet = search. */
 export function siteInfoKind(url: string): keyof typeof SITE_INFO_TEXT {
+  if (isBlankUrl(url)) return 'empty'
   if (url.startsWith('https:')) return 'secure'
   if (url.startsWith('http:')) return 'insecure'
   return 'other'
 }
 
 /** Address bar + navigation + overflow menu of one browser node. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, onZoomReset, searchEngine, onShields, device, onDevice, console: consoleSlot, design }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, onZoomReset, searchEngine, onShields, device, onDevice, console: consoleSlot, design, menuItems }: BrowserToolbarProps) {
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -90,6 +96,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
   const alert = error ?? notice ?? design?.error ?? null
   // Badge while there are errors; also while the drawer is open, so the row still has a way to close it.
   const showConsole = consoleSlot && (errors > 0 || consoleSlot.open)
+  const driving = agentControl && state?.lease === 'agent'
 
   return (
     <div role="toolbar" aria-label={TOOLBAR_TEXT.group} className="browser-toolbar nodrag">
@@ -134,15 +141,18 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
             onClick={consoleSlot.toggle}
           >{icon(errors > 0 ? 'error' : 'debug-console')}{errors > 0 && <span className="tabular-nums">{errors}</span>}</IconButton>
         )}
-        {/* Permission pill; while an agent actually drives, the lease chip on the page says it instead. */}
-        {agentEnabled && agentControl && state?.lease !== 'agent' && (
-          <IconButton size="xs" variant="ghost" aria-pressed label={TOOLBAR_TEXT.agentPill} tooltip={TOOLBAR_TEXT.agentPillHint} className="browser-toolbar__agent" onClick={() => onAgentControl(false)}>
-            {icon('robot')}<span>{TOOLBAR_TEXT.agentPill}</span>
-          </IconButton>
+        {/* Agent-control toggle, icon only (the label ate omnibox width): the dot = agents may drive, accent = driving now. */}
+        {agentEnabled && (
+          <IconButton
+            size="icon-xs" variant="ghost" aria-pressed={agentControl} className="browser-toolbar__agent" data-driving={driving || undefined}
+            label={TOOLBAR_TEXT.agentPill}
+            tooltip={driving ? TOOLBAR_TEXT.agentPillDriving : agentControl ? TOOLBAR_TEXT.agentPillHint : TOOLBAR_TEXT.agentPillHintOff}
+            onClick={() => onAgentControl(!agentControl)}
+          >{icon('robot')}{agentControl && <span className="browser-toolbar__agent-dot" aria-hidden="true" />}</IconButton>
         )}
         <BrowserToolbarMenu
           state={state} zoom={zoom} onZoom={onZoom} onZoomReset={resetZoom} device={device} onDevice={onDevice} onShields={onShields} design={design}
-          agentControl={agentControl} agentEnabled={agentEnabled} onAgentControl={onAgentControl} onEnableAgent={onEnableAgent} console={consoleSlot} onError={setNotice}
+          agentControl={agentControl} agentEnabled={agentEnabled} onAgentControl={onAgentControl} onEnableAgent={onEnableAgent} console={consoleSlot} onError={setNotice} extraItems={menuItems}
         />
       </div>
       {alert && <p id="browser-url-error" role="alert" className="m-0 px-1 text-xs text-(--vscode-errorForeground)">{alert}</p>}

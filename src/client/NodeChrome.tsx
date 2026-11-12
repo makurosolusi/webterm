@@ -4,7 +4,9 @@ import type { AgentStatus, Comment } from '../shared/workspace'
 import { Textfield, ToolbarButton } from '@/vscode/register'
 import { cn } from '@/lib/utils'
 import NodeColorSwatch from './NodeColorSwatch'
-import NodeToolbar from './NodeToolbar'
+import { useNodeId } from '@xyflow/react'
+import NodeToolbar, { nodeMoreItems, type NodeToolbarProps } from './NodeToolbar'
+import TabNodeActions from './tabLayout.nodeActions'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
 import { NodeResizeToggle, useNodeResizeMenuItem } from './nodeResize/NodeLayoutResizer'
@@ -21,6 +23,8 @@ export interface NodeChromeProps {
   icon?: string
   /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
   description?: string
+  /** Title tooltip (e.g. a Files node's full path); a click on the title still renames. */
+  titleHint?: string
   onRename: (t: string) => void
   collapsed: boolean; onToggleCollapse: () => void
   color: string; onColor: (c: string) => void
@@ -28,8 +32,9 @@ export interface NodeChromeProps {
   pill?: ReactNode                // <UsagePill/> for agent; omit for terminal
   comments: Comment[]; onAddComment: (text: string) => void
   // toolbar passthrough (NodeChrome owns comments open-state internally):
-  onRefresh: () => void
-  searchOpen: boolean; onToggleSearch: () => void
+  /** Omit both when the node type has no such action (browser: reload and find live in its own toolbar). */
+  onRefresh?: () => void
+  searchOpen?: boolean; onToggleSearch?: () => void
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   onClose: () => void
   onStop?: () => void             // agent only: Stop button in the toolbar
@@ -113,7 +118,8 @@ export default function NodeChrome(props: NodeChromeProps) {
   const titleRef = useRef<HTMLElement | null>(null)
   // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout. A
   // maximized node keeps its canvas layout too, so collapse/resize hide there as well.
-  const { inTab } = useNodeHost()
+  const { inTab, visible } = useNodeHost()
+  const nodeId = useNodeId()
   const max = useNodeMaximize()
   const fixedLayout = inTab || max.maximized
   const resizeMenuItem = useNodeResizeMenuItem()
@@ -139,6 +145,38 @@ export default function NodeChrome(props: NodeChromeProps) {
   }
 
   const chip = statusChip(props.status)
+  const toolbar: NodeToolbarProps = {
+    onRefresh: props.onRefresh,
+    searchOpen: props.searchOpen, onToggleSearch: props.onToggleSearch,
+    micActive: props.micActive, onToggleMic: props.onToggleMic,
+    commentsOpen, onToggleComments: () => setCommentsOpen((o) => !o), commentCount: props.comments.length,
+    maximized: max.maximized, onToggleMaximize: () => max.toggle?.(), hideMaximize: !max.toggle,
+    onClose: props.onClose,
+    onStop: props.onStop,
+    onAiName: props.onAiName, aiNaming: props.aiNaming,
+    onBroadcast: props.onBroadcast, broadcastActive: props.broadcastActive, broadcastDisabled: props.broadcastDisabled,
+    hideLinks: props.hideLinks, onToggleHideLinks: props.onToggleHideLinks,
+    extraMenuItems: props.menuItems,
+    extraAction: !props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined,
+  }
+  const comments = commentsOpen && (
+    <NodeComments comments={props.comments} onAdd={props.onAddComment} onClose={() => setCommentsOpen(false)} />
+  )
+
+  // Tab mode: the tab is the header (title, status dot, close). Its other actions move to the tab
+  // strip (editor actions + tab context menu); only the tab's × closes the node.
+  if (inTab) {
+    return (
+      <>
+        <TabNodeActions
+          id={nodeId} visible={visible} items={nodeMoreItems(toolbar)} onStop={props.onStop}
+          search={props.onToggleSearch ? { open: Boolean(props.searchOpen), toggle: props.onToggleSearch } : undefined}
+          extra={props.pill || props.extraHeader ? <>{props.pill}{props.extraHeader}</> : undefined}
+        />
+        {comments && <div className="node-tab-comments relative">{comments}</div>}
+      </>
+    )
+  }
 
   return (
     <div className="node-header relative" onDoubleClick={onHeaderDoubleClick}>
@@ -173,7 +211,7 @@ export default function NodeChrome(props: NodeChromeProps) {
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (
-        <span className="nodrag node-title" title="Rename" onClick={beginEdit}>
+        <span className="nodrag node-title" title={props.titleHint ? `${props.titleHint}\nClick to rename` : 'Rename'} onClick={beginEdit}>
           <NodeNameLabel name={props.name} label={props.name ? props.title : props.title || UNTITLED} />
         </span>
       )}
@@ -192,28 +230,9 @@ export default function NodeChrome(props: NodeChromeProps) {
       {props.pill}
       {props.extraHeader}
 
-      <NodeToolbar
-        onRefresh={props.onRefresh}
-        searchOpen={props.searchOpen} onToggleSearch={props.onToggleSearch}
-        micActive={props.micActive} onToggleMic={props.onToggleMic}
-        commentsOpen={commentsOpen} onToggleComments={() => setCommentsOpen((o) => !o)} commentCount={props.comments.length}
-        maximized={max.maximized} onToggleMaximize={() => max.toggle?.()} hideMaximize={!max.toggle}
-        onClose={props.onClose}
-        onStop={props.onStop}
-        onAiName={props.onAiName} aiNaming={props.aiNaming}
-        onBroadcast={props.onBroadcast} broadcastActive={props.broadcastActive} broadcastDisabled={props.broadcastDisabled}
-        hideLinks={props.hideLinks} onToggleHideLinks={props.onToggleHideLinks}
-        extraMenuItems={props.menuItems}
-        extraAction={!props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined}
-      />
+      <NodeToolbar {...toolbar} />
 
-      {commentsOpen && (
-        <NodeComments
-          comments={props.comments}
-          onAdd={props.onAddComment}
-          onClose={() => setCommentsOpen(false)}
-        />
-      )}
+      {comments}
     </div>
   )
 }

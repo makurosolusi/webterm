@@ -1,11 +1,11 @@
-// Slot upload/download file manager (WS-FM-10): menu "Upload…"/"Download", an Upload icon in the
-// toolbar, OS file drop onto the node (filesSlot.upload.drop), one FIFO queue per node (uploadQueue),
+// Slot upload/download file manager (WS-FM-10): menu "Upload…"/"Download", "Upload Files…" in the
+// title-bar overflow menu, OS file drop onto the node (filesSlot.upload.drop), one FIFO queue per node (uploadQueue),
 // the "already exists" prompt (filesSlot.upload.conflict). Progress and results go through
 // `ctx.notify` (footer + progress bar), never the toolbar. Everything is gated by
 // `capabilities().upload` (fail-closed); with filesWrite off "Upload…" shows locked and offers to turn it on.
 import { useEffect, useState } from 'react'
-import { IconButton } from './components/ui/icon-button'
 import { childPath } from './fileBrowse'
+import { codicon } from './FilesMenu'
 import { capabilities } from './fsClient'
 import type { NoticeAction } from './filesNotice'
 import { UploadConflictDialog, askConflict, resetUploadConflicts, skipUploadConflict } from './filesSlot.upload.conflict'
@@ -164,10 +164,6 @@ export const uploadSlot: FilesSlot = {
     if (file && downloadEnabled) rows.push({ label: UPLOAD_TEXT.menuDownload, onClick: () => download(childPath(ctx.dir, file.name), file.name) })
     return rows
   },
-  toolbar: (ctx) => (uploadEnabled ? (
-    <IconButton type="button" size="icon-sm" className="files-tool" label={UPLOAD_TEXT.toolbarUpload} onClick={() => pickInto(ctx)}>
-      <span className="codicon codicon-cloud-upload" aria-hidden="true" />
-    </IconButton>
-  ) : null),
+  overflow: (ctx) => (uploadEnabled ? [{ label: UPLOAD_TEXT.toolbarUpload, icon: codicon('cloud-upload'), onClick: () => pickInto(ctx) }] : []),
   overlay: (ctx) => <UploadConflictDialog nodeId={ctx.nodeId} />,
 }

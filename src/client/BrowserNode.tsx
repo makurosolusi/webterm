@@ -9,7 +9,6 @@ import { hostOnly } from '../shared/browser.url'
 import type { BrowserErr } from './browser.status'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
-import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
@@ -69,8 +68,6 @@ export interface BrowserNodeProps extends NodeProps {
   renderToolbar?: (ctx: BrowserSlotCtx) => ReactNode
   /** Dirender menimpa permukaan (mis. chip "agent mengemudi"). */
   renderOverlay?: (ctx: BrowserSlotCtx) => ReactNode
-  /** Item tambahan menu "⋯" header node (mis. Import Cookies). */
-  menuItems?: VscodeMenuItem[]
 }
 
 /**
@@ -78,7 +75,7 @@ export interface BrowserNodeProps extends NodeProps {
  * input manusia. Berhenti menerima frame saat collapse atau zoom canvas < `ZOOM_PAUSE_BELOW`
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
-function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay, menuItems }: BrowserNodeProps) {
+function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay }: BrowserNodeProps) {
   const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
@@ -201,11 +198,9 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay,
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
-          onRefresh={() => ctx.nav('reload')}
-          // Browser tidak punya pencarian di node; tombolnya tetap ada karena NodeToolbar milik bersama.
-          searchOpen={false} onToggleSearch={() => undefined}
+          // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;
+          // page actions (zoom, cookies, …) are in the toolbar's ⋮ menu, the node's one browser menu.
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
-          menuItems={menuItems}
         />
         <div ref={bodyRef} className="node-body browser-node">
           {renderToolbar?.(ctx)}

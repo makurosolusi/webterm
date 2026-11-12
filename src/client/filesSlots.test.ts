@@ -7,50 +7,50 @@ it('urutan slot tetap (kontrak §5.4) dan id unik', () => {
   expect(FILES_SLOTS.map((s) => s.id)).toEqual(['mutate', 'git', 'watch', 'search', 'dnd', 'upload', 'tree'])
 })
 
-it('mutate: menu + onKey + overlay + useSlot + decorate (cut rows), no toolbar', () => {
+it('mutate: menu + onKey + overlay + useSlot + decorate (cut rows), no overflow', () => {
   const s = slot('mutate')
   expect(s?.menu).toBeTypeOf('function')
   expect(s?.onKey).toBeTypeOf('function')
   expect(s?.overlay).toBeTypeOf('function')
   expect(s?.useSlot).toBeTypeOf('function')
   expect(s?.decorate).toBeTypeOf('function')
-  expect(s?.toolbar).toBeUndefined()
+  expect(s?.overflow).toBeUndefined()
 })
 
-it('git hanya boleh decorate; watch (stub) tidak menambah menu/dekorasi/toolbar/tombol', () => {
+it('git hanya boleh decorate; watch (stub) tidak menambah menu/dekorasi/overflow/tombol', () => {
   for (const id of ['git', 'watch']) {
     const s = slot(id)
     expect(s?.menu, id).toBeUndefined()
-    expect(s?.toolbar, id).toBeUndefined()
+    expect(s?.overflow, id).toBeUndefined()
     expect(s?.onKey, id).toBeUndefined()
     if (id !== 'git') expect(s?.decorate, id).toBeUndefined()
   }
 })
 
-it('search (nyata, WS-FM-09): useSlot + overlay, tanpa menu/toolbar/onKey/decorate', () => {
+it('search (nyata, WS-FM-09): useSlot + overlay, tanpa menu/overflow/onKey/decorate', () => {
   const s = slot('search')
   expect(s?.useSlot).toBeTypeOf('function')
   expect(s?.overlay).toBeTypeOf('function')
   expect(s?.menu).toBeUndefined()
-  expect(s?.toolbar).toBeUndefined()
+  expect(s?.overflow).toBeUndefined()
   expect(s?.onKey).toBeUndefined()
   expect(s?.decorate).toBeUndefined()
 })
 
-it('dnd (nyata, WS-FM-09): useSlot + menu, tanpa toolbar/onKey/decorate/overlay', () => {
+it('dnd (nyata, WS-FM-09): useSlot + menu, tanpa overflow/onKey/decorate/overlay', () => {
   const s = slot('dnd')
   expect(s?.useSlot).toBeTypeOf('function')
   expect(s?.menu).toBeTypeOf('function')
-  expect(s?.toolbar).toBeUndefined()
+  expect(s?.overflow).toBeUndefined()
   expect(s?.onKey).toBeUndefined()
   expect(s?.decorate).toBeUndefined()
   expect(s?.overlay).toBeUndefined()
 })
 
-it('upload (WS-FM-10): menu + toolbar icon + conflict overlay + useSlot (drop), no decorate/onKey', () => {
+it('upload (WS-FM-10): menu + overflow row + conflict overlay + useSlot (drop), no decorate/onKey', () => {
   const s = slot('upload')
   expect(s?.menu).toBeTypeOf('function')
-  expect(s?.toolbar).toBeTypeOf('function')
+  expect(s?.overflow).toBeTypeOf('function')
   expect(s?.overlay).toBeTypeOf('function')
   expect(s?.useSlot).toBeTypeOf('function')
   expect(s?.decorate).toBeUndefined()
@@ -64,7 +64,7 @@ it('footer (C2) is optional; when a slot has one it is a function', () => {
 it('tree: useSlot + menu only; Collapse All offered only while a folder is expanded, and it collapses', () => {
   const s = slot('tree')
   expect(s?.useSlot).toBeTypeOf('function')
-  expect(s?.toolbar).toBeUndefined()
+  expect(s?.overflow).toBeUndefined()
   expect(s?.onKey).toBeUndefined()
   expect(s?.decorate).toBeUndefined()
   const base = {

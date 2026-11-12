@@ -41,7 +41,7 @@ describe('BrowserToolbar tooltips', () => {
     expect(tipOf(fwd)).toBe('Go forward one page (no later page)')
   })
 
-  it('site-info icon, zoom pill and ⋯ have visible tooltips', () => {
+  it('site-info icon, zoom pill and ⋮ More actions have visible tooltips', () => {
     render(<BrowserToolbar
       state={{ id: 'n1', url: 'http://a.com/', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' }}
       nav={() => {}} agentControl={false} agentEnabled onAgentControl={() => {}} zoom={1.3} onZoom={() => {}}
@@ -50,19 +50,29 @@ describe('BrowserToolbar tooltips', () => {
     expect(tipOf(screen.getByRole('button', { name: 'Zoom 130%, reset to 100%' }))).toBe('Page zoom is 130%: click to reset to 100%')
     const more = screen.getByRole('button', { name: 'More actions' })
     expect(more.hasAttribute('title')).toBe(false)
-    expect(tipOf(more)).toBe('Zoom, device mode, Shields, Design Mode and more')
+    expect(tipOf(more)).toBe('Zoom, device mode, Shields, Design Mode, cookies and more')
+  })
+
+  it('a blank page shows a search icon with a visible tooltip instead of site info', () => {
+    render(<BrowserToolbar
+      state={{ id: 'n1', url: 'about:blank', title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' }}
+      nav={() => {}} agentControl={false} agentEnabled onAgentControl={() => {}} onZoom={() => {}}
+    />)
+    expect(screen.queryByRole('img', { name: 'Not secure' })).toBeNull()
+    expect(tipOf(screen.getByRole('img', { name: 'Search' }))).toBe('Type to search or enter an address')
   })
 })
 
 describe('FilesToolbar tooltips', () => {
   const ctx = { cwd: '/p', dir: '/p', entries: [], selection: [], expanded: new Set(), toggle: () => {}, collapseAll: () => {}, startRenameAt: () => {}, refresh() {}, startInput() {}, open() {}, notify: () => '', dismiss() {}, nodeId: 'f1' } as FilesSlotCtx
-  it('states the hidden-files state and the current sort', () => {
+  it('every title-bar action carries a tooltip equal to its label, never a native title', () => {
     const view = { hidden: true, sortKey: 'mtime', sortDir: 'desc' } as ViewOpts
-    render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} />)
-    const eye = screen.getByRole('button', { name: 'Hide hidden files' })
-    expect(eye.hasAttribute('title')).toBe(false)
-    expect(tipOf(eye)).toBe('Hidden files are hidden: click to show them')
-    expect(tipOf(screen.getByRole('button', { name: 'Sort' }))).toBe('Sort files (now by modified, descending)')
+    render(<FilesToolbar view={view} onChange={() => {}} ctx={ctx} onNew={() => {}} onRefresh={() => {}} />)
+    for (const name of ['New File…', 'New Folder…', 'Refresh Explorer', 'Collapse All', 'More Actions…']) {
+      const b = screen.getByRole('button', { name })
+      expect(b.hasAttribute('title')).toBe(false)
+      expect(tipOf(b)).toBe(name)
+    }
   })
 })
 

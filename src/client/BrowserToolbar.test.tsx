@@ -89,9 +89,11 @@ describe('BrowserToolbar', () => {
     expect(nav).toHaveBeenCalledWith('stop')
   })
 
-  it('toggles agent control from the ⋯ menu, and the pill turns it off', () => {
+  it('toggles agent control from the ⋮ menu and from the icon-only Agents toggle', () => {
     const { onAgentControl } = setup()
-    expect(screen.queryByRole('button', { name: TOOLBAR_TEXT.agentPill })).toBeNull() // off: no pill
+    const off = screen.getByRole('button', { name: TOOLBAR_TEXT.agentPill })
+    expect(off.getAttribute('aria-pressed')).toBe('false')
+    expect(off.querySelector('.browser-toolbar__agent-dot')).toBeNull() // off: no active dot
     pick(TOOLBAR_TEXT.agentControl)
     expect(onAgentControl).toHaveBeenCalledExactlyOnceWith(true)
     cleanup()
@@ -103,9 +105,36 @@ describe('BrowserToolbar', () => {
     expect(on.onAgentControl).toHaveBeenCalledExactlyOnceWith(false)
   })
 
-  it('hides the Agents pill while an agent actually drives (the lease chip says so)', () => {
+  it('the Agents button is icon-only with an aria-label, a dot while on, and a driving mark while an agent drives', () => {
+    setup(st(), { agentControl: true })
+    const btn = screen.getByRole('button', { name: TOOLBAR_TEXT.agentPill })
+    expect(btn.getAttribute('aria-label')).toBe(TOOLBAR_TEXT.agentPill)
+    expect(btn.textContent).toBe('') // no visible text label eating omnibox width
+    expect(btn.querySelector('.codicon-robot')).not.toBeNull()
+    expect(btn.getAttribute('aria-pressed')).toBe('true')
+    expect(btn.querySelector('.browser-toolbar__agent-dot')).not.toBeNull()
+    expect(btn.hasAttribute('data-driving')).toBe(false)
+    cleanup()
     setup(st({ lease: 'agent' }), { agentControl: true })
+    expect(screen.getByRole('button', { name: TOOLBAR_TEXT.agentPill }).hasAttribute('data-driving')).toBe(true)
+  })
+
+  it('server off: no Agents toggle in the row', () => {
+    setup(st(), { agentEnabled: false })
     expect(screen.queryByRole('button', { name: TOOLBAR_TEXT.agentPill })).toBeNull()
+  })
+
+  it('has exactly one page-actions menu button (Chrome ⋮) and appends extra rows to it', () => {
+    const onPick = vi.fn()
+    setup(st(), { menuItems: [{ type: 'item', id: 'x', label: 'Extra row', onSelect: onPick }] })
+    const toolbar = screen.getByRole('toolbar', { name: TOOLBAR_TEXT.group })
+    const menus = [...toolbar.querySelectorAll('[aria-haspopup="menu"]')]
+    expect(menus).toHaveLength(1)
+    expect(menus[0].getAttribute('aria-label')).toBe(TOOLBAR_TEXT.more)
+    expect(menus[0].querySelector('.codicon-kebab-vertical')).not.toBeNull()
+    expect(toolbar.querySelector('.codicon-ellipsis')).toBeNull()
+    pick('Extra row')
+    expect(onPick).toHaveBeenCalledOnce()
   })
 
   it('server off: no dead toggle, an offer that asks for confirmation before enabling', async () => {
@@ -182,7 +211,9 @@ describe('BrowserToolbar address field', () => {
   it.each([
     ['https://a.com/', 'secure', 'codicon-lock'],
     ['http://a.com/', 'insecure', 'codicon-warning'],
-    ['about:blank', 'other', 'codicon-info'],
+    ['chrome://version', 'other', 'codicon-info'],
+    ['about:blank', 'empty', 'codicon-search'],
+    ['', 'empty', 'codicon-search'],
   ] as const)('site-info icon for %s', (url, kind, cls) => {
     setup(st({ url }))
     const el = screen.getByRole('img', { name: SITE_INFO_TEXT[kind].label })
@@ -223,7 +254,7 @@ describe('BrowserToolbar address field', () => {
     expect(bar.classList.contains('browser-toolbar')).toBe(true)
     expect(screen.getByRole('button', { name: TOOLBAR_TEXT.forward }).closest('.browser-toolbar__forward')).not.toBeNull()
     expect(bar.querySelectorAll('.browser-omnibox__extra')).toHaveLength(2)
-    expect(bar.querySelector('.browser-toolbar__row')?.children).toHaveLength(5) // one row: back, forward, reload, address field, ⋯
+    expect(bar.querySelector('.browser-toolbar__row')?.children).toHaveLength(6) // one row: back, forward, reload, address field, Agents toggle, ⋮
   })
 })
 

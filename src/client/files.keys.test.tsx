@@ -79,10 +79,11 @@ describe('a11y dan header', () => {
     expect(foot.getAttribute('aria-live')).toBe('polite')
   })
 
-  it('header: ikon folder + deskripsi cwd; nama punya title', async () => {
+  it('header: ikon folder, path hanya di tooltip judul (tanpa deskripsi); nama punya title', async () => {
     const c = await mount(2)
     expect(c.querySelector('.node-icon.codicon-folder')).not.toBeNull()
-    expect(c.querySelector('.node-description')?.textContent).toBe('/proj')
+    expect(c.querySelector('.node-description')).toBeNull()
+    expect(c.querySelector('.node-title')?.getAttribute('title')).toContain('/proj')
     expect(c.querySelector('.files-name')?.getAttribute('title')).toBe('f00')
   })
 })
@@ -109,7 +110,7 @@ describe('keyboard', () => {
     expect(selected(c)).toEqual(['f00', 'f01'])
     key(c, 'a', { metaKey: true })
     expect(selected(c)).toHaveLength(5)
-    expect(c.querySelector('.files-foot')?.textContent).toBe('5 of 5 · 5 selected')
+    expect(c.querySelector('.files-foot')?.textContent).toBe('5 items · 5 selected')
   })
 
   it('Backspace/Delete/F2/panah diklaim: tidak bocor ke canvas (Backspace menghapus node di React Flow)', async () => {
@@ -210,11 +211,11 @@ describe('multi-select pointer', () => {
 })
 
 describe('slot', () => {
-  it('decorate (badge/title/className) dan toolbar dirender tanpa FilesNode tahu isinya', async () => {
+  it('decorate (badge/title/className) dan baris overflow dirender tanpa FilesNode tahu isinya', async () => {
     slots.push({
       id: 'fake',
       decorate: (e) => (e.name === 'f01' ? { badge: 'M', title: 'modified', className: 'is-mod' } : undefined),
-      toolbar: () => <button type="button" data-testid="fake-tool">x</button>,
+      overflow: () => [{ label: 'Fake Action', onClick: () => {} }],
     })
     const c = await mount(3)
     const badge = c.querySelector('.files-badge') as HTMLElement
@@ -222,7 +223,8 @@ describe('slot', () => {
     expect(badge.title).toBe('modified')
     expect(rows(c)[1].classList.contains('is-mod')).toBe(true)
     expect(rows(c)[0].querySelector('.files-badge')).toBeNull()
-    expect(screen.getByTestId('fake-tool')).toBeTruthy()
+    fireEvent.click(c.querySelector('[aria-label="More Actions…"]') as HTMLElement)
+    expect(await screen.findByRole('menuitem', { name: /Fake Action/ })).toBeTruthy()
   })
 
   it('useSlot dipanggil tiap render dengan ctx', async () => {

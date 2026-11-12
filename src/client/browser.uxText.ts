@@ -13,6 +13,8 @@ export const TOOLBAR_TEXT = {
   agentControlHint: 'On by default: terminal agents cabled to this browser can control it right away. Uncheck to turn this off.',
   agentPill: 'Agents',
   agentPillHint: 'Terminal agents cabled to this browser can drive it: click to turn this off',
+  agentPillHintOff: 'Agents cabled to this browser cannot drive it: click to let them',
+  agentPillDriving: 'An agent is driving this browser now',
   more: 'More actions',
   menu: 'Browser actions',
 } as const
@@ -22,7 +24,7 @@ export const TOOLBAR_TIP = {
   back: 'Go back one page', backOff: 'no earlier page',
   forward: 'Go forward one page', forwardOff: 'no later page',
   reload: 'Reload this page', stop: 'Stop loading this page',
-  more: 'Zoom, device mode, Shields, Design Mode and more',
+  more: 'Zoom, device mode, Shields, Design Mode, cookies and more',
 } as const
 
 /** Site-info icon at the start of the address field, picked from the page URL scheme (like Chrome's). */
@@ -30,6 +32,8 @@ export const SITE_INFO_TEXT = {
   secure: { label: 'Secure connection', tip: 'Connection is secure (https)', icon: 'lock' },
   insecure: { label: 'Not secure', tip: 'Connection is not secure (http): do not enter passwords or card numbers here', icon: 'warning' },
   other: { label: 'Page info', tip: 'This page is not loaded over the web', icon: 'info' },
+  /** No page yet (new tab): the field is a search box, like Chrome's NTP omnibox. */
+  empty: { label: 'Search', tip: 'Type to search or enter an address', icon: 'search' },
 } as const
 
 /** "⋯" menu rows of the browser toolbar. */
@@ -163,4 +167,14 @@ export const START_TEXT = {
   shortcuts: 'Shortcuts',
   recent: 'Recent',
   open: (name: string) => `Open ${name}`,
+  add: 'Add shortcut',
+  tileMenu: (name: string) => `Edit or remove ${name}`,
+  edit: 'Edit shortcut',
+  remove: 'Remove',
+  nameLabel: 'Name',
+  urlLabel: 'URL',
+  save: 'Done',
+  cancel: 'Cancel',
+  badUrl: 'Enter a web address (http or https).',
+  full: 'Shortcut limit reached: remove one to add another.',
 } as const

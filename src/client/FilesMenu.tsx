@@ -37,7 +37,7 @@ const item = (label: string, icon: string, onSelect: () => void, keybinding?: st
   ({ type: 'item', id: label, label, icon: codicon(icon), keybinding, onSelect })
 
 /** Ubah baris slot ke item menu; separator di dalam slot dipertahankan. */
-function fromSlot(rows: SlotMenuRow[], group: number): VscodeMenuItem[] {
+export function fromSlot(rows: SlotMenuRow[], group: number): VscodeMenuItem[] {
   return rows.map((r, i): VscodeMenuItem => 'type' in r
     ? { type: 'separator' }
     : { type: 'item', id: `slot${group}-${i}-${r.label}`, label: r.label, icon: r.icon, disabled: r.disabled, danger: r.danger, title: r.hint, keybinding: r.keybinding, onSelect: r.onClick })

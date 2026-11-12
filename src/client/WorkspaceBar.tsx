@@ -260,7 +260,8 @@ export default function WorkspaceBar({
                 aria-pressed={layoutMode === 'tabs'}
                 onClick={onToggleLayout}
               >
-                <span className={layoutMode === 'tabs' ? 'codicon codicon-graph' : 'codicon codicon-layout'} aria-hidden />
+                {/* One layout switch per board (VS Code keeps layout controls in the title bar, not per editor group). */}
+                <span className="codicon codicon-editor-layout" aria-hidden />
               </button>
             </IconTooltip>
           </div>

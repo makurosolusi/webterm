@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import { FILES_PANEL_WIDTH, defaultTabLayout } from '../shared/tabLayout.schema'
 import { getNodeHost, releaseNodeHost } from './tabLayout.dom'
-import { connectTabLayout, getTabLayout, setMode } from './tabLayout.store'
+import { connectTabLayout, getTabLayout } from './tabLayout.store'
 import TabsView, { type TabsViewProps } from './tabLayout.view'
 import { movedOrder } from './tabLayout.strip'
 import { sessionSignal } from './sessionSignal'
@@ -66,12 +66,12 @@ describe('TabsView', () => {
     expect(screen.queryByLabelText('Rename tab')).toBeNull()
   })
 
-  it('a named node shows "name · title"; the rename draft is the title alone', () => {
+  it('a named node shows the name alone; title and type are in the tooltip; the rename draft is the title', () => {
     const named = { ...node('a', 'terminal', 'alpha'), data: { title: 'alpha', name: 'Mango' } }
     render(<TabsView {...props({ nodes: [named, NODES[1]] })} />)
     const t = screen.getByText('Mango').closest<HTMLElement>('[role="tab"]')!
-    expect(t.textContent).toBe('Mango · alpha')
-    expect(t.title).toBe('Mango · alpha')
+    expect(t.textContent).toBe('Mango')
+    expect(t.title).toBe('Mango · alpha · Terminal')
     expect(screen.getByRole('button', { name: 'Close Mango · alpha' })).toBeTruthy()
     fireEvent.doubleClick(screen.getByText('Mango'))
     expect((screen.getByLabelText('Rename tab') as HTMLInputElement).value).toBe('alpha')
@@ -114,11 +114,10 @@ describe('TabsView', () => {
     expect(p.onAddTerminal).toHaveBeenCalled()
   })
 
-  it('back to canvas switches the mode', () => {
+  it('has no layout toggle of its own (the workspace bar owns the canvas/tabs switch)', () => {
     render(<TabsView {...props()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Back to canvas' }))
-    expect(getTabLayout().mode).toBe('canvas')
-    setMode('tabs')
+    expect(screen.queryByRole('button', { name: /canvas|layout/i })).toBeNull()
+    expect(document.querySelector('.codicon-graph, .codicon-editor-layout')).toBeNull()
   })
 })
 
@@ -162,7 +161,7 @@ describe('Files panel', () => {
   it('the + menu offers New Terminal and calls the handler', () => {
     const p = props()
     render(<TabsView {...p} />)
-    act(() => { fireEvent.click(screen.getByRole('button', { name: 'New tab' })) })
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'New node…' })) })
     fireEvent.click(screen.getByRole('menuitem', { name: /New Terminal/ }))
     expect(p.onAddTerminal).toHaveBeenCalled()
   })

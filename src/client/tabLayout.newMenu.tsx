@@ -36,10 +36,10 @@ export default function NewTabMenu(p: NewTabMenuProps) {
   return (
     <>
       <IconButton
-        label="New tab" side="bottom" size="icon-sm" aria-haspopup="menu" aria-expanded={at !== null}
+        label="New node…" side="bottom" size="icon-sm" aria-haspopup="menu" aria-expanded={at !== null}
         onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: r.left, y: r.bottom }) }}
       ><span className="codicon codicon-add" aria-hidden="true" /></IconButton>
-      {at && <VscodeMenu open anchor={at} items={items} onClose={() => setAt(null)} ariaLabel="New tab" />}
+      {at && <VscodeMenu open anchor={at} items={items} onClose={() => setAt(null)} ariaLabel="New node" />}
     </>
   )
 }

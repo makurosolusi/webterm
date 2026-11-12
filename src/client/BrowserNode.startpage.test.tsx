@@ -124,6 +124,18 @@ describe('BrowserNode toolbar seams (slots wiring)', () => {
     expect((container.querySelector('.browser-zoom') as HTMLElement).style.getPropertyValue('--browser-zoom')).toBe('1')
   })
 
+  it('typing in the start-page box focuses the real omnibox and carries the text (one address input)', () => {
+    mount({}, BrowserNodeType)
+    const omnibox = screen.getByLabelText(TOOLBAR_TEXT.urlLabel) as HTMLInputElement
+    const fakebox = screen.getByLabelText(START_TEXT.searchLabel) as HTMLInputElement
+    fireEvent.change(fakebox, { target: { value: 'example.com' } })
+    expect(document.activeElement).toBe(omnibox)
+    expect(omnibox.value).toBe('example.com')
+    expect(fakebox.value).toBe('')
+    fireEvent.submit(omnibox.closest('form')!)
+    expect(fake.st.sent.filter((m) => (m as { t: string }).t === 'nav')).toEqual([{ t: 'nav', id: 'b1', action: 'go', url: 'https://example.com/' }])
+  })
+
   it('net-error plate covers the stream but not the toolbar; the lease chip stays above it', () => {
     const { container } = mount({}, BrowserNodeType)
     push({ url: 'http://nonexistent.invalid/', netError: 'net::ERR_NAME_NOT_RESOLVED', lease: 'agent' })

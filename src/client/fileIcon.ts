@@ -34,6 +34,24 @@ export function fileIconClass(name: string): string {
   return `codicon codicon-${special ?? BY_EXT[fileExt(name)] ?? 'file'}`
 }
 
+// Subtle per-type colour (Seti-like) so same-glyph types (ts vs js) still read apart; mapped to
+// `.files-icon--<tone>` in files.css. Unlisted types stay neutral, folders too (VS Code default).
+const TONE_BY_EXT: Record<string, string> = {
+  ts: 'blue', tsx: 'blue', md: 'blue', mdx: 'blue', markdown: 'blue',
+  js: 'yellow', jsx: 'yellow', mjs: 'yellow', cjs: 'yellow', json: 'yellow', jsonc: 'yellow',
+  yml: 'purple', yaml: 'purple', toml: 'purple', css: 'purple',
+  png: 'purple', jpg: 'purple', jpeg: 'purple', gif: 'purple', webp: 'purple', svg: 'purple', ico: 'purple', bmp: 'purple', avif: 'purple',
+  html: 'orange', sh: 'green', bash: 'green', zsh: 'green', py: 'green',
+}
+
+/** Colour tone of file `name` (`blue`/`yellow`/`purple`/`orange`/`green`), or undefined = neutral. */
+export function fileIconTone(name: string): string | undefined {
+  const base = (name.split('/').pop() ?? name).toLowerCase()
+  if (base === '.env' || base.startsWith('.env.')) return 'yellow'
+  if (base.startsWith('.git')) return 'orange'
+  return TONE_BY_EXT[fileExt(name)]
+}
+
 /** Class codicon folder, terbuka atau tertutup. */
 export function folderIconClass(open: boolean): string {
   return `codicon codicon-${open ? 'folder-opened' : 'folder'}`

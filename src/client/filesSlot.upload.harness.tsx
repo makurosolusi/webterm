@@ -22,13 +22,14 @@ export const mkCtx = (o: Partial<FilesSlotCtx> = {}): FilesSlotCtx => {
   }
 }
 
-/** FilesNode in miniature: useSlot each render, rows as tree items, progress bar, footer, toolbar, overlay. */
+/** FilesNode in miniature: useSlot each render, rows as tree items, progress bar, footer, overflow rows, overlay. */
 export function Host({ ctx }: { ctx: FilesSlotCtx }): ReactNode {
   uploadSlot.useSlot?.(ctx)
   return (
     <div data-id={ctx.nodeId} data-testid="node">
       <div className="files-node" data-testid="body">
-        <div data-testid="toolbar">{uploadSlot.toolbar?.(ctx)}</div>
+        <div data-testid="toolbar">{uploadSlot.overflow?.(ctx).map((r, i) => ('label' in r
+          ? <button key={i} type="button" onClick={r.onClick}>{r.label}</button> : null))}</div>
         <FilesProgressBar nodeId={ctx.nodeId} />
         <div data-testid="list">
           {ctx.entries.map((e, i) => createElement('vscode-tree-item', { key: e.name, 'data-index': i, 'data-testid': `row-${e.name}` },

@@ -8,8 +8,9 @@ import { useFitCount } from './nodeToolbar.overflow'
 const Codicon = ({ name }: { name: string }) => <span className={cn('codicon', `codicon-${name}`)} aria-hidden="true" />
 
 export interface NodeToolbarProps {
-  onRefresh: () => void
-  searchOpen: boolean; onToggleSearch: () => void
+  /** Omit when the node type has no view refresh / search (the row and button are hidden, not dead). */
+  onRefresh?: () => void
+  searchOpen?: boolean; onToggleSearch?: () => void
   micActive?: boolean; onToggleMic?: () => void      // node dengan input teks saja — omit button if undefined
   commentsOpen: boolean; onToggleComments: () => void; commentCount?: number
   maximized: boolean; onToggleMaximize: () => void; maximizeDisabled?: boolean
@@ -24,6 +25,31 @@ export interface NodeToolbarProps {
   extraMenuItems?: VscodeMenuItem[]
   /** Lowest-priority inline action (the resize toggle), with the menu row that replaces it when it overflows. */
   extraAction?: { node: ReactNode; menuItem: VscodeMenuItem }
+}
+
+/** Rows of the node's "More Actions…" menu; tab mode reuses them for the editor actions and the tab context menu. */
+export function nodeMoreItems(props: NodeToolbarProps, overflow: VscodeMenuItem[] = []): VscodeMenuItem[] {
+  const count = props.commentCount ?? 0
+  const aiBusy = Boolean(props.aiNaming)
+  const broadcastOff = Boolean(props.broadcastDisabled)
+  return [
+    ...(overflow.length ? [...overflow, { type: 'separator' } as const] : []),
+    ...(props.onRefresh ? [{ type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh } as const] : []),
+    ...(props.onToggleMic
+      ? [{ type: 'item', id: 'mic', label: 'Dictate', checked: Boolean(props.micActive), onSelect: props.onToggleMic } as const]
+      : []),
+    ...(props.onAiName
+      ? [{ type: 'item', id: 'ai-name', label: 'Name with AI', disabled: aiBusy, onSelect: props.onAiName } as const]
+      : []),
+    { type: 'item', id: 'comments', label: count > 0 ? `Comments (${count})` : 'Comments', checked: props.commentsOpen, onSelect: props.onToggleComments },
+    ...(props.onBroadcast
+      ? [{ type: 'item', id: 'broadcast', label: 'Share live view', checked: Boolean(props.broadcastActive), disabled: broadcastOff, onSelect: props.onBroadcast } as const]
+      : []),
+    ...(props.onToggleHideLinks
+      ? [{ type: 'item', id: 'links', label: props.hideLinks ? 'Show links' : 'Hide links', onSelect: props.onToggleHideLinks } as const]
+      : []),
+    ...(props.extraMenuItems?.length ? [{ type: 'separator' } as const, ...props.extraMenuItems] : []),
+  ]
 }
 
 /**
@@ -54,26 +80,23 @@ export interface NodeToolbarProps {
  */
 export default function NodeToolbar(props: NodeToolbarProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
-  const count = props.commentCount ?? 0
-  const aiBusy = Boolean(props.aiNaming)
-  const broadcastOff = Boolean(props.broadcastDisabled)
   const maximizeOff = Boolean(props.maximizeDisabled)
   const maxLabel = props.maximized ? 'Restore' : 'Maximize'
   const [groupRef, fit] = useFitCount()
 
   // Inline actions in priority order: the ones past `fit` overflow into the menu.
   const inline: { key: string; node: ReactNode; menuItem: VscodeMenuItem }[] = [
-    {
+    ...(props.onToggleSearch ? [{
       key: 'search',
       node: (
         <ToolbarButton
           label="Search" title="Search" data-title="Search"
-          toggleable checked={props.searchOpen}
+          toggleable checked={Boolean(props.searchOpen)}
           onClick={props.onToggleSearch}
         ><Codicon name="search" /></ToolbarButton>
       ),
-      menuItem: { type: 'item', id: 'search', label: 'Search', checked: props.searchOpen, onSelect: props.onToggleSearch },
-    },
+      menuItem: { type: 'item', id: 'search', label: 'Search', checked: props.searchOpen, onSelect: props.onToggleSearch } as const,
+    }] : []),
     ...(props.hideMaximize ? [] : [{
       key: 'maximize',
       node: (
@@ -89,24 +112,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
   ]
   const overflow = inline.slice(fit).map((a) => a.menuItem)
 
-  const moreItems: VscodeMenuItem[] = [
-    ...(overflow.length ? [...overflow, { type: 'separator' } as const] : []),
-    { type: 'item', id: 'refresh', label: 'Refresh view', onSelect: props.onRefresh },
-    ...(props.onToggleMic
-      ? [{ type: 'item', id: 'mic', label: 'Dictate', checked: Boolean(props.micActive), onSelect: props.onToggleMic } as const]
-      : []),
-    ...(props.onAiName
-      ? [{ type: 'item', id: 'ai-name', label: 'Name with AI', disabled: aiBusy, onSelect: props.onAiName } as const]
-      : []),
-    { type: 'item', id: 'comments', label: count > 0 ? `Comments (${count})` : 'Comments', checked: props.commentsOpen, onSelect: props.onToggleComments },
-    ...(props.onBroadcast
-      ? [{ type: 'item', id: 'broadcast', label: 'Share live view', checked: Boolean(props.broadcastActive), disabled: broadcastOff, onSelect: props.onBroadcast } as const]
-      : []),
-    ...(props.onToggleHideLinks
-      ? [{ type: 'item', id: 'links', label: props.hideLinks ? 'Show links' : 'Hide links', onSelect: props.onToggleHideLinks } as const]
-      : []),
-    ...(props.extraMenuItems?.length ? [{ type: 'separator' } as const, ...props.extraMenuItems] : []),
-  ]
+  const moreItems = nodeMoreItems(props, overflow)
 
   return (
     <>

@@ -42,32 +42,30 @@ function fullServer(facts: ProceduralFact[], items: MemoryItem[], refs: string[]
 }
 
 describe('What agents remember: one list', () => {
-  it('shows each item once (no second list), with the Remember field above the kind tabs', async () => {
+  it('shows each item once (no second list), with the filter bar under the Remember field', async () => {
     fullServer([fact({ id: 'r1' })], [item({ id: 'r1', kind: 'procedural', text: 'Always run tests with TMPDIR=/tmp/st', needsReview: false })], [])
-    render(<AgentMemory />)
+    render(<AgentMemory filters={<span data-testid="bar" />} />)
     expect(await screen.findAllByText('Always run tests with TMPDIR=/tmp/st')).toHaveLength(1)
     expect(screen.getByText('You confirmed')).toBeTruthy()
     const panel = screen.getByTestId('agent-memory')
     expect(panel.querySelectorAll('ul').length).toBe(1)
     const add = screen.getByRole('textbox', { name: 'Remember' })
-    const tabs = screen.getByRole('button', { name: 'Past sessions' })
-    expect(add.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const bar = screen.getByTestId('bar')
+    expect(add.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(bar.compareDocumentPosition(panel.querySelector('ul')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('group')).toBeNull()
     expect(screen.queryByText('Everything remembered')).toBeNull()
   })
 
-  it('kind tabs filter the list', async () => {
+  it('the kind prop filters the list (the Kind dropdown lives in Control › Memory)', async () => {
     const { gets } = fullServer([], [item({ id: 'a', kind: 'procedural', text: 'Rule A' }), item({ id: 'b', kind: 'episodic', text: 'Session B' })], [])
-    render(<AgentMemory />)
+    const { rerender } = render(<AgentMemory />)
     expect(await screen.findByText('Rule A')).toBeTruthy()
     expect(screen.getByText('Session B')).toBeTruthy()
-    for (const name of ['All', 'Rules', 'Facts', 'Past sessions']) expect(screen.getByRole('button', { name })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Past sessions' }))
+    rerender(<AgentMemory kind="episodic" />)
     await waitFor(() => expect(screen.queryByText('Rule A')).toBeNull())
     expect(screen.getByText('Session B')).toBeTruthy()
     expect(gets).toContain('/api/memory2?kind=episodic')
-    fireEvent.click(screen.getByRole('button', { name: 'Rules' }))
-    expect(await screen.findByText('Rule A')).toBeTruthy()
-    expect(screen.queryByText('Session B')).toBeNull()
   })
 
   it('confirms an agent suggestion, re-confirms a stale fact, edits, mutes, forgets and remembers', async () => {
