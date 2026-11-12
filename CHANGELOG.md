@@ -304,6 +304,7 @@ Operator notes:
 
 ### Fixed
 - An Agent Chat node no longer sits on "Connecting to Claude…" forever in browsers that leave fetch metadata (`Sec-Fetch-Site`) off the WebSocket handshake; a stream the server keeps refusing now says why, with Retry.
+- Central chat replies keep their order after a reload: text written before and after a run of tool calls stays as separate paragraphs with the "Used N tools" row between them, instead of one glued paragraph with the tools after it. The chat status row is now a fixed opaque band, so no message line shows behind it.
 - A headless agent that finishes now moves its task to reported (and to failed when it fails) instead of stalling a minute later.
 - An agent started without a task no longer reports its idle "READY" boot turn to Central; its card appears with its first prompt.
 - Web research no longer ends with two browser nodes when the agent opens its own browser before webterm's pre-assigned one is cabled: whichever opens second reuses the first.
