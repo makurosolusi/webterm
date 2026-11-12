@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// test-only: the stream rides the shared socket in the app; here it is the stubbed global EventSource fake.
+vi.mock('../ws', async (orig) => ({ ...(await orig<typeof import('../ws')>()), openEventStream: (url: string) => new (globalThis as unknown as { EventSource: new (u: string) => unknown }).EventSource(url) }))
 import {
   LOG_CLIENT_CAP, clearLogStream, getLogStreamState, setLogStreamLevel, subscribeLogStream,
 } from './logStreamStore'

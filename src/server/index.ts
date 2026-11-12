@@ -310,7 +310,15 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 // Terminal socket dispatch, heartbeat and backpressure live in terminalSocket.ts.
-wss.on('connection', (ws) => serveTerminalSocket(ws, { sessions, fsWatchHub, identity, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size }))
+// SSE streams on this socket go through routeApp: the same /api gate and dispatcher as an HTTP request,
+// with the upgrade request's own headers (cookie / token / Origin), so a stream is never easier to open.
+const streamDispatch = (req: http.IncomingMessage, res: http.ServerResponse): void => {
+  if (!routeApp(req, res, reqUrl(req))) { res.statusCode = 404; res.end() }
+}
+wss.on('connection', (ws, req: http.IncomingMessage) => serveTerminalSocket(ws, {
+  sessions, fsWatchHub, identity, watchOn: () => filesFlagOn('WATCH'), clients: () => wss.clients.size,
+  streams: { upgrade: req, dispatch: streamDispatch },
+}))
 
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {

@@ -120,3 +120,33 @@ describe('app-level heartbeat and hello', () => {
     expect(ws.sent[0]).toEqual({ t: 'hello', bootId: 'boot-1', build: '0.8.0+abc' })
   })
 })
+
+describe('sse streams', () => {
+  test('sse.sub reaches the stream dispatcher, socket close fires its close, and never the PTY sessions', () => {
+    const ws = new FakeSocket()
+    const sessions = { handle: vi.fn(), detach: vi.fn(), resync: vi.fn() }
+    const closed = vi.fn()
+    const dispatch = vi.fn((req: { url: string; headers: Record<string, string> }, res: { on: (e: string, f: () => void) => void; setHeader: (k: string, v: string) => void; flushHeaders: () => void }) => {
+      res.on('close', closed)
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.flushHeaders()
+    })
+    const upgrade = { headers: { cookie: 'wt_ui=s', upgrade: 'websocket', 'sec-websocket-key': 'k' } } // test-only
+    serveTerminalSocket(ws as never, { sessions: sessions as never, fsWatchHub: { watch: vi.fn(), unwatch: vi.fn(), dropClient: vi.fn() } as never, watchOn: () => false, clients: () => 1, streams: { upgrade, dispatch: dispatch as never } })
+    ws.fire('message', JSON.stringify({ t: 'sse.sub', id: 's1', url: '/api/logs/stream' }))
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    // Same identity as the upgrade, without the handshake headers.
+    expect(dispatch.mock.calls[0]![0].headers).toEqual({ cookie: 'wt_ui=s', accept: 'text/event-stream' })
+    expect(ws.sent).toEqual([{ t: 'sse.open', id: 's1' }])
+    expect(sessions.handle).not.toHaveBeenCalled()
+    ws.fire('close', 1000, Buffer.from(''))
+    expect(closed).toHaveBeenCalledTimes(1)
+  })
+
+  test('without a stream dispatcher a subscription is refused', () => {
+    const ws = new FakeSocket()
+    serveTerminalSocket(ws as never, { sessions: { handle: vi.fn(), detach: vi.fn(), resync: vi.fn() } as never, fsWatchHub: { watch: vi.fn(), unwatch: vi.fn(), dropClient: vi.fn() } as never, watchOn: () => false, clients: () => 1 })
+    ws.fire('message', JSON.stringify({ t: 'sse.sub', id: 's1', url: '/api/logs/stream' }))
+    expect(ws.sent).toEqual([{ t: 'sse.end', id: 's1', status: 404 }])
+  })
+})
