@@ -24,6 +24,7 @@ import { generateName as apiGenerateName } from './api'
 import { autoTitleFromWork, canResumeAfter, identityColor, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
 import { AgentFailedBar } from './AgentFailedBar'
 import { ClaudeTerminalViewButton } from './agentChat/claudeViewSwitch'
+import NodeStatusBar from './NodeStatusBar'
 
 const COLLAPSED_H = 40
 
@@ -205,7 +206,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
     },
     { label: PROVENANCE_TEXT.menu, hint: PROVENANCE_TEXT.menuHint, onClick: () => setProvenanceOpen(true) },
     {
-      // Same switch as Settings › Memory (IncognitoToggle / setNodeIncognito); a menu row cannot host a
+      // Same switch as Control › Memory (IncognitoToggle / setNodeIncognito); a menu row cannot host a
       // Switch, so the label flips. A failed switch is reported in the node thread, like AI naming.
       label: incognito ? MEMORY_TEXT.leaveIncognito : MEMORY_TEXT.goIncognito,
       hint: MEMORY_TEXT.incognitoIntro,
@@ -310,6 +311,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
             claudeProfileId={d.claudeProfileId}
           />
         </div>
+        {!collapsed && <NodeStatusBar sessionId={id} kind="agent" cwd={cwd} />}
         {searchOpen && (
           <FindBar
             onSearch={(t, dir) => termRef.current?.search(t, { direction: dir })}

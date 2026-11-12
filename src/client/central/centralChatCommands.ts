@@ -8,10 +8,7 @@ import { listActiveSkills } from './centralControlApi'
 import { createCentralCommands, type CentralSkill } from './centralCommands'
 import { setCentralModel } from './centralModel'
 import { chatErrorMessage } from '../chat/chatTransport'
-import { openSettingsSection } from '../settings.link'
 
-/** Settings section that holds Central's memory (below what agents remember). */
-export const MEMORY_SETTINGS_SECTION = 'memory'
 
 /** What the chat host (ChatPanel) lends the commands. */
 export interface CentralChatHost {
@@ -65,7 +62,7 @@ export function useCentralChatCommands<R extends unknown[]>(
     else if (d.action === 'new') hostRef.current?.newChat()
     else if (d.action === 'history') hostRef.current?.showHistory()
     else if (d.action === 'approvals') expandNeedsYou()
-    else if (d.action === 'memory') openSettingsSection(MEMORY_SETTINGS_SECTION)
+    else if (d.action === 'memory') openCentralTab('memory')
     else reseed('/', true)
   }
 

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PREFILL_RULE_EVENT, type PrefillRule } from './policyPresets'
+import { RULES_CHANGED_EVENT } from './policyRules.api'
 import { SecretsPanel, type SecretEntry, type SecretUse } from './SecretsPanel'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -19,6 +19,7 @@ function server(initial: SecretEntry[], usage: SecretUse[] | null = []) {
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined
     writes.push({ method, url, ...(body ? { body } : {}) })
     const name = decodeURIComponent(url.split('/').pop() ?? '')
+    if (url === '/api/policy/grants') return new Response(JSON.stringify({ grant: { id: 'g1', ...body } }), { status: 201 })
     if (method === 'PUT') secrets = [...secrets.filter((s) => s.name !== name), { name, lastUsedAt: null }]
     else secrets = secrets.filter((s) => s.name !== name)
     return new Response(JSON.stringify({ ok: true, name }))
@@ -26,24 +27,37 @@ function server(initial: SecretEntry[], usage: SecretUse[] | null = []) {
   return { writes }
 }
 
-describe('Secrets (Settings › Rules & approvals)', () => {
+describe('Secrets (Settings › Rules & secrets)', () => {
   it('opens with the plain intro, no policy jargon', async () => {
     server([])
     render(<SecretsPanel />)
     await screen.findByText('No secrets yet.')
-    expect(screen.getByText('Agents ask before using a secret. Allow it in Rules & approvals.')).toBeTruthy()
+    expect(screen.getByText('Agents ask before using a secret, unless you allow it here.')).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/secret\.run|secret:<|scope|capability/)
   })
 
-  it('"Allow an agent to use this" asks the rules row to pre-fill that secret', async () => {
-    server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
-    const seen: PrefillRule[] = []
-    const on = (e: Event): void => { seen.push((e as CustomEvent<PrefillRule>).detail) }
-    window.addEventListener(PREFILL_RULE_EVENT, on)
+  it('"Allow for agents in <workspace>" makes a forever rule for that workspace only, says so, and tells the rule list', async () => {
+    const { writes } = server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
+    let changed = 0
+    const on = (): void => { changed += 1 }
+    window.addEventListener(RULES_CHANGED_EVENT, on)
+    render(<SecretsPanel workspace={{ id: 'w1', name: 'Shop' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Allow for agents in Shop' }))
+    expect((await screen.findAllByText('NPM_TOKEN: allowed for agents in Shop. Revoke it under Rules.')).length).toBeGreaterThan(0)
+    window.removeEventListener(RULES_CHANGED_EVENT, on)
+    // No expiresAt = forever; workspaceId = only the agents on that board.
+    expect(writes).toEqual([{ method: 'POST', url: '/api/policy/grants', body: { subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', workspaceId: 'w1', effect: 'allow' } }])
+    expect(changed).toBe(1)
+  })
+
+  it('locks Allow with the reason when no workspace is open, and writes nothing', async () => {
+    const { writes } = server([{ name: 'NPM_TOKEN', lastUsedAt: null }])
     render(<SecretsPanel />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Allow an agent to use this' }))
-    window.removeEventListener(PREFILL_RULE_EVENT, on)
-    expect(seen).toEqual([{ capability: 'secret.run', scope: 'secret:NPM_TOKEN:*' }])
+    const button = await screen.findByRole('button', { name: 'Allow agents to use this' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByText('Open a workspace first: the rule is for the agents in it.')).toBeTruthy()
+    fireEvent.click(button)
+    expect(writes).toEqual([])
   })
 
   it('lists names with last use and the usage log, never a value', async () => {

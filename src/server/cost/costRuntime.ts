@@ -6,6 +6,7 @@ import { eventBus } from '../events/eventBus'
 import { createLogger } from '../logs'
 import { captureTranscript, syncCentralTurns } from './costCapture'
 import { warnDailyCost } from './costDailyWarning'
+import { CENTRAL_COST_KEY, mergeDayCapIntoCentral } from './costDayCap'
 import { beginCostRun, costGate, endCostRun, type BeginRunInput, type CostRunKind, type EndRunResult, type GateResult } from './costOracle'
 
 const log = createLogger('cost')
@@ -59,6 +60,7 @@ export async function startCostCapture(custom?: CostRuntimeDeps): Promise<void> 
   if (stop) return
   deps = custom ?? (await defaultDeps())
   if (stop) return
+  if (!custom) await mergeOldDayCap()
   const off = eventBus.subscribe('hook.*', (e) => { if (e.nodeId && CAPTURE_HOOKS.has(e.kind)) captureNode(e.nodeId, e.workspaceId ?? null) })
   const timer = setInterval(syncCentral, CENTRAL_SYNC_MS)
   timer.unref?.()
@@ -67,6 +69,20 @@ export async function startCostCapture(custom?: CostRuntimeDeps): Promise<void> 
 }
 
 export function stopCostCapture(): void { stop?.() }
+
+/** Boot: folds the retired "Pause all work at $" cap into Central's daily limit (./costDayCap). Never throws. */
+async function mergeOldDayCap(): Promise<void> {
+  const db = deps?.db()
+  if (!db) return
+  try {
+    const { initEnvSettings } = await import('../envSettings.runtime')
+    const env = initEnvSettings()
+    const out = mergeDayCapIntoCentral(db, process.env, (micros) => env.update({ set: { [CENTRAL_COST_KEY]: String(micros) }, unset: [] }).ok)
+    if (out !== 'none') log.info('cost.day_cap_merged', 'Old daily cap merged into the Central daily limit', { outcome: out })
+  } catch (err) {
+    log.warn('cost.day_cap_merge_failed', 'Cannot merge the old daily cap into the Central daily limit', { error: err instanceof Error ? err.message : String(err) })
+  }
+}
 
 // ---- Entry points for routines and the task DAG (they own scheduling; this owns cost). ----
 

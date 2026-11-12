@@ -81,10 +81,11 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
   it('teks halaman penuh bebas kata terlarang, nama env var, dan istilah UI lama', async () => {
-    await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
+    const main = await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
     const text = document.body.textContent ?? ''
     expect(text).toContain('Central')
-    expect(text).not.toMatch(BANNED_WORDS)
+    // The page body, not the sidebar: the nav's "Rules & secrets" page names secrets on purpose.
+    expect(main.textContent ?? '').not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
     expect(text).not.toMatch(OLD_UI)
     expect(text).not.toMatch(/WEBTERM_TOKEN/)

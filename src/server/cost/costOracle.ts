@@ -6,6 +6,7 @@ import { allRows, execWrite, getRow, newId } from '../ledger/ledgerCore'
 import { createInboxItem } from '../inbox'
 import { utcDayStart as dayStart } from '../central/guard/budgetStore'
 import { ensureCostSchema, spentMicros } from './costStore'
+import { dayCapMicros } from './costDayCap'
 import type { Tier } from '../models/modelLadder'
 
 export type CostRunKind = 'routine' | 'dag' | 'bakeoff'
@@ -71,7 +72,7 @@ export function endCostRun(db: Database, id: string, outcome: { producedDiff?: b
   if (recent.length === ROI_NO_DIFF_RUNS && recent.every((r) => r['produced_diff'] === 0) && !isPaused(db, scope)) {
     const spent = Number(getRow(db, 'SELECT COALESCE(SUM(cost_micros), 0) AS c FROM (SELECT cost_micros FROM cost_run WHERE kind = ? AND ref = ? AND ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT ?)', kind, ref, ROI_NO_DIFF_RUNS)?.['c'] ?? 0)
     pauseScope(db, scope, `low ROI: last ${ROI_NO_DIFF_RUNS} runs produced no diff`)
-    notify(db, { scope, workspaceId, title: `Paused ${kind} ${ref}: low ROI`, body: `The last ${ROI_NO_DIFF_RUNS} runs produced no diff and cost ${usd(spent)}. Resume it from Settings › Spending.` })
+    notify(db, { scope, workspaceId, title: `Paused ${kind} ${ref}: low ROI`, body: `The last ${ROI_NO_DIFF_RUNS} runs produced no diff and cost ${usd(spent)}. Resume it from Control › Spending.` })
     return { costMicros: cost, paused: scope }
   }
   const over = overCap(db, scope, now())
@@ -146,7 +147,9 @@ function isPaused(db: Database, scope: CostScope): boolean {
   return getRow(db, 'SELECT 1 AS one FROM cost_cap WHERE scope = ? AND paused_at IS NOT NULL', scope) !== null
 }
 
-const capOf = (db: Database, scope: CostScope): number => Number(getRow(db, 'SELECT limit_micros FROM cost_cap WHERE scope = ?', scope)?.['limit_micros'] ?? 0)
+/** `day` = the one daily limit (Central's, ./costDayCap); other scopes keep their own row. */
+const capOf = (db: Database, scope: CostScope): number =>
+  scope === 'day' ? dayCapMicros(db) : Number(getRow(db, 'SELECT limit_micros FROM cost_cap WHERE scope = ?', scope)?.['limit_micros'] ?? 0)
 
 function overCap(db: Database, scope: CostScope, now: number): string | null {
   const cap = capOf(db, scope)
@@ -160,7 +163,7 @@ export interface CapRow { scope: string; limitMicros: number; spentMicros: numbe
 export function listCaps(db: Database, now: number = Date.now()): CapRow[] {
   ensureCostSchema(db)
   return allRows(db, 'SELECT * FROM cost_cap ORDER BY scope').map((r) => ({
-    scope: String(r['scope']), limitMicros: Number(r['limit_micros']), spentMicros: scopeSpent(db, String(r['scope']) as CostScope, now),
+    scope: String(r['scope']), limitMicros: capOf(db, String(r['scope']) as CostScope), spentMicros: scopeSpent(db, String(r['scope']) as CostScope, now),
     pausedAt: r['paused_at'] == null ? null : Number(r['paused_at']), reason: r['reason'] == null ? null : String(r['reason']),
   }))
 }

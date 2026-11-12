@@ -1,23 +1,21 @@
-// Spending panel (Settings › Spending, F4-e): what Claude Code agents and Central spent today / over 7
-// days by workspace, agent, routine and model, the cache hit rate, and the caps that auto-pause work.
-// Numbers come from GET /api/cost (src/server/cost/cost.route.ts); prices are estimates, not a bill.
+// Spending report (Control › Spending, F4-e; moved out of Settings in the settings overhaul): what Claude Code
+// agents and Central spent today / over 7 days by workspace, agent, routine and model, and which limits paused work.
+// The one daily limit is Central's (Settings › Central, data-field central.costLimit); the old separate "Pause all
+// work at $" cap is gone (merged at boot, server cost/costDayCap.ts). Cache and prefix numbers are `CostDetails`,
+// shown in Settings › Developer. Numbers come from GET /api/cost (cost.route.ts); prices are estimates, not a bill.
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { SettingsCombobox } from './SettingsCombobox'
-import { dollarsToMicros, validateDollars } from './SettingsCostLimit'
-import { COST_CAP_PRESETS } from './settingsPresets'
+import { openSettingsAt } from './settings.link'
 import { Segmented } from './centralSettings.controls'
 import { controlRequest } from './ControlPanel'
 import type { CostResponse } from '../server/cost/cost.route'
 import type { SpendGroup, SpendSummary } from '../server/cost/costStore'
 
 export const COST_API_PATH = '/api/cost'
-/** Own Recent list: this cap pauses all work, unlike Central's "Daily spending limit" (cheaper models). */
-export const PAUSE_ALL_FIELD_ID = 'cost.pauseAllAt'
 
 export const COST_TEXT = {
-  /** Region name only: the Settings › Spending page heading already says it, so no visible heading here. */
+  /** Region name only: the Control › Spending tab already says it, so no visible heading here. */
   title: 'Spending',
   intro: 'Estimated spend of Claude Code agents and the Central Agent, from their own usage data. Not a bill.',
   period: 'Period',
@@ -27,7 +25,7 @@ export const COST_TEXT = {
   loading: 'Loading spending…',
   spend: 'Spent',
   responses: 'Responses',
-  details: 'Details',
+  details: 'Spending details (7 days)',
   cacheHit: 'Cache hit rate',
   prefixReuse: 'Central Agent prefix reuse (7 days)',
   prefixValue: (rate: number | null, n: number) => (rate === null ? '—' : `${Math.round(rate * 100)}% of ${n} prefix${n === 1 ? '' : 'es'}`),
@@ -39,8 +37,9 @@ export const COST_TEXT = {
   central: 'Central Agent',
   none: 'Nothing yet.',
   caps: 'Limits',
-  pauseAll: "Pause all work when today's spend reaches",
-  pauseAllHint: 'When reached, no new routine, plan or bake-off starts until you raise the limit, press Resume, or the day ends (UTC).',
+  limitLine: 'One daily spending limit covers Central, routines, plans and bake-offs.',
+  limitLink: 'Change the daily limit',
+  writeFailed: (why: string) => `Could not resume: ${why}`,
   resume: 'Resume',
   paused: 'Paused',
   pricing: 'Prices from',
@@ -79,33 +78,42 @@ function Groups({ title, rows, name }: { title: string; rows: SpendGroup[]; name
   )
 }
 
-export function CostPanel(): React.JSX.Element {
+/** GET /api/cost; `error` = why it failed, in the server's words. */
+function useCost(): { data: CostResponse | null; error: string | null; reload: () => void } {
   const [data, setData] = useState<CostResponse | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const reload = useCallback(() => {
+    controlRequest('GET', undefined, '', COST_API_PATH)
+      .then((v) => { if (isCost(v)) { setData(v); setError(null) } else setError(COST_TEXT.unavailable) })
+      .catch(() => setError(COST_TEXT.unavailable)) // ledger off or older server
+  }, [])
+  useEffect(reload, [reload])
+  return { data, error, reload }
+}
+
+const why = (err: unknown): string => (err instanceof Error ? err.message : String(err))
+
+export function CostPanel(): React.JSX.Element {
+  const { data, error: loadError, reload } = useCost()
+  const [writeError, setWriteError] = useState<string | null>(null)
   const [range, setRange] = useState<'today' | 'week'>('today')
 
-  const load = useCallback(() => {
-    controlRequest('GET', undefined, '', COST_API_PATH)
-      .then((v) => { if (isCost(v)) { setData(v); setFailed(false) } else setFailed(true) })
-      .catch(() => setFailed(true)) // shown as the unavailable line
-  }, [])
-  useEffect(load, [load])
-
-  const write = (method: string, path: string, body: unknown): void => {
-    controlRequest(method, body, '', path).then(load, () => setFailed(true))
+  // A failed Resume says what went wrong; the report itself stays on screen.
+  const resume = (scope: string): void => {
+    setWriteError(null)
+    controlRequest('POST', { scope }, '', `${COST_API_PATH}/resume`).then(reload, (err: unknown) => setWriteError(COST_TEXT.writeFailed(why(err))))
   }
 
   const s: SpendSummary | undefined = data?.[range]
-  const day = data?.caps.find((c) => c.scope === 'day')
   return (
-    <section aria-label={COST_TEXT.title} data-testid="cost-panel" data-field="cost-panel">
+    <section aria-label={COST_TEXT.title} data-testid="cost-panel">
       <div className="flex items-center gap-2">
         <Segmented label={COST_TEXT.period} value={range} onChange={(v) => setRange(v === 'week' ? 'week' : 'today')}
           options={[{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]} />
       </div>
       <p className="text-xs opacity-70">{COST_TEXT.intro}</p>
-      {failed ? <p className="text-xs opacity-70">{COST_TEXT.unavailable}</p> : null}
-      {!data && !failed ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}
+      {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
+      {!data && !loadError ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}
       {data && s ? (
         <div className="flex flex-col gap-2">
           <dl className="flex items-end gap-6 text-xs">
@@ -128,32 +136,42 @@ export function CostPanel(): React.JSX.Element {
                   {c.pausedAt !== null ? (
                     <>
                       <Badge variant="destructive" title={c.reason ?? undefined}>{COST_TEXT.paused}</Badge>
-                      <Button size="sm" variant="secondary" onClick={() => write('POST', `${COST_API_PATH}/resume`, { scope: c.scope })}>{COST_TEXT.resume}</Button>
+                      <Button size="sm" variant="secondary" onClick={() => resume(c.scope)}>{COST_TEXT.resume}</Button>
                     </>
                   ) : null}
                 </li>
               ))}
             </ul>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-              <label htmlFor="cost-day-cap">{COST_TEXT.pauseAll}</label>
-              <span className="w-40">
-                <SettingsCombobox id="cost-day-cap" fieldId={PAUSE_ALL_FIELD_ID} presets={COST_CAP_PRESETS} placeholder="No limit"
-                  value={day && day.limitMicros > 0 ? String(day.limitMicros / 1e6) : ''} validate={validateDollars}
-                  onCommit={(v) => write('PUT', `${COST_API_PATH}/caps`, { scope: 'day', limitMicros: dollarsToMicros(v) ?? 0 })} />
-              </span>
-              <span className="w-full opacity-70">{COST_TEXT.pauseAllHint}</span>
-            </div>
+            <p className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+              <span className="opacity-70">{COST_TEXT.limitLine}</span>
+              <Button size="sm" variant="link" className="h-auto p-0" onClick={() => openSettingsAt('central', 'central.costLimit')}>{COST_TEXT.limitLink}</Button>
+            </p>
+            {writeError ? <p role="alert" className="text-xs text-destructive">{writeError}</p> : null}
           </div>
-          <details data-testid="cost-details" className="text-xs">
-            <summary>{COST_TEXT.details}</summary>
-            <dl className="mt-1 grid grid-cols-2 gap-2">
-              <div><dt className="opacity-70">{COST_TEXT.cacheHit}</dt><dd data-testid="cost-cache">{s.cacheHitRate === null ? '—' : `${Math.round(s.cacheHitRate * 100)}%`}</dd></div>
-              <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
-            </dl>
-            {s.unpriced > 0 ? <p className="opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
-            <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
-          </details>
         </div>
+      ) : null}
+    </section>
+  )
+}
+
+/** Settings › Developer: cache hit rate, Central prefix reuse, unpriced responses and the price source (7 days). */
+export function CostDetails(): React.JSX.Element {
+  const { data, error } = useCost()
+  const s = data?.week
+  return (
+    <section aria-label={COST_TEXT.details} data-testid="cost-details" className="text-xs">
+      <h4 className="font-semibold">{COST_TEXT.details}</h4>
+      {error ? <p className="opacity-70">{error}</p> : null}
+      {!data && !error ? <p className="opacity-70">{COST_TEXT.loading}</p> : null}
+      {data && s ? (
+        <>
+          <dl className="mt-1 grid grid-cols-2 gap-2">
+            <div><dt className="opacity-70">{COST_TEXT.cacheHit}</dt><dd data-testid="cost-cache">{s.cacheHitRate === null ? '—' : `${Math.round(s.cacheHitRate * 100)}%`}</dd></div>
+            <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
+          </dl>
+          {s.unpriced > 0 ? <p className="opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
+          <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
+        </>
       ) : null}
     </section>
   )

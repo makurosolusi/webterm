@@ -18,12 +18,14 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, choose "Ask for risky things" in Settings › Claude › Permissions (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
-- Ledger schema v31 adds a nullable `not_before` column to `central_checkin_reason`; existing databases are upgraded in place, nothing to backfill.
+- Ledger schema v32 adds a nullable `not_before` column to `central_checkin_reason`; existing databases are upgraded in place, nothing to backfill.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
+- Ledger schema v31 adds a nullable `workspace_id` column to `policy_grant`; existing rules keep applying to every workspace, nothing to backfill.
 
 ### Added
 - Central now keeps a list of the delegations it owns that are stuck or failed, acts on them, and tells you when it cannot fix one.
+- Status bar at the bottom of every terminal and Claude agent node: live or exited (with the exit code), pid, uptime, size, folder and the age of the last output; agent nodes add the agent state and how long it has lasted, the last hook, model, context used, session cost, the current task and the outbox queue. Amber and red badges say in one line when something looks wrong (unexpected exit, stalled turn, failed or stuck outbox mail, a task the agent never started, a long permission wait, a dropped stream, context at 90% or more). Click it for every field and Copy diagnostics. On by default; Settings › Canvas › Status bar turns it off.
 - Settings › Appearance: Theme (System follows your computer's light or dark mode, or Light / Dark), terminal colors with a small preview, Font (only fonts installed on this computer), font size, cursor style and blink, and the canvas background with one "This workspace: Same as all workspaces / Custom" choice.
 - Settings › Notifications: desktop notifications show the browser's real permission (blocked says how to allow it, and is never saved as on) plus the sound. Mute a single workspace from its menu: right-click the tab › Mute Notifications.
 - Settings › Health: every "fix it in Settings" hint from Doctor is a link to that exact setting, a Fix shows its result, the data folder is listed, and "Show developer tools" (or `?dev=1`) shows the Developer page.
@@ -163,6 +165,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- A secret's Allow button in Settings › Rules & secrets now reads "Allow for agents in <workspace>" and allows only the agents in the workspace you are in, still with no end date. The rule shows in the Rules list as "in <workspace>", where you can revoke it. With no workspace open, the button is locked and says why.
 - Settings › Claude (new, first under Agents) puts everything about Claude on one page. **Connection** holds the provider choice with its staged test, the launch profiles right under it, and one line saying what new agents, Central and helpers really start with (and where the credential comes from), as resolved by the server. The profile badges now match where launches really go, also in Custom command mode. **Permissions** is a single choice, "How much may agents do on their own?": Never ask, Ask for risky things (the new default: actions that cannot be undone, such as deleting files, pushing or destructive commands, ask first; routine work runs without asking), or Ask every time. A choice you already stored (for example Skip approvals on) is kept; only installs that never set it get the new default. **Models** shows the ladder read-only, folded. **Advanced** holds Central's own profile, the raw permission mode, the Add menu, custom agents and the automation token. Old links to Settings › Agent land on the matching Claude field.
 - Saving Custom command mode also makes its profile the default for new Claude agents (one setting, not two); existing installs are aligned once at startup. Leaving command mode puts the default back to plain `claude`.
 - Settings › Central is down to On/off, What Central may do, Check in by itself and one daily spending limit that shows what was spent today. Workers per day, check-ins per day and max workers at once are under Advanced. "Propose work" now always asks before each worker runs, so the separate switch is gone.
@@ -173,6 +176,12 @@ Operator notes:
 - New nodes open at the size you last resized a node to, and Markdown files open the way you last toggled Preview/Edit.
 - Developer is hidden from the Settings sidebar unless developer mode is on.
 
+- Memory, Automations and the Spending report moved out of Settings into tabs of the Control side bar. They work even when the Central Agent is off. Settings search still finds them and opens the right tab, and old `?settings=memory|automations|spending` links land there too.
+- Control › Memory is one place for everything agents remember. A filter switches between All, Suggested (waiting for your OK), Notes (the shared board) and Central (Central's own memory). Forget now asks before it deletes. `/memory` in Central chat opens this tab.
+- Control › Automations shows templates first. Run now reports "Started" or why the run was skipped. Delete asks first. Run status reads in plain words ("Skipped, made up for a missed run"). Event triggers are picked from a list of events in plain words, and "Message a wired agent" picks the agent from your boards instead of asking for a node id.
+- One daily spending limit: Settings › Central's "Daily spending limit" now also stops routines, plans and bake-offs. On first start, an old "Pause all work at $" limit that was lower than Central's (or set while Central had none) becomes Central's limit, and the old limit is cleared.
+- Settings › Rules & approvals is now Settings › Safety › Rules & secrets. Recent approval prompts can be turned into "Always allow" or "Always block" rules in one click. Rules read in plain words, with the raw pattern in a tooltip. The hand-made rule form and the "Try a rule on the last 7 days" simulator moved under Advanced. A secret's "Allow agents to use this" now makes the rule directly and confirms it.
+- The cache hit rate, prefix reuse and pricing details of spending moved to Settings › Developer.
 - Settings search results show as "Page › Setting" rows. Clicking one opens that page and highlights the setting.
 - Below 720px wide, the Settings sidebar becomes a section dropdown above full-width content.
 - The first Settings sidebar group is now called "General" (was "Editor"). Section links are unchanged.
@@ -390,6 +399,8 @@ Operator notes:
 - Send buttons are disabled while you are offline, and what you typed is kept.
 
 ### Removed
+- The separate "Pause all work when today's spend reaches" limit. Central's daily spending limit covers all work (see Changed).
+- The two "Let a small model approve…" switches in Rules. Settings › Claude's approval level sets them now.
 - Settings rows that the system now decides: Central's model, context window, reply time limit, steps per reply, daily token budget, skill switches, engine, browser, Telegram, profile, ladder and report rows, Project knowledge, Steadier autonomy and Agent mail, and the Agent page's Skip approvals, Hook approvals, "Default for new Claude agents" and per-workspace model editor. Stored per-workspace model overrides are still honoured.
 - Settings for GPU rendering (always WebGL, falling back on its own), inactive cursor style (always outline), middle-click paste (automatic: on for Linux), Open Markdown as preview, new node width/height, and the separate server replay buffer. Stored values of the first three are dropped on load.
 - Account had two Sign out buttons; this device's row in the sessions list is the one now.

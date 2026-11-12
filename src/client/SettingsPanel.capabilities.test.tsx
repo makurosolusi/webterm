@@ -76,7 +76,8 @@ describe('tab Kemampuan (D8)', () => {
     expect(screen.queryByRole('button', { name: 'Channels' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Environment' })).toBeNull()
     expect(within(body).queryByText(/Berbahaya|Dikunci|Token root|Info server|WEBTERM_TOKEN/)).toBeNull()
-    expect(within(body).queryByText(/webhook|polling|secret|mode|operator/i)).toBeNull()
+    // The page itself (the sidebar's "Rules & secrets" is another page).
+    expect(within(screen.getByRole('main', { name: 'Settings' })).queryByText(/webhook|polling|secret|mode|operator/i)).toBeNull()
     expect(main.querySelector('input[type="search"]')).toBeNull()
   })
 

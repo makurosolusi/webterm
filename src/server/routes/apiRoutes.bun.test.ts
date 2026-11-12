@@ -26,7 +26,7 @@ test('full route order snapshot', () => {
     'brief', 'handoff',
     'workspace-worktree',
     'ports', 'problems', 'tasks',
-    'outbox',
+    'outbox', 'node-status',
     'mcpapps',
     'agent-status', 'tools', 'mcp', 'control', 'context-link',
     'generate-name', 'folder-picker',

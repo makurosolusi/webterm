@@ -103,6 +103,13 @@ describe('whitelists match the surfaces they open', () => {
   })
 })
 
+describe('pages moved to the Control side bar', () => {
+  it.each(['memory', 'automations', 'spending'] as const)('?settings=%s opens the Control tab of that name instead', (id) => {
+    expect(parseAppRoute('/', `?settings=${id}`)).toEqual({ ...EMPTY_APP_ROUTE, ctab: id })
+    expect(parseAppRoute('/', `?settings=${id}&ctab=status`).ctab).toBe('status') // an explicit tab wins
+  })
+})
+
 describe('toSettingsRouteSection', () => {
   it('maps legacy ids, keeps known ones, sends the rest to Appearance (the first page)', () => {
     expect(toSettingsRouteSection('background:workspace')).toBe('appearance')
@@ -113,7 +120,8 @@ describe('toSettingsRouteSection', () => {
     expect(toSettingsRouteSection('canvas-background')).toBe('appearance')
     expect(toSettingsRouteSection('env')).toBe('capabilities')
     expect(toSettingsRouteSection('control')).toBe('health')
-    expect(toSettingsRouteSection('memory')).toBe('memory')
+    expect(toSettingsRouteSection('rules')).toBe('rules')
+    expect(toSettingsRouteSection('memory')).toBe('appearance') // moved out of Settings: parseAppRoute sends ?settings=memory to ?ctab=memory
     expect(toSettingsRouteSection('preview')).toBe('appearance')
   })
 })

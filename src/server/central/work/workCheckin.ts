@@ -13,7 +13,7 @@ import { budgetExhausted, budgetLimits, readBudget, utcDay } from '../guard/budg
 import { effectiveLevelOf } from '../guard/levelStore'
 import type { WorkMove, WorkStore } from './workModel'
 import { dueReminders, markReminderFired } from './workReminders'
-import { DUTY_STATUSES } from './workDuties'
+import { isDuty } from './workDuties'
 import { escalateDuties } from './workEscalation'
 import { WORK_LIVENESS_RULES } from './workSupervisor'
 
@@ -121,6 +121,10 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
     return waiting ? attempt.id : null
   }
 
+  /** A send that did not happen: the new card fails, an existing one goes back to `todo` (not the reopen of a failed card). */
+  const sendFailed = (move: WorkMove): boolean => move.to === 'failed'
+    || (move.to === 'todo' && move.from !== 'failed' && store.assignmentsOfTask(move.task.id, 1)[0]?.endReason === 'send_failed')
+
   const fireReminders = (at: number): void => {
     for (const r of dueReminders(db, at, SCAN_LIMIT)) {
       tx(ctx, () => { if (markReminderFired(db, r.id, at)) enqueue(`reminder:${r.id}`, 'reminder_due', r.projectId, r.taskId, `reminder came due: ${r.text}`) })
@@ -138,8 +142,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   /** A duty fixed before its wake went out (Enter pressed, resent, cancelled) needs no turn: it is settled unsent. */
   const dutyResolved = (r: Reason, at: number): boolean => {
     if (r.kind !== 'task_duty' || r.taskId === null) return false
-    const status = getRow(db, 'SELECT status FROM central_task WHERE id = ?', r.taskId)?.status
-    if ((DUTY_STATUSES as readonly unknown[]).includes(status)) return false
+    if (isDuty(db, r.taskId)) return false
     execWrite(db, 'UPDATE central_checkin_reason SET sent_at = ? WHERE id = ?', at, r.id)
     return true
   }
@@ -204,7 +207,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   return {
     onMove(move) {
       const { task } = move
-      if (move.to === 'failed' && move.rule === DELEGATION_RULE) {
+      if (move.rule === DELEGATION_RULE && sendFailed(move)) {
         const reason = move.reason ? ` (${move.reason})` : ''
         enqueue(`duty:${move.seq}`, 'task_duty', task.projectId, task.id, `the prompt for ${taskLabel(task.title, task.projectId)} was not submitted${reason}; it is listed under Open duties`, now() + WORK_LIVENESS_RULES.escalate.graceMs)
       } else if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {

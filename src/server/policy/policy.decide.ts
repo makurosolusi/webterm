@@ -17,6 +17,8 @@ export const GRANT_EVENT = 'policy.grant'
 export const TELEGRAM_GRANT_MAX_MS = 60 * 60_000
 const MAX_PATTERN = 200
 const MAX_ACTOR = 64
+/** A workspace id as the board stores it (no wildcards: a limited rule names exactly one workspace). */
+const WORKSPACE_ID_RE = /^[\w.:-]{1,200}$/
 
 export interface DecideArgs {
   /** Resource acted on: `node:<id>`, `workspace:<id>`, `project:<id>`. */
@@ -35,6 +37,8 @@ export interface GrantInput {
   subject: string
   capability: string
   scope?: string
+  /** Limits the rule to agents on this workspace; null/absent = every workspace. */
+  workspaceId?: string | null
   effect: Effect
   /** Epoch ms; null/absent = permanent (human-ui only, K4). */
   expiresAt?: number | null
@@ -76,9 +80,10 @@ export function createPolicy(deps: PolicyDeps) {
     if (!principalKind(principal)) return { effect: 'deny', reason: 'unknown principal' }
     const all = store.grants()
     const at = now()
-    let d = evaluate(rulesFor(principal, all, args.cable), { principal, capability, resource: args.resource, now: at })
+    const workspaceId = args.workspaceId
+    let d = evaluate(rulesFor(principal, all, args.cable), { principal, capability, resource: args.resource, workspaceId, now: at })
     for (const parent of store.ancestors(principal)) {
-      const pd = evaluate(rulesFor(parent, all), { principal: parent, capability, resource: args.resource, now: at })
+      const pd = evaluate(rulesFor(parent, all), { principal: parent, capability, resource: args.resource, workspaceId, now: at })
       const next = stricter(d, pd)
       if (next !== d) d = { ...next, reason: `attenuated by parent ${parent}: ${next.reason}` }
     }
@@ -129,11 +134,13 @@ export function createPolicy(deps: PolicyDeps) {
         return { ok: false, status: 400, code: 'invalid_grant' }
       }
       if (expiresAt !== null && (!Number.isFinite(expiresAt) || expiresAt <= now())) return { ok: false, status: 400, code: 'invalid_expiry' }
+      const workspaceId = input.workspaceId ?? null
+      if (workspaceId !== null && (typeof workspaceId !== 'string' || !WORKSPACE_ID_RE.test(workspaceId))) return { ok: false, status: 400, code: 'invalid_workspace' }
       const grant = store.insertGrant({
-        subject: input.subject, capability: input.capability, scope, effect: input.effect, expiresAt,
+        subject: input.subject, capability: input.capability, scope, workspaceId, effect: input.effect, expiresAt,
         origin: kind === 'human-ui' ? 'human-ui' : 'telegram', createdBy: actor,
       })
-      record(GRANT_EVENT, actor, { op: 'create', id: grant.id, subject: grant.subject, capability: grant.capability, scope, effect: grant.effect, expiresAt })
+      record(GRANT_EVENT, actor, { op: 'create', id: grant.id, subject: grant.subject, capability: grant.capability, scope, workspaceId, effect: grant.effect, expiresAt })
       return { ok: true, grant }
     },
 

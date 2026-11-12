@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test'
 import type { Database } from 'bun:sqlite'
 import { appendCentralNotice } from '../chat/conversationNotice'
 import { freshDb, T0 } from '../guard/controlGuard.testutil'
-import { applyV31 } from '../../ledger/ledgerSchemaV31'
+import { applyV32 } from '../../ledger/ledgerSchemaV32'
 import { createWorkCheckin, type CheckinSettingsPort, type CheckinTurn } from './workCheckin'
 import { beginDelegation } from './workDelegation'
 import { listDuties } from './workDuties'
@@ -48,6 +48,29 @@ describe('open duties', () => {
     const r = rig()
     const id = failedSend(r)
     expect(listDuties(r.db, 5)).toEqual([{ taskId: id, projectId: 'p1', title: 'deploy the api', nodeId: 'n1', status: 'failed', reason: 'not_started', attempts: 1, since: T0, textLeftInBox: true }])
+  })
+
+  it('an existing todo card whose send failed is a duty and wakes Central after the grace period', async () => {
+    const r = rig()
+    const card = r.store.createTask({ projectId: 'p1', title: 'write docs', objective: 'o', actor: { kind: 'central' } })
+    const d = beginDelegation(r.store, { projectId: 'p1', nodeId: 'n1', channel: 'terminal', instruction: 'write docs', taskId: card.id, conversationId: 'central:global' })
+    if (!d.ok) throw new Error(d.code)
+    d.settleFailed('not_on_screen', { textLeftInBox: false })
+    expect(r.store.getTask(card.id)?.status).toBe('todo')
+    expect(listDuties(r.db, 5)).toMatchObject([{ taskId: card.id, status: 'todo', reason: 'not_on_screen', textLeftInBox: false }])
+    await r.at(graceMs - 1)
+    expect(r.turns).toHaveLength(0)
+    await r.at(graceMs)
+    expect(r.turns).toHaveLength(1)
+    expect(r.turns[0]?.text).toContain('write docs')
+  })
+
+  it('reopening a failed card is not itself a new duty wake', () => {
+    const r = rig()
+    const id = failedSend(r)
+    const again = beginDelegation(r.store, { projectId: 'p1', nodeId: 'n1', channel: 'terminal', instruction: '(resubmit)', taskId: id, conversationId: 'central:global' })
+    expect(again.ok).toBe(true)
+    expect((r.db.query("SELECT COUNT(*) AS n FROM central_checkin_reason WHERE kind = 'task_duty'").get() as { n: number }).n).toBe(1)
   })
 
   it('a task the user cancelled, or one a human started, is not a duty', () => {
@@ -137,9 +160,9 @@ describe('open duties', () => {
     expect(notices(r.db).filter((n) => n.includes('Central could not fix'))).toHaveLength(1)
   })
 
-  it('v31 re-applied is a no-op', () => {
+  it('v32 re-applied is a no-op', () => {
     const r = rig()
-    applyV31(r.db)
+    applyV32(r.db)
     expect((r.db.query("SELECT COUNT(*) AS n FROM pragma_table_info('central_checkin_reason') WHERE name = 'not_before'").get() as { n: number }).n).toBe(1)
   })
 })

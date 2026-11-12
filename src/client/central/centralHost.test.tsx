@@ -68,11 +68,16 @@ describe('flag gate', () => {
     }
   })
 
-  it('flag off renders nothing even when open', () => {
+  it('flag off shows only the tabs that work without Central, opens on Memory, and never asks Central', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
     const client = fakeClient()
-    const { container } = render(<CentralControlPanel open enabled={false} client={client} />)
-    expect(container.innerHTML).toBe('')
+    render(<CentralControlPanel open enabled={false} client={client} tab="status" />)
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Memory', 'Automations', 'Spending'])
+    expect(screen.getByRole('tab', { name: 'Memory' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'Central' })).toBeNull() // Central's own memory filter needs Central
     expect(client.getControl).not.toHaveBeenCalled()
+    expect(client.listMemory).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it('closed renders nothing', () => {
@@ -85,7 +90,7 @@ describe('CentralControlPanel', () => {
   it('has tab roles, a privacy label for free models, and switches tabs by keyboard', async () => {
     render(<CentralControlPanel open enabled client={fakeClient()} />)
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills', 'Memory', 'Health'])
+    expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Abilities', 'Agents', 'Skills', 'Memory', 'Automations', 'Spending', 'Health'])
     const note = await screen.findByRole('note')
     expect(note.textContent).toContain('sent to the model provider')
     expect(note.textContent).toContain('opencode/free')

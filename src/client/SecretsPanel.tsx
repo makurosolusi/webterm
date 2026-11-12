@@ -1,10 +1,12 @@
-// Secrets part of Settings › Rules & approvals: the secret broker's names, add/replace, delete and usage log
+// Secrets part of Settings › Rules & secrets: the secret broker's names, add/replace, delete and usage log
 // (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a
 // password manager field, the list shows names only and the input is cleared after a save.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { prefillRule, secretRule, whoText } from './policyPresets'
+import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { secretRule, whoText } from './policyPresets'
+import { createRule } from './policyRules.api'
 
 export const SECRETS_PATH = '/api/secrets'
 
@@ -14,12 +16,15 @@ interface SecretsView { secrets: SecretEntry[]; usage: SecretUse[] | null }
 
 export const SECRETS_TEXT = {
   title: 'Secrets',
-  intro: 'Agents ask before using a secret. Allow it in Rules & approvals.',
+  intro: 'Agents ask before using a secret, unless you allow it here.',
   detail: 'An agent never sees the value: it goes into one command and is hidden in that command\'s output.',
   loading: 'Loading secrets…',
   loadFailed: 'Cannot load secrets.',
   empty: 'No secrets yet.',
-  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete', allow: 'Allow an agent to use this',
+  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete',
+  allow: (ws: string) => `Allow for agents in ${ws}`, allowNoWorkspace: 'Allow agents to use this', allowing: 'Allowing…',
+  allowed: (name: string, ws: string) => `${name}: allowed for agents in ${ws}. Revoke it under Rules.`,
+  noWorkspace: 'Open a workspace first: the rule is for the agents in it.',
   neverUsed: 'never used', lastUsed: (at: number) => `last used ${new Date(at).toLocaleString()}`,
   colWhen: 'When', colName: 'Secret', colWho: 'Used by', colCommand: 'Command', colResult: 'Result',
   ok: 'OK', exitFailed: (code: number) => `Failed (exit ${code})`, noResult: 'Unknown',
@@ -40,7 +45,26 @@ async function secretsRequest(method: string, path = SECRETS_PATH, body?: unknow
 
 const isView = (v: unknown): v is SecretsView => !!v && Array.isArray((v as SecretsView).secrets)
 
-export function SecretsPanel(): React.JSX.Element {
+/** The workspace the user is in: an Allow is for the agents on it only. */
+export interface SecretsWorkspace { id: string; name: string }
+
+/** "Allow for agents in <workspace>": makes the rule (agents of the current workspace, any command, forever) right here, with its result. */
+function AllowSecret({ name, workspace }: { name: string; workspace: SecretsWorkspace | null }): React.JSX.Element {
+  const allow = useAction(async () => {
+    if (!workspace) throw new Error(SECRETS_TEXT.noWorkspace) // the button is locked then; guards a stale click
+    await createRule({ subject: 'node:*', ...secretRule(name), workspaceId: workspace.id, effect: 'allow' })
+  }, { label: `${workspace ? SECRETS_TEXT.allow(workspace.name) : SECRETS_TEXT.allowNoWorkspace}: ${name}`, success: () => SECRETS_TEXT.allowed(name, workspace?.name ?? ''), toast: 'always' })
+  return (
+    <span className="flex flex-col gap-0.5">
+      <ActionButton size="sm" variant="outline" action={allow} busyLabel={SECRETS_TEXT.allowing} lock={workspace ? undefined : { reason: SECRETS_TEXT.noWorkspace }}>
+        {workspace ? SECRETS_TEXT.allow(workspace.name) : SECRETS_TEXT.allowNoWorkspace}
+      </ActionButton>
+      <ActionResult action={allow} />
+    </span>
+  )
+}
+
+export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspace | null }): React.JSX.Element {
   const [view, setView] = useState<SecretsView | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +109,7 @@ export function SecretsPanel(): React.JSX.Element {
             <li key={s.name} data-secret={s.name} className="flex items-center gap-2">
               <code className="flex-1">{s.name}</code>
               <span className="opacity-70">{s.lastUsedAt === null ? SECRETS_TEXT.neverUsed : SECRETS_TEXT.lastUsed(s.lastUsedAt)}</span>
-              <Button size="sm" variant="outline" onClick={() => prefillRule(secretRule(s.name))}>{SECRETS_TEXT.allow}</Button>
+              <AllowSecret name={s.name} workspace={workspace} />
               <Button size="sm" variant="secondary" onClick={() => void remove(s.name)}>{SECRETS_TEXT.delete}</Button>
             </li>
           ))}

@@ -120,6 +120,18 @@ test('a human deny rule beats the default and a grant is scoped to node, secret 
   expect((await run('node:a1', ['NPM_TOKEN'], ['npm', 'publish'])).receipt.detail).toBe('policy_denied')
 }, SPAWN_TEST_MS)
 
+test('a rule limited to one workspace lets only that board\'s agents use the secret', async () => {
+  const { policy, deps } = setup()
+  const other = { ...BOARD[0], id: 'w2', nodes: [{ id: 'b1', kind: 'agent', x: 0, y: 0 }] } as unknown as Workspace
+  const board: BrokerDeps = { ...deps, workspaces: () => [...BOARD, other] }
+  policy.createGrant('human-ui', { subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', workspaceId: 'w1', effect: 'allow' })
+  const run = (principal: string) => runSecretCapability(board, 'secret.run', { names: ['NPM_TOKEN'], command: ['true'] }, principal)
+  expect((await run('node:a1')).receipt.outcome).toBe('ok')
+  expect((await run('node:a2')).receipt.outcome).toBe('ok')
+  expect((await run('node:b1')).receipt.detail).toBe('approval_required')
+  expect((await run('node:ghost')).receipt.detail).toBe('approval_required')
+}, SPAWN_TEST_MS)
+
 test('a node cannot run outside its folder; unknown secrets and empty argv are refused', async () => {
   const { policy, deps } = setup()
   policy.createGrant('human-ui', { subject: 'node:a1', capability: 'secret.run', scope: '*', effect: 'allow' })

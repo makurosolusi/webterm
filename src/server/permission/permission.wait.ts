@@ -41,7 +41,7 @@ export interface PermissionWaitDeps {
   pollMs?: number
   sleep?: (ms: number) => Promise<void>
   /**
-   * F4-d (off unless Settings › Rules & approvals turns it on): classifies the held prompt next to the human; on
+   * F4-d (off unless the approval level in Settings › Claude turns it on): classifies the held prompt next to the human; on
    * `allow` it approves the same card, which the poll below then consumes like a human click.
    */
   classify?: (a: GatedAction & { approvalId: string }) => Promise<unknown>

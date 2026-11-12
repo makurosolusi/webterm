@@ -4,7 +4,10 @@ import type { Database } from 'bun:sqlite'
 import type { WorkStatus } from '../../../shared/centralWork'
 import { allRows, parseJson } from '../../ledger/ledgerCore'
 
-/** A task in one of these, whose latest attempt Central started, is Central's to fix. */
+/**
+ * A task in one of these, whose latest attempt Central started, is Central's to fix. So is a `todo` task whose
+ * latest attempt never got sent (task.assign on an existing card puts it back where it was).
+ */
 export const DUTY_STATUSES: readonly WorkStatus[] = ['stalled', 'failed', 'waiting_input']
 
 export interface Duty {
@@ -27,16 +30,24 @@ const PLACEHOLDERS = DUTY_STATUSES.map(() => '?').join(', ')
 
 // One statement, no per-task reads: the "started by Central" test is the same as workCheckin's handoff check
 // (the latest attempt's work.assignment.open event has actor 'central').
-const DUTIES_SQL = `
+const dutiesSql = (oneTask: boolean): string => `
 SELECT t.id, t.project_id, t.title, t.status, t.updated_at, a.node_id, a.attempt, a.end_reason, a.result_json,
   (SELECT e.ts FROM event e WHERE e.correlation_id = t.id AND json_extract(e.payload_json, '$.to') = t.status ORDER BY e.seq DESC LIMIT 1) AS since,
   (SELECT json_extract(e.payload_json, '$.reason') FROM event e WHERE e.correlation_id = t.id AND json_extract(e.payload_json, '$.to') = t.status ORDER BY e.seq DESC LIMIT 1) AS move_reason
 FROM central_task t
 JOIN central_assignment a ON a.task_id = t.id AND a.attempt = (SELECT MAX(x.attempt) FROM central_assignment x WHERE x.task_id = t.id)
-WHERE t.status IN (${PLACEHOLDERS})
+WHERE (t.status IN (${PLACEHOLDERS}) OR (t.status = 'todo' AND a.end_reason = 'send_failed'))${oneTask ? ' AND t.id = ?' : ''}
   AND EXISTS (SELECT 1 FROM event e WHERE e.correlation_id = t.id AND e.kind = 'work.assignment.open' AND e.actor = 'central' AND json_extract(e.payload_json, '$.assignmentId') = a.id)
 ORDER BY since DESC, t.id
 LIMIT ?`
+
+const DUTIES_SQL = dutiesSql(false)
+const DUTY_SQL = dutiesSql(true)
+
+/** Whether a task is an open duty right now. */
+export function isDuty(db: Database, taskId: string): boolean {
+  return allRows(db, DUTY_SQL, ...DUTY_STATUSES, taskId, 1).length > 0
+}
 
 /** Open duties, newest first; `limit` bounds the scan. */
 export function listDuties(db: Database, limit: number): Duty[] {

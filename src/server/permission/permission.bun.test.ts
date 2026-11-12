@@ -12,7 +12,7 @@ import { freshDb, rows, T0 } from '../central/guard/controlGuard.testutil'
 import { createPolicy } from '../policy/policy.decide'
 import { actOnItem } from '../inbox/inboxActions'
 import { listInboxItems } from '../inbox/inboxItemStore'
-import { decidePermission, listPendingPermissions } from './permission.human'
+import { decidePermission, listPendingPermissions, listRecentPermissions } from './permission.human'
 import { answerPermission, PERMISSION_DECISION_EVENT, PERMISSION_REQUEST_EVENT, type PermissionWaitDeps } from './permission.wait'
 
 const body = (command: string) => ({ hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command } })
@@ -170,4 +170,16 @@ test('HTTP /api/approvals/permission: the page lists and decides; an agent crede
   const out = await answerPermission(s.deps, ask('npm publish'))
   expect(seen).toEqual({ label: 'Bash(npm publish)', agent: 403, page: 200 })
   expect(out?.hookSpecificOutput.decision.behavior).toBe('allow')
+})
+
+test('recent prompts: decided and expired ones count, one per tool + pattern, newest first', async () => {
+  const s = setup()
+  s.onFirstWait((id) => { decidePermission(s.db, s.policy, { id, choice: 'allow' }, 'human:loopback', s.now()) })
+  await answerPermission(s.deps, ask('npm test'))
+  await answerPermission(s.deps, ask('npm publish')) // times out: still offered
+  s.onFirstWait((id) => { decidePermission(s.db, s.policy, { id, choice: 'deny' }, 'human:loopback', s.now()) })
+  await answerPermission(s.deps, ask('npm test'))
+  const recent = listRecentPermissions(s.db)
+  expect(recent.map((r) => [r.tool, r.pattern])).toEqual([['Bash', 'npm test'], ['Bash', 'npm publish']])
+  expect(recent[0]).toMatchObject({ node: 'brisk-otter', label: 'Bash(npm test)' })
 })

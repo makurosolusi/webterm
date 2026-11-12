@@ -23,6 +23,8 @@ type RowAct = (what: string, path: string, body?: unknown) => Promise<void>
 
 function MemoryRow({ m, confirmable, act }: { m: MemoryItem; confirmable: boolean; act: RowAct }): React.JSX.Element {
   const [draft, setDraft] = useState<string | null>(null)
+  // Forget cannot be undone (the server has no restore), so it asks first, like Central's own memory list.
+  const [asking, setAsking] = useState(false)
   const untrusted = m.trust === 'external'
   // A claim is confirmed (procedural route); a fact that went stale is confirmed again (verify).
   const confirmPath = m.status === 'claim'
@@ -45,7 +47,13 @@ function MemoryRow({ m, confirmable, act }: { m: MemoryItem; confirmable: boolea
           <Button size="sm" variant="secondary" onClick={() => void act(MEMORY_TEXT.mute, ctl(m.id, 'suppress'), { on: !m.suppressed })}>
             {m.suppressed ? MEMORY_TEXT.unmute : MEMORY_TEXT.mute}
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => void act(MEMORY_TEXT.forget, ctl(m.id, 'forget'))}>{MEMORY_TEXT.forget}</Button>
+          {asking ? (
+            <span role="alertdialog" aria-label={MEMORY_TEXT.forgetAsk} className="flex items-center gap-1">
+              <span>{MEMORY_TEXT.forgetAsk}</span>
+              <Button size="sm" variant="destructive" onClick={() => { setAsking(false); void act(MEMORY_TEXT.forget, ctl(m.id, 'forget')) }}>{MEMORY_TEXT.forget}</Button>
+              <Button size="sm" variant="secondary" onClick={() => setAsking(false)}>{MEMORY_TEXT.cancel}</Button>
+            </span>
+          ) : <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>{MEMORY_TEXT.forget}</Button>}
         </>
       ) : (
         <>
@@ -69,7 +77,10 @@ function useNodeTitles(wanted: boolean): Map<string, string> | null {
   return titles
 }
 
-export function AgentMemory(): React.JSX.Element {
+/** Which part of the panel to show (Control › Memory filter): everything, only suggestions, or only shared notes. */
+export type AgentMemoryPart = 'all' | 'suggested' | 'notes'
+
+export function AgentMemory({ part = 'all' }: { part?: AgentMemoryPart } = {}): React.JSX.Element {
   const [items, setItems] = useState<MemoryItem[] | null>(null)
   const [confirmable, setConfirmable] = useState<ReadonlySet<string>>(new Set())
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -113,7 +124,7 @@ export function AgentMemory(): React.JSX.Element {
       <p className="text-xs opacity-70">{MEMORY_TEXT.intro}</p>
       {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
       {!ready && !loadError ? <p role="status" className="text-xs opacity-70">{MEMORY_TEXT.loading}</p> : null}
-      {ready ? (
+      {ready && part === 'all' ? (
         <div className="mt-2 flex flex-col gap-1 text-xs" data-testid="memory-all">
           <div className="flex items-center gap-2">
             <Input aria-label={MEMORY_TEXT.add} placeholder={MEMORY_TEXT.placeholder} value={text} maxLength={300}
@@ -132,9 +143,9 @@ export function AgentMemory(): React.JSX.Element {
           )}
         </div>
       ) : null}
-      {ready ? <ProposalsSection act={act} tick={tick} /> : null}
-      {ready ? <BoardSection act={act} tick={tick} /> : null}
-      {ready ? (
+      {ready && part !== 'notes' ? <ProposalsSection act={act} tick={tick} /> : null}
+      {ready && part !== 'suggested' ? <BoardSection act={act} tick={tick} /> : null}
+      {ready && part === 'all' ? (
         <div className="mt-3 flex flex-col gap-1 text-xs" data-testid="memory-incognito">
           <h4 className="font-semibold">{MEMORY_TEXT.incognitoTitle}</h4>
           <p className="opacity-70">{MEMORY_TEXT.incognitoIntro}</p>

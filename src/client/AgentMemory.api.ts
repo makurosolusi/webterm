@@ -26,7 +26,7 @@ export const MEMORY_TEXT = {
   ledgerOff: 'Agent memory is unavailable while the ledger is off.',
   empty: 'Nothing remembered yet.',
   placeholder: 'e.g. Always run tests with TMPDIR=/tmp/st',
-  add: 'Remember', confirm: 'Confirm', forget: 'Forget',
+  add: 'Remember', confirm: 'Confirm', forget: 'Forget', forgetAsk: 'Forget this for good?',
   confirmed: 'You confirmed', suggested: 'Suggested', untrusted: 'From a web page, cannot be confirmed',
   failed: (what: string, why: string) => `${what} failed: ${why}`,
   kinds: { all: 'All', procedural: 'Rules', semantic: 'Facts', episodic: 'Past sessions' } as Record<MemoryKindFilter, string>,

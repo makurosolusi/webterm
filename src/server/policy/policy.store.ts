@@ -1,4 +1,4 @@
-// SQLite persistence for the policy model (ledger schema v11): grants, tier minima, node lineage and
+// SQLite persistence for the policy model (ledger schema v11, `workspace_id` since v31): grants, tier minima, node lineage and
 // principal tokens. The DB handle is injected; only bun:sqlite types are imported.
 import type { Database } from 'bun:sqlite'
 import { createHash, randomBytes } from 'node:crypto'
@@ -11,11 +11,12 @@ export const FALLBACK_TIER_MIN: Record<Tier, ControlLevel> = { R0: 'observe', R1
 /** Lineage walk bound; K3 caps spawn depth at 2, so this is generous. */
 export const MAX_LINEAGE = 8
 
-const GRANT_COLS = 'id, subject, capability, scope, effect, expires_at, origin, created_by, created_at'
+const GRANT_COLS = 'id, subject, capability, scope, workspace_id, effect, expires_at, origin, created_by, created_at'
 
 function toGrant(r: Row): Grant {
   return {
     id: String(r.id), subject: String(r.subject), capability: String(r.capability), scope: String(r.scope),
+    workspaceId: r.workspace_id === null || r.workspace_id === undefined ? null : String(r.workspace_id),
     effect: String(r.effect) as Effect, expiresAt: r.expires_at === null ? null : Number(r.expires_at),
     origin: String(r.origin) as GrantOrigin, createdBy: String(r.created_by), createdAt: Number(r.created_at),
   }
@@ -36,9 +37,9 @@ export function createPolicyStore(db: Database, now: () => number) {
       const id = `grant_${randomBytes(8).toString('hex')}`
       const at = now()
       const ord = Number(getRow(db, 'SELECT coalesce(max(ord), 0) + 1 AS n FROM policy_grant')?.n ?? 1)
-      execWrite(db, `INSERT INTO policy_grant (${GRANT_COLS}, ord) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id, g.subject, g.capability, g.scope, g.effect, g.expiresAt, g.origin, g.createdBy, at, ord)
-      return { ...g, id, createdAt: at }
+      execWrite(db, `INSERT INTO policy_grant (${GRANT_COLS}, ord) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, g.subject, g.capability, g.scope, g.workspaceId ?? null, g.effect, g.expiresAt, g.origin, g.createdBy, at, ord)
+      return { ...g, workspaceId: g.workspaceId ?? null, id, createdAt: at }
     },
 
     /** Soft revoke (kept for audit). True when a live row changed. */

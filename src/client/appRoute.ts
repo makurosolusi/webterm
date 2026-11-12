@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router'
 import { CENTRAL_PANEL_TABS } from './central/centralTabs'
-import { SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { SETUP_STEPS, type SetupStep } from '../shared/settings.setup'
 import { movedSettingsField, toSettingsFieldId, type SettingsFieldId } from './settings.link'
 
@@ -82,11 +82,13 @@ export function parseAppRoute(pathname: string, search: string): AppRoute {
   const moved = movedSettingsField(q.get('field'))
   // A retired page id lands where it went; a moved setting takes its new page along.
   const settings = rawSection === null ? null : moved?.section ?? LEGACY_SETTINGS_SECTION[rawSection] ?? pick(SETTINGS_ROUTE_SECTIONS, rawSection)
+  // An old link to a page that moved to the Control side bar (`?settings=memory`) opens that tab instead.
+  const movedPage = MOVED_SETTINGS_PAGES.find((m) => m.id === rawSection)?.ctab ?? null
   return {
     workspaceId,
     settings,
     field: settings ? toSettingsFieldId(q.get('field')) : null,
-    ctab: pick(CENTRAL_ROUTE_TABS, q.get('ctab')),
+    ctab: pick(CENTRAL_ROUTE_TABS, q.get('ctab')) ?? movedPage,
     panel: pick(BOTTOM_PANEL_ROUTE_IDS, q.get('panel')),
     view: pick(APP_ROUTE_VIEWS, q.get('view')),
     help: q.get('help') === '1',

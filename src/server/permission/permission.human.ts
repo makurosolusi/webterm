@@ -30,6 +30,27 @@ export function listPendingPermissions(db: Database, now: number): PendingPermis
   })
 }
 
+/** One recent prompt that "Always allow / Always block" can turn into a rule (Settings › Rules & secrets). */
+export interface RecentPermission { tool: string; label: string; pattern: string; node: string; createdAt: number }
+
+const RECENT_SCAN = 200
+
+/** The newest prompts with a safe pattern, one per tool + pattern, newest first (decided or not). */
+export function listRecentPermissions(db: Database, limit = 10): RecentPermission[] {
+  const out: RecentPermission[] = []
+  const seen = new Set<string>()
+  for (const row of allRows(db, 'SELECT * FROM approval WHERE kind = ? ORDER BY created_at DESC, id DESC LIMIT ?', PERMISSION_KIND, RECENT_SCAN)) {
+    const a = toApproval(row)
+    const v = a.request as PermissionRequestView
+    const key = `${v.tool}\u0000${v.pattern}`
+    if (!v.pattern || seen.has(key)) continue
+    seen.add(key)
+    out.push({ tool: v.tool, label: v.label, pattern: v.pattern, node: v.node, createdAt: a.createdAt })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
 const CHOICES = ['allow', 'deny', 'always'] as const
 type Choice = (typeof CHOICES)[number]
 
