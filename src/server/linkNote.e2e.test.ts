@@ -26,7 +26,12 @@ describe('link note, end to end on a real Claude Code screen', () => {
     sessions.open({ t: 'open', id: 'claude1', cols: 120, rows, cwd: '/tmp' } as never, () => {})
     let typed = ''
     const origWrite = pty.write.bind(pty)
-    pty.write = (d: string) => { origWrite(d); if (d !== '\r') { typed += d; pty.emitData(paint(typed)) } }
+    // Like Claude Code: typed text shows in the input box; Enter submits and the box repaints empty
+    // (agentSubmit reads that empty box as "started"; without it, it would send a second Enter).
+    pty.write = (d: string) => {
+      origWrite(d)
+      if (d === '\r') { typed = ''; pty.emitData(paint(null)) } else { typed += d; pty.emitData(paint(typed)) }
+    }
     const ws = {
       nodes: [{ id: 'claude1', kind: 'agent', agentId: 'claude', title: 'Claude' }, { id: 'web1', kind: 'browser', title: 'makuro-browser' }],
       bridges: [],

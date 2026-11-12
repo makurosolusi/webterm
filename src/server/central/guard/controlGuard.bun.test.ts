@@ -81,7 +81,8 @@ test('worker caps count live agents only: 3 per project, 5 global', () => {
 })
 
 test('daily spawn limit and token budget, reset by the UTC day', () => {
-  const { db, guard, advance } = setup(AUTO)
+  // The token budget defaults to none (the dollar cap is the budget), so set one to test it.
+  const { db, guard, advance } = setup({ ...AUTO, WEBTERM_CENTRAL_DAILY_TOKENS: '10000000' })
   level(db, 'act_envelope')
   const spawn = req({ action: 'spawn', tool: 'agent.spawn', tier: 'R2' })
   guard.recordUsage({ projectId: 'p1', turns: 1, tokens: 10, costMicros: 0, spawns: 19, wallMs: 5 })
@@ -90,7 +91,7 @@ test('daily spawn limit and token budget, reset by the UTC day', () => {
   expect(code(guard.check(spawn))).toBe('spawn_daily')
   expect(code(guard.check(req()))).toBe('allow')
 
-  // 10M input-equivalent tokens = the registry default daily budget
+  // 10M input-equivalent tokens = the budget set above
   guard.recordUsage({ projectId: 'p2', turns: 1, tokens: 10_000_000, costMicros: 0, spawns: 0, wallMs: 0 })
   expect(code(guard.check(req({ action: 'turn', tool: 'chat', tier: 'R0' })))).toBe('budget_exhausted')
   expect(code(guard.check(req()))).toBe('budget_exhausted')
