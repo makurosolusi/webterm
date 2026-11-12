@@ -81,3 +81,13 @@ export function SettingsCheckbox({
     </span>
   )
 }
+
+/** The one "Advanced" disclosure of a page (closed by default; a link to a field inside opens it). */
+export function SettingsAdvanced({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <details className="st-advanced" data-slot="settings-advanced">
+      <summary>Advanced</summary>
+      {children}
+    </details>
+  )
+}

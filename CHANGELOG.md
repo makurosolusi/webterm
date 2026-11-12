@@ -22,6 +22,10 @@ Operator notes:
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 
 ### Added
+- Settings › Appearance: Theme (System follows your computer's light or dark mode, or Light / Dark), terminal colors with a small preview, Font (only fonts installed on this computer), font size, cursor style and blink, and the canvas background with one "This workspace: Same as all workspaces / Custom" choice.
+- Settings › Notifications: desktop notifications show the browser's real permission (blocked says how to allow it, and is never saved as on) plus the sound. Mute a single workspace from its menu: right-click the tab › Mute Notifications.
+- Settings › Health: every "fix it in Settings" hint from Doctor is a link to that exact setting, a Fix shows its result, the data folder is listed, and "Show developer tools" (or `?dev=1`) shows the Developer page.
+- Default shell lists only the shells installed on this computer (`GET /api/settings/shells`).
 - First-run setup after sign-in: connect Claude, set up the browser node, Central Agent and the basics; each step can be skipped, closing keeps progress, and Help › Set up webterm… (or `Setup: Open` in ⌘K) reopens it.
 - Download Chromium: with no browser on the server, setup's Browser step and Settings › Capabilities › Advanced can download Chrome for Testing (~200 MB) with progress, Cancel and Retry, and use it right away; the headless switch shows locked on for a Linux server without a display.
 - Welcome screen: a "Finish setup" checklist showing which setup steps are done, skipped or not set; click one to jump to it.
@@ -162,6 +166,10 @@ Operator notes:
 - Settings › Central is down to On/off, What Central may do, Check in by itself and one daily spending limit that shows what was spent today. Workers per day, check-ins per day and max workers at once are under Advanced. "Propose work" now always asks before each worker runs, so the separate switch is gone.
 - Central picks the rest itself. Its context window comes from the model (200K, or 1M for a `[1m]` model id; `WEBTERM_CENTRAL_CONTEXT_WINDOW` still overrides). The reply time limit and steps per reply scale with the model tier (Opus ×1.5, Fable ×2; the env keys still override). Skills are on as soon as Central is. Project knowledge, steadier autonomy and agent mail turn on with "Work on its own".
 - The daily token budget no longer limits Central by default: the dollar limit is the budget. `WEBTERM_CENTRAL_DAILY_TOKENS` still works when set.
+- Settings regrouped: Terminal now holds copy on select, "Keyboard shortcuts go to: webterm first / the program in the terminal first" and one History length (it sets both the terminal scrollback and the history restored after a reload); the finer terminal options are under Advanced. Canvas holds one Grid choice (Off / Dots / Dots and snap), quick move & resize and the projects folder (Save shows Checking… then Saved); grid size and cables are under Advanced. Interaction, Shell & buffer and Canvas background are gone as pages, and links to them land on the page that now holds the setting.
+- Settings › Capabilities is now Features: Browser (with its search engine), Files (Edit and upload files is a sub-option) and Telegram. A change that fails says so on its card; turning on something risky asks in the app's dialog; Reset capabilities asks first and shows the result. The Central Agent summary row and the engine row are gone from it.
+- New nodes open at the size you last resized a node to, and Markdown files open the way you last toggled Preview/Edit.
+- Developer is hidden from the Settings sidebar unless developer mode is on.
 
 - Settings search results show as "Page › Setting" rows. Clicking one opens that page and highlights the setting.
 - Below 720px wide, the Settings sidebar becomes a section dropdown above full-width content.
@@ -258,6 +266,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Canvas background: a gradient preset showed as selected after its angle was changed.
+- Central and other senders now confirm a Claude agent actually started a prompt instead of leaving it unsent in the input box.
 - Claude permission mode "Auto" now really starts terminal Claude agents in auto mode, the same as Agent Chat; before, Auto and "Ask before every action" both launched without a mode, so current Claude Code picked its own. "Ask before every action" is now sent explicitly.
 - "Max workers at once" for Central now applies whenever Central works on its own (not only with Steadier autonomy) and takes effect for the next worker it starts, without a restart.
 - The daily spending limit hint now says what happens at 100%: Central pauses until the next UTC day or until you raise the limit.
@@ -379,6 +389,8 @@ Operator notes:
 
 ### Removed
 - Settings rows that the system now decides: Central's model, context window, reply time limit, steps per reply, daily token budget, skill switches, engine, browser, Telegram, profile, ladder and report rows, Project knowledge, Steadier autonomy and Agent mail, and the Agent page's Skip approvals, Hook approvals, "Default for new Claude agents" and per-workspace model editor. Stored per-workspace model overrides are still honoured.
+- Settings for GPU rendering (always WebGL, falling back on its own), inactive cursor style (always outline), middle-click paste (automatic: on for Linux), Open Markdown as preview, new node width/height, and the separate server replay buffer. Stored values of the first three are dropped on load.
+- Account had two Sign out buttons; this device's row in the sessions list is the one now.
 - Settings › Agent › "Agent default": the quick-add button always used the first enabled agent, so the choice did nothing. A stored value is dropped on load.
 - Unused settings and env keys that changed nothing: the `accent` setting, and `WEBTERM_CHANNELS`, `WEBTERM_CENTRAL_CHAT`, `WEBTERM_CENTRAL_TELEGRAM`, `WEBTERM_CENTRAL_TOOLS` and `WEBTERM_CENTRAL_PLANNER` (chat and the Telegram bridge follow the Central Agent and Telegram switches; proposal tools are always available). Stored values are kept but have no effect.
 - The "Show Node Tabs" option in the View menu (the node list now lives in the Layers side bar).

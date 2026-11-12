@@ -18,6 +18,7 @@ import type { AgentId, AgentStatus, Workspace } from '../../shared/workspace'
 import { hasClaudeHookSettings } from '../../shared/workspace'
 import type { AppendEventInput } from '../events/eventModel'
 import type { EventBus } from '../events/eventBus'
+import { submitToNode } from '../agentSubmit'
 import { readClaudeComposer } from '../linkNoteComposer'
 import { renderStyledScreen } from '../linkNoteScreen'
 import { createLogger } from '../logs'
@@ -46,18 +47,9 @@ export interface OutboxDeps {
 const HOOK_CONTEXT_EVENTS: ReadonlySet<string> = new Set(['SessionStart', 'UserPromptSubmit'])
 /** Hook events after which the agent may be idle at an empty prompt (same set as linkNote). */
 export const OUTBOX_WAKE_HOOKS: ReadonlySet<string> = new Set(['hook.Stop', 'hook.StopFailure', 'hook.Notification', 'hook.SessionStart'])
-/** Enter is a SEPARATE write once the text is on screen (nodeterm `core/typed-input.ts`, measured). */
-const SUBMIT_POLL_MS = 100
-const SUBMIT_POLLS = 20
-/** Non-Claude agents have no readable composer: same fixed gap the Diff-notes path used. */
-export const SUBMIT_GAP_MS = 150
-/** Ctrl-U: kill to line start, the clear-line every agent TUI honours (client agentActions KILL_LINE). */
-const KILL_LINE = '\x15'
 /** Wait before the one re-type of a batch whose text never showed up on screen. */
 export const OUTBOX_RETYPE_BACKOFF_MS = 2_000
-const UNCONFIRMED = 'typed but not confirmed on screen; Enter withheld'
-const PASTE_START = '\x1b[200~'
-const PASTE_END = '\x1b[201~'
+export { SUBMIT_GAP_MS } from '../agentSubmit'
 
 /** Producer hooks for one operationId prefix (see `register`). */
 export interface DeliveryHook {
@@ -176,54 +168,39 @@ export class OutboxDelivery {
     const vetoed = live.filter((m) => this.hooksFor(m).some((h) => h.accept?.(m) === false))
     this.cancelRows(vetoed)
     const batch = live.filter((m) => !vetoed.includes(m))
-    if (batch.length) await this.type(nodeId, batch, caps.hooks)
+    if (batch.length) await this.type(nodeId, batch, agent)
   }
 
-  private async type(nodeId: string, batch: OutboxMessage[], claude: boolean): Promise<void> {
+  /** Typed through the shared confirmed submit (`agentSubmit.ts`); settled right before its Enter. */
+  private async type(nodeId: string, batch: OutboxMessage[], agent: AgentId): Promise<void> {
     const text = batch.map((m) => m.body).join('\n\n')
-    this.deps.sessions.input(nodeId, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}` : text)
-    const sleep = this.sleep()
-    let landed = !claude
-    if (claude) {
-      for (let i = 0; i < SUBMIT_POLLS && !landed; i++) {
-        await sleep(SUBMIT_POLL_MS)
-        const src = this.deps.sessions.screenSource(nodeId)
-        if (!src) break
-        landed = readClaudeComposer(await this.screen(src)) === 'draft'
-      }
-    } else await sleep(SUBMIT_GAP_MS)
-    // Typed but never seen on screen: the Enter is withheld (it could submit something else).
-    if (!landed) { await this.unconfirmed(nodeId, batch, text); return }
-    for (const m of batch) for (const h of this.hooksFor(m)) h.beforeSubmit?.(m)
-    this.settle(batch, 'pty')
-    this.deps.sessions.input(nodeId, '\r')
-  }
-
-  private sleep(): (ms: number) => Promise<void> {
-    return this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    const s = this.deps.sessions
+    const port = { input: (id: string, d: string) => s.input(id, d), statusOf: (id: string) => s.statusOf(id), screenSource: (id: string) => s.screenSource(id), agentIdOf: () => agent }
+    const res = await submitToNode(port, nodeId, text, {
+      ...(this.deps.render ? { render: this.deps.render } : {}), ...(this.deps.sleep ? { sleep: this.deps.sleep } : {}),
+      beforeEnter: () => {
+        for (const m of batch) for (const h of this.hooksFor(m)) h.beforeSubmit?.(m)
+        this.settle(batch, 'pty')
+      },
+    })
+    if (res.ok || res.reason === 'not_ready') return // not_ready: nothing typed, stays queued for the next wake
+    if (res.reason === 'not_on_screen') { await this.unconfirmed(nodeId, batch, res.cleared === true, res.message); return }
+    this.fail(batch, 'pty', res.message)
   }
 
   /**
-   * Undo the side effect first: the typed text may still be in the composer, where the next message
-   * would be appended to it. Clear it (Ctrl-U per typed line, one write each so the TUI sees each
-   * key), then re-queue each message once after a backoff; a second miss, or a composer that will
-   * not clear, fails the message (re-typing onto leftover text would garble it).
+   * The helper already withheld the Enter and cleared the unseen text. Re-queue each message once
+   * after a backoff; a second miss, or a composer that would not clear, fails the message
+   * (re-typing onto leftover text would garble it).
    */
-  private async unconfirmed(nodeId: string, batch: OutboxMessage[], text: string): Promise<void> {
-    const sleep = this.sleep()
-    for (let i = 0; i < text.split('\n').length; i++) {
-      this.deps.sessions.input(nodeId, KILL_LINE)
-      await sleep(SUBMIT_POLL_MS)
-    }
-    const src = this.deps.sessions.screenSource(nodeId)
-    const cleared = !!src && readClaudeComposer(await this.screen(src)) === 'empty'
+  private async unconfirmed(nodeId: string, batch: OutboxMessage[], cleared: boolean, error: string): Promise<void> {
     const fresh = cleared ? batch.filter((m) => !this.retyped.has(m.id)) : []
     const done = batch.filter((m) => !fresh.includes(m))
-    if (done.length) this.fail(done, 'pty', cleared ? UNCONFIRMED : `${UNCONFIRMED}; composer could not be cleared`)
+    if (done.length) this.fail(done, 'pty', error)
     if (!fresh.length) return
     for (const m of fresh) this.retyped.add(m.id)
     log.info('outbox.retype', 'Outbox text not confirmed on screen; composer cleared, re-typing once', { ids: { nodeId }, count: fresh.length })
-    await sleep(OUTBOX_RETYPE_BACKOFF_MS)
+    await (this.deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(OUTBOX_RETYPE_BACKOFF_MS)
     this.again.add(nodeId) // the per-node pass loops once more and re-checks every gate
   }
 

@@ -32,7 +32,7 @@ import { normalizeInputHistory } from './settings.inputHistory'
 import { DEFAULT_SETUP, normalizeSetup, type SetupState } from './settings.setup'
 import { DEFAULT_APPROVAL_LEVEL, approvalLevelOf, approvalLevelPatch } from './settings.approvalLevel'
 
-export type { TerminalCursorStyle, TerminalCursorInactiveStyle, TerminalShortcutPolicy, TerminalGpuRendering, AppTheme } from './settings.terminal'
+export type { TerminalCursorStyle, TerminalShortcutPolicy, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
 export { SETUP_STEPS, type SetupStep, type SetupStepState, type SetupState } from './settings.setup'
 
@@ -58,9 +58,8 @@ export interface Settings extends TerminalSettings, AgentSettings {
   canvasDots: boolean
   /** Modifier held for "Quick move & resize" (drag anywhere on a node). Normalized on load. */
   quickDrag: QuickDragPreset
-  /** Tampilan chrome APP (panel, header node, menu). `auto` (default) mengambilnya dari tema warna
-   *  terminal, sehingga memilih tema terminal terang tidak menyisakan rangka hitam; `dark`/`light`
-   *  memakunya. */
+  /** Tampilan chrome APP (panel, header node, menu). `auto` (default, "System") mengikuti mode
+   *  terang/gelap OS (`prefers-color-scheme`); `dark`/`light` memakunya. */
   appTheme: AppTheme
   /** Cable (edge) color: `'default'` = theme color, otherwise `#rrggbb`. Normalized on load. */
   edgeColor: string
@@ -117,14 +116,11 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalTheme: 'webterm-dark',
   terminalMinContrast: 1,
   cursorStyle: 'block',
-  cursorInactiveStyle: 'outline',
   cursorBlink: true,
-  terminalGpuRendering: 'auto',
   // Pertahankan tanda hubung, garis bawah, slash dan titik di dalam kata supaya identifier dan
   // path terseleksi utuh.
   terminalWordSeparator: " ()[]{}',\"",
   copyOnSelect: false,
-  terminalMiddleClickPaste: false,
   terminalFontZoomKeys: true,
   terminalShortcutPolicy: 'app-first',
   defaultShell: '',

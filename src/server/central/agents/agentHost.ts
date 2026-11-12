@@ -81,7 +81,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       if (cwd && entry) place(agent, nodeId, cwd, entry.launchLine)
     },
     headlessArgv: (kind, prompt) => deps.catalog.resolve(kind)?.headlessArgv?.(prompt) ?? null,
-    async send(nodeId, text) { deps.sessions.input(nodeId, `${text}\r`) },
+    send: (nodeId, text) => deps.sessions.submit(nodeId, text),
     async scrollback(nodeId, lines) { return deps.sessions.getTerminal(nodeId).split('\n').slice(-lines) },
     async closePty(nodeId) { deps.sessions.close(nodeId) },
     hasSession: (nodeId) => deps.sessions.isLive(nodeId),

@@ -57,8 +57,8 @@ function valueText(r: EffectiveRow): string {
   return r.value === '' ? '—' : r.value
 }
 
-/** Developer table; `query` is the Settings search box (already normalized). */
-export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Element {
+/** Developer table, filtered by its own filter box. */
+export function ControlPanel(): React.JSX.Element {
   const [data, setData] = useState<EffectiveConfig | null>(null)
   const [failed, setFailed] = useState(false)
   const [filter, setFilter] = useState('')
@@ -82,7 +82,7 @@ export function ControlPanel({ query = '' }: { query?: string }): React.JSX.Elem
     }
   }
 
-  const q = normalizeQuery(`${query} ${filter}`)
+  const q = normalizeQuery(filter)
   const rows = useMemo(() => (data?.rows ?? []).filter((r) =>
     (showAll || r.ui === CONTROL_WHERE) &&
     matchesSearch(`${r.key} ${r.label} ${r.description} ${r.subsystem} ${r.reason} ${r.ui ?? CONTROL_TEXT.noUi} ${SOURCE_LABEL[r.source] ?? r.source}`, q),

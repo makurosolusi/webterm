@@ -281,3 +281,11 @@ export const SettingsProvider = SettingsContext.Provider
 export function useLiveSettings(): Settings {
   return useContext(SettingsContext)
 }
+
+/** Settings writer for the same far consumers (an editor node remembering its last Preview/Edit choice).
+ *  Default no-op outside the provider (tests, isolated renders). */
+const SettingsUpdateContext = createContext<(patch: Partial<Settings>) => void>(() => {})
+export const SettingsUpdateProvider = SettingsUpdateContext.Provider
+export function useSettingsUpdate(): (patch: Partial<Settings>) => void {
+  return useContext(SettingsUpdateContext)
+}

@@ -17,17 +17,14 @@ const uiRoot = path.join(clientRoot, 'components', 'ui') + path.sep
  * entry; the staleness test below fails when an entry no longer has that violation.
  */
 const PENDING: Record<string, Reason[]> = {
-  'src/client/AdvancedSection.tsx': ['async-click'],
   'src/client/AgentMemory.tsx': ['async-click'],
   'src/client/AgentMemoryBoard.tsx': ['async-click'],
-  'src/client/CapabilityCard.tsx': ['disabled-no-reason'],
   'src/client/CapabilityOffer.tsx': ['async-click'],
   'src/client/CentralSettingsSection.tsx': ['async-click', 'disabled-no-reason'],
   'src/client/ChromiumDownload.tsx': ['async-click'],
   'src/client/ChromiumPathField.tsx': ['async-click'],
   'src/client/ClaudeProviderCard.tsx': ['async-click'],
   'src/client/ClaudeProviderCommand.tsx': ['async-click', 'disabled-no-reason'],
-  'src/client/ControlPanelDoctor.tsx': ['async-click', 'disabled-no-reason'],
   'src/client/ControlPanelField.tsx': ['async-click', 'disabled-no-reason'],
   'src/client/DiffNode.tsx': ['async-click'],
   'src/client/Dock.workspaceDialog.tsx': ['async-click'],
@@ -81,7 +78,6 @@ const PENDING: Record<string, Reason[]> = {
   'src/client/workspaceCreate/CloneRepoDialog.tsx': ['disabled-no-reason'],
   'src/client/workspaceCreate/NewProjectDialog.tsx': ['disabled-no-reason'],
   'src/client/workspaceCreate/ParentField.tsx': ['disabled-no-reason'],
-  'src/client/workspaceCreate/ProjectsFolderSetting.tsx': ['async-click', 'disabled-no-reason'],
 }
 
 /** Permanent exceptions: the control already gives its own complete feedback. */

@@ -168,7 +168,7 @@ function withExecutor() {
   const sent: string[] = []
   const closes: string[] = []
   const host = {
-    hasSession: () => true, send: async (_n: string, t: string) => { sent.push(t) },
+    hasSession: () => true, send: async (_n: string, t: string) => { sent.push(t); return { ok: true as const, started: true as const } },
     // Mirrors sessionsEnd.close: the exit event is published before close returns.
     closePty: async (n: string) => { closes.push(n); s.bus.publish(event('pty.exit', { reason: 'closed' }, n)) },
   } as unknown as AgentHost

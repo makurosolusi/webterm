@@ -7,6 +7,7 @@ import { consumeApproval, getApproval, requestApproval } from '../../ledger/ledg
 import { execWrite, getRow } from '../../ledger/ledgerCore'
 import type { AgentRecord, AgentRole, AgentRunner, AgentState, ControlGuard, Tier } from '../contracts'
 import type { ToolResult } from '../tools/toolTypes'
+import type { SubmitResult } from '../../agentSubmit'
 import { AGENT_TRANSITIONS } from '../contracts'
 import { AGENT_KIND_UNKNOWN } from './agentCatalog'
 import { AgentTransitionError, isTerminalState } from './agentStateMachine'
@@ -52,7 +53,8 @@ export interface AgentHost {
   defHashOf?(kind: string): string | undefined
   /** Extra env for a headless child of `kind` (already resolved; never logged or audited). */
   execEnv?(kind: string): Record<string, string>
-  send(nodeId: string, text: string): Promise<void>
+  /** Types and submits `text`; a failure means the prompt did not start (nothing to retry blindly). */
+  send(nodeId: string, text: string): Promise<SubmitResult>
   scrollback(nodeId: string, lines: number): Promise<string[]>
   closePty(nodeId: string, force: boolean): Promise<void>
   hasSession(nodeId: string): boolean
@@ -344,7 +346,8 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       if (agent.state !== 'working' && agent.state !== 'waiting_input' && agent.state !== 'candidate_done') return { ok: false, code: 'agent_not_active' }
       if (mode === 'followup' && agent.state === 'working') return { ok: false, code: 'agent_busy' }
       if (!host.hasSession(agent.nodeId)) return { ok: false, code: 'session_gone' }
-      await host.send(agent.nodeId, `${AGENT_ENVELOPE}\n${filterHandoffContext(text).replace(CONTROL_CHARS, '')}`)
+      const sent = await host.send(agent.nodeId, `${AGENT_ENVELOPE}\n${filterHandoffContext(text).replace(CONTROL_CHARS, '')}`)
+      if (!sent.ok) return { ok: false, code: sent.reason, data: { hint: sent.message } }
       const moved = agent.state === 'working' ? agent : tryMove(agent.id, 'working') ?? agent
       audit(moved, 'prompt', { mode, chars: text.length })
       return snapshot(moved)

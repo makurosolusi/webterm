@@ -34,8 +34,8 @@ function reachable(): Map<string, string> {
 }
 
 const ID = /(?<![\w-])(?:data-field|field|setting)="([^"$]+)"/g
-/** Capability cards Settings renders on their own (Workers and Autonomy fold into the Central row). */
-const CARD_IDS = CAPABILITY_IDS.filter((id) => id !== 'workers' && id !== 'autonomy')
+/** Capability cards Settings › Features renders (Central, Workers and Autonomy are switched in Central Agent). */
+const CARD_IDS = CAPABILITY_IDS.filter((id) => id !== 'central' && id !== 'workers' && id !== 'autonomy')
 
 const files = reachable()
 const literal = [...files].flatMap(([file, text]) => [...text.matchAll(ID)].map((m) => ({ file, id: m[1], at: m.index })))
@@ -48,7 +48,8 @@ const indexed = SETTINGS_SEARCH_INDEX.flatMap((x) => (x.field ? [x.field as stri
 
 it('the scan really walked the Settings tree', () => {
   expect(files.size).toBeGreaterThan(50)
-  expect(literal.length).toBeGreaterThan(40)
+  // Floor, not a count: the General/Claude/Central rework cut the literal ids to under 40.
+  expect(literal.length).toBeGreaterThan(30)
 })
 
 it('every rendered data-field has an index entry, and every indexed field is rendered', () => {

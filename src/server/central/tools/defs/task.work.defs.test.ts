@@ -28,7 +28,8 @@ let failSend: string | null
 const chats = {
   async send(ws: string, id: string, text: string) { sent.push(['chat', ws, id, text]); return failSend ? { ok: false, code: failSend } : { ok: true, started: false } },
 } as unknown as ChatPort
-const sessions = { isLive: (id: string) => id !== 'n4', input: (id: string, data: string) => { sent.push(['pty', id, data]) } }
+// Plain-shell submit path (one write); the confirmed Claude path is covered by agentSubmit.test.ts.
+const sessions = { isLive: (id: string) => id !== 'n4', input: (id: string, data: string) => { sent.push(['pty', id, data]) }, statusOf: () => undefined, screenSource: () => undefined, agentIdOf: () => undefined }
 
 beforeEach(() => {
   f = openFixture(); seedPortfolio(f.db); sent = []; failSend = null

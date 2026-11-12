@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Settings > Canvas background: live preview, reset, contrast guard, missing-file notice,
-// upload wiring and the per-workspace "Same as global" switch.
+// upload wiring, the one "This workspace: Same as all / Custom" choice, and a preset selected only on an exact match.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -25,10 +25,10 @@ function stubImage(outcome: 'load' | 'error', pixel = 255): void {
 }
 
 let latest: Settings = DEFAULT_SETTINGS
-function Host({ initial, projectId, initialScope }: { initial: Partial<Settings>; projectId?: string; initialScope?: 'global' | 'workspace' }) {
+function Host({ initial, projectId }: { initial: Partial<Settings>; projectId?: string }) {
   const [s, setS] = useState<Settings>({ ...DEFAULT_SETTINGS, ...initial })
   latest = s
-  return <CanvasBackgroundSection settings={s} projectId={projectId} initialScope={initialScope}
+  return <CanvasBackgroundSection settings={s} projectId={projectId}
     onChange={(p) => setS((prev) => { latest = applySettingsPatch(prev, p); return latest })} />
 }
 
@@ -104,13 +104,31 @@ describe('CanvasBackgroundSection', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Unsupported file')
   })
 
-  it('workspace scope: "Same as global" by default, then its own background', () => {
-    render(<Host initial={{ canvasBackground: bg({ mode: 'color', color: '#17241e' }) }} projectId="w1" initialScope="workspace" />)
-    expect(screen.queryByLabelText('Background style')).toBeNull()
-    fireEvent.change(screen.getByLabelText('This workspace uses'), { target: { value: 'own' } })
-    expect(latest.canvasBackgroundByWorkspace.w1?.color).toBe('#17241e')
+  it('This workspace: Same as all edits the shared background; Custom copies it and edits only this workspace', () => {
+    render(<Host initial={{ canvasBackground: bg({ mode: 'color', color: '#17241e' }) }} projectId="w1" />)
+    expect(screen.queryByLabelText('Edit background for')).toBeNull() // one choice, not two stacked selects
+    expect((screen.getByLabelText('This workspace') as HTMLSelectElement).value).toBe('same')
+    fireEvent.click(screen.getByRole('button', { name: 'Midnight navy' }))
+    expect(latest.canvasBackground.color).toBe('#141b2d')
+    fireEvent.change(screen.getByLabelText('This workspace'), { target: { value: 'custom' } })
+    expect(latest.canvasBackgroundByWorkspace.w1?.color).toBe('#141b2d')
     fireEvent.change(screen.getByLabelText('Background style'), { target: { value: 'gradient' } })
     expect(latest.canvasBackgroundByWorkspace.w1?.mode).toBe('gradient')
     expect(latest.canvasBackground.mode).toBe('color')
+  })
+
+  it('back to Same as all drops the workspace override', async () => {
+    render(<Host initial={{ canvasBackgroundByWorkspace: { w1: bg({ mode: 'color', color: '#2a1e2e' }) } }} projectId="w1" />)
+    expect((screen.getByLabelText('This workspace') as HTMLSelectElement).value).toBe('custom')
+    fireEvent.change(screen.getByLabelText('This workspace'), { target: { value: 'same' } })
+    await waitFor(() => expect(latest.canvasBackgroundByWorkspace.w1).toBeUndefined())
+  })
+
+  it('a gradient preset is selected only when its angle matches too', () => {
+    const dusk = { from: '#1b2234', to: '#2b1d33', angle: 135 }
+    render(<Host initial={{ canvasBackground: bg({ mode: 'gradient', gradient: dusk }) }} />)
+    expect(screen.getByRole('button', { name: 'Dusk' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.change(screen.getByLabelText('Gradient angle'), { target: { value: '200' } })
+    expect(screen.getByRole('button', { name: 'Dusk' }).getAttribute('aria-pressed')).toBe('false')
   })
 })

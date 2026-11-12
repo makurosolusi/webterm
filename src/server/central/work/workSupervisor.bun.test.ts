@@ -34,7 +34,6 @@ test('heartbeat: nudges once per quiet spell, exactly at the threshold, no statu
   expect(s.fake.state.inputs).toHaveLength(1)
   expect(s.fake.state.inputs[0]).toContain(`title ${taskId}`)
   expect(s.fake.state.inputs[0]).toContain('10 minutes')
-  expect(s.fake.state.inputs[0]?.endsWith('\r')).toBe(true)
   expect(s.statusOf(taskId)).toBe('running')
   expect(s.lastRule(taskId)).toBe('heartbeat')
   expect(s.store.timeline(taskId).at(-1)?.kind).toBe('work.assignment.nudge')
@@ -64,6 +63,16 @@ test('a nudge failure logs, marks nothing and does not stop the tick', async () 
   await s.supervisor.tick(at(R.heartbeat.afterMs))
   expect(s.store.getAssignment(a.assignmentId)?.nudgedAt).toBeNull()
   expect(s.fake.state.chats).toHaveLength(1)
+})
+
+test('a nudge that never started the agent is not marked as nudged', async () => {
+  const s = rig()
+  const a = s.assigned('running', { nodeId: 'n-a' })
+  s.store.touchSignal(a.assignmentId, 'x', T0)
+  s.fake.state.submitResult = { ok: false, reason: 'not_started', message: 'did not start' }
+  await s.supervisor.tick(at(R.heartbeat.afterMs))
+  expect(s.fake.state.inputs).toHaveLength(1)
+  expect(s.store.getAssignment(a.assignmentId)?.nudgedAt).toBeNull()
 })
 
 test('stalled: stalls a quiet running task exactly at the threshold, with the rule', async () => {

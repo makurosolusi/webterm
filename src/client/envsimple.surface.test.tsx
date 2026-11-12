@@ -71,7 +71,7 @@ async function openCapabilities(on: ReadonlySet<CapabilityId>): Promise<HTMLElem
   vi.stubGlobal('fetch', vi.fn(async (url: string) =>
     new Response(JSON.stringify(url.startsWith('/api/capabilities') ? fixture(on) : { items: [] }), { status: 200 })))
   render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} projectId="p1" />)
-  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Capabilities' }))
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Section settings' })).getByRole('button', { name: 'Features' }))
   await screen.findAllByRole('switch')
   return screen.getByRole('main', { name: 'Settings' })
 }
@@ -83,7 +83,7 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
   it('teks halaman penuh bebas kata terlarang, nama env var, dan istilah UI lama', async () => {
     await openCapabilities(new Set<CapabilityId>(['central', 'workers']))
     const text = document.body.textContent ?? ''
-    expect(text).toContain('Central Agent')
+    expect(text).toContain('Central')
     expect(text).not.toMatch(BANNED_WORDS)
     expect(text).not.toMatch(ENV_NAMES)
     expect(text).not.toMatch(OLD_UI)
@@ -100,17 +100,17 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     expect(toSectionId('channels')).toBe('capabilities')
   })
 
-  it('tiga kartu bersakelar (Central/Worker/Otonomi = satu baris ringkasan, Telegram = Hubungkan/Putuskan), lima kartu total', async () => {
+  it('Features: two switched cards (Browser, Files) plus Telegram (Connect/Disconnect); Central lives in Central Agent', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
-    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 4)
-    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length - 2)
+    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect(main.querySelectorAll('[data-capability]')).toHaveLength(3)
   })
 
-  it('Lanjutan tertutup dengan tepat empat butir', async () => {
+  it('Advanced is closed with exactly two items (Chromium, Reset)', async () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelectorAll(':scope > div').length).toBe(4) // butir, bukan kontrol: Chromium punya beberapa tombol
+    expect(details.querySelectorAll(':scope > div').length).toBe(2) // items, not controls: Chromium has several buttons
   })
 
   it('Central: tanpa sakelar persetujuan worker terpisah (Propose selalu bertanya), halaman bebas kata terlarang dan env var', async () => {

@@ -10,7 +10,8 @@ import { CostPanel, COST_API_PATH } from './CostPanel'
 import { PolicySimulator } from './PolicySimulator'
 import { CustomAgentsSettings } from './SettingsAgents'
 import { CanvasSection } from './SettingsCanvasSections'
-import { InteractionSection, ShellSection, TerminalSection } from './SettingsTerminalSections'
+import { AppearanceSection } from './SettingsAppearanceSection'
+import { TerminalSection } from './SettingsTerminalSections'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -22,38 +23,55 @@ const optionsOf = (name: string): string[] => {
 }
 
 describe('settings pickers per screen', () => {
-  it('Terminal sections: stepper, combobox, selects and sliders', () => {
-    const onChange = vi.fn()
-    render(<><TerminalSection settings={DEFAULT_SETTINGS} onChange={onChange} /><InteractionSection settings={DEFAULT_SETTINGS} onChange={onChange} />
-      <ShellSection settings={DEFAULT_SETTINGS} onChange={onChange} /></>)
+  it('Appearance: Theme is Light/Dark/System, font size a stepper, fonts a combobox', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(<AppearanceSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />)
+    expect([...select('Theme').options].map((o) => o.textContent)).toEqual(['System', 'Light', 'Dark'])
     expect(screen.getByRole('spinbutton', { name: 'Font size' })).toBeTruthy()
-    expect(optionsOf('Font family').some((o) => o.startsWith('JetBrains Mono'))).toBe(true)
+    expect(optionsOf('Font')[0]).toMatch(/\(default\)/)
+    expect(screen.getByTestId('scheme-preview')).toBeTruthy()
+    expect(screen.queryByText(/edited by hand/)).toBeNull() // no developer hint text
+  })
+
+  it('Terminal: History length drives both buffers; the rest is under Advanced; shells come from the server', async () => {
+    const onChange = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/settings/shells' ? { shells: ['/bin/zsh', '/opt/homebrew/bin/fish'] } : {}))))
+    render(<TerminalSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
     expect(select('Normal text weight').tagName).toBe('SELECT')
+    expect(select('Normal text weight').closest('details')).not.toBeNull()
+    expect(select('Keyboard shortcuts go to').closest('details')).toBeNull()
     expect([...select('Bold text weight').options].map((o) => o.value)).toEqual(['100', '200', '300', '400', '500', '600', '700', '800', '900'])
     for (const name of ['Line height', 'Letter spacing', 'Minimum contrast']) expect((screen.getByLabelText(name) as HTMLInputElement).type).toBe('range')
     fireEvent.change(screen.getByLabelText('Line height'), { target: { value: '1.5' } })
     expect(onChange).toHaveBeenLastCalledWith({ terminalLineHeight: 1.5 })
-    expect(optionsOf('Terminal scrollback')).toContain('10,000 lines (default)10000')
-    fireEvent.change(combo('Terminal scrollback'), { target: { value: '7' } })
-    fireEvent.keyDown(combo('Terminal scrollback'), { key: 'Enter' })
+    expect(optionsOf('History length')).toContain('10,000 lines (default)10000')
+    fireEvent.change(combo('History length'), { target: { value: '7' } })
+    fireEvent.keyDown(combo('History length'), { key: 'Enter' })
     expect(screen.getByRole('alert').textContent).toContain('between 1000 and 100000')
-    fireEvent.change(combo('Terminal scrollback'), { target: { value: '20000' } })
-    fireEvent.keyDown(combo('Terminal scrollback'), { key: 'Enter' })
-    expect(onChange).toHaveBeenLastCalledWith({ scrollbackLines: 20000 })
+    fireEvent.change(combo('History length'), { target: { value: '20000' } })
+    fireEvent.keyDown(combo('History length'), { key: 'Enter' })
+    expect(onChange).toHaveBeenLastCalledWith({ scrollbackLines: 20000, scrollbackBytes: 2 * DEFAULT_SETTINGS.scrollbackBytes })
     fireEvent.change(combo('Word separators'), { target: { value: '()' } })
     fireEvent.blur(combo('Word separators'))
     expect(onChange).toHaveBeenLastCalledWith({ terminalWordSeparator: ' ()' })
-    expect(optionsOf('Default shell')).toEqual(['System default shell', '/bin/zsh', '/bin/bash', '/bin/sh'])
-    expect(select('Server replay buffer').value).toBe(String(DEFAULT_SETTINGS.scrollbackBytes))
+    await waitFor(() => expect(optionsOf('Default shell')).toEqual(['System default shell', '/bin/zsh', '/opt/homebrew/bin/fish']))
+    for (const gone of ['GPU rendering', 'Inactive cursor style', 'Middle-click paste', 'Open Markdown as preview', 'Server replay buffer']) {
+      expect(screen.queryByText(gone), gone).toBeNull()
+    }
   })
 
-  it('Canvas section: grid size and new node size are selects of presets', () => {
+  it('Canvas section: one Grid choice over dots + snap; grid size a select; no node-size settings', () => {
     const onChange = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
     render(<CanvasSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
-    for (const name of ['Grid size', 'New node width', 'New node height']) expect(select(name).tagName).toBe('SELECT')
-    fireEvent.change(select('New node width'), { target: { value: '800' } })
-    expect(onChange).toHaveBeenCalledWith({ defaultNodeWidth: 800 })
+    expect(select('Grid').value).toBe('dots')
+    fireEvent.change(select('Grid'), { target: { value: 'snap' } })
+    expect(onChange).toHaveBeenLastCalledWith({ canvasDots: true, snapToGrid: true })
+    fireEvent.change(select('Grid'), { target: { value: 'off' } })
+    expect(onChange).toHaveBeenLastCalledWith({ canvasDots: false, snapToGrid: false })
+    expect(select('Grid size').tagName).toBe('SELECT')
+    expect(screen.queryByText('New node width')).toBeNull()
+    expect(screen.queryByText('Browser search engine')).toBeNull()
     // A hand-edited value outside the presets stays visible and selected.
     cleanup()
     render(<CanvasSection settings={{ ...DEFAULT_SETTINGS, gridSize: 30 }} onChange={onChange} />)

@@ -7,11 +7,13 @@
 // sudah ada tidak berubah; yang berubah hanya chrome dan metriknya — 35px header, 22px baris,
 // teks 13px, kontrol 26px, token `--vscode-*`.
 //
-// Sidebar dikelompokkan (General / Agents / Workspace / System, `group` tiap section); panah/Home/End
-// melintasi grup karena navigasi menghitung semua tombol di nav.
+// Sidebar dikelompokkan (`group` tiap section; grup tanpa section terlihat disembunyikan); panah/Home/End
+// melintasi grup karena navigasi menghitung semua tombol di nav. Developer hanya tampil dalam developer
+// mode (./developerMode); tautan ke sana tetap membukanya.
 //
-// Tab Kemampuan (ENVSIMPLE D6) menggantikan Channels dan Environment: tujuh kartu, satu sakelar
-// tiap kartu; tautan lama ke `env`/`channels` tetap mendarat di tab ini lewat `toSectionId`.
+// Halaman Features (id `capabilities`, dulu Capabilities; ENVSIMPLE D6) menggantikan Channels dan
+// Environment; tautan lama ke `env`/`channels` tetap mendarat di sini lewat `toSectionId`. A link that
+// names a field opens the page holding it (`pageOfField`), so old `terminal`/`shell` links still land.
 //
 // Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
 // menyambungkannya ke `useSettings()`.
@@ -36,10 +38,11 @@ import { MemorySection } from './MemorySection'
 import { RulesSection } from './RulesSection'
 import { SpendingSection } from './SpendingSection'
 import { normalizeQuery } from './SettingsFields'
-import { searchSettings } from './settings.search'
+import { SETTINGS_SEARCH_INDEX, searchSettings } from './settings.search'
 import { SettingsItemScopeProvider } from './settingsContext'
-import { CanvasSection, InteractionSection, ShellSection, TerminalSection } from './SettingsSections'
-import { CANVAS_BG_SECTION, CANVAS_BG_WORKSPACE_SECTION, CanvasBackgroundSection } from './CanvasBackgroundSection'
+import { AppearanceSection, CanvasSection, TerminalSection } from './SettingsSections'
+import { NotificationsSection } from './osNotify.settings'
+import { useDeveloperMode } from './developerMode'
 import { toSettingsRouteSection } from './appRoute'
 import type { SettingsFieldId } from './settings.link'
 import { revealSettingsField } from './settingsPanel.reveal'
@@ -52,7 +55,7 @@ import './settings-search.css'
 
 export { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 
-/** Section for an id from a link or a saved tab (legacy ids mapped, unknown -> Terminal); lives with the URL whitelist. */
+/** Section for an id from a link or a saved tab (legacy ids mapped, unknown -> Appearance); lives with the URL whitelist. */
 export const toSectionId: (id: string) => SectionId = toSettingsRouteSection
 
 /** What `renderSection` gets: the panel's state and callbacks. */
@@ -61,33 +64,24 @@ interface SectionCtx {
   onChange: (patch: SettingsPatch) => void
   navigate: (to: CentralLinkTarget) => void
   projectId: string
-  activeRaw: string
 }
 
 /** Section id -> its body. A `Record` over `SectionId`, so a new section without a body fails the type check. */
 const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
+  appearance: (c) => <AppearanceSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined} />,
   terminal: (c) => <TerminalSection settings={c.s} onChange={c.onChange} />,
-  interaction: (c) => <InteractionSection settings={c.s} onChange={c.onChange} />,
-  shell: (c) => <ShellSection settings={c.s} onChange={c.onChange} />,
+  canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
+  notifications: () => <NotificationsSection />,
   claude: (c) => <ClaudeSettingsSection settings={c.s} onChange={c.onChange} />,
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
   rules: () => <RulesSection />,
   memory: () => <MemorySection />,
   automations: () => <AutomationsSection />,
   spending: (c) => <SpendingSection onNavigate={c.navigate} />,
-  canvas: (c) => <CanvasSection settings={c.s} onChange={c.onChange} />,
-  [CANVAS_BG_SECTION]: (c) => (
-    <CanvasBackgroundSection settings={c.s} onChange={c.onChange} projectId={c.projectId || undefined}
-      initialScope={c.activeRaw === CANVAS_BG_WORKSPACE_SECTION ? 'workspace' : 'global'} />
-  ),
-  capabilities: (c) => (
-    // Search no longer mounts pages (./settings.search), so the section's own filter always sees ''.
-    <CapabilitiesSection projectId={c.projectId} query="" sectionTitle={SETTINGS_SECTIONS.find((x) => x.id === 'capabilities')?.label ?? ''}
-      onOpenCentral={() => c.navigate({ section: 'central', field: 'central.central' })} />
-  ),
+  capabilities: (c) => <CapabilitiesSection projectId={c.projectId} settings={c.s} onChange={c.onChange} />,
   account: () => <AccountSection />,
   health: () => <HealthSection />,
-  developer: () => <DeveloperSection query="" />,
+  developer: () => <DeveloperSection />,
 }
 
 interface PanelProps {
@@ -126,15 +120,20 @@ function useNarrow(): boolean {
 
 const sectionLabel = (id: SectionId): string => SETTINGS_SECTIONS.find((x) => x.id === id)?.label ?? id
 
+/** The page that holds `field` (from the search index), so a link with an old section id still lands. */
+export const pageOfField = (field: SettingsFieldId | undefined): SectionId | undefined =>
+  field ? SETTINGS_SEARCH_INDEX.find((x) => x.field === field)?.page : undefined
+
 /** Dialog Settings. */
-export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'terminal', section, field, onSectionChange }: PanelProps): React.JSX.Element {
+export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', history, initialSection = 'appearance', section, field, onSectionChange }: PanelProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalized = useMemo(() => normalizeQuery(query), [query])
   const [ownRaw, setOwnRaw] = useState<string>(initialSection)
   const activeRaw = section ?? ownRaw
   const setActive = (id: string, to?: SettingsFieldId): void => { setOwnRaw(id); onSectionChange?.(toSectionId(id), to) }
-  const active = toSectionId(activeRaw)
-  const results = useMemo(() => searchSettings(normalized), [normalized])
+  const developer = useDeveloperMode()
+  const shown = (id: SectionId): boolean => id !== 'developer' || developer
+  const results = useMemo(() => searchSettings(normalized).filter((g) => g.page !== 'developer' || developer), [normalized, developer])
   const found = results.reduce((n, g) => n + g.entries.length, 0)
   const narrow = useNarrow()
   const mainRef = useRef<HTMLElement>(null)
@@ -142,6 +141,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   // Uncontrolled (no `section` prop) the panel keeps the field itself; controlled it comes back as `field`.
   const [ownField, setOwnField] = useState<SettingsFieldId | undefined>()
   const target = section === undefined ? ownField : field
+  const active = pageOfField(target) ?? toSectionId(activeRaw)
   // One way to open a page: TOC click (no field), cross-link, search result "Go to".
   const open = (id: string, to?: SettingsFieldId): void => {
     setQuery('')
@@ -160,7 +160,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   useEffect(() => (target && !normalized ? revealSettingsField(() => mainRef.current, target) : undefined), [target, active, normalized])
 
   const renderSection = (id: SectionId): React.JSX.Element =>
-    SECTION_BODY[id]({ s, onChange, navigate, projectId, activeRaw })
+    SECTION_BODY[id]({ s, onChange, navigate, projectId })
 
   const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
   const activeLabel = activeSection.label
@@ -257,9 +257,9 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
               <div className="st-section-picker">
                 <span className="st-select-wrap">
                   <select className="st-select" aria-label="Settings section" value={active} onChange={(event) => open(event.target.value)}>
-                    {SETTINGS_GROUPS.map((group) => (
+                    {SETTINGS_GROUPS.filter((group) => SETTINGS_SECTIONS.some((x) => x.group === group && shown(x.id))).map((group) => (
                       <optgroup key={group} label={group}>
-                        {SETTINGS_SECTIONS.filter((section) => section.group === group).map((section) => (
+                        {SETTINGS_SECTIONS.filter((section) => section.group === group && shown(section.id)).map((section) => (
                           <option key={section.id} value={section.id}>{section.label}</option>
                         ))}
                       </optgroup>
@@ -270,10 +270,10 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
               </div>
             ) : (
               <nav className="st-sidebar" aria-label="Section settings" onKeyDown={onTocKeyDown}>
-                {SETTINGS_GROUPS.map((group) => (
+                {SETTINGS_GROUPS.filter((group) => SETTINGS_SECTIONS.some((x) => x.group === group && shown(x.id))).map((group) => (
                   <div key={group} role="group" className="st-nav-group" aria-labelledby={`st-nav-group-${group}`}>
                     <div id={`st-nav-group-${group}`} className="st-nav-group-title">{group}</div>
-                    {SETTINGS_SECTIONS.filter((section) => section.group === group).map((section) => (
+                    {SETTINGS_SECTIONS.filter((section) => section.group === group && shown(section.id)).map((section) => (
                       <button
                         key={section.id}
                         type="button"

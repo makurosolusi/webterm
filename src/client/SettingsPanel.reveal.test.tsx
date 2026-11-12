@@ -57,6 +57,12 @@ describe('deep link to a setting', () => {
     await waitFor(() => expect(document.activeElement).toBe(el.querySelector('select')))
   })
 
+  it('opens a page\'s Advanced disclosure around the field (Terminal › Advanced › Default shell)', async () => {
+    panel('shell', 'defaultShell') // a legacy section id still lands on the page that holds the field
+    const el = await revealed('defaultShell')
+    expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
+  })
+
   it('without a field nothing is revealed: the section opens at the top', async () => {
     panel('terminal')
     await waitFor(() => expect(document.querySelector('.st-section-title')).not.toBeNull())
@@ -72,15 +78,11 @@ describe('links inside Settings name the field they land on', () => {
     expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 
-  it('Spending → Central’s own limit, Capabilities → Central Agent row', async () => {
+  it('Spending → Central’s own limit', async () => {
     const onSectionChange = vi.fn()
-    const { unmount } = panel('spending', undefined, onSectionChange)
+    panel('spending', undefined, onSectionChange)
     fireEvent.click(await within(screen.getByRole('main', { name: 'Settings' })).findByRole('button', { name: 'Central Agent' }))
-    unmount()
-    panel('capabilities', undefined, onSectionChange)
-    const row = await waitFor(() => { expect(target('capability.central')).toBeTruthy(); return target('capability.central') })
-    fireEvent.click(within(row).getByRole('button'))
-    expect(onSectionChange.mock.calls).toEqual([['central', 'central.costLimit'], ['central', 'central.central']])
+    expect(onSectionChange.mock.calls).toEqual([['central', 'central.costLimit']])
   })
 
   it('a TOC click is a plain section change: the field is cleared', async () => {

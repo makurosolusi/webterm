@@ -38,7 +38,7 @@ export interface WorkTrackingDeps {
 function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervisorPorts {
   return {
     isLive: (nodeId) => sessions.isLive(nodeId),
-    input: (nodeId, text) => sessions.input(nodeId, text),
+    submit: (nodeId, text) => sessions.submit(nodeId, text),
     chatBusy: (nodeId) => activeAgentChatPool()?.peek(nodeId)?.busy() === true,
     chatNodeGone: (a) => {
       const ws = projectWorkspace(db, a.projectId)

@@ -1,6 +1,9 @@
 // Di mana node baru lahir. Dulu `80 + n * 40`: tangga diagonal dari titik asal yang buta pan/zoom,
 // jadi node ke-13 mendarat di (560,560) — bisa di luar layar, dan pengguna harus mencarinya.
-import type { XYPosition } from '@xyflow/react'
+import { useCallback } from 'react'
+import type { NodeChange, XYPosition } from '@xyflow/react'
+import { DEFAULT_SETTINGS } from '../shared/settings'
+import { clampSetting } from '../shared/settings.ranges'
 
 type Size = { width: number; height: number }
 
@@ -32,4 +35,31 @@ export function spawnAt(
   const center = rf?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
   // Tanpa instance (belum `onInit`) jatuh ke sudut lama (80,80) — bukan ke NaN.
   return spawnPosition(center ?? { x: 80 + size.width / 2, y: 80 + size.height / 2 }, size, n)
+}
+
+/**
+ * The size a resize just ENDED at (React Flow's last `dimensions` change, `resizing: false`), as the
+ * size for the next new node: "remember the last resize" replaces the New node width/height settings.
+ * Measurements (no `resizing` flag) and mid-drag frames are ignored. Rounded into the setting's range.
+ */
+export function resizedNodeSize(changes: readonly NodeChange[]): { defaultNodeWidth: number; defaultNodeHeight: number } | null {
+  const end = changes.findLast((c) => c.type === 'dimensions' && c.resizing === false && c.dimensions)
+  if (end?.type !== 'dimensions' || !end.dimensions) return null
+  const round = (v: number): number => Math.round(v / 20) * 20
+  return {
+    defaultNodeWidth: clampSetting('defaultNodeWidth', round(end.dimensions.width), DEFAULT_SETTINGS.defaultNodeWidth),
+    defaultNodeHeight: clampSetting('defaultNodeHeight', round(end.dimensions.height), DEFAULT_SETTINGS.defaultNodeHeight),
+  }
+}
+
+/** `onNodesChange` that also stores a finished resize as the size of the next new node. */
+export function useRememberLastResize(
+  onNodesChange: (changes: NodeChange[]) => void,
+  update: (patch: { defaultNodeWidth: number; defaultNodeHeight: number }) => void,
+): (changes: NodeChange[]) => void {
+  return useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes)
+    const size = resizedNodeSize(changes)
+    if (size) update(size)
+  }, [onNodesChange, update])
 }

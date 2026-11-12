@@ -3,7 +3,6 @@ import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting, SETTING_RANGES } from '../shared/settings.ranges'
 import type {
   Settings,
-  TerminalCursorInactiveStyle,
   TerminalCursorStyle,
 } from '../shared/settings'
 import { resolveTerminalTheme } from './themes'
@@ -77,7 +76,8 @@ export interface XtermVisualOptions {
   minimumContrastRatio: number
   cursorBlink: boolean
   cursorStyle: TerminalCursorStyle
-  cursorInactiveStyle: TerminalCursorInactiveStyle
+  /** Always `outline` (xterm's default): it shows at a glance which terminal on the canvas has focus. */
+  cursorInactiveStyle: TerminalCursorStyle | 'outline' | 'none'
   lineHeight: number
   letterSpacing: number
   scrollback: number
@@ -98,7 +98,6 @@ export type XtermVisualSettings = Pick<
   | 'terminalMinContrast'
   | 'terminalWordSeparator'
   | 'cursorStyle'
-  | 'cursorInactiveStyle'
   | 'cursorBlink'
   // Bukan appearance, tapi satu-satunya kunci yang memberi xterm batas scrollback-nya (BARIS —
   // bukan `scrollbackBytes`, yang milik ring buffer PTY di server).
@@ -130,7 +129,7 @@ export function xtermOptionsFromSettings(
     minimumContrastRatio: terminalMinContrast(s.terminalMinContrast),
     cursorBlink: s.cursorBlink,
     cursorStyle: s.cursorStyle,
-    cursorInactiveStyle: s.cursorInactiveStyle,
+    cursorInactiveStyle: 'outline',
     lineHeight: terminalLineHeight(s.terminalLineHeight),
     letterSpacing: terminalLetterSpacing(s.terminalLetterSpacing),
     scrollback: terminalScrollbackLines(s.scrollbackLines),
@@ -207,9 +206,6 @@ export function applyLiveOptions(
   }
   if (o.cursorBlink !== next.cursorBlink) o.cursorBlink = next.cursorBlink
   if (o.cursorStyle !== next.cursorStyle) o.cursorStyle = next.cursorStyle
-  if (o.cursorInactiveStyle !== next.cursorInactiveStyle) {
-    o.cursorInactiveStyle = next.cursorInactiveStyle
-  }
   if (o.scrollback !== next.scrollback) o.scrollback = next.scrollback
   if (themeChanged) o.theme = next.theme
 

@@ -54,7 +54,7 @@ function setup(canvasFake = fakeCanvas()) {
   const live = new Set<string>()
   const sessions = {
     open: (i: Parameters<WorkerSessionPort['open']>[0]) => { opens.push(i); live.add(i.nodeId) },
-    isLive: (id: string) => live.has(id), input: () => {}, close: () => {}, getTerminal: () => '', statusOf: () => undefined,
+    isLive: (id: string) => live.has(id), input: () => {}, submit: async () => ({ ok: true as const, started: true as const }), close: () => {}, getTerminal: () => '', statusOf: () => undefined,
   } as WorkerSessionPort
   const wts = new Map<string, WorktreeAllocation>()
   const worktrees = {

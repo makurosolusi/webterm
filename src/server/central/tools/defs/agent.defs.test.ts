@@ -22,7 +22,7 @@ function setup(decide: () => GuardDecision = () => ({ verdict: 'allow', level: '
   const host: AgentHost = {
     runnerFor: () => 'pty', spawnTier: () => 'R2', worktree: async (a) => `/tmp/wt/${a.id}`, initialPrompt: async () => 'go',
     openPty: async (_a, _cwd, nodeId) => { sessions.add(nodeId) }, headlessArgv: () => null,
-    send: async (_n, t) => { sent.push(t) }, scrollback: async () => ['a', 'b', 'c'], closePty: async (n) => { sessions.delete(n) }, hasSession: (n) => sessions.has(n),
+    send: async (_n, t) => { sent.push(t); return { ok: true as const, started: true as const } }, scrollback: async () => ['a', 'b', 'c'], closePty: async (n) => { sessions.delete(n) }, hasSession: (n) => sessions.has(n),
   }
   const executor = createAgentExecutor({ db: f.db, guard, host, now: () => T0 })
   const registry = createRegistry()

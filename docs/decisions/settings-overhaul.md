@@ -47,9 +47,21 @@ override per workspace pindah ke menu workspace), context window (dari model), b
 model), token budget harian (cukup batas dolar), skill on/off (selalu menyala), baris info Browser/Telegram/Report/Ladder,
 duplikat scrollback, dua Sign out, flag env turunan yang tidak dibaca runtime (verifikasi dulu).
 
-## Keputusan terbuka
+## Catatan pelaksanaan W2b
 
-- Default izin agent (3 level): Never ask (= sekarang) / Ask for risky things (rekomendasi) / Ask every time — menunggu user.
+- Theme "System" = nilai `auto`, kini mengikuti `prefers-color-scheme` OS (deviasi sadar dari nodeterm, yang
+  `auto`-nya mengikuti tema terminal; di nodeterm tidak ada mode developer — referensi lokal `nodeterm-web`).
+- Developer mode: `localStorage` per browser (`client/developerMode.ts`), dinyalakan dari Health › "Show developer
+  tools" atau `?dev=1` (`?dev=0` mematikan). Tautan langsung ke `?settings=developer` tetap membuka halamannya.
+- Doctor memberi `go: { field }` terstruktur; klien mencari halamannya di indeks pencarian.
+
+## Keputusan
+
+Diputuskan user 2026-11-12:
+
+- Default izin agent = **Ask for risky things** (aksi tak bisa dibatalkan bertanya dulu; nilai eksplisit lama dipertahankan).
+- Secret "Allow agents to use this" = selamanya, **hanya agent di project/workspace tempat tombol ditekan**.
+- File pembungkus lama `MemorySection`/`AutomationsSection`/`SpendingSection` dihapus (pindah ke panel Control).
 
 ## Gelombang
 

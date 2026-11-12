@@ -56,7 +56,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 async function openCapabilities(): Promise<HTMLElement> {
   render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} projectId="p1" />)
   const nav = screen.getByRole('navigation', { name: 'Section settings' })
-  fireEvent.click(within(nav).getByRole('button', { name: 'Capabilities' }))
+  fireEvent.click(within(nav).getByRole('button', { name: 'Features' }))
   await screen.findAllByRole('switch')
   return screen.getByRole('main', { name: 'Settings' })
 }
@@ -80,41 +80,72 @@ describe('tab Kemampuan (D8)', () => {
     expect(main.querySelector('input[type="search"]')).toBeNull()
   })
 
-  it('satu sakelar per kartu; Central, Worker, Otonomi jadi SATU baris ringkasan menuju Central Agent', async () => {
+  it('Browser, Files and Telegram only: one switch per card, no Central summary, no engine, no provider or token card', async () => {
     const main = await openCapabilities()
-    // Tiga kartu bersakelar (Browser, Files, Edit files); Telegram punya alur tempel-token; Central = ringkasan.
-    expect(screen.getAllByRole('switch')).toHaveLength(CAPABILITY_IDS.length - 4)
-    expect(main.querySelectorAll('[data-capability]')).toHaveLength(CAPABILITY_IDS.length - 2)
-    expect(screen.queryByLabelText('Ask for approval before a worker runs')).toBeNull()
-    const summary = within(main).getByRole('region', { name: 'Central Agent' })
-    expect(within(summary).getByRole('status').textContent).toBe('On')
+    // Two switched cards (Browser, Files); Telegram has its paste-token flow.
+    expect(screen.getAllByRole('switch')).toHaveLength(2)
+    expect([...main.querySelectorAll('[data-capability]')].map((el) => el.getAttribute('data-capability'))).toEqual(['browser', 'files', 'telegram'])
+    expect(within(main).queryByRole('region', { name: 'Central Agent' })).toBeNull()
+    expect(within(main).queryByText(/Managed in Central Agent/)).toBeNull()
+    expect(within(main).queryByText('Engine')).toBeNull()
+    expect(main.querySelector('[data-field="claude-provider"]')).toBeNull()
     expect(within(main).getAllByRole('region', { name: /Telegram/ }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
-    fireEvent.click(within(summary).getByRole('button', { name: 'Managed in Central →' }))
-    expect(document.querySelector('.st-section-title')?.textContent).toBe('Central')
-    expect(await screen.findByRole('switch', { name: 'Central Agent' })).toBeTruthy()
+    expect(screen.getByLabelText('Browser search engine')).toBeTruthy()
   })
 
-  // Batasnya EMPAT BUTIR (mesin, Chromium, folder data, setel ulang), bukan empat kontrol: butir Chromium
-  // sengaja punya beberapa tombol (simpan / pakai otomatis / deteksi ulang / kandidat).
-  it('Lanjutan tertutup, berisi tepat empat butir', async () => {
+  it('Edit and upload files is a sub-option of the Files card (shown while Files is on)', async () => {
+    on.add('files')
+    try {
+      const main = await openCapabilities()
+      const files = main.querySelector('[data-capability="files"]') as HTMLElement
+      fireEvent.click(within(files).getByRole('checkbox', { name: CAPABILITIES.filesWrite.title }))
+      await waitFor(() => expect(calls).toContain('POST /api/capabilities/filesWrite'))
+      expect(JSON.parse(bodies['POST /api/capabilities/filesWrite'] ?? '{}')).toEqual({ enabled: true })
+    } finally {
+      on.delete('files')
+    }
+  })
+
+  it('a refused change is shown on the card that was changed, not at the page top', async () => {
+    const main = await openCapabilities()
+    const base = globalThis.fetch as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) =>
+      (init.method === 'POST' && url === '/api/capabilities/files' ? new Response('{}', { status: 500 }) : base(url, init))))
+    const files = main.querySelector('[data-capability="files"]') as HTMLElement
+    fireEvent.click(within(files).getByRole('switch'))
+    expect((await within(files).findByRole('alert')).textContent).toContain('did not go through')
+    const browser = main.querySelector('[data-capability="browser"]') as HTMLElement
+    expect(within(browser).queryByRole('alert')).toBeNull()
+  })
+
+  // Advanced: Chromium location (+ download) and Reset. Engine is in Central Agent, the data folder in Health.
+  it('Advanced is closed and holds Chromium and Reset only', async () => {
     const main = await openCapabilities()
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
     expect(within(details).getByText('Advanced')).toBeTruthy()
-    expect(details.querySelectorAll(':scope > div').length).toBe(4)
-    expect(within(details).getByText('/tmp/webterm-data')).toBeTruthy()
+    expect(details.querySelector('[data-field="chromium"]')).toBeTruthy()
+    expect(within(details).getByRole('button', { name: 'Reset capabilities' })).toBeTruthy()
+    expect(within(details).queryByText('/tmp/webterm-data')).toBeNull()
+    expect(details.querySelector('[data-field="agentEngine"]')).toBeNull()
   })
 
-  it('tombol langkah Browser membuka Lanjutan; Setel ulang memanggil server lalu memuat ulang', async () => {
+  it('the Browser step opens Advanced; Reset asks first, then calls the server and shows the result', async () => {
     const main = await openCapabilities()
     fireEvent.click(screen.getByRole('button', { name: 'Pilih lokasi' }))
     await waitFor(() => expect((main.querySelector('details') as HTMLDetailsElement).open).toBe(true))
     fireEvent.click(screen.getByRole('button', { name: 'Reset capabilities' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(calls).not.toContain('POST /api/capabilities/reset')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset capabilities' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Reset capabilities' }))
     await waitFor(() => expect(calls).toContain('POST /api/capabilities/reset'))
+    expect((await screen.findByText('Capabilities are back to their defaults')).closest('[data-action-result]')?.getAttribute('data-action-result')).toBe('ok')
   })
 
-  it('search finds cards by title, blurb and keywords from the index, without mounting the tab', async () => {
+  it('search finds cards by title, blurb and keywords from the index, without mounting the page', async () => {
     await openCapabilities()
     const search = screen.getByRole('searchbox', { name: 'Search settings' })
     const rows = (q: string): string[] => {
@@ -122,30 +153,12 @@ describe('tab Kemampuan (D8)', () => {
       const group = document.querySelector('[aria-labelledby="st-group-capabilities"]')
       return group ? [...group.querySelectorAll('.st-result-go')].map((el) => el.textContent ?? '').filter((t) => t.includes('›')) : [] // rows of settings, not the page row
     }
-    expect(rows('Telegram')).toEqual([`Capabilities › ${CAPABILITIES.telegram.title}`])
-    expect(document.querySelector('[data-capability]')).toBeNull() // the tab is not mounted while searching
-    expect(rows('cookie')).toEqual([`Capabilities › ${CAPABILITIES.browser.title}`])
-    expect(rows('chrome')).toEqual([`Capabilities › ${CAPABILITIES.browser.title}`, 'Capabilities › Chromium location'])
-    expect(rows('upload')).toEqual([`Capabilities › ${CAPABILITIES.filesWrite.title}`])
+    expect(rows('Telegram')).toEqual([`Features › ${CAPABILITIES.telegram.title}`])
+    expect(document.querySelector('[data-capability]')).toBeNull() // the page is not mounted while searching
+    expect(rows('cookie')).toEqual([`Features › ${CAPABILITIES.browser.title}`])
+    expect(rows('chrome')).toEqual([`Features › ${CAPABILITIES.browser.title}`, 'Features › Chromium location'])
+    expect(rows('upload')).toEqual([`Features › ${CAPABILITIES.filesWrite.title}`])
     expect(rows('zzz-nothing')).toEqual([])
-  })
-
-  it('Central menunggu mesin agen: ringkasan bilang begitu, tanpa toggle/reset (langkahnya di Central Agent)', async () => {
-    engineStep = true
-    const main = await openCapabilities()
-    const summary = within(main).getByRole('region', { name: 'Central Agent' })
-    expect(within(summary).getByRole('status').textContent).toBe('Needs one step')
-    expect(screen.queryByRole('button', { name: 'Set up Claude Code' })).toBeNull()
-    expect(calls.filter((c) => c.startsWith('POST'))).toEqual([])
-  })
-
-  it('"Turn on what’s needed" menyalakan kartu itu lewat toggle, TIDAK menyetel ulang semua pilihan', async () => {
-    chainBroken = true
-    await openCapabilities()
-    fireEvent.click(screen.getByRole('button', { name: 'Turn on what’s needed' }))
-    await waitFor(() => expect(calls).toContain('POST /api/capabilities/filesWrite'))
-    expect(JSON.parse(bodies['POST /api/capabilities/filesWrite'] ?? '{}')).toEqual({ enabled: true })
-    expect(calls).not.toContain('POST /api/capabilities/reset')
   })
 
   it('projectId dari SettingsPanel diteruskan ke kartu Telegram saat menautkan chat', async () => {

@@ -101,6 +101,8 @@ function harness(overrides: Partial<ControlDeps> = {}) {
       statusOf: (id) => nodes.get(id)?.status,
       getExit: (id) => nodes.get(id)?.exit,
       getTerminal: (id) => nodes.get(id)?.output ?? '',
+      screenSource: () => undefined,
+      agentIdOf: () => undefined,
       isLive: (id) => nodes.has(id),
     },
     capabilities: {

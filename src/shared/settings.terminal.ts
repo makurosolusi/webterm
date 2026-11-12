@@ -2,18 +2,8 @@
 // `Settings` in `settings.ts`; defaults live in `DEFAULT_SETTINGS` there.
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
-export type TerminalCursorInactiveStyle = TerminalCursorStyle | 'outline' | 'none'
 export type TerminalShortcutPolicy = 'app-first' | 'terminal-first'
-/**
- * Rendering terminal lewat GPU. `off` mengarahkan setiap terminal ke renderer DOM xterm. `auto`
- * (default) = satu konteks WebGL PER TERMINAL, dengan fallback otomatis ke DOM bila konteksnya
- * gagal dibuat atau hilang.
- *
- * Nilai `'shared'` milik nodeterm TIDAK disertakan: ia renderer glyphgrid bespoke (satu konteks
- * canvas-wide) yang webterm tidak punya. Menyertakan nilainya berarti menawarkan mode yang tidak
- * ada implementasinya.
- */
-export type TerminalGpuRendering = 'off' | 'auto'
+/** `auto` = System: follows the OS light/dark mode (`prefers-color-scheme`). */
 export type AppTheme = 'auto' | 'dark' | 'light'
 
 export interface TerminalSettings {
@@ -41,11 +31,7 @@ export interface TerminalSettings {
    *  renderer, jadi tetap mati kecuali diminta. */
   terminalMinContrast: number
   cursorStyle: TerminalCursorStyle
-  /** Bentuk kursor saat terminal TIDAK fokus. `outline` (default xterm sendiri) itulah yang
-   *  memberi tahu sekilas terminal mana di antara satu canvas penuh yang menerima ketikan. */
-  cursorInactiveStyle: TerminalCursorInactiveStyle
   cursorBlink: boolean
-  terminalGpuRendering: TerminalGpuRendering
 
   // --- Interaksi -------------------------------------------------------------------------------
   /** Karakter yang mengakhiri kata saat seleksi double-click xterm. */
@@ -53,11 +39,6 @@ export interface TerminalSettings {
   /** Salin seleksi MOUSE yang selesai ke clipboard sistem. OFF secara default: mengganti isi
    *  clipboard tanpa diminta adalah kejutan yang layak dipilih sendiri. */
   copyOnSelect: boolean
-  /** Izinkan KLIK TENGAH di dalam terminal mem-paste (praktisnya Linux). OFF secara default, dan
-   *  OFF berarti tombol tengah sepenuhnya INERT di dalam terminal. Defaultnya mati karena paste
-   *  ini paling keras terasa di dalam TUI agent: satu klik nyasar menjatuhkan apa pun yang terakhir
-   *  diseleksi ke prompt agent yang sedang hidup. */
-  terminalMiddleClickPaste: boolean
   /** ⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang FOKUS. ON secara default. Di luar macOS
    *  chord-nya Ctrl+= / Ctrl+− / Ctrl+0 — Ctrl+− biasanya undo readline, jadi matikan bila bentrok. */
   terminalFontZoomKeys: boolean

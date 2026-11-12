@@ -45,6 +45,8 @@ export function resetPatch(key: keyof Settings, current?: Settings): SettingsPat
       ...(at(current?.centralClaudeProfileId) ? { centralClaudeProfileId: DEFAULT_SETTINGS.centralClaudeProfileId } : {}),
     }
   }
+  // History length is one control for both buffers (Settings › Terminal): reset both together.
+  if (key === 'scrollbackLines') return { scrollbackLines: DEFAULT_SETTINGS.scrollbackLines, scrollbackBytes: DEFAULT_SETTINGS.scrollbackBytes }
   if (isEntryKey(key)) return { [key]: Object.fromEntries(Object.keys(current?.[key] ?? {}).map((id) => [id, null])) }
   return { [key]: DEFAULT_SETTINGS[key] }
 }

@@ -1,4 +1,5 @@
 // Test-only rig: real ledger schema in memory, fake bus, fake ports, hand-driven clock.
+import type { SubmitResult } from '../../agentSubmit'
 import { createEventBus } from '../../events/eventBus'
 import type { EventTrust, SenseEvent } from '../../events/eventModel'
 import { freshDb, T0 } from '../guard/controlGuard.testutil'
@@ -23,12 +24,13 @@ export function fakePorts() {
     live: true, busy: false, chatGone: false, chatResult: { ok: true } as WorkSendResult,
     agents: {} as Record<string, { state: AgentState; endReason: string | null }>,
     inputs: [] as string[], chats: [] as string[], throwOnInput: false,
+    submitResult: { ok: true, started: true } as SubmitResult,
   }
   return {
     state,
     ports: {
       isLive: () => state.live,
-      input: (_: string, text: string) => { if (state.throwOnInput) throw new Error('pty gone'); state.inputs.push(text) },
+      submit: async (_: string, text: string) => { if (state.throwOnInput) throw new Error('pty gone'); state.inputs.push(text); return state.submitResult },
       chatBusy: () => state.busy,
       chatNodeGone: () => state.chatGone,
       chatSend: async (_: AssignmentView, text: string) => { state.chats.push(text); return state.chatResult },
