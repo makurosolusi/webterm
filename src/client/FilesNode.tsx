@@ -45,6 +45,9 @@ export function footCount(shown: number, all: number, query: string): string {
   return query.trim() ? `${shown} of ${all} shown` : `${all} ${all === 1 ? 'item' : 'items'}`
 }
 
+/** Header title: the folder name. The root has none, so the header is just the node's name (no "· /"); the path stays in the tooltip. */
+const rootlessTitle = (cwd: string): string => (cwd.split('/').some(Boolean) ? folderTitle(cwd) : '')
+
 function FilesNode({ id, data, selected, height }: NodeProps) {
   const d = data as {
     dirPath?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; viewOpts?: ViewOpts
@@ -147,7 +150,7 @@ function FilesNode({ id, data, selected, height }: NodeProps) {
         style={{ '--node-swatch': swatch } as CSSProperties}
       >
         <NodeChrome
-          title={d.title || folderTitle(cwd)} name={d.name} icon="folder" titleHint={cwd}
+          title={d.title || rootlessTitle(cwd)} name={d.name} icon="folder" titleHint={cwd}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}

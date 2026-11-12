@@ -90,7 +90,8 @@ describe('viewport tersimpan terpasang saat board di-mount', () => {
   it('menghapus workspace aktif memasang viewport board penggantinya', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await mountCanvas({ nodes: [], dirs: {}, viewport: VP_A, others: [wsB] })
-    fireEvent.click(screen.getAllByLabelText('Workspace options')[0])
+    // Delete lives in the workspace tab's right-click menu (the per-tab kebab is gone).
+    fireEvent.contextMenu(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true')!, { clientX: 40, clientY: 30 })
     fireEvent.click(await screen.findByText('Delete'))
     await waitFor(() => expect(renderedViewport()).toEqual(VP_B))
   })
