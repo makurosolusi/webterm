@@ -69,4 +69,19 @@ describe('Central tool group', () => {
     expect(screen.getByText('Used 2 tools')).toBeTruthy()
     expect(screen.getAllByLabelText(/assistant message|tool message/)).toHaveLength(2)
   })
+
+  it('renders text A, the tool group, then text B in DOM order as separate blocks', () => {
+    const { container } = render(<ChatMessages streaming={false} messages={[msg('a', [
+      { type: 'text', text: 'I will close it now.' }, tool('1', 'node_close'), tool('2', 'canvas_list', 'failed'),
+      { type: 'text', text: 'Canvas is empty.' },
+    ])]} />)
+    const a = screen.getByText('I will close it now.')
+    const b = screen.getByText('Canvas is empty.')
+    const group = groups()[0]!
+    const follows = (x: Node, y: Node) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+    expect(follows(a, group)).toBe(true)
+    expect(follows(group, b)).toBe(true)
+    expect(a).not.toBe(b)
+    expect(container.textContent).not.toContain('now.Canvas')
+  })
 })

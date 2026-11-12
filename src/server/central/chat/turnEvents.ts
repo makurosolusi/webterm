@@ -30,6 +30,11 @@ export interface RunState {
   failure?: { code: string; message: string }
   /** Runtime notices of the turn, persisted ahead of the reply text. */
   notices: string[]
+  /**
+   * Reply body in event order: a text run, then the tool calls that interrupt it, then the next run.
+   * Persisted as-is, so a reload shows text → tools → text, never one glued text with the tools after it.
+   */
+  order: Array<{ kind: 'text'; text: string } | { kind: 'tool'; toolCallId: string }>
 }
 
 export interface ProjectedEvent {
@@ -38,7 +43,7 @@ export interface ProjectedEvent {
 }
 
 export function createRunState(): RunState {
-  return { text: '', usage: zeroUsage(), tools: new Map(), notices: [] }
+  return { text: '', usage: zeroUsage(), tools: new Map(), notices: [], order: [] }
 }
 
 /** `usage` only updates state; `turn.result` is consumed by the service, not persisted here. */
@@ -47,9 +52,13 @@ export function projectRuntimeEvent(
 ): ProjectedEvent | null {
   if (event.type === 'text.delta') {
     state.text += event.text
+    const last = state.order[state.order.length - 1]
+    if (last?.kind === 'text') last.text += event.text
+    else state.order.push({ kind: 'text', text: event.text })
     return { type: 'part.delta', payload: { messageId, part: 'text', delta: event.text } }
   }
   if (event.type === 'tool.requested') {
+    if (!state.tools.has(event.toolCallId)) state.order.push({ kind: 'tool', toolCallId: event.toolCallId })
     state.tools.set(event.toolCallId, {
       toolCallId: event.toolCallId, name: event.name, state: 'failed', args: event.input,
     })
