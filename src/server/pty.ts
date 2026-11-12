@@ -55,13 +55,15 @@ export function leadingBinary(cmd: string): string | null {
 const WRAPPER_SEP = ' -- '
 
 /**
- * Membuang pembungkus perintah yang binary-nya TIDAK terpasang, mis. `envman -e p -- claude` →
- * `claude` ketika `envman` tidak ada di PATH. Mengembalikan null bila tidak ada yang perlu dibuang.
+ * Membuang pembungkus perintah yang binary-nya TIDAK terpasang, mis. `<wrapper> -e p -- claude` →
+ * `claude` ketika `<wrapper>` (op, doppler, envman, apa pun) tidak ada di PATH. Mengembalikan null
+ * bila tidak ada yang perlu dibuang.
  *
- * KENAPA ADA: `assembleCmd` (`src/shared/workspace.ts`) membungkus perintah agent dengan `envman`
- * bila sebuah profil dipilih. envman adalah invensi webterm — ia TIDAK ada di nodeterm (diverifikasi:
- * nol kemunculan di source v0.4.5) — jadi pada mesin tanpa envman setiap node agent mati dengan
- * `load envman: no such file or directory`. Degradasi di sini membuat node tetap berguna.
+ * KENAPA ADA: dulu `assembleCmd` menyuntikkan `envman` otomatis dan setiap node agent mati di mesin
+ * tanpa envman. Itu sudah dihapus (`assembleCmd` kini tidak pernah membungkus, lihat
+ * `src/shared/workspace.commands.ts`); pembungkus hanya ada bila pengguna mengetiknya. Degradasi
+ * ini tetap menjaga node berguna bila perintah tersimpan merujuk pembungkus yang tak terpasang
+ * (mis. profil yang dibawa ke mesin baru).
  *
  * Pembongkaran hanya terjadi saat ADA pemisah `--`: tanpa itu kita tidak tahu di mana perintah yang
  * dibungkus mulai, dan menebak berarti menjalankan sesuatu yang tidak diminta pengguna.

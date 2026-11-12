@@ -49,6 +49,15 @@ describe('normalizeClaudeCommand', () => {
     expect(n('claude --model opus')).toEqual({ argv: ['claude', '--model', 'opus'], warnings: [] })
   })
 
+  it('an unknown wrapper launches the same way: no known-name list gates it', () => {
+    for (const w of [['infisical', 'run'], ['aws-vault', 'exec', 'prod'], ['my-secret-tool', '--vault', 'x']]) {
+      const full = n([...w, '--', 'claude', '--model', 'opus'].join(' '))
+      expect(full).toEqual({ argv: [...w, '--', 'claude', '--model', 'opus'], warnings: [] })
+      expect(n([...w, '--'].join(' ')).argv).toEqual([...w, '--', 'claude']) // prefix form adds claude
+      expect(splitLaunch(full.argv)).toEqual({ wrapper: [...w, '--'], bin: 'claude', flags: ['--model', 'opus'] })
+    }
+  })
+
   it('a custom launcher script is the command itself', () => {
     expect(n('/opt/bin/claude-work --account b')).toEqual({ argv: ['/opt/bin/claude-work', '--account', 'b'], warnings: [] })
   })

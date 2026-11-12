@@ -227,10 +227,12 @@ describe('GET /detect', () => {
     const run = async (cmd: string) => ({ code: 0, stdout: cmd === 'op' ? `1.2.3-beta ${LEAK}\n` : 'no version here\n', timedOut: false })
     const r = await handleProviderApi(ui('GET'), url(`${PROVIDER_PATH}/detect`), '', deps('ok', { run, onPath: (n) => n === 'op' || n === 'envman' }))
     expect(r.body).toEqual({ wrappers: [
-      { name: 'envman', installed: true },
+      { name: 'aws-vault', installed: false },
       { name: 'direnv', installed: false },
-      { name: 'op', installed: true, version: '1.2.3-beta' },
       { name: 'doppler', installed: false },
+      { name: 'envman', installed: true },
+      { name: 'infisical', installed: false },
+      { name: 'op', installed: true, version: '1.2.3-beta' },
     ] })
     expect(JSON.stringify(r.body)).not.toContain(LEAK)
   })

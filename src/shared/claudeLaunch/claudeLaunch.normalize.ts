@@ -13,7 +13,8 @@ export interface NormalizedLaunch {
 export const CLAUDE_BIN = 'claude'
 const DASHDASH = '--'
 
-/** Wrappers that run the command after a bare `--` and misread it without one. */
+/** Wrappers that run the command after a bare `--` and misread it without one. Only a typo fix (adds the
+ *  missing `--`), never a gate: any `<anything> … -- claude` prefix launches through `commandIndex`. */
 const DASH_WRAPPERS: readonly (readonly string[])[] = [['envman'], ['op', 'run'], ['doppler', 'run']]
 /** `env` options that take a value as the next token. */
 const ENV_ARG_OPTS = new Set(['-u', '--unset', '-C', '--chdir'])
@@ -30,7 +31,7 @@ const TEXT = {
   doubled: 'Removed a repeated "claude".',
   shell: 'Shell syntax ($VAR, |, &&, ;) is not interpreted here. Put it in a script and use the script as the command.',
   tilde: '"~" is not expanded here. Use the full path.',
-  secret: 'This looks like a secret typed into the command. Settings are not a secret store: let a wrapper such as envman inject it.',
+  secret: 'This looks like a secret typed into the command. Settings are not a secret store: let a wrapper such as op run, doppler run or envman inject it.',
 }
 const SECRET_ASSIGNMENT = /^[A-Za-z_]*(KEY|TOKEN|SECRET|PASSWORD|AUTH)[A-Za-z0-9_]*=./i
 
@@ -78,7 +79,7 @@ export function normalizeClaudeCommand(input: string): NormalizedLaunch {
     fixed = true
   }
   const at = commandIndex(t)
-  // Prefix form (`envman -e x --`, `env FOO=1`): the command is implied. Not an error.
+  // Prefix form (`<wrapper> … --`, `env FOO=1`): the command is implied. Not an error.
   if (at === t.length) t = [...t, CLAUDE_BIN]
   else if (at > 0 && (t[at] as string).startsWith('-')) {
     t = [...t.slice(0, at), CLAUDE_BIN, ...t.slice(at)]

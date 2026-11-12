@@ -1,9 +1,10 @@
 // Which credential-injecting wrappers are installed on the server (PATH lookup, never a shell).
-// Lets the command-mode card suggest a ready command. `version` is only a version-looking token from
+// Lets the command-mode card show "Detected on this machine: …" as a hint. `version` is only a version-looking token from
 // `<name> --version` (2s cap); any other output is dropped.
 import { defaultOnPath, spawnRun, type RunFn } from '../claudeLauncher/claudeLaunch.probe'
 
-export const WRAPPERS = ['envman', 'direnv', 'op', 'doppler'] as const
+/** Common wrappers, all equal (alphabetical); detection is only a hint, any typed wrapper works the same. */
+export const WRAPPERS = ['aws-vault', 'direnv', 'doppler', 'envman', 'infisical', 'op'] as const
 export type WrapperName = (typeof WRAPPERS)[number]
 export interface WrapperInfo { name: WrapperName; installed: boolean; version?: string }
 

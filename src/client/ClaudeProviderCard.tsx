@@ -46,12 +46,12 @@ function Choice<T extends string>(p: { label: string; options: T[]; names: Recor
 export const PROVIDER_TEXT = {
   title: 'Connection',
   why: 'Used by every Claude agent node, Central and the background helpers (classifier, planner, summaries, names).',
-  modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint', command: 'Custom command' } as Record<Mode, string>,
+  modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint', command: 'Custom command (optional)' } as Record<Mode, string>,
   modeHelp: {
     login: 'Default. Claude uses the account you logged in with (claude auth login). No key is stored.',
     apiKey: 'Billed per token to the Console account of the key. Claude Code asks once in each new agent node whether to use it.',
     custom: 'An Anthropic-compatible proxy or gateway (ANTHROPIC_BASE_URL) with its own key or token.',
-    command: 'Claude runs through your own command, e.g. envman -e claude:my-key -- claude, which supplies its credential.',
+    command: 'Optional, for wrappers that inject credentials or env, e.g. op run, doppler run or envman. Claude runs through your command, which supplies its credential.',
   } as Record<Mode, string>,
   baseUrl: 'Base URL',
   badUrl: 'Enter a web address starting with https:// or http://.',

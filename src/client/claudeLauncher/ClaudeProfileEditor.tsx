@@ -16,7 +16,7 @@ export const EDITOR_TEXT = {
   name: 'Name',
   namePlaceholder: 'e.g. Malik (Opus)',
   command: 'Launch command',
-  commandPlaceholder: 'envman -e claude:my-account --',
+  commandPlaceholder: 'your-wrapper … --',
   presets: 'Templates',
   willRun: 'Will run:',
   applyFix: 'Apply fix',

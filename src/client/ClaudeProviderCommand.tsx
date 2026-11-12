@@ -1,8 +1,9 @@
-// "Custom command" mode of the Claude provider card: Claude runs through the user's own command, e.g.
-// `envman -e claude:malik-opus -- claude`, which injects the credential itself. The command is stored as
+// "Custom command" mode of the Claude provider card (optional): Claude runs through the user's own command,
+// e.g. a wrapper such as `op run -- claude`, `doppler run -- claude` or `envman -e x -- claude`, which injects
+// the credential itself. No wrapper is privileged: detection only lists what is installed, as a hint. The command is stored as
 // a Claude launch profile (Settings > Agent), the same list that page edits; this form only creates or
 // picks one, then the card points the provider at it (PUT {mode:'command', profileId}).
-import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useEffect, useState, type MutableRefObject } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ActionButton, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
@@ -18,13 +19,13 @@ export const COMMAND_TEXT = {
   newCommand: 'New command…',
   command: 'Launch command',
   name: 'Command name',
-  placeholder: 'envman -e myapp:prod -- claude',
+  placeholder: 'your-wrapper … -- claude',
   wrapper: (w: string): string => `wrapper: ${w}`,
-  template: 'Use envman template',
+  detected: (names: string[]): string => `Detected on this machine: ${names.join(', ')}`,
   note: 'webterm leaves credentials alone in this mode; your command supplies them.',
   willRun: 'Runs:',
   applyFix: 'Apply fix',
-  secret: 'This command looks like it contains a key. Prefer a wrapper such as envman so the secret stays out of webterm settings.',
+  secret: 'This command looks like it contains a key. Prefer a wrapper such as op run, doppler run or envman so the secret stays out of webterm settings.',
   missing: 'The selected command was removed. Pick another or create a new one.',
   save: 'Save',
   saving: 'Saving…',
@@ -37,8 +38,6 @@ export const COMMAND_TEXT = {
   fallbackName: 'Custom command',
 }
 
-const PLACEHOLDER = 'project:env'
-const TEMPLATE = `envman -e ${PLACEHOLDER} -- claude`
 const NEW = '' // `selected` while no saved command is picked
 
 const baseName = (t: string): string => t.slice(t.lastIndexOf('/') + 1)
@@ -46,7 +45,7 @@ const wrapperOf = (command: string): string | null => {
   const w = splitLaunch(normalizeClaudeCommand(command).argv).wrapper
   return w.length > 0 ? baseName(w[0] as string) : null
 }
-/** "envman: claude:malik-opus" from the wrapper and its `-e` target; "" for an empty command. */
+/** "<wrapper>: <target>" (e.g. "envman: claude:malik-opus") from the wrapper and its `-e` target; "" for an empty command. */
 export function commandName(command: string): string {
   if (command.trim() === '') return ''
   const w = splitLaunch(normalizeClaudeCommand(command).argv).wrapper
@@ -85,24 +84,16 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
   const [nameTouched, setNameTouched] = useState(start !== undefined)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const input = useRef<HTMLInputElement>(null)
-  const selectPlaceholder = useRef(false)
 
   useEffect(() => {
     loadLaunchProfiles().then(setProfiles).catch(() => setError(COMMAND_TEXT.loadFailed))
-    detectWrappers().then(setWrappers).catch(() => setWrappers([])) // detection is a convenience: no templates when it fails
+    detectWrappers().then(setWrappers).catch(() => setWrappers([])) // detection is a convenience: no hint when it fails
   }, [])
-  useLayoutEffect(() => {
-    if (!selectPlaceholder.current) return
-    selectPlaceholder.current = false
-    const at = command.indexOf(PLACEHOLDER)
-    if (input.current && at >= 0) { input.current.focus(); input.current.setSelectionRange(at, at + PLACEHOLDER.length) }
-  }, [command])
 
   const shownName = nameTouched ? name : commandName(command)
   const n = normalizeClaudeCommand(command)
   const wrapper = wrapperOf(command)
-  const envman = wrappers.some((w) => w.name === 'envman' && w.installed)
+  const installed = wrappers.filter((w) => w.installed).map((w) => w.name)
   const stored = profiles.find((x) => x.id === selected) ?? (provider.profile?.id === selected ? provider.profile : undefined)
   const clean = provider.mode === 'command' && provider.profileId === selected && stored !== undefined
     && stored.command === command.trim() && stored.name === (shownName.trim() || COMMAND_TEXT.fallbackName)
@@ -110,9 +101,6 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
 
   const pick = (x: ClaudeLaunchProfile | null): void => {
     setSelected(x?.id ?? NEW); setCommand(x?.command ?? ''); setName(x?.name ?? ''); setNameTouched(x !== null)
-  }
-  const useTemplate = (): void => {
-    pick(null); setCommand(TEMPLATE); selectPlaceholder.current = true
   }
   /** Create/update the profile, then point the provider at it. */
   const saveDraft = async (): Promise<boolean> => {
@@ -151,12 +139,12 @@ export function ClaudeProviderCommand(p: ClaudeProviderCommandProps): React.JSX.
           <Button size="sm" variant={selected === NEW ? 'default' : 'outline'} aria-pressed={selected === NEW} onClick={() => pick(null)}>{COMMAND_TEXT.newCommand}</Button>
         </div>
       ) : null}
-      <Input ref={input} className="st-mono" aria-label={COMMAND_TEXT.command} placeholder={COMMAND_TEXT.placeholder} value={command}
+      <Input className="st-mono" aria-label={COMMAND_TEXT.command} placeholder={COMMAND_TEXT.placeholder} value={command}
         maxLength={CLAUDE_PROFILE_LIMITS.command} spellCheck={false} autoComplete="off" onChange={(e) => setCommand(e.target.value)} />
-      {wrapper !== null || envman ? (
+      {wrapper !== null || installed.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           {wrapper !== null ? <Badge variant="secondary">{COMMAND_TEXT.wrapper(wrapper)}</Badge> : null}
-          {envman ? <Button size="xs" variant="secondary" onClick={useTemplate}>{COMMAND_TEXT.template}</Button> : null}
+          {installed.length > 0 ? <span className="text-xs opacity-70">{COMMAND_TEXT.detected(installed)}</span> : null}
         </div>
       ) : null}
       <Input aria-label={COMMAND_TEXT.name} value={shownName} maxLength={CLAUDE_PROFILE_LIMITS.name}
