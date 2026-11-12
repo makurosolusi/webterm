@@ -56,7 +56,8 @@ describe('status', () => {
     const res = await get('/api/central/status')
     expect(res?.status).toBe(200)
     expect(res?.body).toMatchObject({ day: '2026-11-03', used: { tokens: 777, spawns: 2 }, model: { id: 'vendor/model:free', free: true } })
-    expect((res?.body as { limits: { tokens: number } }).limits.tokens).toBeGreaterThan(0)
+    // No daily token budget by default (0 = unlimited): the dollar cap is the budget.
+    expect((res?.body as { limits: { tokens: number } }).limits.tokens).toBe(0)
   })
 })
 
