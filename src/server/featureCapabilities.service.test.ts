@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CapabilityId } from '../shared/featureCapabilities'
 import { TEST_TOKEN, fakeBotApi, ok } from './channels/telegramPollHarness'
-import { setupEnv } from './envSettings.testutil'
+import { CAPABILITIES_OFF, setupEnv } from './envSettings.testutil'
 import { enabledSet, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
 import { connect, reset, setAdvanced, setSub, toggle, viewOf, type CapCtx, type Detect } from './featureCapabilities.service'
 
@@ -10,7 +10,7 @@ const DETECT_OK: Detect = { chromium: true, telegramToken: false, agentEngine: t
 const flag = (v: string) => ({ WEBTERM_BROWSER: v })
 
 function harness(env: NodeJS.ProcessEnv = {}, detect: Detect = DETECT_OK, fetch = fakeBotApi([]).fetch) {
-  const h = setupEnv(env)
+  const h = setupEnv({ ...CAPABILITIES_OFF, ...env })
   const audits: Array<Parameters<CapCtx['audit']>[0]> = []
   const ctx: CapCtx = { settings: h.svc, env: h.target, detect: () => detect, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch, audit: (e) => audits.push(e) }
   return { ...h, ctx, audits }
@@ -154,7 +154,7 @@ describe('reset', () => {
     await toggle(h.ctx, 'autonomy', true)
     const r = await reset(h.ctx)
     expect(r.status).toBe(200)
-    expect(h.target.WEBTERM_CENTRAL).toBeUndefined()
+    expect(h.target.WEBTERM_CENTRAL).toBe('off') // override gone: back to the harness's shell value
     expect(events).toEqual(['start:central', 'stop:central'])
     expect(h.secrets.files.get('WEBTERM_TELEGRAM_BOT_TOKEN')).toBe(TEST_TOKEN)
     expect(h.audits.at(-1)).toMatchObject({ capability: 'advanced', action: 'reset' })

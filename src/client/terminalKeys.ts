@@ -238,7 +238,7 @@ export function terminalZoomAction(
   const chord = eventChord(e, isMac)
   for (const [action, id] of Object.entries(ZOOM_COMMANDS) as [TerminalFontZoomAction, string][]) {
     const k = overrides[id]
-    if (k && chord && normalizeChord(k) === chord) return action
+    if (k && chord && normalizeChord(k, isMac) === chord) return action
   }
   const def = terminalFontZoomChord(e, isMac)
   return def && !Object.hasOwn(overrides, ZOOM_COMMANDS[def]) ? def : null

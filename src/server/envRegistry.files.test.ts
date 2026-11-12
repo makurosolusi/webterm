@@ -20,20 +20,16 @@ describe('envRegistry.files', () => {
     for (const s of FILES_ENV_SPECS) expect(validateEnvValue(s, s.default ?? ''), s.key).toMatchObject({ ok: true })
   })
 
-  it('L11: empat flag baca-saja default on di registry, mutate/upload tetap off', () => {
-    const readOnly: FilesFlag[] = ['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN']
-    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
-      expect(specFor(FILES_FLAG[name])?.default, name).toBe(readOnly.includes(name) ? 'on' : 'off')
-    }
+  it('L11 + default maksimal: semua enam flag default on di registry (tulis = tempat sampah + Undo)', () => {
+    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) expect(specFor(FILES_FLAG[name])?.default, name).toBe('on')
   })
 
-  it('filesFlagOn: env kosong => paritas dengan default registry (G6); mutate/upload false', () => {
+  it('filesFlagOn: env kosong => paritas dengan default registry (G6); edit dan upload on', () => {
     for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) {
       expect(filesFlagOn(name, {}), name).toBe(specFor(FILES_FLAG[name])?.default === 'on')
       expect(filesFlagOn(name, { [FILES_FLAG[name]]: '  ' }), name).toBe(filesFlagOn(name, {}))
     }
-    for (const name of ['VIEWERS', 'WATCH', 'GIT_STATUS', 'QUICK_OPEN'] as const) expect(filesFlagOn(name, {})).toBe(true)
-    for (const name of ['MUTATE', 'UPLOAD'] as const) expect(filesFlagOn(name, {})).toBe(false)
+    for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) expect(filesFlagOn(name, {}), name).toBe(true)
   })
 
   it('filesFlagOn: nilai eksplisit menang; off/typo = false, on (spasi/kapital ok) = true', () => {
@@ -47,18 +43,18 @@ describe('envRegistry.files', () => {
     expect(filesFlagOn('MUTATE', { WEBTERM_FILES_MUTATE: 'on' })).toBe(true)
   })
 
-  it('kemampuan files/filesWrite: files off menutup semua; mutate/upload tidak terbuka hanya karena files on', () => {
+  it('kemampuan files/filesWrite: files off menutup semua; mutate off menutup upload', () => {
     const off = { WEBTERM_FILES_VIEWERS: 'off', WEBTERM_FILES_MUTATE: 'on', WEBTERM_FILES_UPLOAD: 'on' }
     for (const name of Object.keys(FILES_FLAG) as FilesFlag[]) expect(filesFlagOn(name, off), name).toBe(false)
     expect(filesFlagOn('VIEWERS', { WEBTERM_FILES_VIEWERS: 'on' })).toBe(true)
-    expect(filesFlagOn('MUTATE', { WEBTERM_FILES_VIEWERS: 'on' })).toBe(false)
-    expect(filesFlagOn('UPLOAD', { WEBTERM_FILES_VIEWERS: 'on', WEBTERM_FILES_UPLOAD: 'on' })).toBe(false)
+    expect(filesFlagOn('MUTATE', { WEBTERM_FILES_VIEWERS: 'on', WEBTERM_FILES_MUTATE: 'off' })).toBe(false)
+    expect(filesFlagOn('UPLOAD', { WEBTERM_FILES_MUTATE: 'off', WEBTERM_FILES_UPLOAD: 'on' })).toBe(false)
     expect(filesFlagOn('UPLOAD', { WEBTERM_FILES_MUTATE: 'on', WEBTERM_FILES_UPLOAD: 'on' })).toBe(true)
     expect(filesFlagOn('WATCH', { WEBTERM_FILES_WATCH: 'off' })).toBe(false) // anak dimatikan sendiri
   })
 
   it('dibaca per panggilan: env berubah langsung berlaku tanpa restart', () => {
-    const env: NodeJS.ProcessEnv = {}
+    const env: NodeJS.ProcessEnv = { WEBTERM_FILES_MUTATE: 'off' }
     expect(filesFlagOn('MUTATE', env)).toBe(false)
     env.WEBTERM_FILES_MUTATE = 'on'
     expect(filesFlagOn('MUTATE', env)).toBe(true)

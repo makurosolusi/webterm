@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { isCleanViewChord, isMacPlatform } from './terminalKeys'
+import { useCommandShortcut } from '@/components/ui/icon-button'
 import './cleanView.css'
 
 /**
@@ -65,9 +66,10 @@ export function useCleanView(): [boolean, () => void] {
  * `role="status"` + `aria-live="polite"`: diumumkan tanpa pernah merebut fokus dari terminal.
  */
 export function CleanViewHint() {
+  const key = useCommandShortcut('view.cleanView') // the registry's fixed escape hatch, one source with the overlay
   return (
     <div className="clean-view-hint" role="status" aria-live="polite">
-      Clean view — press <span className="kbd">{isMacPlatform() ? '⌘.' : 'Ctrl+.'}</span> to exit
+      Clean view — press <span className="kbd">{key}</span> to exit
     </div>
   )
 }

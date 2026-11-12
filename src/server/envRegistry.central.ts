@@ -8,7 +8,7 @@ const CENTRAL_ON = { key: 'WEBTERM_CENTRAL' }
 const RUNTIME_MODEL = { key: 'WEBTERM_CENTRAL_RUNTIME', oneOf: ['claude', ''], note: 'Used by the Claude Code runtime.' }
 
 export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
-  flag('WEBTERM_CENTRAL', 'central', { ...C, audience: 'user', hot: true, label: 'Central Agent', description: 'Turns the Central Agent on: an assistant that knows all your projects and nodes.' }),
+  flag('WEBTERM_CENTRAL', 'central', { ...C, audience: 'user', hot: true, label: 'Central Agent', description: 'Turns the Central Agent on: an assistant that knows all your projects and nodes.' }, 'on'),
   enumOf('WEBTERM_CENTRAL_RUNTIME', 'central', ['claude', 'mock', 'off'], DEFAULT_RUNTIME_KIND, {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
     label: 'Central agent engine',
@@ -23,7 +23,7 @@ export const CENTRAL_ENV_SPECS: readonly EnvSpec[] = [
   flag('WEBTERM_CENTRAL_MEMORY', 'central', {
     ...C, audience: 'user', hot: true, requires: [CENTRAL_ON],
     label: 'Central memory', description: 'Central remembers useful facts between conversations. Follows the Central Agent switch.',
-  }),
+  }, 'on'),
   flag('WEBTERM_CENTRAL_AUTONOMY', 'central', {
     ...C, audience: 'user', hot: true, dangerous: true,
     requires: [CENTRAL_ON, { key: 'WEBTERM_ORCHESTRATOR_RUN', note: 'Autonomy needs Orchestrator run.' }],

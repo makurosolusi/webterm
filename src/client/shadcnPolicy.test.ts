@@ -24,6 +24,8 @@ const vscodeScreens = new Set([
   "src/client/SettingsAgents.tsx",
   // Agent › Models and its spending limit: same hybrid Agent tab, `st-button` rows like SettingsAgents.
   "src/client/SettingsModels.tsx",
+  // Keyboard Shortcuts: the filter is the Settings search box, the chord recorders are `st-button`-metric rows.
+  "src/client/SettingsKeybindings.tsx",
   "src/client/SettingsCostLimit.tsx",
   // Native <select>/checkbox restyled with VS Code metrics (hybrid settings screen).
   "src/client/SettingsControls.tsx",

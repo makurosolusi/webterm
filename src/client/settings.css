@@ -426,6 +426,10 @@
   line-height: 18px;
 }
 
+.st-safeguard {
+  font-size: 12px;
+}
+
 .st-hint code,
 .st-note code {
   font-family: var(--vscode-editor-font-family, var(--font-mono));

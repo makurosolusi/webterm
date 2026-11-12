@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { secretRule, whoText } from './policyPresets'
 import { createRule } from './policyRules.api'
+import { SafeguardNote } from './SettingsFields'
 
 export const SECRETS_PATH = '/api/secrets'
 
@@ -105,6 +106,7 @@ export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspac
     <section aria-label={SECRETS_TEXT.title} data-testid="secrets-panel">
       <h3 className="font-semibold">{SECRETS_TEXT.title}</h3>
       <p className="text-xs opacity-70">{SECRETS_TEXT.intro}</p>
+      <SafeguardNote id="secretAccess" />
       <p className="text-xs opacity-70">{SECRETS_TEXT.detail}</p>
       {loadError ? <p className="text-xs opacity-70">{SECRETS_TEXT.loadFailed}</p> : null}
       {!view && !loadError ? <p role="status" className="text-xs opacity-70">{SECRETS_TEXT.loading}</p> : null}

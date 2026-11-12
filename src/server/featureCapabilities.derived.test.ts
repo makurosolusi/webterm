@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { CapabilityId } from '../shared/featureCapabilities'
 import { linkedSettings } from '../shared/featureCapabilities'
 import { fakeBotApi } from './channels/telegramPollHarness'
-import { setupEnv } from './envSettings.testutil'
+import { CAPABILITIES_OFF, setupEnv } from './envSettings.testutil'
 import { onCapabilityChange } from './featureCapabilities.runtime'
 import { setAdvanced, syncLinkedSettings, toggle, viewOf, type CapCtx, type Detect } from './featureCapabilities.service'
 
@@ -12,7 +12,7 @@ import { setAdvanced, syncLinkedSettings, toggle, viewOf, type CapCtx, type Dete
 const DETECT: Detect = { chromium: true, telegramToken: true, agentEngine: true }
 
 function harness(env: NodeJS.ProcessEnv = {}) {
-  const h = setupEnv(env)
+  const h = setupEnv({ ...CAPABILITIES_OFF, ...env })
   const ctx: CapCtx = { settings: h.svc, env: h.target, detect: () => DETECT, dataDir: '/tmp/webterm-test-data', secrets: h.secrets, fetch: fakeBotApi([]).fetch, audit: () => undefined }
   return { ...h, ctx }
 }
@@ -25,11 +25,10 @@ afterEach(() => { offs.splice(0).forEach((off) => off()); events.length = 0 })
 
 describe('kunci turunan Worker/Otonomi', () => {
   it('linkedSettings: Worker = propose; Otonomi = auto; mati = off; retired dead keys are no longer written', () => {
-    // Work on its own also brings project knowledge, steadier autonomy and agent mail (no Settings rows any more).
-    const extras = (v: string) => ({ WEBTERM_KNOWLEDGE: v, WEBTERM_CENTRAL_RELIABILITY: v, WEBTERM_AGENT_MAIL: v })
-    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose', ...extras('off') })
-    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto', ...extras('on') })
-    expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off', ...extras('off') })
+    // Knowledge, steadier autonomy and agent mail are on by default on their own, so no card writes them any more.
+    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose' })
+    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
+    expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off' })
   })
   it('toggle menulis nilainya ke env; mematikan Otonomi turun ke propose', async () => {
     const h = harness()

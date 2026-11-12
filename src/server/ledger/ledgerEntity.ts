@@ -19,6 +19,12 @@ import {
 } from './ledgerCore'
 import { clampLimit, clampOffset } from './ledgerEvent'
 
+/**
+ * Auto-done for a NEW project: a task whose checks passed goes straight to done (default maximal, 2026-11-12). Existing
+ * projects keep their stored value (the v26 column cannot tell "never set" from "turned off", so none is flipped).
+ */
+export const NEW_PROJECT_AUTO_DONE = 1
+
 export function projectById(ctx: LedgerContext, id: string): Project {
   const row = getRow(ctx.db, 'SELECT * FROM project WHERE id = ?', id)
   if (!row) throw new LedgerNotFoundError('project', id)
@@ -48,8 +54,8 @@ export function projectRepository(ctx: LedgerContext) {
         execWrite(
           db,
           `INSERT INTO project (id, workspace_id, name, path, branch_base, priority, budget_json,
-             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             work_auto_done, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id,
           workspaceId,
           name,
@@ -57,6 +63,7 @@ export function projectRepository(ctx: LedgerContext) {
           input.branchBase ?? null,
           priority,
           jsonOf(input.budget, 'project.budget'),
+          NEW_PROJECT_AUTO_DONE,
           at,
           at
         )

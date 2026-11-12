@@ -3,8 +3,3 @@
 
 /** ⇧⌘U (macOS) / Ctrl+Shift+U, as in VS Code. */
 export const OUTPUT_TOGGLE_KEY = 'Mod+Shift+U'
-
-/** Platform-aware label for menus and tooltips. */
-export function outputShortcutLabel(isMac: boolean): string {
-  return isMac ? '⇧⌘U' : 'Ctrl+Shift+U'
-}
