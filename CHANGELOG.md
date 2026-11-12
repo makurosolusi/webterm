@@ -27,6 +27,7 @@ Operator notes:
 - Default-on switches are written into the server's environment at start while nothing sets them (as `WEBTERM_CENTRAL=on` and so on), so readers and Settings agree; a value in `.env`, the shell or Settings still wins. Existing projects keep their auto-done value; only new projects start with it on.
 
 ### Added
+- Agents can report to Central at any time with `webterm report "<text>" --done|--blocked|--question|--progress`: done, blocked and a question move the task and wake Central at once; progress is recorded on the task timeline and in Central's open-work header, and wakes Central only when it asked for progress. Each report also shows as a line in the Central chat. Reports are capped at 2000 characters and 5 a minute per agent.
 - Central playbooks: `playbook.web_research`, `playbook.code_change` and `playbook.review` run a whole chain in one call (board task, an agent on it, a fixed brief). Web research gives the agent its own cabled browser and asks for a `RESULT:` answer with sources. When the spawn needs approval, the playbook waits on the card and continues by itself once you decide; Central posts a notice when a playbook starts, resumes or stops.
 - Central now gets a "Suggested playbook" hint when a message reads like research, a code change or a review (English and Indonesian, e.g. "lakukan analisa ke github trending"), and a short map of what it can do and whether each action runs on its own or asks first.
 - Nothing changes silently any more: auto-done, supervisor nudges and restarts, self-started autonomy runs, classifier auto-approvals, Central memory writes, skill proposals and startup setting changes each post a Central notice and leave an `auto.*` record in the Timeline (outbox deliveries are recorded only). Auto-done tasks get a Reopen button; memory writes get Forget.
@@ -300,6 +301,9 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- A headless agent that finishes now moves its task to reported (and to failed when it fails) instead of stalling a minute later.
+- An agent started without a task no longer reports its idle "READY" boot turn to Central; its card appears with its first prompt.
+- Web research no longer ends with two browser nodes when the agent opens its own browser before webterm's pre-assigned one is cabled: whichever opens second reuses the first.
 - Work Central delegates now reports back by itself: when an agent it started finishes, asks a question, stalls or fails, Central is woken right away (no 5-minute wait), also when it was the only task, and again for every later report. An agent that exits or fails to start fails its task at once instead of on the next check. A playbook continued after an approval card tells Central how it went.
 - An agent Central starts on a task gets the task's title and full brief in its first message (no more "No task attached" followed by a second message), and is told its `RESULT:` reaches Central automatically. Playbooks no longer send the brief twice.
 - Web research opens the agent's browser node and cables it to the agent right after it starts, and the brief names that node.

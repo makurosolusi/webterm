@@ -16,6 +16,7 @@ import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { BROWSER_COMMAND, CONTEXT_COMMAND, ESC_FN } from './cli.commands'
 import { buildEvalCommand } from './cli.eval'
 import { snapshotOf, TOOL_INDEX } from './cli.registry'
+import { AGENT_REPORT_CAPABILITY } from '../capability/report.capabilities'
 
 export const CLI_NAME = 'webterm'
 /** Skill stub directory + front-matter `name`, and the guide `skills get` serves for it. */
@@ -68,6 +69,9 @@ usage: webterm <command> [args]
                [--operation-id <id>]  replay-safe retry: same id + same call = same receipt
   whats-new [--since <v>] [--json]  capabilities added/removed/changed since the registry you last saw
   skills get <name> [--json]      the version-matched guide for a skill (webterm-cli, ...)
+  report "<text>" [--done|--blocked|--question|--progress]
+                                  tell Central now where your work stands (default --progress);
+                                  done/blocked/question move your task and wake Central
   browser <verb> [args]           drive the browser node wired to this node (alias: webterm-browser)
   context <verb> [--node X]       read a linked node's context (alias: context.sh)
   eval run [--model fake|real]    replay promoted eval cases (user rejections) against Central
@@ -105,6 +109,20 @@ cmd_call() {
   session
   send -X POST -H 'content-type: application/json' --data-binary "$args" "$API/$name\${op:+?operationId=$op}"
 }
+cmd_report() {
+  kind=progress; text=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --done) kind=done ;; --blocked) kind=blocked ;; --question) kind=question ;; --progress) kind=progress ;;
+      -*) die "usage: webterm report \\"<text>\\" [--done|--blocked|--question|--progress]" ;;
+      *) [ -z "$text" ] || die "pass the report as one quoted argument"; text="$1" ;;
+    esac
+    shift
+  done
+  [ -n "$text" ] || die "usage: webterm report \\"<text>\\" [--done|--blocked|--question|--progress]"
+  session
+  send -X POST -H 'content-type: application/json' --data-binary "{\\"kind\\":\\"$kind\\",\\"text\\":\\"$(esc "$text")\\"}" "$API/${AGENT_REPORT_CAPABILITY}"
+}
 ${BROWSER_COMMAND}
 ${CONTEXT_COMMAND}
 ${buildEvalCommand()}
@@ -123,6 +141,7 @@ case "$cmd" in
     case "$since" in *[!0-9a-f]*) die "bad version" ;; esac
     session; send -H "$(accept)" "$API/whats-new\${since:+?since=$since}" ;;
   skills) cmd_skills "$@" ;;
+  report) cmd_report "$@" ;;
   browser) cmd_browser "$@" ;;
   context) cmd_context "$@" ;;
   eval) cmd_eval "$@" ;;
@@ -158,6 +177,8 @@ ${cli} <command> [args]
 3. Retrying something that may have run? Pass \`--operation-id <id>\`: the same id and the same call
    replay the first receipt instead of running twice.
 4. \`${cli} whats-new\` shows what changed since the registry you last saw.
+5. Report to Central any time: \`${cli} report "<text>" --done\` (your result), \`--blocked\`, \`--question\`, or
+   \`--progress\` (the default). done/blocked/question move your task and wake Central at once; progress is recorded.
 
 Capabilities in this version:
 ${rows.join('\n')}

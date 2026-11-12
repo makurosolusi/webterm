@@ -129,19 +129,33 @@ describe('agent delegation', () => {
   const work = (s: ReturnType<typeof setup>) => createWorkStore(s.f.db, () => T0)
   const needsCard = (): GuardDecision => ({ verdict: 'needs_approval', level: 'act_gated', tier: 'R2' })
 
-  it('a spawn records its card on the agent node', async () => {
+  const task = (s: ReturnType<typeof setup>) => work(s).createTask({ projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+
+  it('a spawn on a task records its card on the agent node', async () => {
     const s = setup()
-    const r = await s.spawn({ title: 'write the docs' })
+    const r = await s.spawn({ title: 'write the docs', taskId: task(s).id })
     const id = String(r.data?.agentId)
     expect(work(s).openAssignmentOfNode(`c-${id}`)).toMatchObject({ channel: 'spawn', agentId: id, instruction: 'write the docs', taskId: r.data?.taskId })
   })
 
+  it('a spawn without a task records no card, so its boot turn has nothing to move; its first prompt opens one', async () => {
+    const s = setup()
+    const r = await s.spawn()
+    const id = String(r.data?.agentId)
+    expect(r.data?.taskId).toBeNull()
+    expect(work(s).listTasks({ projectId: 'p1' })).toEqual([])
+    expect(work(s).openAssignmentOfNode(`c-${id}`)).toBeNull()
+    await s.run('agent.prompt', { projectId: 'p1', agentRef: id, text: 'now the tests', mode: 'steer' })
+    expect(work(s).openAssignmentOfNode(`c-${id}`)).toMatchObject({ channel: 'spawn', agentId: id, instruction: 'now the tests' })
+  })
+
   it('a spawn waiting on its card records too, and a retry adds no card', async () => {
     const s = setup(needsCard)
-    const first = await s.spawn()
+    const taskId = task(s).id
+    const first = await s.spawn({ taskId })
     expect(first).toMatchObject({ ok: false, code: 'approval_required' })
     expect(work(s).openAssignmentOfNode(`c-${String(first.data?.agentId)}`)).toMatchObject({ channel: 'spawn' })
-    await s.spawn()
+    await s.spawn({ taskId })
     expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)
   })
 
@@ -173,14 +187,15 @@ describe('agent delegation', () => {
 
   it('a reused spawn adds no card', async () => {
     const s = setup()
-    await s.spawn()
-    await s.spawn()
+    const taskId = task(s).id
+    await s.spawn({ taskId })
+    await s.spawn({ taskId })
     expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)
   })
 
   it('a prompt is a follow-up on the spawn card', async () => {
     const s = setup()
-    const id = String((await s.spawn()).data?.agentId)
+    const id = String((await s.spawn({ taskId: task(s).id })).data?.agentId)
     const r = await s.run('agent.prompt', { projectId: 'p1', agentRef: id, text: 'now the tests', mode: 'steer' })
     expect(r).toMatchObject({ ok: true, data: { assignmentId: work(s).openAssignmentOfNode(`c-${id}`)?.id } })
     expect(work(s).listTasks({ projectId: 'p1' })).toHaveLength(1)

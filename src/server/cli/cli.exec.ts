@@ -12,11 +12,13 @@ import { requesterOf, resolveLinkedBrowser } from '../browser/browser.linkedTarg
 import type { CapabilitySpec } from '../capability/capability.define'
 import type { Receipt, ReceiptLog } from '../capability/capability.receipt'
 import { checkSchema } from '../capability/capability.schema'
+import { AGENT_REPORT_CAPABILITY, reportByDefault, type AgentReportKind } from '../capability/report.capabilities'
 import { CAPABILITY_VERBS, type CapabilityStore, type CapabilityVerb } from '../control/capabilities'
 import { capabilityStore } from '../control/mount'
 import { NODE_TOKEN_HEADER } from '../hooksTokens'
 import { firstHeader } from '../httpHeaders'
 import { cableGrants } from '../policy/policy.cable'
+import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import type { Policy } from '../policy/policy.decide'
 import type { Decision, Grant, Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
@@ -123,6 +125,7 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   const problem = checkSchema(cap.input, input)
   if (problem) return { receipt: receipt('error', 'invalid_shape', { problem }, 'webterm agent-context --json shows the exact input schema') }
   if (isSecretCapability(cap.name)) return runSecretCapability(deps, cap.name, input, principal) // secret broker decides per secret (secret.broker.ts)
+  if (cap.name === AGENT_REPORT_CAPABILITY) return runReport(deps, cap, input, principal)
   const route = cap.route as NonNullable<CapabilitySpec['route']>
   const browser = route.path.startsWith(BROWSER_CONTROL_PREFIX)
   const nodeId = nodeOf(principal)
@@ -168,4 +171,17 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   } finally {
     if (minted) caps.revoke(minted)
   }
+}
+
+/** `agent.report`: only a proven agent node reports, about its own work; the human has nothing to report to Central. */
+async function runReport(deps: ToolsDeps, cap: CapabilitySpec, input: Args, principal: Principal): Promise<{ receipt: Receipt; data?: unknown }> {
+  const nodeId = nodeOf(principal)
+  if (!nodeId) return { receipt: receipt('denied', 'not_an_agent', {}, 'Only an agent session started in webterm reports to Central.') }
+  const d = judge(deps, principal, cap, undefined, reportByDefault(principal))
+  if (d.effect !== 'allow') return { receipt: receipt('denied', d.effect === 'ask' ? 'approval_required' : 'policy_denied', { reason: d.reason }, DENY_NEXT) }
+  const ledger = activeLedgerRuntime()
+  if (!ledger) return { receipt: receipt('error', 'ledger_off', {}, 'the webterm ledger is off; only the user can turn it on') }
+  const { recordAgentReport } = await import('../central/work/workAgentReport') // lazy: bun:sqlite stays out of vitest imports
+  const r = recordAgentReport(ledger.db, Date.now, nodeId, input.kind as AgentReportKind, String(input.text))
+  return r.ok ? { receipt: receipt('ok', 'ok', { moved: r.data.moved }), data: r.data } : { receipt: receipt('error', r.code, {}, r.next) }
 }

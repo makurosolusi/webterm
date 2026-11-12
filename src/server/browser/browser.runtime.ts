@@ -157,7 +157,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
       open: openDeps,
     }),
-    openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed),
+    openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled'),
     async shutdown() {
       if (down) return
       down = true

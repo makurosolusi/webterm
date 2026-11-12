@@ -34,10 +34,14 @@ const delegate = (ctx: ToolCtx, input: ToolInput, target: AgentDelegation) => be
   ...target, channel: 'spawn', ...(typeof input.taskId === 'string' ? { taskId: input.taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
 })
 
-/** Records a spawn the executor accepted (running or waiting on its card); a retry of a settled spawn records nothing. */
+/**
+ * Records a spawn the executor accepted (running or waiting on its card); a retry of a settled spawn records nothing.
+ * A spawn without a task gets no card: its boot turn ("READY") is not work, so it must not report, wake Central or be
+ * watched for liveness. Its first agent.prompt opens the card (`delegate` with no open assignment).
+ */
 function recordSpawn(ctx: ToolCtx, input: ToolInput, projectId: string, r: ToolResult): ToolResult {
   const agentId = r.data?.agentId
-  if ((!r.ok && r.code !== 'approval_required') || r.data?.reused === true || typeof agentId !== 'string') return r
+  if ((!r.ok && r.code !== 'approval_required') || r.data?.reused === true || typeof agentId !== 'string' || typeof input.taskId !== 'string') return r
   const nodeId = typeof r.data?.nodeId === 'string' ? r.data.nodeId : agentNodeId(agentId)
   const d = delegate(ctx, input, { projectId, nodeId, agentId, instruction: String(input.title) })
   // The agent already exists here, so a refused record is reported on the result instead of failing the spawn.
@@ -100,7 +104,7 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
   }
   const spawn: ToolDef = {
     name: 'agent.spawn', summary: 'Start a worker or reviewer agent; the server picks cwd and command. A pty agent appears on the project canvas.', tier: 'R2', auditKeys: AUDIT_KEYS,
-    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional task from task.create>"}. May return approval_required. Tracked as a delegation (new card unless taskId is given). A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. Create the task first (task.create, objective = the full brief) and pass its taskId: the agent starts with the task title and objective as its first message, so do not send the same brief again with agent.prompt (keep agent.prompt for follow-ups). Without taskId it starts idle and waits for agent.prompt. Its result, a stall, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.',
+    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional task from task.create>"}. May return approval_required. Tracked as a delegation on its task. A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. Create the task first (task.create, objective = the full brief) and pass its taskId: the agent starts with the task title and objective as its first message, so do not send the same brief again with agent.prompt (keep agent.prompt for follow-ups). Without taskId it starts idle with no card and waits for agent.prompt, which opens its card. Its result, a stall, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.',
     input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), role: S.oneOf(...ROLES), title: S.str(MAX_TITLE), taskId: S.str(MAX_ID) }, ['requestId', 'kind', 'role', 'title']),
     output: S.anyObj('Agent id and state, or approval_required.'),
     // `role` is a forbidden key for other tools but is this tool's own field; everything else stays forbidden.
