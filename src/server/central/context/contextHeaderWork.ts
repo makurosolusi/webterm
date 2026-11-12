@@ -5,6 +5,7 @@ import { allRows } from '../../ledger/ledgerCore'
 import { redactSecrets } from '../../redactSecrets'
 import { createHealthStore } from '../health/healthStore'
 import { taskCards } from '../work/workBoard'
+import { listDuties } from '../work/workDuties'
 import { createWorkStore } from '../work/workStore'
 
 /** Open assignments listed per project before the shrink. */
@@ -17,6 +18,9 @@ const MAX_GOAL = 120
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
 const DAY_MS = 24 * HOUR_MS
+/** Open duties in the header, newest first; the section is never shrunk. */
+export const MAX_DUTIES = 5
+const MAX_REASON = 60
 /** Projects named in the global health line. */
 const MAX_HEALTH_PROJECTS = 5
 const LIVE_GOALS = ['active', 'proposed']
@@ -34,6 +38,18 @@ export interface ProjectWork {
   open: OpenAssignment[]
 }
 export interface OpenWork { needsYou: NeedsYou; projects: ProjectWork[] }
+
+/** A delegation Central started that is stuck, failed or waiting; `textLeftInBox` true means press Enter, do not retype. */
+export interface OpenDuty { taskId: string; task: string; node: string; status: WorkStatus; reason: string | null; attempts: number; sinceMin: number; textLeftInBox?: boolean }
+
+/** Central's open duties for the header; done and cancelled tasks are never among them. */
+export function duties(db: Database, now: number): OpenDuty[] {
+  return listDuties(db, MAX_DUTIES).map((d) => ({
+    taskId: d.taskId, task: redactSecrets(d.title).slice(0, MAX_TITLE), node: d.nodeId.slice(0, MAX_NODE), status: d.status,
+    reason: d.reason === null ? null : redactSecrets(d.reason).slice(0, MAX_REASON), attempts: d.attempts,
+    sinceMin: Math.max(0, Math.floor((now - d.since) / MINUTE_MS)), ...(d.textLeftInBox === undefined ? {} : { textLeftInBox: d.textLeftInBox }),
+  }))
+}
 
 const noNeeds = (): NeedsYou => ({ waiting_input: 0, needs_review: 0, stalled: 0, failed: 0 })
 const noColumns = (): Record<BoardColumn, number> => Object.fromEntries(Object.keys(BOARD_COLUMNS).map((c) => [c, 0])) as Record<BoardColumn, number>

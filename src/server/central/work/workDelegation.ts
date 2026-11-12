@@ -18,8 +18,10 @@ export interface DelegationInput {
   turnId?: string
 }
 
+/** Why a send did not happen; `textLeftInBox` says the prompt still waits in the node's input box (press Enter, do not retype). */
+export interface SendFailure { reason: string; textLeftInBox?: boolean }
 /** The durable record of a delegation; `settleFailed` undoes it when the send did not happen. */
-export interface Delegation { ok: true; taskId: string; assignmentId: string; settleFailed(reason: string): void }
+export interface Delegation { ok: true; taskId: string; assignmentId: string; settleFailed(reason: string, detail?: Omit<SendFailure, 'reason'>): void }
 /** A delegation that was recorded, or the coded reason it was refused. */
 export type DelegationResult = Delegation | { ok: false; code: string; data: Record<string, unknown> }
 
@@ -33,8 +35,8 @@ function opened(store: WorkStore, taskId: string, input: DelegationInput, restor
   const { id } = store.openAssignment({ taskId, nodeId, channel, instruction, agentId, conversationId, turnId, actor: CENTRAL, rule: RULE })
   return {
     ok: true, taskId, assignmentId: id,
-    settleFailed(reason) {
-      if (store.getAssignment(id)?.endedAt === null) store.endAssignment(id, 'send_failed', { reason }, { actor: CENTRAL, rule: RULE })
+    settleFailed(reason, detail = {}) {
+      if (store.getAssignment(id)?.endedAt === null) store.endAssignment(id, 'send_failed', { reason, ...detail }, { actor: CENTRAL, rule: RULE })
       const current = store.getTask(taskId)
       if (current && canWorkTransition(current.status, restore)) store.moveTask(taskId, restore, { actor: CENTRAL, rule: RULE, reason, assignmentId: id })
     },
@@ -76,8 +78,8 @@ export function beginDelegation(store: WorkStore, input: DelegationInput): Deleg
   }
 }
 
-/** Runs `send`, settling the delegation as failed when it throws or `failureOf` names a code. */
-export async function settleSend<T>(delegation: Delegation, send: () => Promise<T>, failureOf: (sent: T) => string | null): Promise<T> {
+/** Runs `send`, settling the delegation as failed when it throws or `failureOf` names a code (or a code with detail). */
+export async function settleSend<T>(delegation: Delegation, send: () => Promise<T>, failureOf: (sent: T) => string | SendFailure | null): Promise<T> {
   let sent: T
   try {
     sent = await send()
@@ -85,7 +87,8 @@ export async function settleSend<T>(delegation: Delegation, send: () => Promise<
     delegation.settleFailed('send_threw')
     throw new Error(`send delegation ${delegation.assignmentId} of task ${delegation.taskId}: ${err instanceof Error ? err.message : String(err)}`, { cause: err })
   }
-  const code = failureOf(sent)
-  if (code !== null) delegation.settleFailed(code)
+  const failure = failureOf(sent)
+  if (typeof failure === 'string') delegation.settleFailed(failure)
+  else if (failure !== null) delegation.settleFailed(failure.reason, failure)
   return sent
 }

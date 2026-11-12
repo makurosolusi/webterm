@@ -18,11 +18,13 @@ Operator notes:
 - Existing installs get Skip approvals turned on when they upgrade. To get approval cards and permission prompts back, choose "Ask for risky things" in Settings › Claude › Permissions (that choice is remembered).
 - Settings gain an `inputHistory` key: values typed into settings fields, per field, at most 10 per field and 50 fields. It never holds secrets (password fields do not remember) and can be cleared from each field's Recent list.
 - New dependency `modern-screenshot` (MIT) for Central's screenshot tool.
+- Ledger schema v32 adds a nullable `not_before` column to `central_checkin_reason`; existing databases are upgraded in place, nothing to backfill.
 - New dependency `@puppeteer/browsers` 3.2.7 (Apache-2.0) for "Download Chromium"; loaded only when a download starts. Downloaded builds live in `<data dir>/browsers/`.
 - Ledger schema v30 adds the `central_finding` and `central_health_scan` tables for project health; existing databases are upgraded in place, nothing to backfill.
 - Ledger schema v31 adds a nullable `workspace_id` column to `policy_grant`; existing rules keep applying to every workspace, nothing to backfill.
 
 ### Added
+- Central now keeps a list of the delegations it owns that are stuck or failed, acts on them, and tells you when it cannot fix one.
 - Status bar at the bottom of every terminal and Claude agent node: live or exited (with the exit code), pid, uptime, size, folder and the age of the last output; agent nodes add the agent state and how long it has lasted, the last hook, model, context used, session cost, the current task and the outbox queue. Amber and red badges say in one line when something looks wrong (unexpected exit, stalled turn, failed or stuck outbox mail, a task the agent never started, a long permission wait, a dropped stream, context at 90% or more). Click it for every field and Copy diagnostics. On by default; Settings › Canvas › Status bar turns it off.
 - Settings › Appearance: Theme (System follows your computer's light or dark mode, or Light / Dark), terminal colors with a small preview, Font (only fonts installed on this computer), font size, cursor style and blink, and the canvas background with one "This workspace: Same as all workspaces / Custom" choice.
 - Settings › Notifications: desktop notifications show the browser's real permission (blocked says how to allow it, and is never saved as on) plus the sound. Mute a single workspace from its menu: right-click the tab › Mute Notifications.

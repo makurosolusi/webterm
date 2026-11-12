@@ -31,7 +31,7 @@ describe('state header: viewing', () => {
     active = 'ws-wibu' // a workspace whose project livePortfolio creates with id = workspace id
     const text = buildStateHeader(f.db, 'central:global')
     expect(parse(text).viewing).toEqual({ projectId: 'ws-wibu', name: 'wibu' })
-    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['time', 'needsYou', 'health', 'work', 'projectTotal', 'projects', 'scope', 'viewing'])
+    expect(Object.keys(JSON.parse(text.slice('State: '.length)) as object)).toEqual(['time', 'needsYou', 'openDuties', 'health', 'work', 'projectTotal', 'projects', 'scope', 'viewing'])
     active = 'w-p1' // an older project linked to its workspace under a different id
     expect(parse(buildStateHeader(f.db, 'central:global')).viewing).toEqual({ projectId: 'p1', name: 'laya-api' })
   })
@@ -146,6 +146,21 @@ describe('state header: time and open work', () => {
     expect(header.viewing?.projectId).toBe('ws-7')
     expect(header.work.every((w) => w.open.length === 0)).toBe(true)
     expect(buildStateHeader(f.db, 'central:global', NOW)).toBe(text)
+  })
+
+  it('lists open duties of Central-started attempts, never cancelled or done, and keeps them through the shrink', () => {
+    type Duty = { taskId: string; task: string; node: string; status: string; reason: string | null; attempts: number; sinceMin: number }
+    const duties = (text: string): Duty[] => (JSON.parse(text.slice('State: '.length)) as { openDuties: Duty[] }).openDuties
+    const stuck = task('p1', 'failed', 'n-stuck', 'deploy the api')
+    task('p1', 'cancelled', 'n-gone'); task('p1', 'done', 'n-done'); task('p1', 'running', 'n-busy')
+    expect(duties(buildStateHeader(f.db, 'central:global', NOW))).toEqual([{ taskId: stuck, task: 'deploy the api', node: 'n-stuck', status: 'failed', reason: null, attempts: 1, sinceMin: 5 }])
+    workspaces = Array.from({ length: 60 }, (_, i) => ({ id: `ws-${i}`, name: `${'n'.repeat(55)}${i}`, nodes: [] }))
+    buildStateHeader(f.db, 'central:global', NOW)
+    for (let i = 0; i < 40; i += 1) for (let j = 0; j < 8; j += 1) task(`ws-${i}`, j === 0 ? 'stalled' : 'running', `node-${i}-${j}`, `${'t'.repeat(70)}${j}`)
+    const text = buildStateHeader(f.db, 'central:global', NOW)
+    expect(text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS)
+    expect(duties(text)).toHaveLength(5)
+    expect(duties(text).every((d) => d.task.length <= 60)).toBe(true)
   })
 
   it('moderate load keeps every project and trims its assignments evenly', () => {

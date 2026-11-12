@@ -24,6 +24,8 @@ export const WORK_LIVENESS_RULES = {
   stalled: { name: 'stalled', afterMs: 20 * MINUTE_MS },
   vanished: { name: 'vanished', maxRespawnsPerAssignment: 1 },
   restartLimit: { name: 'restart_limit', maxPerTask: 2, windowMs: 60 * MINUTE_MS },
+  /** Open duties (workEscalation.ts): Central gets `graceMs` to fix a failed send in the turn that saw it; after `afterMs` the user is told. */
+  escalate: { name: 'escalate', graceMs: 2 * MINUTE_MS, afterMs: 15 * MINUTE_MS },
 } as const
 
 /** End reason when a session died and the server has no way to relaunch it. */

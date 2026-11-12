@@ -42,6 +42,9 @@ describe('centralQueryOptions', () => {
       abortController: abort,
     })
     expect(CENTRAL_STEWARD_PROMPT).toContain('approval_required')
+    // Ownership of delegations (open duties), with no per-turn data so the prefix stays cache-stable.
+    expect(CENTRAL_STEWARD_PROMPT).toContain('You own every delegation you start. When one is listed under Open duties, act on it this turn')
+    expect(CENTRAL_STEWARD_PROMPT).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 
   it('resumes instead of creating a session when a sessionRef exists, and adds model and budget', () => {

@@ -81,6 +81,9 @@ const NOT_SUBMITTED_HINT: Record<Exclude<SubmitResult, { ok: true }>['reason'], 
   not_started: 'The text may still be waiting in its input box: check with node.inspect and press keys:["Enter"] or tell the user. Do not retype it.',
 }
 
+/** Instruction recorded for an Enter that resubmits a prompt already in the input box. */
+export const RESUBMIT_MARKER = '(resubmit)'
+
 /** What to type: keys go first, then the text. */
 export interface TypeCall { node: BoardNode; text?: string; keys: string[]; submit: boolean; taskId?: string }
 
@@ -89,8 +92,11 @@ export async function typeInto(ctx: ToolCtx, projectId: string | undefined, sess
   const sleep = seams.sleep ?? wait
   const { node, text, keys, taskId } = call
   const submitted = text !== undefined && call.submit
-  const delegation = submitted && node.kind === 'agent'
-    ? beginDelegation(createWorkStore(ctx.db, ctx.now), { projectId: String(projectId), nodeId: node.id, channel: 'terminal', instruction: text, ...(taskId ? { taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}) })
+  // Enter alone on a Claude node for a task is a rescue of a prompt left in its box: track it again so the duty clears once it starts.
+  const rescue = text === undefined && taskId !== undefined && keys.length === 1 && keys[0] === 'Enter'
+  const instruction = submitted ? text : rescue ? RESUBMIT_MARKER : null
+  const delegation = instruction !== null && node.kind === 'agent'
+    ? beginDelegation(createWorkStore(ctx.db, ctx.now), { projectId: String(projectId), nodeId: node.id, channel: 'terminal', instruction, ...(taskId ? { taskId } : {}), conversationId: ctx.conversationId, ...(ctx.turnId ? { turnId: ctx.turnId } : {}) })
     : null
   if (delegation && !delegation.ok) return fail(delegation.code, delegation.data)
   const send = async (): Promise<SubmitResult | null> => {
@@ -100,7 +106,9 @@ export async function typeInto(ctx: ToolCtx, projectId: string | undefined, sess
     if (!submitted) { sessions.input(node.id, text); return null }
     return submitToNode(sessions, node.id, text, { sleep, ...(seams.render ? { render: seams.render } : {}) })
   }
-  const sent = delegation ? await settleSend(delegation, send, (r) => (r && !r.ok ? r.reason : null)) : await send()
+  // not_started: the prompt is still in the box; not_on_screen: only when the box could not be cleared.
+  const failureOf = (r: SubmitResult | null) => (r && !r.ok ? { reason: r.reason, textLeftInBox: r.reason === 'not_started' || (r.reason === 'not_on_screen' && r.cleared === false) } : null)
+  const sent = delegation ? await settleSend(delegation, send, failureOf) : await send()
   const tracking = delegation ? { taskId: delegation.taskId, assignmentId: delegation.assignmentId } : taskId ? { tracked: false } : {}
   if (sent && !sent.ok) {
     return fail(sent.reason, { nodeId: node.id, name: node.name, ...tracking, hint: `${sent.message} ${NOT_SUBMITTED_HINT[sent.reason]}` })
@@ -121,6 +129,7 @@ export function createCanvasTypeDefs(deps: CanvasTypeDeps): ToolDef[] {
       + 'To leave a TUI panel or menu press Escape first; C-c interrupts a running command. For Enter alone use keys:["Enter"]. '
       + 'Only terminal and Claude nodes with a running session. '
       + 'Text submitted to a Claude node is tracked as a delegation (new card unless taskId or an open card applies); plain shells are not. '
+      + 'keys:["Enter"] with a taskId and no text resubmits a prompt left in a Claude input box and tracks that task again. '
       + 'Workers you spawned take agent.prompt / agent.relay instead. Read the screen and result with node.inspect.',
     input: obj({ nodeId: S.str(MAX_ID), text: S.str(MAX_PROMPT_CHARS), keys: S.arr(S.str(MAX_KEY_NAME), MAX_KEYS), submit: S.bool(), taskId: S.str(MAX_ID) }, ['nodeId']),
     output: S.keys('nodeId', 'name', 'submitted', 'length', 'keys', 'taskId', 'assignmentId', 'tracked'),

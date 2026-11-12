@@ -182,3 +182,13 @@ test('settleSend reports a code, and rethrows with the assignment named', async 
   expect(message).toContain(thrown.assignmentId)
   expect(store.getAssignment(thrown.assignmentId)?.endReason).toBe('send_failed')
 })
+
+test('settleSend keeps whether the prompt was left in the input box, so the duty says press Enter', async () => {
+  const { store, started } = setup()
+  const left = started()
+  await settleSend(left, async () => 'x', () => ({ reason: 'not_started', textLeftInBox: true }))
+  expect(store.getAssignment(left.assignmentId)).toMatchObject({ endReason: 'send_failed', result: { reason: 'not_started', textLeftInBox: true } })
+  const cleared = started({ nodeId: 'n2' })
+  await settleSend(cleared, async () => 'x', () => ({ reason: 'not_on_screen', textLeftInBox: false }))
+  expect(store.getAssignment(cleared.assignmentId)?.result).toEqual({ reason: 'not_on_screen', textLeftInBox: false })
+})

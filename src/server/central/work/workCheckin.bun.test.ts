@@ -30,7 +30,7 @@ function rigOn(db: Database, clock = { t: T0 }) {
     n += 1
     return `turn-${turns.length}-${n}`
   }
-  const notice = (key: string, text: string, conversationId: string) => { appendCentralNotice(db, { key, text, conversationId, kind: 'mock', now }) }
+  const notice = (key: string, text: string, conversationId: string) => appendCentralNotice(db, { key, text, conversationId, kind: 'mock', now })
   const checkin = createWorkCheckin({ db, store, now, settings, submit, notice, env: {} })
   onWorkMove(db, checkin.onMove)
   return { db, clock, store, conf, settings, turns, state, checkin, now }
@@ -76,13 +76,14 @@ describe('triggers', () => {
     expect(r.turns[0]?.text).toContain(a.id)
   })
 
-  it('a failed send Central saw itself and waiting_input are not triggers', () => {
+  it('waiting_input is no trigger; a failed send is queued as a duty that waits for the turn that saw it', () => {
     const r = rig()
     const a = running(r)
     r.store.moveTask(a.id, 'waiting_input', { actor: SYSTEM, rule: 'x' })
+    expect(queued(r)).toBe(0)
     const b = started(r)
     r.store.moveTask(b.id, 'failed', { actor: CENTRAL, rule: 'delegation', reason: 'send_threw' })
-    expect(queued(r)).toBe(0)
+    expect(r.db.query('SELECT kind, not_before AS notBefore FROM central_checkin_reason').all()).toEqual([{ kind: 'task_duty', notBefore: T0 + 2 * 60_000 }])
   })
 
   it('a due reminder fires once and is marked fired', async () => {
@@ -357,7 +358,7 @@ describe('budget and settings', () => {
   it('the guard daily money budget also pauses, with a notice', async () => {
     const r = rig()
     r.db.exec(`INSERT INTO central_budget (day, scope, turns, tokens, cost_micros, spawns, wall_ms) VALUES ('${new Date(T0).toISOString().slice(0, 10)}', 'global', 0, 999, 0, 0, 0)`)
-    const checkin = createWorkCheckin({ db: r.db, store: r.store, now: r.now, settings: r.settings, submit: () => 'x', notice: (key, text, conversationId) => { appendCentralNotice(r.db, { key, text, conversationId, kind: 'mock', now: r.now }) }, env: { WEBTERM_CENTRAL_DAILY_TOKENS: '100' } })
+    const checkin = createWorkCheckin({ db: r.db, store: r.store, now: r.now, settings: r.settings, submit: () => 'x', notice: (key, text, conversationId) => appendCentralNotice(r.db, { key, text, conversationId, kind: 'mock', now: r.now }), env: { WEBTERM_CENTRAL_DAILY_TOKENS: '100' } })
     stall(r, running(r).id)
     r.clock.t += WINDOW
     await checkin.tick()
