@@ -42,5 +42,15 @@ export function createBrowserToolDeps(env: Record<string, string | undefined>, s
         src.store.revoke(token)
       }
     },
+    async open(requesterId, nodeId) {
+      const rt = active()
+      if (!rt?.openFor) return { ok: false, code: 'disabled' }
+      const made = await rt.openFor(requesterId, nodeId)
+      if (made.ok) return { ok: true, started: true }
+      // The node is on the board and cabled; only its page waits until the user shows it.
+      if ('startError' in made) return { ok: true, started: false }
+      const error = (made.result.body as { error?: unknown } | undefined)?.error
+      return { ok: false, code: typeof error === 'string' ? error : `browser_http_${made.result.status}` }
+    },
   }
 }

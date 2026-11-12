@@ -179,6 +179,9 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Central no longer sets reminders to check on agents it delegated to: it is told their reports reach it by themselves; reminders are for follow-ups only time can tell. Playbooks answer `started` (with the agent and its browser) instead of `done`.
+- Hung agents are caught sooner: no sign of start after 1 minute, a nudge after 3 quiet minutes, stalled after 6 (was 2 / 10 / 20); a failed send gets 1 minute of grace before it becomes a duty.
+- New Central tool `browser_open` opens a browser node beside an agent Central started and cables it to that agent.
 - Central chat now folds each run of tool calls into one collapsed row ("Used 9 tools · 1 failed", or "Running node_list…" while one runs) so the answer is no longer buried; click it to see the individual tool cards. Approval cards stay visible outside the row.
 - The classifier auto-approval switch is now stored as configuration, so it no longer turns itself off after its event ages out of the 30-day history.
 - Forgetting a memory that is already forgotten now answers ok, and memory route errors carry a `message`.
@@ -297,6 +300,10 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Work Central delegates now reports back by itself: when an agent it started finishes, asks a question, stalls or fails, Central is woken right away (no 5-minute wait), also when it was the only task, and again for every later report. An agent that exits or fails to start fails its task at once instead of on the next check. A playbook continued after an approval card tells Central how it went.
+- An agent Central starts on a task gets the task's title and full brief in its first message (no more "No task attached" followed by a second message), and is told its `RESULT:` reaches Central automatically. Playbooks no longer send the brief twice.
+- Web research opens the agent's browser node and cables it to the agent right after it starts, and the brief names that node.
+- An agent busy in a long subagent run is no longer flagged as quiet, and an agent approved late is no longer marked stalled the moment it starts.
 - Saves and other requests no longer hang once a few Agent Chat nodes, Central and Activity are open: the live streams (logs, events, Central and Agent Chat) now ride the one WebSocket the app already has, so they no longer use up the browser's 6 connections per server.
 - A settings save that gets no answer (the permission-mode chip in Central chat, or any Settings field) no longer shows "Saving…" forever: after 15 s it shows "The server did not answer in 15 s" with Retry.
 - Central now acts instead of proposing: it sees each project's approval mode (Ask, Auto, Danger) and calls the tool in the same turn, so in Danger it no longer asks "shall I type it?" for things it can do. When the mode needs approval, the card appears on its own.

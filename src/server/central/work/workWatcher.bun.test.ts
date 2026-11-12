@@ -29,13 +29,13 @@ for (const [kind, payload] of BUSY_EVENTS) {
   }
 }
 
-test('a subagent tool event is ignored entirely', () => {
+test('a subagent tool event counts as life but moves nothing', () => {
   const s = setup()
-  const { taskId, assignmentId } = s.assigned('stalled')
+  const { taskId, assignmentId } = s.assigned('reported')
   s.bus.publish(event('hook.PostToolUse', { subagent: true }))
   s.bus.publish(event('hook.PreToolUse', { subagent: true }))
-  expect(s.statusOf(taskId)).toBe('stalled')
-  expect(s.store.getAssignment(assignmentId)?.lastSignal).toBeNull()
+  expect(s.statusOf(taskId)).toBe('reported')
+  expect(s.store.getAssignment(assignmentId)?.lastSignal).toBe('hook.PreToolUse')
 })
 
 test('untrusted and nodeless events are ignored', () => {
@@ -177,6 +177,9 @@ test('unsubscribes from every pattern', () => {
   expect(s.bus.subscriberCount).toBe(0)
 })
 
-test('thresholds are the agreed ones', () => {
-  expect([WORK_LIVENESS_RULES.startup.afterMs, WORK_LIVENESS_RULES.heartbeat.afterMs, WORK_LIVENESS_RULES.stalled.afterMs]).toEqual([120_000, 600_000, 1_200_000])
+test('thresholds are the production ones: polling only catches a hung agent, fast', () => {
+  expect([WORK_LIVENESS_RULES.startup.afterMs, WORK_LIVENESS_RULES.heartbeat.afterMs, WORK_LIVENESS_RULES.stalled.afterMs]).toEqual([60_000, 180_000, 360_000])
+  expect(WORK_LIVENESS_RULES.escalate).toMatchObject({ graceMs: 60_000, afterMs: 15 * 60_000 })
+  expect(WORK_LIVENESS_RULES.restartLimit).toMatchObject({ maxPerTask: 2, windowMs: 60 * 60_000 })
+  expect(WORK_LIVENESS_RULES.vanished.maxRespawnsPerAssignment).toBe(1)
 })

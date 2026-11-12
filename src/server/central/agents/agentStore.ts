@@ -3,7 +3,10 @@ import type { Database } from 'bun:sqlite'
 import { allRows, execWrite, getRow, type Row } from '../../ledger/ledgerCore'
 import type { AgentKind, AgentOwner, AgentRecord, AgentRole, AgentRunner, AgentState } from '../contracts'
 import { AGENT_TERMINAL_STATES } from '../contracts'
+import { createLogger } from '../../logs'
 import { AgentTransitionError, assertTransition, isTerminalState } from './agentStateMachine'
+
+const log = createLogger('central.agents')
 
 const DEFAULT_PAGE = 50
 const MAX_PAGE = 200
@@ -52,6 +55,24 @@ export interface AgentStore {
   transition(id: string, to: AgentState, patch?: TransitionPatch): AgentRecord
 }
 
+const endObservers = new WeakMap<Database, Set<(agent: AgentRecord) => void>>()
+
+/** Calls `fn` after any agent on `db` reaches a terminal state (exit, spawn failure, cancel), so its work is settled by event, not a poll. */
+export function onAgentEnded(db: Database, fn: (agent: AgentRecord) => void): () => void {
+  const set = endObservers.get(db) ?? new Set()
+  endObservers.set(db, set.add(fn))
+  return () => { set.delete(fn) }
+}
+
+function publishEnded(db: Database, agent: AgentRecord): void {
+  for (const fn of endObservers.get(db) ?? []) {
+    try { fn(agent) } catch (err) {
+      // The transition is committed; an observer failing must not turn it into a thrown spawn/exit.
+      log.error('agent.end_observer_failed', `observer of agent ${agent.id} ending ${agent.state} failed`, { agentId: agent.id, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+}
+
 function toRecord(r: Row): AgentRecord {
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
   const str = (v: unknown) => (v === null || v === undefined ? null : String(v))
@@ -96,7 +117,9 @@ export function createAgentStore(db: Database, now: () => number): AgentStore {
            ended_at = CASE WHEN ? THEN ? ELSE ended_at END, end_reason = COALESCE(?, end_reason) WHERE id = ? AND state = ?`,
         to, now(), patch.nodeId ?? null, patch.approvalId ?? null, ended ? 1 : 0, now(), patch.reason ?? null, id, cur.state)
       if (changes !== 1) throw new AgentTransitionError('concurrent_update', id, cur.state, to)
-      return store.get(id) as AgentRecord
+      const moved = store.get(id) as AgentRecord
+      if (ended) publishEnded(db, moved)
+      return moved
     },
   }
   return store

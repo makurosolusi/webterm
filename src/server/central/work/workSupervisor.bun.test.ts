@@ -33,7 +33,7 @@ test('heartbeat: nudges once per quiet spell, exactly at the threshold, no statu
   await s.supervisor.tick(at(R.heartbeat.afterMs))
   expect(s.fake.state.inputs).toHaveLength(1)
   expect(s.fake.state.inputs[0]).toContain(`title ${taskId}`)
-  expect(s.fake.state.inputs[0]).toContain('10 minutes')
+  expect(s.fake.state.inputs[0]).toContain('3 minutes')
   expect(s.statusOf(taskId)).toBe('running')
   expect(s.lastRule(taskId)).toBe('heartbeat')
   expect(s.store.timeline(taskId).at(-1)?.kind).toBe('work.assignment.nudge')
@@ -253,4 +253,22 @@ test('finishTask moves the task, ends the open assignment and records both', () 
   const none = s.assigned('needs_review', { nodeId: 'n2' })
   s.store.endAssignment(none.assignmentId, 'session_end')
   expect(finishTask(s.store, none.taskId, 'done', { actor: { kind: 'human' } }).status).toBe('done')
+})
+
+test('startup: a spawn approved late starts its quiet clock at launch, not at the card', async () => {
+  const s = rig()
+  const { taskId } = s.assigned('assigned', { channel: 'spawn', agentId: 'ag-1' })
+  s.fake.state.agents['ag-1'] = { state: 'working', endReason: null, lastEventAt: at(10 * 60_000) }
+  await s.supervisor.tick(at(10 * 60_000 + R.startup.afterMs - 1))
+  expect(s.statusOf(taskId)).toBe('assigned')
+  await s.supervisor.tick(at(10 * 60_000 + R.startup.afterMs))
+  expect(s.statusOf(taskId)).toBe('stalled')
+})
+
+test('sessionEnded leaves a task that already reported alone', async () => {
+  const s = rig()
+  const { taskId, assignmentId } = s.assigned('needs_review', { channel: 'spawn', agentId: 'ag-1' })
+  s.fake.state.agents['ag-1'] = { state: 'session_exited', endReason: 'pty_exit' }
+  await s.supervisor.sessionEnded(s.store.getAssignment(assignmentId)!, 'agent_session_exited')
+  expect(s.statusOf(taskId)).toBe('needs_review')
 })

@@ -9,6 +9,7 @@ import { flagOn } from '../envFlag'
 import { isEnabled, onCapabilityChange } from '../featureCapabilities.runtime'
 import { capabilityStore } from '../control/mount'
 import { consumeApproval } from '../ledger/ledgerApproval'
+import { getRow } from '../ledger/ledgerCore'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { createLogger } from '../logs'
 import { openKnowledgeDb } from '../knowledge/knowledgeStore'
@@ -111,7 +112,12 @@ function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGua
   const wt = resolveWorktrees(deps, worktreeRoot(deps))
   if (!wt.ok) { log.warn('ca2.worktrees_unavailable', 'agent worktree root unavailable; agents disabled'); return null }
   const catalog = createAgentCatalog({ settings: opts.settings ?? (() => DEFAULT_SETTINGS), denyRoots: () => [...DEFAULT_DENY_ROOTS, worktreeRoot(deps)] })
-  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog, canvas: getCanvasPush() })
+  // The board task rides into the boot prompt, so the agent's first message is its whole task.
+  const task = (a: AgentRecord) => {
+    const row = a.taskId ? getRow(db, 'SELECT title, objective FROM central_task WHERE id = ? AND project_id = ?', a.taskId, a.projectId) : null
+    return row ? { title: String(row.title), objective: row.objective === null ? '' : String(row.objective) } : null
+  }
+  const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog, canvas: getCanvasPush(), task })
   return { executor: createAgentExecutor({ db, guard, host, now, env }), catalog }
 }
 

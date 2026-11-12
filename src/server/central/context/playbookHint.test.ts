@@ -58,6 +58,13 @@ describe('renderCapabilityMap', () => {
       + 'delegate by hand: task.create (auto), agent.spawn (asks), agent.prompt (auto) · project health: health.scan (off)')
   })
 
+  it('names reminders for what is not delegated, and an optional step (browser_open) never turns a playbook off', () => {
+    const map = renderCapabilityMap([{ name: 'playbook.web_research', access: 'auto' }, { name: 'task.create', access: 'auto' }, { name: 'agent.spawn', access: 'auto' }, { name: 'reminder.set', access: 'auto' }])
+    expect(map).toContain('research the web: playbook.web_research (auto)')
+    expect(map).toContain('follow up later (not delegated work): reminder.set (auto)')
+    expect(map).not.toContain('check later')
+  })
+
   it('is empty without tools', () => {
     expect(renderCapabilityMap([])).toBe('')
   })

@@ -157,6 +157,18 @@ describe('agent delegation', () => {
     const r = await s.spawn({ taskId: task.id })
     expect(r.data).toMatchObject({ taskId: task.id, assignmentId: expect.any(String) })
     expect(work(s).getTask(task.id)?.status).toBe('assigned')
+    // The board task rides on the agent row, so the host's boot prompt can carry its title and objective.
+    expect(s.executor.store.get(String(r.data?.agentId))?.taskId).toBe(task.id)
+  })
+
+  it('a spawn on a central task that waits for a card keeps the task on the request, not on the ledger task column', async () => {
+    const s = setup()
+    const task = work(s).createTask({ projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+    const r = await s.spawn({ taskId: task.id }, 'propose')
+    expect(r.code).toBe('approval_required')
+    const [card] = allRows(s.f.db, 'SELECT task_id, request_json FROM approval WHERE id = ?', String(r.data?.approvalId))
+    expect(card?.task_id).toBeNull()
+    expect(JSON.parse(String(card?.request_json))).toMatchObject({ taskId: task.id })
   })
 
   it('a reused spawn adds no card', async () => {

@@ -9,14 +9,15 @@ import { execWrite, getRow, newId, type Row } from '../../ledger/ledgerCore'
 import { createLogger } from '../../logs'
 import { automaticAction, type AutomaticActionDeps } from '../automaticAction'
 import { execTool } from '../tools/toolExec'
+import { queueCheckinReason } from '../work/workCheckin'
 import type { ControlGuard, ExecResult, ToolCtx, ToolInput, ToolResult } from '../tools/toolTypes'
 import { type Params, type Playbook, type Saved, playbookById } from './playbook.defs'
 
 const log = createLogger('central')
 
 export type RunStatus = 'running' | 'waiting' | 'done' | 'failed' | 'rejected' | 'expired'
-/** What Central reports: the run, its board task, the step it is on and where it stands. */
-export type PlaybookReceipt = { runId: string; taskId: string | null; step: string; status: RunStatus }
+/** What Central reports: the run, its board task, the step it is on and where it stands; a finished chain is `started` (the agent works on). */
+export type PlaybookReceipt = { runId: string; taskId: string | null; step: string; status: Exclude<RunStatus, 'done'> | 'started' }
 
 /** Tool context of a run's conversation; null while Central is off (the run stays parked). */
 export type CtxFor = (conversationId: string) => ToolCtx | null
@@ -39,7 +40,7 @@ export const REPLAY_WINDOW_MS = 60 * 60_000
  * guard's `needs_approval` passes so the handler can put the card; a guard deny still denies.
  */
 const OWN_CARD_TOOLS: ReadonlySet<string> = new Set(['agent.spawn'])
-/** An approved spawn may still be provisioning when the chain continues; agent.prompt waits this long for it. */
+/** An approved spawn may still be provisioning when the chain continues; a `needsAgent` step waits this long for it. */
 export const AGENT_ACTIVE_WAIT_MS = 60_000
 export const AGENT_POLL_MS = 2_000
 /** States in which agent.prompt is accepted (agentExecutor `prompt`). */
@@ -56,8 +57,15 @@ const toRun = (r: Row): Run => ({
 
 const receiptOf = (pb: Playbook, run: Run): PlaybookReceipt => ({
   runId: run.id, taskId: typeof run.saved.task?.taskId === 'string' ? run.saved.task.taskId : null,
-  step: pb.steps[Math.min(run.stepIndex, pb.steps.length - 1)]?.tool ?? '', status: run.status,
+  step: pb.steps[Math.min(run.stepIndex, pb.steps.length - 1)]?.tool ?? '', status: run.status === 'done' ? 'started' : run.status,
 })
+
+/** Told with a started run: the agent's own report is pushed, so Central has nothing to poll. */
+const startedNote = (pb: Playbook, run: Run): string => {
+  const agent = typeof run.saved.agent?.agentId === 'string' ? run.saved.agent.agentId : 'the agent'
+  const browser = typeof run.saved.browser?.nodeId === 'string' ? ` with browser node ${run.saved.browser.nodeId} cabled to it` : ''
+  return `${pb.label} started: agent ${agent}${browser} has its brief and works on its own. Its RESULT, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.`
+}
 
 const subjectOf = (pb: Playbook, run: Run): string => run.params[pb.subject] ?? ''
 
@@ -104,7 +112,7 @@ async function waitActive(ctx: ToolCtx, run: Run, exec: ExecFn, deps: PlaybookDe
     const r = await exec(ctx, 'agent.status', { projectId: run.projectId, agentRef: agentId })
     state = r.ok && typeof r.data?.state === 'string' ? r.data.state : state
     if (ACTIVE_STATES.has(state)) { run.saved.agent = { ...agent, ...r.data }; return null }
-    if (r.ok && r.data?.endedAt != null) return { code: 'agent_not_active', message: `agent ${agentId} ended (${state}) before it got its brief` }
+    if (r.ok && r.data?.endedAt != null) return { code: 'agent_not_active', message: `agent ${agentId} ended (${state}) before it was ready` }
     if (waited >= bound) return { code: 'agent_not_active', message: `agent ${agentId} did not become active within ${Math.round(bound / 1000)} s (last state ${state})` }
     await sleep(AGENT_POLL_MS)
   }
@@ -115,7 +123,7 @@ async function advance(ctx: ToolCtx, pb: Playbook, run: Run, deps: PlaybookDeps)
   const exec = deps.exec ?? ((c, name, args) => execTool(c, name, args))
   while (run.stepIndex < pb.steps.length) {
     const step = pb.steps[run.stepIndex] as Playbook['steps'][number]
-    const inactive = step.tool === 'agent.prompt' ? await waitActive(ctx, run, exec, deps) : null
+    const inactive = step.needsAgent ? await waitActive(ctx, run, exec, deps) : null
     if (inactive) {
       run.status = 'failed'
       save(ctx, run, null, inactive.code)
@@ -123,8 +131,8 @@ async function advance(ctx: ToolCtx, pb: Playbook, run: Run, deps: PlaybookDeps)
       return { ok: false, code: inactive.code, data: { ...receiptOf(pb, run), message: inactive.message } }
     }
     const r = await exec(stepCtx(ctx, step.tool), step.tool, defined(step.args(run.params, run.saved, run.id)))
-    if (r.ok) {
-      if (step.saveAs) run.saved[step.saveAs] = r.data ?? {}
+    if (r.ok || (step.optional && r.code !== 'approval_required')) {
+      if (step.saveAs) run.saved[step.saveAs] = r.ok ? r.data ?? {} : { error: r.code ?? 'error' }
       run.stepIndex += 1
       save(ctx, run)
       continue
@@ -143,7 +151,7 @@ async function advance(ctx: ToolCtx, pb: Playbook, run: Run, deps: PlaybookDeps)
   }
   run.status = 'done'
   save(ctx, run)
-  return { ok: true, data: { ...receiptOf(pb, run), agentId: run.saved.agent?.agentId ?? null } }
+  return { ok: true, data: { ...receiptOf(pb, run), agentId: run.saved.agent?.agentId ?? null, note: startedNote(pb, run) } }
 }
 
 /** Starts the playbook, or resumes the parked run of this exact call. */
@@ -166,6 +174,18 @@ export async function runPlaybook(ctx: ToolCtx, pb: Playbook, input: ToolInput, 
   return advance(ctx, pb, run, deps)
 }
 
+/**
+ * Nobody waits on a run resumed by a card decision, so its outcome is queued as a check-in: a failure is due at once,
+ * a start waits the window (the agent's own report usually lands in the same turn).
+ */
+function queueResumed(ctx: ToolCtx, pb: Playbook, run: Run, r: ToolResult): void {
+  const what = r.ok ? startedNote(pb, run) : `${pb.label} stopped after the approval at ${receiptOf(pb, run).step} (${r.code ?? 'error'}${typeof r.data?.message === 'string' ? `: ${r.data.message}` : ''})`
+  queueCheckinReason(ctx.db, {
+    kind: 'playbook_result', dedupeKey: `playbook:${run.id}:${run.status}`, projectId: run.projectId, taskId: receiptOf(pb, run).taskId,
+    text: `${what}; subject: ${subjectOf(pb, run)}`, now: ctx.now(), ...(r.ok ? {} : { notBefore: ctx.now() }),
+  })
+}
+
 /** Continues (approved) or ends (rejected, expired) the run parked on `approval`; no-op for other cards. */
 export async function resumeOnApproval(db: Database, ctxFor: CtxFor, approval: Approval, deps: PlaybookDeps = {}): Promise<ToolResult | null> {
   if (approval.status === 'pending') return null
@@ -179,11 +199,16 @@ export async function resumeOnApproval(db: Database, ctxFor: CtxFor, approval: A
     run.status = approval.status === 'rejected' ? 'rejected' : 'expired'
     save(ctx, run, approval.id, `approval_${approval.status}`)
     announce(ctx, deps, pb, run, 'stopped', `Central stopped ${pb.label}: the approval was ${approval.status}: ${subjectOf(pb, run)}`)
-    return { ok: false, code: `approval_${approval.status}`, data: receiptOf(pb, run) }
+    const r: ToolResult = { ok: false, code: `approval_${approval.status}`, data: receiptOf(pb, run) }
+    queueResumed(ctx, pb, run, r)
+    return r
   }
   run.status = 'running'
   announce(ctx, deps, pb, run, 'resumed', `Central resumed ${pb.label} after approval: ${subjectOf(pb, run)}`)
-  return advance(ctx, pb, run, deps)
+  const r = await advance(ctx, pb, run, deps)
+  // A run parked again on a later card is not an outcome yet.
+  if ((run.status as RunStatus) !== 'waiting') queueResumed(ctx, pb, run, r)
+  return r
 }
 
 /** Subscribes the decision hook; `ctxFor` builds the tool context of a run's conversation (null while Central is off). */

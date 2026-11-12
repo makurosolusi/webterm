@@ -56,6 +56,13 @@ describe('centralQueryOptions', () => {
     expect(CENTRAL_STEWARD_PROMPT).toMatch(/chat\.config for an Agent Chat node; for a Claude terminal node, canvas\.type the text "\/model <alias>" then press Enter/)
   })
 
+  // Policy lock (root cause: "Use reminder.set for anything you should check later" made Central poll its own delegations).
+  it('says delegated work reports by itself and keeps reminders for what only time can tell', () => {
+    expect(CENTRAL_STEWARD_PROMPT).not.toContain('Use reminder.set for anything you should check later')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('webterm wakes you with a check-in at once, so never set a reminder or poll to look at delegated work')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('Use reminder.set only for what time alone can tell')
+  })
+
   it('resumes instead of creating a session when a sessionRef exists, and adds model and budget', () => {
     const o = centralQueryOptions({ ...base, sessionRef: ' sess-9 ', model: 'sonnet', maxBudgetUsd: 0.5 })
     expect(o.resume).toBe('sess-9')

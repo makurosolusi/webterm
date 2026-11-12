@@ -220,6 +220,8 @@ Setiap keputusan disertai rekomendasi saya.
    - Fakta dari teks agent/web masuk sebagai *unverified* sampai dikonfirmasi.
 6. **Board default** per project atau gabungan? Rekomendasi: **gabungan "All projects"** dengan filter, karena Central mengelola semuanya.
 7. **Ambang liveness** (120 dtk / 10 menit / 20 menit): pakai default ini dulu, lalu setel ulang dari data setelah 2 minggu.
+   Diperketat 2026-11-12 ke 60 dtk / 3 menit / 6 menit (grace eskalasi 1 menit): laporan, gagal, exit dan pertanyaan agent
+   kini sampai ke Central sebagai event, jadi polling hanya menangkap agent yang macet, dan harus cepat.
 
 ## 7. Risiko
 

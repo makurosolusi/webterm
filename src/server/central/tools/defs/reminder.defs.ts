@@ -28,7 +28,7 @@ function checkSet(input: ToolInput, ctx: ToolCtx): ToolValidationCode | null {
 }
 
 const set: ToolDef = {
-  name: 'reminder.set', summary: 'Remember to check something later; webterm starts a check-in when it comes due.', tier: 'R1',
+  name: 'reminder.set', summary: 'Check later what only time tells (a user follow-up, an outside wait); never for delegated agents.', tier: 'R1',
   projectScoped: false, auditKeys: ['id', 'dueAt'],
   usage: `{"inMinutes":<${REMINDER_MIN_MINUTES}-${REMINDER_MAX_MINUTES}> or "at":"ISO time up to 90 days ahead","text":"what to check, no secrets","projectId":"optional","taskId":"optional"}`,
   input: obj({ inMinutes: S.int(REMINDER_MIN_MINUTES, REMINDER_MAX_MINUTES), at: S.str(AT_MAX), text: S.str(REMINDER_TEXT_MAX), projectId: S.str(MAX_ID), taskId: S.str(MAX_ID) }, ['text']),

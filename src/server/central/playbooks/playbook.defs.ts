@@ -16,6 +16,10 @@ export interface PlaybookStep {
   /** Step input from the playbook params, the saved results and the run id (stable across resumes). */
   args(p: Params, prev: Saved, runId: string): ToolInput
   saveAs?: string
+  /** A failure is saved under `saveAs` as `{ error }` and the chain goes on (a convenience the agent can do itself). */
+  optional?: boolean
+  /** Runs only once the spawned agent is active (an approved spawn may still be provisioning). */
+  needsAgent?: boolean
 }
 
 export type PlaybookBrief = Pick<Brief, 'objective' | 'outputFormat' | 'boundaries'> & { instructions: string }
@@ -34,7 +38,8 @@ export interface Playbook {
   /** The param the notice and task title name. */
   subject: string
   steps: PlaybookStep[]
-  brief(p: Params): PlaybookBrief
+  /** `runId` names what the run sets up for the agent (its browser node). */
+  brief(p: Params, runId: string): PlaybookBrief
 }
 
 const MAX_GOAL = 2000
@@ -48,20 +53,26 @@ export const SEARCH_URL = 'https://duckduckgo.com/?q='
 
 const title = (label: string, text: string): string => `${label}: ${text.replace(/\s+/g, ' ').trim()}`.slice(0, MAX_TITLE)
 
-/** Renders a brief as the steer text an agent receives. */
+/** Browser node a web_research run opens and cables to its agent; fixed per run so the brief can name it before it exists. */
+export const browserNodeOf = (runId: string): string => `br-${runId}`
+
+/** Renders a brief as the task objective, which the agent receives as its first message. */
 export function renderBrief(b: PlaybookBrief): string {
   return [`Objective: ${b.objective}`, b.instructions, `Output format: ${b.outputFormat}`, `Boundaries: ${b.boundaries}`].join('\n\n')
 }
 
-/** The shared chain: board task, then an agent on it, then the brief as its first message. */
-function delegate(pb: Omit<Playbook, 'steps'>, role: 'worker' | 'reviewer'): Playbook {
+/**
+ * The shared chain: the board task holds the brief as its objective, and the agent spawned on it gets that brief in its
+ * FIRST message (agentHost boot prompt), so nothing is sent after it. `extra` steps run after the spawn.
+ */
+function delegate(pb: Omit<Playbook, 'steps'>, role: 'worker' | 'reviewer', extra: PlaybookStep[] = []): Playbook {
   const named = (p: Params): string => title(pb.label, p[pb.subject] ?? '')
   return {
     ...pb,
     steps: [
-      { tool: 'task.create', saveAs: 'task', args: (p) => ({ projectId: p.projectId, title: named(p), objective: renderBrief(pb.brief(p)).slice(0, MAX_OBJECTIVE), acceptance: 'review' }) },
+      { tool: 'task.create', saveAs: 'task', args: (p, _prev, runId) => ({ projectId: p.projectId, title: named(p), objective: renderBrief(pb.brief(p, runId)).slice(0, MAX_OBJECTIVE), acceptance: 'review' }) },
       { tool: 'agent.spawn', saveAs: 'agent', args: (p, prev, runId) => ({ projectId: p.projectId, requestId: `pb-${runId}`, kind: p.kind ?? DEFAULT_AGENT_KIND, role, title: named(p), taskId: prev.task?.taskId }) },
-      { tool: 'agent.prompt', saveAs: 'prompt', args: (p, prev) => ({ projectId: p.projectId, agentRef: prev.agent?.agentId, text: renderBrief(pb.brief(p)), mode: 'steer', taskId: prev.task?.taskId }) },
+      ...extra,
     ],
   }
 }
@@ -73,13 +84,16 @@ const webResearch = delegate({
   summary: 'Research the web: a task, an agent with its own cabled browser, a fixed brief; reports RESULT with sources.',
   match: [WEB_RESEARCH_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), url: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
-  brief: (p) => ({
+  brief: (p, runId) => ({
     objective: p.goal ?? '',
-    instructions: `Open the browser with \`webterm-browser open ${p.url ?? SEARCH_URL + encodeURIComponent(p.goal ?? '')}\`, read the pages with \`webterm-browser snapshot\`, follow the links that matter and gather evidence.`,
+    instructions: `webterm opens browser node ${browserNodeOf(runId)} beside you, cabled to you. Go to ${p.url ?? SEARCH_URL + encodeURIComponent(p.goal ?? '')} with \`webterm-browser navigate <url>\` (no --node needed while it is your only cabled browser; if none is cabled yet, \`webterm-browser open <url>\` opens one), read the pages with \`webterm-browser snapshot\`, follow the links that matter and gather evidence.`,
     outputFormat: `${RESULT_LINE} markdown: the findings, then a Sources list with every URL you used.`,
     boundaries: 'Read-only research: do not sign in, post, buy or change anything on the web or in the repository.',
   }),
-}, 'worker')
+}, 'worker', [
+  // Cabled right after the spawn, before the agent's first tool call; without browser tools the agent opens its own.
+  { tool: 'browser_open', saveAs: 'browser', optional: true, needsAgent: true, args: (p, prev, runId) => ({ projectId: p.projectId, agentRef: prev.agent?.agentId, nodeId: browserNodeOf(runId) }) },
+])
 
 const codeChange = delegate({
   id: 'code_change', label: 'code change', subject: 'goal', tier: 'R1',

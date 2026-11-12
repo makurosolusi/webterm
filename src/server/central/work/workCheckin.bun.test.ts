@@ -45,13 +45,14 @@ function task(r: Rig, projectId = 'p1', extra: { dueAt?: number } = {}) {
   seq += 1
   return r.store.createTask({ id: `t${seq}`, projectId, title: `title ${seq}`, objective: 'o', actor: CENTRAL, ...extra })
 }
-function started(r: Rig, projectId = 'p1', actor: typeof CENTRAL | typeof HUMAN = CENTRAL) {
+/** Default HUMAN: work nobody delegated keeps the 5-minute window; pass CENTRAL for delegated work. */
+function started(r: Rig, projectId = 'p1', actor: typeof CENTRAL | typeof HUMAN = HUMAN, agentId?: string) {
   const t = task(r, projectId)
-  r.store.openAssignment({ taskId: t.id, nodeId: `n-${t.id}`, channel: 'terminal', instruction: 'go', actor })
+  r.store.openAssignment({ taskId: t.id, nodeId: `n-${t.id}`, channel: agentId ? 'spawn' : 'terminal', instruction: 'go', actor, ...(agentId ? { agentId } : {}) })
   return t
 }
-function running(r: Rig, projectId = 'p1') {
-  const t = started(r, projectId)
+function running(r: Rig, projectId = 'p1', actor: typeof CENTRAL | typeof HUMAN = HUMAN, agentId?: string) {
+  const t = started(r, projectId, actor, agentId)
   r.store.moveTask(t.id, 'running', { actor: SYSTEM })
   return t
 }
@@ -76,14 +77,14 @@ describe('triggers', () => {
     expect(r.turns[0]?.text).toContain(a.id)
   })
 
-  it('waiting_input is no trigger; a failed send is queued as a duty that waits for the turn that saw it', () => {
+  it('waiting_input of undelegated work is no trigger; a failed send is queued as a duty that waits for the turn that saw it', () => {
     const r = rig()
     const a = running(r)
     r.store.moveTask(a.id, 'waiting_input', { actor: SYSTEM, rule: 'x' })
     expect(queued(r)).toBe(0)
     const b = started(r)
     r.store.moveTask(b.id, 'failed', { actor: CENTRAL, rule: 'delegation', reason: 'send_threw' })
-    expect(r.db.query('SELECT kind, not_before AS notBefore FROM central_checkin_reason').all()).toEqual([{ kind: 'task_duty', notBefore: T0 + 2 * 60_000 }])
+    expect(r.db.query('SELECT kind, not_before AS notBefore FROM central_checkin_reason').all()).toEqual([{ kind: 'task_duty', notBefore: T0 + 60_000 }])
   })
 
   it('a due reminder fires once and is marked fired', async () => {
@@ -120,31 +121,56 @@ describe('triggers', () => {
     expect(r.turns.length).toBe(1)
   })
 
-  it('a reported task started by Central queues once when others wait, across reported and needs_review', async () => {
+  const wakes = (r: Rig) => r.db.query("SELECT kind, task_id AS taskId, not_before AS notBefore, text FROM central_checkin_reason WHERE dedupe_key LIKE 'wake:%' ORDER BY created_at, rowid").all() as { kind: string; taskId: string; notBefore: number; text: string }[]
+
+  it('a lone delegated task that reports wakes Central at once, keyed per move, with how to read the result', async () => {
     const r = rig()
-    const a = running(r); task(r)
+    const a = running(r, 'p1', CENTRAL, 'ag-7')
     r.store.moveTask(a.id, 'reported', { actor: SYSTEM })
     r.store.moveTask(a.id, 'needs_review', { actor: SYSTEM })
-    expect(reasons(r)).toEqual([{ kind: 'task_handoff', taskId: a.id }])
+    const w = wakes(r)
+    expect(w.map((x) => x.kind)).toEqual(['task_report', 'task_report'])
+    expect(w.every((x) => x.notBefore <= r.now())).toBe(true)
+    expect(w[1]?.text).toContain('finished and is ready for review')
+    expect(w[1]?.text).toContain('agent.read ag-7')
+    expect(w[1]?.text).toContain(`task.get ${a.id}`)
+    // No window: the very next tick sends it.
+    await r.checkin.tick()
+    expect(r.turns.length).toBe(1)
+    expect(r.turns[0]?.text).toContain(a.id)
   })
 
-  it('a blocked dependent counts as waiting; nothing waiting or not Central means no reason', () => {
+  it('two reports in one attempt give two wakes', async () => {
     const r = rig()
-    const a = running(r, 'p1')
+    const a = running(r, 'p1', CENTRAL, 'ag-1')
     r.store.moveTask(a.id, 'reported', { actor: SYSTEM })
-    expect(queued(r)).toBe(0)
-    const b = running(r, 'p2')
-    const dep = task(r, 'p2')
-    r.store.setDeps(dep.id, [b.id])
-    r.store.moveTask(b.id, 'reported', { actor: SYSTEM })
-    expect(reasons(r)).toEqual([{ kind: 'task_handoff', taskId: b.id }])
+    r.store.moveTask(a.id, 'running', { actor: SYSTEM })
+    r.store.moveTask(a.id, 'reported', { actor: SYSTEM })
+    expect(wakes(r).map((x) => x.kind)).toEqual(['task_report', 'task_report'])
+    expect(r.store.assignmentsOfTask(a.id, 5)).toHaveLength(1)
+  })
 
-    const r2 = rig()
-    const human = started(r2, 'p1', HUMAN)
-    r2.store.moveTask(human.id, 'running', { actor: SYSTEM })
-    task(r2)
-    r2.store.moveTask(human.id, 'reported', { actor: SYSTEM })
-    expect(queued(r2)).toBe(0)
+  it('a delegated failure, question or stall wakes at once; onMove says so', () => {
+    const r = rig()
+    const due: boolean[] = []
+    const watch = (fn: () => void) => { const before = wakes(r).length; fn(); due.push(wakes(r).length > before) }
+    const f = running(r, 'p1', CENTRAL, 'ag-1')
+    watch(() => r.store.moveTask(f.id, 'failed', { actor: SYSTEM, rule: 'vanished', reason: 'vanished_no_respawn' }))
+    const q = running(r, 'p1', CENTRAL, 'ag-2')
+    watch(() => r.store.moveTask(q.id, 'waiting_input', { actor: SYSTEM, rule: 'needs_input' }))
+    const st = running(r, 'p1', CENTRAL, 'ag-3')
+    watch(() => stall(r, st.id))
+    expect(due).toEqual([true, true, true])
+    expect(wakes(r).map((x) => [x.kind, x.notBefore <= r.now()])).toEqual([['task_failed', true], ['task_input', true], ['task_stalled', true]])
+    expect(r.checkin.onMove({ task: r.store.getTask(q.id)!, from: 'waiting_input', to: 'running', rule: null, reason: null, channel: 'spawn', seq: 999_001 })).toBe(false)
+  })
+
+  it('undelegated work keeps the window: no wake for a human-started report', () => {
+    const r = rig()
+    const human = running(r)
+    r.store.moveTask(human.id, 'reported', { actor: SYSTEM })
+    r.store.moveTask(human.id, 'needs_review', { actor: SYSTEM })
+    expect(queued(r)).toBe(0)
   })
 })
 

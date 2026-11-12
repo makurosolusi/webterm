@@ -22,7 +22,7 @@ export function event(kind: string, payload: unknown = {}, nodeId: string | null
 export function fakePorts() {
   const state = {
     live: true, busy: false, chatGone: false, chatResult: { ok: true } as WorkSendResult,
-    agents: {} as Record<string, { state: AgentState; endReason: string | null }>,
+    agents: {} as Record<string, { state: AgentState; endReason: string | null; lastEventAt?: number | null }>,
     inputs: [] as string[], chats: [] as string[], throwOnInput: false,
     submitResult: { ok: true, started: true } as SubmitResult,
   }
