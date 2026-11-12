@@ -314,6 +314,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- A Files node opened at the root folder shows just its name in the header again, without a trailing "· /". The browser start page's tile "⋮" and the disabled "Add shortcut" tile (at the shortcut limit) now show the app's tooltip instead of the slow native one.
 - Agent Chat and Central chat: the newest message is no longer hidden under the composer when the box, the status line or a panel below the list grows, or when a reply grows after it renders.
 - The Control side bar no longer scrolls sideways at narrow widths: its tab row stays pinned at the top while only the tab content scrolls, tabs that do not fit scroll inside the tab row (the active one is kept in view), and each Memory item shows its text at full width with its badge and Edit / Mute / Forget in one row underneath.
 - An Agent Chat node no longer sits on "Connecting to Claude…" forever in browsers that leave fetch metadata (`Sec-Fetch-Site`) off the WebSocket handshake; a stream the server keeps refusing now says why, with Retry.
