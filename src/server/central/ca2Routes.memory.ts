@@ -74,6 +74,8 @@ function confirm(h: Ca2Handle, id: string): RouteResult {
 }
 
 async function forget(h: Ca2Handle, id: string): Promise<RouteResult> {
+  // Idempotent (it is the Undo of automatic memory writes): a row already forgotten answers ok again.
+  if (String(getRow(h.db, 'SELECT key FROM memory WHERE id = ?', id)?.['key'] ?? '').startsWith('forgotten:')) return ok({ ok: true })
   const { scope, key } = forgetMemory(h.db, HUMAN, id, h.now())
   if (scope === 'user') await createUserMemoryStore(createMemoryFilePort(userMemoryRoot(h.env, dataDir()))).remove(key)
   return ok({ ok: true })
@@ -83,7 +85,7 @@ async function memoryAction(h: Ca2Handle, id: string, action: string): Promise<R
   try {
     return action === 'confirm' ? confirm(h, id) : await forget(h, id)
   } catch (err) {
-    if (err instanceof MemoryRejectedError) return fail(err.code === 'not_found' ? 404 : 400, err.code)
+    if (err instanceof MemoryRejectedError) return { status: err.code === 'not_found' ? 404 : 400, body: { error: err.code, message: err.message } }
     if (err instanceof MemoryAuthorityError) return fail(403, 'forbidden')
     throw err
   }

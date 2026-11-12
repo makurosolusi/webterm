@@ -20,7 +20,7 @@ const SPEC_EDGES: Record<WorkStatus, WorkStatus[]> = {
   verifying: ['needs_review', 'running', 'failed', 'cancelled'],
   needs_review: ['done', 'todo', 'running', 'cancelled'],
   failed: ['todo', 'cancelled'],
-  done: [],
+  done: ['todo'],
   cancelled: [],
 }
 
@@ -62,7 +62,8 @@ for (const from of WORK_STATUSES) {
       task('x')
       force('x', from)
       const before = events('x').length
-      if (SPEC_EDGES[from].includes(to)) {
+      // done -> todo is an edge only for a task the system closed (auto-done); a forced done row was not.
+      if (SPEC_EDGES[from].includes(to) && from !== 'done') {
         expect(store.moveTask('x', to, { actor: HUMAN }).status).toBe(to)
         expect(events('x').length).toBe(before + 1)
         expect(events('x').at(-1)?.kind).toBe(`work.task.${to}`)

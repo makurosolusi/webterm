@@ -1,6 +1,7 @@
 // Central skill tools: list/load are R0, propose is R1. There is deliberately no activate/approve/rollback tool:
 // activation is a human R3 action on the admin store (skillLifecycle), never reachable from a model.
 import { flagOn } from '../../../envFlag'
+import { automaticAction } from '../../automaticAction'
 import type { SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../../contracts/skill.types'
 import type { Awaitable } from '../../contracts/tool.types'
 import { SkillError, type StoredSkill } from '../../skills/skillIndex'
@@ -66,6 +67,12 @@ export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[]
       if (!flagged(ctx, SKILLS_FLAG)) return { ok: false, code: 'flag_off' }
       try {
         const rec = await resolve(ctx).propose(input as unknown as SkillProposeInput, `central:${ctx.conversationId}`)
+        if (!rec.rejectReason) {
+          automaticAction({ db: ctx.db, now: ctx.now }, {
+            name: 'skill_proposed', actor: 'central', subject: `skill:${rec.name}@${rec.version}`,
+            text: `Central proposed a new skill: ${rec.name}. It stays a draft until you approve it.`,
+          })
+        }
         return { ok: true, data: { name: rec.name, version: rec.version, status: rec.status, ...(rec.rejectReason ? { reason: rec.rejectReason } : {}) } }
       } catch (err) { return failure(err) }
     },

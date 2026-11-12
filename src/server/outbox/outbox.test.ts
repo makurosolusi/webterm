@@ -219,7 +219,7 @@ describe('outbox', () => {
     r.st.status = 'working'
     r.outbox.enqueue(msg('e2'))
     r.outbox.cancel('a1', 'e2')
-    expect(r.events.map((e) => e.kind)).toEqual(['outbox.enqueue', 'outbox.deliver', 'outbox.enqueue', 'outbox.cancel'])
+    expect(r.events.map((e) => e.kind)).toEqual(['outbox.enqueue', 'outbox.deliver', 'auto.mail_delivered', 'outbox.enqueue', 'outbox.cancel'])
     expect(r.events[1]).toMatchObject({ source: 'outbox', nodeId: 'a1', subject: 'node:a1', payload: { operationId: 'e1', transport: 'pty' } })
     expect(JSON.stringify(r.events)).not.toContain('secret-ish')
   })

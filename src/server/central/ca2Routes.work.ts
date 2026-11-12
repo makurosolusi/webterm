@@ -12,13 +12,15 @@ import { finishTask } from './work/workLifecycle'
 import { WorkError, type WorkActor, type WorkStore } from './work/workModel'
 import { readAutoDone, writeAutoDone } from './work/workSettings'
 import { createWorkStore } from './work/workStore'
+import { reopenAutoDone } from './work/workReopen'
+import { recordAutoDoneSet } from './work/workAutoDoneOffer'
 
 const TASKS = '/api/central/tasks'
 const SETTINGS = '/api/central/work-settings'
 const TASK = /^\/api\/central\/tasks\/([^/]+)$/
-const TASK_ACTION = /^\/api\/central\/tasks\/([^/]+)\/(approve|changes|cancel|retry)$/
+const TASK_ACTION = /^\/api\/central\/tasks\/([^/]+)\/(approve|changes|cancel|retry|reopen)$/
 const NOTE_MAX = 2000
-type Action = 'approve' | 'changes' | 'cancel' | 'retry'
+type Action = 'approve' | 'changes' | 'cancel' | 'retry' | 'reopen'
 /** The state machine has more edges into `todo` than these buttons mean. */
 const ONLY_FROM: Partial<Record<Action, WorkStatus>> = { approve: 'needs_review', changes: 'needs_review', retry: 'failed' }
 
@@ -86,10 +88,17 @@ function readSettings(h: Ca2Handle, q: URLSearchParams): RouteResult {
   return autoDone === null ? fail(404, 'project_not_found') : ok<WorkSettings>({ autoDone })
 }
 
-function writeSettings(h: Ca2Handle, { projectId, autoDone }: Body): RouteResult {
+function writeSettings(h: Ca2Handle, { projectId, autoDone }: Body, actor: string): RouteResult {
   if (typeof projectId !== 'string' || projectId === '') return fail(400, 'invalid_project')
   if (typeof autoDone !== 'boolean') return fail(400, 'invalid_auto_done')
-  return writeAutoDone(h.db, projectId, autoDone, h.now()) ? ok({ projectId, autoDone }) : fail(404, 'project_not_found')
+  if (!writeAutoDone(h.db, projectId, autoDone, h.now())) return fail(404, 'project_not_found')
+  recordAutoDoneSet(h.db, projectId, autoDone, actor, h.now())
+  return ok({ projectId, autoDone })
+}
+
+function reopenRoute(h: Ca2Handle, store: WorkStore, id: string, actor: WorkActor): RouteResult {
+  const result = reopenAutoDone(h.db, store, id, actor, h.now())
+  return result.ok ? ok<TaskActionResult>({ task: card(h, result.task) }) : { status: result.status, body: { error: result.error, message: result.message } }
 }
 
 /** Answers a path `isWorkPath` accepted. Writes and the auto-done switch need a `human:*` actor. */
@@ -100,7 +109,7 @@ export async function workDispatch(
   if ((method === 'POST' || path === SETTINGS) && !actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
   if (path === SETTINGS) {
     if (method === 'GET') return readSettings(h, query)
-    return method === 'POST' ? writeSettings(h, bodyOf(await req.body())) : notAllowed
+    return method === 'POST' ? writeSettings(h, bodyOf(await req.body()), actor) : notAllowed
   }
   const store = createWorkStore(h.db, h.now)
   if (path === TASKS) return method === 'GET' ? listView(h, store, query) : notAllowed
@@ -109,5 +118,7 @@ export async function workDispatch(
   if (id === null) return fail(400, 'invalid_id')
   if (!action) return method === 'GET' ? detailView(h, store, id, query) : notAllowed
   if (method !== 'POST') return notAllowed
-  return actionRoute(h, store, id, action[2] as Action, bodyOf(await req.body()), { kind: 'human', id: actor.slice(HUMAN_PREFIX.length) })
+  const human: WorkActor = { kind: 'human', id: actor.slice(HUMAN_PREFIX.length) }
+  if (action[2] === 'reopen') return reopenRoute(h, store, id, human)
+  return actionRoute(h, store, id, action[2] as Action, bodyOf(await req.body()), human)
 }

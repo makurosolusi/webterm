@@ -221,6 +221,16 @@ export class OutboxDelivery {
     for (const m of items) this.retyped.delete(m.id)
     this.deps.store.markDelivered(items.map((m) => m.id), transport)
     for (const m of items) this.event('outbox.deliver', { ...m, transport })
+    if (items.length > 0) this.delivered(items[0].to, items.length, transport)
+  }
+
+  /** `auto.mail_delivered` (automaticAction contract, record only: high volume): one row per delivered batch. */
+  private delivered(nodeId: string, count: number, transport: OutboxTransport): void {
+    const what = count === 1 ? 'a queued message' : `${count} queued messages`
+    this.deps.record({
+      kind: 'auto.mail_delivered', source: 'auto', actor: 'system:outbox', subject: `node:${nodeId}`, nodeId, trust: 'trusted',
+      payload: { text: `Delivered ${what} to the agent automatically (${transport}): it was ready for input.` },
+    })
   }
 
   private fail(items: OutboxMessage[], transport: OutboxTransport | null, error: string): void {

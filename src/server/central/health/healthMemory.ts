@@ -13,6 +13,7 @@ import { appendMemoryEvent, memoryContext } from '../../memory/memoryCore'
 import { findRowByKey, insertMemoryRow, supersedeRow } from '../../memory/memoryInsert'
 import { MAX_BODY_CHARS, MAX_TITLE_CHARS } from '../../memory/memoryRemember'
 import { redactSecrets } from '../../redactSecrets'
+import { automaticAction } from '../automaticAction'
 
 const log = createLogger('central.health')
 const SOURCE_KIND = 'central_finding'
@@ -32,20 +33,21 @@ function retire(db: Database, f: FindingView, now: number, event: string): boole
 }
 
 /** Writes "the user dismissed ..." for a just-dismissed finding, replacing an older dismissal of the same finding. */
-export function rememberDismissal(db: Database, f: FindingView, now: number): void {
+export function rememberDismissal(db: Database, f: FindingView, now: number): string {
   const title = clean(`Dismissed health finding: ${f.title}`).slice(0, MAX_TITLE_CHARS)
   const where = f.line === null ? f.file : `${f.file}:${f.line}`
   const day = new Date(now).toISOString().slice(0, 10)
   const body = clean(`The user dismissed health finding '${f.title}' (${f.rule}, ${where}) on ${day}: ${f.dismissedReason ?? 'no reason given'}`).slice(0, MAX_BODY_CHARS)
+  const id = newId()
   tx(memoryContext(db, now), () => {
     retire(db, f, now, 'memory.health_dismissal_replaced')
-    const id = newId()
     insertMemoryRow(db, {
       id, projectId: f.projectId, scope: 'project', key: dismissalKey(f.id), title, body, status: 'fact', kind: 'decision', trust: 'attested',
       sourceKind: SOURCE_KIND, sourceRef: f.id, supersedes: null, contentHash: contentHash(title, body), staleAfter: null, verifiedAt: now, now,
     })
     appendMemoryEvent(memoryContext(db, now), id, ACTOR, 'memory.health_dismissal', { actorKind: 'system', findingId: f.id, by: f.dismissedBy }, now)
   })
+  return id
 }
 
 /** Supersedes the dismissal fact of a reopened finding. */
@@ -56,8 +58,14 @@ export function forgetDismissal(db: Database, f: FindingView, now: number): void
 /** Runs a memory write for a dismiss/reopen; a failure is logged with the finding id and never fails the action. */
 export function syncDismissalMemory(db: Database, f: FindingView, now: number): void {
   try {
-    if (f.status === 'dismissed') rememberDismissal(db, f, now)
-    else forgetDismissal(db, f, now)
+    if (f.status === 'dismissed') {
+      const id = rememberDismissal(db, f, now)
+      automaticAction({ db, now: () => now }, {
+        name: 'memory_health_dismissal', actor: ACTOR, subject: `memory:${id}`, projectId: f.projectId,
+        text: `Central remembered that you dismissed "${f.title}", so it will not raise it again.`,
+        undo: { label: 'Forget', method: 'POST', path: `/api/central/memory/${encodeURIComponent(id)}/forget` },
+      })
+    } else forgetDismissal(db, f, now)
   } catch (err) {
     log.warn('health.memory_write_failed', `could not record the ${f.status === 'dismissed' ? 'dismissal' : 'reopen'} of health finding ${f.id} in memory`, { findingId: f.id, projectId: f.projectId, error: err instanceof Error ? err.message : String(err) })
   }

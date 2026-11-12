@@ -119,7 +119,7 @@ describe('POST /memory/:id/confirm and /forget', () => {
     rule('web', 'external')
     memory({ id: 'fact', status: 'fact', trust: 'human' })
     memory({ id: 'board', scope: 'blackboard', status: 'claim' })
-    expect(await call('POST', '/memory/web/confirm')).toEqual({ status: 400, body: { error: 'untrusted_source' } })
+    expect(await call('POST', '/memory/web/confirm')).toMatchObject({ status: 400, body: { error: 'untrusted_source' } })
     expect((await call('POST', '/memory/fact/confirm')).status).toBe(404)
     expect((await call('POST', '/memory/board/confirm')).status).toBe(404)
     expect(stored('web')).toMatchObject({ status: 'claim' })

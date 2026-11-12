@@ -23,6 +23,7 @@ import { isEnabled, onCapabilityChange } from './featureCapabilities.runtime'
 import { createPlanStore } from './orchestrator/plan'
 import { orchestratorRunRoute } from './orchestratorRunApi'
 import { createLogger } from './logs'
+import { automaticAction } from './central/automaticAction'
 
 const logger = createLogger('central')
 
@@ -93,6 +94,20 @@ async function runItem(
   }
 }
 
+/** Notice + record before a self-started run (no Undo: the run route has no stop path; the worker ends on its own). */
+function announceRun(runtime: LedgerRuntime | null, plans: ReturnType<typeof createPlanStore> | null, projectId: string, itemId: string): void {
+  let title: string = itemId
+  try {
+    title = plans?.get(projectId)?.items.find((i) => i.id === itemId)?.title ?? itemId
+  } catch (err) {
+    logger.warn('central.autonomy.title_failed', 'plan read for the autonomy notice failed; using the item id', { projectId, itemId, error: err instanceof Error ? err.message : String(err) })
+  }
+  automaticAction({ db: runtime?.db ?? null }, {
+    name: 'autonomy_run', actor: 'central', subject: `plan_item:${itemId}`, projectId, noticeKey: `auto:autonomy_run:${itemId}:${Date.now()}`,
+    text: `Central started a worker on its own for "${title}": it is the next item in the project's plan.`,
+  })
+}
+
 /**
  * Builds the controller; starts the timer now only if autonomy is already on. Never `null`:
  * a missing ledger or an off capability just makes ticks no-ops, so a later hot enable works.
@@ -111,9 +126,10 @@ export function startCentralAutonomyBoot(opts: AutonomyBootOptions): AutonomyCon
     // project list means nothing is sent and no failure budget is spent.
     projects: () => (runtime && live() ? (opts.overrides?.projects ?? (() => listProjects(runtime.db)))() : []),
     plan: opts.overrides?.plan ?? ((projectId) => plans?.get(projectId) ?? null),
-    run:
-      opts.overrides?.run ??
-      ((projectId, itemId, expectedVersion) => runItem(runtime as LedgerRuntime, projectId, itemId, expectedVersion, env)),
+    run: (projectId, itemId, expectedVersion) => {
+      announceRun(runtime, plans, projectId, itemId)
+      return (opts.overrides?.run ?? ((p, i, v) => runItem(runtime as LedgerRuntime, p, i, v, env)))(projectId, itemId, expectedVersion)
+    },
     audit: (event) => {
       try {
         runtime?.ledger.event.appendEvent({

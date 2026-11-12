@@ -54,6 +54,7 @@ import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
 import { backfillSetup } from './setupBackfill'
+import { flushBootChanges, queueBootChange } from './bootChanges'
 import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
 import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
 import { pruneCanvasBackgrounds } from './canvasBackground.gc'
@@ -78,7 +79,9 @@ const log = createLogger('server')
 // Kartu Worker/Otonomi yang sudah on sebelum nilai turunannya ada: isi sekarang, tanpa toggle ulang (zero-config).
 // Gagal (mis. Pengaturan dikunci) tidak menghentikan boot: kartu tetap bisa dimatikan-nyalakan.
 try {
+  queueBootChange('default_on', envSettings.defaultsApplied())
   const linked = syncLinkedSettings(envSettings, process.env)
+  queueBootChange('linked', linked)
   if (linked.length > 0) log.info('capabilities.linked_synced', 'Applied card-linked settings for capabilities already on', { keys: linked })
 } catch (err) {
   log.warn('capabilities.linked_sync_failed', 'Cannot apply card-linked settings at boot', { error: err instanceof Error ? err.message : String(err) })
@@ -93,7 +96,7 @@ const ledgerRuntime = startLedgerRuntime()
 registerWorkspaceLookup((id) => db.get(id), () => db.list())
 // Upgrade path for the first-run wizard: an install already in use is marked set up (once, see setupBackfill.ts).
 try {
-  backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() })
+  if (backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() }) === 'completed') queueBootChange('setup', ['setup'])
 } catch (e) {
   log.warn('settings.setup.backfill_failed', 'Cannot backfill first-run setup state at boot', { cause: e instanceof Error ? e.message : String(e) })
 }
@@ -101,13 +104,14 @@ try {
 // install that saved command mode alone gets the default written once (idempotent: equal = no write).
 try {
   const id = defaultProfileAfter({ mode: 'login' }, loadConfig(), db.getSettings().defaultClaudeProfileId)
-  if (id !== null) db.saveSettings({ defaultClaudeProfileId: id })
+  if (id !== null) { db.saveSettings({ defaultClaudeProfileId: id }); queueBootChange('profile', ['defaultClaudeProfileId']) }
 } catch (e) {
   log.warn('settings.claude_default.migrate_failed', 'Cannot align the default Claude profile with command mode at boot', { cause: e instanceof Error ? e.message : String(e) })
 }
 if (ledgerRuntime) {
   createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
   startLedgerReaper(ledgerRuntime.ledger)
+  try { flushBootChanges(ledgerRuntime.db) } catch (e) { log.warn('boot.changes_notice_failed', 'Cannot post the startup changes notice', { cause: e instanceof Error ? e.message : String(e) }) }
 }
 
 // Telegram hot-apply: runtime kanal + poller dibangun/dihentikan hook kemampuan `telegram`, bukan di boot;

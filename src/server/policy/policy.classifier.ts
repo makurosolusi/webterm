@@ -10,6 +10,7 @@
 import type { Database } from 'bun:sqlite'
 import type { AppendEventInput } from '../events/eventModel'
 import { getRow } from '../ledger/ledgerCore'
+import { readCentralSetting, writeCentralSetting } from '../central/centralSetting'
 import type { Tier } from '../central/contracts/level.types'
 import { redactValue } from '../redactSecrets'
 
@@ -172,17 +173,20 @@ export interface ClassifierSwitch { central: boolean; permissions: boolean }
 export const CLASSIFIER_OFF: ClassifierSwitch = { central: false, permissions: false }
 const switchCache = new WeakMap<Database, ClassifierSwitch>()
 
-// ponytail: the switch lives in the append-only event log (latest `policy.classifier_switch` wins), which is
-// persistent and audited for free; a dedicated settings table only if more classifier knobs appear.
-/** Current switch; OFF until a human turns it on. */
+/** `central_control` setting holding the switch (v33): configuration, never pruned like the event log. */
+export const CLASSIFIER_SWITCH_SETTING = 'classifier_switch'
+const asSwitch = (p: Partial<ClassifierSwitch>): ClassifierSwitch => ({ central: p.central === true, permissions: p.permissions === true })
+
+/** Current switch; OFF until a human turns it on. Old installs that only have the event row fall back to it. */
 export function classifierSwitch(db: Database): ClassifierSwitch {
   const hit = switchCache.get(db)
   if (hit) return hit
-  const row = getRow(db, 'SELECT payload_json FROM event WHERE kind = ? ORDER BY seq DESC LIMIT 1', CLASSIFIER_SWITCH_EVENT)
+  const stored = readCentralSetting(db, CLASSIFIER_SWITCH_SETTING)
   let s = CLASSIFIER_OFF
-  if (row) {
-    const p = JSON.parse(String(row['payload_json'])) as Partial<ClassifierSwitch>
-    s = { central: p.central === true, permissions: p.permissions === true }
+  if (stored && typeof stored === 'object') s = asSwitch(stored as Partial<ClassifierSwitch>)
+  else {
+    const row = getRow(db, 'SELECT payload_json FROM event WHERE kind = ? ORDER BY seq DESC LIMIT 1', CLASSIFIER_SWITCH_EVENT)
+    if (row) s = asSwitch(JSON.parse(String(row['payload_json'])) as Partial<ClassifierSwitch>)
   }
   switchCache.set(db, s)
   return s
@@ -190,7 +194,8 @@ export function classifierSwitch(db: Database): ClassifierSwitch {
 
 /** Writes the switch (callers gate this to the human UI). */
 export function setClassifierSwitch(db: Database, record: (e: AppendEventInput) => void, next: ClassifierSwitch, actor = 'human-ui'): ClassifierSwitch {
-  const s = { central: next.central === true, permissions: next.permissions === true }
+  const s = asSwitch(next)
+  writeCentralSetting(db, CLASSIFIER_SWITCH_SETTING, s, actor, Date.now())
   record({ kind: CLASSIFIER_SWITCH_EVENT, source: 'policy', actor, trust: 'trusted', payload: s })
   switchCache.set(db, s)
   return s
