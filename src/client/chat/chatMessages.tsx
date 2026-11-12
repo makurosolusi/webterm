@@ -11,6 +11,7 @@ import ChatMarkdown from './chatMarkdown'
 import type { ChatMessage, ChatPart } from './chatTypes'
 import { messageText } from './chatTypes'
 import { splitProposalBlocks, type LegacyProposal } from './proposalBlocks'
+import { openSettingsAt } from '../settings.link'
 import './chatBubbles.css'
 
 const NEAR_BOTTOM_PX = 80
@@ -23,7 +24,9 @@ const ROLE_HEADER: Record<Exclude<ChatMessage['role'], 'human'>, { icon: string;
 }
 
 /** A failure reason is a sentence, not a log: anything longer is cut. */
-const MAX_REASON = 300
+const MAX_REASON = 500
+/** A turn stopped by the Claude readiness check: the link opens the card holding Test connection. */
+const UNAVAILABLE_LINK = 'Open Settings › Claude › Connection test'
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text
@@ -103,7 +106,16 @@ function PartView(props: { part: ChatPart; assistant: boolean; imageUrl?: ImageU
   if (part.type === 'image' || part.type === 'file') return <AttachmentView part={part} imageUrl={props.imageUrl} />
   if (part.type === 'tool') return <ToolCard part={part} />
   if (part.type === 'approval') return <ChatApprovalCard approvalId={part.approvalId} partState={part.state} />
-  if (part.type === 'error') return <div className="chat-error-inline" role="note">{clip(part.message, MAX_REASON)}</div>
+  if (part.type === 'error') {
+    return (
+      <div className="chat-error-inline" role="note">
+        {clip(part.message, MAX_REASON)}
+        {part.code === 'runtime_unavailable' && (
+          <> <button type="button" className="chat-retry" onClick={() => openSettingsAt('claude', 'claude-provider')}>{UNAVAILABLE_LINK}</button></>
+        )}
+      </div>
+    )
+  }
   if (part.type === 'notice') return <div className="chat-notice-inline" role="note">{clip(part.text, MAX_REASON)}</div>
   if (part.type !== 'text') return null
   if (!assistant) return <p className="chat-text chat-text--plain">{part.text}</p>

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createClaudePreflight, type RunFn, type RunResult } from './claudePreflight'
+import { blocksTurn, createClaudePreflight, type RunFn, type RunResult } from './claudePreflight'
 
 const EMAIL = 'someone.private@example.com'
 const env = { PATH: '/x' } as NodeJS.ProcessEnv
@@ -49,6 +49,26 @@ describe('createClaudePreflight', () => {
     t = 100
     await pre()
     expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not cache a failure: concurrent calls share the probe, the next call probes again', async () => {
+    const run = fake({ code: 1, stdout: '{"loggedIn":false}' })
+    const pre = make(run, { now: () => 0 })
+    await Promise.all([pre(), pre()])
+    expect(run).toHaveBeenCalledTimes(1)
+    await pre()
+    expect(run).toHaveBeenCalledTimes(2)
+  })
+
+  it('marks a timeout, records the elapsed time, and only definite failures block a turn', async () => {
+    let t = 0
+    const slow = await make(fake({ timedOut: true, code: null }), { now: () => (t += 5_000) })()
+    expect(slow).toMatchObject({ ok: false, code: 'claude_check_failed', stage: 'auth', failed: 'check_failed', timedOut: true, elapsedMs: 5_000 })
+    expect(blocksTurn(slow)).toBe(false)
+    expect(blocksTurn(await make(fake({ code: 1, stdout: '{"loggedIn":false}' }))())).toBe(true)
+    expect(blocksTurn(await createClaudePreflight({ env, run: fake({}), onPath: () => false })())).toBe(true)
+    expect(blocksTurn({ ok: false, code: 'claude_check_failed', hint: '' })).toBe(false)
+    expect(blocksTurn({ ok: true })).toBe(false)
   })
 
   it('never leaks output (email) into the result, console, or error text', async () => {

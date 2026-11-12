@@ -73,16 +73,19 @@ describe('claude wiring: health', () => {
     await expect(runtimeReadiness('mock', boom)).resolves.toEqual({ runtimeReady: true })
   })
 
-  it('warns once per wrapped preflight, with the code and nothing else', async () => {
-    const seen: string[] = []
-    const off = logBus.subscribe((entry) => { if (entry.event === 'central.runtime_unready') seen.push(JSON.stringify(entry)) })
-    const wrapped = onceWarn(async () => NOT_LOGGED_IN)
+  it('warns once per distinct cause, with stage, profile and timing', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const off = logBus.subscribe((entry) => { if (entry.event === 'central.runtime_unready') seen.push(entry.data as Record<string, unknown>) })
+    let ready: ClaudeReady = { ...NOT_LOGGED_IN, stage: 'auth', failed: 'auth_failed', profile: { id: 'p1', name: 'Mine' }, elapsedMs: 12, timedOut: false }
+    const wrapped = onceWarn(async () => ready)
     await wrapped()
+    await wrapped()
+    ready = { ok: false, code: 'claude_check_failed', hint: 'slow', stage: 'wrapper', failed: 'wrapper_failed', profile: { id: 'p1', name: 'Mine' }, timedOut: true }
     await wrapped()
     off()
-    expect(seen).toHaveLength(1)
-    expect(seen[0]).toContain('claude_not_authenticated')
-    expect(seen[0]).not.toContain('login')
+    expect(seen).toHaveLength(2)
+    expect(seen[0]).toMatchObject({ code: 'claude_not_authenticated', stage: 'auth', failed: 'auth_failed', profileId: 'p1', elapsedMs: 12, timedOut: false })
+    expect(seen[1]).toMatchObject({ stage: 'wrapper', timedOut: true })
     expect(fromPreflight).toEqual({ ok: true })
   })
 })

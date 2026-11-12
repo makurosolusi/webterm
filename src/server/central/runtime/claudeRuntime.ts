@@ -21,6 +21,7 @@ import { type CentralMcpLink, type OpenedMcp, createCentralMcpLink } from './cla
 import { CENTRAL_MODEL_FLAG } from './runtimeShared'
 import { FRESH_SESSION_NOTICE, isMissingSession, logTurnFailed } from './claudeFailure'
 import { createLogger } from '../../logs'
+import { blocksTurn, preflightLogFields, unreadyMessage } from './claudePreflight'
 import { claudeEnv } from '../../claudeProvider/claudeProvider.store'
 import { centralClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 import { claudeSdkSpawn } from '../../claudeLauncher/claudeSdkSpawn'
@@ -104,8 +105,14 @@ export class ClaudeRuntime implements CentralRuntime {
       const ready = await this.ready()
       if (token.cancelled) return this.cancelled(state, finish)
       if (!ready.ok) {
-        failTurn(emitter, state, { code: 'runtime_unavailable', unavailable: ready.code })
-        return finish()
+        state.preflight = preflightLogFields(ready)
+        if (blocksTurn(ready)) {
+          const reason = unreadyMessage(ready)
+          failTurn(emitter, state, { code: 'runtime_unavailable', unavailable: ready.code, ...(reason ? { reason } : {}) })
+          return finish()
+        }
+        // Inconclusive (a timeout, an unexpected exit): the profile just may be slow, so the turn runs.
+        log.warn('central.claude_preflight_inconclusive', 'claude preflight was inconclusive; running the turn anyway', { turnId: input.turnId, ...state.preflight })
       }
 
       try {
@@ -224,7 +231,7 @@ export class ClaudeRuntime implements CentralRuntime {
     }
   }
 
-  /** Runs the injected preflight; a throwing check counts as "could not check", never as ready. */
+  /** Runs the injected preflight; a throwing check counts as "could not check" (inconclusive, so the turn still runs). */
   private async ready(): Promise<Awaited<ReturnType<NonNullable<ClaudeRuntimeOptions['preflight']>>>> {
     const check = this.options.preflight
     if (check === undefined) return { ok: true }

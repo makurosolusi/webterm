@@ -72,6 +72,8 @@ export function logTurnFailed(
     turnId: input.turnId, conversationId: input.conversationId, code: result.errorCode ?? 'runtime_error',
     exitCode: exit?.code ?? null, signal: exit?.signal ?? null, spawnErrorCode: state.spawnError?.code ?? null,
     sawInit: state.sawInit, stderrChars: state.stderrTail.length, stderrFirstLine: stderrReason(firstLine, secrets),
-    reason: state.failure?.reason ?? null, argv0: launch?.argv0 ?? null, profileId: launch?.profileId ?? null,
+    reason: state.failure?.reason ?? null, argv0: launch?.argv0 ?? null,
+    profileId: launch?.profileId ?? (state.preflight?.['profileId'] as string | null | undefined) ?? null,
+    preflight: state.preflight,
   })
 }
