@@ -37,6 +37,7 @@ export const CENTRAL_FIELD_TEXT = {
   level: { label: 'What Central may do', hint: 'Propose work = Central asks you before each worker it starts.' },
   checkin: { label: 'Let Central check in by itself', hint: 'Central starts a turn on its own when something needs a decision, such as a stalled task or a reminder that came due.' },
   costLimit: { label: 'Daily spending limit', hint: 'Near the limit work moves to cheaper models.' },
+  spendWarning: { label: 'Warn when today\'s spend passes $10', hint: 'One notice per day. It never stops work. Turning it off also closes the open warnings.' },
   dailySpawns: { label: 'Workers per day', hint: 'How many workers Central may start per day. 0 = none.' },
   checkinLimit: { label: 'Check-ins per day', hint: 'The most check-ins Central may start in one day.' },
   maxInflight: { label: 'Max workers at once', hint: 'How many workers Central runs side by side when it works on its own. Applies to the next worker it starts.' },

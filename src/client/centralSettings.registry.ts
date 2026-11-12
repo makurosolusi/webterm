@@ -17,6 +17,8 @@ export type CentralSource =
   /** `scale` = stored value per shown unit (ms per second). */
   | { kind: 'env'; key: string; unit?: string; scale?: number }
   | { kind: 'checkin'; key: 'enabled' | 'dailyLimit' }
+  /** A boolean key of the shared Settings row (saved through the section's `onChange`). */
+  | { kind: 'setting'; key: 'dailySpendWarning' }
 
 export interface CentralOption { value: string; label: string; confirm?: string }
 export interface CentralField {
@@ -57,6 +59,8 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
   f('checkin', { group: 'autonomy', control: 'switch', source: { kind: 'checkin', key: 'enabled' } }),
 
   f('costLimit', { group: 'cost', control: 'combobox', source: env(COST_CAP_KEY, { unit: '$' }) }),
+  // Spend from every source, not only Central's, so it works with Central off.
+  f('spendWarning', { group: 'cost', control: 'switch', source: { kind: 'setting', key: 'dailySpendWarning' }, always: true }),
 
   f('dailySpawns', { group: 'advanced', control: 'stepper', source: env('WEBTERM_CENTRAL_DAILY_SPAWNS', { unit: UNIT_TEXT.workers }), min: 0, max: 500, step: 5, needs: 'workers' }),
   f('checkinLimit', { group: 'advanced', control: 'select', source: { kind: 'checkin', key: 'dailyLimit' }, options: CHECKIN_DAILY_LIMITS.map((n) => ({ value: String(n), label: String(n) })) }),

@@ -101,6 +101,11 @@ export interface Settings extends TerminalSettings, AgentSettings {
    *  Shown as "Recent" suggestions on every device; never holds secrets. */
   inputHistory: Record<string, string[]>
 
+  // --- Cost ----------------------------------------------------------------------------------
+  /** One Needs-you notice per UTC day once today's spend passes $10 (server/cost/costDailyWarning.ts). Off by
+   *  default (SAFEGUARDS); turning it off closes the open ones. The hard daily cap is separate and unaffected. */
+  dailySpendWarning: boolean
+
   // --- First run -------------------------------------------------------------------------------
   /** First-run wizard progress (`settings.setup.ts`); `completedAt` null = wizard not finished. */
   setup: SetupState
@@ -165,6 +170,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keybindings: {},
   defaultProjectsFolder: '',
   inputHistory: {},
+  dailySpendWarning: false,
   setup: DEFAULT_SETUP,
 }
 

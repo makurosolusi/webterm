@@ -124,6 +124,7 @@ export function CentralSettingsSection({ settings: s, onChange, onNavigate }: Ce
         </>
       )
     }
+    if (src.kind === 'setting') return <Switch id={id} checked={s[src.key]} disabled={disabled} aria-describedby={why} onCheckedChange={(on) => onChange({ [src.key]: on })} />
     if (src.kind !== 'env') return null
     const raw = env.value(src.key)
     if (field.control === 'switch') {

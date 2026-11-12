@@ -191,12 +191,14 @@ const localDay = (t: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-/** Once per local day: one notify item summing up the last 24 h of notify news (plan §3 digest). */
+/** Once per local day: one notify item summing up the last 24 h of notify news (plan §3 digest).
+ *  Spend warnings (`source 'cost'`) are left out: when on they are their own Needs-you item already, and
+ *  re-listing them was the noise users asked to drop (costDailyWarning.ts). */
 export function ensureDailyDigest(ctx: LedgerContext): InboxEntry | null {
   const now = ctx.now()
   const key = `digest:${localDay(now)}`
   if (getRow(ctx.db, 'SELECT 1 AS x FROM inbox_item WHERE dedupe_key = ?', key)) return null
-  const news = allRows(ctx.db, `SELECT title, repeat_count FROM inbox_item WHERE kind = 'notify' AND source != 'digest'
+  const news = allRows(ctx.db, `SELECT title, repeat_count FROM inbox_item WHERE kind = 'notify' AND source NOT IN ('digest', 'cost')
     AND created_at >= ? AND created_at < ? ORDER BY created_at DESC`, now - DAY_MS, now)
   if (news.length === 0) return null
   const lines = news.slice(0, DIGEST_LINES).map((r) => `- ${String(r['title'])}${Number(r['repeat_count']) > 1 ? ` (×${Number(r['repeat_count'])})` : ''}`)

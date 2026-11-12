@@ -137,16 +137,18 @@ test('Telegram and the canvas produce the same decision event', async () => {
   expect(listInboxItems(s.ctx)).toHaveLength(0)
 })
 
-test('a daily digest sums up yesterday\'s notify news once per day', () => {
+test('a daily digest sums up yesterday\'s notify news once per day, without spend warnings', () => {
   const s = setup()
   createInboxItem(s.ctx, { kind: 'notify', source: 'agent', title: 'Build finished', dedupeKey: 'build' })
   createInboxItem(s.ctx, { kind: 'notify', source: 'agent', title: 'Build finished', dedupeKey: 'build' })
   createInboxItem(s.ctx, { kind: 'notify', source: 'agent', title: 'Tests green' })
+  createInboxItem(s.ctx, { kind: 'notify', source: 'cost', title: "Today's spend passed $10", dedupeKey: 'cost:day-warning:x' })
   s.clock.t = T0 + 1000
   const digest = listInboxItems(s.ctx).filter((i) => i.source === 'digest')
   expect(digest).toHaveLength(1)
   expect(digest[0].title).toBe('Daily digest: 2 updates')
   expect(digest[0].body).toContain('Build finished (×2)')
+  expect(digest[0].body).not.toContain('spend') // spend warnings never ride in the digest
   expect(listInboxItems(s.ctx).filter((i) => i.source === 'digest')).toHaveLength(1)
 })
 

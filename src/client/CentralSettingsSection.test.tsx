@@ -111,7 +111,7 @@ describe('Settings › Central Agent', () => {
 
   it('automatic rows are gone: model, context window, reply limits, token budget, skills, engine, browser, telegram, links, experiments', async () => {
     const main = await open()
-    expect(CENTRAL_FIELDS.map((f) => f.id)).toEqual(['central', 'level', 'checkin', 'costLimit', 'dailySpawns', 'checkinLimit', 'maxInflight'])
+    expect(CENTRAL_FIELDS.map((f) => f.id)).toEqual(['central', 'level', 'checkin', 'costLimit', 'spendWarning', 'dailySpawns', 'checkinLimit', 'maxInflight'])
     for (const gone of ['Model', 'Context window', 'Reply time limit', 'Steps per reply', 'Daily token budget', 'Use approved skills', 'Suggest new skills',
       'Summarize long conversations', 'Engine', 'Claude profile', 'Project knowledge', 'Steadier autonomy', 'Agent mail', 'Ask before each worker runs']) {
       expect(within(main).queryByLabelText(gone), gone).toBeNull()
@@ -124,6 +124,17 @@ describe('Settings › Central Agent', () => {
     await open()
     fireEvent.click(screen.getByRole('switch', { name: 'Central Agent' }))
     await waitFor(() => expect(posts).toEqual([{ url: '/api/capabilities/central', body: { enabled: false } }]))
+  })
+
+  it('spend warning switch: off by default, saves the Settings key, works with Central off', async () => {
+    on.delete('central')
+    const onChange = vi.fn()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={onChange} onClose={vi.fn()} initialSection="central" />)
+    const sw = await screen.findByRole('switch', { name: "Warn when today's spend passes $10" })
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+    expect(sw.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(sw)
+    expect(onChange).toHaveBeenCalledWith({ dailySpendWarning: true })
   })
 
   it('"What Central may do" writes the matching capability; Work on its own asks first', async () => {
@@ -211,13 +222,13 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('20 workers'))
   })
 
-  it('Central off: every control but the master switch is disabled, with a reason', async () => {
+  it('Central off: every control but the master switch (and the spend warning, any source) is disabled, with a reason', async () => {
     on = new Set()
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} initialSection="central" />)
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Central Agent' }).hasAttribute('disabled')).toBe(false))
     const main = screen.getByRole('main', { name: 'Settings' })
     const switches = within(main).getAllByRole('switch', { hidden: true })
-    expect(switches.filter((s) => !s.hasAttribute('disabled')).map((s) => s.id)).toEqual(['st-central-central'])
+    expect(switches.filter((s) => !s.hasAttribute('disabled')).map((s) => s.id)).toEqual(['st-central-central', 'st-central-spendWarning'])
     expect(within(main).getAllByRole('radio', { hidden: true }).every((r) => r.hasAttribute('disabled'))).toBe(true)
     expect(screen.getByRole('button', { name: 'Increase Workers per day' }).hasAttribute('disabled')).toBe(true)
     await waitFor(() => expect((screen.getByLabelText('Daily spending limit') as HTMLInputElement).disabled).toBe(true))
