@@ -3,6 +3,9 @@
 /** Must match PASSWORD_MIN in src/server/uiUser.ts (NIST 800-63B minimum, counted in characters). */
 export const PASSWORD_MIN = 12
 
+/** Must match USERNAME_RE in src/server/uiUser.ts; the server stays the authority. */
+export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,32}$/
+
 /** Characters as the server counts them (code points, not UTF-16 units). */
 export const charCount = (s: string): number => [...s].length
 
@@ -11,8 +14,10 @@ export const SIGN_IN_TEXT = {
   title: 'Sign in to webterm',
   setupTitle: 'Create your webterm account',
   intro: 'Sign in with your webterm account.',
-  setupIntroProof: 'This is the first time webterm runs here. Create the account you will sign in with.',
-  setupIntroNoProof: 'No account exists yet. Create it from the computer running webterm, so nobody else can claim this install.',
+  setupIntroProof: 'Create the account you will sign in with.',
+  setupIntroNoProof: 'Create it from the computer running webterm, so nobody else can claim this install.',
+  localNote: 'This account lives only on the computer running webterm.',
+  or: 'or',
   open: 'Open signed-in window',
   openSetup: 'Open setup window on this computer',
   opening: 'A signed-in webterm window is opening on the computer running webterm. This tab follows by itself once you are signed in.',
@@ -23,10 +28,25 @@ export const SIGN_IN_TEXT = {
   usernameLabel: 'Username',
   passwordLabel: 'Password',
   confirmLabel: 'Confirm password',
+  usernameHint: '3 to 32 letters, digits, dots, dashes or underscores.',
+  show: (field: string) => `Show ${field}`,
+  hide: (field: string) => `Hide ${field}`,
+  requirements: 'Password requirements',
+  checkLength: `At least ${PASSWORD_MIN} characters`,
+  checkMatch: 'Both passwords match',
+  checkMet: '(done)',
+  checkPending: '(not yet)',
+  needUsername: 'Enter a username.',
+  needPassword: 'Enter your password.',
+  needCode: 'Enter the setup code.',
+  needConfirm: 'Type the password again.',
+  matches: 'Passwords match',
   lengthHint: (n: number) => (n >= PASSWORD_MIN ? `${n} characters. Long enough.` : `At least ${PASSWORD_MIN} characters (${n} so far).`),
   signIn: 'Sign in',
   create: 'Create account',
   working: 'Working…',
+  signingIn: 'Signing in…',
+  creating: 'Creating account…',
   wrongCredentials: 'Wrong username or password.',
   tooMany: (s: number) => `Too many attempts. Try again in ${s} s.`,
   mismatch: 'The passwords do not match.',

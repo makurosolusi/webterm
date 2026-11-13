@@ -7,8 +7,11 @@
 // setup window that signs it in shows the form here too. A reload keeps the path the user asked for.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import Brand from './Brand'
-import { LoginForm, OpenWindowButton, SetupForm } from './SignInForms'
+import { FormAlert } from './signIn/authFormParts'
+import { SetupForm } from './signIn/SetupForm'
+import { LoginForm, OpenWindowButton } from './SignInForms'
 import { SIGN_IN_TEXT } from './signInLabels'
 import { fetchMe, type AuthMe } from './transportToken'
 
@@ -28,7 +31,22 @@ export interface SignInScreenProps {
   now?: () => number
 }
 
-const MUTED = 'max-w-[440px] text-center text-xs text-[var(--vscode-descriptionForeground)]'
+const MUTED = 'text-center text-xs text-[var(--vscode-descriptionForeground)] text-balance'
+const SHELL = 'absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-auto bg-[var(--vscode-editor-background)] p-4 text-foreground'
+
+/** The ~400px card every signed-out state sits in: logo, title, one-line subtitle, then the body. */
+function AuthCard({ title, subtitle, children }: { title: string; subtitle?: React.ReactNode; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Card className="w-full max-w-[400px] gap-6 px-6 py-8 shadow-sm">
+      <header className="flex flex-col items-center gap-2">
+        <div className="sign-in-brand mb-2"><Brand gradientId="signin-brand" /></div>
+        <h1 className="text-center text-[18px] leading-6 font-semibold">{title}</h1>
+        {subtitle}
+      </header>
+      {children}
+    </Card>
+  )
+}
 
 /** The signed-out page: sign in, or create the first account. */
 export default function SignInScreen({ reload = reloadPage, now = Date.now }: SignInScreenProps) {
@@ -73,41 +91,51 @@ export default function SignInScreen({ reload = reloadPage, now = Date.now }: Si
 
   const alreadySetup = useCallback(() => { setNotice(SIGN_IN_TEXT.alreadySetup); check() }, [check])
 
-  const shell = 'absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-auto bg-[var(--vscode-editor-background)] p-4 text-foreground'
   if (done || (me === null && fatal === null)) {
-    return <div role="status" className={`${shell} text-[13px] text-[var(--vscode-descriptionForeground)]`}>{done ? SIGN_IN_TEXT.signedIn : SIGN_IN_TEXT.loading}</div>
+    return (
+      <div role="status" className={`${SHELL} flex-row text-[13px] text-[var(--vscode-descriptionForeground)]`}>
+        <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" />{done ? SIGN_IN_TEXT.signedIn : SIGN_IN_TEXT.loading}
+      </div>
+    )
   }
   const setup = !fatal && me?.setupRequired === true
   const proof = setup && me?.signedIn === true
+  const subtitle = fatal ? null
+    : setup ? <p className={MUTED}>{proof ? SIGN_IN_TEXT.setupIntroProof : SIGN_IN_TEXT.setupIntroNoProof}</p>
+      : notice ? <p role="status" className={MUTED}>{notice}</p> : <p className={MUTED}>{SIGN_IN_TEXT.intro}</p>
   return (
-    <div className={shell}>
-      <Brand gradientId="signin-brand" />
-      <h1 className="text-[15px] font-semibold">{setup ? SIGN_IN_TEXT.setupTitle : SIGN_IN_TEXT.title}</h1>
-      {fatal ? (
-        <div role="alert" className="flex flex-col items-center gap-2">
-          <p className="max-w-[440px] text-center text-xs text-[var(--vscode-errorForeground)]">{fatal.message}</p>
-          <Button type="button" variant="outline" onClick={fatal.retry}>{SIGN_IN_TEXT.retry}</Button>
-        </div>
-      ) : setup ? (
-        <>
-          <p className={MUTED}>{proof ? SIGN_IN_TEXT.setupIntroProof : SIGN_IN_TEXT.setupIntroNoProof}</p>
-          {proof ? <SetupForm withCode={false} onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /> : (
-            <>
-              <OpenWindowButton label={SIGN_IN_TEXT.openSetup} now={now} />
-              <details className="flex w-[300px] max-w-full flex-col items-stretch gap-2 text-[13px]">
-                <summary className="cursor-pointer text-center">{SIGN_IN_TEXT.otherDevice}</summary>
-                <div className="mt-3"><SetupForm withCode onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /></div>
-              </details>
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {notice ? <p role="status" className={MUTED}>{notice}</p> : <p className={MUTED}>{SIGN_IN_TEXT.intro}</p>}
-          <LoginForm onDone={signedIn} now={now} />
-          <OpenWindowButton label={SIGN_IN_TEXT.open} variant="outline" now={now} />
-        </>
-      )}
+    <div className={SHELL}>
+      <AuthCard title={setup ? SIGN_IN_TEXT.setupTitle : SIGN_IN_TEXT.title} subtitle={subtitle}>
+        {fatal ? (
+          <div className="flex flex-col gap-4">
+            <FormAlert text={fatal.message} />
+            <Button type="button" variant="outline" className="h-8 w-full" onClick={fatal.retry}>{SIGN_IN_TEXT.retry}</Button>
+          </div>
+        ) : setup ? (
+          <>
+            {proof ? <SetupForm withCode={false} autoFocus onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /> : (
+              <>
+                <OpenWindowButton label={SIGN_IN_TEXT.openSetup} now={now} />
+                <details className="flex w-full flex-col text-[13px]">
+                  <summary className="cursor-pointer text-center text-xs text-[var(--vscode-textLink-foreground)]">{SIGN_IN_TEXT.otherDevice}</summary>
+                  <div className="mt-4"><SetupForm withCode onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /></div>
+                </details>
+              </>
+            )}
+            <p className="flex items-center justify-center gap-1.5 border-t border-(--vscode-editorWidget-border) pt-4 text-center text-xs text-[var(--vscode-descriptionForeground)]">
+              <span className="codicon codicon-lock shrink-0" aria-hidden="true" />{SIGN_IN_TEXT.localNote}
+            </p>
+          </>
+        ) : (
+          <>
+            <LoginForm onDone={signedIn} now={now} />
+            <div className="flex items-center gap-3 text-xs text-[var(--vscode-descriptionForeground)]" aria-hidden="true">
+              <span className="h-px flex-1 bg-(--vscode-editorWidget-border)" />{SIGN_IN_TEXT.or}<span className="h-px flex-1 bg-(--vscode-editorWidget-border)" />
+            </div>
+            <OpenWindowButton label={SIGN_IN_TEXT.open} variant="outline" now={now} />
+          </>
+        )}
+      </AuthCard>
       {offline ? <p role="status" className="text-xs text-[var(--vscode-errorForeground)]">{SIGN_IN_TEXT.offline}</p> : null}
     </div>
   )

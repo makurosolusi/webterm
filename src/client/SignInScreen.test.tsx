@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // Every SignInScreen mode against a stubbed /auth/* (transportToken.ts, account.api.client.ts):
-// loading, sign-in (401, 429 countdown), first-run setup with and without proof (403, 400, 409),
+// loading, sign-in (401, 429 countdown), first-run setup (inline checks: signIn/authForms.test.tsx) with and without proof (403, 400, 409),
 // opening a window (next = the current path), polling, error + Retry, signed in -> exactly one reload.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -240,24 +240,30 @@ describe('SignInScreen', () => {
 })
 
 describe('SignInScreen: first-run setup', () => {
-  it('with proof (a signed-in setup window): the form, live length hint, client-side checks, 400s, then 201 enters', async () => {
+  it('with proof (a signed-in setup window): the form, live checklist, inline client-side checks, 400s, then 201 enters', async () => {
     setupRequired = true; me = true
     const reload = await mount()
     expect(screen.getByRole('heading').textContent).toBe(SIGN_IN_TEXT.setupTitle)
+    expect(screen.getByText(SIGN_IN_TEXT.localNote)).toBeDefined()
     expect(screen.queryByLabelText(SIGN_IN_TEXT.setupCodeLabel)).toBeNull()
     expect((document.getElementById('setup-password') as HTMLInputElement).autocomplete).toBe('new-password')
+    expect(document.activeElement?.id).toBe('setup-username')
+    const lengthItem = () => screen.getByText(SIGN_IN_TEXT.checkLength).closest('li')!
     type('setup-username', 'ada')
     type('setup-password', 'short')
-    expect(screen.getByText(SIGN_IN_TEXT.lengthHint(5))).toBeDefined()
+    expect(lengthItem().dataset.met).toBe('false')
     fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
     await flush()
-    expect(alertText()).toBe(SIGN_IN_TEXT.weakPassword)
+    expect(screen.getByText(SIGN_IN_TEXT.weakPassword)).toBeDefined() // inline under the field, not the alert
+    expect(document.activeElement?.id).toBe('setup-password')
+    expect(screen.queryByRole('alert')).toBeNull()
     type('setup-password', 'long enough passphrase')
-    expect(screen.getByText(SIGN_IN_TEXT.lengthHint(22))).toBeDefined()
+    expect(lengthItem().dataset.met).toBe('true')
     type('setup-confirm', 'something else entirely')
     fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
     await flush()
-    expect(alertText()).toBe(SIGN_IN_TEXT.mismatch)
+    expect(screen.getByText(SIGN_IN_TEXT.mismatch)).toBeDefined()
+    expect(document.activeElement?.id).toBe('setup-confirm')
     expect(bodiesOf(AUTH_SETUP_PATH)).toEqual([]) // nothing sent for a client-side refusal
     type('setup-confirm', 'long enough passphrase')
     setupReply = { status: 400, body: { error: 'weak_password' } }
