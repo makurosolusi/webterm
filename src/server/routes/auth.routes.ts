@@ -3,7 +3,8 @@
 // sign-in mints a FRESH session (no fixation). Secrets never appear in a response body or a log line.
 //   GET  /auth/open?code=&next= one-time code (uiOpen.ts) -> Set-Cookie + 303 to a same-origin `next`
 //   GET  /auth/me               { signedIn, setupRequired, user, tokenSignIn }
-//   POST /auth/request-open     { next? } server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS
+//   POST /auth/request-open     { next?, launch? } server opens a signed-in window on this machine; 1 per OPEN_INTERVAL_MS.
+//                               `launch: false` only writes the 0600 sign-in file (the native app loads it itself)
 //   POST /auth/login            { username, password }, or { token } while no account exists
 //   POST /auth/logout           revokes the caller's session and clears the cookie
 //   /auth/setup, /auth/sessions*, /auth/account/*  -> auth.account.routes.ts
@@ -61,7 +62,8 @@ export function createUiAuthRoute(d: UiAuthDeps): (req: IncomingMessage, res: Se
     // Optional `{ next }`: the page to land on. No/invalid body is not an error, it just lands on `/`.
     const read = await readJsonBody(req)
     const next = read.ok && typeof read.body.next === 'string' ? safeNext(read.body.next) : '/'
-    await d.opener.open(firstHeader(req.headers.host), next)
+    // No launch: the code still only reaches the 0600 file, so the caller must be able to read the data dir.
+    await d.opener.open(firstHeader(req.headers.host), next, !(read.ok && read.body.launch === false))
     reply(res, 202, { opening: true })
   }
 

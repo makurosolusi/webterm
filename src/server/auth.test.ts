@@ -208,7 +208,7 @@ describe('isNodeTokenPath — source guard', () => {
   })
 
   it('never widens the allowlist from index.ts', () => {
-    const index = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    const index = fs.readFileSync(path.resolve(__dirname, 'server.main.ts'), 'utf8')
     expect(index).not.toMatch(/isNodeTokenPath\(\s*['"]\/api\/(central|orchestrator|memory|channels)/)
   })
 })
@@ -367,7 +367,7 @@ describe('authorizeRequest — capability tokens (control API only)', () => {
 
 describe('index.ts wiring', () => {
   it('passes a capability validator built on capabilityStore.verify', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    const src = fs.readFileSync(path.resolve(__dirname, 'server.main.ts'), 'utf8')
     expect(src).toMatch(/import \{ capabilityStore \} from '\.\/control\/mount'/)
     expect(src).toMatch(/isCapabilityToken:\s*\(t\)\s*=>\s*capabilityStore\.verify\(t\)\s*!==\s*undefined/)
   })
@@ -375,7 +375,7 @@ describe('index.ts wiring', () => {
   it('routes the gate through authorizeRequest + isValidNodeToken for both /api and /ws', () => {
     // index.ts binds a port on import, so assert the wiring from its source (same pattern as the
     // writeTokenToEnv test above).
-    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    const src = fs.readFileSync(path.resolve(__dirname, 'server.main.ts'), 'utf8')
     expect(src).toMatch(/authorizeRequest\(\{/)
     expect(src).toMatch(/isNodeToken:\s*isValidNodeToken/)
     expect(src).toMatch(/pathname:\s*url\.pathname/)

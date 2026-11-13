@@ -93,7 +93,7 @@ describe('/ws/lsp over a real socket', () => {
 
 describe('index.ts wiring', () => {
   it('routes /ws/lsp only after allowed() and the Origin gate', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '..', 'index.ts'), 'utf8')
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'server.main.ts'), 'utf8')
     const lsp = src.indexOf("if (route === 'lsp') return lspUpgrade(")
     expect(lsp).toBeGreaterThan(0)
     expect(src.indexOf('if (!allowed(req, url))')).toBeLessThan(lsp)

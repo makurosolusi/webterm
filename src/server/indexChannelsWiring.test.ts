@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+const source = readFileSync(new URL('./server.main.ts', import.meta.url), 'utf8')
 const GATE = 'if (url.pathname.startsWith(API_PREFIX) && !allowed(req, url)) { refuseRequest(res); return true }'
 const BINDINGS = 'return telegramHot.handleApi(req, res) || handleApi(req, res)'
 const WEBHOOK = 'if (telegramHot.handle(req, res)) return true'

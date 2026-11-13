@@ -15,5 +15,7 @@
       "@/*": ["./src/client/*"]
     }
   },
-  "include": ["src", "scripts/devFresh.ts", "scripts/devFresh.bun.test.ts"]
+  "include": ["src", "scripts/devFresh.ts", "scripts/devFresh.bun.test.ts"],
+  // Electrobun glue: `electrobun/main` resolves only from the generated Hutch devkit (src/native/main.ts header).
+  "exclude": ["src/native/main.ts"]
 }

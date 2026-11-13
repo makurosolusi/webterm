@@ -117,7 +117,7 @@ describe('product text is English', () => {
   it('scans every non-test source file in client, server and shared', () => {
     const files = sourceFiles()
     expect(files.length).toBeGreaterThan(500)
-    for (const f of ['client/central/centralLabels.ts', 'client/SettingsPanel.tsx', 'server/index.ts', 'shared/featureCapabilities.ts']) {
+    for (const f of ['client/central/centralLabels.ts', 'client/SettingsPanel.tsx', 'server/server.main.ts', 'shared/featureCapabilities.ts']) {
       expect(files).toContain(f)
     }
   })
