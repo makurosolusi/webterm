@@ -6,7 +6,7 @@ import { CHANNEL_ENV_SPECS } from '../envRegistry.channels'
 import { reconcile } from '../featureCapabilities.runtime'
 import { callApi, harnessLedger } from './channelsRuntimeHarness'
 import { TELEGRAM_PENDING_PATH } from './channelPendingHttp'
-import { createTelegramHot, registerTelegramHot, type TelegramHot } from './telegramHot'
+import { createTelegramHot, registerTelegramCentralRefresh, registerTelegramHot, type TelegramHot } from './telegramHot'
 import { fakeBotApi, TEST_TOKEN } from './telegramPollHarness'
 
 const TOKEN_ENV = 'WEBTERM_TELEGRAM_BOT_TOKEN'
@@ -107,5 +107,39 @@ describe('registry kanal', () => {
     }
     const telegramLike = CHANNEL_ENV_SPECS.filter((s) => s.owner === 'channels')
     expect(JSON.stringify(telegramLike.map((s) => s.requires))).not.toContain('WEBTERM_LEDGER')
+  })
+})
+
+describe('registerTelegramCentralRefresh', () => {
+  const on = new Set(['central'] as const)
+  const off = new Set<never>()
+  function setup(centralOn: { v: boolean }) {
+    const refresh = vi.fn(async () => undefined)
+    const fake = { refresh } as unknown as TelegramHot
+    unregister = registerTelegramCentralRefresh(fake, () => centralOn.v, () => true)
+    return refresh
+  }
+  /** Boot: reconcile from nothing to what is on (marks the hook running, like server.main.ts). */
+  const boot = (): Promise<void> => reconcile(off, on)
+
+  it('a Central restart with no on/off change (bounce: stop then start) does not rebuild the channel', async () => {
+    const refresh = setup({ v: true })
+    await boot()
+    await reconcile(on, off)
+    await reconcile(off, on)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('Central really turning off, then on, rebuilds once each', async () => {
+    const central = { v: true }
+    const refresh = setup(central)
+    await boot()
+    expect(refresh).not.toHaveBeenCalled()
+    central.v = false
+    await reconcile(on, off)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    central.v = true
+    await reconcile(off, on)
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 })
