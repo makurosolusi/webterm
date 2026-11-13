@@ -18,6 +18,12 @@ try {
   process.exit(ALREADY_RUNNING_EXIT_CODE)
 }
 
+// The login shell's PATH, merged before server.main loads and spawns anything (tmux probe, launch profile
+// Test, headless claude). After the guard so a second instance exits without paying the shell run (up to
+// 5 s); the guard itself spawns nothing. Dynamic for the same import-order reason as server.main.
+const { mergeLoginShellPath } = await import('./loginShellPath')
+mergeLoginShellPath()
+
 const server = await import('./server.main')
 /** Resolves once the main listener is bound; for an in-process host (src/native) that imports this module. */
 export const ready = server.ready

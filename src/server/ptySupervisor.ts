@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { ptyEnv, resolveCwd, shellArgv } from './ptyShell'
-import { locateBinary } from './loginShellPath'
+import { findOnPath } from './binaryOnPath'
 import { spawnPty, type Pty } from './pty'
 import { createLogger } from './logs'
 
@@ -306,11 +306,11 @@ export const TMUX_MISSING_NOTICE =
  *  luar Bun: test tidak boleh menempel ke sesi tmux milik pengguna. */
 export function bootSupervisor(
   env: NodeJS.ProcessEnv = process.env,
-  locate: (bin: string) => string | undefined = (bin) => locateBinary(bin, env.PATH)
+  locate: (bin: string) => string | undefined = (bin) => findOnPath(bin, env.PATH ?? '')
 ): { supervisor: TmuxSupervisor | null; notice?: string } {
   if (env.NODE_ENV === 'test' || !process.versions.bun) return { supervisor: null }
-  // Absolute path: the probe may find tmux only on the login shell's PATH (ops-212-4), which every
-  // later tmux call (run/attach) does not search.
+  // Absolute path, resolved once: env.PATH already holds the login shell's entries (ops-212-4,
+  // mergeLoginShellPath at boot), and later tmux calls (run/attach) need not search it again.
   const tmux = locate('tmux')
   if (!tmux) {
     log.warn('pty.supervisor_missing', 'tmux not found; sessions will not survive a server restart')

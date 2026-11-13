@@ -12,11 +12,12 @@ const warnedMissing = new Set<string>()
 /** Apakah `bin` bisa dieksekusi — path langsung bila mengandung `/`, selain itu dicari di PATH.
  *  Hanya cek keberadaan + bit executable: TIDAK pernah menjalankan binary-nya.
  *
- *  BATASNYA: yang dibaca PATH PROSES SERVER, sedangkan perintah berjalan di login shell yang
- *  mungkin punya PATH lebih luas (nvm/asdf/homebrew lewat rc) — jebakan yang nodeterm juga catat di
- *  `pty-manager.ts`. Karena itu hasil negatif hanya dipakai untuk MEMBUANG pembungkus (lihat
- *  `unwrapMissingWrapper`), bukan untuk menolak peluncuran: salah tebak paling buruk mengabaikan
- *  satu pembungkus dan mengatakannya, bukan mematikan node. */
+ *  LIMIT: this reads the SERVER PROCESS PATH. At boot the login shell's PATH is merged into it
+ *  (`mergeLoginShellPath`, run from index.ts), so nvm/asdf/Homebrew entries set by rc files are
+ *  included; what can still differ is a PATH change made after boot or by a shell other than
+ *  `$SHELL` (nodeterm notes the same trap in `pty-manager.ts`). So a negative result is only used
+ *  to DROP a wrapper (see `unwrapMissingWrapper`), never to refuse a launch: the worst wrong guess
+ *  ignores one wrapper and says so, it does not kill the node. */
 export function binaryExists(bin: string, pathEnv = process.env.PATH ?? ''): boolean {
   const executable = (p: string): boolean => {
     try {

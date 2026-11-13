@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { findOnPath } from './binaryOnPath'
+import { delimiter } from 'node:path'
 import { ptyEnv, resolveShell } from './ptyShell'
 import { createLogger } from './logs'
 
@@ -30,7 +30,31 @@ export function loginShellPath(shell: string = resolveShell(undefined), env: Nod
   }
 }
 
-/** Absolute path of `name`: the process PATH first, then the login shell's PATH (run only on a miss). */
-export function locateBinary(name: string, pathEnv: string | undefined, loginPath: () => string | undefined = loginShellPath): string | undefined {
-  return findOnPath(name, pathEnv ?? '') ?? findOnPath(name, loginPath() ?? '')
+/** `current` followed by the entries of `extra` it lacks; empty entries dropped, first occurrence kept. */
+export function mergePathLists(current: string, extra: string): { path: string; added: number } {
+  const have = current.split(delimiter).filter(Boolean)
+  const merged = [...new Set([...have, ...extra.split(delimiter).filter(Boolean)])]
+  return { path: merged.join(delimiter), added: merged.length - new Set(have).size }
+}
+
+/**
+ * Once at boot, before anything spawns: append the login shell's PATH entries that `env.PATH` lacks,
+ * the way VS Code resolves the shell env at startup. Every later PATH reader (tmux probe, launch
+ * profile Test, headless claude spawns, agent sessions) then sees `~/.local/bin`, Homebrew and nvm
+ * directories even when launchd/Dock/ssh started webterm with `/usr/bin:/bin`. No-op on Windows.
+ * Returns how many entries were added.
+ */
+export function mergeLoginShellPath(
+  env: NodeJS.ProcessEnv = process.env,
+  resolve: () => string | undefined = () => loginShellPath(undefined, env),
+  platform: string = process.platform
+): number {
+  if (platform === 'win32') return 0
+  const login = resolve()
+  if (login === undefined) return 0
+  const { path, added } = mergePathLists(env.PATH ?? '', login)
+  if (added > 0) env.PATH = path
+  // Count only: PATH entries carry user names.
+  log.info('pty.login_path_merged', 'Merged the login shell PATH into the server PATH', { added })
+  return added
 }
