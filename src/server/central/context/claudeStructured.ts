@@ -107,6 +107,9 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
       if (code !== 0) { reject(new Error(`${kind}: claude exited ${code}`)); return }
       try { resolve(parseStructuredAnswer(out, request.requested)) } catch (err) { reject(new Error(`${kind}: ${(err as Error).message}`, { cause: err })) }
     })
+    // A child that dies before reading its prompt (killed, broken launcher) makes this write EPIPE; unheard, that
+    // error is uncaught and ends the server. The exit status in 'close' already rejects this call with the cause.
+    child.stdin.on('error', (err: NodeJS.ErrnoException) => log.warn('central.helper.stdin_failed', `${kind}: prompt write to claude failed`, { kind, code: err.code ?? err.name }))
     child.stdin.end(req.prompt)
   })
 }

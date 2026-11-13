@@ -86,6 +86,9 @@ export function createAnalysisRunner(opts: { bin?: string } = {}): AnalysisRun {
       if (code !== 0) { reject(new Error(`health analysis: claude exited ${code}`)); return }
       try { resolve(parseStructuredAnswer(out, request.requested)) } catch (err) { reject(new Error(`health analysis: ${errorText(err)}`, { cause: err })) }
     })
+    // A child that dies before reading its prompt makes this write EPIPE; unheard, that error is uncaught and ends the
+    // server. The exit status in 'close' already rejects this run with the cause.
+    child.stdin.on('error', (err: NodeJS.ErrnoException) => log.warn('health.analyze_stdin_failed', `health analysis: prompt write to claude failed in ${req.cwd}`, { code: err.code ?? err.name }))
     child.stdin.end(req.prompt)
   })
 }
