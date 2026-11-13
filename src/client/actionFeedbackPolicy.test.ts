@@ -26,7 +26,6 @@ const PERMANENT: Record<string, { reasons: Reason[]; why: string }> = {
   'src/client/DiffNode.tsx': { reasons: ['async-click'], why: 'node Close: rf.deleteElements removes the node; the close-confirm dialog is the feedback' },
   'src/client/PlanNode.tsx': { reasons: ['async-click'], why: 'node Close: rf.deleteElements removes the node; the close-confirm dialog is the feedback' },
   'src/client/mcpapps/McpAppNode.tsx': { reasons: ['async-click'], why: 'node Close: rf.deleteElements removes the node; the close-confirm dialog is the feedback' },
-  'src/client/EditorNode.tsx': { reasons: ['async-click'], why: 'node Close (close-confirm dialog) and Outline (Monaco quick outline opens as the result)' },
   'src/client/viewers/BinaryPlaceholder.tsx': { reasons: ['async-click'], why: 'copy-to-clipboard with its own "Copied" state' },
   'src/client/Welcome.tsx': { reasons: ['async-click'], why: 'Reopen waits for the reopen-confirm dialog, which is the feedback' },
   'src/client/Dock.workspaceDialog.tsx': { reasons: ['async-click'], why: 'worktree checkbox: best-effort pre-fill of the repo folder, not a user action' },
