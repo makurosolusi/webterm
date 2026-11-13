@@ -2,6 +2,7 @@
 // The main process is src/native/main.ts: it attaches to the data dir's running server or runs one in-process; the window
 // loads the server's own URL, so there is no separate view bundle.
 import pkg from './package.json'
+import { UPDATE_BASE_URL } from './src/native/release.config'
 
 export default {
   app: {
@@ -32,4 +33,7 @@ export default {
       icons: 'assets/native/icon.iconset',
     },
   },
+  // Update host (src/native/release.config.ts): baked into the app's version.json for Updater checks, and used
+  // by Hutch on a stable build to diff against the previously published release (delta .patch). Empty: neither.
+  release: { baseUrl: UPDATE_BASE_URL },
 }
