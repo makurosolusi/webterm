@@ -1,14 +1,12 @@
-// Canvas header and breadcrumb of an editor node, VS Code style: the title is the file name (ellipsis,
-// hover = full path), the breadcrumb is the path relative to the Files node that opened it (absolute
-// when there is none), and every icon action is an IconButton with a real tooltip and its chord.
+// Editor-specific parts of an editor node's header (on the shared NodeChrome) and its breadcrumb,
+// VS Code style: the breadcrumb is the path relative to the Files node that opened it (absolute when
+// there is none), and every icon action is an IconButton with a real tooltip and its chord.
 import { useCallback } from 'react'
 import { useStore, type ReactFlowState } from '@xyflow/react'
-import { IconButton, IconTooltip } from '@/components/ui/icon-button'
+import { IconButton } from '@/components/ui/icon-button'
 import { VscodeBreadcrumbs, type VscodeBreadcrumbSegment } from './components/vscode/vscodeBreadcrumbs'
 import { fileIconToneClass } from './fileIcon'
 import { isUnder } from './editorFile'
-import { NodeNameLabel } from './nodeName.label'
-import { NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
 import { ShowInFilesButton, filesSourceOf } from './ShowInFilesButton'
 import { WRAP_COMMAND_ID } from './editorWrap'
 
@@ -49,12 +47,8 @@ export function EditorCrumbs({ filePath, root, onFolder }: { filePath: string; r
   return <VscodeBreadcrumbs className="nodrag editor-node__crumbs" ariaLabel="File path" maxVisible={CRUMBS_VISIBLE} segments={segments} />
 }
 
-export interface EditorHeaderProps {
+export interface EditorHeaderActionsProps {
   id: string
-  name?: string
-  fileName: string
-  filePath: string
-  dirty: boolean
   /** Text editor mounted: the view actions apply. */
   editable: boolean
   /** Markdown file: offer Preview/Edit. */
@@ -65,46 +59,34 @@ export interface EditorHeaderProps {
   onToggleWrap: () => void
   /** Language server present: offer the symbol outline. */
   onOutline?: () => void
-  onClose: () => void
-  onContextMenu?: (e: React.MouseEvent) => void
 }
 
-export function EditorHeader(p: EditorHeaderProps) {
+/** The editor's own title actions (VS Code editor title bar), shown before the shared NodeChrome toolbar. */
+export function EditorHeaderActions(p: EditorHeaderActionsProps) {
   return (
-    <div className="node-header" onContextMenu={p.onContextMenu}>
-      <IconTooltip label={p.filePath || p.fileName}>
-        <span className="node-title editor-node__name">
-          <span className={`${fileIconToneClass(p.fileName)} editor-node__icon`} aria-hidden="true" />
-          <span className="editor-node__label"><NodeNameLabel name={p.name} label={p.fileName} /></span>
-          {p.editable && p.dirty && (
-            <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
-          )}
-        </span>
-      </IconTooltip>
-      <span className="editor-node__spacer" />
-      <span className="nodrag editor-node__actions">
-        <ShowInFilesButton editorId={p.id} />
-        <NodeResizeToggle />
-        {p.editable && p.markdown && (
-          <IconButton size="icon-xs" label={p.preview ? 'Edit' : 'Preview'} tooltip={p.preview ? 'Back to Editor' : 'Open Preview'}
-            commandId={PREVIEW_COMMAND_ID} aria-pressed={p.preview} onClick={p.onTogglePreview}>
-            <span className={`codicon codicon-${p.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
-          </IconButton>
-        )}
-        {p.editable && (
-          <IconButton size="icon-xs" label="Word wrap" tooltip="Toggle Word Wrap" commandId={WRAP_COMMAND_ID} aria-pressed={p.wrap} onClick={p.onToggleWrap}>
-            <span className="codicon codicon-word-wrap" aria-hidden="true" />
-          </IconButton>
-        )}
-        {p.editable && p.onOutline && (
-          <IconButton size="icon-xs" label="Outline" tooltip="Go to Symbol in Editor" shortcut="⇧⌘O" onClick={p.onOutline}>
-            <span className="codicon codicon-symbol-class" aria-hidden="true" />
-          </IconButton>
-        )}
-        <IconButton size="icon-xs" label="Close" onClick={p.onClose}>
-          <span className="codicon codicon-close" aria-hidden="true" />
+    <span className="nodrag editor-node__actions node-header-actions">
+      <ShowInFilesButton editorId={p.id} />
+      {p.editable && p.markdown && (
+        <IconButton size="icon-xs" label={p.preview ? 'Edit' : 'Preview'} tooltip={p.preview ? 'Back to Editor' : 'Open Preview'}
+          commandId={PREVIEW_COMMAND_ID} aria-pressed={p.preview} onClick={p.onTogglePreview}>
+          <span className={`codicon codicon-${p.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
         </IconButton>
-      </span>
-    </div>
+      )}
+      {p.editable && (
+        <IconButton size="icon-xs" label="Word wrap" tooltip="Toggle Word Wrap" commandId={WRAP_COMMAND_ID} aria-pressed={p.wrap} onClick={p.onToggleWrap}>
+          <span className="codicon codicon-word-wrap" aria-hidden="true" />
+        </IconButton>
+      )}
+      {p.editable && p.onOutline && (
+        <IconButton size="icon-xs" label="Outline" tooltip="Go to Symbol in Editor" shortcut="⇧⌘O" onClick={p.onOutline}>
+          <span className="codicon codicon-symbol-class" aria-hidden="true" />
+        </IconButton>
+      )}
+    </span>
   )
+}
+
+/** The unsaved-changes dot after the title (VS Code's dirty tab). */
+export function EditorDirtyDot() {
+  return <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
 }

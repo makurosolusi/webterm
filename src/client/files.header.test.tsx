@@ -31,6 +31,13 @@ const mount = async () => {
   return r.container
 }
 
+/** The shadcn tooltip of `el`, opened the way keyboard navigation opens it. */
+function tooltipOf(el: Element): string | null | undefined {
+  fireEvent.keyDown(document, { key: 'Tab' })
+  fireEvent.focus(el)
+  return document.querySelector('[role="tooltip"]')?.textContent
+}
+
 describe('Files title bar', () => {
   it('shows New File, New Folder, Refresh, Collapse All in VS Code order, then the overflow button', async () => {
     const c = await mount()
@@ -62,7 +69,8 @@ describe('Files title bar', () => {
     expect(header.querySelector('.node-title')?.textContent).toBe('laya-api')
     expect(header.textContent).not.toContain(PATH)
     expect(header.querySelector('.node-description')).toBeNull()
-    expect(header.querySelector('.node-title')?.getAttribute('title')).toContain(PATH)
+    expect(header.querySelector('.node-title')?.hasAttribute('title')).toBe(false)
+    expect(tooltipOf(header.querySelector('.node-title')!)).toContain(PATH)
   })
 
   it('footer says "N items" unfiltered', async () => {

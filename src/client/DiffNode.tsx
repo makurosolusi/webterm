@@ -9,12 +9,14 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow, useStore, type NodeProps } from '@xyflow/react'
-import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
+import NodeChrome, { termNodeClass } from './NodeChrome'
+import { useNodeCollapse } from './nodeCollapse'
 import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { ActionResult, errorCause, useAction } from '@/components/ui/action'
 import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.types'
-import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus } from '../shared/workspace'
+import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus, type Comment } from '../shared/workspace'
 import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
 import { useDiffEditor } from './DiffNode.editor'
 import { enqueueNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
@@ -24,7 +26,6 @@ import { getStatus, subscribeStatus } from './ws'
 // The commit/stage panel loads with the first diff node; the node chrome and file list stay eager.
 const ScmPanel = lazy(() => import('./ScmPanel').then((m) => ({ default: m.ScmPanel })))
 import './DiffNode.css'
-import { NodeNameLabel } from './nodeName.label'
 import { effectiveWrap, useWordWrap, useWrapChord, WordWrapButton, wrapChordLabel } from './editorWrap'
 import { useNodeHost } from './tabLayout.context'
 import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
@@ -63,10 +64,13 @@ function UndoHunk({ ask, undo }: { ask: () => boolean; undo: () => Promise<void>
   )
 }
 
-function DiffNode({ id, data, selected }: NodeProps) {
+function DiffNode({ id, data, selected, height }: NodeProps) {
   const rf = useReactFlow()
-  const d = data as { cwd?: string; color?: string; name?: string; title?: string }
+  const d = data as { cwd?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const swatch = d.color ?? '#0a84ff'
+  const collapsed = d.collapsed ?? false
+  const comments = d.comments ?? []
+  const toggleCollapse = useNodeCollapse(id, height, collapsed)
   const agent = useWiredAgent(id)
   // ide-parity G1: wiring an agent makes the diff follow that agent's cwd/worktree.
   const root = agent?.cwd || d.cwd || ''
@@ -180,32 +184,31 @@ function DiffNode({ id, data, selected }: NodeProps) {
 
   return (
     <>
-      <NodeLayoutResizer minWidth={420} minHeight={260} color={swatch} />
-      <div className={`term-node diff-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+      <NodeLayoutResizer collapsed={collapsed} minWidth={420} minHeight={260} color={swatch} />
+      <div className={`${termNodeClass({ selected: !!selected, collapsed })} diff-node`} style={{ '--node-swatch': swatch } as CSSProperties}>
         {nodeHost.inTab ? <TabNodeActions id={id} visible={nodeHost.visible} items={[]} actions={tabActions} /> : (
-        <div className="node-header">
-          <span className="node-title diff-node__title" title={root}>
-            <span className="codicon codicon-git-compare" aria-hidden="true" />
-            <NodeNameLabel name={d.name} label={d.title || 'Changes'} />
-            <span className="diff-node__desc">{root ? `${total} file${total === 1 ? '' : 's'}` : ''}</span>
-          </span>
-          <span className="diff-node__spacer" />
-          <NodeResizeToggle />
-          <ToolbarContainer className="nodrag diff-node__actions">
-            {sides && <WordWrapButton on={wrap} onToggle={toggleWrap} />}
-            <IconTooltip label={sendTip}>
-              <VscodeButton secondary disabled={send.busy} aria-busy={send.busy ? 'true' : 'false'} onClick={onSend}>
-                {send.busy ? 'Sending…' : `Send to agent (${notes.length})`}
-              </VscodeButton>
-            </IconTooltip>
-            <IconTooltip label="Reload the changed files and the open diff">
-              <ToolbarButton label="Refresh" onClick={refresh}><span className="codicon codicon-refresh" aria-hidden="true" /></ToolbarButton>
-            </IconTooltip>
-            <IconTooltip label="Remove this node from the canvas">
-              <ToolbarButton label="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
-            </IconTooltip>
-          </ToolbarContainer>
-        </div>
+        <NodeChrome
+          title={d.title || 'Changes'} name={d.name} icon="git-compare" titleHint={root || undefined}
+          description={root ? `${total} file${total === 1 ? '' : 's'}` : undefined}
+          onRename={(t) => rf.updateNodeData(id, { title: t })}
+          collapsed={collapsed} onToggleCollapse={toggleCollapse}
+          color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+          comments={comments} onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
+          extraHeader={
+            <ToolbarContainer className="nodrag diff-node__actions node-header-actions">
+              {sides && <WordWrapButton on={wrap} onToggle={toggleWrap} />}
+              <IconTooltip label={sendTip}>
+                <VscodeButton secondary disabled={send.busy} aria-busy={send.busy ? 'true' : 'false'} onClick={onSend}>
+                  {send.busy ? 'Sending…' : `Send to agent (${notes.length})`}
+                </VscodeButton>
+              </IconTooltip>
+              <IconTooltip label="Reload the changed files and the open diff">
+                <ToolbarButton label="Refresh" data-title="Refresh" onClick={refresh}><span className="codicon codicon-refresh" aria-hidden="true" /></ToolbarButton>
+              </IconTooltip>
+            </ToolbarContainer>
+          }
+          closeLabel="Close" onClose={() => void rf.deleteElements({ nodes: [{ id }] })}
+        />
         )}
         {msg && <div className="diff-node__msg nodrag" role="status">{msg}</div>}
         {send.result && <div className="diff-node__msg nodrag"><ActionResult action={send} /></div>}

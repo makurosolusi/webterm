@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Textfield, ToolbarButton, ToolbarContainer } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import './findBar.css'
 
 /**
@@ -35,9 +36,9 @@ export default function FindBar({ onSearch, onClose }: {
         onKeyDown={onKey}
       />
       <ToolbarContainer className="node-find__actions">
-        <ToolbarButton label="Previous Match" title="Previous Match (Shift+Enter)" data-title="Previous Match (Shift+Enter)" onClick={() => onSearch(term, 'prev')}><span className="codicon codicon-arrow-up" aria-hidden="true" /></ToolbarButton>
-        <ToolbarButton label="Next Match" title="Next Match (Enter)" data-title="Next Match (Enter)" onClick={() => onSearch(term, 'next')}><span className="codicon codicon-arrow-down" aria-hidden="true" /></ToolbarButton>
-        <ToolbarButton label="Close" title="Close (Escape)" data-title="Close (Escape)" onClick={onClose}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
+        <IconTooltip label="Previous Match" shortcut="Shift+Enter"><ToolbarButton label="Previous Match" data-title="Previous Match (Shift+Enter)" onClick={() => onSearch(term, 'prev')}><span className="codicon codicon-arrow-up" aria-hidden="true" /></ToolbarButton></IconTooltip>
+        <IconTooltip label="Next Match" shortcut="Enter"><ToolbarButton label="Next Match" data-title="Next Match (Enter)" onClick={() => onSearch(term, 'next')}><span className="codicon codicon-arrow-down" aria-hidden="true" /></ToolbarButton></IconTooltip>
+        <IconTooltip label="Close" shortcut="Escape"><ToolbarButton label="Close" data-title="Close (Escape)" onClick={onClose}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton></IconTooltip>
       </ToolbarContainer>
     </div>
   )

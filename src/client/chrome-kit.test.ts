@@ -28,11 +28,8 @@ describe('termNodeClass', () => {
     expect(termNodeClass({ status: 'working' })).toBe('term-node working')
     expect(termNodeClass({ status: 'blocked' })).toBe('term-node attention')
   })
-  it('waiting tidak lagi memakai halo merah berdenyut milik blocked', () => {
-    // Halo node adalah penanda terkencang di canvas. Kalau turn yang cuma habis ikut memakainya,
-    // chip amber di header dibatalkan oleh node yang mengelilinginya.
-    expect(termNodeClass({ status: 'waiting' })).not.toBe('term-node attention')
-    expect(termNodeClass({ status: 'waiting' })).toBe('term-node waiting')
+  it('turn ended (waiting) is calm idle: no ring, no halo', () => {
+    expect(termNodeClass({ status: 'waiting' })).toBe('term-node')
   })
   it('done tidak menyalakan glow apa pun', () => {
     expect(termNodeClass({ status: 'done' })).toBe('term-node')
@@ -67,9 +64,8 @@ describe('node-chrome.css: status chip tones', () => {
     expect(chrome).not.toMatch(/\.node-status--(working|idle|error|unread|muted) \.codicon \{ animation:/)
   })
 
-  it('kelas glow waiting ada dan tidak memakai halo pseudo merah', () => {
-    expect(decl('.term-node.waiting')).toContain('var(--state-warning)')
-    expect(chrome).not.toContain(':has(.term-node.waiting)')
+  it('has no turn-ended ring: waiting is calm idle', () => {
+    expect(chrome).not.toContain('.term-node.waiting')
   })
 
   it('the node colour is an edge accent on the header, not a dot', () => {

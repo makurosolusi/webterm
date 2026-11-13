@@ -3,6 +3,7 @@
 // can never be acknowledged (Rule 7). The server checks all of this again (gitScm.report.ts push()).
 import { useState } from 'react'
 import { Button as VscodeButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { ScmReport, ScmStatus } from '../server/gitScm.types'
 import { createPr, pushBranch, runReport } from './ScmPanel.api'
 
@@ -46,12 +47,18 @@ export function ScmReportSection({ root, status, report, onReport, onDone }: Scm
   return (
     <section className="scm-panel__report" aria-label="Pre-push report">
       <div className="scm-panel__actions">
-        <VscodeButton secondary disabled={running} title="Run test, typecheck and lint, and scan the outgoing diff" onClick={onRun}>
-          {running ? 'Running…' : 'Run pre-push checks'}
-        </VscodeButton>
-        <VscodeButton disabled={running || !pushAllowed(report, ack)} title={report ? '' : 'Run the pre-push checks first'} onClick={onPush}>Push</VscodeButton>
+        <IconTooltip label="Run test, typecheck and lint, and scan the outgoing diff">
+          <VscodeButton secondary disabled={running} onClick={onRun}>
+            {running ? 'Running…' : 'Run pre-push checks'}
+          </VscodeButton>
+        </IconTooltip>
+        <IconTooltip label={report ? 'Push the branch to its remote' : 'Run the pre-push checks first'}>
+          <VscodeButton disabled={running || !pushAllowed(report, ack)} onClick={onPush}>Push</VscodeButton>
+        </IconTooltip>
         {status.gh && (
-          <VscodeButton secondary disabled={running || !status.upstream || status.ahead > 0} title="gh pr create --fill" onClick={onPr}>Create PR</VscodeButton>
+          <IconTooltip label="gh pr create --fill">
+            <VscodeButton secondary disabled={running || !status.upstream || status.ahead !== 0} onClick={onPr}>Create PR</VscodeButton>
+          </IconTooltip>
         )}
       </div>
       {report && (

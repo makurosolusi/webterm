@@ -11,6 +11,7 @@ vi.mock('./mcpApp.api', () => api)
 
 import McpAppNode, { APP_TEXT } from './McpAppNode'
 import { NodeHostContext } from '../tabLayout.context'
+import { expectSharedChrome } from '../nodeChromeKinds.testkit'
 import { setEditorActionsSlot, tabNodeMenuItems } from '../tabLayout.nodeActions'
 
 // test-only: jsdom has no ResizeObserver.
@@ -76,10 +77,12 @@ describe('McpAppNode in tab mode', () => {
     expect(tabNodeMenuItems('app-1')).toEqual([])
   })
 
-  it('keeps its own header with Close on the canvas', async () => {
+  it('on the canvas uses the shared NodeChrome header: the app uri as title, no resize button, edges resize', async () => {
     api.fetchAppView.mockResolvedValue(VIEW)
     const { container } = mount()
     await screen.findByTitle(APP_TEXT.frameTitle)
-    expect(container.querySelector('.mcp-app-node .node-header .codicon-close')).not.toBeNull()
+    expect(container.querySelector('.mcp-app-node .node-header .node-title')?.textContent).toBe(VIEW.uri)
+    expect(container.querySelector('.mcp-app-node .node-header .node-icon.codicon-window')).not.toBeNull()
+    expectSharedChrome(container.querySelector('.react-flow__node[data-id="app-1"]')!)
   })
 })

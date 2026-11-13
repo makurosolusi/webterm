@@ -86,7 +86,7 @@ describe('renamed', () => {
     await ready()
     typed('edit')
     act(() => emitFsEvent({ kind: 'renamed', path: '/x/new.json', from: '/x/old.json', origin: 'local' }))
-    await waitFor(() => expect(container.querySelector('.editor-node__name')?.textContent).toContain('new.json'))
+    await waitFor(() => expect(container.querySelector('.node-header .node-title')?.textContent).toContain('new.json'))
     expect(filePathOf()).toBe('/x/new.json')
     expect(openEditorFor(rfRef!.getNodes(), '/x/new.json')).toBe('n1')
     expect(openEditorFor(rfRef!.getNodes(), '/x/old.json')).toBeNull()
@@ -102,6 +102,19 @@ describe('renamed', () => {
     expect(filePathOf()).toBe('/w/dir/sub/a.ts')
     act(() => emitFsEvent({ kind: 'renamed', path: '/w/moved', from: '/w/dir', origin: 'local' }))
     await waitFor(() => expect(filePathOf()).toBe('/w/moved/sub/a.ts'))
+  })
+
+  it('a title that was the old file name follows the rename; a custom title stays', async () => {
+    const { container } = mount('/x/old.json')
+    await ready()
+    const title = () => container.querySelector('.node-header .node-title')?.textContent
+    act(() => rfRef!.updateNodeData('n1', { title: 'old.json' })) // how Quick Open opens a file
+    act(() => emitFsEvent({ kind: 'renamed', path: '/x/new.json', from: '/x/old.json', origin: 'local' }))
+    await waitFor(() => expect(title()).toBe('new.json'))
+    act(() => rfRef!.updateNodeData('n1', { title: 'Config' }))
+    act(() => emitFsEvent({ kind: 'renamed', path: '/x/newer.json', from: '/x/new.json', origin: 'local' }))
+    await waitFor(() => expect(filePathOf()).toBe('/x/newer.json'))
+    expect(title()).toBe('Config')
   })
 
   it('simpan sesudah rename menulis ke path baru', async () => {

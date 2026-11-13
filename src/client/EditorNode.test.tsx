@@ -77,14 +77,14 @@ describe('EditorNode chrome', () => {
   it('menampilkan ikon codicon per ekstensi, dirty dot saat berubah, dan tema VS Code', async () => {
     const { container } = mount()
     await waitFor(() => expect(fake.state.createdWith).not.toBeNull())
-    expect(container.querySelector('.editor-node__icon')?.className).toContain('codicon-json')
+    expect(container.querySelector('.node-header .node-icon')?.className).toContain('codicon-json')
     expect(fake.state.createdWith).toMatchObject({ theme: 'webterm-dark-modern', minimap: { enabled: false } })
 
     expect(screen.queryByRole('img', { name: 'Unsaved changes' })).toBeNull()
     fake.state.value = 'ab'
     act(() => fake.state.onChange())
     expect(screen.getByRole('img', { name: 'Unsaved changes' }).className).toContain('codicon-circle-filled')
-    expect(container.querySelector('.editor-node__name')?.textContent).not.toContain('●')
+    expect(container.querySelector('.node-header .node-title')?.textContent).not.toContain('●')
   })
 
   it('menampilkan breadcrumb path dan tidak lagi memaksa border atas berwarna swatch', async () => {
@@ -116,7 +116,7 @@ describe('EditorNode language server hint', () => {
     expect(screen.getByRole('status').textContent).toContain(HINT.command)
     fireEvent.click(screen.getByText('Copy command'))
     expect(clip.writeClipboard).toHaveBeenCalledWith(HINT.command)
-    const dismiss = container.querySelector('.editor-node__lsp-hint vscode-toolbar-button')
+    const dismiss = container.querySelector('.editor-node__lsp-hint button[aria-label="Dismiss"]')
     expect(dismiss).not.toBeNull()
     fireEvent.click(dismiss!)
     expect(screen.queryByText('Copy command')).toBeNull()

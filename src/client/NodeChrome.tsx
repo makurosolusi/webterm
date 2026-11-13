@@ -21,6 +21,8 @@ export interface NodeChromeProps {
   name?: string
   /** Nama codicon untuk ikon tipe node di depan judul (mis. 'terminal', 'hubot'); kosong = tanpa ikon. */
   icon?: string
+  /** Full class list of a typed icon (a file's codicon + colour tone); wins over `icon`. */
+  iconClass?: string
   /** Teks redup setelah judul, seperti deskripsi tab editor (mis. cwd). */
   description?: string
   /** Title tooltip (e.g. a Files node's full path); a click on the title still renames. */
@@ -29,7 +31,7 @@ export interface NodeChromeProps {
   collapsed: boolean; onToggleCollapse: () => void
   /** Node colour: a thin accent on the header's left edge, changed from "…" › Node color…. */
   color: string; onColor: (c: string) => void
-  /** Agent only: the one labelled status chip (`AgentStatusChip`), always present for an agent node. */
+  /** Status mark right after the title: an agent's labelled status chip, an editor's dirty dot. */
   statusChip?: ReactNode
   pill?: ReactNode                // <UsagePill/> for agent; omit for terminal
   comments: Comment[]; onAddComment: (text: string) => void
@@ -39,6 +41,10 @@ export interface NodeChromeProps {
   searchOpen?: boolean; onToggleSearch?: () => void
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   onClose: () => void
+  /** Close tooltip; default names the session it ends. Nodes with no session say plain "Close". */
+  closeLabel?: string
+  /** Right-click on the header (VS Code tab context menu); omit for none. */
+  onContextMenu?: (e: MouseEvent) => void
   onStop?: () => void             // agent only: Stop button in the toolbar
   onAiName?: () => void; aiNaming?: boolean
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean
@@ -57,10 +63,8 @@ export const UNTITLED = 'Untitled'
  * `.react-flow__node:has(.term-node.working)::after` (dan padanannya `[data-tab-node]` di tab; pseudo-nya harus hidup di luar `.term-node`
  * yang `overflow: hidden`), dan selector itu disalin apa adanya dari nodeterm.
  *
- * `waiting` dapat kelasnya SENDIRI, dengan alasan yang sama dengan pecahnya chip di atas: halo
- * merah berdenyut di sekeliling seluruh node adalah penanda terkencang yang dimiliki canvas ini,
- * dan memakainya untuk turn yang cuma habis akan membatalkan chip amber yang baru saja dipasang di
- * atasnya. `attention` (merah, berdenyut) tinggal milik `blocked`.
+ * Turn ended (`waiting`) gets no class: the shared status model treats it as calm idle, so the node
+ * shows no ring. `attention` (red, pulsing) belongs to `blocked` only.
  */
 export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; status?: AgentStatus }): string {
   return (
@@ -68,7 +72,6 @@ export function termNodeClass(o: { selected?: boolean; collapsed?: boolean; stat
     (o.selected ? ' term-node--selected' : '') +
     (o.collapsed ? ' term-node--collapsed' : '') +
     (o.status === 'working' ? ' working' : '') +
-    (o.status === 'waiting' ? ' waiting' : '') +
     (o.status === 'blocked' ? ' attention' : '')
   )
 }
@@ -112,19 +115,20 @@ export default function NodeChrome(props: NodeChromeProps) {
 
   // The colour lives in the menu (VS Code tab colour), never as a coloured button that reads as status.
   const colorItem: VscodeMenuItem = { type: 'item', id: 'color', label: NODE_COLOR_MENU_LABEL, onSelect: () => setColorOpen(true) }
+  const renameItem: VscodeMenuItem = { type: 'item', id: 'rename', label: 'Rename…', onSelect: beginEdit }
   const toolbar: NodeToolbarProps = {
     onRefresh: props.onRefresh,
     searchOpen: props.searchOpen, onToggleSearch: props.onToggleSearch,
     micActive: props.micActive, onToggleMic: props.onToggleMic,
     commentsOpen, onToggleComments: () => setCommentsOpen((o) => !o), commentCount: props.comments.length,
     maximized: max.maximized, onToggleMaximize: () => max.toggle?.(), hideMaximize: !max.toggle,
-    onClose: props.onClose,
+    onClose: props.onClose, closeLabel: props.closeLabel,
     onStop: props.onStop,
     onAiName: props.onAiName, aiNaming: props.aiNaming,
     onBroadcast: props.onBroadcast, broadcastActive: props.broadcastActive, broadcastDisabled: props.broadcastDisabled,
     hideLinks: props.hideLinks, onToggleHideLinks: props.onToggleHideLinks,
-    // Tab mode is view-only (no header to anchor the picker on), so no colour row there.
-    extraMenuItems: inTab ? props.menuItems : [...(props.menuItems ?? []), colorItem],
+    // Tab mode is view-only (no header to anchor the picker or the title field on), so no colour or rename row there.
+    extraMenuItems: inTab ? props.menuItems : [...(props.menuItems ?? []), renameItem, colorItem],
   }
   const comments = commentsOpen && (
     <NodeComments comments={props.comments} onAdd={props.onAddComment} onClose={() => setCommentsOpen(false)} />
@@ -146,7 +150,7 @@ export default function NodeChrome(props: NodeChromeProps) {
   }
 
   return (
-    <div ref={headerRef} className="node-header relative" onDoubleClick={onHeaderDoubleClick} style={{ '--nc-node-color': props.color } as CSSProperties}>
+    <div ref={headerRef} className="node-header relative" onDoubleClick={onHeaderDoubleClick} onContextMenu={props.onContextMenu} style={{ '--nc-node-color': props.color } as CSSProperties}>
       {!fixedLayout && (
         <IconTooltip label={props.collapsed ? 'Expand' : 'Collapse'}>
           <ToolbarButton
@@ -158,7 +162,7 @@ export default function NodeChrome(props: NodeChromeProps) {
         </IconTooltip>
       )}
 
-      {props.icon && <span className={cn('node-icon codicon', `codicon-${props.icon}`)} aria-hidden="true" />}
+      {(props.iconClass || props.icon) && <span className={cn('node-icon', props.iconClass ?? `codicon codicon-${props.icon}`)} aria-hidden="true" />}
 
       {editing ? (
         <Textfield
@@ -170,9 +174,11 @@ export default function NodeChrome(props: NodeChromeProps) {
           onKeyDown={onTitleKey} onBlur={commit}
         />
       ) : (
-        <span className="nodrag node-title" title={props.titleHint ? `${props.titleHint}\nClick to rename` : 'Rename'} onClick={beginEdit}>
-          <NodeNameLabel name={props.name} label={props.name ? props.title : props.title || UNTITLED} />
-        </span>
+        <IconTooltip label={props.titleHint ? `${props.titleHint} · Click to rename` : 'Click to rename'}>
+          <span className="nodrag node-title" onClick={beginEdit}>
+            <NodeNameLabel name={props.name} label={props.name ? props.title : props.title || UNTITLED} />
+          </span>
+        </IconTooltip>
       )}
 
       {props.description && !editing && (

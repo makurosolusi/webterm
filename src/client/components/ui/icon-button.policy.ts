@@ -8,8 +8,9 @@ export interface TooltipPolicyViolation {
   snippet: string
 }
 
-// Opening tag of <button>/<Button>; `=>` inside attribute expressions does not end the tag.
-const OPENING_TAG = /<(button|Button)\b(?:=>|[^>])*>/g
+// Opening tag of <button>/<Button> and the VS Code element buttons (`ToolbarButton`, `Button as
+// VscodeButton`) node headers use; `=>` inside attribute expressions does not end the tag.
+const OPENING_TAG = /<(button|Button|ToolbarButton|VscodeButton)\b(?:=>|[^>])*>/g
 // Wrappers that give their single child a visible tooltip. VscodeTooltip is the older VS Code
 // layer primitive (output toolbar, timeline) and also renders a real hover, so it counts.
 // A Radix `<X.Trigger asChild>` between them (menu/popover button with a tooltip) passes the

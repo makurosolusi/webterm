@@ -131,17 +131,6 @@
   animation: nt-attention-glow 1.8s ease-in-out infinite;
 }
 
-/* Turn-ended (waiting): sepupu TENANG dari dua glow di atas — amber, satu ring tipis, TANPA halo
-   pseudo dan tanpa animasi. Turn yang habis bukan keadaan mendesak: ia laporan. Halo merah
-   berdenyut sengaja tinggal milik `blocked`, satu-satunya status yang berarti kerja MANDEG sampai
-   pengguna bertindak — kalau keduanya memakai halo yang sama, chip amber di header dibatalkan oleh
-   node yang mengelilinginya. */
-.term-node.waiting {
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--state-warning) 35%, transparent),
-    0 0 6px 1px color-mix(in srgb, var(--state-warning) 16%, transparent);
-}
-
 /* ---- Header (tab) ----
    Tinggi tetap 35px seperti tab editor. Tidak terpilih = tab nonaktif: latar dan teks redup.
    The node colour is only a 2px accent on the left edge (VS Code tab colour), set inline as

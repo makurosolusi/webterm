@@ -53,6 +53,7 @@ const viewer = vi.hoisted(() => ({ props: null as null | { onOpenAsText?: () => 
 vi.mock('./viewers/ViewerHost', () => ({ ViewerHost: (p: typeof viewer.props) => { viewer.props = p; return <div data-testid="viewer" /> } }))
 
 import EditorNode from './EditorNode'
+import { expectSharedChrome } from './nodeChromeKinds.testkit'
 
 // test-only: jsdom has no ResizeObserver.
 beforeAll(() => {
@@ -63,7 +64,7 @@ afterEach(() => { cleanup(); fake.state.value = 'a'; fake.state.created = 0; fak
 type Meta = { content: string; version: string; encoding: 'utf8' }
 const META: Meta = { content: 'a', version: 'v1', encoding: 'utf8' }
 
-function mount(path: string, opts: { readMeta?: () => Promise<Meta>; writeChecked?: () => Promise<unknown>; nodes?: Node[]; edges?: Edge[] } = {}) {
+function mount(path: string, opts: { readMeta?: () => Promise<Meta>; writeChecked?: () => Promise<unknown>; nodes?: Node[]; edges?: Edge[]; data?: Record<string, unknown> } = {}) {
   const readMeta = vi.fn(opts.readMeta ?? (() => Promise.resolve(META)))
   const writeChecked = opts.writeChecked ?? (() => Promise.resolve({ ok: true, version: 'v2' }))
   // A real flow, so `updateNodeData` (Open as Text) reaches the node's props as in the app.
@@ -71,7 +72,7 @@ function mount(path: string, opts: { readMeta?: () => Promise<Meta>; writeChecke
     editor: (p: NodeProps) => <EditorNode {...(p as ComponentProps<typeof EditorNode>)} readMeta={readMeta} writeChecked={writeChecked as never} />,
     files: () => null,
   }
-  const node: Node = { id: 'n1', type: 'editor', position: { x: 0, y: 0 }, width: 600, height: 400, data: { filePath: path } }
+  const node: Node = { id: 'n1', type: 'editor', position: { x: 0, y: 0 }, width: 600, height: 400, data: { filePath: path, ...opts.data } }
   const r = render(
     <ReactFlowProvider>
       <div style={{ width: 800, height: 600 }}>
@@ -154,12 +155,45 @@ describe('conflict Compare', () => {
   })
 })
 
+describe('shared header (NodeChrome)', () => {
+  const nodeEl = () => document.querySelector<HTMLElement>('.react-flow__node[data-id="n1"]')!
+  it('a text editor has the same header as every node: Maximize, "…", Close, edge resize, no resize button', async () => {
+    mount('/x/app.ts')
+    await ready()
+    expect(header().getByRole('button', { name: 'Word wrap' }).closest('.node-header-actions')).not.toBeNull()
+    expectSharedChrome(nodeEl())
+  })
+
+  it('a preview (image) node gets the same header', async () => {
+    mount('/x/shot.png')
+    await waitFor(() => expect(viewer.props).not.toBeNull())
+    expectSharedChrome(nodeEl())
+  })
+
+  it('"…" also offers the editor rows: Save, Go to Line/Column…, word wrap and Fit width', async () => {
+    mount('/x/app.ts')
+    await ready()
+    fireEvent.click(nodeEl().querySelector('.node-header [data-title="More Actions…"]')!)
+    const rows = [...document.querySelectorAll('[role^="menuitem"]')].map((r) => r.textContent)
+    expect(rows).toEqual(expect.arrayContaining(['Save', 'Go to Line/Column…', 'Turn word wrap on', 'Fit width to content']))
+  })
+
+  it('a renamed node shows its title; collapse folds the node to its header', async () => {
+    const { container } = mount('/x/app.ts', { data: { title: 'API entry' } })
+    await ready()
+    expect(container.querySelector('.node-header .node-title')?.textContent).toBe('API entry')
+    fireEvent.click(container.querySelector('.node-header [data-title="Collapse"]')!)
+    await waitFor(() => expect(container.querySelector('.editor-node')?.classList.contains('term-node--collapsed')).toBe(true))
+    expect(nodeEl().querySelectorAll('.node-edge-resize')).toHaveLength(0)
+  })
+})
+
 describe('title and breadcrumb', () => {
-  it('title truncates in an inner label span and the icon carries the type colour', async () => {
+  it('title is the file name on the shared NodeChrome, and the icon carries the type colour', async () => {
     const { container } = mount('/x/app.ts')
     await ready()
-    expect(container.querySelector('.editor-node__name .editor-node__label')?.textContent).toBe('app.ts')
-    expect(container.querySelector('.editor-node__name .editor-node__icon')?.className).toContain('files-icon--blue')
+    expect(container.querySelector('.node-header .node-title')?.textContent).toBe('app.ts')
+    expect(container.querySelector('.node-header .node-icon')?.className).toContain('files-icon--blue')
   })
 
   it('is relative to the Files node that opened the file, with folder segments that show it', async () => {

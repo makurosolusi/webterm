@@ -1,6 +1,7 @@
 // The Plan node's mini-graph: one column per wave (what may run together), one card per task with its
 // dependencies, lease and effort; gate tasks are marked as human decisions. Live statuses once approved.
 import { ToolbarButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import type { PlanTaskData } from '../shared/workspace'
 import type { TaskStatus } from './PlanNode.model'
 
@@ -36,9 +37,10 @@ export function PlanGraph({ tasks, waves, status, onRemove }: PlanGraphProps) {
                     {t.kind === 'gate' ? <span className="plan-node__badge">Your decision</span> : <span className="plan-node__badge">{str(t.brief['effort'])}</span>}
                     {st && <span className={`plan-node__status plan-node__status--${st}`}>{st}</span>}
                     {onRemove && (
-                      <ToolbarButton className="plan-node__remove" label={`Remove task ${key}`} title={`Remove task ${key}`} onClick={() => onRemove(key)}>
+                      <IconTooltip label={`Remove task ${key}`}>
+                      <ToolbarButton className="plan-node__remove" label={`Remove task ${key}`} onClick={() => onRemove(key)}>
                         <span className="codicon codicon-close" aria-hidden="true" />
-                      </ToolbarButton>
+                      </ToolbarButton></IconTooltip>
                     )}
                   </div>
                   <div className="plan-node__objective">{str(t.brief['objective'])}</div>
