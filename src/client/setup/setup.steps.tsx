@@ -18,11 +18,13 @@ import { ProjectsFolderSetting } from '../workspaceCreate/ProjectsFolderSetting'
 import { BrowserStep } from './setup.browser'
 import { ClaudeStep } from './setup.claude'
 import { SETUP_TEXT } from './setup.labels'
-import { LoadRetry, StepFooter, Tiles, type StepProps } from './setup.ui'
+import { StepFooter, StepLoading, StepPage, Tiles, type StepProps, type StepSetting } from './setup.ui'
 
 /** How much Central may do; each level is the capability of that name (it implies the ones before). */
 export type CentralLevel = 'off' | 'central' | 'workers' | 'autonomy'
 const LEVELS: readonly CentralLevel[] = ['off', 'central', 'workers', 'autonomy']
+const CENTRAL_SETTING: StepSetting = { where: SETUP_TEXT.central.where, section: 'central', field: 'central.level' }
+const BASICS_SETTING: StepSetting = { where: SETUP_TEXT.basics.where, section: 'appearance', field: 'appTheme' }
 
 /** The level the server's capability state amounts to (highest one on). */
 export function centralLevel(data: CapabilitiesResponse): CentralLevel {
@@ -37,13 +39,7 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
   const [level, setLevel] = useState<CentralLevel | null>(null)
   useEffect(() => { if (data && level === null) setLevel(centralLevel(data)) }, [data, level])
   if (!data || level === null) {
-    return (
-      <div className="flex flex-col gap-3" data-setup-step="central">
-        <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
-        {error ? <LoadRetry load={refresh} /> : null}
-        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} locked={SETUP_TEXT.waitForLoad} />
-      </div>
-    )
+    return <StepLoading step="central" setting={CENTRAL_SETTING} nav={nav} error={error} loading={T.loading} failed={T.loadFailed} retry={refresh} />
   }
   // Turn the chosen level on (prerequisites follow) and the next level off (its dependents follow).
   const commit = async (): Promise<string | null> => {
@@ -52,12 +48,10 @@ export function CentralStep({ nav }: StepProps): React.JSX.Element {
     return ok ? null : T.saveFailed
   }
   return (
-    <div className="flex flex-col gap-3" data-setup-step="central">
-      <p className="m-0 text-sm">{T.intro}</p>
+    <StepPage step="central" setting={CENTRAL_SETTING} footer={<StepFooter nav={nav} commit={commit} />}>
       <Tiles<CentralLevel> label={T.pick} options={LEVELS} names={T.modes} help={T.help} value={level} onChange={setLevel} />
       {level !== 'off' ? <CentralLaunchStatus /> : null}
-      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.central' }} commit={commit} />
-    </div>
+    </StepPage>
   )
 }
 
@@ -70,25 +64,24 @@ export function BasicsStep({ nav, settings, update }: StepProps & { settings: Se
   const notify = useDesktopNotify()
   const openCapabilities = (): void => openSettingsAt('capabilities', 'capability.telegram')
   return (
-    <div className="flex flex-col gap-3" data-setup-step="basics">
+    <StepPage step="basics" setting={BASICS_SETTING} footer={<StepFooter nav={nav} />}>
       <Tiles label={T.theme} options={THEMES} names={T.themes} value={settings.appTheme} onChange={(appTheme) => update({ appTheme })} />
       <ProjectsFolderSetting value={settings.defaultProjectsFolder} onChange={(defaultProjectsFolder) => update({ defaultProjectsFolder })} />
       <div className="flex items-start gap-2">
         <Switch id="setup-notify" checked={notify.on} disabled={notify.lock !== undefined} aria-describedby="setup-notify-reason" onCheckedChange={notify.set} />
         <div className="flex flex-col">
           <Label htmlFor="setup-notify">{T.notify}</Label>
-          <span className="text-xs opacity-70">{T.notifyHint}</span>
+          <span className="text-xs text-(--vscode-descriptionForeground)">{T.notifyHint}</span>
           {notify.lock ? <DisabledReason id="setup-notify-reason" {...notify.lock} /> : null}
           {notify.refused ? <p id="setup-notify-reason" role="alert" className="m-0 text-xs">{NOTIFY_TEXT.refused}</p> : null}
         </div>
       </div>
-      <p className="m-0 text-xs">
-        {T.telegram}:{' '}
-        <Button size="xs" variant="link" className="px-0" onClick={openCapabilities}>{T.telegramLater}</Button>
+      <p className="m-0 flex flex-wrap items-center gap-x-1 text-xs">
+        <span>{T.telegram}:</span>
+        <Button size="xs" variant="link" className="h-auto min-h-0 px-0" onClick={openCapabilities}>{T.telegramLater}</Button>
       </p>
-      <p className="m-0 text-xs opacity-70">{T.telemetry}</p>
-      <StepFooter nav={nav} where={T.where} at={{ section: 'terminal', field: 'appTheme' }} />
-    </div>
+      <p className="m-0 text-xs text-(--vscode-descriptionForeground)">{T.telemetry}</p>
+    </StepPage>
   )
 }
 

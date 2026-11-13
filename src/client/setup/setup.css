@@ -1,0 +1,27 @@
+/* First-run wizard: stepper markers, choice tiles, and the Claude card hosted inside a step. */
+
+/* Stepper marker: one 20px circle per step; number for current/upcoming/skipped, check for done. */
+.setup-marker {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 600; line-height: 1;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  color: var(--vscode-descriptionForeground);
+}
+.setup-marker .codicon { font-size: 12px; }
+.setup-marker[data-kind='current'] { border-color: var(--vscode-focusBorder); color: var(--vscode-foreground); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+.setup-marker[data-kind='done'] { border-color: var(--vscode-button-background); background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.setup-marker[data-kind='skipped'] { border-style: dashed; }
+
+/* Narrow-width progress bar (the list is hidden below `sm`). */
+.setup-progress__seg { flex: 1; height: 3px; border-radius: 2px; background: var(--vscode-widget-border, var(--vscode-panel-border)); }
+.setup-progress__seg[data-kind='done'], .setup-progress__seg[data-kind='current'] { background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
+.setup-progress__seg[data-kind='skipped'] { opacity: 0.6; background: var(--vscode-descriptionForeground); }
+
+/* Choice tiles: outline cards; the chosen one carries the accent border and a check. */
+.setup-tile[aria-pressed='true'] { border-color: var(--vscode-focusBorder); background: var(--vscode-list-inactiveSelectionBackground, transparent); }
+.setup-tile__check { color: var(--vscode-focusBorder); }
+
+/* The Claude provider card inside the Claude step: the step heading and description already say what it
+   is, so the card's own group heading would be a second and third heading for one choice. The heading
+   stays in the DOM (it still names the region). */
+[data-setup-step='claude'] .st-group-title, [data-setup-step='claude'] .st-group-desc { display: none; }

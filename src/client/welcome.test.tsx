@@ -34,14 +34,14 @@ describe('Welcome', () => {
   describe('Finish setup card', () => {
     const mixed: SetupState = { completedAt: null, steps: { claude: 'done', browser: 'skipped' } } // test-only
 
-    it('lists every step with done / skipped / not set and counts done steps', () => {
+    it('lists every step with Done / Skipped / Not started, the wizard words and counts done steps', () => {
       render(<Welcome onNewProject={noop} onCreateEmpty={noop} setup={mixed} />)
       expect(screen.getByRole('heading', { name: 'Finish setup · 1 of 4' })).toBeTruthy()
       const row = (label: string) => screen.getByText(label).closest('button')!.textContent
-      expect(row('Claude')).toBe('Claudedone')
-      expect(row('Browser')).toBe('Browserskipped')
-      expect(row('Central Agent')).toBe('Central Agentnot set')
-      expect(row('Basics')).toBe('Basicsnot set')
+      expect(row('Claude')).toBe('ClaudeDone')
+      expect(row('Browser')).toBe('BrowserSkipped')
+      expect(row('Central Agent')).toBe('Central AgentNot started')
+      expect(row('Basics')).toBe('BasicsNot started')
     })
 
     it('a row opens setup at that step; the button resumes', () => {

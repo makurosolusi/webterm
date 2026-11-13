@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // The wizard shell: hidden without ?setup=, resumes at the first unfinished step, ?setup=<step> opens
 // there, Skip / Back / Continue PATCH progress per step, Escape keeps progress, Finish sets completedAt.
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +11,8 @@ import { AppRouteSync } from '../appRoute'
 import { registerCommands } from '../commandRegistry'
 import { resetCapabilitiesCache } from '../useCapabilities'
 import SetupDialog from './SetupDialog'
-import { fakeServer } from './setup.fakeServer'
+import { CONN_NOT_FOUND, fakeServer } from './setup.fakeServer'
+import { CONNECTION_TEXT } from '../claudeLauncher/ConnectionTest'
 import { SETUP_TEXT } from './setup.labels'
 import { openSetup } from './setup.open'
 
@@ -118,5 +119,82 @@ describe('SetupDialog', () => {
     expect(run).toHaveBeenCalledOnce()
     await waitFor(() => expect(where).toBe('/'))
     off()
+  })
+
+  describe('frame and stepper', () => {
+    const item = (s: string): HTMLElement => document.querySelector(`[data-step="${s}"]`) as HTMLElement
+    const footer = (): HTMLElement => document.querySelector('[data-setup-footer]') as HTMLElement
+
+    it('numbered stepper: done / skipped / current / upcoming, aria-current only on the current step', async () => {
+      mount('/?setup=central', withSteps({ claude: 'done', browser: 'skipped' }))
+      const current = document.querySelectorAll('[aria-current="step"]')
+      expect(current).toHaveLength(1)
+      expect(current[0]).toBe(item('central'))
+      expect(item('claude').querySelector('.setup-marker .codicon-check')).toBeTruthy()
+      expect(item('browser').querySelector('.setup-marker .codicon-circle-slash')).toBeTruthy()
+      expect(item('basics').querySelector('.setup-marker')?.textContent).toBe('4')
+      // Answered steps go back; the current and upcoming ones are not buttons.
+      expect(item('claude').querySelector('button')).toBeTruthy()
+      expect(item('browser').querySelector('button')).toBeTruthy()
+      expect(item('central').querySelector('button')).toBeNull()
+      expect(item('basics').querySelector('button')).toBeNull()
+      expect(screen.getByRole('navigation', { name: SETUP_TEXT.progress })).toBeTruthy()
+      await screen.findByText(SETUP_TEXT.central.modes.off)
+    })
+
+    it('a done step in the stepper reopens it without a patch; aria-current follows', async () => {
+      mount('/?setup=browser', withSteps({ claude: 'done' }))
+      fireEvent.click(item('claude').querySelector('button')!)
+      await waitFor(() => expect(heading()).toBe(SETUP_TEXT.steps.claude))
+      expect(where).toBe('/?setup=claude')
+      expect(item('claude').getAttribute('aria-current')).toBe('step')
+      expect(item('claude').getAttribute('data-state')).toBe('current')
+      expect(patches).toEqual([])
+    })
+
+    it('header has title, Step n of 4 and Close; footer has Back (quiet), Skip (ghost), Continue (primary)', async () => {
+      mount('/?setup=browser')
+      expect(screen.getByRole('heading', { name: SETUP_TEXT.title })).toBeTruthy()
+      expect(screen.getByText(SETUP_TEXT.stepOf(2, 4))).toBeTruthy()
+      const f = footer()
+      const btn = (name: string): HTMLElement => within(f).getByRole('button', { name })
+      expect(btn(SETUP_TEXT.back).getAttribute('data-variant')).toBe('ghost')
+      expect(btn(SETUP_TEXT.skip).getAttribute('data-variant')).toBe('ghost')
+      expect(btn(SETUP_TEXT.next).getAttribute('data-variant')).toBe('default')
+      // Order: Back, Skip, Continue.
+      expect(within(f).getAllByRole('button').map((b) => b.textContent)).toEqual([SETUP_TEXT.back, SETUP_TEXT.skip, SETUP_TEXT.next])
+      await screen.findByText(SETUP_TEXT.browser.installed)
+      fireEvent.click(screen.getByRole('button', { name: SETUP_TEXT.close }))
+      await waitFor(() => expect(where).toBe('/'))
+    })
+
+    it('Claude: not tested with a request = a notice, Continue still works; a passing test clears it', async () => {
+      mount('/?setup=claude')
+      expect((await within(footer()).findByRole('status')).textContent).toBe(SETUP_TEXT.claude.untested)
+      click(CONNECTION_TEXT.button.idle)
+      await screen.findByText(/^Connection works/)
+      expect(document.querySelector('[data-setup-notice]')).toBeNull()
+    })
+
+    it('Claude: a failed test says it can be fixed later and never blocks Continue', async () => {
+      fakeServer({ connection: CONN_NOT_FOUND })
+      mount('/?setup=claude')
+      expect((await within(footer()).findByRole('status')).textContent).toBe(SETUP_TEXT.claude.failed)
+      click(SETUP_TEXT.next)
+      await waitFor(() => expect(heading()).toBe(SETUP_TEXT.steps.browser))
+      expect(patches).toEqual([{ setup: { steps: { claude: 'done' } } }])
+    })
+
+    it('a new step takes focus on its heading; Tab wraps inside the dialog (focus trap)', async () => {
+      mount('/?setup=basics', withSteps({ claude: 'done', browser: 'done', central: 'done' }))
+      await waitFor(() => expect(document.activeElement?.hasAttribute('data-setup-heading')).toBe(true))
+      const dialog = document.querySelector('[data-setup-dialog]') as HTMLElement
+      const tabbables = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]')]
+      tabbables.at(-1)!.focus()
+      fireEvent.keyDown(tabbables.at(-1)!, { key: 'Tab' })
+      expect(document.activeElement).toBe(tabbables[0])
+      fireEvent.keyDown(tabbables[0]!, { key: 'Tab', shiftKey: true })
+      expect(document.activeElement).toBe(tabbables.at(-1))
+    })
   })
 })

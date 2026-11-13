@@ -55,7 +55,7 @@ describe('Claude step', () => {
     expect(s.calls.filter((c) => c.url === '/api/claude-provider/test').map((c) => c.body)).toEqual([{ request: false }, { request: true }])
     expect(screen.getByRole('button', { name: test.again })).toBeTruthy()
     expect(s.calls.some((c) => c.url === '/api/claude-launch/test')).toBe(false)
-    expect(screen.getByText(SETUP_TEXT.claude.intro)).toBeTruthy()
+    expect(screen.getByText(SETUP_TEXT.description.claude)).toBeTruthy()
     expect(await screen.findByRole('region', { name: 'Connection' })).toBeTruthy()
     expect(screen.getByText(SETUP_TEXT.changeLater(SETUP_TEXT.claude.where))).toBeTruthy()
   })
@@ -316,8 +316,8 @@ describe('Basics step', () => {
     window.addEventListener('webterm:open-settings', opened)
     click(SETUP_TEXT.basics.telegramLater)
     expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ section: 'capabilities', field: 'capability.telegram' })
-    click(SETUP_TEXT.changeLater(SETUP_TEXT.basics.where)) // the "Change later" hint is a link to the setting
-    expect((opened.mock.calls[1][0] as CustomEvent).detail).toEqual({ section: 'terminal', field: 'appTheme' })
+    click(SETUP_TEXT.openSettings) // the quiet "change later" line links to the exact setting
+    expect((opened.mock.calls[1][0] as CustomEvent).detail).toEqual({ section: 'appearance', field: 'appTheme' })
     window.removeEventListener('webterm:open-settings', opened)
     expect(screen.getByRole('button', { name: SETUP_TEXT.finish })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Default projects folder' })).toBeTruthy() // the projects folder row, Browse + recent
