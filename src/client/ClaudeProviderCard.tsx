@@ -4,13 +4,15 @@
 // until Save and is cleared right after; it is never logged or put in an error message.
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { ActionButton, useAction } from '@/components/ui/action'
-import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ClaudeProviderCommand } from './ClaudeProviderCommand'
 import { VscodeNotification, type VscodeNotificationSeverity } from './components/vscode/vscodeNotification'
 import { PROJECT_MODEL_ALIASES } from '../shared/settings.projectModels'
 import { SettingsCombobox } from './SettingsCombobox'
+import { SettingsGroup, SettingsSegmented, type SegmentedOption } from './SettingsControls'
+import { Field } from './SettingsFieldRow'
+import { SettingsMessage } from './SettingsMessage'
 import { reloadSettings } from './useSettings'
 import { PROVIDER_PATH as PATH, RESET_PATH, providerCall as call, type Credential, type Mode, type State } from './claudeProvider.api'
 import { ConnectionTest, testButtonLabel } from './claudeLauncher/ConnectionTest'
@@ -18,7 +20,7 @@ import { useConnectionTest, type ConnectionTestHandle } from './claudeLauncher/c
 
 const MODE_LIST: Mode[] = ['login', 'apiKey', 'custom', 'command']
 const CREDENTIAL_LIST: Credential[] = ['authToken', 'apiKey']
-const MODEL_PRESETS = [{ value: '', label: 'Claude Code default' }, ...PROJECT_MODEL_ALIASES.map((m) => ({ value: m }))]
+const MODEL_PRESETS = [{ value: '', label: 'Claude Code default' }, ...PROJECT_MODEL_ALIASES.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }))]
 
 /** A gateway URL: http(s), and never with a user or password in it (it would be stored and remembered). */
 export function validateGatewayUrl(v: string): string | null {
@@ -32,38 +34,33 @@ export function validateGatewayUrl(v: string): string | null {
   }
 }
 
-/** One-of-N choice as a row of shadcn buttons (aria-pressed), no raw form controls. */
-function Choice<T extends string>(p: { label: string; options: T[]; names: Record<T, string>; value: T; onChange(v: T): void }): React.JSX.Element {
-  return (
-    <div role="group" aria-label={p.label} className="flex flex-wrap gap-1">
-      {p.options.map((o) => (
-        <Button key={o} size="sm" variant={p.value === o ? 'default' : 'outline'} aria-pressed={p.value === o} onClick={() => p.onChange(o)}>{p.names[o]}</Button>
-      ))}
-    </div>
-  )
-}
-
 export const PROVIDER_TEXT = {
   title: 'Connection',
-  why: 'Used by every Claude agent node, Central and the background helpers (classifier, planner, summaries, names).',
-  modes: { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'Custom endpoint', command: 'Custom command (optional)' } as Record<Mode, string>,
+  why: 'How every Claude agent, Central and the background helpers sign in to Claude.',
+  mode: 'Sign in with',
+  modes: { login: 'Claude login', apiKey: 'API key', custom: 'Gateway', command: 'Command' } as Record<Mode, string>,
   modeHelp: {
     login: 'Default. Claude uses the account you logged in with (claude auth login). No key is stored.',
     apiKey: 'Billed per token to the Console account of the key. Claude Code asks once in each new agent node whether to use it.',
-    custom: 'An Anthropic-compatible proxy or gateway (ANTHROPIC_BASE_URL) with its own key or token.',
-    command: 'Optional, for wrappers that inject credentials or env, e.g. op run, doppler run or envman. Claude runs through your command, which supplies its credential.',
+    custom: 'An Anthropic-compatible proxy or gateway with its own key or token.',
+    command: 'For wrappers that supply the credential, e.g. op run, doppler run or envman. Claude runs through your command.',
   } as Record<Mode, string>,
   baseUrl: 'Base URL',
+  baseUrlHint: 'The address of your gateway.',
   badUrl: 'Enter a web address starting with https:// or http://.',
   urlCredentials: 'Leave the user and password out of the address; put the key in Key or token.',
   credential: 'Credential type',
-  credentials: { authToken: 'Auth token (Authorization: Bearer)', apiKey: 'API key (x-api-key)' } as Record<Credential, string>,
+  credentialHint: 'Use what your gateway expects: an auth token is sent as a Bearer header, an API key as x-api-key.',
+  credentials: { authToken: 'Auth token', apiKey: 'API key' } as Record<Credential, string>,
   key: 'Key or token',
   keySet: 'Saved. Type a new one to replace it.',
   keyUnset: 'Not set',
+  keySetHint: 'A key is saved. It is never shown again.',
+  keyUnsetHint: 'Stored on this server only, never shown again.',
   removeKey: 'Remove key',
   retry: 'Retry',
-  model: 'Default model (optional)',
+  model: 'Default model',
+  modelHint: 'Optional. Empty uses the Claude Code default.',
   save: 'Save',
   saving: 'Saving…',
   clean: 'Saved',
@@ -82,6 +79,9 @@ export const PROVIDER_TEXT = {
   resetting: 'Resetting…',
   resetFailed: (code: string): string => `Could not reset (${code}). Try again.`,
 }
+
+const MODE_OPTIONS: readonly SegmentedOption<Mode>[] = MODE_LIST.map((value) => ({ value, label: PROVIDER_TEXT.modes[value] }))
+const CREDENTIAL_OPTIONS: readonly SegmentedOption<Credential>[] = CREDENTIAL_LIST.map((value) => ({ value, label: PROVIDER_TEXT.credentials[value] }))
 
 /** Saves the pending edits (resolves true when saved or nothing to save); filled in by the card. */
 export type ProviderCommitRef = MutableRefObject<(() => Promise<boolean>) | null>
@@ -184,69 +184,83 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
     commitRef.current = async () => mode === 'command' ? (commandCommit.current ? commandCommit.current() : true) : !dirty || save()
   })
 
+  const keyId = 'st-claude-key'
+  // One status line in the footer: the save just made, else the previous test, else running sessions.
+  const status = saved && state?.lastTest?.ok === false
+    ? <p key={saved.seq} role="status" className="st-actions-status st-actions-status--warning"><span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.savedCheckFailed}</p>
+    : saved && state ? <p key={saved.seq} role="status" className="st-actions-status">{PROVIDER_TEXT.saved} {PROVIDER_TEXT.savedAt(saved.at)} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p>
+    : state && state.restartNeeded > 0 ? <p className="st-actions-status">{PROVIDER_TEXT.restart(state.restartNeeded)}</p>
+    : null
   return (
-    <section aria-label={PROVIDER_TEXT.title} className="flex flex-col gap-2" data-field="claude-provider">
-      <h3>{PROVIDER_TEXT.title}</h3>
-      <p className="text-xs opacity-70">{PROVIDER_TEXT.why}</p>
-      {state === null && error === null ? <p role="status" className="text-xs opacity-70">{PROVIDER_TEXT.loading}</p> : null}
-      {p?.configError ? (
-        <div role="alert" className="flex flex-col items-start gap-2 rounded border border-[var(--vscode-inputValidation-errorBorder,var(--vscode-errorForeground))] bg-[var(--vscode-inputValidation-errorBackground)] p-2 text-xs">
-          <p><span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.damaged}</p>
-          <ActionButton size="sm" variant="outline" disabled={busy} action={resetAct} busyLabel={PROVIDER_TEXT.resetting}>{resetting ? PROVIDER_TEXT.resetting : PROVIDER_TEXT.reset}</ActionButton>
-        </div>
-      ) : null}
-      {state ? (
-        <>
-          <Choice label={PROVIDER_TEXT.title} options={MODE_LIST} names={PROVIDER_TEXT.modes} value={mode} onChange={setMode} />
-          <p className="text-xs opacity-70">{PROVIDER_TEXT.modeHelp[mode]}</p>
-          {mode === 'command' && p ? (
-            <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest}
-              onError={(m, retry) => setToast({ seq: ++seq.current, severity: 'error', title: m, retry: commitRef ? undefined : retry })} pending={commandCommit} hideSave={!!commitRef} />
-          ) : null}
-          {mode === 'custom' ? (
-            <>
-              <SettingsCombobox ariaLabel={PROVIDER_TEXT.baseUrl} fieldId="claude.gatewayUrl" mono presets={[]} placeholder="https://llm-gateway.example.com"
-                value={baseUrl} validate={validateGatewayUrl} onDraft={setBaseUrl} onCommit={setBaseUrl} />
-              <Choice label={PROVIDER_TEXT.credential} options={CREDENTIAL_LIST} names={PROVIDER_TEXT.credentials} value={credential} onChange={setCredential} />
-            </>
-          ) : null}
-          {mode !== 'login' && mode !== 'command' ? (
-            <>
-              <Input aria-label={PROVIDER_TEXT.key} type="password" autoComplete="off" value={secret}
-                placeholder={p?.secretSet ? PROVIDER_TEXT.keySet : PROVIDER_TEXT.keyUnset} onChange={(e) => setSecret(e.target.value)} />
-              <SettingsCombobox ariaLabel={PROVIDER_TEXT.model} fieldId="claude.providerModel" presets={MODEL_PRESETS}
-                value={model} onDraft={setModel} onCommit={setModel} />
-            </>
-          ) : null}
-          {mode !== 'command' ? <div className="flex items-center gap-2">
-            {commitRef ? null : (
-              <IconTooltip label={saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean} disabled={busy || !dirty}
-                disabledReason={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}>
-                <ActionButton size="sm" disabled={busy || !dirty} action={saveAct} busyLabel={PROVIDER_TEXT.saving}>
-                  {saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</ActionButton>
-              </IconTooltip>
-            )}
-            <ActionButton variant="outline" size="sm" disabled={busy} action={testAct} busyLabel={testing ? testLabel : PROVIDER_TEXT.saving}>{testLabel}</ActionButton>
-            {mode !== 'login' && p?.secretSet ? <ActionButton variant="outline" size="sm" disabled={busy} action={removeKeyAct} busyLabel={PROVIDER_TEXT.saving}>{PROVIDER_TEXT.removeKey}</ActionButton> : null}
-          </div> : null}
-          {connection ? null : <ConnectionTest test={conn} />}
-          {/* The previous result (before this page ran one), from the server. */}
-          {!connection && !testing && !conn.state.final && state.lastTest ? (
-            <p role="status" className={state.lastTest.ok ? 'text-xs' : 'text-xs text-destructive'}>
-              <span className={`codicon ${state.lastTest.ok ? 'codicon-pass' : 'codicon-error'}`} aria-hidden="true" /> {state.lastTest.message}
-            </p>
-          ) : null}
-          {/* Save clears the server's lastTest, so a failed one here is a test of what was just saved. */}
-          {saved && state.lastTest?.ok === false ? <p key={saved.seq} role="status" className="text-xs text-(--vscode-editorWarning-foreground)">
-            <span className="codicon codicon-warning" aria-hidden="true" /> {PROVIDER_TEXT.savedCheckFailed}</p>
-          : saved ? <p key={saved.seq} role="status" className="text-xs">{PROVIDER_TEXT.saved} {PROVIDER_TEXT.savedAt(saved.at)} {state.restartNeeded > 0 ? PROVIDER_TEXT.restart(state.restartNeeded) : PROVIDER_TEXT.newOnly}</p> : null}
-          {!saved && state.restartNeeded > 0 ? <p className="text-xs opacity-70">{PROVIDER_TEXT.restart(state.restartNeeded)}</p> : null}
-        </>
-      ) : null}
-      {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
+    <div data-field="claude-provider">
+      <SettingsGroup title={PROVIDER_TEXT.title} description={PROVIDER_TEXT.why}>
+        {state === null && error === null ? <SettingsMessage kind="loading">{PROVIDER_TEXT.loading}</SettingsMessage> : null}
+        {p?.configError ? (
+          <SettingsMessage kind="warning">
+            {PROVIDER_TEXT.damaged}{' '}
+            <ActionButton size="xs" variant="outline" disabled={busy} action={resetAct} busyLabel={PROVIDER_TEXT.resetting}>{resetting ? PROVIDER_TEXT.resetting : PROVIDER_TEXT.reset}</ActionButton>
+          </SettingsMessage>
+        ) : null}
+        {state ? (
+          <>
+            <Field label={PROVIDER_TEXT.mode} hint={PROVIDER_TEXT.modeHelp[mode]} htmlFor="st-claude-mode">
+              <SettingsSegmented<Mode> id="st-claude-mode" ariaLabel={PROVIDER_TEXT.mode} value={mode} options={MODE_OPTIONS} onChange={setMode} />
+            </Field>
+            {mode === 'command' && p ? (
+              <ClaudeProviderCommand provider={p} busy={busy} testLabel={testLabel} commit={(id) => save(undefined, id)} test={runTest}
+                onError={(m, retry) => setToast({ seq: ++seq.current, severity: 'error', title: m, retry: commitRef ? undefined : retry })} pending={commandCommit} hideSave={!!commitRef} />
+            ) : null}
+            {mode === 'custom' ? (
+              <>
+                <Field label={PROVIDER_TEXT.baseUrl} hint={PROVIDER_TEXT.baseUrlHint} htmlFor="st-claude-url">
+                  <SettingsCombobox id="st-claude-url" ariaLabel={PROVIDER_TEXT.baseUrl} fieldId="claude.gatewayUrl" mono presets={[]} placeholder="https://llm-gateway.example.com"
+                    value={baseUrl} validate={validateGatewayUrl} onDraft={setBaseUrl} onCommit={setBaseUrl} />
+                </Field>
+                <Field label={PROVIDER_TEXT.credential} hint={PROVIDER_TEXT.credentialHint} htmlFor="st-claude-credential">
+                  <SettingsSegmented<Credential> id="st-claude-credential" ariaLabel={PROVIDER_TEXT.credential} value={credential} options={CREDENTIAL_OPTIONS} onChange={setCredential} />
+                </Field>
+              </>
+            ) : null}
+            {mode !== 'login' && mode !== 'command' ? (
+              <>
+                <Field label={PROVIDER_TEXT.key} hint={p?.secretSet ? PROVIDER_TEXT.keySetHint : PROVIDER_TEXT.keyUnsetHint} htmlFor={keyId}>
+                  <Input id={keyId} className="st-input st-input-wide" aria-label={PROVIDER_TEXT.key} type="password" autoComplete="off" value={secret}
+                    placeholder={p?.secretSet ? PROVIDER_TEXT.keySet : PROVIDER_TEXT.keyUnset} onChange={(e) => setSecret(e.target.value)} />
+                </Field>
+                <Field label={PROVIDER_TEXT.model} hint={PROVIDER_TEXT.modelHint} htmlFor="st-claude-model">
+                  <SettingsCombobox id="st-claude-model" ariaLabel={PROVIDER_TEXT.model} fieldId="claude.providerModel" presets={MODEL_PRESETS}
+                    value={model} onDraft={setModel} onCommit={setModel} />
+                </Field>
+              </>
+            ) : null}
+            {mode !== 'command' ? (
+              <div className="st-actions">
+                {status ?? <span className="st-actions-status" />}
+                {mode !== 'login' && p?.secretSet ? <ActionButton variant="outline" size="sm" disabled={busy} action={removeKeyAct} busyLabel={PROVIDER_TEXT.saving}>{PROVIDER_TEXT.removeKey}</ActionButton> : null}
+                <ActionButton variant="outline" size="sm" disabled={busy} action={testAct} busyLabel={testing ? testLabel : PROVIDER_TEXT.saving}>{testLabel}</ActionButton>
+                {commitRef ? null : (
+                  <IconTooltip label={saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean} disabled={busy || !dirty}
+                    disabledReason={!dirty && !saving ? PROVIDER_TEXT.noChanges : undefined}>
+                    <ActionButton size="sm" disabled={busy || !dirty} action={saveAct} busyLabel={PROVIDER_TEXT.saving}>
+                      {saving ? PROVIDER_TEXT.saving : dirty ? PROVIDER_TEXT.save : PROVIDER_TEXT.clean}</ActionButton>
+                  </IconTooltip>
+                )}
+              </div>
+            ) : status ? <div className="st-actions">{status}</div> : null}
+            {connection ? null : <div className="st-facts"><ConnectionTest test={conn} /></div>}
+            {/* The previous result (before this page ran one), from the server. */}
+            {!connection && !testing && !conn.state.final && state.lastTest ? (
+              <p role="status" className={'st-facts' + (state.lastTest.ok ? '' : ' text-destructive')}>
+                <span className={`codicon ${state.lastTest.ok ? 'codicon-pass' : 'codicon-error'}`} aria-hidden="true" /> {state.lastTest.message}
+              </p>
+            ) : null}
+          </>
+        ) : null}
+        {error ? <SettingsMessage kind="error">{error}</SettingsMessage> : null}
+      </SettingsGroup>
       {toast ? <VscodeNotification key={toast.seq} id={`claude-provider-${toast.seq}`} severity={toast.severity} title={toast.title}
         onClose={() => setToast((t) => (t?.seq === toast.seq ? null : t))}
         actions={toast.retry ? [{ label: PROVIDER_TEXT.retry, onClick: () => { setToast(null); toast.retry?.() } }] : undefined} /> : null}
-    </section>
+    </div>
   )
 }

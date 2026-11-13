@@ -25,4 +25,15 @@ describe('CustomAgentsSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add agent' }))
     expect(onChange.mock.calls[0]?.[0].customAgents).toEqual([expect.objectContaining({ label: 'Custom agent', launchCmd: '' })])
   })
+
+  it('custom agents: an empty state, cards inside the row, no raw id shown', () => {
+    const { rerender } = render(<CustomAgentsSettings settings={DEFAULT_SETTINGS} onChange={vi.fn()} />)
+    expect(screen.getByText('No custom agents yet.')).toBeTruthy()
+    const agent = { id: 'custom:abc123', label: 'Proxy', launchCmd: '' }
+    rerender(<CustomAgentsSettings settings={{ ...DEFAULT_SETTINGS, customAgents: [agent] }} onChange={vi.fn()} />)
+    expect(screen.queryByText('No custom agents yet.')).toBeNull()
+    const row = document.querySelector('[data-field="customAgents"]') as HTMLElement
+    expect(row.querySelector('section[aria-label="Proxy"]')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('custom:abc123')
+  })
 })

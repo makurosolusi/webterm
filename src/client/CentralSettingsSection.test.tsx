@@ -99,12 +99,16 @@ describe('registry', () => {
 })
 
 describe('Settings › Central Agent', () => {
-  it('deep link lands on the section and renders every group; Advanced starts closed', async () => {
+  it('deep link lands on the section; every group is a titled card, Advanced the folded one, closed', async () => {
     const main = await open()
     expect(toSectionId('central')).toBe('central')
     expect(within(main).getByRole('heading', { level: 2 }).textContent).toBe('Central')
     expect([...main.querySelectorAll('[data-central-group]')].map((g) => g.getAttribute('data-central-group'))).toEqual([...CENTRAL_GROUPS])
-    const advanced = main.querySelector('details[data-central-group="advanced"]') as HTMLDetailsElement
+    expect(within(main).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Central Agent', 'What Central may do', 'Spending'])
+    for (const g of ['status', 'autonomy', 'cost']) expect(main.querySelector(`[data-central-group="${g}"] [data-slot="settings-group"]`), g).toBeTruthy()
+    // No ad-hoc headings or raw details left on the page.
+    expect(main.querySelectorAll('.st-central h4, .st-central .st-capabilities-advanced').length).toBe(0)
+    const advanced = main.querySelector('[data-central-group="advanced"] details[data-slot="settings-advanced"]') as HTMLDetailsElement
     expect(advanced.open).toBe(false)
     expect([...advanced.querySelectorAll('[data-central-field]')].map((x) => x.getAttribute('data-central-field'))).toEqual(['dailySpawns', 'checkinLimit', 'maxInflight'])
   })
@@ -137,17 +141,22 @@ describe('Settings › Central Agent', () => {
     expect(onChange).toHaveBeenCalledWith({ dailySpendWarning: true })
   })
 
-  it('"What Central may do" writes the matching capability; Work on its own asks first', async () => {
+  it('"What Central may do" is the shared segmented control; On its own asks in the app dialog first', async () => {
     await open()
+    const confirm = vi.spyOn(window, 'confirm')
     const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
-    expect(within(group).getByRole('radio', { name: 'Propose work (asks first)' }).getAttribute('aria-checked')).toBe('true')
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    fireEvent.click(within(group).getByRole('radio', { name: 'Work on its own' }))
-    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(group.getAttribute('data-control')).toBe('segmented')
+    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Chat only', 'Propose work', 'On its own'])
+    expect(within(group).getByRole('radio', { name: 'Propose work' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(group).getByRole('radio', { name: 'On its own' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Let Central work on its own?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(posts).toEqual([])
-    confirm.mockReturnValue(true)
-    fireEvent.click(within(group).getByRole('radio', { name: 'Work on its own' }))
+    fireEvent.click(within(group).getByRole('radio', { name: 'On its own' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Let it work on its own' }))
     await waitFor(() => expect(posts).toEqual([{ url: '/api/capabilities/autonomy', body: { enabled: true } }]))
+    expect(confirm).not.toHaveBeenCalled()
     fireEvent.click(within(group).getByRole('radio', { name: 'Chat only' }))
     await waitFor(() => expect(posts[1]).toEqual({ url: '/api/capabilities/workers', body: { enabled: false } }))
   })
@@ -156,7 +165,7 @@ describe('Settings › Central Agent', () => {
     on = new Set(['central'])
     await open()
     const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
-    fireEvent.click(within(group).getByRole('radio', { name: 'Propose work (asks first)' }))
+    fireEvent.click(within(group).getByRole('radio', { name: 'Propose work' }))
     await waitFor(() => expect(posts).toEqual([
       { url: '/api/capabilities/workers', body: { enabled: true } },
       { url: '/api/capabilities/workers/sub', body: { key: 'runRequireApproval', on: true } },
@@ -168,6 +177,14 @@ describe('Settings › Central Agent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Increase Workers per day' }))
     await waitFor(() => expect(puts).toEqual([{ set: { WEBTERM_CENTRAL_DAILY_SPAWNS: '25' }, unset: [] }]))
     await waitFor(() => expect(screen.getByLabelText('Workers per day').textContent).toBe('25 workers'))
+  })
+
+  it('the Workers per day stepper also steps with the arrow keys, as a spinbutton', async () => {
+    await open()
+    const value = screen.getByRole('spinbutton', { name: 'Workers per day' })
+    expect(value.getAttribute('aria-valuetext')).toBe('20 workers')
+    fireEvent.keyDown(value, { key: 'ArrowDown' })
+    await waitFor(() => expect(puts).toEqual([{ set: { WEBTERM_CENTRAL_DAILY_SPAWNS: '15' }, unset: [] }]))
   })
 
   it('Max workers at once (Advanced) writes through /api/settings/env once Central works on its own', async () => {
@@ -232,11 +249,11 @@ describe('Settings › Central Agent', () => {
     expect(within(main).getAllByRole('radio', { hidden: true }).every((r) => r.hasAttribute('disabled'))).toBe(true)
     expect(screen.getByRole('button', { name: 'Increase Workers per day' }).hasAttribute('disabled')).toBe(true)
     await waitFor(() => expect((screen.getByLabelText('Daily spending limit') as HTMLInputElement).disabled).toBe(true))
-    expect(main.querySelectorAll('[data-reason]').length).toBeGreaterThan(3)
+    expect(main.querySelectorAll('[data-slot="disabled-reason"]').length).toBeGreaterThan(3)
     expect(main.textContent).toContain('Turn on Central Agent first.')
-    // Each disabled switch points at the line saying why.
+    // Each disabled switch points at the row's lock line saying why.
     for (const sw of switches.filter((x) => x.hasAttribute('disabled'))) {
-      expect(document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.hasAttribute('data-reason')).toBe(true)
+      expect(document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.getAttribute('data-slot')).toBe('disabled-reason')
     }
   })
 
