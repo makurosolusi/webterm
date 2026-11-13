@@ -9,7 +9,7 @@ export const LOOPBACK_HOST = '127.0.0.1'
 export interface EmbeddedServer {
   /** Origin the server answers on, e.g. http://127.0.0.1:53211. */
   url: string
-  /** Mint a one-time sign-in URL and hand it to `openUrl`. */
+  /** Mint a one-time code, write the 0600 sign-in file and hand its path to `openFile`. */
   openUi(): Promise<void>
   /** Close the listeners (main + dev proxy), every socket and the stores; the ports are free afterwards. */
   stop(): Promise<void>
@@ -26,10 +26,10 @@ export async function freeLoopbackPort(): Promise<number> {
 
 /** Start the server in-process. Host/port go through the env the CLI reads (PTY children never see them:
  *  ptyShell LEAKED_ENV strips HOST/PORT). Call once per process: index.ts is a boot module. */
-export async function startEmbeddedServer(o: { port: number; openUrl: (url: string) => Promise<void>; distDir?: string }): Promise<EmbeddedServer> {
+export async function startEmbeddedServer(o: { port: number; openFile: (path: string) => Promise<void>; distDir?: string }): Promise<EmbeddedServer> {
   process.env.HOST = LOOPBACK_HOST
   process.env.PORT = String(o.port)
-  registerEmbedHost({ openUrl: o.openUrl, ...(o.distDir ? { distDir: o.distDir } : {}) })
+  registerEmbedHost({ openFile: o.openFile, ...(o.distDir ? { distDir: o.distDir } : {}) })
   const server = await import('../server/index')
   const { host, port } = await server.ready
   return { url: `http://${host}:${port}`, openUi: server.openUi, stop: server.stopServer }

@@ -24,14 +24,15 @@ export const RUN_SUBDIR = 'run'
 const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})$/
 
 /** Launch the OS default handler for a file path. The seam tests replace: never a real browser there.
- *  `url` is the same sign-in URL the file redirects to, for an in-process host that shows it in its own
- *  window (src/server/embedHost.ts) instead of handing a path to the OS. */
-export type OpenFile = (path: string, url: string) => Promise<void>
+ *  An in-process host (src/server/embedHost.ts) loads the same path in its own window instead. */
+export type OpenFile = (path: string) => Promise<void>
 
 export interface UiOpener {
   /** Mint a code (replacing any pending one), write the redirect file, hand its path to the opener.
-   *  `next`: a path already passed through safeNext; `/auth/open` re-validates it anyway. */
-  open(hostHeader?: string, next?: string): Promise<void>
+   *  `next`: a path already passed through safeNext; `/auth/open` re-validates it anyway.
+   *  `launch` false: write the file only, for a local process that loads it itself (the native app
+   *  attaching to this server, src/native/nativeSession.ts); the 0600 file is still the only carrier. */
+  open(hostHeader?: string, next?: string, launch?: boolean): Promise<void>
   /** Spend `candidate`: true exactly once for the pending, unexpired code. */
   consume(candidate: string | null): boolean
 }
@@ -73,30 +74,33 @@ function writeRedirectFile(runDir: string, file: string, html: string): void {
   writeFileSync(file, html, { mode: OPEN_FILE_MODE, flag: 'wx' }) // wx: O_EXCL, never follows a planted link
 }
 
+/** Name of the redirect file server process `pid` writes under its run dir. */
+export const signInFileName = (pid: number): string => `open-${pid}.html`
+
 export function createUiOpener(o: { runDir: string; bindHost: string; port: number; openFile?: OpenFile; now?: () => number }): UiOpener {
   const now = o.now ?? Date.now
   const openFile = o.openFile ?? openWithSystem
-  const file = join(o.runDir, `open-${process.pid}.html`)
+  const file = join(o.runDir, signInFileName(process.pid))
   let pending: { code: string; expires: number } | null = null
   const discard = () => {
     pending = null
     rmSync(file, { force: true })
   }
   return {
-    async open(hostHeader, next) {
+    async open(hostHeader, next, launch = true) {
       const code = randomBytes(CODE_BYTES).toString('base64url')
       const nextQuery = next && next !== '/' ? `&next=${encodeURIComponent(next)}` : ''
-      const url = `${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}${nextQuery}`
       try {
-        writeRedirectFile(o.runDir, file, redirectHtml(url))
+        writeRedirectFile(o.runDir, file, redirectHtml(`${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}${nextQuery}`))
       } catch (err) {
         throw new Error(`cannot write the sign-in file in ${o.runDir}`, { cause: err })
       }
       pending = { code, expires: now() + CODE_TTL_MS }
       // Expired codes leave no file behind; unref: never holds the process open.
       setTimeout(() => { if (pending?.code === code) discard() }, CODE_TTL_MS).unref()
-      await openFile(file, url)
-      log.info('auth.open_window', 'Opened a signed-in webterm window', { file: `${RUN_SUBDIR}/open-${process.pid}.html` })
+      if (!launch) return log.info('auth.open_file_written', 'Wrote a sign-in file for a local window', { file: `${RUN_SUBDIR}/${signInFileName(process.pid)}` })
+      await openFile(file)
+      log.info('auth.open_window', 'Opened a signed-in webterm window', { file: `${RUN_SUBDIR}/${signInFileName(process.pid)}` })
     },
     consume(candidate) {
       if (pending === null || typeof candidate !== 'string') return false

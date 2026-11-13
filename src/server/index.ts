@@ -36,6 +36,7 @@ import { tokenAccessRoute } from './tokenAccess.api'
 import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { embedHost } from './embedHost'
+import { removeInstanceFile, writeInstanceFile } from './instanceFile'
 import { uiSessions } from './uiSession'
 import { uiUsers } from './uiUser'
 import { ensureSetupCode } from './setupCode'
@@ -219,8 +220,9 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 // Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
-// In-process host: the sign-in URL goes to its window, never the OS browser.
-const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT, ...(host ? { openFile: (_path: string, url: string) => host.openUrl(url) } : {}) })
+// In-process host: its window loads the sign-in file, never the OS browser.
+const RUN_DIR = join(dataDir(), RUN_SUBDIR)
+const uiOpener = createUiOpener({ runDir: RUN_DIR, bindHost: HOST, port: PORT, ...(host ? { openFile: host.openFile } : {}) })
 const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, users: uiUsers, opener: uiOpener, token: () => getTokenState().token, dataDir })
 announceSetup(() => ensureSetupCode(dataDir())) // no account yet: one line naming the setup-code file
 const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
@@ -333,6 +335,10 @@ export const openUi = (): Promise<void> => uiOpener.open()
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {
   markReady({ host: HOST, port: PORT })
+  // Lets the native app find this server for the data dir instead of starting a second one (instanceFile.ts).
+  try { writeInstanceFile(RUN_DIR, { pid: process.pid, host: HOST, port: PORT }) } catch (e) {
+    log.warn('server.instance_file_failed', 'Cannot record this server in the run dir', { cause: e instanceof Error ? e.message : String(e) })
+  }
   // Never log the token itself — only whether one is in force, how long it is, and where it came from.
   const { token: TOKEN, source } = getTokenState()
   const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
@@ -348,10 +354,13 @@ process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncau
 // Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
 process.on('unhandledRejection', onUnhandledRejection(log))
 let storesClosed = false
-/** Once per process: the `exit` hook, or stopServer() for an in-process host whose runtime may exit natively without it. */
+/** Once per process (`exit` hook, or stopServer() for an in-process host that may exit natively without it): drop the run-dir record, close the stores. */
 function closeStoresOnce(code: number): void {
   if (storesClosed) return
   storesClosed = true
+  try { removeInstanceFile(RUN_DIR, process.pid) } catch (e) {
+    log.warn('server.instance_file_failed', 'Cannot remove this server\'s record from the run dir', { cause: e instanceof Error ? e.message : String(e) })
+  }
   closeStores([['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])], log)
   log.info('server.stop', 'webterm stopping', { code })
   flushLogsSync()

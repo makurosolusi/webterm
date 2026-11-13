@@ -182,6 +182,19 @@ describe('POST /auth/request-open: the server opens the window, the code never l
     }
   })
 
+  test('`launch: false` writes the 0600 sign-in file without launching anything (native app attach)', async () => {
+    clock += OPEN_INTERVAL_MS
+    const before = opened.length
+    const r = await call('POST', '/auth/request-open', SAME, JSON.stringify({ launch: false }))
+    expect(r.status).toBe(202)
+    expect(opened.length).toBe(before) // no OS opener
+    const file = join(runDir, `open-${process.pid}.html`)
+    expect(statSync(file).mode & 0o777).toBe(0o600)
+    const code = /code=([A-Za-z0-9_-]+)/.exec(readFileSync(file, 'utf8'))![1]!
+    expect(r.body).not.toContain(code)
+    expect((await call('GET', `/auth/open?code=${code}`)).status).toBe(303)
+  })
+
   test('a cross-site page cannot drive it', async () => {
     expect((await call('POST', '/auth/request-open', { origin: 'http://evil.test', 'sec-fetch-site': 'cross-site' })).status).toBe(403)
     expect((await call('POST', '/auth/request-open', { origin: `http://127.0.0.1:${port + 1}` })).status).toBe(403)

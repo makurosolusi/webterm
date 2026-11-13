@@ -3,8 +3,9 @@
 // binary never register, so their behaviour is unchanged (OS browser, auto-open on a TTY).
 
 export interface EmbedHost {
-  /** Show the signed-in URL (`/auth/open?code=`) in the host's own window instead of the OS browser. */
-  openUrl(url: string): Promise<void>
+  /** Load the 0600 sign-in redirect file (uiOpen.ts) in the host's own window instead of the OS browser.
+   *  A path, never the code-bearing URL: the host's logs (Electrobun prints every loadURL) stay code-free. */
+  openFile(path: string): Promise<void>
   /** Built UI (vite `dist/`) on disk when the host packages it somewhere other than `<repo>/dist`. */
   distDir?: string
 }

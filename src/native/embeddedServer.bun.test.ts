@@ -1,5 +1,5 @@
 // The native app's in-process server: started on a chosen loopback port it answers, hands its
-// one-time sign-in URL to the host (not the OS browser), and after stop() the port is free again
+// one-time sign-in file to the host (not the OS browser), and after stop() the port is free again
 // while the process is still alive (the listener really closed, not the process exiting) and the
 // SQLite stores are closed.
 import { afterAll, expect, test } from 'bun:test'
@@ -19,7 +19,7 @@ afterAll(() => { children.forEach((c) => c.kill()); return reapChildren() })
 // Child: start in-process, print what the host would see, stop on a `stop` line from the test.
 const CHILD = `
 import { startEmbeddedServer } from ${JSON.stringify(MODULE)}
-const s = await startEmbeddedServer({ port: Number(process.env.EMBED_PORT), openUrl: async (u) => console.log('OPEN ' + u) })
+const s = await startEmbeddedServer({ port: Number(process.env.EMBED_PORT), openFile: async (p) => console.log('OPEN ' + p) })
 console.log('READY ' + s.url)
 await s.openUi()
 for await (const line of console) if (line === 'stop') { await s.stop(); console.log('STOPPED') }
@@ -56,8 +56,10 @@ test('starts on the chosen loopback port, answers, opens through the host, stops
   const opened = lineFrom(proc, 'OPEN ')
 
   expect(await lineFrom(proc, 'READY ')).toBe(`http://${LOOPBACK_HOST}:${port}`)
-  // The host's window would load this URL: it trades the one-time code for the UI cookie.
-  const signIn = await opened
+  // The host's window would load this file; it redirects to the URL that trades the code for the UI cookie.
+  const file = await opened
+  expect(file).not.toContain('code=') // the host (and Electrobun's loadURL log) only ever sees the path
+  const signIn = /url=([^"]+)"/.exec(readFileSync(file, 'utf8'))![1]!.replace(/&amp;/g, '&')
   expect(signIn.startsWith(`http://${LOOPBACK_HOST}:${port}/auth/open?code=`)).toBe(true)
   const open = await fetch(signIn, { redirect: 'manual' })
   expect(open.status).toBe(303)
