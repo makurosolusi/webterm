@@ -5,6 +5,7 @@ import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 const actions = (): SessionMenuActions => ({
   onFocusNode: vi.fn(),
   onCloseSession: vi.fn(),
+  onRenameSession: vi.fn(),
   onReopenSession: vi.fn(),
   onSelectWorkspace: vi.fn(),
   onToggleGroup: vi.fn(),
@@ -21,15 +22,23 @@ const byLabel = (items: VscodeMenuItem[], label: string) => {
 }
 
 describe('buildSessionMenu', () => {
-  it('sesi: Reveal, Copy Path, End Session dipisah seperti menu VS Code', () => {
+  it('sesi: Reveal, Rename, Copy Path, End Session dipisah seperti menu VS Code', () => {
     const a = actions()
-    const items = buildSessionMenu({ kind: 'session', id: 's1', path: '/w' }, false, a)
-    expect(labels(items)).toEqual(['Reveal on Canvas', '---', 'Copy Path', '---', 'End Session'])
+    const items = buildSessionMenu({ kind: 'session', id: 's1', path: '/w', renamable: true }, false, a)
+    expect(labels(items)).toEqual(['Reveal on Canvas', 'Rename…', '---', 'Copy Path', '---', 'End Session'])
 
+    byLabel(items, 'Rename…').onSelect?.()
     byLabel(items, 'Copy Path').onSelect?.()
     byLabel(items, 'End Session').onSelect?.()
+    expect(a.onRenameSession).toHaveBeenCalledWith('s1')
     expect(a.onCopyText).toHaveBeenCalledWith('/w')
     expect(a.onCloseSession).toHaveBeenCalledWith('s1')
+  })
+
+  it('Rename nonaktif untuk sesi di board lain (tidak renamable) atau tanpa handler', () => {
+    expect(byLabel(buildSessionMenu({ kind: 'session', id: 's1' }, false, actions()), 'Rename…').disabled).toBe(true)
+    const a = { ...actions(), onRenameSession: undefined }
+    expect(byLabel(buildSessionMenu({ kind: 'session', id: 's1', renamable: true }, false, a), 'Rename…').disabled).toBe(true)
   })
 
   it('Copy Path nonaktif bila sesi tak punya path', () => {

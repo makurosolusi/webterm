@@ -72,7 +72,8 @@ describe('Sessions badge', () => {
   it('counts sessions waiting in OTHER workspaces only', () => {
     const all = [ws('open', [node('a')]), ws('other', [node('b'), node('c'), node('d')])]
     const statuses = { a: 'waiting', b: 'blocked', c: 'failed', d: 'working' } as const
-    expect(sessionsAttentionCount(all, null, 'open', statuses)).toBe(2)
+    // Only `blocked` needs you; a failure is the Error bucket and turn ended is calm Idle (shared model).
+    expect(sessionsAttentionCount(all, null, 'open', statuses)).toBe(1)
     expect(sessionsAttentionCount(all, null, 'open', {})).toBe(0)
   })
 })

@@ -13,23 +13,10 @@ const panelSrc = () => src('SessionsPanel.tsx') + src('SessionsPanel.tree.tsx')
 const titleFollowsView = (s: string) =>
   /\{SIDE_BAR_VIEW_TITLE\[view\]\}/.test(s) && /view === 'layers' && layerCount !== undefined && <span className="sessions-sidebar__count">/.test(s)
 
-/** Blok render tab Status: dari gerbang `empty === 'none'` sampai pemetaan section-nya. */
-const statusGate = (s: string) => s.split("empty === 'none'")[1]?.split('.map((s) =>')[0] ?? ''
-
-/** Seksi kosong dibuang, KECUALI `attention` — nol di sana adalah kabar baik yang dicari. */
-const hidesEmptySectionsButAttention = (s: string) => {
-  const gate = statusGate(s)
-  return /\.filter\(/.test(gate) && /'attention'/.test(gate) && /rows\.length > 0/.test(gate)
-}
-
 // Bentuk lama, persis seperti sebelum dibetulkan. Dipakai untuk membuktikan guard di atas
 // benar-benar menggigit, bukan lulus karena polanya mustahil ditemukan.
 const OLD_HEAD = `        <span className="sessions-sidebar__title">Sessions</span>
         <span className="sessions-sidebar__count">{total}</span>`
-const OLD_STATUS_GATE = `          ? // komentar lama
-            empty === 'none' &&
-            sections.map((s) => (
-              <section key={s.kind} className="ss-status" aria-label={s.label}>`
 describe('judul sidebar', () => {
   it('menamai view yang tampil dan hanya LAYERS yang membawa hitungan', () => {
     expect(titleFollowsView(src('sideBar/SideBar.tsx'))).toBe(true)
@@ -41,21 +28,12 @@ describe('judul sidebar', () => {
 })
 
 describe('seksi status kosong', () => {
-  it('disembunyikan, kecuali Need attention', () => {
+  // Empty buckets are dropped by `buildStatusList` (see sessionList.test.ts); the tree must not
+  // bring back the old "Need attention 0" exception header.
+  it('the Status tab renders the sections as given, no attention exception', () => {
     const panel = panelSrc()
-    // Dihitung dulu: blok yang tidak ketemu memulangkan string kosong, dan guard apa pun di
-    // atasnya akan lulus/gagal tanpa menjaga apa pun.
-    expect(statusGate(panel).length).toBeGreaterThan(0)
-    expect(hidesEmptySectionsButAttention(panel)).toBe(true)
-  })
-
-  it('guard menolak bentuk lama yang merender kelima header apa pun isinya', () => {
-    expect(statusGate(OLD_STATUS_GATE).length).toBeGreaterThan(0)
-    expect(hidesEmptySectionsButAttention(OLD_STATUS_GATE)).toBe(false)
-  })
-
-  it('header attention tetap dirender saat nol — jadi badan barisnya masih digerbang sendiri', () => {
-    expect(panelSrc()).toMatch(/\{s\.rows\.length > 0 && \(/)
+    expect(panel).toContain('p.sections.map((s) =>')
+    expect(panel).not.toContain("s.kind === 'attention'")
   })
 })
 
@@ -84,10 +62,10 @@ describe('strip tab node di atas canvas dihapus', () => {
 })
 
 describe('meta baris sesi', () => {
-  it('SessionRow memanggil `rowMeta`, tidak lagi menyusun metanya sendiri', () => {
+  it('SessionRow reads its description from `rowDescription`, not composing it itself', () => {
     const row = src('SessionRow.tsx')
-    expect(row).toMatch(/const meta = rowMeta\(showProject \? row\.projectName : undefined, row\.cwd\)/)
-    // `dirName` pindah ke `sessionList` supaya bisa dites; salinan kedua di sini akan menua sendiri.
+    expect(row).toMatch(/const description = rowDescription\(row, mode, groupCwd\)/)
+    // `dirName` lives in `sessionList` so it can be tested; a second copy here would drift.
     expect(row).not.toContain('function dirName')
   })
 })
@@ -108,7 +86,8 @@ describe('G-11/G-12/G-18 CSS fidelity', () => {
 
   it('meta redup mengalah saat baris ber-aksi di-hover/di-fokus (aksi tak menimpa meta)', () => {
     const c = css('sessions-panel.css')
-    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta')
-    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta')
+    // Any inline action (End session, Rename, ⋯, Restore) makes the meta and the time give way.
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__action):hover .ss-meta')
+    expect(c).toContain('.ss-tree__leaf:has(.ss-tree__action):focus-within .ss-meta')
   })
 })

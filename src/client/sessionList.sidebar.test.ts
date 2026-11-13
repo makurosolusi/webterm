@@ -3,7 +3,7 @@
 // cross-board. Pure functions, no DOM.
 import { describe, expect, it } from 'vitest'
 import { buildSessionList, buildStatusList, otherWorkspaceGroups, sidebarEmptyState } from './sessionList'
-import { workspaceDot, workspaceSubline } from './sessionList.workspace'
+import { workspaceSubline } from './sessionList.workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Workspace, WsNode } from '../shared/workspace'
 
@@ -32,15 +32,14 @@ describe('sidebarEmptyState', () => {
     expect(sidebarEmptyState(true, 'x')).toBe('no-matches')
     expect(sidebarEmptyState(false, 'x')).toBe('none')
   })
+
+  it('while workspaces are not hydrated (boot) it is loading, never "no sessions"', () => {
+    expect(sidebarEmptyState(true, '', true)).toBe('loading')
+    expect(sidebarEmptyState(false, '', true)).toBe('none')
+  })
 })
 
 describe('workspace header', () => {
-  it('status dot: attention beats running beats idle', () => {
-    expect(workspaceDot({ attention: 1, working: 3 })).toBe('attention')
-    expect(workspaceDot({ attention: 0, working: 1 })).toBe('running')
-    expect(workspaceDot({ attention: 0, working: 0 })).toBe('idle')
-  })
-
   it('second line: folder name, then the branch when known', () => {
     expect(workspaceSubline('/Users/me/dev/laya-api', 'main')).toBe('laya-api · main')
     expect(workspaceSubline('/Users/me/dev/laya-api', undefined)).toBe('laya-api')

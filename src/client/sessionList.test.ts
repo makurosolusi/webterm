@@ -6,19 +6,15 @@ import {
   parseCollapsed,
   projectCollapseKey,
   rowMeta,
+  sessionIds,
   sessionLabel,
-  sessionStatusGroup,
-  sessionStatusKind,
   sidebarEmptyState,
   sidebarFilterKeyAction,
   signalCounts,
-  stateLabelOf,
-  STATE_LABEL,
-  STATUS_GROUP_LABEL,
   type SessionRowVM,
-  type StatusGroup,
   type StatusSection,
 } from './sessionList'
+import type { StatusBucket } from './sessionStatus.model'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
@@ -43,62 +39,30 @@ const ws = (id: string, name: string, nodes: WsNode[], extra: Partial<Workspace>
 
 const noStatus: Record<string, AgentStatus> = {}
 
-describe('sessionStatusKind', () => {
-  it('melipat waiting dan blocked ke satu kind attention', () => {
-    expect(sessionStatusKind('waiting')).toBe('attention')
-    expect(sessionStatusKind('blocked')).toBe('attention')
+// The old vocabulary (sessionStatusKind / STATE_LABEL / STATUS_GROUP_LABEL) folded `waiting`
+// (turn ended) and `failed` into "Need attention" and left live sessions in "No status". Rows now
+// read the shared model; these pin that a row's view is the model's, not a local rule.
+describe('row status comes from the shared model', () => {
+  const one = (status: AgentStatus | undefined, src = {}) =>
+    buildSessionList([ws('p1', 'One', [node('a')])], null, 'p1', status ? { a: status } : {}, '', undefined, src)[0].sessions[0].view
+
+  it('turn ended is calm Idle, a failure is Error, blocked needs you', () => {
+    expect(one('waiting')).toMatchObject({ bucket: 'idle', label: 'Turn ended', icon: null })
+    expect(one('failed').bucket).toBe('error')
+    expect(one('blocked').bucket).toBe('needs-input')
   })
 
-  it('memisahkan working dan done, dan jatuh ke unknown tanpa status', () => {
-    expect(sessionStatusKind('working')).toBe('working')
-    expect(sessionStatusKind('done')).toBe('done')
-    expect(sessionStatusKind(undefined)).toBe('unknown')
-  })
-})
-
-describe('STATE_LABEL', () => {
-  it('memakai kalimat manusiawi, bukan enum huruf besar', () => {
-    expect(STATE_LABEL).toEqual({
-      working: 'Running',
-      attention: 'Waiting for your response',
-      done: 'Done',
-      unknown: 'Unknown',
-    })
-  })
-})
-
-// Bentuk LAMA: `stateLabel` barisnya dibaca dari `STATE_LABEL[statusKind]`, jadi `waiting` dan
-// `blocked` sama-sama mengaku "Waiting for your response" — di `title` bel DAN di `aria-label`
-// barisnya (`SessionRow.tsx`). Satu permukaan yang masih menggabungkan keduanya membuat chip node
-// yang baru dipecah tak berguna.
-const OLD_ROW_LABEL = (s: AgentStatus) => STATE_LABEL[sessionStatusKind(s)]
-
-describe('stateLabelOf', () => {
-  it('memisahkan blocked dari waiting, dan bentuk lama gagal guard ini', () => {
-    expect(stateLabelOf('blocked')).toMatch(/approval/i)
-    expect(stateLabelOf('blocked')).not.toBe(stateLabelOf('waiting'))
-    expect(OLD_ROW_LABEL('waiting')).toBe(OLD_ROW_LABEL('blocked'))
-    expect(stateLabelOf('waiting')).not.toBe(OLD_ROW_LABEL('waiting'))
+  it('no status and no exit is Idle "Ready" (never "No status"); an exit fact makes it Exited', () => {
+    expect(one(undefined)).toMatchObject({ bucket: 'idle', label: 'Ready' })
+    expect(one(undefined, { facts: { a: { live: false, exit: { code: 0, reason: 'self', at: 1 } } } }).bucket).toBe('exited')
   })
 
-  it('status lain tetap memakai kalimat STATE_LABEL yang sudah ada', () => {
-    expect(stateLabelOf('working')).toBe(STATE_LABEL.working)
-    expect(stateLabelOf('done')).toBe(STATE_LABEL.done)
-    expect(stateLabelOf(undefined)).toBe(STATE_LABEL.unknown)
-  })
-})
-
-describe('STATUS_GROUP_LABEL', () => {
-  it('menamai grup tanpa status dengan bahasa pengguna, bukan nama kind-nya', () => {
-    // "Unknown" terbaca seperti kegagalan membaca sesuatu; yang sebenarnya ada di grup itu adalah
-    // terminal biasa yang memang tidak punya status agent.
-    expect(STATUS_GROUP_LABEL.unknown).toBe('No status')
-    expect(STATUS_GROUP_LABEL.unknown).not.toBe('Unknown')
-  })
-
-  it('tooltip per baris TETAP memakai STATE_LABEL — dua peta, dua pembaca', () => {
-    // Perubahan header tidak boleh ikut mengubah `stateLabel`, yang dipakai sebagai title glyph.
-    expect(STATE_LABEL.unknown).toBe('Unknown')
+  it('carries the reason (live channel first, else the fetched one for the same status) and since', () => {
+    expect(one('blocked', { reasons: { a: { reason: 'permission', detail: 'Bash' } } }).label).toBe('Waiting for approval: Bash')
+    expect(one('blocked', { facts: { a: { live: true, status: 'blocked', reason: 'permission', detail: 'Edit', statusSince: 42 } } }))
+      .toMatchObject({ label: 'Waiting for approval: Edit', since: 42 })
+    // A fetched reason of an older status does not leak onto the new one.
+    expect(one('working', { facts: { a: { live: true, status: 'blocked', reason: 'permission', detail: 'Edit' } } }).label).toBe('Working')
   })
 })
 
@@ -128,27 +92,6 @@ describe('rowMeta', () => {
     expect(rowMeta(undefined, '/Users/x/api/')).toEqual(['api'])
     // Root tak punya basename; path itu sendiri yang dipakai, karena "/" memang nama yang benar.
     expect(rowMeta(undefined, '/')).toEqual(['/'])
-  })
-})
-
-describe('sessionStatusGroup', () => {
-  it('menaruh done di idle, bukan di attention', () => {
-    expect(sessionStatusGroup('attention', false)).toBe('attention')
-    expect(sessionStatusGroup('working', false)).toBe('working')
-    expect(sessionStatusGroup('done', false)).toBe('idle')
-    expect(sessionStatusGroup('unknown', false)).toBe('unknown')
-  })
-
-  it('menaruh yang belum dibaca di unread, termasuk yang tanpa sinyal hook', () => {
-    expect(sessionStatusGroup('done', true)).toBe('unread')
-    expect(sessionStatusGroup('unknown', true)).toBe('unread')
-  })
-
-  it('attention dan working mengalahkan tanda unread', () => {
-    // Prioritas keanggotaan, bukan urutan tampil: turn BARU yang sedang jalan tetap di Running,
-    // lalu muncul lagi sebagai Unread begitu turn itu berakhir.
-    expect(sessionStatusGroup('attention', true)).toBe('attention')
-    expect(sessionStatusGroup('working', true)).toBe('working')
   })
 })
 
@@ -213,15 +156,15 @@ describe('parseCollapsed', () => {
 })
 
 describe('signalCounts', () => {
-  it('menghitung attention dan working, mengabaikan done/unknown', () => {
+  it('counts needs-input and working, not turn ended / done / failed', () => {
     const rows = buildStatusList(
       [ws('p1', 'One', [node('a'), node('b'), node('c'), node('d')])],
       null,
       'p1',
-      { a: 'waiting', b: 'blocked', c: 'working', d: 'done' },
+      { a: 'waiting', b: 'blocked', c: 'working', d: 'failed' },
       '',
     ).flatMap((s) => s.rows)
-    expect(signalCounts(rows)).toEqual({ attention: 2, working: 1 })
+    expect(signalCounts(rows)).toEqual({ attention: 1, working: 1 })
   })
 })
 
@@ -269,10 +212,19 @@ describe('buildSessionList', () => {
   it('menganggap baris sudah dibaca bila himpunan unread tidak disebut', () => {
     // Default itu yang membuat pemanggil mode-project (mis. tab workspace) tak perlu tahu soal
     // kanal baca sama sekali.
-    expect(buildSessionList(projects, null, 'p1', noStatus, '')[0].sessions[0].unread).toBe(false)
+    expect(buildSessionList(projects, null, 'p1', noStatus, '')[0].sessions[0].view.unread).toBe(false)
     expect(
-      buildSessionList(projects, null, 'p1', noStatus, '', new Set(['a1']))[0].sessions[0].unread,
+      buildSessionList(projects, null, 'p1', noStatus, '', new Set(['a1']))[0].sessions[0].view.unread,
     ).toBe(true)
+  })
+
+  it('carries the node kind (kind icon) and its own title (what Rename edits)', () => {
+    const rows = buildSessionList([ws('p', 'P', [node('c', { kind: 'agentChat', agentId: 'claude', name: 'Puffin' })])], null, 'p', noStatus, '')[0].sessions
+    expect(rows[0]).toMatchObject({ kind: 'agentChat', title: 'Agent Chat', label: 'Puffin · Agent Chat' })
+  })
+
+  it('sessionIds lists every session once (live nodes for the open board)', () => {
+    expect(sessionIds(projects, [node('a1'), node('a7')], 'p1')).toEqual(['a1', 'a7', 'b1'])
   })
 
   it('mewarisi cwd workspace untuk sesi tanpa cwd sendiri', () => {
@@ -288,66 +240,36 @@ describe('buildStatusList', () => {
     ws('p2', 'Beta', [node('b1', { title: 'beta' })]),
   ]
 
-  // test-only: section tidak lagi dibuang saat kosong, jadi kasus di bawah menyebut section yang
-  // diuji alih-alih mengandalkan posisi [0].
-  const rowsOf = (sections: StatusSection[], kind: StatusGroup): SessionRowVM[] =>
-    sections.find((s) => s.kind === kind)?.rows ?? []
+  // test-only: pick a bucket by name rather than position.
+  const rowsOf = (sections: StatusSection[], bucket: StatusBucket): SessionRowVM[] =>
+    sections.find((s) => s.bucket === bucket)?.rows ?? []
 
-  it('meratakan semua workspace dan menaruh attention paling atas', () => {
-    const sections = buildStatusList(projects, null, 'p1', { a1: 'working', a2: 'waiting', b1: 'done' }, '')
-    expect(sections.map((s) => [s.kind, s.rows.map((r) => r.id)])).toEqual([
-      ['attention', ['a2']],
-      ['unread', []],
-      ['working', ['a1']],
-      ['idle', ['b1']],
-      ['unknown', []],
+  it('fixed lifecycle order Needs input -> Working -> Idle -> Error -> Exited, empty buckets left out', () => {
+    const p = [ws('p1', 'Alpha', [node('w'), node('n'), node('i'), node('e')])]
+    const sections = buildStatusList(p, null, 'p1', { w: 'working', n: 'blocked', i: 'waiting', e: 'failed' }, '')
+    expect(sections.map((s) => [s.bucket, s.label, s.rows.map((r) => r.id)])).toEqual([
+      ['needs-input', 'Needs input', ['n']],
+      ['working', 'Working', ['w']],
+      ['idle', 'Idle', ['i']],
+      ['error', 'Error', ['e']],
     ])
   })
 
-  it('menaruh Unread tepat di bawah attention, dan hanya yang turn-nya sudah berakhir', () => {
-    // a1 bertanda tapi turn barunya jalan → tetap Running; a2 bertanda dan sudah selesai → Unread;
-    // b1 selesai tanpa tanda → Idle.
-    const sections = buildStatusList(
-      projects,
-      null,
-      'p1',
-      { a1: 'working', a2: 'done', b1: 'done' },
-      '',
-      new Set(['a1', 'a2']),
-    )
-    expect(sections.map((s) => [s.kind, s.rows.map((r) => r.id)])).toEqual([
-      ['attention', []],
-      ['unread', ['a2']],
-      ['working', ['a1']],
-      ['idle', ['b1']],
-      ['unknown', []],
-    ])
+  it('unread is a flag on Idle rows, listed first inside Idle, not a bucket of its own', () => {
+    const sections = buildStatusList(projects, null, 'p1', { a1: 'working', a2: 'waiting', b1: 'waiting' }, '', new Set(['a1', 'b1']))
+    expect(sections.map((s) => s.bucket)).toEqual(['working', 'idle'])
+    // a1 is marked but its new turn runs -> Working; b1 marked and ended -> first in Idle.
+    expect(rowsOf(sections, 'working').map((r) => r.id)).toEqual(['a1'])
+    expect(rowsOf(sections, 'idle').map((r) => [r.id, r.view.unread])).toEqual([['b1', true], ['a2', false]])
   })
 
-  it('membawa tanda unread ke barisnya, supaya glyph bisa membedakannya dari done biasa', () => {
-    const rows = buildStatusList(projects, null, 'p1', { a1: 'done', b1: 'done' }, '', new Set(['a1']))
-      .flatMap((s) => s.rows)
-    expect(rows.find((r) => r.id === 'a1')?.unread).toBe(true)
-    expect(rows.find((r) => r.id === 'b1')?.unread).toBe(false)
-  })
-
-  it('menahan section kosong, dengan label dan hitungan nol', () => {
-    // Kelima section selalu hadir dalam urutan tetap: posisi section tidak boleh bergeser saat
-    // satu sesi berganti status, dan "0" itu sendiri jawaban yang perlu dibaca.
+  it('no "No status": a session with nothing known is Idle', () => {
     const sections = buildStatusList(projects, null, 'p1', noStatus, '')
-    expect(sections.map((s) => [s.kind, s.label, s.rows.length])).toEqual([
-      ['attention', 'Need attention', 0],
-      ['unread', 'Unread', 0],
-      ['working', 'Running', 0],
-      ['idle', 'Idle', 0],
-      ['unknown', 'No status', 3],
-    ])
+    expect(sections.map((s) => [s.bucket, s.rows.length])).toEqual([['idle', 3]])
   })
 
-  it('tetap mengembalikan kelima section walau filter tak cocok sama sekali', () => {
-    const sections = buildStatusList(projects, null, 'p1', noStatus, 'zzz')
-    expect(sections.map((s) => s.kind)).toEqual(['attention', 'unread', 'working', 'idle', 'unknown'])
-    expect(sections.every((s) => s.rows.length === 0)).toBe(true)
+  it('returns nothing when the filter matches nothing', () => {
+    expect(buildStatusList(projects, null, 'p1', noStatus, 'zzz')).toEqual([])
   })
 
   it('mengurutkan dalam section per urutan workspace lalu judul', () => {
@@ -360,12 +282,12 @@ describe('buildStatusList', () => {
     // Jendela nyata: activeProjectId sudah pindah ke p2 sementara liveActiveNodes masih
     // memegang node p1. Tanpa dedup, a1 terpancar di bawah Alpha DAN Beta.
     const live = [node('a1', { title: 'zeta' })]
-    const rows = rowsOf(buildStatusList(projects, live, 'p2', noStatus, ''), 'unknown')
+    const rows = rowsOf(buildStatusList(projects, live, 'p2', noStatus, ''), 'idle')
     expect(rows.filter((r) => r.id === 'a1')).toHaveLength(1)
   })
 
   it('membawa nama workspace di setiap baris', () => {
-    const rows = rowsOf(buildStatusList(projects, null, 'p1', noStatus, ''), 'unknown')
+    const rows = rowsOf(buildStatusList(projects, null, 'p1', noStatus, ''), 'idle')
     expect(rows.find((r) => r.id === 'b1')?.projectName).toBe('Beta')
   })
 
@@ -392,5 +314,6 @@ describe('sidebarEmptyState', () => {
     expect(sidebarEmptyState(true, '')).toBe('no-sessions')
     expect(sidebarEmptyState(true, '  ')).toBe('no-sessions')
     expect(sidebarEmptyState(true, 'zzz')).toBe('no-matches')
+    expect(sidebarEmptyState(true, '', true)).toBe('loading')
   })
 })
