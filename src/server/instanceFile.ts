@@ -9,6 +9,8 @@ import { join } from 'node:path'
 export const INSTANCE_FILE = 'server.json'
 const RUN_DIR_MODE = 0o700
 const FILE_MODE = 0o600
+/** How long a recorded server may take to answer before its record counts as stale. */
+export const INSTANCE_ANSWER_TIMEOUT_MS = 3_000
 
 /** What a server records about itself. `host` is the bind host (may be a wildcard). */
 export interface InstanceRecord { pid: number; host: string; port: number }
@@ -49,4 +51,17 @@ export function readInstanceFile(runDir: string): InstanceRecord | null {
 /** Remove the record only if it is still `pid`'s: a newer server that took over keeps its own. */
 export function removeInstanceFile(runDir: string, pid: number): void {
   if (readInstanceFile(runDir)?.pid === pid) rmSync(join(runDir, INSTANCE_FILE), { force: true })
+}
+
+/** True while `pid` exists (EPERM = exists under another user): a dead recorded pid = stale record. */
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ESRCH') return false
+    if (code === 'EPERM') return true
+    throw new Error(`cannot probe process ${pid}`, { cause: err })
+  }
 }

@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+const source = readFileSync(new URL('./server.main.ts', import.meta.url), 'utf8')
 // Rute env tinggal di tabel route ber-urutan (routes/settings.routes.ts); urutan penuh dijaga apiRoutes.bun.test.ts.
 const apiSource = readFileSync(new URL('./routes/settings.routes.ts', import.meta.url), 'utf8')
 

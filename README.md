@@ -147,6 +147,8 @@ bun run build:binary   # emits ./webterm
 ./webterm              # runs from any directory; reads HOST / PORT (and a .env) from the cwd
 ```
 
+One server per data dir: a start (`bun run dev`, `./webterm`, the native app) refuses with one line and exit code 1 while another webterm is alive and answering for the same `WEBTERM_DATA_DIR`. Open that one, or set a different `WEBTERM_DATA_DIR`. A record left by a crashed server is ignored.
+
 ### Command-line options
 
 The server entry (`./webterm` or `bun src/server/index.ts`) handles these before it opens the database or binds a port; with no options it starts the server.
@@ -174,7 +176,7 @@ The vitest run now also covers `src/shared` (assembleCmd / agent config).
 
 ## How it works
 
-`src/server/index.ts` runs one `node:http` server on `PORT` (plus a second listener on `PORT+1` that serves only the dev-server proxy, so proxied pages get their own origin and cannot read webterm's token): in dev it mounts Vite in middleware mode (HMR on that same port), and in production it serves the built `dist/`. A `ws` WebSocketServer on `/ws` multiplexes every terminal over one shared socket, keyed by a stable client-generated id. The server keeps each PTY alive across socket close (detach) and replays a 256 KB scrollback ring buffer on re-attach; a PTY dies only on explicit close or when the shell exits. PTYs are Bun-native (`Bun.spawn` with its inline `terminal` option), with no node-pty dependency.
+`src/server/server.main.ts` (loaded by the `src/server/index.ts` entry) runs one `node:http` server on `PORT` (plus a second listener on `PORT+1` that serves only the dev-server proxy, so proxied pages get their own origin and cannot read webterm's token): in dev it mounts Vite in middleware mode (HMR on that same port), and in production it serves the built `dist/`. A `ws` WebSocketServer on `/ws` multiplexes every terminal over one shared socket, keyed by a stable client-generated id. The server keeps each PTY alive across socket close (detach) and replays a 256 KB scrollback ring buffer on re-attach; a PTY dies only on explicit close or when the shell exits. PTYs are Bun-native (`Bun.spawn` with its inline `terminal` option), with no node-pty dependency.
 
 Workspaces + layout are persisted in `bun:sqlite` (`src/server/db.ts`) as the source of truth, served over a small REST API under `/api` (`src/server/api.ts`); a node may be a terminal or an agent — an agent node spawns a CLI command via the login shell (`cmd` on the open message) instead of an interactive shell. When `tmux` is installed, each node's session lives on a webterm-owned tmux server (`-L webterm`) and is re-attached after a server restart; without it a restart reloads workspace + node definitions from the DB and respawns fresh PTYs.
 

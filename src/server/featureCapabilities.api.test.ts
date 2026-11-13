@@ -242,7 +242,7 @@ describe('chromium-download', () => {
 
 describe('index.ts', () => {
   it('tidak membaca token/flag saat boot: poller via hook, browser via activeBrowser(), reconcile dari himpunan kosong', () => {
-    const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+    const src = readFileSync(new URL('./server.main.ts', import.meta.url), 'utf8')
     for (const gone of ['startTelegramInbound', 'resolveTelegramMode', 'browserRuntime', 'startBrowserRuntime', 'startChannelsRuntime']) expect(src).not.toContain(gone)
     expect(src).toContain('await reconcile(new Set(), enabledSet(process.env))')
     expect(src.indexOf('registerBrowserCapability(')).toBeLessThan(src.indexOf('await reconcile('))

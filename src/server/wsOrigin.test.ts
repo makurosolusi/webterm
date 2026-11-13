@@ -123,7 +123,7 @@ describe('human-channel upgrades over a real socket', () => {
 describe('index.ts wiring', () => {
   // index.ts binds a port on import, so assert the wiring from its source (pattern of auth.test.ts).
   it('applies the Origin check to every claimed upgrade (/ws and /ws/browser), after allowed(), keyed on the live root token', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, 'index.ts'), 'utf8')
+    const src = fs.readFileSync(path.resolve(__dirname, 'server.main.ts'), 'utf8')
     expect(src).toMatch(/if \(!humanUpgradeOriginOk\(req\.headers, getTokenState\(\)\.token\)\)/)
     // Before the browser branch, so /ws/browser cannot bypass it; after destroy/ignore, so Vite HMR is untouched.
     expect(src.indexOf("if (route === 'ignore') return")).toBeLessThan(src.indexOf('humanUpgradeOriginOk(req.headers'))

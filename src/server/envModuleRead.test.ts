@@ -9,7 +9,7 @@ const SERVER_DIR = __dirname
 const MODULE_ENV_READ = /^(export )?const (?!.*=>).*process\.env/m
 const TEST_FILE = /\.(test|testutil)\.tsx?$/
 // Entry bootstrap: membaca env sebelum overlay Settings ada, memang tempatnya (urutan boot dipegang EM-14).
-const ENTRY_FILES = new Set(['index.ts'])
+const ENTRY_FILES = new Set(['index.ts', 'server.main.ts'])
 // Dibekukan sengaja: tiap berkas punya alasan (kunci keamanan bootstrap / logger sebelum Settings siap).
 export const ALLOWED_MODULE_ENV_READS = ['launchLine.ts', 'agentStatusAuth.ts', 'logs/logger.ts', 'logs/logBus.ts'] as const
 
