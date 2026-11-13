@@ -7,15 +7,17 @@ import {
   type TabOverflow,
 } from './workspaceTabs'
 import { scrollTopToReveal } from './filesKeys'
-import type { SessionGroup, SessionRowVM, StatusKind } from './sessionList'
+import type { SessionGroup, SessionRowVM } from './sessionList'
+import { sessionStatusView } from './sessionStatus.model'
 
-// test-only: pabrik ringkas, hanya field yang dibaca `workspaceTabs`.
-const row = (id: string, statusKind: StatusKind): SessionRowVM => ({
+// test-only: pabrik ringkas, hanya field yang dibaca `workspaceTabs`. Nama kunci = arti di tab.
+const STATUS = { working: 'working', attention: 'blocked', done: 'done', unknown: undefined } as const
+const row = (id: string, s: keyof typeof STATUS): SessionRowVM => ({
   id,
   label: id,
-  isAgent: true,
-  statusKind,
-  stateLabel: statusKind,
+  title: id,
+  kind: 'agent',
+  view: sessionStatusView({ status: STATUS[s] }),
   projectId: 'p',
   projectName: 'proj',
 })

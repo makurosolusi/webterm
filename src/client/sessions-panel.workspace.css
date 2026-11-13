@@ -1,5 +1,5 @@
 /* Project tab: every workspace stacked in tab order (like Orca's workspace sidebar). The header is
-   two lines (dot, name, Current chip / folder · branch); the tree item's wrapper has min-height
+   two lines (name, Current chip / folder · branch); the tree item's wrapper has min-height
    22px and aligns to the top, so the chevron and monogram stay on the first line. */
 .ss-ws {
   display: flex;
@@ -17,22 +17,6 @@
 
 .ss-ws__line .ss-tree__group-label {
   min-width: 0;
-}
-
-.ss-ws__dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted-2);
-}
-
-.ss-ws__dot--attention {
-  background: var(--state-attention);
-}
-
-.ss-ws__dot--running {
-  background: var(--state-working);
 }
 
 .ss-ws__chip {
@@ -55,8 +39,8 @@
   white-space: nowrap;
 }
 
-/* The open workspace is a card: its header and its sessions share one background. */
+/* The open workspace: a 2px accent bar on its header row (Linear / VS Code), never the selection
+   background, which made the whole card read as selected. */
 .ss-tree__group--ws.ss-tree__group--active {
-  border-radius: 4px;
-  background: var(--vscode-list-inactiveSelectionBackground, var(--raised));
+  box-shadow: inset 2px 0 0 var(--accent);
 }

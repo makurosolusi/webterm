@@ -19,7 +19,9 @@ export function visibleTreeItems(root: ParentNode): TreeItemEl[] {
 
 /** Label baris untuk type-ahead: elemen label milik item itu sendiri, bukan teks anak-anaknya. */
 export function treeItemLabel(item: Element): string {
-  const label = item.querySelector(':scope > .ss-tree__label, :scope > .ss-tree__group-label')
+  // A workspace header nests its label in `.ss-ws > .ss-ws__line` (SessionGroupItem), one level
+  // deeper than leaves and bucket headers; without that path type-ahead skipped every workspace.
+  const label = item.querySelector(':scope > .ss-tree__label, :scope > .ss-tree__group-label, :scope > .ss-ws > .ss-ws__line > .ss-tree__group-label')
   return (label?.textContent ?? '').trim()
 }
 

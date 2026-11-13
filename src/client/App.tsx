@@ -49,7 +49,7 @@ import { useLayersCommands } from './layers.commands'
 import { useAppTabs } from './App.tabs'
 import { toggleMaximizeTarget } from './nodeMaximize.store'
 import AppHosts, { SettingsHost } from './App.hosts'
-import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds, useAppSession } from './App.hooks'
+import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds, useAppSession, useStatusReasons } from './App.hooks'
 import { useAppUrlState, useWorkspaceUrlSync } from './App.route'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
@@ -166,6 +166,8 @@ export default function App() {
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
 
   const agentSummary = useAgentSummary(statuses)
+  // Mounted with App (not the Sessions view, which mounts only while shown) so no reason frame is missed.
+  const statusReasons = useStatusReasons()
 
   // TIDAK ada suntikan apa pun ke `data` di sini — callback lewat `useNodeActions`, settings lewat
   // `useLiveSettings`. Node terminal/agent jadi mewarisi identitas objek aslinya (`withLinkHandles`
@@ -254,9 +256,10 @@ export default function App() {
             open={sideBar.open} view={sideBar.view} onClose={() => sideBar.setOpen(false)} layerCount={flowNodes.length}
             layers={activeWs ? <LayersPanel nodes={tabsProps.nodes} statuses={statuses} rf={rf} onCloseNode={tabsProps.onCloseNode} onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} /> : null}
             sessions={<SessionsPanel
-              active={sideBar.open && sideBar.view === 'sessions'} workspaces={workspaces} activeId={activeId} liveActiveNodes={liveNodes} statuses={statuses}
+              active={sideBar.open && sideBar.view === 'sessions'} workspaces={workspaces} activeId={activeId} liveActiveNodes={liveNodes} statuses={statuses} reasons={statusReasons}
               onFocusNode={onFocus} onCloseSession={(id) => void closeSession(id)} onSelectWorkspace={(id) => void onSelect(id)}
-              closedSessions={closedSessions} onReopenSession={(id) => void reopenClosed(id, reopenDeps)} />}
+              closedSessions={closedSessions} onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
+              onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} />}
             history={<SessionHistory active={sideBar.open && sideBar.view === 'history'} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />}
           />
           {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
