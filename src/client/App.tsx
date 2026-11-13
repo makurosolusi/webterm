@@ -2,18 +2,15 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
 import { useRememberLastResize } from './nodeSpawn'
 import '@xyflow/react/dist/style.css'
-import AppDock, { AppWorkspaceBar } from './App.chrome'
+import { AppWorkspaceBar } from './App.chrome'
+import AppWorkbench from './App.workbench'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
 import AppSetup from './App.setup'
 import SignInScreen from './SignInScreen'
 import BootScreen from './BootScreen'
 import ConnectionStatus from './ConnectionStatus'
-import SessionsPanel from './SessionsPanel'
-import SideBar from './sideBar/SideBar'
 import { useAppSideBar, useSessionsAttention } from './sideBar/useAppSideBar'
-import AppBottomPanel from './App.bottomPanel'
-import SecondarySideBar from './App.secondarySideBar'
 import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
 import { useCentralControlEnabled } from './central/centralControlApi'
 import { CleanViewHint, useCleanView } from './cleanView'
@@ -21,12 +18,10 @@ import Omnibox from './Omnibox'
 import { openEditorAt, useOmnibox } from './Omnibox.open'
 import { setLspFileOpener } from './editorLsp.store'
 import { useAppCommands } from './commandRegistry.defaults'
-import OutputPanelHost from './output/outputPanelHost'
 import { TASK_BOARD_STATUS_ITEM } from './central/work/taskBoardView'
 import { usePortsStatusItems } from './PortsChip'
 import { useProblems } from './ProblemsPanel'
 import { useTasksMenu } from './TasksMenu'
-import MorningBrief from './MorningBrief'
 import { SettingsProvider, SettingsUpdateProvider, useSettings } from './useSettings'
 import { NodeActionsProvider } from './nodeActions'
 import { ActiveWorkspaceProvider } from './activeWorkspace.context'
@@ -41,21 +36,18 @@ import { useWorkspaceLifecycle } from './workspaceLifecycle'
 import { useWorkspaceSaver } from './workspaceSaver'
 import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
-import SessionHistory from './SessionHistory'
 import { useBoardActions } from './App.board'
 import BoardHost from './BoardHost'
-import LayersPanel from './layersPanel'
 import { useLayersCommands } from './layers.commands'
 import { useAppTabs } from './App.tabs'
 import { toggleMaximizeTarget } from './nodeMaximize.store'
-import AppHosts, { SettingsHost } from './App.hosts'
+import { SettingsHost } from './App.hosts'
 import { useStatusSubscription, useAppTheme, useAuthActions, useAgentSummary, useDockFeeds, useAppSession, useStatusReasons } from './App.hooks'
 import { useAppUrlState, useWorkspaceUrlSync } from './App.route'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Viewport, Workspace } from '../shared/workspace'
 
-// Rarely opened overlays load on first open, not with the board (keeps the start-up chunk small).
-const Kanban = lazy(() => import('./Kanban'))
+// Rarely opened overlay: loads on first open, not with the board (keeps the start-up chunk small).
 const HelpOverlay = lazy(() => import('./HelpOverlay'))
 
 export default function App() {
@@ -246,41 +238,16 @@ export default function App() {
         )}
       </div>
       {hydrated && !noWorkspaces && (
-        <>
-          <AppDock
-            {...{ vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings }}
-            {...{ onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary }}
-            extraStatusItems={[...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems]}
-          />
-          <SideBar
-            open={sideBar.open} view={sideBar.view} onClose={() => sideBar.setOpen(false)} layerCount={flowNodes.length}
-            layers={activeWs ? <LayersPanel nodes={tabsProps.nodes} statuses={statuses} rf={rf} onCloseNode={tabsProps.onCloseNode} onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} /> : null}
-            sessions={<SessionsPanel
-              active={sideBar.open && sideBar.view === 'sessions'} workspaces={workspaces} activeId={activeId} liveActiveNodes={liveNodes} statuses={statuses} reasons={statusReasons}
-              onFocusNode={onFocus} onCloseSession={(id) => void closeSession(id)} onSelectWorkspace={(id) => void onSelect(id)}
-              closedSessions={closedSessions} onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
-              onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} />}
-            history={<SessionHistory active={sideBar.open && sideBar.view === 'history'} activeWs={activeWs} workspaces={workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces, selectWorkspace: onSelect }} />}
-          />
-          {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
-              menutup lewat Escape/X tab-nya. Persetujuan tinggal di strip Needs-you chat Central. */}
-          <AppBottomPanel
-            problems={problems} root={activeWs?.cwd} nodes={nodes} nodesRef={nodesRef} addFlowNode={addFlowNode}
-            onFocus={(id) => void onFocus(id)}
-            workspaces={workspaces} liveNodes={liveNodes} activeId={activeId} centralEnabled={centralEnabled} panel={route.panel} />
-          {/* Chat & Central di kanan (ala Copilot Chat): kolom grid `aux`, canvas menyempit, tidak ditutupi. */}
-          <SecondarySideBar centralEnabled={centralEnabled} ctab={route.ctab} setCentralTab={routeActions.setCentralTab} />
-          <OutputPanelHost />
-          {tasks.menu}
-          <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenDiff={(ws) => (ws === activeId ? onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
-          <AppHosts
-            activeWs={activeWs}
-            onCreated={(ws) => { setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
-            onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); restoreBridges(bridges, placed.map((n) => n.id)) }}
-          />
-          {board && <Suspense fallback={null}><Kanban nodes={flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => setBoard(false)} /></Suspense>}
-          {paneMenu}
-        </>
+        <AppWorkbench
+          dock={{
+            vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings,
+            onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary,
+            extraStatusItems: [...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems],
+          }}
+          {...{ sideBar, tabsProps, rf, flowNodes, nodes, nodesRef, statuses, statusReasons, workspaces, activeWs, activeId, liveNodes, setWorkspaces, onFocus, onSelect, closeSession }}
+          {...{ addFlowNode, restoreBridges, onAddDiff, closedSessions, reopenClosed, reopenDeps, problems, centralEnabled, route, board, setBoard, paneMenu }}
+          tasksMenu={tasks.menu} setCentralTab={routeActions.setCentralTab}
+        />
       )}
       {/* Di luar blok `hydrated && !noWorkspaces`: chord-nya tak digerbangi, petunjuk keluarnya juga tidak. */}
       {cleanView && <CleanViewHint />}
