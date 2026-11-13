@@ -1,40 +1,35 @@
 // Secrets part of Settings › Rules & secrets: the secret broker's names, add/replace, delete and usage log
-// (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a
-// password manager field, the list shows names only and the input is cleared after a save.
+// (`/api/secrets`, UI-only on the server). Values go out once on save and never come back: like a password
+// manager or Vercel's environment variables, a saved value is only dots, the value box has Show/Hide while
+// you type, Copy copies the name (what a command refers to), and Delete asks first.
 import { useCallback, useEffect, useState } from 'react'
-import { Input } from '@/components/ui/input'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
-import { secretRule, whoText } from './policyPresets'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { writeClipboard } from './clipboard'
+import { secretRule } from './policyPresets'
 import { createRule } from './policyRules.api'
+import { CardEmpty, CardError, CardLoading } from './SettingsCardState'
+import { SettingsGroup } from './SettingsControls'
 import { SafeguardNote } from './SettingsFields'
+import { SecretsUsage, type SecretUse } from './SecretsUsage'
+import { SECRETS_TEXT as T } from './secretsLabels'
 
+export { SECRETS_TEXT } from './secretsLabels'
+export type { SecretUse } from './SecretsUsage'
 export const SECRETS_PATH = '/api/secrets'
 
 export interface SecretEntry { name: string; lastUsedAt: number | null }
-export interface SecretUse { seq: number; ts: number; name: string; principal: string; commandHash: string; exitCode: number | null }
 interface SecretsView { secrets: SecretEntry[]; usage: SecretUse[] | null }
 
-export const SECRETS_TEXT = {
-  title: 'Secrets',
-  intro: 'Agents ask before using a secret, unless you allow it here.',
-  detail: 'An agent never sees the value: it goes into one command and is hidden in that command\'s output.',
-  loading: 'Loading secrets…',
-  loadFailed: 'Cannot load secrets.',
-  empty: 'No secrets yet.',
-  name: 'Name (e.g. NPM_TOKEN)', value: 'Value', save: 'Save', delete: 'Delete',
-  allow: (ws: string) => `Allow for agents in ${ws}`, allowNoWorkspace: 'Allow agents to use this', allowing: 'Allowing…',
-  allowed: (name: string, ws: string) => `${name}: allowed for agents in ${ws}. Revoke it under Rules.`,
-  noWorkspace: 'Open a workspace first: the rule is for the agents in it.',
-  neverUsed: 'never used', lastUsed: (at: number) => `last used ${new Date(at).toLocaleString()}`,
-  colWhen: 'When', colName: 'Secret', colWho: 'Used by', colCommand: 'Command', colResult: 'Result',
-  ok: 'OK', exitFailed: (code: number) => `Failed (exit ${code})`, noResult: 'Unknown',
-  usageTitle: 'Usage log', usageEmpty: 'No uses yet.', usageOff: 'The usage log is unavailable while the ledger is off.',
-  failed: (what: string, why: string) => `${what} failed: ${why}`,
-  saving: 'Saving…', deleting: 'Deleting…', saved: (name: string) => `Saved ${name}.`, deleted: (name: string) => `Deleted ${name}.`,
-  badName: 'Name: a capital letter first, then capitals, digits or _ (e.g. NPM_TOKEN).', needValue: 'Enter a value.',
-} as const
-
 const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/
+const COPIED_MS = 1500
 
 async function secretsRequest(method: string, path = SECRETS_PATH, body?: unknown): Promise<unknown> {
   const headers: Record<string, string> = { Accept: 'application/json' }
@@ -53,112 +48,143 @@ export interface SecretsWorkspace { id: string; name: string }
 /** "Allow for agents in <workspace>": makes the rule (agents of the current workspace, any command, forever) right here, with its result. */
 function AllowSecret({ name, workspace }: { name: string; workspace: SecretsWorkspace | null }): React.JSX.Element {
   const allow = useAction(async () => {
-    if (!workspace) throw new Error(SECRETS_TEXT.noWorkspace) // the button is locked then; guards a stale click
+    if (!workspace) throw new Error(T.noWorkspace) // the button is locked then; guards a stale click
     await createRule({ subject: 'node:*', ...secretRule(name), workspaceId: workspace.id, effect: 'allow' })
-  }, { label: `${workspace ? SECRETS_TEXT.allow(workspace.name) : SECRETS_TEXT.allowNoWorkspace}: ${name}`, success: () => SECRETS_TEXT.allowed(name, workspace?.name ?? ''), toast: 'always' })
+  }, { label: `${workspace ? T.allow(workspace.name) : T.allowNoWorkspace}: ${name}`, success: () => T.allowed(name, workspace?.name ?? ''), toast: 'always' })
   return (
-    <span className="flex flex-col gap-0.5">
-      <ActionButton size="sm" variant="outline" action={allow} busyLabel={SECRETS_TEXT.allowing} lock={workspace ? undefined : { reason: SECRETS_TEXT.noWorkspace }}>
-        {workspace ? SECRETS_TEXT.allow(workspace.name) : SECRETS_TEXT.allowNoWorkspace}
+    <span className="flex flex-col items-end gap-0.5">
+      <ActionButton size="sm" variant="outline" action={allow} busyLabel={T.allowing} lock={workspace ? undefined : { reason: T.noWorkspace }}>
+        {workspace ? T.allow(workspace.name) : T.allowNoWorkspace}
       </ActionButton>
       <ActionResult action={allow} />
     </span>
   )
 }
 
-/** Delete one secret, with busy and its failure on the row. */
-function DeleteSecret({ name, onDone }: { name: string; onDone(): void }): React.JSX.Element {
-  const del = useAction(async () => {
-    await secretsRequest('DELETE', `${SECRETS_PATH}/${encodeURIComponent(name)}`)
-    onDone()
-  }, { label: `${SECRETS_TEXT.delete} ${name}`, success: () => SECRETS_TEXT.deleted(name), failure: (e) => SECRETS_TEXT.failed(SECRETS_TEXT.delete, errorCause(e)) })
+function SecretRow({ s, workspace, onDelete }: { s: SecretEntry; workspace: SecretsWorkspace | null; onDelete(): void }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const copy = (): void => {
+    writeClipboard(s.name).then((ok) => {
+      setCopied(ok)
+      if (ok) window.setTimeout(() => setCopied(false), COPIED_MS)
+    }, (err: unknown) => console.warn(`secrets: copying the name ${s.name} failed`, err))
+  }
   return (
-    <span className="flex flex-col gap-0.5">
-      <ActionButton size="sm" variant="secondary" action={del} busyLabel={SECRETS_TEXT.deleting}>{SECRETS_TEXT.delete}</ActionButton>
-      <ActionResult action={del} />
-    </span>
+    <li data-secret={s.name} className="st-field">
+      <div className="st-field-text">
+        <code className="st-row-title">{s.name}</code>
+        <p className="st-row-meta">
+          <span className="st-mask" aria-hidden="true">{T.mask}</span><span className="sr-only">{T.maskLabel}</span>
+          {' · '}{s.lastUsedAt === null ? T.neverUsed : T.lastUsed(s.lastUsedAt)}
+        </p>
+      </div>
+      <div className="st-control">
+        <IconButton size="icon-sm" label={copied ? T.copied : T.copyName(s.name)} onClick={copy}>
+          <span className={`codicon ${copied ? 'codicon-check' : 'codicon-copy'}`} aria-hidden="true" />
+        </IconButton>
+        <AllowSecret name={s.name} workspace={workspace} />
+        <IconButton size="icon-sm" label={T.deleteName(s.name)} onClick={onDelete}>
+          <span className="codicon codicon-trash" aria-hidden="true" />
+        </IconButton>
+      </div>
+    </li>
   )
 }
 
 export function SecretsPanel({ workspace = null }: { workspace?: SecretsWorkspace | null }): React.JSX.Element {
   const [view, setView] = useState<SecretsView | null>(null)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [value, setValue] = useState('')
+  const [shown, setShown] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const load = useCallback(() => {
+    setLoadError(null)
     secretsRequest('GET')
-      .then((v) => { if (isView(v)) { setView(v); setLoadError(false) } else setLoadError(true) })
-      .catch(() => setLoadError(true)) // shown as the loadFailed note
+      .then((v) => { if (isView(v)) setView(v); else setLoadError(T.loadFailed) })
+      .catch((e: unknown) => setLoadError(`${T.loadFailed} ${errorCause(e)}`))
   }, [])
   useEffect(load, [load])
 
+  const closeForm = (): void => { setAdding(false); setName(''); setValue(''); setShown(false) }
   const save = useAction(async () => {
     const n = name.trim()
     await secretsRequest('PUT', `${SECRETS_PATH}/${encodeURIComponent(n)}`, { value })
-    setValue('')
+    closeForm()
     load()
     return n
-  }, { label: SECRETS_TEXT.save, success: (n) => SECRETS_TEXT.saved(n), failure: (e) => SECRETS_TEXT.failed(SECRETS_TEXT.save, errorCause(e)) })
-  const saveLock = !NAME_RE.test(name.trim()) ? SECRETS_TEXT.badName : value.trim() === '' ? SECRETS_TEXT.needValue : undefined
+  }, { label: T.save, success: (n) => T.saved(n), failure: (e) => T.failed(T.save, errorCause(e)) })
+  const saveLock = !NAME_RE.test(name.trim()) ? T.badName : value.trim() === '' ? T.needValue : undefined
 
+  const del = useAction(async () => {
+    const n = deleting ?? ''
+    setDeleting(null)
+    await secretsRequest('DELETE', `${SECRETS_PATH}/${encodeURIComponent(n)}`)
+    load()
+    return n
+  }, { label: T.delete, success: (n) => T.deleted(n), failure: (e) => T.failed(T.delete, errorCause(e)) })
+  const confirmDelete = (): void => { void del.run() }
+
+  const addButton = <Button size="sm" variant="outline" onClick={() => setAdding(true)}>{T.add}</Button>
   return (
-    <section aria-label={SECRETS_TEXT.title} data-testid="secrets-panel">
-      <h3 className="font-semibold">{SECRETS_TEXT.title}</h3>
-      <p className="text-xs opacity-70">{SECRETS_TEXT.intro}</p>
-      <SafeguardNote id="secretAccess" />
-      <p className="text-xs opacity-70">{SECRETS_TEXT.detail}</p>
-      {loadError ? <p className="text-xs opacity-70">{SECRETS_TEXT.loadFailed}</p> : null}
-      {!view && !loadError ? <p role="status" className="text-xs opacity-70">{SECRETS_TEXT.loading}</p> : null}
-      {view?.secrets.length === 0 ? <p className="text-xs opacity-70">{SECRETS_TEXT.empty}</p> : null}
-      {view && view.secrets.length > 0 ? (
-        <ul className="flex flex-col gap-1 text-xs">
-          {view.secrets.map((s) => (
-            <li key={s.name} data-secret={s.name} className="flex items-center gap-2">
-              <code className="flex-1">{s.name}</code>
-              <span className="opacity-70">{s.lastUsedAt === null ? SECRETS_TEXT.neverUsed : SECRETS_TEXT.lastUsed(s.lastUsedAt)}</span>
-              <AllowSecret name={s.name} workspace={workspace} />
-              <DeleteSecret name={s.name} onDone={load} />
-            </li>
-          ))}
-        </ul>
+    <div data-testid="secrets-panel" className="contents">
+      <SettingsGroup title={T.title} description={T.intro}>
+        <div className="st-state st-state--empty"><SafeguardNote id="secretAccess" /><p className="st-hint">{T.detail}</p></div>
+        {loadError ? <CardError text={loadError} onRetry={load} /> : null}
+        {!view && !loadError ? <CardLoading text={T.loading} /> : null}
+        {view?.secrets.length === 0 && !adding ? <CardEmpty text={T.empty}>{addButton}</CardEmpty> : null}
+        {view && view.secrets.length > 0 ? (
+          <ul className="st-list" aria-label={T.title}>
+            {view.secrets.map((s) => <SecretRow key={s.name} s={s} workspace={workspace} onDelete={() => setDeleting(s.name)} />)}
+          </ul>
+        ) : null}
+        {view && adding ? (
+          <form className="st-form" aria-label={T.addTitle} onSubmit={(e) => { e.preventDefault(); if (!saveLock) void save.run() }}>
+            <div className="st-form-row">
+              <span className="flex flex-col gap-1">
+                <Label htmlFor="secret-name">{T.name}</Label>
+                <Input id="secret-name" className="st-mono" placeholder={T.namePlaceholder} autoComplete="off" spellCheck={false} autoFocus
+                  value={name} onChange={(e) => setName(e.target.value.toUpperCase())} />
+              </span>
+              <span className="flex flex-col gap-1">
+                <Label htmlFor="secret-value">{T.value}</Label>
+                <span className="flex items-center gap-1">
+                  <Input id="secret-value" type={shown ? 'text' : 'password'} autoComplete="off" spellCheck={false}
+                    value={value} onChange={(e) => setValue(e.target.value)} />
+                  <Button type="button" variant="ghost" size="sm" aria-pressed={shown} aria-label={shown ? T.hideValue : T.showValue}
+                    onClick={() => setShown((v) => !v)}>{shown ? T.hide : T.show}</Button>
+                </span>
+              </span>
+            </div>
+            <p className="st-row-meta">{T.replaceHint}</p>
+            <div className="st-form-actions">
+              <ActionButton size="sm" type="button" action={save} busyLabel={T.saving} lock={saveLock ? { reason: saveLock } : undefined}>{T.save}</ActionButton>
+              <Button size="sm" variant="ghost" type="button" onClick={closeForm}>{T.cancel}</Button>
+            </div>
+          </form>
+        ) : null}
+        {view && view.secrets.length > 0 && !adding ? <div className="st-form">{addButton}</div> : null}
+        {save.result || del.result ? (
+          <div className="st-form"><ActionResult action={save} /><ActionResult action={del} /></div>
+        ) : null}
+      </SettingsGroup>
+      {view ? <SecretsUsage usage={view.usage} /> : null}
+      {deleting !== null ? (
+        <AlertDialog open onOpenChange={(open) => { if (!open) setDeleting(null) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{T.deleteTitle(deleting)}</AlertDialogTitle>
+              <AlertDialogDescription>{T.deleteBody}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus>{T.cancel}</AlertDialogCancel>
+              <AlertDialogAction variant="destructive" onClick={confirmDelete}>{T.delete}</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
-      {view ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-          <Input aria-label={SECRETS_TEXT.name} placeholder={SECRETS_TEXT.name} value={name} onChange={(e) => setName(e.target.value.toUpperCase())} className="min-w-32 flex-1" />
-          <Input aria-label={SECRETS_TEXT.value} placeholder={SECRETS_TEXT.value} type="password" autoComplete="off" value={value} onChange={(e) => setValue(e.target.value)} className="min-w-32 flex-1" />
-          <ActionButton size="sm" action={save} busyLabel={SECRETS_TEXT.saving} lock={saveLock ? { reason: saveLock } : undefined}>{SECRETS_TEXT.save}</ActionButton>
-        </div>
-      ) : null}
-      <ActionResult action={save} />
-      {view ? (
-        <div className="mt-2">
-          <h4 className="text-xs font-semibold">{SECRETS_TEXT.usageTitle}</h4>
-          {view.usage === null ? <p className="text-xs opacity-70">{SECRETS_TEXT.usageOff}</p> : null}
-          {view.usage?.length === 0 ? <p className="text-xs opacity-70">{SECRETS_TEXT.usageEmpty}</p> : null}
-          {view.usage && view.usage.length > 0 ? (
-            <table className="mt-1 border-collapse text-xs" aria-label={SECRETS_TEXT.usageTitle}>
-              <thead>
-                <tr className="text-left opacity-70">
-                  {[SECRETS_TEXT.colWhen, SECRETS_TEXT.colName, SECRETS_TEXT.colWho, SECRETS_TEXT.colCommand, SECRETS_TEXT.colResult].map((h) => <th key={h} className="pr-4">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {view.usage.map((u) => (
-                  <tr key={u.seq} data-use={u.seq}>
-                    <td className="pr-4">{new Date(u.ts).toLocaleString()}</td>
-                    <td className="pr-4"><code>{u.name}</code></td>
-                    <td className="pr-4">{whoText(u.principal)}</td>
-                    {/* The broker logs a hash, never the command line itself. */}
-                    <td className="pr-4"><code>{u.commandHash.slice(0, 12)}</code></td>
-                    <td>{u.exitCode === null ? SECRETS_TEXT.noResult : u.exitCode === 0 ? SECRETS_TEXT.ok : SECRETS_TEXT.exitFailed(u.exitCode)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
+    </div>
   )
 }

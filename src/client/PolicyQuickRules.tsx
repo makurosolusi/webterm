@@ -3,6 +3,7 @@
 // pattern the prompt card's "Always allow" saves), like Claude Code /permissions growing from the prompts.
 import { useEffect, useRef, useState } from 'react'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { SettingsGroup } from './SettingsControls'
 import { createRule, isAsks, policyRequest, RECENT_ASKS_PATH, type PolicyGrant, type RecentAsk } from './policyRules.api'
 import { TOOL_PREFIX } from './policyPresets'
 
@@ -25,15 +26,17 @@ function AskRow({ ask }: { ask: RecentAsk }): React.JSX.Element {
   const allow = useAction(rule('allow'), { label: `${T.allow}: ${ask.label}`, success: () => T.allowed, toast: 'always' })
   const block = useAction(rule('deny'), { label: `${T.block}: ${ask.label}`, success: () => T.blocked, toast: 'always' })
   return (
-    <li data-ask={`${ask.tool}:${ask.pattern}`} className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <code className="flex-1 break-all">{ask.label}</code>
-        <span className="opacity-70">{T.askedBy(ask.node)}</span>
+    <li data-ask={`${ask.tool}:${ask.pattern}`} className="st-field">
+      <div className="st-field-text">
+        <code className="st-row-title">{ask.label}</code>
+        <p className="st-row-meta">{T.askedBy(ask.node)}</p>
+        <ActionResult action={allow} />
+        <ActionResult action={block} />
+      </div>
+      <div className="st-control">
         <ActionButton size="sm" variant="outline" action={allow} busyLabel={T.saving}>{T.allow}</ActionButton>
         <ActionButton size="sm" variant="outline" action={block} busyLabel={T.saving}>{T.block}</ActionButton>
       </div>
-      <ActionResult action={allow} />
-      <ActionResult action={block} />
     </li>
   )
 }
@@ -50,10 +53,10 @@ export function PolicyQuickRules({ grants }: { grants: readonly PolicyGrant[] })
   const open = asks ?? []
   if (open.length === 0) return null
   return (
-    <div className="mt-2 flex flex-col gap-1 text-xs" data-testid="policy-quick-rules">
-      <h4 className="font-semibold">{T.title}</h4>
-      <p className="opacity-70">{T.intro}</p>
-      <ul className="flex flex-col gap-1">{open.map((a) => <AskRow key={`${a.tool}:${a.pattern}`} ask={a} />)}</ul>
+    <div data-testid="policy-quick-rules" className="contents">
+      <SettingsGroup title={T.title} description={T.intro}>
+        <ul className="st-list" aria-label={T.title}>{open.map((a) => <AskRow key={`${a.tool}:${a.pattern}`} ask={a} />)}</ul>
+      </SettingsGroup>
     </div>
   )
 }

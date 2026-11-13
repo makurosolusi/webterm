@@ -83,6 +83,8 @@ describe('tab Kemampuan (D8)', () => {
 
   it('Browser, Files and Telegram only: one switch per card, no Central summary, no engine, no provider or token card', async () => {
     const main = await openCapabilities()
+    // One titled card per feature, then the page's Advanced.
+    expect([...main.querySelectorAll('[data-slot="settings-group"] > h3')].map((h) => h.textContent)).toEqual(['Browser', 'Files', 'Telegram'])
     // Two switched cards (Browser, Files); Telegram has its paste-token flow.
     expect(screen.getAllByRole('switch')).toHaveLength(2)
     expect([...main.querySelectorAll('[data-capability]')].map((el) => el.getAttribute('data-capability'))).toEqual(['browser', 'files', 'telegram'])
@@ -95,12 +97,14 @@ describe('tab Kemampuan (D8)', () => {
     expect(screen.getByLabelText('Browser search engine')).toBeTruthy()
   })
 
-  it('Edit and upload files is a sub-option of the Files card (shown while Files is on)', async () => {
+  it('Edit and upload files is a sub-switch of the Files card (shown while Files is on)', async () => {
     on.add('files')
     try {
       const main = await openCapabilities()
       const files = main.querySelector('[data-capability="files"]') as HTMLElement
-      fireEvent.click(within(files).getByRole('checkbox', { name: CAPABILITIES.filesWrite.title }))
+      const sub = within(files).getByRole('switch', { name: CAPABILITIES.filesWrite.title })
+      expect(sub.closest('.st-field--sub')).toBeTruthy()
+      fireEvent.click(sub)
       await waitFor(() => expect(calls).toContain('POST /api/capabilities/filesWrite'))
       expect(JSON.parse(bodies['POST /api/capabilities/filesWrite'] ?? '{}')).toEqual({ enabled: true })
     } finally {

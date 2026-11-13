@@ -1,10 +1,10 @@
-/* Tab Kemampuan di Settings: kolom kartu; kartu memakai utilitas Tailwind, di sini hanya bingkai dan Lanjutan. */
+/* Settings › Features: the cards are SettingsGroups (settings-field.css); the column only needs to stack them. */
 .st-capabilities {
   display: flex;
   flex-direction: column;
-  max-width: 640px;
 }
 
+/* Still used by the Claude and Central pages' own collapsibles (not this page any more). */
 .st-capabilities-advanced {
   padding: 12px 0;
 }

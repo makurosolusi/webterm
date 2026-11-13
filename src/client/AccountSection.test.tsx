@@ -43,6 +43,10 @@ const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0))
 const type = (id: string, value: string) => fireEvent.change(document.getElementById(id)!, { target: { value } })
 const posted = (url: string) => calls.filter((c) => c.url === url).map((c) => (c.body ? JSON.parse(c.body) : null))
 const form = (title: string) => screen.getByRole('form', { name: title })
+/** Opens a card's form ("Change username" / "Change password" on its row). */
+const openForm = (title: string) => fireEvent.click(screen.getByRole('button', { name: title }))
+/** Answers the sign-out question in the app dialog. */
+const confirmSignOut = () => fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: ACCOUNT_TEXT.signOutRow }))
 
 async function mount() {
   const reload = vi.fn()
@@ -65,6 +69,9 @@ describe('AccountSection', () => {
     expect(rows[1]!.textContent).toContain('Firefox on Linux')
     expect(rows[1]!.textContent).toContain(ACCOUNT_TEXT.lastActive('2 hours ago'))
     expect(rows[1]!.textContent).not.toContain(ACCOUNT_TEXT.thisDevice)
+    expect(rows[1]!.textContent).toContain(ACCOUNT_TEXT.signedInAt('3 days ago'))
+    // Each part is a titled card: Username, Password, Signed-in devices.
+    expect([...document.querySelectorAll('[data-slot="settings-group"] > h3')].map((h) => h.textContent)).toEqual([ACCOUNT_TEXT.usernameGroup, ACCOUNT_TEXT.passwordGroup, ACCOUNT_TEXT.sessionsTitle])
   })
 
   it('a failed /auth/me shows the cause with Retry', async () => {
@@ -81,6 +88,8 @@ describe('AccountSection', () => {
 
   it('change username: 401 wrong password, 409 taken, then 200 shows the new name', async () => {
     await mount()
+    expect(screen.queryByRole('form', { name: ACCOUNT_TEXT.usernameTitle })).toBeNull() // closed until asked
+    openForm(ACCOUNT_TEXT.usernameTitle)
     type('account-new-username', 'grace')
     type('account-username-password', 'wrong')
     replies[AUTH_USERNAME_PATH] = { status: 401, body: { error: 'invalid_credentials' } }
@@ -97,11 +106,13 @@ describe('AccountSection', () => {
     await flush()
     expect(screen.getByTestId('account-username').textContent).toBe('grace')
     expect(screen.getByText(ACCOUNT_TEXT.usernameChanged)).toBeTruthy()
+    expect(screen.queryByRole('form', { name: ACCOUNT_TEXT.usernameTitle })).toBeNull() // closes on success
     expect(posted(AUTH_USERNAME_PATH).at(-1)).toEqual({ username: 'grace', password: 'correct horse battery' })
   })
 
   it('change password: short and mismatched are refused locally, 401 names the current password, 200 signs others out', async () => {
     await mount()
+    openForm(ACCOUNT_TEXT.passwordTitle)
     const f = () => form(ACCOUNT_TEXT.passwordTitle)
     const submit = () => fireEvent.click(within(f()).getByRole('button', { name: ACCOUNT_TEXT.savePassword }))
     type('account-current-password', 'old password here')
@@ -132,8 +143,20 @@ describe('AccountSection', () => {
     expect(within(screen.getByRole('list', { name: ACCOUNT_TEXT.sessionsTitle })).getAllByRole('listitem')).toHaveLength(1)
   })
 
+  it('empty fields are named on submit (the button is not silently off); Cancel closes the form', async () => {
+    await mount()
+    openForm(ACCOUNT_TEXT.usernameTitle)
+    fireEvent.click(within(form(ACCOUNT_TEXT.usernameTitle)).getByRole('button', { name: ACCOUNT_TEXT.saveUsername }))
+    await flush()
+    expect(within(form(ACCOUNT_TEXT.usernameTitle)).getByRole('alert').textContent).toBe(ACCOUNT_TEXT.needUsername)
+    expect(posted(AUTH_USERNAME_PATH)).toEqual([])
+    fireEvent.click(within(form(ACCOUNT_TEXT.usernameTitle)).getByRole('button', { name: ACCOUNT_TEXT.cancel }))
+    expect(screen.queryByRole('form', { name: ACCOUNT_TEXT.usernameTitle })).toBeNull()
+  })
+
   it('a 429 on a change counts down instead of a generic failure', async () => {
     await mount()
+    openForm(ACCOUNT_TEXT.usernameTitle)
     type('account-new-username', 'grace')
     type('account-username-password', 'x')
     replies[AUTH_USERNAME_PATH] = { status: 429, body: { error: 'rate_limited' } }
@@ -142,22 +165,33 @@ describe('AccountSection', () => {
     expect(within(form(ACCOUNT_TEXT.usernameTitle)).getByRole('alert').textContent).toBe(ACCOUNT_TEXT.tooMany(1))
   })
 
-  it('Sign out on another row revokes that session; "Sign out all other sessions" reports the count', async () => {
+  it('Sign out on another row asks first, then revokes that device; "Sign out all other devices" asks and reports the count', async () => {
     await mount()
     replies[authRevokePath(OTHER.id)] = { status: 204 }
+    fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel('Firefox on Linux') }))
+    expect(screen.getByRole('alertdialog').textContent).toContain(ACCOUNT_TEXT.confirmOneTitle('Firefox on Linux'))
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: ACCOUNT_TEXT.cancel }))
+    await flush()
+    expect(calls.some((c) => c.url === authRevokePath(OTHER.id))).toBe(false)
     sessions = [HERE]
     fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel('Firefox on Linux') }))
+    confirmSignOut()
     await flush()
     await flush()
     expect(calls.some((c) => c.url === authRevokePath(OTHER.id))).toBe(true)
+    expect(screen.getByText(ACCOUNT_TEXT.signedOutOne('Firefox on Linux'))).toBeTruthy()
     expect(within(screen.getByRole('list', { name: ACCOUNT_TEXT.sessionsTitle })).getAllByRole('listitem')).toHaveLength(1)
-    expect((screen.getByRole('button', { name: ACCOUNT_TEXT.signOutOthers }) as HTMLButtonElement).disabled).toBe(true)
+    // Nobody else to sign out: a sentence instead of a dead button.
+    expect(screen.queryByRole('button', { name: ACCOUNT_TEXT.signOutOthers })).toBeNull()
+    expect(screen.getByText(ACCOUNT_TEXT.noOthers)).toBeTruthy()
 
     sessions = [HERE, OTHER, { ...OTHER, id: 'cccccccccccc' }]
     cleanup()
     await mount()
     replies[AUTH_REVOKE_OTHERS_PATH] = { status: 200, body: { revoked: 2 } }
     fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutOthers }))
+    expect(screen.getByRole('alertdialog').textContent).toContain(ACCOUNT_TEXT.confirmOthersTitle(2))
+    confirmSignOut()
     await flush()
     expect(screen.getByText(ACCOUNT_TEXT.signedOutOthers(2))).toBeTruthy()
   })
@@ -166,6 +200,7 @@ describe('AccountSection', () => {
     await mount()
     replies[authRevokePath(OTHER.id)] = { status: 404, body: { error: 'not_found' } }
     fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel('Firefox on Linux') }))
+    confirmSignOut()
     await flush()
     expect(screen.getByText(ACCOUNT_TEXT.rowGone)).toBeTruthy()
     cleanup()
@@ -183,11 +218,14 @@ describe('AccountSection', () => {
     expect(screen.queryByRole('button', { name: ACCOUNT_TEXT.signOut })).toBeNull()
     replies[AUTH_LOGOUT_PATH] = { status: 500 }
     fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel(`Chrome on macOS (${ACCOUNT_TEXT.thisDevice})`) }))
+    expect(screen.getByRole('alertdialog').textContent).toContain(ACCOUNT_TEXT.confirmHereTitle)
+    confirmSignOut()
     await flush()
     expect(reload).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toContain('Signing out failed')
     replies[AUTH_LOGOUT_PATH] = { status: 204 }
     fireEvent.click(screen.getByRole('button', { name: ACCOUNT_TEXT.signOutRowLabel(`Chrome on macOS (${ACCOUNT_TEXT.thisDevice})`) }))
+    confirmSignOut()
     await flush()
     expect(reload).toHaveBeenCalledTimes(1)
   })

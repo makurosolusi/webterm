@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { POLICY_CLASSIFIER_PATH, POLICY_SIMULATE_PATH, PolicySimulator, type SimReport } from './PolicySimulator'
+import { RulesSection } from './RulesSection'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
@@ -37,12 +38,15 @@ describe('Policy simulator (Settings › Rules & secrets › Advanced)', () => {
     expect(writes.filter((w) => w.url === POLICY_CLASSIFIER_PATH)).toEqual([])
   })
 
-  it('keeps the rule try-out collapsed until opened', async () => {
+  it('lives under the page\'s one Advanced collapsible (closed, no count), one row per choice', async () => {
     server()
-    render(<PolicySimulator />)
-    const details = screen.getByTestId('policy-simulator-try') as HTMLDetailsElement
+    render(<RulesSection />)
+    const details = screen.getByTestId('rules-advanced').querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelector('summary')!.textContent).toBe('Try a rule on the last 7 days')
+    expect(details.querySelector('summary')!.textContent).toBe('Advanced')
+    const sim = within(details).getByTestId('policy-simulator')
+    expect(within(sim).getByText('Try a rule on the last 7 days')).toBeTruthy()
+    expect([...sim.querySelectorAll('.st-field .st-label')].map((l) => l.textContent)).toEqual(['Who', 'What', 'Where', 'Effect', 'Include the small model'])
     fireEvent.click(details.querySelector('summary')!)
     expect(details.open).toBe(true)
   })
