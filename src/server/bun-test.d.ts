@@ -7,6 +7,7 @@ declare module 'bun:test' {
   export function test(name: string, fn: () => void | Promise<void>, timeoutMs?: number): void
   /** Dipakai test PTY untuk membersihkan direktori temp `mkdtempSync` sesudah file selesai. */
   export function afterAll(fn: () => void | Promise<void>): void
+  export function beforeAll(fn: () => void | Promise<void>): void
   // WS-19: describe/it + hooks + the matchers the CA2 suites use.
   export function describe(name: string, fn: () => void): void
   export function it(name: string, fn: () => void | Promise<void>, timeoutMs?: number): void

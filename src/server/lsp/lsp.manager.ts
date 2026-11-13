@@ -11,6 +11,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createLogger } from '../logs'
+import { guardChildStdin } from '../childStdin'
 import { ptyEnv } from '../ptyShell'
 import { LSP_CLOSE } from './lsp.contract'
 import { LspFramer, frameLsp } from './lsp.framing'
@@ -152,7 +153,7 @@ export class LspManager {
     })
     proc.stderr.on('data', (c: Buffer) => { s.stderrTail = (s.stderrTail + c.toString('utf8')).slice(-300) })
     // stdin EPIPE after the server died is reported by 'exit' below; without a listener it would crash the process.
-    proc.stdin.on('error', () => {})
+    guardChildStdin(proc.stdin, { op: 'lsp', command: cmd.cmd })
     const gone = (why: string) => {
       if (this.servers.get(key) === s) this.servers.delete(key)
       clearTimeout(s.idle)

@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { childEnv } from '../childEnv'
+import { endChildStdin } from '../childStdin'
 import { mcpLaunchBase } from './mcp.launch'
 
 const PROBE_TIMEOUT_MS = 10_000
@@ -44,7 +45,7 @@ export function probeMcpServer(launch = mcpLaunchBase(), timeoutMs = PROBE_TIMEO
       }
     })
     child.on('close', (code) => finish({ ok: false, reason: `exited with code ${code}${err.trim() ? `: ${err.trim().slice(0, 300)}` : ''}` }))
-    child.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'webterm-doctor', version: '1' } } })}\n`)
+    endChildStdin(child.stdin, `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'webterm-doctor', version: '1' } } })}\n`, { op: 'mcp.probe', command: launch.command })
   })
 }
 

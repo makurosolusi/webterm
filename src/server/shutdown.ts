@@ -53,7 +53,7 @@ export function installShutdown({ log, runDir, stores, server, sockets, devProxy
   // Observe-only crash hook, flushed at once (processCrash.ts: Electrobun's native exit skips the `exit` hook).
   process.on('uncaughtExceptionMonitor', onUncaughtExceptionMonitor(log, flushLogsSync))
   // Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
-  process.on('unhandledRejection', onUnhandledRejection(log))
+  process.on('unhandledRejection', onUnhandledRejection(log, flushLogsSync))
   let storesClosed = false
   /** Once per process (`exit` hook, or the in-process stop that may exit natively without it): drop the run-dir record, close the stores. */
   const closeStoresOnce = (code: number): void => {
