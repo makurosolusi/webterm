@@ -12,6 +12,7 @@ import { usePresencePing } from './presencePing'
 import { fetchSignedIn, isAbortError, logout } from './transportToken'
 import type { Settings } from '../shared/settings'
 import type { AgentStatus } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
 
 /** Signed-in session plumbing: keybindings sync + chords, presence ping, and the eager shared socket. */
 export function useAppSession(signedIn: boolean, settings: Pick<Settings, 'keybindings'>, hydrated: boolean, update: (patch: Partial<Settings>) => void) {
@@ -36,6 +37,22 @@ export function useStatusSubscription(setStatuses: Dispatch<SetStateAction<Recor
     )
     return unsub
   }, [setStatuses])
+}
+
+/** Why each node's current status needs you or failed (permission tool, question, error), live from
+ *  the status channel; a node without a reason has no key. Feed it to `sessionStatusView`. */
+export function useStatusReasons(): Record<string, StatusReason> {
+  const [reasons, setReasons] = useState<Record<string, StatusReason>>({})
+  useEffect(() => subscribeStatus((id, _s, reason) =>
+    setReasons((prev) => {
+      if (!reason && !(id in prev)) return prev
+      const next = { ...prev }
+      if (reason) next[id] = reason
+      else delete next[id]
+      return next
+    })
+  ), [])
+  return reasons
 }
 
 // Satu-satunya penulis `data-theme`; `styles.css` menyimpan varian terangnya di

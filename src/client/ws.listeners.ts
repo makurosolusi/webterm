@@ -1,7 +1,7 @@
 // Broadcast frames of the shared terminal socket (ws.ts) that are not tied to one terminal
 // subscriber: agent status, fs dirty hints, canvas pushes, view/shot requests, workspace list.
 import { emitFsEvent } from './fsEvents'
-import type { CanvasMsg, ServerMsg, ShotMsg, ViewMsg, WorkspacesMsg } from '../shared/protocol'
+import type { CanvasMsg, ServerMsg, ShotMsg, StatusReason, ViewMsg, WorkspacesMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
 
@@ -11,15 +11,19 @@ import { noteStatus } from './unread'
 // `undefined` ikut disiarkan: itu sapuan basi mencabut status (lihat `shared/agentStale.ts`), dan
 // pembaca yang tidak mendengarnya akan menyimpan 'working' yang sudah dicabut selamanya.
 const statuses = new Map<string, AgentStatus>()
-const statusListeners = new Set<(id: string, status: AgentStatus | undefined) => void>()
+const reasons = new Map<string, StatusReason>()
+type StatusListener = (id: string, status: AgentStatus | undefined, reason: StatusReason | undefined) => void
+const statusListeners = new Set<StatusListener>()
 
-/** Listen to every agent status change (including the stale sweep's `undefined`). */
-export function subscribeStatus(cb: (id: string, status: AgentStatus | undefined) => void): () => void {
+/** Listen to every agent status change (including the stale sweep's `undefined`); `reason` = why it needs you or failed. */
+export function subscribeStatus(cb: StatusListener): () => void {
   statusListeners.add(cb)
   return () => { statusListeners.delete(cb) }
 }
 /** Last known agent status of node `id`. */
 export function getStatus(id: string): AgentStatus | undefined { return statuses.get(id) }
+/** Reason of node `id`'s current status (permission tool, question, error), when the server gave one. */
+export function getStatusReason(id: string): StatusReason | undefined { return reasons.get(id) }
 
 const canvasListeners = new Set<(msg: CanvasMsg) => void>()
 /** Nodes/cables the server added to a stored board (`t:'canvas'`). */
@@ -61,12 +65,17 @@ export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
       // belum-dibaca.
       statuses.delete(msg.id)
     } else {
+      const prev = statuses.get(msg.id)
       statuses.set(msg.id, msg.status)
       // Aturan SET unread hidup DI SINI, bukan di komponen node: ini satu-satunya tempat yang
       // melihat status node mana pun, termasuk node workspace non-aktif yang tak ter-mount.
-      noteStatus(msg.id, msg.status)
+      // A connect snapshot is news only where it differs from what this tab already knew (reconnect).
+      if (!msg.snapshot || (prev !== undefined && prev !== msg.status)) noteStatus(msg.id, msg.status)
     }
-    for (const l of statusListeners) l(msg.id, msg.status)
+    const reason: StatusReason | undefined = msg.status && msg.reason ? { reason: msg.reason, ...(msg.detail ? { detail: msg.detail } : {}) } : undefined
+    if (reason) reasons.set(msg.id, reason)
+    else reasons.delete(msg.id)
+    for (const l of statusListeners) l(msg.id, msg.status, reason)
     return true
   }
   // Petunjuk watcher file manager (flag WATCH): lewat bus, bukan sub terminal.

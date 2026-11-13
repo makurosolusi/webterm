@@ -2,6 +2,7 @@
 // `hooks.ts` (yang sudah di batas budget service-nya) karena ini satu-satunya bagian modul itu yang
 // MENAFSIRKAN payload hook — sisanya merakit langganan, token, dan baris peluncuran.
 import type { AgentStatus } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
 
 /**
  * Field payload hook yang menentukan status. `agent_id` ADA hanya pada event yang berasal dari
@@ -13,6 +14,11 @@ export interface HookStatusBody {
   agent_id?: string
   /** Sub-jenis sebuah `Notification`. Satu event, beberapa arti — lihat `NOTIFICATION_STATUS`. */
   notification_type?: string
+  /** Tool a `PermissionRequest` asks for. */
+  tool_name?: unknown
+  /** Text of a `Notification` (or a `StopFailure`'s error line). Kept short, memory only. */
+  message?: unknown
+  error?: unknown
 }
 
 /**
@@ -119,4 +125,18 @@ export function hookStatus(body: HookStatusBody): AgentStatus | null {
     default:
       return null
   }
+}
+
+const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v : undefined)
+
+/** Why a hook's status needs you or failed (registry caps `detail`); undefined = no reason to show. */
+export function hookStatusReason(body: HookStatusBody): StatusReason | undefined {
+  const event = body.hook_event_name
+  const why = (reason: StatusReason['reason'], detail: string | undefined): StatusReason => ({ reason, ...(detail ? { detail } : {}) })
+  if (event === 'PermissionRequest') return why('permission', text(body.tool_name))
+  if (event === 'StopFailure') return why('error', text(body.error) ?? text(body.message))
+  if (event !== 'Notification') return undefined
+  const status = NOTIFICATION_STATUS[body.notification_type ?? '']
+  if (status === 'blocked') return why('permission', text(body.message))
+  return status ? why('question', text(body.message)) : undefined
 }

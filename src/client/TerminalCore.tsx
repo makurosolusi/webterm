@@ -1,11 +1,11 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
+import './terminal-surface.css'
 import { send, subscribe } from './ws'
 import { writeClipboard } from './clipboard'
 import { TerminalOffline } from './TerminalCore.offline'
@@ -25,6 +25,9 @@ import {
   terminalZoomAction,
 } from './terminalKeys'
 import { installPointerScaleFix } from './terminalScale'
+import { fitTerminal } from './terminalFit'
+import { osc52Clipboard } from './terminalClipboard'
+import { resolveTerminalTheme } from './themes'
 import { useLiveSettings } from './useSettings'
 import type { AgentId } from '../shared/workspace'
 
@@ -70,7 +73,7 @@ function copyText(nodeId: string, text: string): void {
 
 /** Node yang di-collapse hanya DISEMBUNYIKAN (`.term-node--collapsed .node-body { display: none }`
  *  di node-chrome.css), bukan di-unmount — itulah sebabnya ia mempertahankan PTY-nya. Konsekuensinya
- *  elemen host xterm jadi 0×0, dan FitAddon tetap menghitung cols/rows dari dimensi nol itu.
+ *  elemen host xterm jadi 0×0, dan fit tetap menghitung cols/rows dari dimensi nol itu.
  *  `term.resize()` ke ukuran mikro hasilnya ME-REFLOW buffer, dan reflow tidak punya operasi
  *  balikan: scrollback-nya rusak PERMANEN, bukan cuma tak tergambar — karena itu menggambar ulang
  *  (tombol refresh) tak bisa memulihkannya. Jadi 0×0 dibaca sebagai "sedang tersembunyi": tidak ada
@@ -102,7 +105,6 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const settings = useLiveSettings()
   const elRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
   const linkRef = useRef<string | null>(null)
@@ -127,7 +129,6 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   // cukup ditegakkan di satu tempat. Sebelum `open` terkirim, ukuran pertama ikut di `open`.
   const refit = useCallback(() => {
     const term = termRef.current
-    const fit = fitRef.current
     const el = elRef.current
     // Un-hiding (tab switch, canvas<->tabs) fires the ResizeObserver BEFORE xterm's renderer resumes;
     // resizing then scrolls the buffer to the top (see `watchVisible`). The visibility watcher refits
@@ -135,8 +136,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     // its `open` must not wait for visibility. (Kept above the size gate so `hasSize` stays adjacent
     // to the fit call, which terminalFit.test.ts enforces.)
     if (session.current.opened && shownRef.current?.visible === false) return
-    if (!term || !fit || !el || !hasSize(el)) return
-    fit.fit()
+    if (!term || !el || !hasSize(el)) return
+    fitTerminal(term, el)
     term.refresh(0, term.rows - 1)
     const s = session.current
     if (!s.opened) {
@@ -188,10 +189,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const p = live.current
 
     const term = new Terminal(xtermOptionsFromSettings(p.settings, p.fontZoom))
-    const fit = new FitAddon()
     const search = new SearchAddon()
-    term.loadAddon(fit)
     term.loadAddon(search)
+    term.loadAddon(osc52Clipboard((text) => copyText(live.current.id, text)))
     // nodeterm sengaja TIDAK memakai addon ini (TerminalNode.tsx:3283): addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
@@ -214,9 +214,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     installPointerScaleFix(term)
     // Node bisa LAHIR sudah ter-collapse (collapse ikut tersimpan di layout workspace), jadi jalur
     // ini pun bergerbang — kalau tidak, `open` di bawah men-spawn PTY selebar ~1 kolom.
-    if (hasSize(el)) fit.fit()
+    if (hasSize(el)) fitTerminal(term, el)
     termRef.current = term
-    fitRef.current = fit
     searchRef.current = search
     if (canClaimFocus(document.activeElement as HTMLElement | null, false)) term.focus()
 
@@ -323,7 +322,6 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       unsub()
       term.dispose() // ikut men-dispose addon yang dimuatnya, WebGL termasuk
       termRef.current = null
-      fitRef.current = null
       searchRef.current = null
       webglRef.current = null
     }
@@ -365,7 +363,13 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
 
   return (
     <div className="relative size-full">
-      <div ref={elRef} className="nodrag nowheel size-full" />
+      {/* Theme background on the host: the part of the host the grid does not cover (padding, the
+          last partial cell) is otherwise the node's panel colour, a visible band under the last row. */}
+      <div
+        ref={elRef}
+        className="wt-term-host nodrag nowheel size-full"
+        style={{ background: resolveTerminalTheme(settings.terminalTheme).theme.background }}
+      />
       <TerminalOffline />
     </div>
   )

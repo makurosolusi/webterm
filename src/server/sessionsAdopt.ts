@@ -3,7 +3,7 @@ import { writeNodeHeaders } from './hooks'
 import { recordEvent } from './events/producers'
 import { SessionsEnd } from './sessionsEnd'
 import { ptyLog } from './sessionsLog'
-import { CANVAS_OWNER } from './ptySupervisor'
+import { CANVAS_OWNER, CLAUDE_MOUSE_AGENT } from './ptySupervisor'
 
 /** How long a canvas session no stored node owns survives before a boot ends it (ops-212-3). Long
  *  enough that a layout saved late, or a restore from backup, still finds its agent alive. */
@@ -47,6 +47,7 @@ export class SessionsAdopt extends SessionsEnd {
       // Owned again (a layout saved after the mark): the grace must not carry over to a later boot.
       if (s.orphanAt !== undefined) supervisor.clearOrphan(s.id)
       if (s.agentId) writeNodeHeaders(s.id)
+      if (s.agentId === CLAUDE_MOUSE_AGENT) supervisor.mouseOn(s.id) // sessions made before mouse-on existed
       const history = s.history > 0 ? supervisor.capture(s.id, { escapes: true, screen: false }) : undefined
       const session = this.track(s.id, supervisor.attach(s.id, s.cols, s.rows), s.agentId, s.cols, s.rows)
       if (history) this.emit(session, history.replace(/\r?\n/g, '\r\n'))

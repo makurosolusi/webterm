@@ -1,4 +1,4 @@
-import type { ServerMsg } from '../shared/protocol'
+import type { ServerMsg, StatusMsg, StatusReason } from '../shared/protocol'
 import type { Pty } from './pty'
 import { SubscriberSet } from './subscribers'
 import { DA_REPLY_TTL_OTHER_MS, DA_REPLY_TTL_TMUX_MS, DaReplyGate } from './daReplyGate'
@@ -66,17 +66,40 @@ export class SessionsCore {
   // bukan di `Session`. Node yang sudah mati tetap perlu bisa dijawab (lihat nodeRegistry.ts).
   protected registry = new NodeRegistry()
 
-  /** Tulis status lalu pancarkan ke SEMUA pelanggan sesi. Sesi tanpa pelanggan tetap menyimpan
-   *  statusnya: re-attach berikutnya memutar ulang status itu sebagai snapshot. */
-  setStatus(id: string, status: AgentStatus, now: number = this.now()): void {
+  /** Sends a status frame to every open UI socket. Set by the singleton only (sessions.ts), so a
+   *  `new Sessions()` in a test stays db-free; unset = PTY subscribers only, as before. */
+  broadcast?: (m: ServerMsg) => void
+
+  /** Status frames go to EVERY UI socket when wired: the Sessions panel lists nodes of every board,
+   *  and a client that never opened this PTY still needs its status. Subscribers sit on those same
+   *  sockets, so they are not sent to twice. */
+  protected sendStatus(id: string, m: StatusMsg): void {
+    if (this.broadcast) this.broadcast(m)
+    else this.map.get(id)?.subs.send(m)
+  }
+
+  /** The status frame of `id` as stored now (status absent = nothing known). */
+  statusMsgOf(id: string): StatusMsg {
+    const status = this.registry.getStatus(id)?.status
+    return { t: 'status', id, ...(status ? { status, ...this.registry.reasonOf(id) } : {}) }
+  }
+
+  /** Every stored status as frames, for a socket that just connected (terminalSocket.ts). Bounded by MAX_NODE_STATE. */
+  statusSnapshot(): StatusMsg[] {
+    return this.registry.statusEntries().map(([id]) => ({ ...this.statusMsgOf(id), snapshot: true as const }))
+  }
+
+  /** Tulis status lalu pancarkan (lihat `sendStatus`). `reason` = why it needs you or failed, when known.
+   *  Sesi tanpa pelanggan tetap menyimpan statusnya: re-attach memutar ulang status itu sebagai snapshot. */
+  setStatus(id: string, status: AgentStatus, now: number = this.now(), reason?: StatusReason): void {
     // Node yang sudah punya tombstone exit adalah node MATI. Hook yang telat (mis. `Stop` claude
     // mendarat sesudah shell-nya keluar) tidak boleh menghidupkan lagi statusnya — client akan
     // merender node mati itu sebagai aktif dan menawarkan Resume.
     if (this.registry.getExit(id)) return
     const prev = this.registry.getStatus(id)?.status
     if (prev !== status) ptyLog.status(id, prev, status)
-    this.registry.setStatus(id, status, now)
-    this.map.get(id)?.subs.send({ t: 'status', id, status })
+    this.registry.setStatus(id, status, now, reason)
+    this.sendStatus(id, this.statusMsgOf(id))
   }
 
   /**
@@ -87,8 +110,8 @@ export class SessionsCore {
     for (const entry of this.registry.sweepStale(now)) {
       const { id } = entry
       ptyLog.statusCleared(id)
-      // `status` absen = "tidak ada status lagi". Client menghapus entry-nya dan merender "Unknown".
-      this.map.get(id)?.subs.send({ t: 'status', id })
+      // `status` absen = "tidak ada status lagi". The client falls back to liveness (a live node reads Idle).
+      this.sendStatus(id, { t: 'status', id })
       try {
         this.onStaleSweep?.(entry)
       } catch (err) {
@@ -135,9 +158,10 @@ export class SessionsCore {
     return s && { pid: s.pty.pid, startedAt: s.startedAt, cols: s.cols, rows: s.rows }
   }
   /** Status with its clocks: last write (`updatedAt`) and start of this status (`since`). */
-  statusEntryOf(id: string): (NodeStatusEntry & { since?: number }) | undefined {
+  statusEntryOf(id: string): (NodeStatusEntry & { since?: number; reason?: StatusReason }) | undefined {
     const e = this.registry.getStatus(id)
-    return e && { ...e, since: this.registry.statusSince(id) }
+    const reason = this.registry.reasonOf(id)
+    return e && { ...e, since: this.registry.statusSince(id), ...(reason ? { reason } : {}) }
   }
   /** The agent a LIVE session was launched as (undefined = plain shell or no session). */
   agentIdOf(id: string): string | undefined { return this.map.get(id)?.agentId }

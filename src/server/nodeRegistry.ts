@@ -1,5 +1,16 @@
 import { isStaleWorking } from '../shared/agentStale'
 import type { AgentStatus } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
+
+/** Longest `detail` kept with a status (a tool name, a short notification line). */
+export const STATUS_DETAIL_MAX = 60
+
+/** Bounded copy of a reason: `detail` trimmed, cut to STATUS_DETAIL_MAX, dropped when empty. */
+export function capReason(r: StatusReason | undefined): StatusReason | undefined {
+  if (!r) return undefined
+  const d = typeof r.detail === 'string' ? r.detail.replace(/\s+/g, ' ').trim() : ''
+  return { reason: r.reason, ...(d ? { detail: d.length > STATUS_DETAIL_MAX ? `${d.slice(0, STATUS_DETAIL_MAX - 1)}…` : d } : {}) }
+}
 
 /** Status agent beserta jam penulisannya. Jam itulah yang membedakan `working` yang masih hidup
  *  dari `working` yang ditinggal mati (lihat `agentStale.ts`). */
@@ -96,18 +107,25 @@ export class NodeRegistry {
   private exits = new Map<string, NodeExit>()
   /** When each node's current status began; a repeated write of the same status keeps it. */
   private since = new Map<string, number>()
+  /** Why the current status needs you or failed. Memory only: never written to the durable store. */
+  private reasons = new Map<string, StatusReason>()
   /** Called after every status write, delete or sweep: the one hook the durable store needs (A4). */
   onStatusChange?: () => void
 
   /** `now` di-inject supaya sweep bisa dites tanpa jam dinding; pemanggil nyata melewatkannya. */
-  setStatus(id: string, status: AgentStatus, now: number = Date.now()): void {
+  setStatus(id: string, status: AgentStatus, now: number = Date.now(), reason?: StatusReason): void {
     // Jamnya dimundurkan pada SETIAP penulisan, termasuk `working` berulang — itulah yang membuat
     // turn panjang yang sah tidak pernah tersapu: tiap tool call menulis ulang `working`.
     const changed = this.statuses.get(id)?.status !== status
     this.statuses.set(id, { status, updatedAt: now })
     if (changed) this.since.set(id, now)
+    // Every write states its reason (or none): a reason never outlives the status it explained.
+    const capped = capReason(reason)
+    if (capped) this.reasons.set(id, capped)
+    else this.reasons.delete(id)
     evictInsertionOrder(this.statuses, MAX_NODE_STATE)
     evictInsertionOrder(this.since, MAX_NODE_STATE)
+    evictInsertionOrder(this.reasons, MAX_NODE_STATE)
     if (changed) this.onStatusChange?.()
   }
 
@@ -122,12 +140,19 @@ export class NodeRegistry {
     return entry ? { ...entry } : undefined
   }
 
+  /** Reason of the node's current status (a copy); undefined = none given. */
+  reasonOf(id: string): StatusReason | undefined {
+    const r = this.statuses.has(id) ? this.reasons.get(id) : undefined
+    return r ? { ...r } : undefined
+  }
+
   /** Start of the node's current status; undefined when unknown (no status, or restored from disk). */
   statusSince(id: string): number | undefined {
     return this.statuses.has(id) ? this.since.get(id) : undefined
   }
 
   deleteStatus(id: string): void {
+    this.reasons.delete(id)
     if (this.statuses.delete(id)) this.onStatusChange?.()
   }
 
@@ -142,6 +167,7 @@ export class NodeRegistry {
     for (const [id, entry] of this.statuses) {
       if (!isStaleWorking(entry.status, entry.updatedAt, now)) continue
       this.statuses.delete(id)
+      this.reasons.delete(id)
       swept.push({ id, idleMs: now - entry.updatedAt })
     }
     if (swept.length) this.onStatusChange?.()

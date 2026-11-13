@@ -73,10 +73,9 @@ export class Sessions extends SessionsAdopt {
     if (existing) {
       if (!sameKind(existing.agentId, msg.agentId)) return refuseKind(msg.id, existing.agentId, msg.agentId, send)
       ptyLog.reattached(msg.id, existing.subs.size())
-      const status = this.registry.getStatus(msg.id)?.status
       existing.subs.add(send)
       replay(existing, send, msg.since)
-      send({ t: 'status', id: msg.id, status })
+      send(this.statusMsgOf(msg.id))
       return
     }
     // A tmux session not adopted yet carries its kind in `@webterm-agent`: same gate before attach.
@@ -243,6 +242,14 @@ if (boot.supervisor) sessions.statusStore = new StatusStore(join(dataDir(), NODE
 // Jamnya hidup sekali per proses, di singleton — bukan di constructor, supaya `new Sessions()` di
 // test tetap bebas timer dan memilih sendiri kapan menyapu.
 sessions.onStaleSweep = recordAgentStale
+// Status frames reach every UI socket, not only PTY subscribers (sessionsCore `sendStatus`). Lazy:
+// canvasPush.runtime opens the db, and a test that only builds this module must not.
+let uiPush: typeof import('./canvas/canvasPush.runtime') | undefined
+sessions.broadcast = (m) => {
+  if (uiPush) return uiPush.broadcastUi(m)
+  import('./canvas/canvasPush.runtime').then((r) => { uiPush = r; r.broadcastUi(m) }, (err: unknown) =>
+    spawnLog.warn('status.broadcast_failed', 'Status frame not broadcast: UI push unavailable', { ids: { nodeId: 'id' in m ? m.id : undefined }, cause: err instanceof Error ? err.message : String(err) }))
+}
 sessions.startStaleSweep()
 
 /** Node id yang dikenal workspace mana pun (id pane split `node:pN` ikut node induknya), termasuk
