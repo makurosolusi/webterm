@@ -33,16 +33,15 @@ export class SessionsEnd extends SessionsCore {
     }
     const status: ServerMsg = stopped ? { t: 'status', id, status: 'stopped' } : { t: 'status', id }
     const exit: ServerMsg = { t: 'exit', id, code: -1, reason: 'closed' }
-    // `setStatus` already broadcast `stopped` to the session's subscribers.
-    if (!stopped) session?.subs.send(status)
+    // `setStatus` already sent `stopped`. The removal goes the same way (`sendStatus`): to EVERY UI
+    // socket when wired, since the Sessions panel lists nodes of every board, not only opened PTYs.
+    if (!stopped) this.sendStatus(id, status)
     if (firstClose) session?.subs.send(exit)
     // Pencabutan harus sampai ke socket PEMANGGIL juga: kasus restart tidak punya entry `map`.
-    // Bila ia sudah jadi pelanggan, broadcast di atas sudah mengirimnya — jangan gandakan.
-    const callerHeard = session !== undefined && send !== undefined && session.subs.has(send)
-    if (!callerHeard) {
-      send?.(status)
-      if (firstClose) send?.(exit)
-    }
+    // Bila ia sudah jadi pelanggan, atau broadcast sudah menjangkau semua socket UI, jangan gandakan.
+    const callerSubscribed = session !== undefined && send !== undefined && session.subs.has(send)
+    if (!callerSubscribed && !this.broadcast) send?.(status)
+    if (!callerSubscribed && firstClose) send?.(exit)
     if (session) {
       ptyLog.exited(id, session.agentId, -1, 'closed', this.now() - session.startedAt)
       if (firstClose) producePtyExit({ nodeId: id, agentId: session.agentId, code: -1, reason: 'closed', durationMs: this.now() - session.startedAt })

@@ -164,7 +164,9 @@ export class Sessions extends SessionsAdopt {
     this.registry.deleteStatus(msg.id)
     // Selalu dijawab, termasuk ketika yang kita tahu adalah "tidak ada status". Senyap terbaca
     // "tidak berubah" oleh client yang menyimpan salinan status lepas dari socket (restart server).
-    send({ t: 'status', id: msg.id })
+    // `sendStatus`: every UI socket when wired (the Sessions panel of another tab still shows the
+    // old status otherwise); unwired = the subscribers, which now include `send`.
+    this.sendStatus(msg.id, { t: 'status', id: msg.id })
   }
 
   /** Live Claude agent sessions started before `t` (a provider change applies to new sessions only). */
