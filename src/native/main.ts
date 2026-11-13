@@ -6,6 +6,7 @@ import Electrobun, { ApplicationMenu, BrowserWindow, Utils } from 'electrobun/ma
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { openNativeSession } from './nativeSession'
+import { sessionErrorDialog } from './sessionError'
 
 const WINDOW_TITLE = 'webterm'
 const WINDOW_FRAME = { x: 80, y: 60, width: 1400, height: 900 }
@@ -20,8 +21,10 @@ const win = new BrowserWindow({ title: WINDOW_TITLE, frame: WINDOW_FRAME, url: '
 const session = await openNativeSession({
   distDir: DIST_DIR,
   showSignInFile: (path) => { win.webview.loadURL(pathToFileURL(path).href) },
-}).catch((err: unknown) => {
+}).catch(async (err: unknown) => {
   console.error('[webterm] cannot open webterm:', err instanceof Error ? err.message : String(err))
+  // Electrobun 2.0.6 Utils.showMessageBox (api/sdks/main/core/Utils.ts): modal, resolves once OK is clicked.
+  await Utils.showMessageBox({ type: 'error', buttons: ['OK'], defaultId: 0, cancelId: 0, ...sessionErrorDialog(err) })
   Utils.quit()
   throw err
 })

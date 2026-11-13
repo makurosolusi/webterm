@@ -12,17 +12,20 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { dataDir } from '../server/config'
-import { type InstanceRecord, readInstanceFile } from '../server/instanceFile'
+import { INSTANCE_ANSWER_TIMEOUT_MS, type InstanceRecord, isProcessAlive, readInstanceFile } from '../server/instanceFile'
 import { RUN_SUBDIR, openOrigin, signInFileName } from '../server/uiOpen'
 import { freeLoopbackPort, startEmbeddedServer } from './embeddedServer'
 
-/** How long a recorded server may take to answer before its record counts as stale. */
-export const ATTACH_TIMEOUT_MS = 3_000
 /** Longest Retry-After honoured once when another window was just requested (OPEN_INTERVAL_MS in auth.routes.ts). */
 const MAX_RETRY_WAIT_MS = 10_000
 const HTTP_ACCEPTED = 202
 const HTTP_TOO_MANY = 429
 const MS_PER_S = 1_000
+
+/** A live server for this data dir answered but would not open a window (the app must not start a second one). */
+export class AttachRefusedError extends Error {
+  override name = 'AttachRefusedError'
+}
 
 export interface NativeSession {
   /** `attached`: a server for this data dir was already running; `embedded`: started in this process. */
@@ -33,24 +36,11 @@ export interface NativeSession {
   quit(): Promise<void>
 }
 
-/** True while `pid` exists (EPERM = exists under another user). */
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ESRCH') return false
-    if (code === 'EPERM') return true
-    throw new Error(`cannot probe process ${pid}`, { cause: err })
-  }
-}
-
 const requestSignInFile = (origin: string): Promise<Response> => fetch(`${origin}/auth/request-open`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ launch: false }),
-  signal: AbortSignal.timeout(ATTACH_TIMEOUT_MS),
+  signal: AbortSignal.timeout(INSTANCE_ANSWER_TIMEOUT_MS),
 })
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -70,7 +60,7 @@ async function signInFileFrom(runDir: string, rec: InstanceRecord): Promise<{ or
     console.info(`[webterm] recorded server pid ${rec.pid} does not answer on ${origin} (${err instanceof Error ? err.message : String(err)}): stale record`)
     return null
   }
-  if (res.status !== HTTP_ACCEPTED) throw new Error(`webterm server pid ${rec.pid} on ${origin} refused a sign-in window (HTTP ${res.status})`)
+  if (res.status !== HTTP_ACCEPTED) throw new AttachRefusedError(`webterm server pid ${rec.pid} on ${origin} refused a sign-in window (HTTP ${res.status})`)
   const signInFile = join(runDir, signInFileName(rec.pid))
   if (!existsSync(signInFile)) {
     console.info(`[webterm] the server on ${origin} is not pid ${rec.pid} of this data dir: stale record`)
@@ -83,7 +73,7 @@ async function signInFileFrom(runDir: string, rec: InstanceRecord): Promise<{ or
 export async function findRunningServer(runDir: string): Promise<{ origin: string; signInFile: string } | null> {
   const rec = readInstanceFile(runDir)
   if (rec === null) return null
-  if (!isAlive(rec.pid)) {
+  if (!isProcessAlive(rec.pid)) {
     console.info(`[webterm] recorded server pid ${rec.pid} is not running: stale record`)
     return null
   }
