@@ -19,7 +19,7 @@ import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
 import { activeLedgerRuntime, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { buildButtonDeps } from './channels/channelButtons'
-import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
+import { createTelegramHot, registerTelegramCentralRefresh, registerTelegramHot } from './channels/telegramHot'
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { bootCa2 } from './central/ca2Boot'
@@ -88,9 +88,7 @@ const telegramHot = createTelegramHot({
 })
 registerTelegramHot(telegramHot)
 // Jembatan central dirakit saat start: central berubah => kanal yang sedang on dirakit ulang (bukan saat boot).
-let booted = false
-const refreshTelegram = () => (booted && isEnabled('telegram') ? telegramHot.refresh() : undefined)
-onCapabilityChange('central', { start: refreshTelegram, stop: refreshTelegram })
+registerTelegramCentralRefresh(telegramHot, () => isEnabled('central'), () => isEnabled('telegram'))
 // bootCa2 merakit manajer bot sekali; bila telegram sudah on nyalakan lebih dulu supaya `bots` ada.
 if (isEnabled('telegram')) await telegramHot.start()
 
@@ -155,7 +153,6 @@ registerBrowserCapability({
 onCapabilityChange('browser', { start: applyPtyOptions, stop: applyPtyOptions })
 // Semua hook sudah terpasang: boot = reconcile dari himpunan kosong ke yang on di env (hanya yang on yang jalan).
 await reconcile(new Set(), enabledSet(process.env))
-booted = true
 applyPtyOptions()
 void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
 void guardWorkspaceRepos(db.list()) // secrets guard: auto-.gitignore untracked secret files in workspace repos

@@ -74,3 +74,19 @@ export function createTelegramHot(input: TelegramHotInput): TelegramHot {
 export function registerTelegramHot(hot: TelegramHot): () => void {
   return onCapabilityChange('telegram', { start: () => hot.start(), stop: () => hot.stop() })
 }
+
+/**
+ * Rebuild the running channel when Central turns on or off: its Central bridge is built at start. Only a real
+ * change of `central()` rebuilds; a Central restart with no change (the service's `bounce` after a Worker or
+ * Autonomy toggle runs Central's stop AND start hooks) used to rebuild twice for nothing.
+ */
+export function registerTelegramCentralRefresh(hot: TelegramHot, central: () => boolean, telegramOn: () => boolean): () => void {
+  let built = central()
+  const sync = (): Promise<void> | undefined => {
+    const now = central()
+    if (now === built) return undefined
+    built = now
+    return telegramOn() ? hot.refresh() : undefined
+  }
+  return onCapabilityChange('central', { start: sync, stop: sync })
+}

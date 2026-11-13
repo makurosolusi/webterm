@@ -12,6 +12,7 @@ import { childEnv } from './childEnv'
 import { promises as fs } from 'node:fs'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
+import { killProcessGroup } from './processGroup'
 
 // Narrow local slice of Bun's API: @types/bun reddens unrelated files (same as pty.ts/nameGen.ts).
 declare const Bun: { YAML: { parse(text: string): unknown } }
@@ -134,7 +135,7 @@ export async function runSetupScript(primary: string, worktree: string, timeoutM
     const child = spawn('bash', ['-e', '-c', found.script], { cwd: worktree, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     const timer = setTimeout(() => {
       timedOut = true
-      try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { child.kill('SIGKILL') }
+      killProcessGroup(child)
     }, timeoutMs)
     child.stdout.on('data', append)
     child.stderr.on('data', append)

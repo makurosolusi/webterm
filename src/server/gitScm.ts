@@ -16,6 +16,7 @@ import { sensitivePattern } from './repoHygiene'
 import { binaryOnPath } from './binaryOnPath'
 import { cleanEnv, nameGenLine } from './nameGen'
 import { commitMessageProblem, SCM_GROUP_MAX, type ScmArea, type ScmCommitFailure, type ScmEntry, type ScmHunk, type ScmStatus } from './gitScm.types'
+import { killProcessGroup } from './processGroup'
 
 const GIT_TIMEOUT_MS = 15_000
 /** Pre-commit hooks run lint/tests; Orca does not cap them tighter than this either. */
@@ -51,7 +52,7 @@ export function run(cmd: string, args: string[], opts: { cwd: string; input?: st
     child.stderr.on('data', (c) => { stderr += c })
     const timer = setTimeout(() => {
       timedOut = true
-      try { process.kill(-child.pid!, 'SIGKILL') } catch { child.kill('SIGKILL') } // group already gone: kill the leader
+      killProcessGroup(child)
     }, opts.timeoutMs)
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: null, stdout, stderr: `${stderr}${e.message}`, timedOut }) })
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }) })
