@@ -12,7 +12,7 @@ import type { AgentChatData } from '../shared/agentChat.shape'
 import type { AgentChatPatch } from './agentChat/agentChatView'
 import { LazyPaneFallback } from './lazyPaneFallback'
 import { unwatchNode, watchNode } from './unread'
-import { ClaudeViewButton } from './agentChat/claudeViewSwitch'
+import { ClaudeViewToggle } from './agentChat/claudeViewSwitch'
 
 // The chat body (and its markdown/tool-card tree) loads with the first chat node; the chrome stays eager.
 const AgentChatView = lazy(() => import('./agentChat/agentChatView').then((m) => ({ default: m.AgentChatView })))
@@ -57,7 +57,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           comments={comments}
-          extraHeader={<><span ref={setHeaderHost} className="agent-chat-head-slot nodrag" /><ClaudeViewButton nodeId={id} to="terminal" busy={busy} /></>}
+          extraHeader={<><span ref={setHeaderHost} className="agent-chat-head-slot nodrag" /><ClaudeViewToggle nodeId={id} view="chat" busy={busy} /></>}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // No refresh or search in the chat shell yet; the buttons stay because NodeToolbar is shared.
           onRefresh={() => undefined}

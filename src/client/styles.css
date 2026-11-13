@@ -403,11 +403,19 @@ body.clean-view .app-shell {
 .tab__dot--working { background: var(--state-working); }
 .tab__dot--attention { background: var(--state-attention); }
 
-/* Context-link bridge handles on node edges (React Flow handle override) */
+/* Context-link bridge handles on node edges (React Flow handle override). Hidden until they are
+   useful (React Flow examples, tldraw, ComfyUI): on node hover or selection, and on every node while
+   a connection is being dragged; keyboard focus keeps one visible. */
 .react-flow__handle.bridge-handle {
   width: 13px; height: 13px; border: none; background: var(--accent);
-  opacity: 0.4; transition: opacity 0.12s ease;
+  opacity: 0; transition: opacity 0.12s ease;
 }
+.react-flow__node:hover .react-flow__handle.bridge-handle,
+.react-flow__node.selected .react-flow__handle.bridge-handle,
+.react-flow__handle.bridge-handle.connectingfrom,
+.react-flow__handle.bridge-handle.connectingto,
+.react-flow:has(.react-flow__connection) .react-flow__handle.bridge-handle,
+.react-flow__handle.bridge-handle:focus-visible { opacity: 0.6; }
 .react-flow__handle.bridge-handle:hover {
   opacity: 1;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
 import { cn } from '@/lib/utils'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { VscodeMenu, type VscodeMenuItem } from './components/vscode/vscodeMenu'
 import { useFitCount } from './nodeToolbar.overflow'
 
@@ -89,22 +90,22 @@ export default function NodeToolbar(props: NodeToolbarProps) {
     ...(props.onToggleSearch ? [{
       key: 'search',
       node: (
-        <ToolbarButton
-          label="Search" title="Search" data-title="Search"
+        <IconTooltip label="Search"><ToolbarButton
+          label="Search" data-title="Search"
           toggleable checked={Boolean(props.searchOpen)}
           onClick={props.onToggleSearch}
-        ><Codicon name="search" /></ToolbarButton>
+        ><Codicon name="search" /></ToolbarButton></IconTooltip>
       ),
       menuItem: { type: 'item', id: 'search', label: 'Search', checked: props.searchOpen, onSelect: props.onToggleSearch } as const,
     }] : []),
     ...(props.hideMaximize ? [] : [{
       key: 'maximize',
       node: (
-        <ToolbarButton
-          label={maxLabel} title={maxLabel} data-title={maxLabel}
+        <IconTooltip label={maxLabel}><ToolbarButton
+          label={maxLabel} data-title={maxLabel}
           disabled={maximizeOff}
           onClick={props.onToggleMaximize}
-        ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton>
+        ><Codicon name={props.maximized ? 'screen-normal' : 'screen-full'} /></ToolbarButton></IconTooltip>
       ),
       menuItem: { type: 'item', id: 'maximize', label: maxLabel, disabled: maximizeOff, onSelect: props.onToggleMaximize } as const,
     }]),
@@ -123,28 +124,28 @@ export default function NodeToolbar(props: NodeToolbarProps) {
           ))}
         </div>
 
-        <ToolbarButton
-          label="More Actions…" title="More Actions…" data-title="More Actions…"
+        <IconTooltip label="More Actions…"><ToolbarButton
+          label="More Actions…" data-title="More Actions…"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
             setMenuAt({ x: r.left, y: r.bottom })
           }}
-        ><Codicon name="ellipsis" /></ToolbarButton>
+        ><Codicon name="ellipsis" /></ToolbarButton></IconTooltip>
 
         <span className="node-toolbar__separator" role="separator" aria-orientation="vertical" />
 
         {props.onStop && (
-          <ToolbarButton
+          <IconTooltip label="Stop Agent (keeps the node)"><ToolbarButton
             className="node-toolbar__stop"
-            label="Stop Agent (keeps the node)" title="Stop Agent (keeps the node)" data-title="Stop Agent (keeps the node)"
+            label="Stop Agent (keeps the node)" data-title="Stop Agent (keeps the node)"
             onClick={props.onStop}
-          ><Codicon name="debug-stop" /></ToolbarButton>
+          ><Codicon name="debug-stop" /></ToolbarButton></IconTooltip>
         )}
 
-        <ToolbarButton
-          label="Close (ends the session)" title="Close (ends the session)" data-title="Close (ends the session)"
+        <IconTooltip label="Close (ends the session)"><ToolbarButton
+          label="Close (ends the session)" data-title="Close (ends the session)"
           onClick={props.onClose}
-        ><Codicon name="close" /></ToolbarButton>
+        ><Codicon name="close" /></ToolbarButton></IconTooltip>
       </ToolbarContainer>
       {menuAt && <VscodeMenu open anchor={menuAt} items={moreItems} onClose={() => setMenuAt(null)} ariaLabel="More Actions" />}
     </>

@@ -59,18 +59,20 @@ describe('fitCount', () => {
 })
 
 describe('node header overflow', () => {
-  it('narrow (240px node): Close, Stop and More stay; Search, Maximize and Resize move into the menu', () => {
+  it('narrow (240px node): Close, Stop and More stay; Search and Maximize move into the menu', () => {
     const { shown, rows } = mount(0)
     expect(shown).toEqual(expect.arrayContaining(['More Actions…', 'Stop Agent (keeps the node)', 'Close (ends the session)']))
     expect(shown).not.toContain('Search')
     expect(shown).not.toContain('Maximize')
-    expect(rows.slice(0, 3)).toEqual(['Search', 'Maximize', 'Resize this node'])
+    expect(rows.slice(0, 2)).toEqual(['Search', 'Maximize'])
+    expect(rows).not.toContain('Resize this node') // edges resize; there is no resize mode button or row
   })
 
   it('drops the lowest-priority actions first', () => {
-    const { shown, rows } = mount(ITEM + GAP + ITEM)
-    expect(shown).toEqual(expect.arrayContaining(['Search', 'Maximize']))
-    expect(rows[0]).toBe('Resize this node')
+    const { shown, rows } = mount(ITEM)
+    expect(shown).toContain('Search')
+    expect(shown).not.toContain('Maximize')
+    expect(rows[0]).toBe('Maximize')
     expect(rows).not.toContain('Search')
   })
 

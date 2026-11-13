@@ -1,9 +1,11 @@
-// The only place NodeResizer is used (nodeResizePolicy.test.ts enforces it). Handles show only
-// while the node is in resize mode, which the user enters on purpose with NodeResizeToggle or the
-// "Node: Resize Focused Node" command; selecting or clicking a node never shows them.
+// The only place NodeResizer is used (nodeResizePolicy.test.ts enforces it). Edges and corners always
+// resize (OS windows, VS Code sashes, node editors): invisible hit strips that only change the cursor,
+// so selecting or clicking a node never shows handles. Resize mode (NodeResizeToggle or the "Node:
+// Resize Focused Node" command) additionally draws the visible handles.
 import { useEffect, useRef } from 'react'
 import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
 import { nodeIdOf } from '../nodeRoot'
+import { useNodeHost } from '../tabLayout.context'
 import { IconButton } from '@/components/ui/icon-button'
 import type { VscodeMenuItem } from '../components/vscode/vscodeMenu'
 import { RESIZE_COMMAND_ID, exitNodeResize, setNodeResizeLimits, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
@@ -22,11 +24,14 @@ export interface NodeLayoutResizerProps extends Omit<NodeResizerProps, 'isVisibl
   onFitWidth?: () => void
 }
 
-/** NodeResizer shown only in this node's resize mode; ends the mode on Esc, outside press, typing, collapse or removal. */
-export function NodeLayoutResizer({ collapsed, onFitWidth, ...props }: NodeLayoutResizerProps) {
+/** Invisible edge resize, plus visible handles in this node's resize mode (ended on Esc, outside press, typing, collapse or removal). */
+export function NodeLayoutResizer({ collapsed, onFitWidth, color, ...props }: NodeLayoutResizerProps) {
   const id = useNodeId()
-  const { editingId } = useNodeResizeState()
+  const { editingId, locked } = useNodeResizeState()
+  const { inTab, maximized } = useNodeHost()
   const editing = id !== null && editingId === id && !collapsed
+  // Tab mode and a maximized node keep their canvas layout; the dock lock freezes it.
+  const edges = id !== null && !collapsed && !locked && !inTab && !maximized
   const fitRef = useRef(onFitWidth)
   fitRef.current = onFitWidth
 
@@ -66,7 +71,9 @@ export function NodeLayoutResizer({ collapsed, onFitWidth, ...props }: NodeLayou
     }
   }, [editing, id])
 
-  return <NodeResizer isVisible={editing} {...props} />
+  // `color` is applied inline by NodeResizer, so the invisible strips must not get it.
+  if (editing) return <NodeResizer isVisible color={color} {...props} />
+  return <NodeResizer isVisible={edges} lineClassName="node-edge-resize" handleClassName="node-edge-resize" {...props} />
 }
 
 /** Header toggle for this node's resize mode; disabled while the view is locked. */

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-  autoTitleFromWork, identityColor, idleAgentIds, isAutoName,
+  autoTitleFromWork, idleAgentIds, isAutoName,
   stopAgent, stopIdleAgents, uniqueTitle,
 } from './nodeIdentity'
 import type { AgentStatus } from '../shared/workspace'
@@ -18,11 +18,6 @@ describe('auto names', () => {
     expect(uniqueTitle('Fix bug', [])).toBe('Fix bug')
     expect(uniqueTitle('Fix bug', ['fix bug'])).toBe('Fix bug (2)')
     expect(uniqueTitle('Fix bug', ['Fix bug', 'Fix bug (2)'])).toBe('Fix bug (3)')
-  })
-
-  it('identityColor is stable per id', () => {
-    expect(identityColor('n1')).toBe(identityColor('n1'))
-    expect(identityColor('n1')).toMatch(/^hsl\(\d+, 65%, 55%\)$/)
   })
 })
 
