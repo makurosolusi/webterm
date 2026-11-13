@@ -10,7 +10,7 @@ import './vscode/test-setup'
 import BrowserToolbar from './BrowserToolbar'
 import FilesToolbar from './FilesToolbar'
 import FolderPicker from './FolderPicker'
-import NodeColorSwatch from './NodeColorSwatch'
+import NodeColorPicker from './NodeColorSwatch'
 import Welcome from './Welcome'
 import * as api from './api'
 import type { FilesSlotCtx } from './filesSlots'
@@ -76,13 +76,9 @@ describe('FilesToolbar tooltips', () => {
   })
 })
 
-describe('NodeColorSwatch tooltips', () => {
-  it('describes the toggle and marks the current color', () => {
-    const { container } = render(<NodeColorSwatch color="#0a84ff" onColor={() => {}} />)
-    const toggle = container.querySelector('[data-title="Color"]')!
-    expect(toggle.hasAttribute('title')).toBe(false)
-    expect(tipOf(toggle)).toBe('Node color: click to choose one')
-    fireEvent.click(toggle)
+describe('NodeColorPicker tooltips', () => {
+  it('marks the current color and names the others', () => {
+    render(<NodeColorPicker anchor={document.body} color="#0a84ff" onColor={() => {}} onClose={() => {}} />)
     expect(tipOf(screen.getByRole('button', { name: '#0a84ff' }))).toBe('#0a84ff (current color)')
     expect(tipOf(screen.getByRole('button', { name: '#d97757' }))).toBe('Set node color to #d97757')
   })

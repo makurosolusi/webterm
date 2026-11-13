@@ -6,7 +6,8 @@ import type { ConnectionPhase } from './ws.connection'
 import { anomaliesOf, formatAge, type Anomaly, type StatusBarFacts } from './nodeStatusBar.rules'
 
 export type StatusBarKind = 'terminal' | 'agent'
-export interface StatusBarItem { id: string; text: string; full: string }
+/** `label` is the plain English name of the field, shown in the details popover. */
+export interface StatusBarItem { id: string; label: string; text: string; full: string }
 
 const COST_DIGITS = 2
 const COST_FULL_DIGITS = 4
@@ -37,55 +38,65 @@ export function factsOf(i: StatusBarInput): StatusBarFacts {
   }
 }
 
-function sessionItems(i: StatusBarInput, f: StatusBarFacts): StatusBarItem[] {
+/** Debug facts of the PTY: details popover only (VS Code: hover detail, not status bar items). */
+function sessionDetails(i: StatusBarInput, f: StatusBarFacts): StatusBarItem[] {
   const out: StatusBarItem[] = []
   const { info, activity: a, now } = i
   if (f.exit) {
-    out.push({ id: 'state', text: `exited ${f.exit.code}`, full: `Session exited with code ${f.exit.code}${f.exit.reason ? ` (${f.exit.reason})` : ''}, ${formatAge(now - f.exit.at)} ago` })
+    out.push({ id: 'state', label: 'Process', text: `exited ${f.exit.code}`, full: `Exited with code ${f.exit.code}${f.exit.reason ? ` (${f.exit.reason})` : ''}, ${formatAge(now - f.exit.at)} ago` })
   } else if (info) {
-    out.push(info.live ? { id: 'state', text: 'live', full: 'Session is running' } : { id: 'state', text: 'not running', full: 'No process runs for this node' })
+    out.push(info.live ? { id: 'state', label: 'Process', text: 'running', full: 'Running' } : { id: 'state', label: 'Process', text: 'not running', full: 'No process runs for this node' })
   }
-  if (!f.exit && info?.pid !== undefined) out.push({ id: 'pid', text: `pid ${info.pid}`, full: `Process id ${info.pid}` })
+  if (!f.exit && info?.pid !== undefined) out.push({ id: 'pid', label: 'Process ID', text: `${info.pid}`, full: `${info.pid}` })
   if (!f.exit && info?.startedAt !== undefined) {
-    out.push({ id: 'uptime', text: `up ${formatAge(now - info.startedAt)}`, full: `Started at ${clock(info.startedAt)}, ${formatAge(now - info.startedAt)} ago` })
+    out.push({ id: 'uptime', label: 'Running for', text: formatAge(now - info.startedAt), full: `${formatAge(now - info.startedAt)} (since ${clock(info.startedAt)})` })
   }
-  if (a?.cols && a.rows) out.push({ id: 'size', text: `${a.cols}×${a.rows}`, full: `Terminal size: ${a.cols} columns × ${a.rows} rows` })
-  if (i.cwd) out.push({ id: 'cwd', text: baseName(i.cwd), full: `Working directory: ${i.cwd}` })
-  if (a?.lastOutputAt !== undefined) out.push({ id: 'output', text: `out ${formatAge(now - a.lastOutputAt)}`, full: `Last output ${formatAge(now - a.lastOutputAt)} ago` })
+  if (a?.cols && a.rows) out.push({ id: 'size', label: 'Terminal size', text: `${a.cols}×${a.rows}`, full: `${a.cols} columns × ${a.rows} rows` })
+  if (a?.lastOutputAt !== undefined) out.push({ id: 'output', label: 'Last output', text: formatAge(now - a.lastOutputAt), full: `${formatAge(now - a.lastOutputAt)} ago` })
   return out
 }
 
-function agentItems(info: NodeStatusInfo | undefined, now: number): StatusBarItem[] {
+function agentDetails(info: NodeStatusInfo | undefined, now: number): StatusBarItem[] {
   if (!info) return []
   const out: StatusBarItem[] = []
   if (info.status) {
-    const dur = info.statusSince !== undefined ? ` ${formatAge(now - info.statusSince)}` : ''
-    out.push({ id: 'agent', text: `${info.status}${dur}`, full: `Agent is ${info.status}${dur ? `, for${dur}` : ' (since before the last server restart)'}` })
+    const dur = info.statusSince !== undefined ? formatAge(now - info.statusSince) : undefined
+    out.push({ id: 'agent', label: 'Agent status', text: dur ? `${info.status} ${dur}` : info.status, full: dur ? `${info.status}, for ${dur}` : `${info.status} (since before the last server restart)` })
   }
-  if (info.lastHookAt !== undefined) out.push({ id: 'hook', text: `hook ${formatAge(now - info.lastHookAt)}`, full: `Last hook event ${formatAge(now - info.lastHookAt)} ago` })
-  if (info.model) out.push({ id: 'model', text: info.model.replace(/^claude-/, ''), full: `Model: ${info.model}` })
-  if (info.contextPct !== undefined) out.push({ id: 'context', text: `ctx ${Math.round(info.contextPct)}%`, full: `Context window ${info.contextPct}% used after the last response` })
-  if (info.costUsd !== undefined) {
-    out.push({ id: 'cost', text: `$${info.costUsd.toFixed(COST_DIGITS)}`, full: `Session cost $${info.costUsd.toFixed(COST_FULL_DIGITS)} (responses with a known price)` })
-  }
-  if (info.work) {
-    out.push({ id: 'task', text: `task ${info.work.status}`, full: `Task “${info.work.title}”: ${info.work.status}, assigned ${formatAge(now - info.work.startedAt)} ago` })
-  }
-  if (info.outbox) {
+  if (info.lastHookAt !== undefined) out.push({ id: 'hook', label: 'Last hook', text: formatAge(now - info.lastHookAt), full: `${formatAge(now - info.lastHookAt)} ago` })
+  // Shown only when mail is waiting: an empty outbox is not news (a stuck one is an anomaly badge).
+  if (info.outbox?.queued) {
     const q = info.outbox.queued
-    out.push({ id: 'outbox', text: `outbox ${q}`, full: q ? `${q} queued ${q === 1 ? 'message' : 'messages'} in the outbox` : 'Outbox empty' })
+    out.push({ id: 'outbox', label: 'Outbox', text: `${q} queued`, full: `${q} queued ${q === 1 ? 'message' : 'messages'}` })
   }
   return out
 }
 
-export interface StatusBarModel { items: StatusBarItem[]; anomalies: Anomaly[] }
+/** What the user acts on: where (folder), which model, how full the context is, the cost, the task. */
+function visibleItems(i: StatusBarInput): StatusBarItem[] {
+  const out: StatusBarItem[] = []
+  const info = i.kind === 'agent' ? i.info : undefined
+  if (i.cwd) out.push({ id: 'cwd', label: 'Folder', text: baseName(i.cwd), full: `Working directory: ${i.cwd}` })
+  if (info?.model) out.push({ id: 'model', label: 'Model', text: info.model.replace(/^claude-/, ''), full: `Model: ${info.model}` })
+  if (info?.contextPct !== undefined) out.push({ id: 'context', label: 'Context', text: `ctx ${Math.round(info.contextPct)}%`, full: `Context window ${info.contextPct}% used after the last response` })
+  if (info?.costUsd !== undefined) {
+    out.push({ id: 'cost', label: 'Cost', text: `$${info.costUsd.toFixed(COST_DIGITS)}`, full: `Session cost $${info.costUsd.toFixed(COST_FULL_DIGITS)} (responses with a known price)` })
+  }
+  if (info?.work) {
+    out.push({ id: 'task', label: 'Task', text: `Task: ${info.work.status}`, full: `Task “${info.work.title}”: ${info.work.status}, assigned ${formatAge(i.now - info.work.startedAt)} ago` })
+  }
+  return out
+}
+
+/** `items` are on the bar, `details` only in its popover; the live state is the header chip's. */
+export interface StatusBarModel { items: StatusBarItem[]; details: StatusBarItem[]; anomalies: Anomaly[] }
 
 /** Everything one bar shows. */
 export function statusBarModel(i: StatusBarInput): StatusBarModel {
   const f = factsOf(i)
-  const items = sessionItems(i, f)
-  if (i.kind === 'agent') items.splice(1, 0, ...agentItems(i.info, i.now))
-  return { items, anomalies: anomaliesOf(f) }
+  const details = sessionDetails(i, f)
+  if (i.kind === 'agent') details.push(...agentDetails(i.info, i.now))
+  return { items: visibleItems(i), details, anomalies: anomaliesOf(f) }
 }
 
 /**
@@ -95,7 +106,7 @@ export function statusBarModel(i: StatusBarInput): StatusBarModel {
 export function diagnosticsJson(nodeId: string, i: StatusBarInput, m: StatusBarModel): string {
   return JSON.stringify({
     node: nodeId, kind: i.kind, at: new Date(i.now).toISOString(), connection: i.connection,
-    fields: Object.fromEntries(m.items.map((x) => [x.id, x.text])),
+    fields: Object.fromEntries([...m.items, ...m.details].map((x) => [x.id, x.text])),
     anomalies: m.anomalies,
   }, null, 2)
 }

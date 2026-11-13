@@ -24,10 +24,11 @@ describe('node identity in the chrome', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('renders the identity color chip next to the title', () => {
-    const { container } = render(<NodeChrome {...base} identityColor="hsl(10, 65%, 55%)" />)
-    const chip = container.querySelector('.node-identity') as HTMLElement
-    expect(chip.style.background).toBe('rgb(215, 91, 66)') // jsdom normalises hsl(10, 65%, 55%)
+  it('has no unexplained coloured marks before the title (no hashed identity square, no colour dot)', () => {
+    const { container } = render(<NodeChrome {...base} icon="hubot" />)
+    expect(container.querySelector('.node-identity')).toBeNull()
+    expect(container.querySelector('.node-swatch__dot')).toBeNull()
+    expect([...container.querySelectorAll('.node-header [style*="background"]')]).toHaveLength(0)
   })
 
   it('shows the name first and the label muted after it; Rename edits the title, never the name', () => {

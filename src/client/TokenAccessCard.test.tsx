@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Automation token card: status off/on/env, enable -> the bare value once + Copy, rotate hidden for env,
 // no sign-in path (no /auth/login, no `?token=` link), the value never reaches the console.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TokenAccessCard } from './TokenAccessCard'
 import { TOKEN_TEXT } from './tokenAccessLabels'
@@ -30,6 +30,12 @@ const consoleSpies = (): ReturnType<typeof vi.spyOn>[] =>
   (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined))
 
 beforeEach(() => { calls = [] })
+
+/** Confirms the app AlertDialog asking `q`. */
+async function agree(q: { title: string; action: string }): Promise<void> {
+  const dialog = await screen.findByRole('alertdialog', { name: q.title })
+  fireEvent.click(within(dialog).getByRole('button', { name: q.action }))
+}
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('TokenAccessCard', () => {
@@ -65,23 +71,27 @@ describe('TokenAccessCard', () => {
     expect(screen.queryByRole('button', { name: TOKEN_TEXT.enable })).toBeNull()
   })
 
-  it('declined confirm sends nothing', async () => {
+  it('asks in the app dialog, never window.confirm; Cancel sends nothing', async () => {
     serve([OFF])
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const confirm = vi.spyOn(window, 'confirm')
     render(<TokenAccessCard />)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
+    const dialog = await screen.findByRole('alertdialog', { name: TOKEN_TEXT.confirmEnable.title })
+    fireEvent.click(within(dialog).getByRole('button', { name: TOKEN_TEXT.cancel }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(await screen.findByText(TOKEN_TEXT.unchanged)).toBeTruthy()
     expect(calls.filter((c) => c.method === 'POST')).toEqual([])
+    expect(confirm).not.toHaveBeenCalled()
   })
 
   it('enable: confirm, the bare token shown once with Copy, no sign-in request, never logged', async () => {
     const spies = consoleSpies()
     serve([OFF, ON_FILE])
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
     render(<TokenAccessCard />)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
-    expect(confirm).toHaveBeenCalledWith(TOKEN_TEXT.confirmEnable)
+    await agree(TOKEN_TEXT.confirmEnable)
 
     const input = (await screen.findByLabelText(TOKEN_TEXT.valueLabel)) as HTMLInputElement
     expect(input.value).toBe(FIXTURE_TOKEN) // the value itself, never a `/?token=` sign-in link
@@ -104,10 +114,10 @@ describe('TokenAccessCard', () => {
 
   it('rotate shows the new value; the card offers no way to sign in with it', async () => {
     serve([ON_FILE])
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<TokenAccessCard />)
     expect(screen.getByRole('region', { name: TOKEN_TEXT.title }).textContent).toContain(TOKEN_TEXT.intro)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.rotate }))
+    await agree(TOKEN_TEXT.confirmRotate)
     await screen.findByLabelText(TOKEN_TEXT.valueLabel)
     expect(calls.find((c) => c.method === 'POST')?.url).toBe('/api/settings/token/rotate')
     expect(screen.queryByRole('button', { name: /sign in/i })).toBeNull()
@@ -116,10 +126,10 @@ describe('TokenAccessCard', () => {
 
   it('copy without clipboard access shows the manual-copy hint', async () => {
     serve([OFF])
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.stubGlobal('navigator', { ...navigator, clipboard: undefined })
     render(<TokenAccessCard />)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
+    await agree(TOKEN_TEXT.confirmEnable)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.copy }))
     expect(await screen.findByText(TOKEN_TEXT.copyFailed)).toBeTruthy()
   })
@@ -130,9 +140,9 @@ describe('TokenAccessCard', () => {
     ['loopback_only', TOKEN_TEXT.loopbackOnly],
   ])('403 %s maps to honest text, no value, no sign-in', async (code, text) => {
     serve([OFF], { status: 403, body: { error: code } })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<TokenAccessCard />)
     fireEvent.click(await screen.findByRole('button', { name: TOKEN_TEXT.enable }))
+    await agree(TOKEN_TEXT.confirmEnable)
     expect(screen.getByRole('button', { name: TOKEN_TEXT.enabling }).getAttribute('aria-busy')).toBe('true')
     await waitFor(() => expect(document.querySelector('[data-action-result="failed"] [role="alert"]')?.textContent).toContain(text))
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
@@ -140,9 +150,13 @@ describe('TokenAccessCard', () => {
     expect(calls.some((c) => c.url.startsWith('/auth/'))).toBe(false)
   })
 
-  it('status load failure is shown, not swallowed', async () => {
+  it('status load failure is shown with Retry, not swallowed', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     render(<TokenAccessCard />)
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(TOKEN_TEXT.loadFailed))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(TOKEN_TEXT.loadFailed))
+    serve([OFF])
+    fireEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: TOKEN_TEXT.retry }))
+    expect(await screen.findByText(TOKEN_TEXT.off)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

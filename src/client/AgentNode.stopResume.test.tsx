@@ -6,7 +6,7 @@
 import { fireEvent, waitFor, act } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
-import { AGENT_FAILED_TEXT } from './AgentFailedBar'
+import { AGENT_ENDED_TEXT, AGENT_FAILED_TEXT } from './AgentFailedBar'
 import type { WsNode } from '../shared/workspace'
 
 class FakeWS {
@@ -93,3 +93,35 @@ it('a failed agent shows a sticky error whose Retry opens it again', async () =>
   sock().push({ t: 'status', id })
   await waitFor(() => expect(failedBar()).toBeUndefined())
 })
+
+it('after a normal end the header says so and an in-flow bar offers Resume and New session', async () => {
+  const id = 'agent-e'
+  await mountCanvas({ nodes: [{ ...agentNode, id }], dirs: {} })
+  const opensOf = () => sock().msgs().filter((m) => m.t === 'open' && m.id === id)
+  await waitFor(() => expect(opensOf().length).toBe(1), OPEN_WAIT)
+  const node = () => document.querySelector(`.react-flow__node[data-id="${id}"]`)!
+  const chip = () => node().querySelector('.node-header .node-status')?.textContent
+  // Before the first output and without a hook: Starting…; the chip is always there.
+  expect(chip()).toBe('Starting…')
+  sock().push({ t: 'status', id, status: 'done' })
+  sock().push({ t: 'exit', id, code: 0 })
+  expect(chip()).toBe('Exited')
+  const bar = await waitFor(() => {
+    const el = node().querySelector('[data-bar="ended"]')
+    if (!el) throw new Error('no ended bar')
+    return el
+  })
+  expect(bar.textContent).toContain(AGENT_ENDED_TEXT.message)
+  // The bar sits in the body's flow after the terminal, never absolutely over its last rows.
+  expect(bar.parentElement?.classList.contains('node-body--stack')).toBe(true)
+  expect(bar.previousElementSibling?.classList.contains('node-body__term')).toBe(true)
+  const resume = Array.from(bar.querySelectorAll('button')).find((b) => b.textContent === AGENT_ENDED_TEXT.resume)!
+  fireEvent.click(resume)
+  await waitFor(() => expect(opensOf().length).toBe(2), OPEN_WAIT)
+  expect(opensOf()[1].resume).toBe(true)
+  // The relaunch answers with no status: the bar goes and the chip starts over.
+  sock().push({ t: 'status', id })
+  await waitFor(() => expect(node().querySelector('[data-bar="ended"]')).toBeNull())
+  expect(chip()).toBe('Starting…')
+})
+

@@ -35,10 +35,10 @@ describe('SettingsPanel search', () => {
     renderPanel()
     fireEvent.change(search(), { target: { value: 'font' } })
     const count = document.querySelector('.st-search-count') as HTMLElement
-    expect(rows()).toContain('Appearance › Font size')
+    expect(rows()).toContain('Terminal › Font size')
     expect(count.textContent).toBe(`${rows().length} results`)
     expect(count.closest('main')).toBeTruthy() // not squeezed into the search box
-    const marks = [...screen.getByRole('button', { name: 'Appearance › Font size' }).querySelectorAll('mark.st-mark')].map((m) => m.textContent)
+    const marks = [...screen.getByRole('button', { name: 'Terminal › Font size' }).querySelectorAll('mark.st-mark')].map((m) => m.textContent)
     expect(marks).toEqual(['Font'])
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
     expect(search().value).toBe('')
@@ -74,7 +74,7 @@ describe('SettingsPanel search', () => {
     renderPanel()
     fireEvent.change(search(), { target: { value: 'font bold' } })
     expect(rows()).toContain('Terminal › Bold text weight')
-    expect(rows()).not.toContain('Appearance › Font size')
+    expect(rows()).not.toContain('Terminal › Font size')
 
     fireEvent.change(search(), { target: { value: 'tidak-ada-setting-ini' } })
     expect(rows()).toEqual([])
@@ -111,6 +111,7 @@ describe('SettingsPanel search', () => {
     item.focus()
     fireEvent.keyDown(item, { key: '/' })
     expect(document.activeElement).toBe(search())
+    fireEvent.click(item) // the Font combobox is on Terminal
     const font = screen.getByRole('combobox', { name: 'Font' })
     font.focus()
     fireEvent.keyDown(font, { key: '/' })
@@ -121,10 +122,10 @@ describe('SettingsPanel search', () => {
     const onSectionChange = vi.fn()
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} onSectionChange={onSectionChange} initialSection="canvas" />)
     fireEvent.change(search(), { target: { value: 'font size' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance › Font size' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal › Font size' }))
     expect(search().value).toBe('')
-    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
-    expect(onSectionChange).toHaveBeenLastCalledWith('appearance', 'fontSize')
+    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy()
+    expect(onSectionChange).toHaveBeenLastCalledWith('terminal', 'fontSize')
     await waitFor(() => expect(document.querySelector('[data-field="fontSize"]')?.classList.contains('st-reveal')).toBe(true))
   })
 
@@ -146,6 +147,7 @@ describe('SettingsPanel search', () => {
 
   it('Escape with an open combobox list closes only the list; the next Escape closes Settings', () => {
     const { onClose } = renderPanel()
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
     const font = screen.getByRole('combobox', { name: 'Font' })
     fireEvent.keyDown(font, { key: 'ArrowDown' })
     expect(font.getAttribute('aria-expanded')).toBe('true')
@@ -176,7 +178,7 @@ describe('SettingsPanel narrow layout', () => {
     expect(!!screen.queryByRole('navigation', { name: 'Section settings' })).toBe(!narrow)
     // The search box is always there, and the content pane is never empty.
     expect(search()).toBeTruthy()
-    expect(document.querySelectorAll('.st-content [data-slot="settings-field"]').length).toBeGreaterThan(3)
+    expect(document.querySelectorAll('.st-content [data-slot="settings-field"]').length).toBeGreaterThan(2) // Appearance: theme, preview, style
     expect(document.querySelector('.st-body')!.classList.contains('is-narrow')).toBe(narrow)
   })
 

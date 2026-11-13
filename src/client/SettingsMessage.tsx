@@ -1,22 +1,24 @@
-// Pesan inline ala VS Code (ikon codicon + teks) untuk info/warning/error di dalam Settings.
+// A page-level notice inside Settings (VS Code / GitHub flash style): severity icon, one sentence and an
+// optional action such as Retry. For loading and load-failure states that belong to a whole page or card;
+// a single row's save state stays on the row (FieldSaveStatus).
 import type { ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import './settings-agent-pages.css'
 
-const ICON = { info: 'codicon-info', warning: 'codicon-warning', error: 'codicon-error' } as const
+const ICON = { info: 'codicon-info', warning: 'codicon-warning', error: 'codicon-error', loading: 'codicon-loading codicon-modifier-spin' } as const
 
-/** Pesan satu baris dengan ikon severity; `role` diteruskan bila pesan harus diumumkan. */
-export function SettingsMessage({
-  kind,
-  role,
-  children,
-}: {
+/** One notice line; `error` is announced as an alert, `loading` as a status. */
+export function SettingsMessage({ kind, action, children }: {
   kind: keyof typeof ICON
-  role?: 'alert' | 'status'
+  action?: { label: string; run(): void }
   children: ReactNode
 }): React.JSX.Element {
+  const role = kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined
   return (
-    <p className={`st-message st-message--${kind}`} role={role}>
+    <div className={`st-message st-message--${kind}`} role={role} data-slot="settings-message">
       <span className={`codicon ${ICON[kind]}`} aria-hidden="true" />
-      <span>{children}</span>
-    </p>
+      <span className="st-message-text">{children}</span>
+      {action ? <Button size="xs" variant="secondary" onClick={action.run}>{action.label}</Button> : null}
+    </div>
   )
 }

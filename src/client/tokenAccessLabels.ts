@@ -17,10 +17,18 @@ export const TOKEN_TEXT = {
   rotating: 'Rotating…',
   shownBelow: 'New token below. Copy it now.',
   unchanged: 'Not changed.',
-  confirmEnable:
-    'Enable the automation token?\n\nThe token is shown only ONCE. Copy it now. Other signed-in browsers will be signed out.',
-  confirmRotate:
-    'Rotate the automation token?\n\nThe old token stops working immediately; scripts and agents need the new one. It is shown only ONCE. Other signed-in browsers will be signed out.',
+  confirmEnable: {
+    title: 'Enable the automation token?',
+    body: 'The token is shown only once, so copy it right away. Other signed-in browsers will be signed out.',
+    action: 'Enable token',
+  },
+  confirmRotate: {
+    title: 'Rotate the automation token?',
+    body: 'The old token stops working at once; scripts and agents need the new one. It is shown only once. Other signed-in browsers will be signed out.',
+    action: 'Rotate token',
+  },
+  cancel: 'Cancel',
+  retry: 'Retry',
   valueIntro: 'This token is shown only once. Copy it now and keep it somewhere safe.',
   valueLabel: 'Automation token value',
   copy: 'Copy',

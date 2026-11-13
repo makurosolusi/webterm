@@ -31,7 +31,8 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 function Harness() {
   const { settings, update, history, hydrated } = useSettings()
   if (!hydrated) return null
-  return <SettingsPanel settings={settings} onChange={update} onClose={() => undefined} history={history} />
+  // Terminal: its first switch (Cursor blink) is a plain server-saved setting.
+  return <SettingsPanel settings={settings} onChange={update} onClose={() => undefined} history={history} initialSection="terminal" />
 }
 
 async function mount() {

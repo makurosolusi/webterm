@@ -30,25 +30,34 @@ afterEach(() => {
 
 const bar = () => document.querySelector('footer.node-statusbar')
 const item = (id: string) => document.querySelector(`[data-item="${id}"]`)?.textContent
+/** [label, value] of one row of the details popover. */
+const field = (id: string) => {
+  const row = document.querySelector(`.node-statusbar__pop [data-field="${id}"]`)
+  return row ? [row.querySelector('dt')?.textContent, row.querySelector('dd')?.textContent] : undefined
+}
 
 describe('NodeStatusBar', () => {
-  it('terminal: shows live/pid/uptime/size/cwd/output age from one batched fetch', async () => {
+  it('terminal: the bar shows only the folder; process facts live in the details popover with English labels', async () => {
     reply = { t1: { live: true, pid: 4242, startedAt: NOW - 3_660_000 } }
     noteClientMsg({ t: 'open', id: 't1', cols: 120, rows: 40 })
     noteServerMsg({ t: 'output', id: 't1', data: 'x' }, undefined, NOW - 3000)
     render(<NodeStatusBar sessionId="t1" kind="terminal" cwd="/home/u/project-x" />)
-    await waitFor(() => expect(item('pid')).toBe('pid 4242'))
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(String(fetchMock.mock.calls[0][0])).toBe('/api/node-status?ids=t1')
-    expect(item('state')).toBe('live')
-    expect(item('uptime')).toBe('up 1h 1m')
-    expect(item('size')).toBe('120×40')
     expect(item('cwd')).toBe('project-x')
-    expect(item('output')).toMatch(/^out \ds$/)
+    for (const gone of ['state', 'pid', 'uptime', 'size', 'output']) expect(item(gone), gone).toBeUndefined()
     expect(bar()?.querySelectorAll('[data-anomaly]')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.details }))
+    await waitFor(() => expect(field('pid')).toEqual(['Process ID', '4242']))
+    expect(field('state')).toEqual(['Process', 'Running'])
+    expect(field('uptime')?.[0]).toBe('Running for')
+    expect(field('uptime')?.[1]).toMatch(/^1h 1m \(since /)
+    expect(field('size')).toEqual(['Terminal size', '120 columns × 40 rows'])
+    expect(field('output')?.[0]).toBe('Last output')
+    expect(field('cwd')).toEqual(['Folder', 'Working directory: /home/u/project-x'])
   })
 
-  it('agent: agent items plus amber/red badges, announced politely, reachable by keyboard', async () => {
+  it('agent: folder, model, context, cost and task on the bar; badges announced politely; no duplicate state', async () => {
     reply = {
       a1: {
         live: true, pid: 7, startedAt: NOW - 60_000, status: 'working', statusSince: NOW - STALL_MS - 60_000, lastHookAt: NOW - STALL_MS - 1000,
@@ -58,23 +67,36 @@ describe('NodeStatusBar', () => {
     }
     render(<NodeStatusBar sessionId="a1" kind="agent" cwd="/w" />)
     await waitFor(() => expect(item('model')).toBe('opus-4-7'))
-    expect(item('agent')).toMatch(/^working 6m$/)
+    expect([...document.querySelectorAll<HTMLElement>('.node-statusbar__items [data-item]')].map((b) => b.dataset.item)).toEqual(['cwd', 'model', 'context', 'cost', 'task'])
     expect(item('context')).toBe('ctx 93%')
     expect(item('cost')).toBe('$1.23')
-    expect(item('task')).toBe('task running')
-    expect(item('outbox')).toBe('outbox 1')
+    expect(item('task')).toBe('Task: running')
     const badges = [...document.querySelectorAll<HTMLButtonElement>('[data-anomaly]')]
     expect(badges.map((b) => [b.dataset.anomaly, b.dataset.level])).toEqual([['outbox', 'error'], ['stalled', 'warn'], ['context', 'warn']])
     expect(badges.every((b) => b.tagName === 'BUTTON')).toBe(true)
     const live = document.querySelector('[aria-live="polite"]')
     expect(live?.textContent).toContain('Context is 93% used')
     expect(bar()?.querySelector('[title]')).toBeNull() // tooltips, never native title=
+    fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.details }))
+    await waitFor(() => expect(field('outbox')).toEqual(['Outbox', '1 queued message']))
+    expect(field('agent')?.[0]).toBe('Agent status')
+    expect(field('hook')?.[0]).toBe('Last hook')
+  })
+
+  it('an empty outbox is not shown anywhere', async () => {
+    reply = { a3: { live: true, outbox: { queued: 0 } } }
+    render(<NodeStatusBar sessionId="a3" kind="agent" cwd="/w" />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.details }))
+    await waitFor(() => expect(field('state')).toEqual(['Process', 'Running']))
+    expect(field('outbox')).toBeUndefined()
+    expect(document.body.textContent).not.toContain('outbox 0')
   })
 
   it('click opens every field and Copy diagnostics copies JSON without the task title or full path', async () => {
     reply = { a2: { live: true, status: 'waiting', work: { title: 'Secret task title', status: 'running', startedAt: NOW } } }
     render(<NodeStatusBar sessionId="a2" kind="agent" cwd="/Users/someone/private/repo" />)
-    await waitFor(() => expect(item('task')).toBe('task running'))
+    await waitFor(() => expect(item('task')).toBe('Task: running'))
     fireEvent.click(document.querySelector('[data-item="task"]')!)
     const pop = document.querySelector('.node-statusbar__pop')
     expect(pop?.textContent).toContain('Secret task title') // the popover shows the full value
@@ -91,8 +113,8 @@ describe('NodeStatusBar', () => {
     clip.write.mockResolvedValueOnce(false)
     reply = { t3: { live: true } }
     render(<NodeStatusBar sessionId="t3" kind="terminal" />)
-    await waitFor(() => expect(item('state')).toBe('live'))
-    fireEvent.click(document.querySelector('[data-item="state"]')!)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.details }))
     fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.copy }))
     await waitFor(() => expect(document.querySelector('[data-action-result="failed"]')?.textContent).toContain(STATUS_BAR_TEXT.noClipboard))
   })
@@ -102,7 +124,8 @@ describe('NodeStatusBar', () => {
     noteServerMsg({ t: 'exit', id: 't4', code: 137 }, 'self')
     render(<NodeStatusBar sessionId="t4" kind="terminal" />)
     act(() => setConnection({ phase: 'reconnecting', attempt: 1 }))
-    expect(item('state')).toBe('exited 137')
+    fireEvent.click(screen.getByRole('button', { name: STATUS_BAR_TEXT.details }))
+    expect(field('state')?.[1]).toMatch(/^Exited with code 137/)
     expect([...document.querySelectorAll<HTMLElement>('[data-anomaly]')].map((b) => b.dataset.anomaly)).toEqual(['exit', 'stream'])
   })
 

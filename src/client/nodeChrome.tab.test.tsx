@@ -25,13 +25,13 @@ const inTab = (ui: ReactNode) => <NodeHostContext.Provider value={{ inTab: true,
 afterEach(cleanup)
 
 describe('NodeChrome gating', () => {
-  it('canvas (default context): header with collapse, resize toggle, maximize and close', () => {
+  it('canvas (default context): header with collapse, maximize and close; no resize button (edges resize)', () => {
     const { container } = render(<NodeChrome {...props} />)
     expect(container.querySelector('.node-header')).not.toBeNull()
     expect(titles(container)).toContain('Close (ends the session)')
     expect(titles(container)).toEqual(expect.arrayContaining(['Collapse', 'Maximize']))
     expect(titles(container)).not.toContain('Full Screen')
-    expect(container.querySelector('.node-resize-toggle')).not.toBeNull()
+    expect(container.querySelector('.node-resize-toggle')).toBeNull()
   })
 
   it('tab: no node header at all (the tab is the header), so no collapse, maximize, search or close here', () => {

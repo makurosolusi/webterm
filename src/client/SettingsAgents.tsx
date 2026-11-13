@@ -1,6 +1,7 @@
-// Settings › Claude › Advanced (dulu section Agent): `customAgents` (daftar record) butuh lebih dari satu input. Bentuknya mengikuti
-// nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: satu kartu per agent
-// custom. Claude's launch command lives in the launch profiles card; other CLIs have no builtin row.
+// Settings › Claude › Advanced: the Add-menu checklist and `customAgents` (a list of records, more than one
+// input each). Shaped after nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: one
+// card per custom agent, inside the "Custom agents" row, with an empty state. Claude's launch command lives
+// in the launch profiles card; other CLIs have no builtin row.
 import type { CustomAgent, Settings } from '../shared/settings'
 import {
   AGENT_CONFIG,
@@ -12,7 +13,23 @@ import { ColorField, Field, SelectField, TextField } from './SettingsFields'
 import { ComboboxField } from './SettingsPickerFields'
 import { SettingsCheckbox } from './SettingsControls'
 import { randomId } from './randomId'
+import { Button } from '@/components/ui/button'
 import type { SettingsPatch } from '../shared/settings.patch'
+
+export const AGENTS_TEXT = {
+  customHint: 'Run your own agent CLI, or wrap a built-in agent such as Claude to send it through your proxy. Keys belong in the server environment, not here.',
+  empty: 'No custom agents yet.',
+  add: 'Add agent',
+  remove: 'Remove',
+  newLabel: 'Custom agent',
+  label: 'Label',
+  color: 'Node color',
+  base: 'Works like',
+  noBase: 'Nothing (a plain CLI)',
+  baseHint: (label: string): string => `Gets what ${label} can do in webterm: resume, linked context and permission modes.`,
+  noBaseHint: 'Optional. Without it the agent only gets a terminal and a title.',
+  emptyCommand: (cmd: string): string => `Empty uses "${cmd}".`,
+} as const
 
 /** Settings › Claude › Advanced: which agents the Add menu offers, and custom agent CLIs. */
 export function CustomAgentsSettings({
@@ -40,7 +57,7 @@ export function CustomAgentsSettings({
     onChange({
       customAgents: [
         ...s.customAgents,
-        { id: `custom:${randomId()}`, label: 'Custom agent', launchCmd: '' },
+        { id: `custom:${randomId()}`, label: AGENTS_TEXT.newLabel, launchCmd: '' },
       ],
     })
 
@@ -70,19 +87,16 @@ export function CustomAgentsSettings({
         </div>
       </Field>
 
-      <Field
-        label="Custom agents"
-        field="customAgents"
-        hint="Bring your own agent CLI, or wrap a builtin harness (e.g. Claude) to route inference through your proxy. Env variables are NOT available here — webterm settings travel over HTTP, and env is the only place credentials would land."
-        block
-      >
-        <button type="button" className="st-button" onClick={addAgent}>Add agent</button>
+      <Field label="Custom agents" field="customAgents" hint={AGENTS_TEXT.customHint} block>
+        {s.customAgents.length === 0 ? <p className="st-hint m-0">{AGENTS_TEXT.empty}</p> : (
+          <div className="st-cards">
+            {s.customAgents.map((a) => (
+              <CustomAgentCard key={a.id} agent={a} onPatch={patchAgent} onRemove={removeAgent} />
+            ))}
+          </div>
+        )}
+        <Button size="sm" variant="secondary" className="self-start" onClick={addAgent}>{AGENTS_TEXT.add}</Button>
       </Field>
-      <div className="st-cards">
-        {s.customAgents.map((a) => (
-          <CustomAgentCard key={a.id} agent={a} onPatch={patchAgent} onRemove={removeAgent} />
-        ))}
-      </div>
     </>
   )
 }
@@ -101,22 +115,18 @@ function CustomAgentCard({
     <section className="st-card" aria-label={agent.label || agent.id}>
       <TextField
         id={`st-ca-label-${agent.id}`}
-        label="Label"
+        label={AGENTS_TEXT.label}
         value={agent.label}
         placeholder="e.g. Claude (proxy)"
         onChange={(v) => onPatch(agent.id, { label: v })}
       />
       <SelectField
         id={`st-ca-base-${agent.id}`}
-        label="Base harness"
-        hint={
-          base
-            ? `Inherits ${base.label} capabilities: resume, context link, permission mode, session id minting.`
-            : 'Optional. Without it a custom agent only gets spawn + terminal title, nothing more.'
-        }
+        label={AGENTS_TEXT.base}
+        hint={base ? AGENTS_TEXT.baseHint(base.label) : AGENTS_TEXT.noBaseHint}
         value={agent.baseAgent ?? ''}
         options={[
-          { value: '', label: 'None (standalone CLI)' },
+          { value: '', label: AGENTS_TEXT.noBase },
           ...BUILTIN_AGENT_IDS.map((id) => ({ value: id as string, label: AGENT_CONFIG[id].label })),
         ]}
         onChange={(v) => onPatch(agent.id, { baseAgent: (v || undefined) as BuiltinAgentId | undefined })}
@@ -127,7 +137,7 @@ function CustomAgentCard({
         label="Launch command"
         hint={
           base && !agent.launchCmd.trim()
-            ? `Empty uses the base command ("${base.launchCmd}").`
+            ? AGENTS_TEXT.emptyCommand(base.launchCmd)
             : undefined
         }
         value={agent.launchCmd}
@@ -138,15 +148,12 @@ function CustomAgentCard({
       />
       <ColorField
         id={`st-ca-color-${agent.id}`}
-        label="Node color"
+        label={AGENTS_TEXT.color}
         value={agent.color || base?.color || FALLBACK_AGENT_COLOR}
         onChange={(v) => onPatch(agent.id, { color: v })}
       />
-      <div className="st-card-foot">
-        <code className="st-mono st-muted">{agent.id}</code>
-        <button type="button" className="st-button" onClick={() => onRemove(agent.id)}>
-          Remove
-        </button>
+      <div className="st-card-foot justify-end">
+        <Button size="sm" variant="ghost" onClick={() => onRemove(agent.id)}>{AGENTS_TEXT.remove}</Button>
       </div>
     </section>
   )

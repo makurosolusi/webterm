@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // "Custom command" mode of the Claude provider card, against a fetch mock that follows the server contract:
 // the command is saved as a launch profile (/api/settings) and the provider points at it by profileId.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ClaudeProviderCard, PROVIDER_TEXT } from './ClaudeProviderCard'
 import { COMMAND_TEXT, commandName } from './ClaudeProviderCommand'
@@ -49,21 +49,29 @@ function serve(w: World = {}): void {
   }))
 }
 const PUTS = (): Call[] => calls.filter((c) => c.method === 'PUT')
-const open = async (): Promise<void> => { fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.command })) }
+const open = async (): Promise<void> => { fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.command })) }
+/** The "Saved commands" select (one shared dropdown, not a row of toggle buttons). */
+const savedPicker = async (): Promise<HTMLSelectElement> => (await screen.findByLabelText(COMMAND_TEXT.saved)) as HTMLSelectElement
+const pickSaved = async (name: string): Promise<void> => {
+  const sel = await savedPicker()
+  fireEvent.change(sel, { target: { value: [...sel.options].find((o) => o.textContent === name)!.value } })
+}
+const pickedName = async (): Promise<string | undefined> => (await savedPicker()).selectedOptions[0]?.textContent ?? undefined
 
 beforeEach(() => { calls = [] })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('Claude provider: Custom command', () => {
-  it('always shows four mode buttons, with aria-pressed on the active one', async () => {
+  it('always shows the four modes as the shared segmented control, aria-checked on the active one', async () => {
     serve()
     render(<ClaudeProviderCard />)
-    await screen.findByRole('button', { name: PROVIDER_TEXT.modes.command })
-    for (const label of Object.values(PROVIDER_TEXT.modes)) expect(screen.getByRole('button', { name: label })).toBeTruthy()
+    const group = await screen.findByRole('radiogroup', { name: PROVIDER_TEXT.mode })
+    expect(group.getAttribute('data-control')).toBe('segmented')
+    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(Object.values(PROVIDER_TEXT.modes))
     expect(Object.keys(PROVIDER_TEXT.modes)).toHaveLength(4)
-    expect(screen.getByRole('button', { name: PROVIDER_TEXT.modes.login }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('radio', { name: PROVIDER_TEXT.modes.login }).getAttribute('aria-checked')).toBe('true')
     await open()
-    expect(screen.getByRole('button', { name: PROVIDER_TEXT.modes.command }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('radio', { name: PROVIDER_TEXT.modes.command }).getAttribute('aria-checked')).toBe('true')
   })
 
   it('choosing it shows the command form, no key field and the credentials note', async () => {
@@ -96,7 +104,7 @@ describe('Claude provider: Custom command', () => {
     serve({ profiles: [{ id: 'other', name: 'Other', command: 'claude' }] })
     render(<ClaudeProviderCard />)
     await open()
-    fireEvent.click(await screen.findByRole('button', { name: COMMAND_TEXT.newCommand }))
+    await pickSaved(COMMAND_TEXT.newCommand)
     fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     await screen.findByText(new RegExp(PROVIDER_TEXT.saved))
@@ -107,11 +115,11 @@ describe('Claude provider: Custom command', () => {
     serve({ profiles: [{ id: 'p1', name: 'Work', command: 'op run -- claude' }, { id: 'p2', name: 'Home', command: CMD }] })
     render(<ClaudeProviderCard />)
     await open()
-    fireEvent.click(await screen.findByRole('button', { name: 'Work' }))
+    await pickSaved('Work')
     expect((screen.getByLabelText(COMMAND_TEXT.command) as HTMLInputElement).value).toBe('op run -- claude')
     expect((screen.getByLabelText(COMMAND_TEXT.name) as HTMLInputElement).value).toBe('Work')
-    expect(screen.getByRole('button', { name: 'Work' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+    expect(await pickedName()).toBe('Work')
+    await pickSaved('Home')
     expect((screen.getByLabelText(COMMAND_TEXT.command) as HTMLInputElement).value).toBe(CMD)
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     await screen.findByText(new RegExp(PROVIDER_TEXT.saved))
@@ -124,7 +132,7 @@ describe('Claude provider: Custom command', () => {
     serve({ profiles: [{ id: 'p1', name: 'Work', command: 'op run -- claude' }] })
     render(<ClaudeProviderCard />)
     await open()
-    fireEvent.click(await screen.findByRole('button', { name: 'Work' }))
+    await pickSaved('Work')
     fireEvent.change(screen.getByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     await screen.findByText(new RegExp(PROVIDER_TEXT.saved))
@@ -189,7 +197,7 @@ describe('Claude provider: Custom command', () => {
     render(<ClaudeProviderCard />)
     expect(await screen.findByText(COMMAND_TEXT.missing)).toBeTruthy()
     expect((screen.getByLabelText(COMMAND_TEXT.command) as HTMLInputElement).value).toBe('')
-    expect((await screen.findByRole('button', { name: 'Other' })).getAttribute('aria-pressed')).toBe('false')
+    expect(await pickedName()).toBe(COMMAND_TEXT.newCommand)
   })
 
   it('Test connection saves first, shows Testing… while it runs, then the server summary', async () => {
@@ -234,7 +242,7 @@ describe('Claude provider: Custom command', () => {
     render(<ClaudeProviderCard />)
     await screen.findByText(PROVIDER_TEXT.modeHelp.login)
     expect(screen.queryByLabelText(COMMAND_TEXT.command)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.modes.custom }))
+    fireEvent.click(screen.getByRole('radio', { name: PROVIDER_TEXT.modes.custom }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.baseUrl), { target: { value: 'https://gw.example.test' } })
     fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.save }))
     await screen.findByText(new RegExp(PROVIDER_TEXT.saved))

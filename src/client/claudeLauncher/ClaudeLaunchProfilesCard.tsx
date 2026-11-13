@@ -9,6 +9,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { IconTooltip } from '@/components/ui/icon-button'
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { Settings } from '../../shared/settings'
 import { joinArgv } from '../../shared/claudeLaunch/shellQuote'
 import {
@@ -37,6 +40,7 @@ export const PROFILES_TEXT = {
   testing: 'Testing…',
   remove: 'Delete',
   confirmRemove: (name: string): string => `Delete "${name}"?`,
+  confirmRemoveBody: 'If new agents or Central use it, they switch to the built-in Default.',
   builtIn: 'Built in',
   badgeDefault: 'Default for new agents',
   badgeCentral: 'Central',
@@ -154,7 +158,7 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
     label: PROFILES_TEXT.test, ok: (r) => r.ok, success: (r) => (r.ok ? PROFILES_TEXT.testPassed : PROFILES_TEXT.testProblem),
     failure: (e) => PROFILES_TEXT.testFailed(errorCause(e)),
   })
-  const removeAction = useAction(onRemove, {
+  const removeAction = useAction(async () => { try { await onRemove() } finally { setConfirming(false) } }, {
     label: PROFILES_TEXT.remove,
     failure: (e) => (e instanceof ProfileInUseError ? PROFILES_TEXT.inUse(p.name, e.reason) : PROFILES_TEXT.removeFailed(p.name, errorCause(e))),
   })
@@ -172,11 +176,19 @@ function ProfileRow({ profile: p, command, isDefault, isCentral, onEdit, onRemov
       </div>
       <code className="st-mono st-profile-command">{command}</code>
       {confirming ? (
-        <div role="alertdialog" aria-label={PROFILES_TEXT.confirmRemove(p.name)} className="flex flex-wrap items-center gap-2 text-xs">
-          <span>{PROFILES_TEXT.confirmRemove(p.name)}</span>
-          <ActionButton size="xs" variant="destructive" autoFocus action={removeAction} busyLabel={PROFILES_TEXT.removing}>{PROFILES_TEXT.remove}</ActionButton>
-          <Button size="xs" variant="ghost" onClick={() => setConfirming(false)}>{PROFILES_TEXT.cancel}</Button>
-        </div>
+        // Stays open while the server answers (Delete busy); a refusal then shows on the row.
+        <AlertDialog open onOpenChange={(open) => { if (!open && !removeAction.busy) setConfirming(false) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{PROFILES_TEXT.confirmRemove(p.name)}</AlertDialogTitle>
+              <AlertDialogDescription>{PROFILES_TEXT.confirmRemoveBody}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus disabled={removeAction.busy}>{PROFILES_TEXT.cancel}</AlertDialogCancel>
+              <ActionButton variant="destructive" action={removeAction} busyLabel={PROFILES_TEXT.removing}>{PROFILES_TEXT.remove}</ActionButton>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
       {saved ? (
         <div role="status" className="flex flex-wrap items-center gap-2 text-xs">

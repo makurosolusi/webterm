@@ -84,12 +84,13 @@ describe('Connection', () => {
 })
 
 describe('Permissions', () => {
-  const level = () => screen.getByLabelText('How much may agents do on their own?') as HTMLSelectElement
+  const level = () => screen.getByRole('radiogroup', { name: 'How much may agents do on their own?' })
 
-  it('one select with Ask, Auto, Danger; a choice is saved straight to the server (ApprovalModeControl)', async () => {
+  it('one segmented choice Ask, Auto, Danger; a choice is saved straight to the server (ApprovalModeControl)', async () => {
     render(<Harness />)
-    expect([...level().options].map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
-    fireEvent.change(level(), { target: { value: 'always' } })
+    expect(within(level()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
+    expect(within(level()).getByRole('radio', { name: 'Auto' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(level()).getByRole('radio', { name: 'Ask' }))
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u, i]) => u === '/api/settings' && (i as RequestInit | undefined)?.body === JSON.stringify({ agentApprovalLevel: 'always' }))).toBe(true))
   })
 
@@ -117,10 +118,21 @@ describe('Models and Advanced', () => {
     render(<Harness />)
     expect(screen.getByText(/Models are chosen automatically/)).toBeTruthy()
     expect(screen.queryByText('Per-workspace model')).toBeNull()
-    const advanced = document.querySelector('[data-claude-group="advanced"]') as HTMLDetailsElement
+    const advanced = document.querySelector('[data-claude-group="advanced"] details[data-slot="settings-advanced"]') as HTMLDetailsElement
     expect(advanced.open).toBe(false)
+    expect(advanced.querySelector('summary')?.textContent).toBe('Advanced · 5')
     for (const field of ['centralClaudeProfileId', 'claudePermissionMode', 'disabledAgents', 'customAgents']) {
       expect(advanced.querySelector(`[data-field="${field}"]`), field).toBeTruthy()
     }
+  })
+
+  it('the page is grouped cards with titles, no ad-hoc headings or raw details', () => {
+    render(<Harness />)
+    const page = document.querySelector('[data-section="claude"]') as HTMLElement
+    expect(within(page).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Connection', 'How Claude starts', 'Permissions', 'Models'])
+    expect(page.querySelectorAll('h4, .st-capabilities-advanced').length).toBe(0)
+    expect(page.querySelectorAll('details:not([data-slot="settings-advanced"]):not(.st-models-ladder)').length).toBe(0)
+    // Effort reads as words, not the ladder id.
+    expect(page.textContent).not.toMatch(/xhigh/)
   })
 })

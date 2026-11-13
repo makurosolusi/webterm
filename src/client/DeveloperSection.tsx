@@ -12,8 +12,12 @@ export function DeveloperSection(): React.JSX.Element {
     <div className="flex flex-col gap-3" data-testid="developer-section">
       <ControlPanel />
       <CostDetails />
-      <details className="text-[13px]">
-        <summary className="cursor-default font-semibold">{DEVELOPER_TEXT.evalCases}</summary>
+      {/* Same collapsible look as a page's Advanced (SettingsAdvanced), with its own title. */}
+      <details className="st-advanced">
+        <summary className="st-advanced-summary">
+          <span className="codicon codicon-chevron-right st-advanced-chevron" aria-hidden="true" />
+          {DEVELOPER_TEXT.evalCases}
+        </summary>
         <EvalCasesPanel />
       </details>
     </div>

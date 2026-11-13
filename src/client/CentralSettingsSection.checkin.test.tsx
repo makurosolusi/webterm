@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAPABILITY_IDS, CAPABILITIES, type CapabilitiesResponse, type CapabilityId } from '../shared/featureCapabilities'
 import { DEFAULT_SETTINGS } from '../shared/settings'
@@ -90,11 +90,22 @@ describe('check-in settings', () => {
   it('a failed read says so, offers Retry, and leaves the controls off', async () => {
     failGet = true
     open()
-    const alert = await screen.findByText(/Could not load the check-in settings/)
+    const alert = (await screen.findByText(/Could not load the check-in settings/)).closest('[role="alert"]') as HTMLElement
     expect(screen.getByRole('switch', { name: SWITCH }).hasAttribute('disabled')).toBe(true)
     failGet = false
     fireEvent.click(alert.querySelector('button') as HTMLButtonElement)
     expect(await screen.findByText('Used today: 2 of 10')).toBeTruthy()
+  })
+
+  it('differs from the default (on, 10 per day): modified dot, and Reset saves the default back', async () => {
+    await ready()
+    const row = screen.getByRole('switch', { name: SWITCH }).closest('[data-slot="settings-field"]') as HTMLElement
+    expect(within(row).getByText('(Modified)')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: `Reset Setting: ${SWITCH}` }))
+    await waitFor(() => expect(posts).toEqual([{ enabled: true }]))
+    const limitRow = screen.getByLabelText(LIMIT).closest('[data-slot="settings-field"]') as HTMLElement
+    expect(within(limitRow).queryByText('(Modified)')).toBeNull()
+    expect([...(screen.getByLabelText(LIMIT) as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['5 per day', '10 per day', '20 per day', '50 per day'])
   })
 
   it('needs Central on', async () => {

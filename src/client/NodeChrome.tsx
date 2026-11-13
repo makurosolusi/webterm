@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import type { AgentStatus, Comment } from '../shared/workspace'
 import { Textfield, ToolbarButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { cn } from '@/lib/utils'
-import NodeColorSwatch from './NodeColorSwatch'
+import NodeColorPicker, { NODE_COLOR_MENU_LABEL } from './NodeColorSwatch'
 import { useNodeId } from '@xyflow/react'
 import NodeToolbar, { nodeMoreItems, type NodeToolbarProps } from './NodeToolbar'
 import TabNodeActions from './tabLayout.nodeActions'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import NodeComments from './NodeComments'
-import { NodeResizeToggle, useNodeResizeMenuItem } from './nodeResize/NodeLayoutResizer'
 import { useNodeHost } from './tabLayout.context'
 import { useNodeMaximize } from './nodeMaximize.store'
 import { NodeNameLabel } from './nodeName.label'
@@ -27,8 +27,10 @@ export interface NodeChromeProps {
   titleHint?: string
   onRename: (t: string) => void
   collapsed: boolean; onToggleCollapse: () => void
+  /** Node colour: a thin accent on the header's left edge, changed from "…" › Node color…. */
   color: string; onColor: (c: string) => void
-  status?: AgentStatus            // agent only
+  /** Agent only: the one labelled status chip (`AgentStatusChip`), always present for an agent node. */
+  statusChip?: ReactNode
   pill?: ReactNode                // <UsagePill/> for agent; omit for terminal
   comments: Comment[]; onAddComment: (text: string) => void
   // toolbar passthrough (NodeChrome owns comments open-state internally):
@@ -38,8 +40,6 @@ export interface NodeChromeProps {
   micActive?: boolean; onToggleMic?: () => void   // node tanpa input suara: tombol Dictate disembunyikan
   onClose: () => void
   onStop?: () => void             // agent only: Stop button in the toolbar
-  /** Stable identity color (agent only): chip before the title, separate from the node color. */
-  identityColor?: string
   onAiName?: () => void; aiNaming?: boolean
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean
   hideLinks?: boolean; onToggleHideLinks?: () => void
@@ -49,41 +49,6 @@ export interface NodeChromeProps {
 
 /** Judul yang dipakai saat node belum punya nama — nodeterm merender `data.title || 'Untitled'`. */
 export const UNTITLED = 'Untitled'
-
-/**
- * Chip status di header, atau `null` kalau tidak ada yang perlu dikatakan.
- *
- * Aturan "kapan chip muncul" diambil dari nodeterm `src/renderer/nodes/TerminalNode.tsx`: state
- * idle/selesai TIDAK merender chip apa pun (nodeterm tidak punya chip `DONE`). Labelnya literal di
- * markup, bukan hasil `text-transform`, karena di nodeterm tidak semua label huruf besar (chip
- * `unread` huruf kecil).
- *
- * `waiting` dan `blocked` DIPISAH di sini — nodeterm melipat keduanya ke satu NEEDS YOU, dan
- * lipatan itulah bug yang dilaporkan: sebuah node memasang NEEDS YOU setelah agent-nya cuma
- * menyelesaikan turn, lalu pembacanya tidak menemukan permintaan apa pun di percakapan. Chip yang
- * berteriak palsu berhenti dipercaya, dan dengan itu chip yang berteriak BENAR ikut mati nilainya.
- * Perbedaannya sudah ada di kawat (`hookStatus`: `PermissionRequest`/`permission_prompt` →
- * `blocked`, akhir turn → `waiting`); UI-lah yang membuangnya.
- *
- * Tiga sumbu beda sekaligus, karena chip sebesar ini harus terbaca dalam sekejap dan satu kata yang
- * berbeda saja tidak cukup:
- *  - KATA: "NEEDS YOU" (tuntutan) vs "TURN ENDED" (laporan).
- *  - WARNA: merah `--state-attention` vs amber `--state-warning` — pasangan token yang SUDAH
- *    dipakai repo ini untuk dua status itu di MiniMap (`canvasStyle.ts`) dan Kanban (`Kanban.tsx`).
- *  - GERAK: hanya `blocked` yang dot-nya berdenyut (lihat `node-chrome.css`). `blocked` satu-satunya
- *    status yang berarti kerja benar-benar MANDEG sampai pengguna bertindak, jadi ia yang dapat
- *    penanda terkuat; turn yang habis boleh diam.
- */
-export function statusChip(status?: AgentStatus): { cls: string; label: string; title: string } | null {
-  if (status === 'working') return { cls: 'node-status--busy', label: 'RUNNING', title: 'Agent is working' }
-  if (status === 'blocked')
-    return { cls: 'node-status--attention', label: 'NEEDS YOU', title: 'Blocked — waiting for your approval' }
-  if (status === 'waiting')
-    return { cls: 'node-status--waiting', label: 'TURN ENDED', title: 'Turn ended — nothing is blocked' }
-  if (status === 'failed') return { cls: 'node-status--failed', label: 'FAILED', title: 'The agent failed to start or exited with an error' }
-  if (status === 'stopped') return { cls: 'node-status--stopped', label: 'STOPPED', title: 'Stopped — Resume continues the session' }
-  return null
-}
 
 /**
  * className untuk elemen `.term-node`.
@@ -115,14 +80,15 @@ export default function NodeChrome(props: NodeChromeProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [colorOpen, setColorOpen] = useState(false)
   const titleRef = useRef<HTMLElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
   // Tab mode is view-only: collapse/resize/maximize would rewrite the node's canvas layout. A
   // maximized node keeps its canvas layout too, so collapse/resize hide there as well.
   const { inTab, visible } = useNodeHost()
   const nodeId = useNodeId()
   const max = useNodeMaximize()
   const fixedLayout = inTab || max.maximized
-  const resizeMenuItem = useNodeResizeMenuItem()
   // Double-click on the bare header toggles Maximize (VS Code: double-click the editor tab bar).
   // Controls are excluded; so is the title (`nodrag`), whose single click is Rename.
   const onHeaderDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -144,7 +110,8 @@ export default function NodeChrome(props: NodeChromeProps) {
     else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
   }
 
-  const chip = statusChip(props.status)
+  // The colour lives in the menu (VS Code tab colour), never as a coloured button that reads as status.
+  const colorItem: VscodeMenuItem = { type: 'item', id: 'color', label: NODE_COLOR_MENU_LABEL, onSelect: () => setColorOpen(true) }
   const toolbar: NodeToolbarProps = {
     onRefresh: props.onRefresh,
     searchOpen: props.searchOpen, onToggleSearch: props.onToggleSearch,
@@ -156,8 +123,8 @@ export default function NodeChrome(props: NodeChromeProps) {
     onAiName: props.onAiName, aiNaming: props.aiNaming,
     onBroadcast: props.onBroadcast, broadcastActive: props.broadcastActive, broadcastDisabled: props.broadcastDisabled,
     hideLinks: props.hideLinks, onToggleHideLinks: props.onToggleHideLinks,
-    extraMenuItems: props.menuItems,
-    extraAction: !props.collapsed && !fixedLayout ? { node: <NodeResizeToggle />, menuItem: resizeMenuItem } : undefined,
+    // Tab mode is view-only (no header to anchor the picker on), so no colour row there.
+    extraMenuItems: inTab ? props.menuItems : [...(props.menuItems ?? []), colorItem],
   }
   const comments = commentsOpen && (
     <NodeComments comments={props.comments} onAdd={props.onAddComment} onClose={() => setCommentsOpen(false)} />
@@ -179,27 +146,19 @@ export default function NodeChrome(props: NodeChromeProps) {
   }
 
   return (
-    <div className="node-header relative" onDoubleClick={onHeaderDoubleClick}>
+    <div ref={headerRef} className="node-header relative" onDoubleClick={onHeaderDoubleClick} style={{ '--nc-node-color': props.color } as CSSProperties}>
       {!fixedLayout && (
-        <ToolbarButton
-          label={props.collapsed ? 'Expand' : 'Collapse'}
-          className="nodrag"
-          title={props.collapsed ? 'Expand' : 'Collapse'}
-          data-title={props.collapsed ? 'Expand' : 'Collapse'}
-          onClick={props.onToggleCollapse}
-        ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} /></ToolbarButton>
+        <IconTooltip label={props.collapsed ? 'Expand' : 'Collapse'}>
+          <ToolbarButton
+            label={props.collapsed ? 'Expand' : 'Collapse'}
+            className="nodrag"
+            data-title={props.collapsed ? 'Expand' : 'Collapse'}
+            onClick={props.onToggleCollapse}
+          ><span className={cn('codicon', props.collapsed ? 'codicon-chevron-right' : 'codicon-chevron-down')} aria-hidden="true" /></ToolbarButton>
+        </IconTooltip>
       )}
-
-      <NodeColorSwatch color={props.color} onColor={props.onColor} />
 
       {props.icon && <span className={cn('node-icon codicon', `codicon-${props.icon}`)} aria-hidden="true" />}
-
-      {props.identityColor && (
-        <span
-          className="node-identity" aria-hidden="true"
-          style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: props.identityColor }}
-        />
-      )}
 
       {editing ? (
         <Textfield
@@ -220,12 +179,7 @@ export default function NodeChrome(props: NodeChromeProps) {
         <span className="node-description" title={props.description}>{props.description}</span>
       )}
 
-      {chip && (
-        <span className={cn('node-status', chip.cls)} title={chip.title}>
-          <span className="node-status-dot" />
-          {chip.label}
-        </span>
-      )}
+      {props.statusChip}
 
       {props.pill}
       {props.extraHeader}
@@ -233,6 +187,9 @@ export default function NodeChrome(props: NodeChromeProps) {
       <NodeToolbar {...toolbar} />
 
       {comments}
+      {colorOpen && headerRef.current && (
+        <NodeColorPicker anchor={headerRef.current} color={props.color} onColor={props.onColor} onClose={() => setColorOpen(false)} />
+      )}
     </div>
   )
 }

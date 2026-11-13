@@ -48,9 +48,6 @@ export interface EditorNodeProps extends NodeProps {
   stat?: typeof fsClient.stat
 }
 
-/** Props ViewerHost takes once the viewer side lands; spread (not typed attributes) so this compiles before it. */
-type ViewerExtras = { onOpenAsText?: () => void; onMeta?: (meta: ViewerMeta) => void }
-
 /**
  * Node editor/preview file. Teks dimuat/disimpan lewat `useEditorFile` (cek versi, konflik,
  * biner, non-UTF-8); gambar dan PDF jadi preview; audio/video/archive/biner jadi placeholder jujur.
@@ -69,8 +66,7 @@ function EditorNode({
   stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
-  // `viewAs: 'text'` = "Open as Text" on a file the viewers would show (SVG, misdetected types); kept on
-  // the node for this session only (not in the workspace shape yet).
+  // `viewAs: 'text'` = "Open as Text" on a file the viewers would show (SVG, misdetected types); persisted (WsNode.viewAs).
   const d = data as { filePath?: string; color?: string; name?: string; viewAs?: 'text' }
   const filePath = d.filePath ?? ''
   const swatch = d.color ?? '#0a84ff'
@@ -116,7 +112,6 @@ function EditorNode({
   const showInFiles = useShowInFiles(id)
   const filesRoot = useFilesRoot(id)
   const close = () => { void rf.deleteElements({ nodes: [{ id }] }) }
-  const viewerExtras: ViewerExtras = { onOpenAsText: () => rf.updateNodeData(id, { viewAs: 'text' }), onMeta: setViewerMeta }
   const compareSides = async () => {
     const meta = await readMeta(filePath)
     const refusal = loadRefusal(meta.content, 'File', true)
@@ -162,7 +157,7 @@ function EditorNode({
       return sync.missing ? (
         <span className="editor-node__notice">{fileName} was deleted on disk.</span>
       ) : (
-        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} {...viewerExtras} />
+        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} onOpenAsText={() => rf.updateNodeData(id, { viewAs: 'text' })} onMeta={setViewerMeta} />
       )
     if (isBinary)
       return (

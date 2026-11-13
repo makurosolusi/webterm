@@ -14,7 +14,7 @@ export interface NotifyPrefs {
 }
 
 const KEY = 'webterm.osNotify'
-const DEFAULTS: NotifyPrefs = { enabled: true, sound: true, muted: [] }
+export const NOTIFY_DEFAULTS: NotifyPrefs = { enabled: true, sound: true, muted: [] }
 const listeners = new Set<() => void>()
 let cache: NotifyPrefs | null = null
 
@@ -29,8 +29,8 @@ export function readNotifyPrefs(): NotifyPrefs {
     console.warn('osNotify: ignoring unreadable prefs in localStorage', err)
   }
   cache = {
-    enabled: typeof stored.enabled === 'boolean' ? stored.enabled : DEFAULTS.enabled,
-    sound: typeof stored.sound === 'boolean' ? stored.sound : DEFAULTS.sound,
+    enabled: typeof stored.enabled === 'boolean' ? stored.enabled : NOTIFY_DEFAULTS.enabled,
+    sound: typeof stored.sound === 'boolean' ? stored.sound : NOTIFY_DEFAULTS.sound,
     muted: Array.isArray(stored.muted) ? stored.muted.filter((x) => typeof x === 'string') : [],
   }
   return cache

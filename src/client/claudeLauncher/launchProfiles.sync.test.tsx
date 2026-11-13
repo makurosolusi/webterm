@@ -61,7 +61,7 @@ describe('launch profiles written by the setup wizard', () => {
     const server = serve()
     render(<App />)
     await screen.findByRole('region', { name: 'Work' })
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.command }))
+    fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.command }))
     fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     const envman = await screen.findByRole('region', { name: 'envman: claude:malik-opus' })
@@ -95,7 +95,7 @@ describe('launch profiles written by the setup wizard', () => {
     }
     render(<Scoped />)
     await screen.findByRole('region', { name: 'Work' })
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.command }))
+    fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.command }))
     fireEvent.change(await screen.findByLabelText(COMMAND_TEXT.command), { target: { value: CMD } })
     fireEvent.click(screen.getByRole('button', { name: COMMAND_TEXT.save }))
     await screen.findByRole('region', { name: 'envman: claude:malik-opus' })

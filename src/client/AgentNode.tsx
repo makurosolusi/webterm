@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
@@ -21,9 +21,11 @@ import { unwatchNode, watchNode } from './unread'
 import { randomId } from './randomId'
 import { useNodeActions } from './nodeActions'
 import { generateName as apiGenerateName } from './api'
-import { autoTitleFromWork, canResumeAfter, identityColor, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
-import { AgentFailedBar } from './AgentFailedBar'
-import { ClaudeTerminalViewButton } from './agentChat/claudeViewSwitch'
+import { autoTitleFromWork, canResumeAfter, isAutoName, stopAgent, stopIdleAgents, uniqueTitle } from './nodeIdentity'
+import { AgentEndedBar, AgentFailedBar } from './AgentFailedBar'
+import { ClaudeTerminalViewToggle } from './agentChat/claudeViewSwitch'
+import { AgentStatusChip } from './NodeStatusChip'
+import { useNodeStatusFacts } from './nodeStatus.store'
 import NodeStatusBar from './NodeStatusBar'
 
 const COLLAPSED_H = 40
@@ -82,6 +84,12 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const [resume, setResume] = useState(() => resumesOnFirstLaunch(agentId, sessionId))
   // Bumping the key remounts TerminalCore so it re-sends `open`.
   const [gen, setGen] = useState(0)
+  // When the current launch was sent (per remount): output and exits older than this belong to the previous process.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed on purpose for each launch generation
+  const openedAt = useMemo(() => Date.now(), [gen])
+  const facts = useNodeStatusFacts(id, true)
+  // Ended normally: the hook said so, or (no hook) the server saw this launch's process exit.
+  const ended = status === 'done' || status === 'stopped' || (!status && !!facts && !facts.live && !!facts.exit && facts.exit.at >= openedAt)
 
   // Persist a freshly generated id up to App exactly once.
   useEffect(() => { if (!sessionId) onSession(id, sid) }, [])
@@ -275,10 +283,9 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           title={label} name={d.name}
           icon="hubot"
           onRename={setTitle}
-          identityColor={identityColor(id)}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
-          status={status}
+          statusChip={<AgentStatusChip id={id} status={status} openedAt={openedAt} />}
           pill={usageModel ? <UsagePill modelLabel={usageModel} /> : undefined}
           comments={comments} onAddComment={addComment}
           onRefresh={() => termRef.current?.refit()}
@@ -294,22 +301,27 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           onAiName={aiName} aiNaming={aiNaming}
           onBroadcast={ext.onBroadcast} broadcastActive={ext.broadcastActive} broadcastDisabled={ext.broadcastDisabled}
           hideLinks={d.hideLinks} onToggleHideLinks={onToggleHideLinksProp}
-          extraHeader={<ClaudeTerminalViewButton nodeId={id} agentId={agentId} panes={d.panes} status={status} />}
+          extraHeader={<ClaudeTerminalViewToggle nodeId={id} agentId={agentId} panes={d.panes} status={status} onStopTurn={() => send({ t: 'close', id })} />}
         />
-        <div className="node-body relative">
+        <div className="node-body node-body--stack relative">
+          <div className="node-body__term">
+            <TerminalCore
+              key={gen}
+              ref={termRef}
+              id={id}
+              cmd={cmd}
+              cwd={cwd}
+              agentId={agentId}
+              sessionId={resumableSid}
+              resume={resume}
+              claudeProfileId={d.claudeProfileId}
+            />
+          </div>
           {/* A1/A2: Retry resumes the conversation when there is one, else launches it afresh. */}
           {status === 'failed' && <AgentFailedBar onRetry={() => { setResume(!!resumableSid); setGen((g) => g + 1) }} />}
-          <TerminalCore
-            key={gen}
-            ref={termRef}
-            id={id}
-            cmd={cmd}
-            cwd={cwd}
-            agentId={agentId}
-            sessionId={resumableSid}
-            resume={resume}
-            claudeProfileId={d.claudeProfileId}
-          />
+          {status !== 'failed' && ended && (
+            <AgentEndedBar onResume={agentId && canResume(agentId) && resumableSid ? doResume : undefined} onNewSession={newSession} />
+          )}
         </div>
         {!collapsed && <NodeStatusBar sessionId={id} kind="agent" cwd={cwd} />}
         {searchOpen && (

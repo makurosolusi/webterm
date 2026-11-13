@@ -261,14 +261,14 @@ describe('node-chrome.css', () => {
     expect(chrome).toContain('--nc-focus: var(--vscode-focusBorder')
   })
 
-  it('styles the status chip without text-transform (nodeterm labels are literal)', () => {
+  it('styles the status chip without text-transform (the shared model words are literal)', () => {
     const chip = chrome.slice(chrome.indexOf('.node-status {'), chrome.indexOf('@keyframes nt-pulse'))
     expect(chip).toContain('font-size: var(--ui-font-size-label)')
     expect(chip).toContain('font-weight: 400')
     expect(chip).not.toContain('letter-spacing')
-    expect(chip).toContain('.node-status-dot')
-    expect(chip).toContain('.node-status--busy')
+    expect(chip).toContain('.node-status--working')
     expect(chip).toContain('.node-status--attention')
+    expect(chip).not.toContain('.node-status-dot')
     expect(chip).not.toContain('text-transform')
   })
 
@@ -356,5 +356,23 @@ describe('CSS mati sudah dibuang', () => {
     ]) {
       expect(all).not.toContain(gone)
     }
+  })
+})
+
+describe('styles.css: bridge (cable) handles', () => {
+  const rule = (sel: string) => tokens.match(new RegExp(`${sel.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
+
+  it('are invisible by default, so they never sit over terminal text', () => {
+    expect(rule('.react-flow__handle.bridge-handle')).toMatch(/opacity:\s*0;/)
+  })
+
+  it('show on node hover, on selection, while connecting and on keyboard focus', () => {
+    for (const sel of [
+      '.react-flow__node:hover .react-flow__handle.bridge-handle',
+      '.react-flow__node.selected .react-flow__handle.bridge-handle',
+      '.react-flow__handle.bridge-handle.connectingfrom',
+      '.react-flow:has(.react-flow__connection) .react-flow__handle.bridge-handle',
+      '.react-flow__handle.bridge-handle:focus-visible',
+    ]) expect(tokens).toContain(sel)
   })
 })

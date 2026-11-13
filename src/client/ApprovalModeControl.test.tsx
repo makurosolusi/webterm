@@ -2,7 +2,7 @@
 // The permission-mode control: the Central composer mode button (effective mode, icon + tooltip, scope, Danger confirm with
 // confirmDanger in the payload, a confirm_required reply reopening the dialog, the stale-sessions line)
 // and the Settings rows (all projects + This project, "Same as all projects" clears the override).
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, mergeSettings, type Settings } from '../shared/settings'
 import { SettingsProvider } from './useSettings'
@@ -143,14 +143,15 @@ describe('ApprovalModeChip', () => {
 describe('ApprovalModeFields (Settings › Claude › Permissions)', () => {
   const fields = (s: Settings, projectId?: string) =>
     render(<SettingsItemScopeProvider category="Claude" settings={s}><ApprovalModeFields settings={s} projectId={projectId} /></SettingsItemScopeProvider>)
-  const all = () => screen.getByLabelText('How much may agents do on their own?') as HTMLSelectElement
+  const all = () => screen.getByRole('radiogroup', { name: 'How much may agents do on their own?' })
   const project = () => screen.getByLabelText('This project') as HTMLSelectElement
 
-  it('the all-projects row lists Ask, Auto, Danger and writes the global level', async () => {
+  it('the all-projects row is a segmented Ask, Auto, Danger and writes the global level', async () => {
     fields(settings())
-    expect([...all().options].map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
+    expect(all().getAttribute('data-control')).toBe('segmented')
+    expect(within(all()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
     expect(screen.queryByLabelText('This project')).toBeNull()
-    fireEvent.change(all(), { target: { value: 'always' } })
+    fireEvent.click(within(all()).getByRole('radio', { name: 'Ask' }))
     await waitFor(() => expect(puts).toEqual([{ agentApprovalLevel: 'always' }]))
   })
 

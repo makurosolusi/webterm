@@ -7,13 +7,13 @@ export const SETTINGS_GROUPS = ['General', 'Agents', 'Account & system'] as cons
 /** Settings sections: nav entry + page header, one place, listed in group order. `icon` is an outline
  *  codicon name; `description` says what is inside (page header and search, not the one-line nav item). */
 export const SETTINGS_SECTIONS = [
-  { id: 'appearance', group: 'General', label: 'Appearance', icon: 'symbol-color', description: 'Theme, colors, font, canvas background' },
-  { id: 'terminal', group: 'General', label: 'Terminal', icon: 'terminal', description: 'Copy, shortcuts, history, shell' },
+  { id: 'appearance', group: 'General', label: 'Appearance', icon: 'symbol-color', description: 'Theme and canvas background' },
+  { id: 'terminal', group: 'General', label: 'Terminal', icon: 'terminal', description: 'Colors, font, cursor, history, shell' },
   { id: 'keyboard', group: 'General', label: 'Keyboard Shortcuts', icon: 'keyboard', description: 'See, change and reset every shortcut' },
-  { id: 'canvas', group: 'General', label: 'Canvas', icon: 'layout', description: 'Grid, quick move, projects folder' },
+  { id: 'canvas', group: 'General', label: 'Canvas', icon: 'layout', description: 'Grid, nodes, cables, projects folder' },
   { id: 'notifications', group: 'General', label: 'Notifications', icon: 'bell', description: 'Desktop notifications and sound' },
-  { id: 'claude', group: 'Agents', label: 'Claude', icon: 'sparkle', description: 'Connection, permissions, profiles' },
-  { id: 'central', group: 'Agents', label: 'Central', icon: 'comment-discussion', description: 'What it may do, check-ins, daily limit' },
+  { id: 'claude', group: 'Agents', label: 'Claude', icon: 'sparkle', description: 'Sign-in, how Claude starts, permissions' },
+  { id: 'central', group: 'Agents', label: 'Central', icon: 'comment-discussion', description: 'What it may do, check-ins, spend limit' },
   { id: 'rules', group: 'Agents', label: 'Rules & secrets', icon: 'shield', description: 'What agents may do, and their secrets' },
   { id: 'account', group: 'Account & system', label: 'Account', icon: 'person', description: 'Username, password, signed-in devices' },
   { id: 'capabilities', group: 'Account & system', label: 'Features', icon: 'extensions', description: 'Turn on the browser, files and Telegram' },
