@@ -37,14 +37,14 @@ const nodeEl = (id: string): HTMLElement => {
   return el as HTMLElement
 }
 const closeBtn = (id: string): HTMLElement => {
-  // The toolbar's custom element carries no title attribute in jsdom: find it by its close icon.
-  const el = nodeEl(id).querySelector('.editor-node__actions .codicon-close')?.closest('vscode-toolbar-button')
+  // The header's Close is an IconButton: its accessible name is the label.
+  const el = nodeEl(id).querySelector('.editor-node__actions button[aria-label="Close"]')
   if (!el) throw new Error(`no close button on ${id}`)
   return el as HTMLElement
 }
 const nodeIds = () => Array.from(document.querySelectorAll('.react-flow__node')).map((n) => n.getAttribute('data-id')).sort()
 const dialog = () => document.querySelector('[data-slot="vscode-dialog"]')
-/** A button of the open dialog (the editor's own toolbar has a Save button too). */
+/** A button of the open dialog. */
 const dlgBtn = (name: string) => within(dialog() as HTMLElement).getByRole('button', { name })
 const flush = () => act(() => new Promise<void>((r) => setTimeout(r, 20)))
 /** A save the test settles by hand, so "closes only after the write" is observable. */
