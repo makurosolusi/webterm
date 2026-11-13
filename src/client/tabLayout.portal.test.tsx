@@ -130,6 +130,26 @@ describe('withTabPortal', () => {
     expect(probe.nodeId).toBe('rf1')
   })
 
+  // Claude view switch: the server flips a node's kind (agent <-> agentChat), so React Flow swaps the
+  // component under the SAME id. The old portal's unmount must not take the new one's host with it.
+  it('keeps the host on the canvas when a node changes type under the same id', () => {
+    const A = withTabPortal(function A() { return <i data-testid="view-a" /> })
+    const B = withTabPortal(function B() { return <i data-testid="view-b" /> })
+    // React Flow renders `nodeTypes[type]` in the node's slot: a new type is a new component there.
+    const flow = (type: 'a' | 'b') => {
+      const T = type === 'a' ? A : B
+      return <Shell><T {...props({}, { id: 'sw1', type })} /></Shell>
+    }
+    const { rerender, container } = render(flow('a'))
+    expect(container.querySelector('[data-testid=view-a]')).not.toBeNull()
+    rerender(flow('b'))
+    const host = getNodeHost('sw1')
+    expect(host.isConnected).toBe(true)
+    expect(container.querySelector('.tab-host-slot')?.firstChild).toBe(host)
+    expect(container.querySelector('[data-testid=view-b]')).not.toBeNull()
+    expect(container.querySelector('[data-testid=view-a]')).toBeNull()
+  })
+
   it('exposes the nine node types as stable module constants', () => {
     expect(Object.keys(nodeTypes).sort()).toEqual(['agent', 'agentChat', 'app', 'browser', 'diff', 'editor', 'files', 'plan', 'terminal'])
     Object.values(nodeTypes).forEach((t) => expect(t).toBeTruthy())

@@ -1,11 +1,11 @@
 // Renders a node's content into a persistent host div (tabLayout.dom) instead of in place, so the
 // same React subtree (and its xterm / iframe / Monaco) survives moving between canvas, tab pane and
 // the maximize overlay (nodeMaximize.overlay).
-import { memo, useCallback, useEffect, useMemo, type ComponentType, type KeyboardEvent, type SyntheticEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, type ComponentType, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { NodeProps } from '@xyflow/react'
 import { NodeHostContext } from './tabLayout.context'
-import { getNodeHost, placeNodeHost, releaseNodeHost } from './tabLayout.dom'
+import { claimNodeHost, getNodeHost, placeNodeHost, releaseNodeHost } from './tabLayout.dom'
 import { useTabLayout } from './tabLayout.store'
 import { useMaximizedNode } from './nodeMaximize.store'
 import './tab-host.css'
@@ -41,7 +41,11 @@ export function withTabPortal(Inner: ComponentType<NodeProps>): ComponentType<No
     // Runs before the portal subtree's own layout effects (earlier sibling), so the host is in the document.
     // `detached` in the deps re-runs it on Restore, which puts the host back here.
     const slot = useCallback((el: HTMLDivElement | null) => { if (el && !detached) placeNodeHost(id, el) }, [id, detached])
-    useEffect(() => () => releaseNodeHost(id), [id])
+    // Claimed in the layout phase so a same-id remount (type change) owns the host before the old
+    // portal's passive unmount cleanup runs; that cleanup then leaves the host alone.
+    const [owner] = useState(() => Symbol(id))
+    useLayoutEffect(() => claimNodeHost(id, owner), [id, owner])
+    useEffect(() => () => releaseNodeHost(id, owner), [id, owner])
     return (
       <>
         <div ref={slot} className="tab-host-slot" />
