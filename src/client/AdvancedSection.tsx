@@ -1,5 +1,6 @@
 // Settings › Features › Advanced: where Chromium is (+ download it), and Reset capabilities (asks first,
-// then busy, then the result with its time). Closed by default; the Browser card's step opens it.
+// then busy, then the result with its time). Closed by default; the Browser card's step opens it. Looks like
+// SettingsAdvanced (chevron, inset card) but is controlled, so the step can open it.
 import { useState } from 'react'
 import type { CapabilitiesResponse } from '../shared/featureCapabilities'
 import {
@@ -18,14 +19,14 @@ type Advanced = CapabilitiesResponse['advanced']
 
 export interface AdvancedSectionProps {
   advanced: Advanced
-  /** Dipanggil setelah server menerima perubahan, agar kartu memuat ulang. */
+  /** Called after the server took a change, so the cards reload. */
   onChanged(): Promise<unknown>
-  /** Terbuka atau tidak; dikendalikan induk supaya tombol langkah di kartu Browser bisa membukanya. */
+  /** Open or not; the parent controls it so the Browser card's step button can open it. */
   open: boolean
   onOpenChange(open: boolean): void
 }
 
-/** Bagian Lanjutan: lokasi Chromium (+ unduh Chromium) dan setel ulang. */
+/** The Advanced part: Chromium location (+ download Chromium) and reset. */
 export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: AdvancedSectionProps): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
@@ -53,19 +54,31 @@ export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: Adv
   }
 
   return (
-    <details className="st-capabilities-advanced" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
-      <summary>{ADVANCED_TEXT.summary}</summary>
-      <ChromiumPathField chromium={advanced.chromiumPath}
-        save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />
-      {advanced.chromiumDownload?.supported ? <ChromiumDownload onDone={onChanged} /> : null}
-      <div className="flex flex-col gap-1 py-2">
-        <Button size="sm" variant="outline" className="self-start" disabled={reset.busy} aria-busy={reset.busy} onClick={() => setAsking(true)}>
-          {reset.busy ? ADVANCED_TEXT.resetting : ADVANCED_TEXT.reset}
-        </Button>
-        <p className="m-0 text-xs opacity-70">{ADVANCED_TEXT.resetHint}</p>
-        <ActionResult action={reset} />
+    <details className="st-advanced" data-slot="settings-advanced" open={open} onToggle={(e) => onOpenChange(e.currentTarget.open)}>
+      <summary className="st-advanced-summary">
+        <span className="codicon codicon-chevron-right st-advanced-chevron" aria-hidden="true" />
+        {ADVANCED_TEXT.summary}
+      </summary>
+      <div className="st-group-card">
+        <div className="st-form">
+          <ChromiumPathField chromium={advanced.chromiumPath}
+            save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />
+        </div>
+        {advanced.chromiumDownload?.supported ? <div className="st-form"><ChromiumDownload onDone={onChanged} /></div> : null}
+        <div className="st-field">
+          <div className="st-field-text">
+            <span className="st-label">{ADVANCED_TEXT.reset}</span>
+            <p className="st-hint">{ADVANCED_TEXT.resetHint}</p>
+            <ActionResult action={reset} />
+          </div>
+          <div className="st-control">
+            <Button size="sm" variant="outline" disabled={reset.busy} aria-busy={reset.busy} onClick={() => setAsking(true)}>
+              {reset.busy ? ADVANCED_TEXT.resetting : ADVANCED_TEXT.reset}
+            </Button>
+          </div>
+        </div>
       </div>
-      {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
+      {error ? <p role="alert" className="st-state st-state--error">{error}</p> : null}
       {asking ? (
         <AlertDialog open onOpenChange={(o) => { if (!o) setAsking(false) }}>
           <AlertDialogContent>

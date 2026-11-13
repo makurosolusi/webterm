@@ -1,31 +1,29 @@
-// Settings › Rules & secrets: what agents may do without asking. The rule list with one-click rules from recent
-// approvals (PolicyRules), the secrets agents may use (SecretsPanel brings its own "Secrets" subheading), and
-// under Advanced the raw rule form and the simulator. How often agents ask at all is Settings › Claude's
-// approval level, not a switch here.
+// Settings › Rules & secrets: what agents may do without asking. Cards in order: Rules (the list), From recent
+// approvals (one-click rules, only when there are some), Add a rule, Secrets, Secret usage; under Advanced the
+// rule try-out (PolicySimulator). How often agents ask at all is Settings › Claude's approval level, not a switch here.
 import { PolicyRuleForm } from './PolicyRuleForm'
 import { PolicyRules } from './PolicyRules'
 import { PolicySimulator } from './PolicySimulator'
 import { SecretsPanel } from './SecretsPanel'
-
-export const RULES_SECTION_TEXT = { advanced: 'Advanced' } as const
+import { SettingsAdvanced } from './SettingsControls'
 
 export interface WorkspaceName { id: string; name: string }
 
 /** Rules & secrets section body; `workspaceId` is the workspace the user is in ('' = none). */
 export function RulesSection({ workspaceId = '', workspaces = [] }: { workspaceId?: string; workspaces?: readonly WorkspaceName[] }): React.JSX.Element {
   const names = new Map(workspaces.map((w) => [w.id, w.name]))
-  const current = workspaceId ? { id: workspaceId, name: names.get(workspaceId) ?? workspaceId } : null
+  const current = workspaceId ? { id: workspaceId, name: names.get(workspaceId) ?? 'this workspace' } : null
   return (
-    <div className="flex flex-col gap-3 text-[13px]" data-testid="rules-section">
+    <div className="flex flex-col" data-testid="rules-section">
       <PolicyRules workspaceNames={names} />
+      <PolicyRuleForm />
       <SecretsPanel workspace={current} />
-      <details data-testid="rules-advanced">
-        <summary className="cursor-default font-semibold">{RULES_SECTION_TEXT.advanced}</summary>
-        <div className="mt-2 flex flex-col gap-3">
-          <PolicyRuleForm />
+      <div data-testid="rules-advanced" className="contents">
+        {/* A tool, not settings: no count in the summary. */}
+        <SettingsAdvanced count={0}>
           <PolicySimulator />
-        </div>
-      </details>
+        </SettingsAdvanced>
+      </div>
     </div>
   )
 }

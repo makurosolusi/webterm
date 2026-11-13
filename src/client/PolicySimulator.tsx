@@ -4,10 +4,10 @@
 import { useEffect, useState } from 'react'
 import { ActionButton, useAction } from '@/components/ui/action'
 import { Switch } from '@/components/ui/switch'
-import { Segmented } from './centralSettings.controls'
-import { SettingsSelect } from './SettingsControls'
+import { SettingsSegmented, SettingsSelect } from './SettingsControls'
 import { SettingsCombobox } from './SettingsCombobox'
-import { CAPABILITY_PRESETS, SCOPE_PRESETS, SUBJECTS, whatText, whoText } from './policyPresets'
+import { Field } from './SettingsFields'
+import { CAPABILITY_PRESETS, RULE_EFFECTS, SCOPE_PRESETS, SUBJECTS, whatText, whoText } from './policyPresets'
 
 export const POLICY_CLASSIFIER_PATH = '/api/policy/classifier'
 export const POLICY_SIMULATE_PATH = '/api/policy/simulate'
@@ -26,6 +26,7 @@ export const SIM_TEXT = {
   simIntro: 'See what a rule would have changed. Nothing runs and nothing is saved.',
   subject: 'Who', capability: 'What', scope: 'Where', effect: 'Effect',
   classifierOn: 'Include the small model',
+  classifierHint: 'Also replay the actions the small model would have decided.',
   run: 'Try it', running: 'Trying…',
   simFailed: (why: string) => `The try failed: ${why}`,
   summary: (total: number, changed: number) => `${total} decisions replayed, ${changed} would change.`,
@@ -45,8 +46,8 @@ async function request(method: string, path: string, body?: unknown): Promise<un
   return out
 }
 
-const EFFECTS = [{ value: 'allow', label: 'Allow' }, { value: 'ask', label: 'Ask' }, { value: 'deny', label: 'Deny' }] as const
-type SimRuleEffect = (typeof EFFECTS)[number]['value']
+type SimRuleEffect = (typeof RULE_EFFECTS)[number]['value']
+const SIM_IDS = { subject: 'sim-who', capability: 'sim-what', scope: 'sim-where', effect: 'sim-effect' } as const
 const ROWS: SimEffect[] = ['allow', 'ask', 'deny', 'classifier']
 
 export function PolicySimulator(): React.JSX.Element {
@@ -59,7 +60,8 @@ export function PolicySimulator(): React.JSX.Element {
     let live = true
     request('GET', POLICY_CLASSIFIER_PATH)
       .then((v) => { if (live) setClassifier((v as ClassifierSwitch).central || (v as ClassifierSwitch).permissions) })
-      .catch(() => {}) // ledger off or older server: the try below says so when run
+      // Ledger off or an older server: the switch starts off, and "Try it" reports the reason when run.
+      .catch((err: unknown) => console.warn('policy simulator: could not read the small-model switch', err))
     return () => { live = false }
   }, [])
 
@@ -71,30 +73,33 @@ export function PolicySimulator(): React.JSX.Element {
   }, { label: SIM_TEXT.run, failure: (err) => SIM_TEXT.simFailed(err instanceof Error ? err.message : String(err)) })
   const simError = simulate.result && !simulate.result.ok ? simulate.result.text : null
 
+  const combo = (key: 'capability' | 'scope', presets: typeof CAPABILITY_PRESETS) => (
+    <SettingsCombobox id={SIM_IDS[key]} ariaLabel={SIM_TEXT[key]} fieldId={`policy.${key}`} presets={presets} placeholder={SIM_TEXT[key]}
+      value={rule[key]} onDraft={(v) => setRule((r) => ({ ...r, [key]: v }))} onCommit={(v) => setRule((r) => ({ ...r, [key]: v }))} />
+  )
+
   return (
-    <section aria-label={SIM_TEXT.simTitle} className="flex flex-col gap-2" data-testid="policy-simulator">
-      <details data-testid="policy-simulator-try">
-        <summary className="cursor-default text-xs font-semibold">{SIM_TEXT.simTitle}</summary>
-        <p className="text-xs opacity-70">{SIM_TEXT.simIntro}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <SettingsSelect ariaLabel={SIM_TEXT.subject} value={rule.subject} options={SUBJECTS} onChange={(v) => setRule((r) => ({ ...r, subject: v }))} />
-          <span className="w-56">
-            <SettingsCombobox ariaLabel={SIM_TEXT.capability} fieldId="policy.capability" mono presets={CAPABILITY_PRESETS} placeholder={SIM_TEXT.capability}
-              value={rule.capability} onDraft={(v) => setRule((r) => ({ ...r, capability: v }))} onCommit={(v) => setRule((r) => ({ ...r, capability: v }))} />
-          </span>
-          <span className="w-40">
-            <SettingsCombobox ariaLabel={SIM_TEXT.scope} fieldId="policy.scope" mono presets={SCOPE_PRESETS} placeholder={SIM_TEXT.scope}
-              value={rule.scope} onDraft={(v) => setRule((r) => ({ ...r, scope: v }))} onCommit={(v) => setRule((r) => ({ ...r, scope: v }))} />
-          </span>
-          <Segmented label={SIM_TEXT.effect} value={rule.effect} options={EFFECTS} onChange={(v) => setRule((r) => ({ ...r, effect: v as SimRuleEffect }))} />
-          <label htmlFor="sim-classifier" className="flex items-center gap-1 text-xs">
-            <Switch id="sim-classifier" checked={classifier} onCheckedChange={setClassifier} />{SIM_TEXT.classifierOn}
-          </label>
-          <ActionButton size="sm" action={simulate} busyLabel={SIM_TEXT.running}>{SIM_TEXT.run}</ActionButton>
-        </div>
-        {simError ? <p role="alert" className="text-xs text-destructive">{simError}</p> : null}
+    <section aria-label={SIM_TEXT.simTitle} data-testid="policy-simulator" className="st-rows">
+      <div className="st-field-text st-form">
+        <span className="st-row-title">{SIM_TEXT.simTitle}</span>
+        <p className="st-row-meta">{SIM_TEXT.simIntro}</p>
+      </div>
+      <Field label={SIM_TEXT.subject} htmlFor={SIM_IDS.subject}>
+        <SettingsSelect id={SIM_IDS.subject} ariaLabel={SIM_TEXT.subject} value={rule.subject} options={SUBJECTS} onChange={(v) => setRule((r) => ({ ...r, subject: v }))} />
+      </Field>
+      <Field label={SIM_TEXT.capability} htmlFor={SIM_IDS.capability}>{combo('capability', CAPABILITY_PRESETS)}</Field>
+      <Field label={SIM_TEXT.scope} htmlFor={SIM_IDS.scope}>{combo('scope', SCOPE_PRESETS)}</Field>
+      <Field label={SIM_TEXT.effect} htmlFor={SIM_IDS.effect}>
+        <SettingsSegmented id={SIM_IDS.effect} ariaLabel={SIM_TEXT.effect} value={rule.effect} options={RULE_EFFECTS} onChange={(v) => setRule((r) => ({ ...r, effect: v }))} />
+      </Field>
+      <Field label={SIM_TEXT.classifierOn} hint={SIM_TEXT.classifierHint} htmlFor="sim-classifier">
+        <Switch id="sim-classifier" checked={classifier} onCheckedChange={setClassifier} />
+      </Field>
+      <div className="st-form">
+        <ActionButton size="sm" action={simulate} busyLabel={SIM_TEXT.running}>{SIM_TEXT.run}</ActionButton>
+        {simError ? <p role="alert" className="m-0 text-xs text-destructive">{simError}</p> : null}
         {report ? (
-          <div className="text-xs" role="status">
+          <div className="flex w-full flex-col gap-1 text-xs" role="status">
             <p>{SIM_TEXT.summary(report.total, report.changed)}{report.truncated ? ` ${SIM_TEXT.truncated}` : ''}</p>
             {report.neverAutoHeld > 0 ? <p>{SIM_TEXT.held(report.neverAutoHeld)}</p> : null}
             <table className="mt-1 border-collapse">
@@ -114,7 +119,7 @@ export function PolicySimulator(): React.JSX.Element {
             )}
           </div>
         ) : null}
-      </details>
+      </div>
     </section>
   )
 }

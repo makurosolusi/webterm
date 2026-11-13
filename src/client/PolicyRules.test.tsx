@@ -49,7 +49,7 @@ describe('Policy rules (Settings › Rules & secrets)', () => {
     expect(rows[0]).toContain('Any agent → Any browser action (anywhere)')
     expect(rows[0]).toContain('Forever')
     expect(rows[1]).toContain('Agent a1 → Close a node (anywhere)')
-    expect(rows[1]).toContain('until ')
+    expect(rows[1]).toContain('Until ')
     expect(rows[2]).toContain('Central → Use a secret (NPM_TOKEN, starting with npm publish)')
     for (const r of rows) {
       expect(r).not.toMatch(/node:|\*|telegram|human-ui/)
@@ -81,7 +81,9 @@ describe('Policy rules (Settings › Rules & secrets)', () => {
       grant({ id: 'g6', capability: 'secret.run', scope: 'secret:GH:*', workspaceId: 'gone' })])
     render(<PolicyRules workspaceNames={new Map([['w1', 'Shop']])} />)
     const group = await screen.findByRole('radiogroup', { name: /Effect for Any agent in Shop → Use a secret \(NPM_TOKEN, any command\)/ })
-    expect(document.querySelector('li[data-grant="g6"]')?.textContent).toContain('Any agent in workspace gone →')
+    // A workspace no longer open reads in words, never as its id.
+    expect(document.querySelector('li[data-grant="g6"]')?.textContent).toContain('Any agent in a removed workspace →')
+    expect(document.querySelector('li[data-grant="g6"]')?.textContent).not.toContain('gone')
     fireEvent.click(within(group).getByRole('radio', { name: 'Deny' }))
     await waitFor(() => expect(writes).toHaveLength(2))
     expect(writes[0]?.body).toEqual({ subject: 'node:*', capability: 'secret.run', scope: 'secret:NPM_TOKEN:*', effect: 'deny', workspaceId: 'w1' })
@@ -115,24 +117,57 @@ describe('Policy rules (Settings › Rules & secrets)', () => {
     await waitFor(() => expect(document.querySelectorAll('li[data-grant]')).toHaveLength(2))
   })
 
-  it('shows the ledger-off state', async () => {
+  it('shows the activity-log-off state without Retry (nothing to retry), in plain words', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'ledger_off' }), { status: 503 })))
     render(<PolicyRules />)
-    expect(await screen.findByText(/ledger is off/)).toBeTruthy()
+    expect(await screen.findByText('Rules are unavailable while the activity log is off.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
     expect(screen.queryByTestId('policy-quick-rules')).toBeNull()
+  })
+
+  it('a failed load says so in the card with Retry, which loads again', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === RECENT_ASKS_PATH) return new Response(JSON.stringify({ items: [] }))
+      return fail ? new Response('{}', { status: 500 }) : new Response(JSON.stringify({ grants: [grant({})] }))
+    }))
+    render(<PolicyRules />)
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load the rules.')
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(document.querySelector('li[data-grant="g1"]')).toBeTruthy())
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('an empty list says what that means and offers Add a rule, which goes to the form', async () => {
+    server([])
+    render(<><PolicyRules /><PolicyRuleForm /></>)
+    expect(await screen.findByText('No rules yet. Agents ask you before each action until you add one.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a rule' }))
+    expect(document.activeElement).toBe(combo('What'))
+  })
+
+  it('the list is a card titled Rules with one row per rule (label left, controls right)', async () => {
+    server([grant({}), grant({ id: 'g2', capability: 'node.close' })])
+    render(<PolicyRules />)
+    const list = await screen.findByRole('list', { name: 'Rules' })
+    expect(list.closest('[data-slot="settings-group"]')?.querySelector('h3')?.textContent).toBe('Rules')
+    await waitFor(() => expect(list.querySelectorAll('li.st-field')).toHaveLength(2))
+    for (const li of list.querySelectorAll('li')) expect(li.querySelector('.st-control [role="radiogroup"]')).toBeTruthy()
   })
 })
 
-describe('Rule form (Settings › Rules & secrets › Advanced)', () => {
-  it('adds a rule with a Who select, What/Where comboboxes and segmented Effect / How long; no plain text boxes', async () => {
+describe('Add a rule (Settings › Rules & secrets)', () => {
+  it('adds a rule with a Who select, What/Where comboboxes and segmented Effect / How long, one row each; no plain text boxes', async () => {
     const { writes } = server([])
     render(<PolicyRuleForm now={() => NOW} />)
     const row = screen.getByTestId('policy-add-rule')
     expect(row.querySelectorAll('input:not([role="combobox"])')).toHaveLength(0)
+    expect([...row.querySelectorAll('.st-field .st-label')].map((l) => l.textContent)).toEqual(['Who', 'What', 'Where', 'Effect', 'How long'])
     expect((within(row).getByLabelText('Who') as HTMLSelectElement).tagName).toBe('SELECT')
     // Nothing to cover yet: Add says why it is off.
     expect((screen.getByRole('button', { name: 'Add rule' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('Pick or type what the rule covers first.')).toBeTruthy()
+    expect(screen.getByText('Pick what the rule covers first.')).toBeTruthy()
     type('What', 'browser.*')
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
     await waitFor(() => expect(writes).toHaveLength(1))
@@ -153,6 +188,9 @@ describe('Rule form (Settings › Rules & secrets › Advanced)', () => {
     render(<PolicyRuleForm />)
     fireEvent.click(within(combo('What').closest('.st-combo') as HTMLElement).getByRole('button', { name: 'Show suggestions' }))
     fireEvent.click(screen.getByRole('option', { name: /Use a secret/ }))
+    // At rest the box reads the plain words of the stored pattern; the pattern itself shows while editing.
+    expect(combo('What').value).toBe('Use a secret')
+    fireEvent.focus(combo('What'))
     expect(combo('What').value).toBe('secret.run')
   })
 
