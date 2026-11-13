@@ -3,7 +3,7 @@
  */
 // Control › Spending: today/7d totals, labelled top spenders, paused cap resume with its real error, degrade;
 // Settings › Developer's CostDetails: cache hit rate, prefix reuse, pricing.
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COST_API_PATH, COST_TEXT, CostDetails, CostPanel, formatUsd, modelName, scopeName } from './CostPanel'
 import { OPEN_SETTINGS_EVENT } from './settings.link'
@@ -153,22 +153,24 @@ describe('CostPanel', () => {
     expect(screen.getByTestId('cost-responses').textContent).toBe('2')
   })
 
-  it('the period is one radio group: a single tab stop, arrow keys move and select', async () => {
+  it('the period is one radio group: a single tab stop, arrow keys move focus, Enter/Space select', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(DATA))))
     render(<CostPanel />)
     await screen.findByTestId('cost-total')
     const group = screen.getByRole('radiogroup', { name: COST_TEXT.period })
     const [today, week] = within(group).getAllByRole('radio')
     expect([today!.tabIndex, week!.tabIndex]).toEqual([0, -1])
-    today!.focus()
+    act(() => today!.focus())
     fireEvent.keyDown(today!, { key: 'ArrowRight' })
-    expect(week!.getAttribute('aria-checked')).toBe('true')
     expect(document.activeElement).toBe(week)
     expect([today!.tabIndex, week!.tabIndex]).toEqual([-1, 0])
+    expect(today!.getAttribute('aria-checked')).toBe('true') // focus moved, the choice did not
+    fireEvent.keyDown(week!, { key: 'Enter' })
+    expect(week!.getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('cost-total').textContent).toBe('$9.00')
     fireEvent.keyDown(week!, { key: 'ArrowRight' }) // wraps
+    expect(document.activeElement).toBe(today)
+    fireEvent.keyDown(today!, { key: ' ' })
     expect(today!.getAttribute('aria-checked')).toBe('true')
-    fireEvent.keyDown(today!, { key: 'ArrowLeft' })
-    expect(week!.getAttribute('aria-checked')).toBe('true')
   })
 })

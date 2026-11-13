@@ -86,6 +86,8 @@ export const PROBE_TEXT = {
   authMissing: 'Claude Code is not signed in.',
   authHint: 'Run "claude auth login" on the server.',
   authHintWrapped: 'Run "claude auth login" on the server, or let the wrapper provide ANTHROPIC_API_KEY.',
+  authMissingCommand: (w?: string): string => `${w ?? 'The launch command'} started claude without a credential.`,
+  authHintCommand: 'Make the launch command provide ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, then check again.',
   providerNotReady: 'The Claude provider has no key yet. Add it in Settings › Capabilities › Claude provider.',
   checkFailed: 'Checking Claude Code status failed. Try again in a moment.',
 }
@@ -224,15 +226,18 @@ export async function probeClaudeLaunch(launch: ResolvedClaudeLaunch, d: ProbeDe
     push({ stage: 'auth', ok: true, message: PROBE_TEXT.authEnvProxy })
     return { ok: true, profile, steps }
   }
-  const hint = wrapped ? PROBE_TEXT.authHintWrapped : PROBE_TEXT.authHint
+  // Command mode: the user's command supplies the credential, so a missing one is the command's to fix, not a login.
+  const command = d.provider?.mode === 'command'
+  const missing = command ? PROBE_TEXT.authMissingCommand(wrapped ? baseName(launch.wrapper[0] as string) : undefined) : PROBE_TEXT.authMissing
+  const hint = command ? PROBE_TEXT.authHintCommand : wrapped ? PROBE_TEXT.authHintWrapped : PROBE_TEXT.authHint
   let r: RunResult
   try { r = await exec(['auth', 'status']) } catch { return fail('auth', 'check_failed', PROBE_TEXT.checkFailed) } // detail dropped: could echo paths/env
   if (r.timedOut) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed, undefined, true)
-  if (r.code === EXIT_NOT_LOGGED_IN) return fail('auth', 'auth_failed', PROBE_TEXT.authMissing, hint)
+  if (r.code === EXIT_NOT_LOGGED_IN) return fail('auth', 'auth_failed', missing, hint)
   if (r.code !== 0) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
   const auth = readAuth(r.stdout)
   if (auth === null) return fail('auth', 'check_failed', PROBE_TEXT.checkFailed)
-  if (!auth.loggedIn) return fail('auth', 'auth_failed', PROBE_TEXT.authMissing, hint)
+  if (!auth.loggedIn) return fail('auth', 'auth_failed', missing, hint)
   push({ stage: 'auth', ok: true, message: PROBE_TEXT.authOk(auth.method) })
   return { ok: true, profile, steps }
 }

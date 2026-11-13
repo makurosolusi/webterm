@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Shared Settings controls: SettingsSelect never renders blank (a stored value outside `options` shows as
-// a disabled "(not in list)" option), the segmented radio group, the grouped card and the Advanced collapsible.
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+// a disabled "(not in list)" option), the segmented radio group (manual activation), the grouped card and the Advanced collapsible.
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsAdvanced, SettingsGroup, SettingsSegmented, SettingsSelect } from './SettingsControls'
 import { SegmentedField } from './SettingsFields'
@@ -29,7 +29,7 @@ describe('SettingsSelect', () => {
 const SHAPES = [{ value: 'block', label: 'Block', glyph: '█' }, { value: 'bar', label: 'Bar' }, { value: 'underline', label: 'Underline' }] as const // test-only
 
 describe('SettingsSegmented', () => {
-  it('is a radio group with one tab stop; click and arrow keys select (wrapping), and focus follows', () => {
+  it('is a radio group with one tab stop; a click commits, the current option sends nothing', () => {
     const onChange = vi.fn()
     render(<SettingsSegmented ariaLabel="Cursor style" value="bar" options={SHAPES} onChange={onChange} />)
     const group = screen.getByRole('radiogroup', { name: 'Cursor style' })
@@ -39,14 +39,46 @@ describe('SettingsSegmented', () => {
     expect(radios[0]!.querySelector('.st-seg-glyph')?.textContent).toBe('█')
     fireEvent.click(radios[2]!)
     expect(onChange).toHaveBeenLastCalledWith('underline')
-    fireEvent.keyDown(radios[1]!, { key: 'ArrowLeft' })
-    expect(onChange).toHaveBeenLastCalledWith('block')
-    expect(document.activeElement).toBe(radios[0])
-    fireEvent.keyDown(radios[1]!, { key: 'ArrowRight' })
-    expect(onChange).toHaveBeenLastCalledWith('underline')
     onChange.mockClear()
-    fireEvent.click(radios[1]!) // the current option: no change
+    fireEvent.click(radios[1]!)
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('manual activation: Arrow/Home/End move focus (wrapping) and never commit; Space and Enter commit', () => {
+    const onChange = vi.fn()
+    render(<SettingsSegmented ariaLabel="Cursor style" value="bar" options={SHAPES} onChange={onChange} />)
+    const radios = within(screen.getByRole('radiogroup')).getAllByRole('radio')
+    radios[1]!.focus()
+    const press = (key: string): void => { fireEvent.keyDown(document.activeElement!, { key }) }
+    press('ArrowLeft')
+    expect(document.activeElement).toBe(radios[0])
+    expect(radios.map((r) => r.tabIndex)).toEqual([0, -1, -1]) // the tab stop roves with focus
+    press('ArrowUp') // wraps
+    expect(document.activeElement).toBe(radios[2])
+    press('ArrowRight')
+    press('ArrowDown')
+    expect(document.activeElement).toBe(radios[1])
+    press('End')
+    expect(document.activeElement).toBe(radios[2])
+    press('Home')
+    expect(document.activeElement).toBe(radios[0])
+    expect(onChange).not.toHaveBeenCalled()
+    expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
+    press(' ')
+    expect(onChange).toHaveBeenLastCalledWith('block')
+    press('End')
+    press('Enter')
+    expect(onChange).toHaveBeenLastCalledWith('underline')
+    expect(onChange).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaving the group puts the tab stop back on the checked option', () => {
+    render(<><SettingsSegmented ariaLabel="Cursor style" value="bar" options={SHAPES} onChange={vi.fn()} /><button>after</button></>)
+    const radios = within(screen.getByRole('radiogroup')).getAllByRole('radio')
+    radios[1]!.focus()
+    fireEvent.keyDown(radios[1]!, { key: 'ArrowRight' })
+    act(() => screen.getByRole('button', { name: 'after' }).focus())
+    expect(radios.map((r) => r.tabIndex)).toEqual([-1, 0, -1])
   })
 
   it('SegmentedField puts it in a row, disabled with the lock reason', () => {

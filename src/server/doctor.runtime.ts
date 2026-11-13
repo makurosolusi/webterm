@@ -7,16 +7,15 @@ import { AGENT_SANDBOX_ENV, agentSandboxOn, claudeSandboxSupported } from './age
 import { binaryOnPath } from './binaryOnPath'
 import { skipHomeInstalls } from './cli/cli.launcher'
 import { BROWSER_SKILL_NAME, browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
-import { resolveClaudeLaunch } from './claudeLauncher/claudeLauncher'
 import { probeClaudeLaunch } from './claudeLauncher/claudeLaunch.probe'
 import { claudeChildEnv } from './central/runtime/claudeOptions'
 import { toClaudeReady } from './central/runtime/claudePreflight'
-import { launchLabel } from './central/runtime/runtimeDetect'
 import { callBotApi, PollApiError } from './channels/telegramPollApi'
 import { resolveTelegramBotToken, type TelegramSenderFetch } from './channels/telegramSend'
 import { dataDir } from './config'
 import { lastProviderTest } from './claudeProvider/claudeProvider.api'
 import { providerView } from './claudeProvider/claudeProvider.store'
+import { claudeStartup } from './claudeProvider/claudeProvider.startup'
 import { SKILL_NAME, buildContextLinkSkillBody, buildContextShim, contextShimPath, installContextLink } from './contextLinkSkill'
 import type { DoctorDeps, GeneratedFile } from './doctor'
 import { activeEventsRuntime } from './events/eventsRuntime'
@@ -71,13 +70,13 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
   const env = i.env
   return {
     onPath: (bin) => binaryOnPath(bin, env['PATH'] ?? ''),
-    // Default launch profile (what new agent nodes run), probed stage by stage with Central's scrubbed env.
+    // The same launch + provider Test connection checks (claudeStartup), probed stage by stage with Central's scrubbed env.
     claudeReady: async () => {
-      const launch = resolveClaudeLaunch()
-      const via = launch.wrapper.length > 0 ? { via: launchLabel(launch) } : {}
-      const r = toClaudeReady(await probeClaudeLaunch(launch, { env: claudeChildEnv(env), provider: providerView() }))
-      if (r.ok) return { ok: true, ...via }
-      return { ok: false, reason: r.hint || r.code, missing: r.failed === 'wrapper_not_found' || r.failed === 'claude_not_found', ...via }
+      const { launch, provider, method } = claudeStartup()
+      const named = { method, ...(launch.wrapper.length > 0 ? { profile: launch.profile.name } : {}) }
+      const r = toClaudeReady(await probeClaudeLaunch(launch, { env: claudeChildEnv(env), provider }))
+      if (r.ok) return { ok: true, ...named }
+      return { ok: false, reason: r.hint || r.code, missing: r.failed === 'wrapper_not_found' || r.failed === 'claude_not_found', ...named }
     },
     claudeProvider: () => ({ view: providerView(), lastTest: lastProviderTest() }),
     mcpServer: () => probeMcpServer(),

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // "Reveal setting" (settingsPanel.reveal.ts): a `field` scrolls its `[data-field]` element to the centre,
-// focuses its control, flashes it for ~1.5 s and opens a collapsed group around it; links inside the
+// focuses the field block (never a control that commits on keys), flashes it for ~1.5 s and opens a collapsed group around it; links inside the
 // panel name the field they land on. Fetch is stubbed (test-only fixtures).
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,27 +41,35 @@ const revealed = async (id: string): Promise<HTMLElement> => {
 }
 
 describe('deep link to a setting', () => {
-  it('scrolls the field to the centre, focuses its control and flashes it for ~1.5 s', async () => {
+  it('scrolls the field to the centre, focuses the field block (not a radio) and flashes it for ~1.5 s', async () => {
     panel('terminal', 'appTheme')
     const el = await revealed('appTheme')
     expect(scrolled.find((s) => s.el === el)?.arg).toEqual({ block: 'center' })
-    // Theme is a segmented choice: focus lands on the checked option (System), not the first (Light).
-    expect(document.activeElement).toBe(within(el).getByRole('radio', { name: 'System' }))
+    // Theme is a segmented choice: a focused radio would turn the next arrow key into a change.
+    expect(document.activeElement).toBe(el)
+    expect(el.tabIndex).toBe(-1)
+    expect(document.activeElement?.closest('[role="radio"]')).toBeNull()
     expect(el.classList.contains(REVEAL_CLASS)).toBe(true)
     await waitFor(() => expect(el.classList.contains(REVEAL_CLASS)).toBe(false), { timeout: REVEAL_MS + 1000 })
   })
 
-  it('a segmented row with a non-first value focuses that checked option', async () => {
-    render(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, cursorStyle: 'underline' }} onChange={vi.fn()} onClose={vi.fn()} section="terminal" field="cursorStyle" />)
-    const el = await revealed('cursorStyle')
-    await waitFor(() => expect(document.activeElement).toBe(within(el).getByRole('radio', { name: /Underline/ })))
+  it('an arrow key after a reveal of Central\'s level changes nothing and sends nothing', async () => {
+    const onChange = vi.fn()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={onChange} onClose={vi.fn()} section="central" field="central.level" />)
+    const el = await revealed('central.level')
+    const posts = (): number => vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method && init.method !== 'GET').length
+    const before = posts()
+    for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'Home', 'End']) fireEvent.keyDown(document.activeElement ?? el, { key })
+    expect(document.activeElement?.getAttribute('role')).not.toBe('radio')
+    expect(posts()).toBe(before)
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('opens the collapsed group around the field first (Central › Advanced)', async () => {
     panel('central', 'central.checkinLimit')
     const el = await revealed('central.checkinLimit')
     expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
-    await waitFor(() => expect(document.activeElement).toBe(el.querySelector('select')))
+    await waitFor(() => expect(document.activeElement).toBe(el)) // a select commits on arrows (Windows/Linux)
   })
 
   it('opens a page\'s Advanced disclosure around the field (Terminal › Advanced › Word separators)', async () => {

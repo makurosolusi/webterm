@@ -1,9 +1,9 @@
 // Shared controls of every Settings page: dropdown (native `<select>`, so label association, keyboard and
 // the OS popup need no re-implementation), checkbox (multi-select lists only; on/off settings use the
-// shadcn Switch through ToggleField), segmented choice (WAI-ARIA radio group), the grouped card a page
+// shadcn Switch through ToggleField), segmented choice (WAI-ARIA radio group, manual activation), the grouped card a page
 // is built from (macOS System Settings / Linear: heading above a bordered card, divider between rows),
 // and the page's one "Advanced" collapsible.
-import { Children, useId, useRef } from 'react'
+import { Children, useId, useRef, useState } from 'react'
 import './settings-controls.css'
 
 const SELECT_TEXT = { notInList: (value: string): string => `${value} (not in list)` } as const
@@ -95,7 +95,12 @@ export interface SegmentedOption<T extends string> {
 
 const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
 
-/** One-of-few choice (2-4 options): a radio group with a single tab stop; arrow keys move and select. */
+/** One-of-few choice (2-4 options): a radio group with a single roving tab stop. Arrow/Home/End only move
+ *  focus; Space, Enter or a click commits.
+ *  Deviation from the APG radio group (where arrows also check): it follows the APG "manual activation"
+ *  pattern (https://www.w3.org/WAI/ARIA/apg/patterns/tabs/ — "Deciding When to Make Selection Automatically
+ *  Follow Focus") because a choice here has side effects (a POST, a Central restart): arrow keys pressed to
+ *  scroll must never rewrite a setting. */
 export function SettingsSegmented<T extends string>({ id, value, options, onChange, ariaLabel, disabled, describedBy }: {
   id?: string
   value: T
@@ -107,22 +112,27 @@ export function SettingsSegmented<T extends string>({ id, value, options, onChan
   describedBy?: string
 }): React.JSX.Element {
   const group = useRef<HTMLSpanElement>(null)
+  const [focused, setFocused] = useState<number | null>(null) // roving tab stop while focus is inside
   const selected = Math.max(0, options.findIndex((o) => o.value === value))
-  const move = (e: React.KeyboardEvent, i: number): void => {
-    const step = STEP[e.key]
-    if (!step) return
+  const stop = focused ?? selected
+  const pick = (i: number): void => { if (options[i]!.value !== value) onChange(options[i]!.value) }
+  const keys = (e: React.KeyboardEvent, i: number): void => {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(i); return } // the only key commit
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? options.length - 1
+      : STEP[e.key] ? (i + STEP[e.key]! + options.length) % options.length : null
+    if (next === null) return
     e.preventDefault()
-    const next = (i + step + options.length) % options.length
-    onChange(options[next]!.value)
     group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
   }
   return (
     <span ref={group} id={id} role="radiogroup" aria-label={ariaLabel} aria-describedby={describedBy}
-      aria-disabled={disabled || undefined} className="st-seg" data-control="segmented">
+      aria-disabled={disabled || undefined} className="st-seg" data-control="segmented"
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(null) }}>
       {options.map((o, i) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} tabIndex={i === selected ? 0 : -1}
+        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} tabIndex={i === stop ? 0 : -1}
           className={'st-seg-option' + (o.value === value ? ' is-active' : '')} disabled={disabled}
-          onClick={() => { if (o.value !== value) onChange(o.value) }} onKeyDown={(e) => move(e, i)}>
+          onFocus={() => setFocused(i)}
+          onClick={() => pick(i)} onKeyDown={(e) => keys(e, i)}>
           {o.glyph ? <span className="st-seg-glyph" aria-hidden="true">{o.glyph}</span> : null}
           {o.label}
         </button>
