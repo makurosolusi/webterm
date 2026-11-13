@@ -16,6 +16,15 @@ describe('nodeRowLabel', () => {
     expect(nodeRowLabel(node('n1', 'files', { title: 'docs', dirPath: '/repo/src' }))).toBe('docs')
   })
 
+  it('a NodeChrome rename of an editor, diff, plan or app node names its tab, over the file name', () => {
+    expect(nodeRowLabel(node('n1', 'editor', { title: 'notes', filePath: '/repo/api.ts' }))).toBe('notes')
+    expect(nodeRowLabel(node('n2', 'diff', { title: 'review' }))).toBe('review')
+    expect(nodeRowLabel(node('n3', 'plan', { title: 'roadmap' }))).toBe('roadmap')
+    expect(nodeRowLabel(node('n4', 'app', { title: 'dashboard' }))).toBe('dashboard')
+    // A blank rename falls back to the file name.
+    expect(nodeRowLabel(node('n5', 'editor', { title: '  ', filePath: '/repo/api.ts' }))).toBe('api.ts')
+  })
+
   it('tanpa judul: tiap kind tetap bisa dibedakan dari path atau agent-nya', () => {
     expect(nodeRowLabel(node('n1', 'files', { dirPath: '/repo/src' }))).toBe('src')
     expect(nodeRowLabel(node('n2', 'editor', { filePath: '/repo/api.ts' }))).toBe('api.ts')

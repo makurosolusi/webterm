@@ -66,15 +66,37 @@ describe('TabsView', () => {
     expect(screen.queryByLabelText('Rename tab')).toBeNull()
   })
 
-  it('a named node shows the name alone; title and type are in the tooltip; the rename draft is the title', () => {
+  it('a custom title wins on the tab; title, name and type stay in the tooltip; the rename draft is the title', () => {
     const named = { ...node('a', 'terminal', 'alpha'), data: { title: 'alpha', name: 'Mango' } }
     render(<TabsView {...props({ nodes: [named, NODES[1]] })} />)
-    const t = screen.getByText('Mango').closest<HTMLElement>('[role="tab"]')!
-    expect(t.textContent).toBe('Mango')
+    const t = screen.getByText('alpha').closest<HTMLElement>('[role="tab"]')!
+    expect(t.textContent).toBe('alpha')
     expect(t.title).toBe('Mango · alpha · Terminal')
     expect(screen.getByRole('button', { name: 'Close Mango · alpha' })).toBeTruthy()
-    fireEvent.doubleClick(screen.getByText('Mango'))
+    fireEvent.doubleClick(screen.getByText('alpha'))
     expect((screen.getByLabelText('Rename tab') as HTMLInputElement).value).toBe('alpha')
+  })
+
+  it('without a custom title (none, blank, or a legacy auto title) the tab shows the node name', () => {
+    const nodes = [
+      { ...node('a', 'editor'), data: { name: 'Mango', filePath: '/repo/api.ts' } },
+      { ...node('b', 'terminal'), data: { name: 'Kiwi', title: '  ' } },
+      { ...node('c', 'agent'), data: { name: 'Otter', title: 'brisk-otter' } },
+    ]
+    render(<TabsView {...props({ nodes })} />)
+    const mango = screen.getByText('Mango').closest<HTMLElement>('[role="tab"]')!
+    expect(mango.textContent).toBe('Mango')
+    expect(mango.title).toBe('Mango · api.ts · Editor')
+    expect(screen.getByText('Kiwi').closest('[role="tab"]')!.textContent).toBe('Kiwi')
+    expect(screen.getByText('Otter').closest('[role="tab"]')!.textContent).toBe('Otter')
+  })
+
+  it('a renamed editor shows its custom title instead of the name or file name', () => {
+    const ed = { ...node('a', 'editor'), data: { name: 'Mango', title: 'notes', filePath: '/repo/api.ts' } }
+    render(<TabsView {...props({ nodes: [ed] })} />)
+    const t = screen.getByText('notes').closest<HTMLElement>('[role="tab"]')!
+    expect(t.textContent).toBe('notes')
+    expect(t.title).toBe('Mango · notes · Editor')
   })
 
   it('drag reorder writes the new order to the store', () => {
