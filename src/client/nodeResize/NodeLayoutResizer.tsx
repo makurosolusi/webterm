@@ -1,14 +1,12 @@
 // The only place NodeResizer is used (nodeResizePolicy.test.ts enforces it). Edges and corners always
 // resize (OS windows, VS Code sashes, node editors): invisible hit strips that only change the cursor,
-// so selecting or clicking a node never shows handles. Resize mode (NodeResizeToggle or the "Node:
-// Resize Focused Node" command) additionally draws the visible handles.
+// so selecting or clicking a node never shows handles, and no header carries a resize button. Resize
+// mode (the "Node: Resize Focused Node" command) additionally draws the visible handles.
 import { useEffect, useRef } from 'react'
 import { NodeResizer, useNodeId, type NodeResizerProps } from '@xyflow/react'
 import { nodeIdOf } from '../nodeRoot'
 import { useNodeHost } from '../tabLayout.context'
-import { IconButton } from '@/components/ui/icon-button'
-import type { VscodeMenuItem } from '../components/vscode/vscodeMenu'
-import { RESIZE_COMMAND_ID, exitNodeResize, setNodeResizeLimits, toggleNodeResize, useNodeResizeState } from './nodeResize.store'
+import { exitNodeResize, setNodeResizeLimits, useNodeResizeState } from './nodeResize.store'
 
 /** NodeResizer's own default when a node passes no minimum. */
 const RESIZER_DEFAULT_MIN = 10
@@ -74,35 +72,4 @@ export function NodeLayoutResizer({ collapsed, onFitWidth, color, ...props }: No
   // `color` is applied inline by NodeResizer, so the invisible strips must not get it.
   if (editing) return <NodeResizer isVisible color={color} {...props} />
   return <NodeResizer isVisible={edges} lineClassName="node-edge-resize" handleClassName="node-edge-resize" {...props} />
-}
-
-/** Header toggle for this node's resize mode; disabled while the view is locked. */
-export function NodeResizeToggle() {
-  const id = useNodeId()
-  const { editingId, locked } = useNodeResizeState()
-  const on = id !== null && editingId === id
-  return (
-    <IconButton
-      size="icon-xs"
-      className="nodrag node-resize-toggle"
-      label={on ? 'Done resizing' : 'Resize this node'}
-      commandId={RESIZE_COMMAND_ID}
-      aria-pressed={on}
-      disabled={locked}
-      disabledReason="the view is locked"
-      onClick={() => { if (id) toggleNodeResize(id) }}
-    >
-      <span className="codicon codicon-arrow-both" aria-hidden="true" />
-    </IconButton>
-  )
-}
-
-/** The "…" menu row that stands in for NodeResizeToggle when a narrow header overflows it. */
-export function useNodeResizeMenuItem(): VscodeMenuItem {
-  const id = useNodeId()
-  const { editingId, locked } = useNodeResizeState()
-  const on = id !== null && editingId === id
-  // The menu sits outside the node, so its press has already ended the mode: "Done" must not toggle it back on.
-  const onSelect = () => { if (!id) return; if (on) exitNodeResize(id); else toggleNodeResize(id) }
-  return { type: 'item', id: 'resize', label: on ? 'Done resizing' : 'Resize this node', checked: on, disabled: locked, onSelect }
 }

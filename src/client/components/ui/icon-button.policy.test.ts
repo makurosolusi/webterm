@@ -22,6 +22,20 @@ describe('findTooltipPolicyViolations', () => {
     expect(findTooltipPolicyViolations('<button onClick={() => x()} title="Hi" />')).toHaveLength(1)
   })
 
+  describe('VS Code element buttons (node headers)', () => {
+    it('flags a native title and an untooltipped icon-only ToolbarButton', () => {
+      expect(reasons('<ToolbarButton label="Close" title="Close" onClick={close}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>'))
+        .toEqual([[1, 'native-title'], [1, 'icon-only-button']])
+    })
+    it('flags a native title on a text VscodeButton', () => {
+      expect(reasons('<VscodeButton secondary title="Show hunks" onClick={go}>Hunks</VscodeButton>')).toEqual([[1, 'native-title']])
+    })
+    it('accepts a ToolbarButton inside IconTooltip and a VscodeButton with only text', () => {
+      expect(findTooltipPolicyViolations(`<IconTooltip label="Refresh">\n  <ToolbarButton label="Refresh" onClick={go}><span className="codicon codicon-refresh" /></ToolbarButton>\n</IconTooltip>`)).toEqual([])
+      expect(findTooltipPolicyViolations('<VscodeButton secondary onClick={go}>Retry</VscodeButton>')).toEqual([])
+    })
+  })
+
   describe('icon-only buttons', () => {
     it.each([
       ['codicon() call', `<button type="button" aria-label="Run" onClick={() => run()}>{codicon('play')}</button>`],

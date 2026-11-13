@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
-// Edges always resize through invisible strips (no visible handles on select or click). Resize mode
-// is explicit: the toggle or the command shows the visible handles, and Esc, an outside press, typing
-// in the node, collapse, removal and the view lock end it.
+// Edges always resize through invisible strips (no visible handles on select or click), and no header
+// has a resize-mode button. Resize mode is keyboard-only: the "Node: Resize Focused Node" command shows
+// the visible handles, and Esc, an outside press, typing in the node, collapse, removal and the view
+// lock end it.
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { NodeLayoutResizer, NodeResizeToggle } from './NodeLayoutResizer'
+import { NodeLayoutResizer } from './NodeLayoutResizer'
 import { exitNodeResize, getNodeResizeState, setNodeResizeLocked, toggleFocusedNodeResize, toggleNodeResize, RESIZE_COMMAND_ID } from './nodeResize.store'
 import { appCommands, FIXED_COMMANDS } from '../commandRegistry.defaults'
 import { findConflicts, listCommands } from '../commandRegistry'
@@ -17,14 +18,14 @@ beforeAll(() => {
 })
 afterEach(() => { cleanup(); setNodeResizeLocked(false); exitNodeResize() })
 
-// test-only probe node, wired like the real nodes: resizer + header toggle + a typing surface.
+// test-only probe node, wired like the real nodes: resizer + header + a typing surface.
 function Probe({ data }: NodeProps) {
   const collapsed = Boolean((data as { collapsed?: boolean }).collapsed)
   return (
     <>
       <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} />
       <div className="term-node">
-        <div className="node-header"><span>Probe</span><NodeResizeToggle /></div>
+        <div className="node-header"><span>Probe</span><button type="button">Header action</button></div>
         <div className="node-body"><textarea aria-label="input" /></div>
       </div>
     </>
@@ -41,7 +42,9 @@ function mount(nodes: Node[]) {
 /** Visible resize-mode handles; the always-on invisible edge strips carry `node-edge-resize`. */
 const handles = () => document.querySelectorAll('.react-flow__resize-control:not(.node-edge-resize)')
 const edges = (id = 'a') => document.querySelectorAll(`.react-flow__node[data-id="${id}"] .react-flow__resize-control.node-edge-resize`)
-const toggleOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] [data-slot="icon-button"]`) as HTMLButtonElement
+const headerButtonOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] .node-header button`) as HTMLButtonElement
+/** Enters resize mode the way the command does. */
+const enter = (id: string) => act(() => toggleNodeResize(id))
 const textareaOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] textarea`) as HTMLTextAreaElement
 
 describe('NodeLayoutResizer', () => {
@@ -49,8 +52,7 @@ describe('NodeLayoutResizer', () => {
     mount([node('a', { selected: true })])
     fireEvent.click(document.querySelector('.react-flow__node[data-id="a"]')!)
     expect(handles().length).toBe(0)
-    expect(toggleOf('a').getAttribute('aria-pressed')).toBe('false')
-    expect(toggleOf('a').getAttribute('aria-label')).toBe('Resize this node')
+    expect(getNodeResizeState().editingId).toBeNull()
   })
 
   it('edges and corners resize without any mode: invisible strips on every side and corner', () => {
@@ -71,34 +73,34 @@ describe('NodeLayoutResizer', () => {
     expect(edges().length).toBe(0)
   })
 
-  it('the toggle shows the handles and turns them off again', () => {
+  it('resize mode shows the handles; a header control inside the node keeps it, toggling again ends it', () => {
     mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     expect(handles().length).toBeGreaterThan(0)
-    expect(toggleOf('a').getAttribute('aria-pressed')).toBe('true')
-    expect(toggleOf('a').getAttribute('aria-label')).toBe('Done resizing')
-    fireEvent.pointerDown(toggleOf('a'))
-    fireEvent.click(toggleOf('a'))
+    fireEvent.pointerDown(headerButtonOf('a'))
+    fireEvent.keyDown(headerButtonOf('a'), { key: 'a' })
+    expect(handles().length).toBeGreaterThan(0)
+    enter('a')
     expect(handles().length).toBe(0)
   })
 
   it('Esc exits', () => {
     mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     fireEvent.keyDown(document.body, { key: 'Escape' })
     expect(handles().length).toBe(0)
   })
 
   it('a press outside the node exits', () => {
     mount([node('a'), node('b')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     fireEvent.pointerDown(textareaOf('b'))
     expect(handles().length).toBe(0)
   })
 
   it('typing inside the node content exits, a chord does not', () => {
     mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     fireEvent.keyDown(textareaOf('a'), { key: 'Shift' })
     fireEvent.keyDown(textareaOf('a'), { key: 'r', metaKey: true, altKey: true })
     expect(handles().length).toBeGreaterThan(0)
@@ -108,7 +110,7 @@ describe('NodeLayoutResizer', () => {
 
   it('collapse exits', () => {
     const m = mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     m.rerender([node('a', { data: { collapsed: true } })])
     expect(handles().length).toBe(0)
     expect(getNodeResizeState().editingId).toBeNull()
@@ -116,14 +118,14 @@ describe('NodeLayoutResizer', () => {
 
   it('removing the node exits', () => {
     const m = mount([node('a'), node('b')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     m.rerender([node('b')])
     expect(getNodeResizeState().editingId).toBeNull()
   })
 
   it('dragging a handle keeps the mode', () => {
     mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     const handle = handles()[0] as HTMLElement
     // test-only: jsdom leaves `event.view` null and its constructor rejects vitest's window; d3-drag reads it.
     const mouse = (target: EventTarget, type: string, x: number, y: number) => {
@@ -139,17 +141,16 @@ describe('NodeLayoutResizer', () => {
     expect(getNodeResizeState().editingId).toBe('a')
   })
 
-  it('the view lock disables the toggle and exits resize mode', () => {
+  it('the view lock exits resize mode and blocks re-entry until unlocked', () => {
     mount([node('a')])
-    fireEvent.click(toggleOf('a'))
+    enter('a')
     act(() => setNodeResizeLocked(true))
     expect(handles().length).toBe(0)
-    expect(toggleOf('a').disabled).toBe(true)
-    fireEvent.click(toggleOf('a'))
-    act(() => toggleNodeResize('a'))
+    enter('a')
     expect(handles().length).toBe(0)
     act(() => setNodeResizeLocked(false))
-    expect(toggleOf('a').disabled).toBe(false)
+    enter('a')
+    expect(handles().length).toBeGreaterThan(0)
   })
 
   it('the command toggles the focused node, else the single selected one', () => {

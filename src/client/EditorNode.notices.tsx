@@ -2,6 +2,7 @@
 // refused (over the size cap). Like VS Code's error editor, a failure always offers a way out.
 import { Button as VscodeButton, ProgressBar } from '@/vscode/register'
 import { ActionResult, useAction } from '@/components/ui/action'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { writeClipboard } from './clipboard'
 
 /** Copy `text` to the clipboard, then say "Copied" (or that copying failed, with Retry). */
@@ -10,7 +11,9 @@ export function CopyText({ text, title, children }: { text: string; title: strin
   const click = (): void => { void act.run() }
   return (
     <>
-      <VscodeButton secondary title={title} disabled={act.busy} aria-busy={act.busy ? 'true' : 'false'} onClick={click}>{children}</VscodeButton>
+      <IconTooltip label={title}>
+        <VscodeButton secondary disabled={act.busy} aria-busy={act.busy ? 'true' : 'false'} onClick={click}>{children}</VscodeButton>
+      </IconTooltip>
       <ActionResult action={act} />
     </>
   )

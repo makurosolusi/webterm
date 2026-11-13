@@ -12,6 +12,7 @@ vi.mock('./PlanNode.api', () => api)
 
 import PlanNode, { PLAN_TEXT } from './PlanNode'
 import { NodeHostContext } from './tabLayout.context'
+import { expectSharedChrome } from './nodeChromeKinds.testkit'
 import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
 
 // test-only: jsdom has no ResizeObserver; React Flow renders unmeasured nodes, which is all this needs.
@@ -137,11 +138,14 @@ describe('PlanNode in tab mode', () => {
     expect((strip().getByRole('button', { name: PLAN_TEXT.approve }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('keeps its own header on the canvas and publishes nothing', async () => {
+  it('on the canvas uses the shared NodeChrome header (plan actions on it, no resize button) and publishes nothing', async () => {
     draftReady()
     const { container } = mount({ intent: 'x y', workspaceId: 'w1', draft: DRAFT, projectId: 'w1', repo: '/repo' })
     await screen.findByLabelText('Task ask')
-    expect(container.querySelector('.plan-node .node-header .codicon-close')).not.toBeNull()
+    const actions = container.querySelector<HTMLElement>('.plan-node .node-header .node-header-actions')!
+    expect(within(actions).getByRole('button', { name: PLAN_TEXT.approve })).toBeTruthy()
+    expect(actions.querySelector('[title]')).toBeNull()
+    expectSharedChrome(container.querySelector('.react-flow__node[data-id="p1"]')!)
     expect(strip().queryAllByRole('button')).toHaveLength(0)
     expect(tabNodeMenuItems('p1')).toEqual([])
   })

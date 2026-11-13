@@ -1,0 +1,16 @@
+/* NodeChrome for the editor, diff, plan and MCP app nodes. Kept apart from node-chrome.css (near
+   its size limit). The node-specific actions passed as `extraHeader` sit on the right, just before
+   the shared toolbar, like VS Code editor title actions before "…". */
+.node-header > .node-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.node-header > .node-header-actions + .node-toolbar { margin-left: 0; }
+
+/* Collapsed to its header: the rows these nodes keep outside `.node-body` hide as well. */
+.react-flow__node .term-node--collapsed > :is(.editor-node__crumbs, .editor-statusbar, .diff-node__msg, .scm-panel, .plan-node__summary, .plan-node__msg) {
+  display: none;
+}

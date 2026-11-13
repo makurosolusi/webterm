@@ -5,11 +5,13 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { NodeLayoutResizer, NodeResizeToggle } from '../nodeResize/NodeLayoutResizer'
-import { ToolbarButton, ToolbarContainer } from '@/vscode/register'
+import { NodeLayoutResizer } from '../nodeResize/NodeLayoutResizer'
+import NodeChrome, { termNodeClass } from '../NodeChrome'
+import { useNodeCollapse } from '../nodeCollapse'
+import { randomId } from '../randomId'
+import type { Comment } from '../../shared/workspace'
 import { callAppTool, fetchAppView, type AppView } from './mcpApp.api'
 import { APP_SANDBOX, allowAttribute, createAppBridge } from './mcpApp.bridge'
-import { NodeNameLabel } from '../nodeName.label'
 import { useNodeHost } from '../tabLayout.context'
 import TabNodeActions from '../tabLayout.nodeActions'
 
@@ -21,10 +23,13 @@ export const APP_TEXT = {
 
 const theme = (): 'light' | 'dark' => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
 
-function McpAppNode({ id, data, selected }: NodeProps) {
+function McpAppNode({ id, data, selected, height }: NodeProps) {
   const rf = useReactFlow()
-  const d = data as { color?: string; name?: string }
+  const d = data as { color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const swatch = d.color ?? '#3794ff'
+  const collapsed = d.collapsed ?? false
+  const comments = d.comments ?? []
+  const toggleCollapse = useNodeCollapse(id, height, collapsed)
   const [view, setView] = useState<AppView | null>(null)
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
@@ -67,20 +72,17 @@ function McpAppNode({ id, data, selected }: NodeProps) {
   const host = useNodeHost()
   return (
     <>
-      <NodeLayoutResizer minWidth={280} minHeight={200} color={swatch} />
-      <div className={`term-node mcp-app-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch, display: 'flex', flexDirection: 'column' } as CSSProperties}>
+      <NodeLayoutResizer collapsed={collapsed} minWidth={280} minHeight={200} color={swatch} />
+      <div className={`${termNodeClass({ selected: !!selected, collapsed })} mcp-app-node`} style={{ '--node-swatch': swatch, display: 'flex', flexDirection: 'column' } as CSSProperties}>
         {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} /> : (
-        <div className="node-header">
-          <span className="node-title" title={view ? `${view.uri}\nCSP: ${view.csp}` : undefined}>
-            <span className="codicon codicon-window" aria-hidden="true" />
-            <NodeNameLabel name={d.name} label={view?.uri ?? 'App'} />
-          </span>
-          <span style={{ flex: 1 }} />
-          <NodeResizeToggle />
-          <ToolbarContainer className="nodrag">
-            <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
-          </ToolbarContainer>
-        </div>
+        <NodeChrome
+          title={d.title || view?.uri || 'App'} name={d.name} icon="window" titleHint={view ? `${view.uri} · CSP: ${view.csp}` : undefined}
+          onRename={(t) => rf.updateNodeData(id, { title: t })}
+          collapsed={collapsed} onToggleCollapse={toggleCollapse}
+          color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+          comments={comments} onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
+          closeLabel="Close" onClose={() => void rf.deleteElements({ nodes: [{ id }] })}
+        />
         )}
         <div className="node-body nodrag nowheel nokey" style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {error ? <p role="alert" style={{ padding: 12, margin: 0, fontSize: 12 }}>{error}</p>

@@ -1,7 +1,4 @@
 /* Plan node. Imported from PlanNode.tsx so it rides the node's chunk; tokens come from styles.css. */
-.plan-node__title { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.plan-node__desc { color: var(--muted); font-size: 11px; }
-.plan-node__spacer { flex: 1; }
 .plan-node__actions { display: inline-flex; align-items: center; gap: 4px; }
 .plan-node__summary { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 8px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
 .plan-node__intent { color: var(--text); width: 100%; }

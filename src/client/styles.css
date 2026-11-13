@@ -1,6 +1,7 @@
 /* Chrome node & dock dipisah ke sheet sendiri: sheet ini tinggal token + base + shell + kontrol
    bersama. @import harus mendahului semua style rule, jadi ia tetap di puncak file. */
 @import './node-chrome.css';
+@import './node-chrome.kinds.css';
 @import './dock.css';
 
 :root {

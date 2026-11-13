@@ -54,6 +54,13 @@ afterEach(() => {
   reveal.mockReset()
 })
 
+/** The shadcn tooltip of `el`, opened the way keyboard navigation opens it. */
+function tooltipOf(el: Element): string | null | undefined {
+  fireEvent.keyDown(document, { key: 'Tab' })
+  fireEvent.focus(el)
+  return document.querySelector('[role="tooltip"]')?.textContent
+}
+
 describe('a11y dan header', () => {
   it('list role=tree dengan aria-label, multiselectable, dan satu model fokus (activedescendant)', async () => {
     const c = await mount()
@@ -83,7 +90,7 @@ describe('a11y dan header', () => {
     const c = await mount(2)
     expect(c.querySelector('.node-icon.codicon-folder')).not.toBeNull()
     expect(c.querySelector('.node-description')).toBeNull()
-    expect(c.querySelector('.node-title')?.getAttribute('title')).toContain('/proj')
+    expect(tooltipOf(c.querySelector('.node-title')!)).toContain('/proj')
     expect(c.querySelector('.files-name')?.getAttribute('title')).toBe('f00')
   })
 })

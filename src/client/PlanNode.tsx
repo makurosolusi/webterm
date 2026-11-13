@@ -5,16 +5,19 @@
 import { memo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, useReactFlow, type NodeProps } from '@xyflow/react'
-import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
-import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
+import { Button as VscodeButton, ToolbarContainer } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
+import NodeChrome, { termNodeClass } from './NodeChrome'
+import { useNodeCollapse } from './nodeCollapse'
+import { randomId } from './randomId'
 import { ActionResult, errorCause, useAction } from '@/components/ui/action'
-import type { PlanTaskData } from '../shared/workspace'
+import type { Comment, PlanTaskData } from '../shared/workspace'
 import { approvePlan, previewPlan } from './PlanNode.api'
 import { PlanGraph } from './PlanNode.graph'
 import { usePlanNode } from './PlanNode.hooks'
 import { estimateText, removeTask, type TaskStatus } from './PlanNode.model'
 import './PlanNode.css'
-import { NodeNameLabel } from './nodeName.label'
 import { useNodeHost } from './tabLayout.context'
 import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
 
@@ -33,10 +36,13 @@ export const PLAN_TEXT = {
 
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
-function PlanNode({ id, data, selected }: NodeProps) {
+function PlanNode({ id, data, selected, height }: NodeProps) {
   const rf = useReactFlow()
-  const d = data as { plan?: unknown; color?: string; name?: string }
+  const d = data as { plan?: unknown; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const swatch = d.color ?? '#a970ff'
+  const collapsed = d.collapsed ?? false
+  const comments = d.comments ?? []
+  const toggleCollapse = useNodeCollapse(id, height, collapsed)
   const { plan, patch, preview, previewError, view, viewError } = usePlanNode(id, d.plan)
   const [editing, setEditing] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
@@ -95,27 +101,30 @@ function PlanNode({ id, data, selected }: NodeProps) {
 
   return (
     <>
-      <NodeLayoutResizer minWidth={420} minHeight={240} color={swatch} />
-      <div className={`term-node plan-node${selected ? ' term-node--selected' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+      <NodeLayoutResizer collapsed={collapsed} minWidth={420} minHeight={240} color={swatch} />
+      <div className={`${termNodeClass({ selected: !!selected, collapsed })} plan-node`} style={{ '--node-swatch': swatch } as CSSProperties}>
         {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} /> : (
-        <div className="node-header">
-          <span className="node-title plan-node__title" title={plan.intent}>
-            <span className="codicon codicon-type-hierarchy" aria-hidden="true" />
-            <NodeNameLabel name={d.name} label={title} />
-            <span className="plan-node__desc">{view ? view.dag.status : draft ? 'draft, not running' : ''}</span>
-          </span>
-          <span className="plan-node__spacer" />
-          <NodeResizeToggle />
-          <ToolbarContainer className="nodrag plan-node__actions">
+        <NodeChrome
+          title={d.title || title} name={d.name} icon="type-hierarchy" titleHint={plan.intent || undefined}
+          description={view ? view.dag.status : draft ? 'draft, not running' : undefined}
+          onRename={(t) => rf.updateNodeData(id, { title: t })}
+          collapsed={collapsed} onToggleCollapse={toggleCollapse}
+          color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+          comments={comments} onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
+          closeLabel="Close" onClose={() => void rf.deleteElements({ nodes: [{ id }] })}
+          extraHeader={
+          <ToolbarContainer className="nodrag plan-node__actions node-header-actions">
             {draft && !view && editing === null && <VscodeButton secondary onClick={() => setEditing(JSON.stringify(draft.tasks, null, 2))}>{PLAN_TEXT.edit}</VscodeButton>}
             {editing !== null && <VscodeButton secondary disabled={apply.busy} aria-busy={apply.busy ? 'true' : 'false'} onClick={onApply}>{apply.busy ? PLAN_TEXT.applying : PLAN_TEXT.apply}</VscodeButton>}
             {!plan.dagId && (draft || plan.error) && <VscodeButton secondary onClick={redraft}>{PLAN_TEXT.redraft}</VscodeButton>}
             {draft && !plan.dagId && (
-              <VscodeButton title={PLAN_TEXT.approveHint} disabled={busy || editing !== null || !preview || !plan.projectId} aria-busy={approve.busy ? 'true' : 'false'} onClick={onApprove}>{approve.busy ? PLAN_TEXT.approving : PLAN_TEXT.approve}</VscodeButton>
+              <IconTooltip label={PLAN_TEXT.approveHint}>
+                <VscodeButton disabled={busy || editing !== null || !preview || !plan.projectId} aria-busy={approve.busy ? 'true' : 'false'} onClick={onApprove}>{approve.busy ? PLAN_TEXT.approving : PLAN_TEXT.approve}</VscodeButton>
+              </IconTooltip>
             )}
-            <ToolbarButton label="Close" title="Close" onClick={() => void rf.deleteElements({ nodes: [{ id }] })}><span className="codicon codicon-close" aria-hidden="true" /></ToolbarButton>
           </ToolbarContainer>
-        </div>
+          }
+        />
         )}
         <div className="plan-node__summary nodrag">
           <span className="plan-node__intent">{plan.intent}</span>

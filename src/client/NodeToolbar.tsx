@@ -18,14 +18,14 @@ export interface NodeToolbarProps {
   /** Tab mode: there is no canvas area to maximize into. */
   hideMaximize?: boolean
   onClose: () => void
+  /** Close tooltip and accessible name; default "Close (ends the session)". */
+  closeLabel?: string
   onStop?: () => void                                  // agent only, while it runs: kill the session, keep the node — omit if undefined
   onAiName?: () => void; aiNaming?: boolean            // agent only — omit button if undefined
   onBroadcast?: () => void; broadcastActive?: boolean; broadcastDisabled?: boolean  // agent only
   hideLinks?: boolean; onToggleHideLinks?: () => void  // context-capable agent only — omit if undefined
   /** Item khusus tipe node (mis. Import Cookies di browser), di bawah separator di menu More Actions. */
   extraMenuItems?: VscodeMenuItem[]
-  /** Lowest-priority inline action (the resize toggle), with the menu row that replaces it when it overflows. */
-  extraAction?: { node: ReactNode; menuItem: VscodeMenuItem }
 }
 
 /** Rows of the node's "More Actions…" menu; tab mode reuses them for the editor actions and the tab context menu. */
@@ -72,7 +72,7 @@ export function nodeMoreItems(props: NodeToolbarProps, overflow: VscodeMenuItem[
  * Urutan: aksi layout, "…", separator, Stop (merah `--vscode-debugIcon-stopForeground`, hanya saat agent jalan),
  * Close — aksi destruktif tak menempel ke aksi layout, dan tiap ikonnya beda (`nodeHeaderIconPolicy.test.tsx`).
  *
- * Header sempit: Search, Maximize dan `extraAction` (urut prioritas) ada di satu grup yang terpotong;
+ * Header sempit: Search dan Maximize (urut prioritas) ada di satu grup yang terpotong;
  * yang tak muat disembunyikan dan pindah ke atas menu "…" (`nodeToolbar.overflow`). "…", Stop dan Close
  * tak pernah ikut hilang.
  *
@@ -83,6 +83,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const maximizeOff = Boolean(props.maximizeDisabled)
   const maxLabel = props.maximized ? 'Restore' : 'Maximize'
+  const closeLabel = props.closeLabel ?? 'Close (ends the session)'
   const [groupRef, fit] = useFitCount()
 
   // Inline actions in priority order: the ones past `fit` overflow into the menu.
@@ -109,7 +110,6 @@ export default function NodeToolbar(props: NodeToolbarProps) {
       ),
       menuItem: { type: 'item', id: 'maximize', label: maxLabel, disabled: maximizeOff, onSelect: props.onToggleMaximize } as const,
     }]),
-    ...(props.extraAction ? [{ key: 'extra', ...props.extraAction }] : []),
   ]
   const overflow = inline.slice(fit).map((a) => a.menuItem)
 
@@ -142,8 +142,8 @@ export default function NodeToolbar(props: NodeToolbarProps) {
           ><Codicon name="debug-stop" /></ToolbarButton></IconTooltip>
         )}
 
-        <IconTooltip label="Close (ends the session)"><ToolbarButton
-          label="Close (ends the session)" data-title="Close (ends the session)"
+        <IconTooltip label={closeLabel}><ToolbarButton
+          label={closeLabel} data-title={closeLabel}
           onClick={props.onClose}
         ><Codicon name="close" /></ToolbarButton></IconTooltip>
       </ToolbarContainer>

@@ -6,6 +6,7 @@
 // Collapsed by default and loads nothing until opened, so a Diff node costs no extra request.
 import { useCallback, useRef, useState } from 'react'
 import { Button as VscodeButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { commitMessageProblem, type ScmArea, type ScmEntry, type ScmHunk, type ScmReport, type ScmStatus } from '../server/gitScm.types'
 import { commitStaged, fetchHunks, fetchReport, fetchStatus, generateMessage, ScmApiError, sendFixToAgent, stagePath, unstagePath } from './ScmPanel.api'
@@ -125,7 +126,9 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
       ) : (
         <>
           {area !== 'untracked' && !e.sensitive && (
-            <VscodeButton secondary title="Show hunks" disabled={hunks.busy} aria-busy={busyOn(hunks.busy)} onClick={() => toggleHunks(e.path, area === 'staged' ? 'staged' : 'unstaged')}>Hunks</VscodeButton>
+            <IconTooltip label="Show hunks">
+              <VscodeButton secondary disabled={hunks.busy} aria-busy={busyOn(hunks.busy)} onClick={() => toggleHunks(e.path, area === 'staged' ? 'staged' : 'unstaged')}>Hunks</VscodeButton>
+            </IconTooltip>
           )}
           {area === 'staged'
             ? <VscodeButton secondary disabled={busy} aria-busy={busyOn(busy)} aria-label={`Unstage ${e.path}`} onClick={() => act('stage', () => unstagePath(root, e.path), `Unstaged ${e.path}.`)}>Unstage</VscodeButton>
@@ -147,14 +150,18 @@ export function ScmPanel({ root, agentId, onChanged }: ScmPanelProps): React.JSX
         <textarea aria-label="Commit message" placeholder="feat(scope): describe the change" value={message} onChange={(e) => setMessage(e.target.value)} />
         {message && problem && <div className="scm-panel__problem" role="alert">{problem}</div>}
         <div className="scm-panel__actions">
-          <VscodeButton secondary disabled={busy || !staged} aria-busy={busyOn(running('generate'))} title="Draft a message from the staged changes" onClick={onGenerate}>{running('generate') ? BUSY_TEXT.generate : 'Generate with AI'}</VscodeButton>
+          <IconTooltip label="Draft a message from the staged changes">
+            <VscodeButton secondary disabled={busy || !staged} aria-busy={busyOn(running('generate'))} onClick={onGenerate}>{running('generate') ? BUSY_TEXT.generate : 'Generate with AI'}</VscodeButton>
+          </IconTooltip>
           <VscodeButton disabled={busy || !staged || !!problem} aria-busy={busyOn(running('commit'))} onClick={onCommit}>{running('commit') ? BUSY_TEXT.commit : `Commit (${staged})`}</VscodeButton>
         </div>
       </div>
       {failure && (
         <div className="scm-panel__failure">
           <pre aria-label="Commit failure output">{failure.output}</pre>
-          <VscodeButton secondary disabled={!agentId} title={agentId ? 'Send the hook output to the wired agent' : 'Wire an agent to this node first'} onClick={onFix}>Fix with agent</VscodeButton>
+          <IconTooltip label={agentId ? 'Send the hook output to the wired agent' : 'Wire an agent to this node first'}>
+            <VscodeButton secondary disabled={!agentId} onClick={onFix}>Fix with agent</VscodeButton>
+          </IconTooltip>
         </div>
       )}
       {status && GROUPS.map(({ area, label }) => status[area].total > 0 && (

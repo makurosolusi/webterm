@@ -2,10 +2,16 @@ import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useReactFlow, type NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
-import { Button as VscodeButton, ToolbarButton } from '@/vscode/register'
+import { Button as VscodeButton } from '@/vscode/register'
+import { IconButton } from '@/components/ui/icon-button'
+import NodeChrome, { termNodeClass } from './NodeChrome'
+import { useNodeCollapse } from './nodeCollapse'
+import { fileIconToneClass } from './fileIcon'
+import { randomId } from './randomId'
+import type { Comment } from '../shared/workspace'
 import * as fsClient from './fsClient'
 import { EditorConflictBar } from './EditorConflictBar'
-import { EditorCrumbs, EditorHeader, PREVIEW_COMMAND_ID, useFilesRoot } from './EditorNode.header'
+import { EditorCrumbs, EditorDirtyDot, EditorHeaderActions, PREVIEW_COMMAND_ID, useFilesRoot } from './EditorNode.header'
 import { EditorCompare } from './EditorNode.compare'
 import { CopyText, EditorLoadFailure, EditorLoading } from './EditorNode.notices'
 import EditorStatusBar, { runEditorAction, type ViewerMeta } from './EditorStatusBar'
@@ -59,6 +65,7 @@ function EditorNode({
   id,
   data,
   selected,
+  height,
   readMeta = fsClient.readMeta,
   writeChecked = fsClient.writeChecked,
   openMarkdownPreview = false,
@@ -67,9 +74,12 @@ function EditorNode({
 }: EditorNodeProps) {
   const rf = useReactFlow()
   // `viewAs: 'text'` = "Open as Text" on a file the viewers would show (SVG, misdetected types); persisted (WsNode.viewAs).
-  const d = data as { filePath?: string; color?: string; name?: string; viewAs?: 'text' }
+  const d = data as { filePath?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; viewAs?: 'text' }
   const filePath = d.filePath ?? ''
   const swatch = d.color ?? '#0a84ff'
+  const collapsed = d.collapsed ?? false
+  const comments = d.comments ?? []
+  const toggleCollapse = useNodeCollapse(id, height, collapsed)
 
   const fileName = fileBaseName(filePath) || 'untitled'
   const ext = fileExt(filePath)
@@ -134,7 +144,8 @@ function EditorNode({
   // dengan `updateNodeData` lain, jadi persist & daftar node ikut tanpa jalur baru.
   const sync = useEditorSync({
     filePath, text: kind === 'text', stat,
-    setPath: (p) => rf.updateNodeData(id, { filePath: p }),
+    // A title that was just the old file name (how a node opens) follows the rename; a custom one stays.
+    setPath: (p) => rf.updateNodeData(id, (n) => ({ filePath: p, ...((n.data as { title?: string }).title === fileName ? { title: undefined } : {}) })),
     snapshot: ef.snapshot, reload: ef.reload, flagConflict: ef.flagConflict
   })
 
@@ -197,18 +208,29 @@ function EditorNode({
 
   return (
     <>
-      <NodeLayoutResizer minWidth={MIN_WIDTH} minHeight={180} color={swatch} onFitWidth={view.fit} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={MIN_WIDTH} minHeight={180} color={swatch} onFitWidth={view.fit} />
       <div
-        className={`term-node editor-node${selected ? ' term-node--selected' : ''}`}
+        className={`${termNodeClass({ selected: !!selected, collapsed })} editor-node`}
         style={{ '--node-swatch': swatch } as CSSProperties}
         onMouseEnter={() => (hoveredRef.current = true)}
         onMouseLeave={() => (hoveredRef.current = false)}
       >
         {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} dirty={editable && ef.dirty} /> : (
-          <EditorHeader
-            id={id} name={d.name} fileName={fileName} filePath={filePath} dirty={ef.dirty} editable={editable} markdown={markdown}
-            preview={ef.preview} onTogglePreview={ef.togglePreview} wrap={view.wrap} onToggleWrap={view.toggleWrap}
-            onOutline={lspLanguage ? () => void showOutline(id) : undefined} onClose={close}
+          <NodeChrome
+            title={d.title || fileName} name={d.name} iconClass={fileIconToneClass(fileName)} titleHint={filePath || fileName}
+            onRename={(t) => rf.updateNodeData(id, { title: t })}
+            collapsed={collapsed} onToggleCollapse={toggleCollapse}
+            color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+            comments={comments} onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
+            statusChip={editable && ef.dirty ? <EditorDirtyDot /> : undefined}
+            extraHeader={
+              <EditorHeaderActions
+                id={id} editable={editable} markdown={markdown} preview={ef.preview} onTogglePreview={ef.togglePreview}
+                wrap={view.wrap} onToggleWrap={view.toggleWrap} onOutline={lspLanguage ? () => void showOutline(id) : undefined}
+              />
+            }
+            menuItems={editable ? view.items : undefined}
+            closeLabel="Close" onClose={close}
             onContextMenu={editable ? view.openMenu : undefined}
           />
         )}
@@ -228,9 +250,9 @@ function EditorNode({
             <div className="editor-node__banner editor-node__lsp-hint nodrag" role="status">
               <span>{lspHint.message} Install it with <code>{lspHint.command}</code></span>
               <CopyText text={lspHint.command} title="Copy install command">Copy command</CopyText>
-              <ToolbarButton label="Dismiss" title="Dismiss" onClick={() => dismissLspHint(lspLanguage)}>
+              <IconButton size="icon-xs" label="Dismiss" onClick={() => dismissLspHint(lspLanguage)}>
                 <span className="codicon codicon-close" aria-hidden="true" />
-              </ToolbarButton>
+              </IconButton>
             </div>
           )}
           {editable && <EditorRenamePreview nodeId={id} />}

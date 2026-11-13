@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import type * as Monaco from 'monaco-editor'
 import { ToolbarButton } from '@/vscode/register'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { fileBaseName, fileExt } from './editorFile'
 import { chordLabel, useCommands } from './commandRegistry'
 import { monacoKeybinding } from './editorChords'
@@ -63,8 +64,10 @@ export function WordWrapButton({ on, onToggle }: { on: boolean; onToggle: () => 
   const key = wrapChordLabel(useWrapChord())
   const title = key ? `Toggle word wrap (${key})` : 'Toggle word wrap'
   return (
-    <ToolbarButton label="Word wrap" title={title} data-title={title} toggleable checked={on} onClick={onToggle}>
-      <span className="codicon codicon-word-wrap" aria-hidden="true" />
-    </ToolbarButton>
+    <IconTooltip label={title}>
+      <ToolbarButton label="Word wrap" data-title={title} toggleable checked={on} onClick={onToggle}>
+        <span className="codicon codicon-word-wrap" aria-hidden="true" />
+      </ToolbarButton>
+    </IconTooltip>
   )
 }

@@ -37,8 +37,8 @@ const nodeEl = (id: string): HTMLElement => {
   return el as HTMLElement
 }
 const closeBtn = (id: string): HTMLElement => {
-  // The header's Close is an IconButton: its accessible name is the label.
-  const el = nodeEl(id).querySelector('.editor-node__actions button[aria-label="Close"]')
+  // The header's Close is the shared NodeChrome toolbar button (the same as every other node kind).
+  const el = nodeEl(id).querySelector('.node-header .node-toolbar [data-title="Close"]')
   if (!el) throw new Error(`no close button on ${id}`)
   return el as HTMLElement
 }

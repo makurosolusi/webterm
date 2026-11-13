@@ -28,6 +28,7 @@ const monaco = vi.hoisted(() => {
 vi.mock('./lazyMonaco', () => ({ loadMonaco: () => Promise.resolve(monaco.m) }))
 
 import DiffNode from './DiffNode'
+import { expectSharedChrome } from './nodeChromeKinds.testkit'
 import { NodeHostContext } from './tabLayout.context'
 import { setEditorActionsSlot, tabNodeMenuItems } from './tabLayout.nodeActions'
 
@@ -194,12 +195,26 @@ describe('DiffNode in tab mode', () => {
     expect(container.querySelector('.diff-node__msg')?.textContent).toBeTruthy()
   })
 
-  it('keeps its own header on the canvas and publishes nothing', async () => {
+  it('on the canvas uses the shared NodeChrome header (no resize button, edges resize) and publishes nothing', async () => {
     api.fetchDiffList.mockResolvedValue(LIST)
     const { container } = mount({ cwd: '/repo' })
     await waitFor(() => expect(container.querySelectorAll('.diff-node__file')).toHaveLength(3))
-    expect(container.querySelector('.diff-node .node-header .codicon-close')).not.toBeNull()
+    expect(container.querySelector('.diff-node .node-header .node-title')?.textContent).toBe('Changes')
+    expect(container.querySelector('.diff-node .node-header .node-header-actions [data-title="Refresh"]')).not.toBeNull()
+    expectSharedChrome(container.querySelector('.react-flow__node[data-id="d1"]')!)
     expect(strip().queryAllByRole('button')).toHaveLength(0)
     expect(tabNodeMenuItems('d1')).toEqual([])
+  })
+
+  it('collapses to its header from the chevron and expands again', async () => {
+    api.fetchDiffList.mockResolvedValue(LIST)
+    const { container } = mount({ cwd: '/repo' })
+    await waitFor(() => expect(container.querySelectorAll('.diff-node__file')).toHaveLength(3))
+    fireEvent.click(container.querySelector('.diff-node [data-title="Collapse"]')!)
+    await waitFor(() => expect(container.querySelector('.diff-node')?.classList.contains('term-node--collapsed')).toBe(true))
+    expect(latest[0].data.collapsed).toBe(true)
+    expect(container.querySelectorAll('.react-flow__node[data-id="d1"] .node-edge-resize')).toHaveLength(0)
+    fireEvent.click(container.querySelector('.diff-node [data-title="Expand"]')!)
+    await waitFor(() => expect(container.querySelector('.diff-node')?.classList.contains('term-node--collapsed')).toBe(false))
   })
 })
