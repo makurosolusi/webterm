@@ -90,7 +90,6 @@ export function TelegramCard({ projectId }: { projectId: string }): React.JSX.El
   const hasProject = projectId !== ''
   return (
     <section aria-label={TG.title} className="flex flex-col gap-2">
-      <h3>{TG.title}</h3>
       {s.connecting ? <p role="status">{TG.connecting}</p> : null}
       {s.error ? <p role="alert">{s.error}</p> : null}
       {s.connected ? (

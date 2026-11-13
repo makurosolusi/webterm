@@ -1,0 +1,107 @@
+/* Lists, tables, forms and states inside a SettingsGroup card, for the Rules & secrets, Account and
+   About this machine pages (settings-field.css draws the rows and the card itself). */
+
+/* A list of records (rules, secrets, devices, checks): one `.st-field` row per item, hairline between. */
+.st-list { margin: 0; padding: 0; list-style: none; }
+.st-list > li + li { border-top: 1px solid var(--st-card-border); }
+.st-group-card > .st-list + *,
+.st-group-card > * + .st-list,
+.st-group-card > .st-form + *,
+.st-group-card > * + .st-form,
+.st-group-card > .st-state + *,
+.st-group-card > * + .st-state { border-top: 1px solid var(--st-card-border); }
+
+.st-row-title {
+  overflow-wrap: anywhere;
+  color: var(--vscode-foreground, var(--text));
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.st-row-meta {
+  margin: 0;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* Loading / error / empty inside a card: one padded line, the action at the end. */
+.st-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 12px;
+}
+.st-state--error { color: var(--vscode-errorForeground, var(--destructive, #f14c4c)); }
+.st-state--empty { flex-direction: column; align-items: flex-start; padding-block: 16px; }
+
+/* A stored secret: the value is never sent back, the dots only say that one is saved. */
+.st-mask {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-family: var(--vscode-editor-font-family, var(--font-mono));
+  letter-spacing: 2px;
+}
+
+/* An inline form in a card (add a secret, change the password). */
+.st-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.st-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; width: 100%; }
+.st-form-row > * { flex: 1 1 200px; min-width: 0; }
+.st-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* A read-only log (secrets usage). */
+.st-table-wrap { overflow-x: auto; }
+.st-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.st-table th,
+.st-table td { padding: 6px 14px; text-align: left; vertical-align: top; }
+.st-table th { color: var(--vscode-descriptionForeground, var(--muted)); font-weight: 500; }
+.st-table tbody tr { border-top: 1px solid var(--st-card-border); }
+
+/* Status badge of a check: icon + word, colour by tone (never colour alone). */
+.st-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-width: 84px;
+  font-size: 12px;
+  line-height: 20px;
+}
+.st-status[data-tone='ok'] { color: var(--vscode-testing-iconPassed, #73c991); }
+.st-status[data-tone='warn'] { color: var(--st-warning); }
+.st-status[data-tone='fail'] { color: var(--vscode-errorForeground, var(--destructive, #f14c4c)); }
+.st-status[data-tone='off'] { color: var(--vscode-descriptionForeground, var(--muted)); }
+
+/* The "this device" marker on a session row. */
+.st-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 11px;
+  line-height: 17px;
+  vertical-align: 1px;
+}
+
+.st-path {
+  overflow-wrap: anywhere;
+  font-family: var(--vscode-editor-font-family, var(--font-mono));
+  font-size: 12px;
+}
+
+/* A run of rows that is not a direct child of the card (a section inside Advanced). */
+.st-rows > * + * { border-top: 1px solid var(--st-card-border); }
+
+/* A sub-option under its feature (Files › Edit and upload files): same row, indented under the title. */
+.st-field--sub { padding-left: 34px; }

@@ -111,7 +111,7 @@ describe('render Settings: 8 elemen UI lama (D8) tidak ada', () => {
     const main = await openCapabilities(new Set<CapabilityId>(['central']))
     const details = main.querySelector('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
-    expect(details.querySelectorAll(':scope > div').length).toBe(2) // items, not controls: Chromium has several buttons
+    expect(details.querySelectorAll(':scope > .st-group-card > div').length).toBe(2) // items, not controls: Chromium has several buttons
   })
 
   it('Central: tanpa sakelar persetujuan worker terpisah (Propose selalu bertanya), halaman bebas kata terlarang dan env var', async () => {

@@ -14,11 +14,11 @@ export const SETTINGS_SECTIONS = [
   { id: 'notifications', group: 'General', label: 'Notifications', icon: 'bell', description: 'Desktop notifications and sound' },
   { id: 'claude', group: 'Agents', label: 'Claude', icon: 'sparkle', description: 'Connection, permissions, profiles' },
   { id: 'central', group: 'Agents', label: 'Central', icon: 'comment-discussion', description: 'What it may do, check-ins, daily limit' },
-  { id: 'rules', group: 'Agents', label: 'Rules & secrets', icon: 'shield', description: 'What agents may do, and secrets' },
+  { id: 'rules', group: 'Agents', label: 'Rules & secrets', icon: 'shield', description: 'What agents may do, and their secrets' },
   { id: 'account', group: 'Account & system', label: 'Account', icon: 'person', description: 'Username, password, signed-in devices' },
-  { id: 'capabilities', group: 'Account & system', label: 'Features', icon: 'extensions', description: 'Browser, files, Telegram' },
+  { id: 'capabilities', group: 'Account & system', label: 'Features', icon: 'extensions', description: 'Turn on the browser, files and Telegram' },
   // Machine diagnostics, not the Control panel's code Health; the id stays `health` for old links.
-  { id: 'health', group: 'Account & system', label: 'About this machine', icon: 'info', description: 'Data folder, checks, developer mode' },
+  { id: 'health', group: 'Account & system', label: 'About this machine', icon: 'info', description: 'Checks, data folder, developer tools' },
   // Hidden from the nav unless developer mode is on (./developerMode); links and `?settings=developer` still open it.
   { id: 'developer', group: 'Account & system', label: 'Developer', icon: 'tools', description: 'Every raw value, for troubleshooting' },
 ] as const satisfies ReadonlyArray<{ id: string; group: (typeof SETTINGS_GROUPS)[number]; label: string; icon: string; description: string }>

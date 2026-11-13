@@ -1,5 +1,7 @@
-// Kartu satu kemampuan: judul, blurb, SATU sakelar, status, langkah, dan sub-opsi (hanya saat aktif).
-// Menyalakan hal berbahaya ditanya lewat AlertDialog app (bukan `window.confirm`); mematikan tak pernah ditanya.
+// One feature as Settings rows (macOS System Settings): title + plain description left, ONE switch right; a
+// feature waiting on setup shows a warning badge and its setup button; sub-options (only while on) are indented
+// switch rows under it. Turning on something risky asks in the app AlertDialog (never `window.confirm`);
+// turning off never asks.
 import { useState, type ReactNode } from 'react'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -9,7 +11,6 @@ import { CAPABILITIES, closure, dependents } from '../shared/featureCapabilities
 import type { CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import { CAPABILITY_STATUS_LABEL, CAPABILITY_TEXT, joinTitles } from './capabilitiesLabels'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 
@@ -60,29 +61,37 @@ export function CapabilityCard(props: CapabilityCardProps): React.JSX.Element {
     else onSub?.(s.key, next)
   }
   return (
-    <section aria-label={view.title} aria-busy={busy} data-capability={view.id} data-field={`capability.${view.id}`} className="flex flex-col gap-1 border-b border-(--vscode-widget-border,transparent) py-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={switchId} className="text-[13px] font-semibold">{view.title}</Label>
-        <div className="flex items-center gap-2">
-          <span role="status" className="text-xs opacity-70">{CAPABILITY_STATUS_LABEL[view.status]}</span>
-          <Switch id={switchId} checked={checked} disabled={busy} onCheckedChange={toggle} />
+    <section aria-label={view.title} aria-busy={busy} data-capability={view.id} data-field={`capability.${view.id}`} className="st-rows">
+      <div className="st-field">
+        <div className="st-field-text">
+          <div className="st-title">
+            <Label htmlFor={switchId} className="st-label">{view.title}</Label>
+            {view.status === 'needs-step' ? (
+              <span role="status" className="st-status" data-tone="warn">
+                <span className="codicon codicon-warning" aria-hidden="true" />{CAPABILITY_STATUS_LABEL['needs-step']}
+              </span>
+            ) : null}
+          </div>
+          <p className="st-hint">{view.blurb}</p>
+          {view.detail ? <p className="st-hint">{view.detail}</p> : null}
+          {turnsOn.length > 0 ? <p className="st-hint">{CAPABILITY_TEXT.alsoTurnsOn} {titles(turnsOn)}</p> : null}
+          {turnsOff.length > 0 ? <p className="st-hint">{CAPABILITY_TEXT.alsoTurnsOff} {titles(turnsOff)}</p> : null}
+          {view.status === 'needs-step' && view.step ? (
+            <Button size="sm" variant="secondary" className="mt-1.5" onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
+          ) : null}
+          {error ? <p role="alert" className="st-hint st-save--error">{error}</p> : null}
         </div>
+        <div className="st-control"><Switch id={switchId} checked={checked} disabled={busy} onCheckedChange={toggle} /></div>
       </div>
-      <p className="m-0 text-xs opacity-80">{view.blurb}</p>
-      {view.detail ? <p className="m-0 text-xs opacity-70">{view.detail}</p> : null}
-      {view.status === 'needs-step' && view.step ? (
-        <Button size="sm" variant="secondary" className="self-start" onClick={() => step(view.step!.kind)}>{view.step.label}</Button>
-      ) : null}
-      {turnsOn.length > 0 ? <p className="m-0 text-xs opacity-70">{CAPABILITY_TEXT.alsoTurnsOn} {titles(turnsOn)}</p> : null}
-      {turnsOff.length > 0 ? <p className="m-0 text-xs opacity-70">{CAPABILITY_TEXT.alsoTurnsOff} {titles(turnsOff)}</p> : null}
       {on && view.subs?.map((s) => (
-        <div key={s.key} className="flex items-center gap-2">
-          <Checkbox id={`capability-sub-${view.id}-${s.key}`} checked={s.on} disabled={busy} onCheckedChange={(v) => sub(s, v === true)} />
-          <Label htmlFor={`capability-sub-${view.id}-${s.key}`} className="text-xs">{s.label}</Label>
+        <div key={s.key} className="st-field st-field--sub">
+          <div className="st-field-text"><Label htmlFor={`capability-sub-${view.id}-${s.key}`} className="st-label">{s.label}</Label></div>
+          <div className="st-control">
+            <Switch id={`capability-sub-${view.id}-${s.key}`} checked={s.on} disabled={busy} onCheckedChange={(v) => sub(s, v)} />
+          </div>
         </div>
       ))}
       {on ? children : null}
-      {error ? <p role="alert" className="m-0 text-xs text-destructive">{error}</p> : null}
       {asking ? (
         <AlertDialog open onOpenChange={(open) => { if (!open) setAsking(null) }}>
           <AlertDialogContent>

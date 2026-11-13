@@ -2,6 +2,13 @@
 // trying a rule (PolicyRuleForm, PolicySimulator) and the plain-words reading of a stored rule's patterns.
 import type { ComboPreset } from './SettingsCombobox'
 
+/** The three effects of a rule, as a segmented choice (rule list, form, simulator). */
+export const RULE_EFFECTS = [
+  { value: 'allow', label: 'Allow' },
+  { value: 'ask', label: 'Ask' },
+  { value: 'deny', label: 'Deny' },
+] as const satisfies ReadonlyArray<{ value: 'allow' | 'ask' | 'deny'; label: string }>
+
 /** Principal patterns (server policy.model.ts `Principal`). */
 export const SUBJECTS = [
   { value: 'node:*', label: 'Any agent' },
