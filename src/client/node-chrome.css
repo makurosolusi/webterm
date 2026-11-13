@@ -281,15 +281,21 @@
 
 /* ---- Edge resize (NodeLayoutResizer) ----
    Outside resize mode the edges and corners still resize, like OS windows, VS Code sashes and other
-   node editors: invisible hit strips that only change the cursor. Above the body (z-index) so the
-   inner half of the strip is not covered by the terminal. */
-.react-flow__resize-control.node-edge-resize { z-index: 5; border-color: transparent; background: transparent; }
+   node editors: invisible hit strips that only change the cursor, with a faint sash highlight on hover.
+   Above the body (z-index) so the inner half of the strip is not covered by the terminal.
+   Every rule names `.line`/`.handle` too (3 classes): @xyflow/react's sheet is imported by App.tsx,
+   AFTER styles.css, so its 2-class `.react-flow__resize-control.handle { background-color }` wins any
+   tie and painted solid blue corner squares. Out-ranking it keeps this independent of import order
+   (nodeResize.css.test.ts pins it). */
+.react-flow__resize-control.node-edge-resize { z-index: 5; }
+.react-flow__resize-control.line.node-edge-resize { border-color: transparent; background: transparent; }
 .react-flow__resize-control.line.node-edge-resize.left,
 .react-flow__resize-control.line.node-edge-resize.right { width: 6px; border-width: 0; }
 .react-flow__resize-control.line.node-edge-resize.top,
 .react-flow__resize-control.line.node-edge-resize.bottom { height: 6px; border-width: 0; }
-.react-flow__resize-control.handle.node-edge-resize { width: 10px; height: 10px; border: none; }
-.react-flow__resize-control.line.node-edge-resize:hover { background: var(--vscode-sash-hoverBorder, var(--accent)); opacity: 0.6; }
+.react-flow__resize-control.handle.node-edge-resize { width: 10px; height: 10px; border: none; border-radius: 0; background: transparent; }
+.react-flow__resize-control.line.node-edge-resize:hover,
+.react-flow__resize-control.handle.node-edge-resize:hover { background: var(--vscode-sash-hoverBorder, var(--accent)); opacity: 0.6; }
 /* Collapse is a canvas-only layout: a tab pane (outside .react-flow__node) always shows the body. */
 .react-flow__node .term-node--collapsed { height: auto !important; }
 .react-flow__node .term-node--collapsed .node-body { display: none; }
