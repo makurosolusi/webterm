@@ -4,15 +4,13 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { cleanEnv } from './verifyEnv'
 import type { VerifyExec, VerifyExecResult } from './verify'
+import { killProcessGroup } from '../processGroup'
 
 /** Grace between SIGTERM to the group and the SIGKILL that forces stragglers. */
 export const VERIFY_KILL_GRACE_MS = 2_000
 const MIN_OUTPUT_BYTES = 1024
 
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  if (child.pid === undefined) return
-  try { process.kill(-child.pid, signal) } catch { child.kill(signal) } // group already gone/unsupported: signal the leader (never throws)
-}
+const killGroup = (child: ChildProcess, signal: NodeJS.Signals): void => killProcessGroup(child, signal)
 
 /** Exec produksi: spawn (shell: false) in its own process group, timeout + output cap kill the group. */
 export function createProcessExec(source: NodeJS.ProcessEnv = process.env): VerifyExec {

@@ -12,6 +12,7 @@ import { DATA_DIR_MESSAGE, insideDataDir } from './projectsFolder'
 import { gitCommand } from '../gitExec'
 import { promisify } from 'node:util'
 import { cloneErrorMessage, deriveRepoDirName, expandCloneUrl, isSafeFolderName, isValidCloneUrl, parseCloneProgress, type CloneProgress } from './cloneUrl'
+import { killProcessGroup } from '../processGroup'
 
 const run = promisify(execFile)
 
@@ -83,9 +84,7 @@ interface ActiveClone {
 }
 let activeClone: ActiveClone | null = null
 
-function killGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  try { process.kill(-child.pid!, signal) } catch { child.kill(signal) } // group gone: signal the leader (never throws)
-}
+const killGroup = (child: ChildProcess, signal: NodeJS.Signals): void => killProcessGroup(child, signal)
 
 /**
  * One group SIGTERM is not enough: a child git/the shell forks at that instant misses it, stays in

@@ -12,6 +12,7 @@ import { binaryOnPath } from '../binaryOnPath'
 import { redactSecrets } from '../redactSecrets'
 import { isClaudeToken } from '../../shared/claudeLaunch/claudeLaunch.normalize'
 import type { ResolvedClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
+import { killProcessGroup } from '../processGroup'
 
 export interface RunResult { code: number | null; stdout: string; stderr?: string; timedOut: boolean }
 /** Runs one process (argv array, no shell) and resolves with its exit code and captured output. */
@@ -100,7 +101,7 @@ export const spawnRun: RunFn = (cmd, args, { env, timeoutMs, cwd, signal }) =>
     let done = false
     const finish = (r: RunResult): void => { if (!done) { done = true; clearTimeout(timer); resolve(r) } }
     const kill = (): void => {
-      try { process.kill(-(child.pid as number), 'SIGKILL') } catch { child.kill('SIGKILL') } // group gone/unsupported: kill the child itself
+      killProcessGroup(child)
       finish({ code: null, stdout, stderr, timedOut: true })
     }
     const timer = setTimeout(kill, timeoutMs)
