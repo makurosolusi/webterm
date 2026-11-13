@@ -8,10 +8,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AGENT_CANNOT_APPROVE, uiOnlyDenial } from '../approvalAuth'
 import { readCappedRequestBody } from '../cappedRequestBody'
 import { claudeChildEnv } from '../central/runtime/claudeOptions'
-import { centralClaudeLaunch, resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { rememberProviderTest } from './claudeProvider.api'
 import { runConnectionTest, type ConnDeps, type ConnEvent, type FinalEvent } from './claudeProvider.connectionTest'
-import { claudeEnv, loadConfig, providerView } from './claudeProvider.store'
+import { claudeEnv } from './claudeProvider.store'
+import { claudeStartup } from './claudeProvider.startup'
 
 export const PROVIDER_TEST_PATH = '/api/claude-provider/test'
 
@@ -77,11 +77,10 @@ export async function streamProviderTest(req: IncomingMessage, res: ServerRespon
   res.flushHeaders()
   const leave = joinConnectionTest(sendRequest ? 'full' : 'quick', (emit, signal) => {
     deps.refreshCentral?.()
-    const c = loadConfig()
-    const launch = c.mode === 'command' ? resolveClaudeLaunch(c.profileId) : centralClaudeLaunch()
+    const { launch, provider } = claudeStartup()
     const { run, onPath, book, now, requestTimeoutMs } = deps
     return runConnectionTest(launch, {
-      env: claudeEnv(deps.env ?? claudeChildEnv(process.env)), provider: providerView(), signal, sendRequest,
+      env: claudeEnv(deps.env ?? claudeChildEnv(process.env)), provider, signal, sendRequest,
       ...(run ? { run } : {}), ...(onPath ? { onPath } : {}), ...(book ? { book } : {}), ...(now ? { now } : {}), ...(requestTimeoutMs ? { requestTimeoutMs } : {}),
     }, emit).then((final) => {
       // Only a full run is a result for the Doctor/GET; a check without the request proves less.

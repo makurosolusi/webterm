@@ -14,6 +14,7 @@ import { createLogger } from '../logs'
 import { modelRequest } from '../models/modelRequest'
 import { redactSecrets } from '../redactSecrets'
 import type { ResolvedClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
+import { startupMethod } from './claudeProvider.startup'
 
 export type ConnStage = 'wrapper' | 'cli' | 'auth' | 'request'
 /** `pending`: not run on purpose (a check without the request): neither passed nor failed. */
@@ -32,7 +33,6 @@ const STDOUT_MAX_MATCHED = 64 * 1024
 const log = createLogger('claude-provider')
 
 export const STAGE_LABEL: Record<ConnStage, string> = { wrapper: 'Wrapper', cli: 'Claude CLI', auth: 'Sign-in', request: 'Request' }
-const MODE_VIA: Record<string, string> = { login: 'Claude Code login', apiKey: 'Anthropic API key', custom: 'custom endpoint', command: 'custom command' }
 
 const secs = (ms: number): string => `${(ms / 1000).toFixed(1)} s`
 
@@ -93,7 +93,6 @@ export interface ConnDeps {
 }
 
 const PROBE_STAGE: Record<StageResult['stage'], ConnStage> = { wrapper: 'wrapper', claude: 'cli', auth: 'auth' }
-const baseName = (t: string): string => t.slice(t.lastIndexOf('/') + 1)
 type Parsed = { isError: boolean; text: string; raw: Parameters<typeof parseUsage>[0] & { modelUsage?: unknown } }
 
 function parseResult(stdout: string): Parsed | null {
@@ -112,7 +111,7 @@ export async function runConnectionTest(launch: ResolvedClaudeLaunch, d: ConnDep
   const now = d.now ?? Date.now
   const run = d.run ?? spawnRun
   const t0 = now()
-  const via = launch.wrapper.length > 0 ? baseName(launch.wrapper[0] as string) : MODE_VIA[d.provider.mode] ?? 'Claude Code'
+  const via = startupMethod(d.provider.mode, launch)
   const order: ConnStage[] = ['wrapper', 'cli', 'auth', 'request']
   let started = t0
   let current: ConnStage | null = null

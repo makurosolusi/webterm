@@ -131,12 +131,12 @@ describe('detection is profile-aware', () => {
   })
 })
 
-describe('Doctor probes the default profile', () => {
+describe('Doctor probes the launch the provider resolves (claudeStartup)', () => {
   it('ready via envman, named in the result; missing wrapper is reported as missing', async () => {
     const { doctorDeps } = await import('../doctor.runtime')
     const deps = (): ReturnType<typeof doctorDeps> => doctorDeps({ service: {} as never, env: { PATH, HOME: dir } })
-    expect(await deps().claudeReady()).toEqual({ ok: true, via: 'envman (via profile Malik)' })
+    expect(await deps().claudeReady()).toEqual({ ok: true, method: 'envman', profile: 'Malik' })
     rmSync(join(dir, 'envman'))
-    expect(await deps().claudeReady()).toMatchObject({ ok: false, missing: true, via: 'envman (via profile Malik)', reason: expect.stringMatching(/^envman not found on PATH\./) })
+    expect(await deps().claudeReady()).toMatchObject({ ok: false, missing: true, method: 'envman', profile: 'Malik', reason: expect.stringMatching(/^envman not found on PATH\./) })
   })
 })

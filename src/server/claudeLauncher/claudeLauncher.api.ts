@@ -7,7 +7,8 @@ import { AGENT_CANNOT_APPROVE, uiOnlyDenial } from '../approvalAuth'
 import { readCappedRequestBody } from '../cappedRequestBody'
 import { claudeChildEnv } from '../central/runtime/claudeOptions'
 import { providerView } from '../claudeProvider/claudeProvider.store'
-import { centralClaudeLaunch, effectiveLaunchTargets, resolveClaudeLaunch } from './claudeLauncher'
+import { effectiveLaunchTargets, resolveClaudeLaunch } from './claudeLauncher'
+import { claudeStartup } from '../claudeProvider/claudeProvider.startup'
 import { envProxyAuth } from '../agentEnv'
 import { CLAUDE_LAUNCH_EFFECTIVE_PATH, type EffectiveClaudeLaunch } from '../../shared/claudeLaunch/claudeLaunch.effective'
 import type { ProviderView } from '../claudeProvider/claudeProvider.model'
@@ -49,10 +50,12 @@ export async function claudeLaunchRoute(req: IncomingMessage, url: URL, deps: La
   try { body = read.body === '' ? {} : JSON.parse(read.body) } catch { return { status: 400, body: { error: 'invalid_json' } } }
   const { profileId, central } = (body && typeof body === 'object' ? body : {}) as { profileId?: unknown; central?: unknown }
   if (central !== true && typeof profileId !== 'string') return { status: 400, body: { error: 'profile_required' } }
-  const launch = central === true ? centralClaudeLaunch() : resolveClaudeLaunch(profileId as string)
+  // Central: the shared resolver (what Central runs); a profile id: that saved profile, under the same provider.
+  const startup = claudeStartup('central')
+  const launch = central === true ? startup.launch : resolveClaudeLaunch(profileId as string)
   if (central !== true && launch.missingId) return { status: 404, body: { error: 'unknown_profile' } }
   if (central === true) deps.refreshCentral()
   // Central's env (claudeChildEnv: only the named provider vars), so a server-env proxy counts as signed in.
-  const result = await (deps.probe ?? probeClaudeLaunch)(launch, { env: claudeChildEnv(process.env), provider: providerView() })
+  const result = await (deps.probe ?? probeClaudeLaunch)(launch, { env: claudeChildEnv(process.env), provider: startup.provider })
   return { status: 200, body: { ...result, warnings: launch.warnings } }
 }

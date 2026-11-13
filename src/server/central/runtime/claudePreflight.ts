@@ -1,9 +1,9 @@
 // Cached readiness probe for Central's Claude: runs through the Central launch profile
 // (server/claudeLauncher), so a wrapper such as `envman -e p:e -- claude` that injects the
 // credential is part of the check. Stages and their redaction live in claudeLaunch.probe.ts.
-import { providerView } from '../../claudeProvider/claudeProvider.store'
+import { claudeStartup, type ClaudeStartup } from '../../claudeProvider/claudeProvider.startup'
 import type { ProviderView } from '../../claudeProvider/claudeProvider.model'
-import { centralClaudeLaunch, DEFAULT_CLAUDE_PROFILE, type ResolvedClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
+import { DEFAULT_CLAUDE_PROFILE, type ResolvedClaudeLaunch } from '../../claudeLauncher/claudeLauncher'
 import {
   AUTH_CHECK_TIMEOUT_MS, probeClaudeLaunch, spawnRun,
   type LaunchFailure, type LaunchProbe, type LaunchStage, type RunFn, type RunResult,
@@ -84,8 +84,11 @@ export function preflightLogFields(r: ClaudeReady): Record<string, unknown> {
 
 async function check(d: PreflightDeps, now: () => number): Promise<ClaudeReady> {
   const started = now()
-  const launch = d.executable ? bare(d.executable) : (d.launch ?? centralClaudeLaunch)()
-  const provider = (d.provider ?? providerView)()
+  // Central's launch + provider from the shared resolver; tests override either part.
+  let resolved: ClaudeStartup | undefined
+  const startup = (): ClaudeStartup => (resolved ??= claudeStartup('central'))
+  const launch = d.executable ? bare(d.executable) : d.launch ? d.launch() : startup().launch
+  const provider = d.provider ? d.provider() : startup().provider
   const r = toClaudeReady(await probeClaudeLaunch(launch, {
     env: d.env, ...(d.run ? { run: d.run } : {}), ...(d.onPath ? { onPath: d.onPath } : {}),
     ...(d.timeoutMs !== undefined ? { timeoutMs: d.timeoutMs } : {}), provider,
