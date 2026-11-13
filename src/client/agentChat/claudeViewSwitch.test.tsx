@@ -90,6 +90,16 @@ describe('ClaudeViewToggle', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ to: 'chat' })
   })
 
+  it('an arrow key landing on the current view sends nothing; landing on the other view switches', async () => {
+    fetchMock.mockResolvedValue(reply(200, { ok: true, node: {} }))
+    const { container } = render(<ClaudeViewToggle nodeId="a" view="terminal" busy={false} />)
+    fireEvent.keyDown(option(container, 'Chat'), { key: 'ArrowRight' }) // wraps onto Terminal, the current view
+    expect(fetchMock).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.keyDown(option(container, 'Terminal'), { key: 'ArrowRight' }) })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ to: 'chat' })
+  })
+
   it('switching disables only that node (aria-busy, options disabled), then re-enables it', async () => {
     const d = deferred()
     fetchMock.mockReturnValue(d.promise)

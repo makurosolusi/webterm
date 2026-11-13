@@ -1,6 +1,15 @@
 // Persistent per-node host divs: node content is portaled into them and they are moved between the
 // canvas slot and a tab pane without being re-created.
 const hosts = new Map<string, HTMLDivElement>()
+/** Which mounted portal holds each host: a node whose type changes (Claude view switch) mounts a new
+ *  portal under the same id before the old one's unmount cleanup runs, and that cleanup must not
+ *  take the new portal's host with it. */
+const owners = new Map<string, symbol>()
+
+/** Mark `owner` as the portal holding node `id`'s host (the latest mount wins). */
+export function claimNodeHost(id: string, owner: symbol): void {
+  owners.set(id, owner)
+}
 
 export function getNodeHost(id: string): HTMLDivElement {
   let host = hosts.get(id)
@@ -36,7 +45,10 @@ export function parkNodeHost(id: string): void {
   if (host && parking?.isConnected) move(host, parking)
 }
 
-export function releaseNodeHost(id: string): void {
+/** Drop node `id`'s host; with `owner`, only while that portal still holds it. */
+export function releaseNodeHost(id: string, owner?: symbol): void {
+  if (owner && owners.has(id) && owners.get(id) !== owner) return
+  owners.delete(id)
   hosts.get(id)?.remove()
   hosts.delete(id)
 }

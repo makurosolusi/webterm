@@ -117,7 +117,8 @@ export function ClaudeViewToggle({ nodeId, view, busy, onStopTurn }: { nodeId: s
   const [confirming, setConfirming] = useState(false)
   const blocked = busy && !onStopTurn
   const hint = switching ? CLAUDE_VIEW_TEXT.switching : blocked ? CLAUDE_VIEW_TEXT.busy : to === 'chat' ? CLAUDE_VIEW_TEXT.toChat : CLAUDE_VIEW_TEXT.toTerminal
-  const choose = () => { if (busy) setConfirming(true); else run() }
+  // Only a different view switches: an arrow key that lands on the current option also reports it.
+  const choose = (v: ClaudeView) => { if (v === view) return; if (busy) setConfirming(true); else run() }
   return (
     <>
       <IconTooltip label={hint}>
