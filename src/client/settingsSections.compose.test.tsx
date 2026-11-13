@@ -22,17 +22,18 @@ const open = (label: string): void => {
 describe('Settings purpose sections', () => {
   it.each([
     ['Rules & secrets', 'rules-section', ['policy-rules', 'secrets-panel', 'rules-advanced', 'policy-add-rule', 'policy-simulator']],
-    ['Health', 'health-section', ['doctor']],
+    ['About this machine', 'health-section', ['doctor']],
   ])('%s mounts its panels', async (label, section, panels) => {
     open(label)
     const root = await screen.findByTestId(section)
     for (const id of panels) expect(await within(root).findByTestId(id), id).toBeTruthy()
   })
 
-  it('Rules & secrets sits in the Safety group; Memory, Automations and Spending are gone from the sidebar', () => {
+  it('Rules & secrets sits in the Agents group (no one-item Safety group); Memory, Automations and Spending are gone from the sidebar', () => {
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} />)
     const nav = screen.getByRole('navigation', { name: 'Section settings' })
-    expect(within(within(nav).getByRole('group', { name: 'Safety' })).getAllByRole('button').map((b) => b.getAttribute('aria-labelledby'))).toEqual(['st-nav-rules'])
+    expect(within(within(nav).getByRole('group', { name: 'Agents' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Claude', 'Central', 'Rules & secrets'])
+    expect(within(nav).queryByRole('group', { name: 'Safety' })).toBeNull()
     for (const gone of ['Memory', 'Automations', 'Spending']) expect(within(nav).queryByRole('button', { name: gone })).toBeNull()
   })
 

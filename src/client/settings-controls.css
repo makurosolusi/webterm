@@ -1,13 +1,14 @@
-/* Kontrol Settings (input, select, checkbox, tombol, chip, kartu) dan breakpoint sempit.
-   Dipisah dari `settings.css` supaya keduanya tetap di bawah batas file health; urutan import
-   tidak memengaruhi hasil karena selektornya tidak bertumpuk. Metrik terukur Settings editor
-   VS Code: input/dropdown 25-26px radius 4px, tombol 26px radius 4px, checkbox 18x18 radius 3px. */
+/* Settings controls (input, select, checkbox, buttons, segmented, lists, cards). Split from
+   `settings.css` to stay under the file limit; selectors do not overlap, so import order does not
+   matter. Width: one token, `--st-control-width`, for every control in the row's right column.
+   There is no viewport breakpoint here: the narrow layout follows SettingsNav NARROW_QUERY via
+   `.is-narrow`, and rows stack through a container query (settings-field.css). */
 
 .st-input,
 .st-select {
   box-sizing: border-box;
-  width: 100%;
-  max-width: 420px;
+  width: var(--st-control-width, 240px);
+  max-width: 100%;
   height: var(--st-control-height, 26px);
   padding: 0 6px;
   border: 1px solid var(--vscode-settings-textInputBorder, var(--border));
@@ -58,7 +59,7 @@
 .st-select-wrap {
   position: relative;
   display: inline-flex;
-  width: 320px;
+  width: var(--st-control-width, 240px);
   max-width: 100%;
 }
 
@@ -249,7 +250,7 @@
 }
 
 .st-cards {
-  margin: 4px 14px 0;
+  margin: 4px 0 0;
 }
 
 .st-card {
@@ -318,40 +319,48 @@
   font-size: 12px;
 }
 
-/* ------------------------------------------------------------------ narrow */
-@media (max-width: 720px) {
-  .st-sidebar {
-    flex-basis: 150px;
-    width: 150px;
-  }
-
-  /* Narrow: icon + title only. */
-  .st-nav-desc {
-    display: none;
-  }
-
-  .st-select-wrap {
-    width: 100%;
-  }
-
-  .st-input-num,
-  .st-input-hex {
-    width: 92px;
-  }
-}
-
 /* Model ladder defaults (Settings › Agent › Models): compact, theme tokens only. */
 .st-table { border-collapse: collapse; font-size: 12px; }
 .st-table th, .st-table td { padding: 2px 12px 2px 0; text-align: left; }
 .st-table th { color: var(--vscode-descriptionForeground, var(--text-muted)); font-weight: 600; }
 
-/* The page's "Advanced" disclosure (SettingsAdvanced). */
-.st-advanced {
-  padding: 12px 0;
+/* ------------------------------------------------------------ segmented */
+/* SettingsSegmented: one-of-few choice, a single tab stop (WAI-ARIA radio group). */
+.st-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border: 1px solid var(--vscode-settings-dropdownBorder, var(--border));
+  border-radius: 6px;
+  background: var(--vscode-settings-dropdownBackground, var(--sunken));
 }
 
-.st-advanced > summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
+.st-seg-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground, var(--text));
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
 }
+
+.st-seg-option:hover:not(:disabled):not(.is-active) { background: var(--vscode-toolbar-hoverBackground, var(--raised)); }
+
+.st-seg-option.is-active {
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  color: var(--vscode-button-secondaryForeground, var(--text));
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder, var(--accent)) inset;
+}
+
+.st-seg-option:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
+.st-seg-option:disabled { opacity: 0.4; }
+.st-seg-glyph { font-family: var(--vscode-editor-font-family, var(--font-mono)); line-height: 1; }

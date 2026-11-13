@@ -1,23 +1,17 @@
-// Halaman settings dengan bentuk VS Code Settings editor: search + hitungan hasil di atas, TOC
-// section 260px with icon + description (panah/Home/End berpindah fokus), satu pane daftar setting di kanan.
-// Below 720px the TOC becomes a section dropdown above full-width content (`NARROW_QUERY`).
+// Settings as a full-screen page in the macOS System Settings / Linear shape: a sidebar (search box on
+// top, single-line items under group headings) and a centred content column of grouped rows. Below
+// `NARROW_QUERY` the sidebar becomes the search box over a section dropdown above the content.
 // Search reads the static index (./settings.search) and lists "Page › Label" rows; no page mounts while
-// searching, and "Go to" opens the page and reveals the field (same path as a cross-link). Dialog tetap
-// dipertahankan (full-screen, bukan popover) supaya Escape/focus-trap dan alur buka-tutup yang
-// sudah ada tidak berubah; yang berubah hanya chrome dan metriknya — 35px header, 22px baris,
-// teks 13px, kontrol 26px, token `--vscode-*`.
+// searching, and a result opens the page and reveals the field (same path as a cross-link). ⌘F or `/`
+// focuses the search box, Enter opens the first result, ArrowDown moves into the results. Kept as a
+// Dialog (full-screen, not a popover) so Escape, the focus trap and open/close stay as they were.
 //
-// Sidebar dikelompokkan (`group` tiap section; grup tanpa section terlihat disembunyikan); panah/Home/End
-// melintasi grup karena navigasi menghitung semua tombol di nav. Developer hanya tampil dalam developer
-// mode (./developerMode); tautan ke sana tetap membukanya. Memory, Automations dan Spending pindah ke
-// panel Control: hasil search-nya membuka tab Control (`go`).
+// Developer only shows in developer mode (./developerMode); a link still opens it. Memory, Automations
+// and Spending moved to the Control panel: their search results open that tab (`go`).
+// Features (id `capabilities`) replaces Channels and Environment; old `env`/`channels` links land there
+// through `toSectionId`. A link that names a field opens the page holding it (`pageOfField`).
 //
-// Halaman Features (id `capabilities`, dulu Capabilities; ENVSIMPLE D6) menggantikan Channels dan
-// Environment; tautan lama ke `env`/`channels` tetap mendarat di sini lewat `toSectionId`. A link that
-// names a field opens the page holding it (`pageOfField`), so old `terminal`/`shell` links still land.
-//
-// Props-driven: `settings` + `onChange` masuk sebagai prop, integrator yang me-mount dan
-// menyambungkannya ke `useSettings()`.
+// Props-driven: `settings` + `onChange` come in as props; the integrator wires them to `useSettings()`.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dialog,
@@ -25,9 +19,9 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { IconTooltip } from '@/components/ui/icon-button'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { ClaudeSettingsSection } from './ClaudeSettingsSection'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { CentralSettingsSection } from './CentralSettingsSection'
@@ -36,7 +30,7 @@ import { DeveloperSection } from './DeveloperSection'
 import { HealthSection } from './HealthSection'
 import { KeybindingsSection } from './SettingsKeybindings'
 import { RulesSection } from './RulesSection'
-import { normalizeQuery } from './SettingsFields'
+import { normalizeQuery } from './SettingsFieldRow'
 import { SETTINGS_SEARCH_INDEX, searchSettings, type SearchGroupId, type SettingsSearchEntry } from './settings.search'
 import { openCentralTab } from './secondarySideBar.store'
 import { SettingsItemScopeProvider } from './settingsContext'
@@ -49,12 +43,16 @@ import { revealSettingsField } from './settingsPanel.reveal'
 import { MOVED_GROUP_LABEL, SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import { AccountSection } from './AccountSection'
 import { SETTINGS_UNDO_TOAST_SLOT, SettingsUndoToast, settingsUndoKeyDown } from './SettingsUndoToast'
+import { NARROW_QUERY, SettingsNavList, SettingsSearchBox, SettingsSectionPicker } from './SettingsNav'
+import { focusFirstResult, SettingsSearchResults } from './SettingsSearchResults'
+import { SettingsPageHeader } from './SettingsPageHeader'
 import type { SettingsUndo } from './useSettings'
 import type { WorkspaceName } from './RulesSection'
 import './settings-sections.css'
 import './settings-search.css'
 
 export { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
+export { NARROW_QUERY } from './SettingsNav'
 
 /** Section for an id from a link or a saved tab (legacy ids mapped, unknown -> Appearance); lives with the URL whitelist. */
 export const toSectionId: (id: string) => SectionId = toSettingsRouteSection
@@ -106,9 +104,6 @@ interface PanelProps {
 
 const NO_WORKSPACES: readonly WorkspaceName[] = []
 
-/** Below this width the sidebar becomes a section dropdown (no room for a 260px column next to the fields). */
-export const NARROW_QUERY = '(max-width: 719px)'
-
 /** True while the viewport matches `NARROW_QUERY`; follows resizes. */
 function useNarrow(): boolean {
   const [narrow, setNarrow] = useState(() => window.matchMedia?.(NARROW_QUERY).matches ?? false)
@@ -140,9 +135,9 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
   const developer = useDeveloperMode()
   const shown = (id: SectionId): boolean => id !== 'developer' || developer
   const results = useMemo(() => searchSettings(normalized).filter((g) => g.page !== 'developer' || developer), [normalized, developer])
-  const found = results.reduce((n, g) => n + g.entries.length, 0)
   const narrow = useNarrow()
   const mainRef = useRef<HTMLElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   // A link from one section into another (Central Agent -> Agent › Models): switch and reveal its field.
   // Uncontrolled (no `section` prop) the panel keeps the field itself; controlled it comes back as `field`.
   const [ownField, setOwnField] = useState<SettingsFieldId | undefined>()
@@ -161,7 +156,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     open(entry.page, entry.field)
   }
 
-  // Pindah section = daftar baru, mulai dari atas seperti VS Code saat memilih entri TOC.
+  // A new page starts at the top, as VS Code does when a TOC entry is picked.
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0
   }, [active, normalized])
@@ -174,22 +169,23 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
     SECTION_BODY[id]({ s, onChange, navigate, projectId, workspaces })
 
   const activeSection = SETTINGS_SECTIONS.find((section) => section.id === active) ?? SETTINGS_SECTIONS[0]
-  const activeLabel = activeSection.label
-
-  // Roving fokus ala tree VS Code: panah/Home/End memindah fokus, Enter/Space memilih.
-  const onTocKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
-    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'))
-    const index = items.findIndex((item) => item === document.activeElement)
-    const target =
-      event.key === 'ArrowDown' ? index + 1
-        : event.key === 'ArrowUp' ? index - 1
-          : event.key === 'Home' ? 0
-            : event.key === 'End' ? items.length - 1
-              : null
-    if (target === null || index < 0) return
-    event.preventDefault()
-    items[Math.min(items.length - 1, Math.max(0, target))]?.focus()
+  const undoKeys = settingsUndoKeyDown(history)
+  // ⌘F / Ctrl+F anywhere in Settings, or `/` outside a text field, focuses search (Linear, GitHub).
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    const typing = (event.target as Element | null)?.closest?.('input,textarea,select,[contenteditable="true"]')
+    if (((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'f') || (event.key === '/' && !typing)) {
+      event.preventDefault()
+      searchRef.current?.focus()
+      searchRef.current?.select()
+      return
+    }
+    undoKeys(event)
   }
+  const first = results[0]?.entries[0]
+  const searchBox = (
+    <SettingsSearchBox ref={searchRef} query={query} onQuery={setQuery}
+      onEnter={() => { if (first) go(first) }} onDown={() => focusFirstResult(mainRef.current)} />
+  )
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -197,7 +193,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
         // inset-0 + translate-*-0 replace the shadcn centering utilities (tailwind-merge) so the page fills the viewport.
         className="st-dialog-content inset-0 translate-x-0 translate-y-0"
         showCloseButton={false}
-        onKeyDown={settingsUndoKeyDown(history)}
+        onKeyDown={onKeyDown}
         // The Undo toast is portaled outside the dialog; clicking it must not count as "outside".
         onInteractOutside={(event) => {
           if ((event.target as Element | null)?.closest?.(`[data-slot="${SETTINGS_UNDO_TOAST_SLOT}"]`)) event.preventDefault()
@@ -209,7 +205,7 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
             event.preventDefault()
             return
           }
-          // Escape mengosongkan pencarian dulu; baru Escape kedua menutup dialog.
+          // Escape clears the search first; a second Escape closes the dialog.
           if (query) {
             event.preventDefault()
             setQuery('')
@@ -222,124 +218,40 @@ export function SettingsPanel({ settings: s, onChange, onClose, projectId = '', 
           <header className="st-header">
             <span className="st-header-title">Settings</span>
             <IconTooltip label="Close settings" shortcut="Esc">
-              <button
-                type="button"
-                className="st-close"
-                aria-label="Close settings"
-                onClick={onClose}
-              >
+              <button type="button" className="st-close" aria-label="Close settings" onClick={onClose}>
                 <span className="codicon codicon-close" aria-hidden="true" />
               </button>
             </IconTooltip>
           </header>
 
-          <div className="st-searchbar">
-            <div className="st-search-wrap">
-              <span className="codicon codicon-search st-search-icon" aria-hidden="true" />
-              <input
-                type="search"
-                className="st-search"
-                aria-label="Search settings"
-                placeholder="Search settings"
-                value={query}
-                autoFocus
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              {found ? (
-                <span className="st-search-count" role="status">{found} {found === 1 ? 'setting' : 'settings'} found</span>
-              ) : null}
-              {query ? (
-                <IconTooltip label="Clear Search Results">
-                  <button
-                    type="button"
-                    className="st-search-clear"
-                    aria-label="Clear search"
-                    onClick={() => setQuery('')}
-                  >
-                    <span className="codicon codicon-close" aria-hidden="true" />
-                  </button>
-                </IconTooltip>
-              ) : null}
-            </div>
-          </div>
-
           <div className={'st-body' + (narrow ? ' is-narrow' : '')}>
             {narrow ? (
               <div className="st-section-picker">
-                <span className="st-select-wrap">
-                  <select className="st-select" aria-label="Settings section" value={active} onChange={(event) => open(event.target.value)}>
-                    {SETTINGS_GROUPS.filter((group) => SETTINGS_SECTIONS.some((x) => x.group === group && shown(x.id))).map((group) => (
-                      <optgroup key={group} label={group}>
-                        {SETTINGS_SECTIONS.filter((section) => section.group === group && shown(section.id)).map((section) => (
-                          <option key={section.id} value={section.id}>{section.label}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <span className="codicon codicon-chevron-down st-select-chevron" aria-hidden="true" />
-                </span>
+                {searchBox}
+                <SettingsSectionPicker active={active} shown={shown} onOpen={(id) => open(id)} />
               </div>
             ) : (
-              <nav className="st-sidebar" aria-label="Section settings" onKeyDown={onTocKeyDown}>
-                {SETTINGS_GROUPS.filter((group) => SETTINGS_SECTIONS.some((x) => x.group === group && shown(x.id))).map((group) => (
-                  <div key={group} role="group" className="st-nav-group" aria-labelledby={`st-nav-group-${group}`}>
-                    <div id={`st-nav-group-${group}`} className="st-nav-group-title">{group}</div>
-                    {SETTINGS_SECTIONS.filter((section) => section.group === group && shown(section.id)).map((section) => (
-                      <button
-                        key={section.id}
-                        type="button"
-                        aria-current={active === section.id && !normalized}
-                        className={'st-nav' + (active === section.id && !normalized ? ' is-active' : '')}
-                        // Name = title only (aria-labelledby), the description is read as the item's description.
-                        aria-labelledby={`st-nav-${section.id}`}
-                        aria-describedby={`st-nav-${section.id}-desc`}
-                        onClick={() => open(section.id)}
-                      >
-                        <span className={`codicon codicon-${section.icon} st-nav-icon`} aria-hidden="true" />
-                        <span className="st-nav-text">
-                          <span id={`st-nav-${section.id}`} className="st-nav-label">{section.label}</span>
-                          <span id={`st-nav-${section.id}-desc`} className="st-nav-desc">{section.description}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </nav>
+              <aside className="st-sidebar">
+                <div className="st-sidebar-search">{searchBox}</div>
+                <SettingsNavList active={active} searching={!!normalized} shown={shown} onOpen={(id) => open(id)} />
+              </aside>
             )}
 
             <main className="st-main" aria-label="Settings" ref={mainRef}>
-              {normalized ? (
-                results.length ? results.map(({ page, entries }) => (
-                  <section key={page} className="st-search-group" aria-labelledby={`st-group-${page}`}>
-                    <h3 id={`st-group-${page}`} className="st-group-title">{sectionLabel(page)}</h3>
-                    <ul className="st-results">
-                      {entries.map((entry) => (
-                        <li key={entry.field ?? `${page}:${entry.label}`} className="st-result">
-                          <button type="button" className="st-result-go" onClick={() => go(entry)}>
-                            {entry.label === sectionLabel(page) ? entry.label : <><span className="st-result-path">{sectionLabel(page)} ›</span> {entry.label}</>}
-                          </button>
-                          {entry.hint ? <p className="st-hint">{entry.hint}</p> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )) : (
-                  <p className="st-no-results" role="status">No settings match “{query.trim()}”.</p>
-                )
-              ) : (
-                <>
-                  <div className="st-section-head">
-                    <h2 className="st-section-title">
-                      <span className={`codicon codicon-${activeSection.icon}`} aria-hidden="true" />
-                      {activeLabel}
-                    </h2>
-                    <p className="st-section-desc">{activeSection.description}</p>
-                  </div>
-                  <SettingsItemScopeProvider category={activeLabel} settings={s} onChange={onChange}>
-                    {renderSection(active)}
-                  </SettingsItemScopeProvider>
-                </>
-              )}
+              <div className="st-content">
+                {normalized ? (
+                  <SettingsSearchResults query={query} normalized={normalized} results={results} labelOf={sectionLabel} onGo={go} />
+                ) : (
+                  <>
+                    <SettingsPageHeader section={activeSection} settings={s} onChange={onChange} />
+                    <div className="st-page" data-page={active}>
+                      <SettingsItemScopeProvider category={activeSection.label} settings={s} onChange={onChange}>
+                        {renderSection(active)}
+                      </SettingsItemScopeProvider>
+                    </div>
+                  </>
+                )}
+              </div>
             </main>
           </div>
         </div>

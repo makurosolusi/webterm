@@ -1,17 +1,134 @@
-/* Field anatomy (settings overhaul): modified dot, visible Reset, inline save status. */
+/* Settings row anatomy (SettingsFieldRow.tsx) and the grouped card (SettingsGroup / SettingsAdvanced):
+   text column left, control right, hairline dividers between rows; one modified indicator (the dot) with
+   a Reset that shows on hover/focus (always on touch); the save status sits on the label line. */
 
+/* ---------------------------------------------------------------- the row */
+.st-field {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 24px;
+  row-gap: 8px;
+  margin: 0;
+  padding: var(--st-item-padding, 10px 14px);
+}
+
+.st-field-text { min-width: 0; }
+
+.st-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 20px;
+}
+
+.st-category {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-weight: 400;
+  white-space: pre;
+}
+
+.st-label {
+  display: inline;
+  color: var(--vscode-foreground, var(--text));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.st-field-text > .st-hint { margin-top: 2px; }
+
+/* The control column: right-aligned, one width token for selects / comboboxes / sliders. */
+.st-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Wide controls (lists, previews, launch rows): under the text, full row width, left-aligned. */
+.st-field--block { grid-template-columns: minmax(0, 1fr); }
+.st-field--block .st-control {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* Narrow content column: the control drops under the label (macOS / Linear on small widths). */
+@container (max-width: 520px) {
+  .st-field { grid-template-columns: minmax(0, 1fr); }
+  .st-control { justify-content: flex-start; }
+}
+
+/* A row straight on the page (no card yet) lines up with the page title. */
+.st-page > .st-field { padding-inline: 2px; }
+
+/* Rows in a page without cards yet, in a card, or in Advanced: a hairline between consecutive rows. */
+.st-page > .st-field + .st-field,
+.st-group-card > .st-field + .st-field,
+.st-group-card > * + .st-field,
+.st-group-card > .st-field + * {
+  border-top: 1px solid var(--st-card-border);
+}
+
+/* ------------------------------------------------------------- the group */
+.st-group + .st-group,
+.st-group + .st-field,
+.st-field + .st-group { margin-top: 8px; }
+.st-group-desc { margin: -2px 2px 6px; color: var(--vscode-descriptionForeground, var(--muted)); font-size: 12px; }
+
+.st-group-card {
+  overflow: hidden;
+  border: 1px solid var(--st-card-border);
+  border-radius: var(--st-card-radius, 8px);
+  background: var(--st-card-background);
+}
+
+/* ------------------------------------------------------------- advanced */
+/* The page's Advanced collapsible: same inset as the rows, codicon chevron instead of the browser triangle. */
+.st-advanced { margin-top: 16px; }
+
+.st-advanced-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-bottom: 6px;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--vscode-descriptionForeground, var(--text-muted));
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.st-advanced-summary::-webkit-details-marker { display: none; }
+.st-advanced-summary:hover { color: var(--vscode-foreground, var(--text)); }
+.st-advanced-summary:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
+.st-advanced-chevron { font-size: 14px; transition: transform 120ms ease; }
+.st-advanced[open] > .st-advanced-summary .st-advanced-chevron { transform: rotate(90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .st-advanced-chevron { transition: none; }
+}
+
+/* ------------------------------------------------------ modified + reset */
 .st-modified-dot {
   display: inline-block;
   flex: none;
   width: 6px;
   height: 6px;
-  margin-left: 2px;
   border-radius: 50%;
   background: var(--st-modified-indicator, var(--vscode-focusBorder, var(--accent)));
 }
 
 .st-reset {
-  margin-left: auto;
   padding: 0 6px;
   border: 0;
   border-radius: 4px;
@@ -20,11 +137,18 @@
   font-size: 12px;
   line-height: 20px;
   cursor: pointer;
+  opacity: 0;
 }
 
-.st-reset:hover {
-  background: var(--vscode-toolbar-hoverBackground, var(--raised));
+.st-field:hover .st-reset,
+.st-field:focus-within .st-reset,
+.st-reset:focus-visible { opacity: 1; }
+
+@media (hover: none) {
+  .st-reset { opacity: 1; }
 }
+
+.st-reset:hover { background: var(--vscode-toolbar-hoverBackground, var(--raised)); }
 
 .st-reset:focus-visible,
 .st-save-retry:focus-visible {
@@ -32,14 +156,27 @@
   outline-offset: 1px;
 }
 
+/* ------------------------------------------------------------ save status */
 .st-save {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--vscode-descriptionForeground, var(--muted));
   font-size: 12px;
-  line-height: 18px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.st-save[data-save='saved'] { animation: st-save-fade 3s ease-in forwards; }
+
+@keyframes st-save-fade {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-save[data-save='saved'] { animation: none; }
 }
 
 .st-save--error {

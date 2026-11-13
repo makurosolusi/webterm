@@ -1,6 +1,8 @@
 // Settings fields that avoid typing: stepper, slider, number select, and the combobox field (presets
-// + remembered values) for what still needs free input. Bounds come from `SETTING_RANGES`.
-import type { Settings } from '../shared/settings'
+// + remembered values) for what still needs free input. Bounds come from `SETTING_RANGES`. Numbers show
+// through one formatter (`format`, default: the step's decimals plus `unit`), so a value, its bounds
+// and its screen-reader text read the same.
+import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { SETTING_RANGES, type RangedKey } from '../shared/settings.ranges'
 import { SettingsSelect } from './SettingsControls'
 import { Field, lockReasonId } from './SettingsFields'
@@ -18,11 +20,22 @@ const roundTo = (v: number, step: number): number => {
 
 const bounds = (range: RangedKey) => SETTING_RANGES[range]
 
+/** Value text: `step` decimals ("1.0" for step 0.1) and the unit ("2 px"), unless the caller formats. */
+export function formatNumber(v: number, step: number, unit?: string): string {
+  const decimals = (String(step).split('.')[1] ?? '').length
+  const text = v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+  return unit ? `${text} ${unit}` : text
+}
+
+interface NumberFormat { unit?: string; format?(v: number): string }
+const formatter = (step: number, { unit, format }: NumberFormat) => (v: number): string => format?.(v) ?? formatNumber(v, step, unit)
+
 /** − value + buttons; arrow keys on the value step too. */
-export function StepperField({ id, label, hint, setting, range, value, unit, onChange, lock }: Base & {
-  range: RangedKey; value: number; unit?: string; onChange(v: number): void; lock?: Lock
+export function StepperField({ id, label, hint, setting, range, value, unit, format, onChange, lock }: Base & NumberFormat & {
+  range: RangedKey; value: number; onChange(v: number): void; lock?: Lock
 }): React.JSX.Element | null {
   const { min, max, step } = bounds(range)
+  const show = formatter(step, { format })
   const set = (v: number): void => { const n = roundTo(Math.min(max, Math.max(min, v)), step); if (!lock && n !== value) onChange(n) }
   const describedBy = lock ? lockReasonId(id) : undefined
   return (
@@ -30,13 +43,13 @@ export function StepperField({ id, label, hint, setting, range, value, unit, onC
       <span className="st-stepper" data-control="stepper">
         <button type="button" className="st-button" aria-label={`Decrease ${label}`} aria-describedby={describedBy} disabled={!!lock || value <= min} onClick={() => set(value - step)}>−</button>
         <span id={id} role="spinbutton" tabIndex={0} className="st-stepper-value" aria-label={label} aria-disabled={lock ? true : undefined} aria-describedby={describedBy}
-          aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} aria-valuetext={unit ? `${value} ${unit}` : String(value)}
+          aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} aria-valuetext={formatter(step, { unit, format })(value)}
           onKeyDown={(e) => {
             const d = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 }[e.key]
             if (d !== undefined) { e.preventDefault(); set(value + d) }
             else if (e.key === 'Home') { e.preventDefault(); set(min) }
             else if (e.key === 'End') { e.preventDefault(); set(max) }
-          }}>{value}</span>
+          }}>{show(value)}</span>
         <button type="button" className="st-button" aria-label={`Increase ${label}`} aria-describedby={describedBy} disabled={!!lock || value >= max} onClick={() => set(value + step)}>+</button>
         {unit ? <span className="st-unit">{unit}</span> : null}
       </span>
@@ -44,17 +57,23 @@ export function StepperField({ id, label, hint, setting, range, value, unit, onC
   )
 }
 
-/** Native range input with the current value beside it. */
-export function SliderField({ id, label, hint, setting, range, value, unit, onChange }: Base & {
-  range: RangedKey; value: number; unit?: string; onChange(v: number): void
+/** Native range input: min and max at its ends, a tick at the default, the value in a fixed-width slot. */
+export function SliderField({ id, label, hint, setting, range, value, unit, format, onChange }: Base & NumberFormat & {
+  range: RangedKey; value: number; onChange(v: number): void
 }): React.JSX.Element | null {
   const { min, max, step } = bounds(range)
+  const show = formatter(step, { unit, format })
+  const fallback = setting ? DEFAULT_SETTINGS[setting] : undefined
+  const ticks = typeof fallback === 'number' ? `${id}-ticks` : undefined
   return (
     <Field label={label} hint={hint} htmlFor={id} setting={setting}>
       <span className="st-slider" data-control="slider">
-        <input id={id} type="range" min={min} max={max} step={step} value={value}
+        <span className="st-slider-bound" aria-hidden="true">{show(min)}</span>
+        <input id={id} type="range" min={min} max={max} step={step} value={value} list={ticks} aria-valuetext={show(value)}
           onChange={(e) => onChange(roundTo(Number(e.target.value), step))} />
-        <output htmlFor={id}>{unit ? `${value} ${unit}` : value}</output>
+        {ticks ? <datalist id={ticks}><option value={fallback as number} /></datalist> : null}
+        <span className="st-slider-bound" aria-hidden="true">{show(max)}</span>
+        <output htmlFor={id} className="st-slider-value">{show(value)}</output>
       </span>
     </Field>
   )
