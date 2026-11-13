@@ -40,23 +40,25 @@ function Harness({ query = '' }: { query?: string }) {
 }
 
 const fieldOf = (): HTMLElement => screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
+const on = (): boolean => screen.getByRole('switch', { name: 'Cursor blink' }).getAttribute('aria-checked') === 'true'
 
 describe('settings field save path', () => {
   it('a failed save reverts the value and shows the error at the field with Retry; no toast', async () => {
     render(<Harness />)
-    const box = await screen.findByLabelText('Cursor blink') as HTMLInputElement
-    const before = box.checked
+    const box = await screen.findByRole('switch', { name: 'Cursor blink' })
+    const before = on()
     fireEvent.click(box)
-    expect((screen.getByLabelText('Cursor blink') as HTMLInputElement).checked).toBe(!before) // pending shows at once
+    expect(on()).toBe(!before) // pending shows at once
 
     const alert = await within(fieldOf()).findByRole('alert', {}, { timeout: 2000 })
     expect(alert.textContent).toContain('Could not save: disk full')
-    await waitFor(() => expect((screen.getByLabelText('Cursor blink') as HTMLInputElement).checked).toBe(before)) // reverted
+    expect(alert.closest('.st-title')).toBeTruthy() // on the label line: the row does not grow
+    await waitFor(() => expect(on()).toBe(before)) // reverted
     expect(last?.history.notice).toBeNull()
 
     failPut = false
     fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
-    expect((screen.getByLabelText('Cursor blink') as HTMLInputElement).checked).toBe(!before)
+    expect(on()).toBe(!before)
     await waitFor(() => expect(within(fieldOf()).getByRole('status').textContent).toContain('Saved'), { timeout: 2000 })
     expect(puts).toEqual([{ cursorBlink: !before }])
     expect(last?.history.notice?.kind).toBe('changed') // toast only after the server confirmed
@@ -71,7 +73,7 @@ describe('settings field save path', () => {
     const reset = within(fieldOf()).getByRole('button', { name: 'Reset Setting: Cursor blink' })
     expect(reset.textContent).toBe('Reset')
     fireEvent.click(reset)
-    expect((screen.getByLabelText('Cursor blink') as HTMLInputElement).checked).toBe(DEFAULT_SETTINGS.cursorBlink)
+    expect(on()).toBe(DEFAULT_SETTINGS.cursorBlink)
     expect(within(fieldOf()).queryByText('(Modified)')).toBeNull()
 
     cleanup()

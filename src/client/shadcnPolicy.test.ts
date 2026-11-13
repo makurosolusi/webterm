@@ -33,6 +33,12 @@ const vscodeScreens = new Set([
   // Settings pickers: the combobox (ARIA combobox: native input + listbox) and stepper / slider / number select.
   "src/client/SettingsCombobox.tsx",
   "src/client/SettingsPickerFields.tsx",
+  // Settings shell split out of SettingsPanel/SettingsFields: the shared row (Reset, Retry), the sidebar
+  // (search box, nav items, narrow section select), search result rows and the page header's Reset page.
+  "src/client/SettingsFieldRow.tsx",
+  "src/client/SettingsNav.tsx",
+  "src/client/SettingsSearchResults.tsx",
+  "src/client/SettingsPageHeader.tsx",
   // Sessions sidebar
   "src/client/SessionsFilter.tsx",
   "src/client/SessionsGroupingTabs.tsx",

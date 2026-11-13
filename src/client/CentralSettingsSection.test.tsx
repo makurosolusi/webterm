@@ -243,7 +243,9 @@ describe('Settings › Central Agent', () => {
   it('daily spending limit shows dollars, writes micros, and clears to unlimited', async () => {
     await open()
     const input = screen.getByLabelText('Daily spending limit') as HTMLInputElement
-    await waitFor(() => expect(input.value).toBe('5'))
+    await waitFor(() => expect(input.value).toBe('$5')) // at rest the combobox shows the preset label
+    fireEvent.focus(input)
+    expect(input.value).toBe('5') // the stored amount while editing
     fireEvent.change(input, { target: { value: '2.5' } })
     fireEvent.blur(input)
     await waitFor(() => expect(puts).toEqual([{ set: { [COST_CAP_KEY]: '2500000' }, unset: [] }]))

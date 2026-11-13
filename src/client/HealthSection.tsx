@@ -58,7 +58,7 @@ export function HealthSection(): React.JSX.Element {
         </section>
       ) : null}
       <ToggleField id="st-developerMode" label={HEALTH_TEXT.developerMode} value={developer}
-        hint={HEALTH_TEXT.developerModeHint} onChange={writeDeveloperMode} />
+        hint={HEALTH_TEXT.developerModeHint} savedLocally onChange={writeDeveloperMode} />
     </div>
   )
 }

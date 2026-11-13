@@ -3,10 +3,11 @@
 // The one daily limit is Central's (Settings › Central, data-field central.costLimit); the old separate "Pause all
 // work at $" cap is gone (merged at boot, server cost/costDayCap.ts). Cache and prefix numbers are `CostDetails`,
 // shown in Settings › Developer. Numbers come from GET /api/cost (cost.route.ts); prices are estimates, not a bill.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { openSettingsAt } from './settings.link'
+import { SettingsSegmented } from './SettingsControls'
 import { controlRequest } from './ControlPanel'
 import { effortLabel } from './agentChat/effortPicker'
 import { modelAlias } from './chat/chatCostChip'
@@ -115,30 +116,6 @@ function Groups({ title, rows, total, name }: { title: string; rows: SpendGroup[
 
 type Range = 'today' | 'week'
 const RANGES: readonly { value: Range; label: string }[] = [{ value: 'today', label: COST_TEXT.today }, { value: 'week', label: COST_TEXT.week }]
-const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
-
-/** One segmented control (WAI-ARIA radio group): a single tab stop, arrow keys move and select. */
-function RangeControl({ value, onChange }: { value: Range; onChange: (v: Range) => void }): React.JSX.Element {
-  const group = useRef<HTMLSpanElement>(null)
-  const move = (e: React.KeyboardEvent, i: number): void => {
-    const step = STEP[e.key]
-    if (!step) return
-    e.preventDefault()
-    const next = (i + step + RANGES.length) % RANGES.length
-    onChange(RANGES[next]!.value)
-    group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
-  }
-  return (
-    <span ref={group} role="radiogroup" aria-label={COST_TEXT.period}
-      className="inline-flex gap-0.5 rounded-(--vscode-cornerRadius-small) border border-(--vscode-input-border) p-0.5">
-      {RANGES.map((r, i) => (
-        <Button key={r.value} size="xs" role="radio" aria-checked={r.value === value} tabIndex={r.value === value ? 0 : -1}
-          variant={r.value === value ? 'secondary' : 'ghost'} onClick={() => onChange(r.value)} onKeyDown={(e) => move(e, i)}>{r.label}</Button>
-      ))}
-    </span>
-  )
-}
-
 /** GET /api/cost; `error` = why it failed, in the server's words. */
 function useCost(): { data: CostResponse | null; error: string | null; reload: () => void } {
   const [data, setData] = useState<CostResponse | null>(null)
@@ -168,7 +145,7 @@ export function CostPanel(): React.JSX.Element {
   const s: SpendSummary | undefined = data?.[range]
   return (
     <section aria-label={COST_TEXT.title} data-testid="cost-panel">
-      <RangeControl value={range} onChange={setRange} />
+      <SettingsSegmented<Range> ariaLabel={COST_TEXT.period} value={range} options={RANGES} onChange={setRange} />
       <p className="text-xs opacity-70">{COST_TEXT.intro}</p>
       {loadError ? <p className="text-xs opacity-70">{loadError}</p> : null}
       {!data && !loadError ? <p className="text-xs opacity-70">{COST_TEXT.loading}</p> : null}

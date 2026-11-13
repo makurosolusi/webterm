@@ -1,9 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-// Settings dalam bentuk VS Code Settings editor: sidebar section, baris label-kiri/kontrol-kanan,
-// dan search lintas section. Yang dijaga di sini adalah perilaku yang sudah ada (persistensi lewat
-// `onChange`, keyboard Escape, tambah/hapus agent) plus filter pencarian yang baru.
+// Settings in the macOS System Settings / Linear shape: sidebar (search on top, single-line items),
+// rows with the label left and the control right, booleans as switches, "Reset page…" in the header.
+// Also the behavior that was already there: persistence through `onChange`, Escape, agents add/remove.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type CustomAgent, type Settings } from '../shared/settings'
@@ -33,7 +33,7 @@ function renderPanel(overrides: Partial<Settings> = {}) {
 
 const nav = () => screen.getByRole('navigation', { name: 'Section settings' })
 
-describe('SettingsPanel VS Code layout', () => {
+describe('SettingsPanel layout', () => {
   it('fills the viewport without the shadcn centering utilities (prod minifier drops a CSS translate reset)', () => {
     renderPanel()
 
@@ -44,35 +44,41 @@ describe('SettingsPanel VS Code layout', () => {
     expect(classes).toEqual(expect.arrayContaining(['inset-0', 'translate-x-0', 'translate-y-0']))
   })
 
-  it('renders the search box, section sidebar, and the active section as label/control rows', () => {
+  it('renders the search box inside the sidebar column, single-line nav items, and the page as label/control rows', () => {
     renderPanel()
 
-    expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy()
+    const search = screen.getByRole('searchbox', { name: 'Search settings' })
+    expect(search.closest('.st-sidebar')).toBe(nav().closest('.st-sidebar')) // one column, not a bar over both
     // Developer is hidden outside developer mode (./developerMode). Memory, Automations and Spending moved to the Control panel.
-    const labels = ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'Health']
-    // Accessible name stays the title alone; the description is the item's accessible description.
-    expect(within(nav()).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent)).toEqual(labels)
+    const labels = ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'About this machine']
+    expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels) // the title only, one line
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
     const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
     expect(fontSize.getAttribute('aria-valuenow')).toBe(String(DEFAULT_SETTINGS.fontSize))
-    expect(fontSize.closest('[data-slot="settings-field"]')).toBeTruthy()
+    const row = fontSize.closest('[data-slot="settings-field"]') as HTMLElement
+    // Row anatomy: text column (label + description) first, then the control column.
+    expect([...row.children].slice(0, 2).map((c) => c.className)).toEqual(['st-field-text', 'st-control'])
+    expect(row.querySelector('.st-control')!.contains(fontSize)).toBe(true)
+    expect(row.querySelector('.st-field-text .st-label')?.textContent).toBe('Font size')
+    // The page sits in the centred content column.
+    expect(row.closest('.st-content')).toBeTruthy()
   })
 
-  it('groups the sidebar under General, Agents, Safety and System headings, in that order', () => {
+  it('groups the sidebar under General, Agents and Account & system (no one-item group), in that order', () => {
     renderPanel()
     const groups = within(nav()).getAllByRole('group')
-    expect(groups.map((g) => g.querySelector('.st-nav-group-title')?.textContent)).toEqual(['General', 'Agents', 'Safety', 'System'])
-    const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.querySelector('.st-nav-label')?.textContent))
+    expect(groups.map((g) => g.getAttribute('aria-labelledby') && document.getElementById(g.getAttribute('aria-labelledby')!)?.textContent))
+      .toEqual(['General', 'Agents', 'Account & system'])
+    const byGroup = groups.map((g) => within(g).getAllByRole('button').map((b) => b.textContent))
     expect(byGroup).toEqual([
       ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications'],
-      ['Claude', 'Central'],
-      ['Rules & secrets'],
-      ['Account', 'Features', 'Health'],
+      ['Claude', 'Central', 'Rules & secrets'],
+      ['Account', 'Features', 'About this machine'],
     ])
-    expect(within(groups[2]!).getByRole('button', { name: 'Rules & secrets' }).getAttribute('aria-describedby')).toBe('st-nav-rules-desc')
-    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Safety', 'System'])
+    expect(within(nav()).getByRole('group', { name: 'Account & system' })).toBe(groups[2])
+    expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Account & system'])
     // SETTINGS_SECTIONS is listed in group order, so the sidebar order equals the array order.
     expect(SETTINGS_SECTIONS.map((x) => x.group)).toEqual([...SETTINGS_SECTIONS.map((x) => x.group)].sort((a, b) => SETTINGS_GROUPS.indexOf(a) - SETTINGS_GROUPS.indexOf(b)))
   })
@@ -90,6 +96,12 @@ describe('SettingsPanel VS Code layout', () => {
 })
 
 describe('SettingsPanel section icons and descriptions', () => {
+  it('uses outline icons for Account and About (not the filled account / pulse glyphs)', () => {
+    const icon = (id: string) => SETTINGS_SECTIONS.find((x) => x.id === id)?.icon
+    expect(icon('account')).toBe('person')
+    expect(icon('health')).toBe('info')
+  })
+
   it('gives every section a known codicon and a short description', () => {
     for (const section of SETTINGS_SECTIONS) {
       expect(section.icon, section.id).toMatch(/^[a-z-]+$/)
@@ -98,7 +110,7 @@ describe('SettingsPanel section icons and descriptions', () => {
     }
   })
 
-  it('renders a decorative icon and the description in each nav item', () => {
+  it('renders a decorative icon and only the title in each nav item; the description is in the page header', () => {
     renderPanel()
     const items = within(nav()).getAllByRole('button')
     const listed = SETTINGS_SECTIONS.filter((x) => x.id !== 'developer') // developer mode off
@@ -107,9 +119,10 @@ describe('SettingsPanel section icons and descriptions', () => {
       const icon = items[i]!.querySelector('.codicon')!
       expect(icon.classList).toContain(`codicon-${section.icon}`)
       expect(icon.getAttribute('aria-hidden')).toBe('true')
-      expect(items[i]!.querySelector('.st-nav-desc')?.textContent).toBe(section.description)
-      expect(items[i]!.getAttribute('aria-describedby')).toBe(items[i]!.querySelector('.st-nav-desc')!.id)
+      expect(items[i]!.textContent).toBe(section.label)
+      expect(items[i]!.hasAttribute('aria-describedby')).toBe(false)
     })
+    expect(document.querySelector('.st-section-desc')?.textContent).toBe(SETTINGS_SECTIONS[0].description)
   })
 
   it('shows the same icon, title and description in the section header, for every section id', () => {
@@ -121,7 +134,7 @@ describe('SettingsPanel section icons and descriptions', () => {
       const heading = screen.getByRole('heading', { level: 2, name: section.label })
       expect(heading.querySelector('.codicon')?.classList).toContain(`codicon-${section.icon}`)
       expect(heading.querySelector('.codicon')?.getAttribute('aria-hidden')).toBe('true')
-      expect(heading.parentElement?.querySelector('.st-section-desc')?.textContent).toBe(section.description)
+      expect(heading.closest('.st-section-head')?.querySelector('.st-section-desc')?.textContent).toBe(section.description)
     }
   })
 })
@@ -169,15 +182,16 @@ describe('SettingsPanel item placement', () => {
     for (const section of SETTINGS_SECTIONS) expect(toSectionId(section.id)).toBe(section.id)
   })
 
-  it('Developer shows in the nav only in developer mode (Health switch), and a link opens it anyway', async () => {
+  it('Developer shows in the nav only in developer mode (About this machine switch), and a link opens it anyway', async () => {
     const { resetDeveloperModeCache, writeDeveloperMode } = await import('./developerMode')
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"not_found"}', { status: 404 })))
     resetDeveloperModeCache()
     writeDeveloperMode(false)
     renderPanel()
     expect(within(nav()).queryByRole('button', { name: 'Developer' })).toBeNull()
-    fireEvent.click(within(nav()).getByRole('button', { name: 'Health' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Show developer tools' }))
+    fireEvent.click(within(nav()).getByRole('button', { name: 'About this machine' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Show developer tools' }))
+    expect(screen.getByText('Saved on this browser').closest('[role="status"]')).toBeTruthy() // local pref, said so
     expect(within(nav()).getByRole('button', { name: 'Developer' })).toBeTruthy()
     writeDeveloperMode(false)
     cleanup()
@@ -228,11 +242,13 @@ describe('SettingsPanel persistence', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('toggles a boolean through a native checkbox with the same accessible name', () => {
+  it('toggles a boolean through a switch in the control column, named by the row label', () => {
     const { onChange } = renderPanel()
 
-    const toggle = screen.getByRole('checkbox', { name: 'Cursor blink' }) as HTMLInputElement
-    expect(toggle.checked).toBe(true)
+    const toggle = screen.getByRole('switch', { name: 'Cursor blink' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(toggle.closest('.st-control')).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: 'Cursor blink' })).toBeNull()
     fireEvent.click(toggle)
 
     expect(onChange).toHaveBeenCalledWith({ cursorBlink: false })
@@ -271,12 +287,24 @@ describe('SettingsPanel persistence', () => {
     expect(onChange).toHaveBeenCalledWith({ cursorStyle: 'bar' })
   })
 
-  it('draws checkboxes as a codicon check inside the 18px box', () => {
-    renderPanel()
+  it('one modified indicator per row: the dot, no left bar element; Reset page… resets the page after a confirm', () => {
+    const { onChange } = renderPanel({ cursorBlink: false, fontSize: DEFAULT_SETTINGS.fontSize + 2 })
+    const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
+    expect(field.querySelectorAll('.st-modified-dot')).toHaveLength(1)
 
-    const toggle = screen.getByRole('checkbox', { name: 'Cursor blink' })
-    expect(toggle.nextElementSibling?.className).toBe('st-checkbox-box')
-    expect(toggle.nextElementSibling?.querySelector('.codicon-check')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset page…' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText('Reset 2 settings on Appearance?')).toBeTruthy()
+    expect(dialog.textContent).toContain('Font size')
+    expect(dialog.textContent).toContain('Cursor blink')
+    expect(onChange).not.toHaveBeenCalled() // nothing until confirmed
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reset' }))
+    expect(onChange).toHaveBeenCalledWith({ fontSize: DEFAULT_SETTINGS.fontSize, cursorBlink: DEFAULT_SETTINGS.cursorBlink })
+  })
+
+  it('no Reset page… when the page is at its defaults', () => {
+    renderPanel()
+    expect(screen.queryByRole('button', { name: 'Reset page…' })).toBeNull()
   })
 
   it('lists agents of the Add menu as checkboxes, not toggle chips', () => {

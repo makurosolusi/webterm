@@ -37,22 +37,23 @@ function Harness() {
 async function mount() {
   render(<Harness />)
   await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search settings' })).toBeTruthy())
-  const box = screen.getAllByRole('checkbox')[0] as HTMLInputElement
-  return { box, before: box.checked }
+  const box = screen.getAllByRole('switch')[0]!
+  return { box, before: isOn() }
 }
 
+const isOn = (): boolean => screen.getAllByRole('switch')[0]!.getAttribute('aria-checked') === 'true'
 const z = (el: Element, shift = false) => fireEvent.keyDown(el, { key: shift ? 'Z' : 'z', metaKey: true, shiftKey: shift })
 
 describe('Settings undo', () => {
   it('a change shows "Changed …" with Undo once the server accepted it, and Undo restores the value (and persists it)', async () => {
     const { box, before } = await mount()
     fireEvent.click(box)
-    expect(box.checked).toBe(!before) // the pick shows at once
+    expect(isOn()).toBe(!before) // the pick shows at once
     expect(screen.queryByText(/^Changed /)).toBeNull() // the toast waits for the server
     expect(await screen.findByText(/^Changed /, {}, { timeout: 2000 })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
-    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(before)
+    expect(isOn()).toBe(before)
     expect(await screen.findByText(/^Undid change to /, {}, { timeout: 2000 })).toBeTruthy()
     // The undo goes through the same coalesced PUT as an edit.
     await waitFor(() => expect(puts.length).toBeGreaterThan(0), { timeout: 2000 })
@@ -65,9 +66,9 @@ describe('Settings undo', () => {
     fireEvent.click(box)
     box.focus()
     z(box)
-    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(before)
-    z(screen.getAllByRole('checkbox')[0], true)
-    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(!before)
+    expect(isOn()).toBe(before)
+    z(screen.getAllByRole('switch')[0]!, true)
+    expect(isOn()).toBe(!before)
   })
 
   it('⌘Z in a text field with text is left to the browser', async () => {
@@ -79,7 +80,7 @@ describe('Settings undo', () => {
     act(() => { search.dispatchEvent(ev) })
     expect(ev.defaultPrevented).toBe(false)
     fireEvent.change(search, { target: { value: '' } })
-    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(!before)
+    expect(isOn()).toBe(!before)
   })
 
   it('a change made before the panel opened does not pop a toast; the next one does', () => {

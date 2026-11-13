@@ -2,17 +2,18 @@
 // field to the server: the settings row (useSettings), env-backed rows (centralSettings.env), check-ins.
 // Keyed, not one slot: two fields saving at once must not clear each other's status. A newer save of a key
 // supersedes an older one, so a late reply never overwrites the status of the edit the user made after it.
-import { useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 export type FieldSave =
   | { status: 'saving' }
-  | { status: 'saved' }
+  /** `where: 'browser'`: kept in this browser only (localStorage prefs), said so in the status. */
+  | { status: 'saved'; where?: 'browser' }
   | { status: 'error'; message: string; retry(): void }
 
 export type SaveResult = { ok: true } | { ok: false; message: string; retry(): void }
 
-/** How long "Saved ✓" stays next to a field. */
-export const SAVED_SHOW_MS = 2000
+/** How long "Saved ✓" stays next to a field: long enough to notice after looking back from the control. */
+export const SAVED_SHOW_MS = 3000
 
 export interface SaveStates {
   get(key: string): FieldSave | undefined
@@ -65,4 +66,18 @@ export function useFieldSave(store: SaveStates | undefined, key: string | undefi
 export async function responseError(res: Response, what: string): Promise<Error> {
   const body = (await res.json().catch(() => null)) as { error?: unknown } | null
   return new Error(typeof body?.error === 'string' && body.error ? body.error : `${what} -> ${res.status}`)
+}
+
+/** Save state of a row stored in this browser (no request): `mark()` after each change shows
+ *  "Saved on this browser" for `SAVED_SHOW_MS`. */
+export function useLocalFieldSave(): [FieldSave | undefined, () => void] {
+  const [save, setSave] = useState<FieldSave | undefined>()
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const mark = (): void => {
+    window.clearTimeout(timer.current)
+    setSave({ status: 'saved', where: 'browser' })
+    timer.current = window.setTimeout(() => setSave(undefined), SAVED_SHOW_MS)
+  }
+  return [save, mark]
 }
