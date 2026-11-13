@@ -1,6 +1,10 @@
-// Dua kontrol bentuk VS Code yang dipakai semua section Settings: dropdown (`<select>` native,
-// persis yang dipakai Settings editor VS Code) dan checkbox 18x18. Native dipertahankan supaya
-// label association, keyboard, dan popup OS tidak perlu ditiru ulang.
+// Shared controls of every Settings page: dropdown (native `<select>`, so label association, keyboard and
+// the OS popup need no re-implementation), checkbox (multi-select lists only; on/off settings use the
+// shadcn Switch through ToggleField), segmented choice (WAI-ARIA radio group), the grouped card a page
+// is built from (macOS System Settings / Linear: heading above a bordered card, divider between rows),
+// and the page's one "Advanced" collapsible.
+import { Children, useId, useRef } from 'react'
+import './settings-controls.css'
 
 const SELECT_TEXT = { notInList: (value: string): string => `${value} (not in list)` } as const
 
@@ -15,7 +19,7 @@ interface SelectProps<T extends string> {
   describedBy?: string
 }
 
-/** Satu-satunya gaya dropdown di Settings: 26px, token dropdown, chevron codicon, teks panjang di-ellipsis. */
+/** The one dropdown style in Settings: control height, dropdown tokens, codicon chevron, long text ellipsised. */
 export function SettingsSelect<T extends string>({
   id,
   value,
@@ -47,7 +51,7 @@ export function SettingsSelect<T extends string>({
   )
 }
 
-/** Checkbox VS Code: input native transparan di atas kotak gambar dengan centang codicon. */
+/** Checkbox for multi-select lists (Add-menu agents): a transparent native input over a drawn box. */
 export function SettingsCheckbox({
   id,
   checked,
@@ -82,12 +86,80 @@ export function SettingsCheckbox({
   )
 }
 
-/** The one "Advanced" disclosure of a page (closed by default; a link to a field inside opens it). */
-export function SettingsAdvanced({ children }: { children: React.ReactNode }): React.JSX.Element {
+export interface SegmentedOption<T extends string> {
+  value: T
+  label: string
+  /** A small decorative mark before the label (cursor shape █ ▏ ▁, a theme swatch). */
+  glyph?: React.ReactNode
+}
+
+const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
+
+/** One-of-few choice (2-4 options): a radio group with a single tab stop; arrow keys move and select. */
+export function SettingsSegmented<T extends string>({ id, value, options, onChange, ariaLabel, disabled, describedBy }: {
+  id?: string
+  value: T
+  options: readonly SegmentedOption<T>[]
+  onChange(value: T): void
+  ariaLabel?: string
+  disabled?: boolean
+  /** id of the line that says why it is disabled (Field `lock`). */
+  describedBy?: string
+}): React.JSX.Element {
+  const group = useRef<HTMLSpanElement>(null)
+  const selected = Math.max(0, options.findIndex((o) => o.value === value))
+  const move = (e: React.KeyboardEvent, i: number): void => {
+    const step = STEP[e.key]
+    if (!step) return
+    e.preventDefault()
+    const next = (i + step + options.length) % options.length
+    onChange(options[next]!.value)
+    group.current?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus()
+  }
+  return (
+    <span ref={group} id={id} role="radiogroup" aria-label={ariaLabel} aria-describedby={describedBy}
+      aria-disabled={disabled || undefined} className="st-seg" data-control="segmented">
+      {options.map((o, i) => (
+        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} tabIndex={i === selected ? 0 : -1}
+          className={'st-seg-option' + (o.value === value ? ' is-active' : '')} disabled={disabled}
+          onClick={() => { if (o.value !== value) onChange(o.value) }} onKeyDown={(e) => move(e, i)}>
+          {o.glyph ? <span className="st-seg-glyph" aria-hidden="true">{o.glyph}</span> : null}
+          {o.label}
+        </button>
+      ))}
+    </span>
+  )
+}
+
+/** A titled group of rows: secondary heading above a bordered card, hairline dividers between rows. */
+export function SettingsGroup({ title, description, children }: {
+  title?: string
+  description?: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  const headingId = useId()
+  return (
+    <section className="st-group" data-slot="settings-group" aria-labelledby={title ? headingId : undefined}>
+      {title ? <h3 id={headingId} className="st-group-title">{title}</h3> : null}
+      {description ? <p className="st-group-desc">{description}</p> : null}
+      <div className="st-group-card">{children}</div>
+    </section>
+  )
+}
+
+export const ADVANCED_SUMMARY = (count: number): string => (count ? `Advanced · ${count}` : 'Advanced')
+
+/** The one "Advanced" collapsible of a page (closed by default; a link to a field inside opens it). A
+ *  `<details>` so the reveal path opens it; the browser triangle is replaced by a codicon chevron. */
+export function SettingsAdvanced({ count, children }: { count?: number; children: React.ReactNode }): React.JSX.Element {
+  const n = count ?? Children.toArray(children).length
   return (
     <details className="st-advanced" data-slot="settings-advanced">
-      <summary>Advanced</summary>
-      {children}
+      <summary className="st-advanced-summary">
+        <span className="codicon codicon-chevron-right st-advanced-chevron" aria-hidden="true" />
+        {ADVANCED_SUMMARY(n)}
+      </summary>
+      <div className="st-group-card">{children}</div>
     </details>
   )
 }

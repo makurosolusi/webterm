@@ -70,10 +70,10 @@ export function NotificationsSection(): React.JSX.Element {
 
   return (
     <div data-testid="notifications-section">
-      <ToggleField id="st-osNotify" label={NOTIFY_TEXT.desktop} value={on} hint={NOTIFY_TEXT.desktopHint} lock={lock} onChange={onDesktop} />
+      <ToggleField id="st-osNotify" label={NOTIFY_TEXT.desktop} value={on} hint={NOTIFY_TEXT.desktopHint} lock={lock} savedLocally onChange={onDesktop} />
       {refused ? <p role="alert" className="st-hint">{NOTIFY_TEXT.refused}</p> : null}
       <ToggleField id="st-osNotifySound" label={NOTIFY_TEXT.sound} value={prefs.sound}
-        hint={NOTIFY_TEXT.soundHint} onChange={(v) => writeNotifyPrefs({ sound: v })} />
+        hint={NOTIFY_TEXT.soundHint} savedLocally onChange={(v) => writeNotifyPrefs({ sound: v })} />
     </div>
   )
 }

@@ -4,10 +4,14 @@
   position: relative;
   display: inline-flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 420px;
+  width: var(--st-control-width, 240px);
+  max-width: 100%;
   min-width: 0;
 }
+
+/* Full-width rows (Field `block`) let inputs and comboboxes use the whole row. */
+.st-field--block .st-combo,
+.st-field--block .st-control > .st-input { width: 100%; }
 
 .st-combo-box {
   position: relative;
@@ -15,6 +19,7 @@
 }
 
 .st-combo-input.st-input {
+  width: 100%;
   max-width: none;
   padding-right: 26px;
 }
@@ -142,17 +147,26 @@
 .st-slider {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 320px;
+  gap: 6px;
+  width: var(--st-control-width, 240px);
   max-width: 100%;
 }
 
 .st-slider input[type='range'] {
   flex: 1;
+  min-width: 0;
   accent-color: var(--vscode-focusBorder, var(--accent));
 }
 
-.st-slider output {
-  min-width: 48px;
+.st-slider-bound {
+  color: var(--vscode-descriptionForeground, var(--muted));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fixed-width value slot: the row does not jump while dragging. */
+.st-slider-value {
+  min-width: 44px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }

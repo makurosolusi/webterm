@@ -3,6 +3,9 @@
 // (w3.org/WAI/ARIA/apg/patterns/combobox, "list autocomplete"). Built here rather than on
 // vscode-single-select `creatable`: that list lives in a shadow root with no per-option remove
 // button, and it exposes no live draft for previews such as the launch profile's "Will run".
+// At rest the box shows the human label of the stored value (the matching preset's label, else
+// `format(value)`), like macOS and Raycast; the raw value appears only while the box has focus.
+// Not for `mono` boxes (commands, paths, ids), where the raw text is what the user needs to see.
 import { useEffect, useId, useState, type Ref } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { forgetInput, rememberInput, useInputHistory } from './inputHistory.store'
@@ -33,6 +36,10 @@ export interface SettingsComboboxProps {
   id?: string
   ariaLabel?: string
   mono?: boolean
+  /** Font list: each option is drawn in its own typeface (`fontFamily: value`). */
+  fontPreview?: boolean
+  /** Text shown at rest for a value with no preset label (e.g. "25,000 lines"). */
+  format?(value: string): string
   inputRef?: Ref<HTMLInputElement>
 }
 
@@ -46,7 +53,7 @@ export const COMBO_TEXT = {
 }
 
 export function SettingsCombobox({
-  fieldId, value, onCommit, presets, remember = true, trim = true, validate, onDraft, error: outerError, maxLength, placeholder, disabled, id, ariaLabel, mono, inputRef,
+  fieldId, value, onCommit, presets, remember = true, trim = true, validate, onDraft, error: outerError, maxLength, placeholder, disabled, id, ariaLabel, mono, fontPreview, format, inputRef,
 }: SettingsComboboxProps): React.JSX.Element {
   const uid = useId()
   const inputId = id ?? `combo-${uid}`
@@ -56,6 +63,7 @@ export function SettingsCombobox({
   const [filter, setFilter] = useState(false)
   const [active, setActive] = useState(-1)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
   const history = useInputHistory(fieldId)
   useEffect(() => { setDraft(value); setError(null) }, [value])
 
@@ -68,6 +76,10 @@ export function SettingsCombobox({
     ...recent.filter(hit).map((v) => ({ key: `r:${v}`, value: v, label: v, recent: true })),
   ]
   const shown = open && items.length > 0
+  // A `mono` box holds code-like text (command, path, capability, cron) whose raw form is the meaning:
+  // it keeps showing the raw value. A font list (`fontPreview`) still shows the family name.
+  const labelled = !mono || fontPreview
+  const atRest = labelled ? presets.find((p) => p.value === draft)?.label ?? (draft && format ? format(draft) : draft) : draft
   const shownError = error ?? outerError
 
   const show = (): void => {
@@ -124,12 +136,13 @@ export function SettingsCombobox({
           data-field-id={fieldId}
           autoComplete="off"
           spellCheck={false}
-          value={draft}
+          value={editing ? draft : atRest}
           placeholder={placeholder}
           disabled={disabled}
-          onChange={(e) => { setText(e.target.value); setFilter(true); setActive(-1); show() }}
-          onKeyDown={onKeyDown}
-          onBlur={() => { if (open || draft !== value) commit(draft) }}
+          onFocus={() => setEditing(true)}
+          onChange={(e) => { setEditing(true); setText(e.target.value); setFilter(true); setActive(-1); show() }}
+          onKeyDown={(e) => { setEditing(true); onKeyDown(e) }}
+          onBlur={() => { setEditing(false); if (open || draft !== value) commit(draft) }}
         />
         <IconTooltip label={COMBO_TEXT.open}>
           <button type="button" className="st-combo-toggle" tabIndex={-1} aria-label={COMBO_TEXT.open} disabled={disabled}
@@ -153,8 +166,8 @@ export function SettingsCombobox({
                 <div key={it.key} id={`${listId}-${i}`} role="option" aria-selected={i === active}
                   className={'st-combo-option' + (i === active ? ' is-active' : '')}
                   onClick={() => { setText(it.value); commit(it.value) }}>
-                  <span className={'st-combo-label' + (mono ? ' st-mono' : '')}>{it.label}</span>
-                  {it.label !== it.value ? <span className="st-combo-value st-mono">{it.value}</span> : null}
+                  <span className={'st-combo-label' + (mono ? ' st-mono' : '')} style={fontPreview ? { fontFamily: it.value } : undefined}>{it.label}</span>
+                  {it.label !== it.value && !fontPreview ? <span className="st-combo-value st-mono">{it.value}</span> : null}
                   {it.recent ? (
                     <IconTooltip label={COMBO_TEXT.remove(it.value)}>
                       <button type="button" className="st-combo-remove" tabIndex={-1} aria-label={COMBO_TEXT.remove(it.value)}

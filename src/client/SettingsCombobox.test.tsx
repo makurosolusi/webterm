@@ -51,7 +51,9 @@ describe('SettingsCombobox', () => {
     expect(within(groups[1]!).getByRole('option').textContent).toBe('typed-before')
     fireEvent.click(within(list).getByRole('option', { name: /Alpha/ }))
     expect(onCommit).toHaveBeenCalledWith('a')
-    expect(input.value).toBe('a')
+    expect(input.value).toBe('Alpha') // at rest the box shows the preset's label, not the raw value
+    fireEvent.focus(input)
+    expect(input.value).toBe('a') // editing shows what is stored
     await flush()
     expect(puts).toEqual([])
   })
@@ -138,5 +140,22 @@ describe('SettingsCombobox', () => {
     expect(onCommit).toHaveBeenCalledWith('early')
     await flush()
     expect(puts).toEqual([])
+  })
+
+  it('at rest shows format(value) for a value with no preset; font options draw in their own face', () => {
+    const { input, open } = setup({ value: '25000', format: (v: string) => `${Number(v).toLocaleString('en-US')} lines`, fontPreview: true })
+    expect(input.value).toBe('25,000 lines')
+    fireEvent.focus(input)
+    expect(input.value).toBe('25000')
+    fireEvent.blur(input)
+    expect(input.value).toBe('25,000 lines')
+    const option = within(open()).getByRole('option', { name: /Alpha/ })
+    expect((option.querySelector('.st-combo-label') as HTMLElement).style.fontFamily).toBe('a')
+    expect(option.querySelector('.st-combo-value')).toBeNull() // the raw stack is not repeated beside the face
+  })
+
+  it('a mono box (command, path, id) keeps showing the raw value at rest', () => {
+    const { input } = setup({ value: 'a', mono: true })
+    expect(input.value).toBe('a')
   })
 })

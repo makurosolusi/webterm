@@ -132,7 +132,7 @@ export function ImageControls({ bg, onChange, onUpload, onRemove, missing, lowCo
         <SettingsSelect id="cbg-fit" value={bg.imageFit} options={CANVAS_IMAGE_FITS.map((f) => ({ value: f, label: FIT_LABELS[f] }))}
           onChange={(imageFit) => onChange({ imageFit })} />
       </Field>
-      <Field label="Gradient overlay" htmlFor="cbg-overlay" hint="Tint the image with the gradient below." inline>
+      <Field label="Gradient overlay" htmlFor="cbg-overlay" hint="Tint the image with the gradient below.">
         <SettingsCheckbox id="cbg-overlay" checked={bg.imageGradientOverlay} onChange={(imageGradientOverlay) => onChange({ imageGradientOverlay })} />
       </Field>
       {bg.imageGradientOverlay && <GradientControls bg={bg} onChange={onChange} />}

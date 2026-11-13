@@ -218,14 +218,14 @@ describe('Settings › Notifications', () => {
     const { readNotifyPrefs } = await load()
     const { NotificationsSection, NOTIFY_TEXT } = await import('./osNotify.settings')
     render(<NotificationsSection />)
-    const toggle = screen.getByLabelText('Desktop notifications') as HTMLInputElement
-    expect(toggle.checked).toBe(false) // stored "on" but never granted: shown as it really is
+    const toggle = screen.getByRole('switch', { name: 'Desktop notifications' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false') // stored "on" but never granted: shown as it really is
     fireEvent.click(toggle)
     expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(readNotifyPrefs().enabled).toBe(false))
     // Refused: locked, with how to allow it.
     expect(await screen.findByText(NOTIFY_TEXT.blocked)).toBeTruthy()
-    expect((screen.getByLabelText('Desktop notifications') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('switch', { name: 'Desktop notifications' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('granted: the switch is the saved choice; sound is its own switch', async () => {
@@ -234,10 +234,11 @@ describe('Settings › Notifications', () => {
     const { readNotifyPrefs } = await load()
     const { NotificationsSection } = await import('./osNotify.settings')
     render(<NotificationsSection />)
-    const toggle = screen.getByLabelText('Desktop notifications') as HTMLInputElement
-    expect(toggle.checked).toBe(true)
+    const toggle = screen.getByRole('switch', { name: 'Desktop notifications' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(toggle)
     expect(readNotifyPrefs().enabled).toBe(false)
+    expect(screen.getByText('Saved on this browser').closest('[role="status"]')).toBeTruthy() // stored locally, said so
     fireEvent.click(screen.getByLabelText('Notification sound')) // beforeEach stores sound off
     expect(readNotifyPrefs().sound).toBe(true)
     expect(screen.queryByText(/Mute notifications:/)).toBeNull() // per-workspace mute is in the workspace menu

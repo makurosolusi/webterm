@@ -74,10 +74,10 @@ describe('HealthSection', () => {
     await waitFor(() => expect(within(row).getByText('Fixed: Agent skills and house rules is OK now')).toBeTruthy())
   })
 
-  it('an old `control` deep link opens Health', async () => {
+  it('an old `control` deep link opens About this machine (the Health page, renamed)', async () => {
     stub(false)
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={() => {}} onClose={() => {}} initialSection="control" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Health' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 2, name: 'About this machine' })).toBeTruthy()
     expect(await screen.findByTestId('health-section')).toBeTruthy()
   })
 })
