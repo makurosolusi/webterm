@@ -7,21 +7,25 @@
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
 import { openSetup } from './setup/setup.open'
+import { isMacPlatform } from './terminalKeys.platform'
+
+// Chrome's back/forward: ⌘[ / ⌘] on macOS, Alt+Left / Alt+Right elsewhere (`browser.keys.ts`).
+const IS_MAC = isMacPlatform()
 
 export const FIXED_COMMANDS: Command[] = [
-  { id: 'editor.save', label: 'File: Save (editor node)', defaultKey: 'Mod+S', scope: 'editor', fixed: true },
+  { id: 'editor.save', label: 'File: Save', defaultKey: 'Mod+S', scope: 'editor', when: 'Editor node focused', fixed: true },
   { id: 'terminal.newline', label: 'Terminal: Insert Newline Without Sending', defaultKey: 'Shift+Enter', scope: 'terminal', fixed: true },
-  { id: 'browser.focusUrl', label: 'Browser: Focus Address Bar (focused browser node)', defaultKey: 'Mod+L', scope: 'browser', fixed: true },
+  { id: 'browser.focusUrl', label: 'Browser: Focus Address Bar', defaultKey: 'Mod+L', scope: 'browser', fixed: true },
   { id: 'browser.reload', label: 'Browser: Reload', defaultKey: 'Mod+R', scope: 'browser', fixed: true },
   { id: 'browser.hardReload', label: 'Browser: Hard Reload', defaultKey: 'Mod+Shift+R', scope: 'browser', fixed: true },
-  { id: 'browser.back', label: 'Browser: Back (Alt+Left on Windows/Linux)', defaultKey: 'Mod+[', scope: 'browser', fixed: true },
-  { id: 'browser.forward', label: 'Browser: Forward (Alt+Right on Windows/Linux)', defaultKey: 'Mod+]', scope: 'browser', fixed: true },
+  { id: 'browser.back', label: 'Browser: Back', defaultKey: IS_MAC ? 'Mod+[' : 'Alt+ArrowLeft', scope: 'browser', fixed: true },
+  { id: 'browser.forward', label: 'Browser: Forward', defaultKey: IS_MAC ? 'Mod+]' : 'Alt+ArrowRight', scope: 'browser', fixed: true },
   { id: 'browser.zoomIn', label: 'Browser: Zoom In Page', defaultKey: 'Mod+=', scope: 'browser', fixed: true },
   { id: 'browser.zoomOut', label: 'Browser: Zoom Out Page', defaultKey: 'Mod+-', scope: 'browser', fixed: true },
   { id: 'browser.zoomReset', label: 'Browser: Reset Page Zoom', defaultKey: 'Mod+0', scope: 'browser', fixed: true },
   { id: 'browser.zoomPinch', label: 'Browser: Zoom Page', gesture: 'Ctrl+scroll or pinch', scope: 'browser', fixed: true },
-  { id: 'browser.stop', label: 'Browser: Stop Loading (while loading)', defaultKey: 'Escape', scope: 'browser', fixed: true },
-  { id: 'files.quickOpen', label: 'Files: Go to File in This Folder (focused Files node)', defaultKey: 'Mod+P', scope: 'files', fixed: true },
+  { id: 'browser.stop', label: 'Browser: Stop Loading', defaultKey: 'Escape', scope: 'browser', when: 'Browser node loading a page', fixed: true },
+  { id: 'files.quickOpen', label: 'Files: Go to File in This Folder', defaultKey: 'Mod+P', scope: 'files', when: 'Files node focused', fixed: true },
   // Escape hatch out of a chrome-less screen: fixed, so no setting or rebinding can lock the user in.
   { id: 'view.cleanView', label: 'View: Toggle Clean View', defaultKey: 'Mod+.', fixed: true, hidden: true },
   { id: 'canvas.deleteSelection', label: 'Canvas: Delete Selected Nodes or Edges', defaultKey: 'Backspace', scope: 'canvas', fixed: true },

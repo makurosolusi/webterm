@@ -41,6 +41,10 @@ describe('bindings and conflicts', () => {
     expect(effectiveKey(a, { a: 'mod+shift+k' })).toBe('Mod+Shift+K')
     expect(effectiveKey(a, { a: null })).toBeUndefined()
     expect(effectiveKey(editorSave, { save: 'Mod+X' })).toBe('Mod+S')
+    // A per-instance palette entry: a stale override can never bind it (nor clash with it).
+    const perWs: Command = { id: 'ws.1', label: 'Agents: Continue in A', bindable: false, run: () => {} }
+    expect(effectiveKey(perWs, { 'ws.1': 'Mod+K' })).toBeUndefined()
+    expect(findConflicts([a, perWs], { 'ws.1': 'Mod+K' }).size).toBe(0)
   })
 
   it('flags two commands on one chord in the same scope, not across scopes', () => {
