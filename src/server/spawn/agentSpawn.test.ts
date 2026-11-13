@@ -149,6 +149,16 @@ describe('agent.spawn headless mode', () => {
     expect(r.spawner.childrenOf('central')).toEqual([])
   })
 
+  it('a rejected exec `done` is logged and frees the child, never an unhandled rejection', async () => {
+    const r = rig({ exec: () => ({ pid: 2, done: Promise.reject(new Error('exec runner broke')), tail: () => '', kill: () => {} }) })
+    const res = await r.spawner.spawn({ door: 'central', mode: 'headless', parent: 'central', cwd: '/tmp/wt', prompt: 'do it' })
+    expect(res.ok).toBe(true)
+    await new Promise((res2) => setTimeout(res2, 0))
+    expect(r.events.map((e) => e.kind)).toEqual(['agent.spawn', 'agent.exit'])
+    expect(r.events[1]!.payload).toMatchObject({ code: null, reason: 'error' })
+    expect(r.spawner.childrenOf('central')).toEqual([])
+  })
+
   it('uses the door argv when given (custom headless kinds)', async () => {
     const fx = fakeExec()
     const r = rig({ exec: fx.exec })

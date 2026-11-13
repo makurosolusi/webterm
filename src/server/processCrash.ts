@@ -11,9 +11,14 @@ import type { Logger } from './logs'
 /** Exit status for a crash caused by an unhandled rejection (Node's default is also 1). */
 export const UNHANDLED_REJECTION_EXIT_CODE = 1
 
-/** Build the `unhandledRejection` listener: log with context, then exit non-zero. */
+/**
+ * Build the `unhandledRejection` listener: log with context, flush the log to disk, then exit non-zero.
+ * The flush matters as in `onUncaughtExceptionMonitor`: under Electrobun the exit is native and skips
+ * the `exit` hook, so a buffered line (the cause) would be lost.
+ */
 export function onUnhandledRejection(
   log: Pick<Logger, 'error'>,
+  flush: () => void,
   exit: (code: number) => void = (code) => process.exit(code)
 ): (reason: unknown) => void {
   return (reason) => {
@@ -22,6 +27,7 @@ export function onUnhandledRejection(
       exitCode: UNHANDLED_REJECTION_EXIT_CODE,
       stack: reason instanceof Error ? reason.stack : undefined,
     })
+    flush()
     exit(UNHANDLED_REJECTION_EXIT_CODE)
   }
 }

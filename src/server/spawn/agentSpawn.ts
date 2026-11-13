@@ -17,6 +17,7 @@ import { applyProviderEnv, type ProviderEnv } from '../claudeProvider/claudeProv
 import { activeProviderEnv } from '../claudeProvider/claudeProvider.store'
 import { type ExecHandle, type ExecSpec, startExec } from '../central/agents/execRunner'
 import { eventBus } from '../events/eventBus'
+import { createLogger } from '../logs'
 import { recordEvent } from '../events/producers'
 import type { AppendEventInput } from '../events/eventModel'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
@@ -27,6 +28,8 @@ import { AGENT_SPAWN_CAPABILITY, type AgentSpawnMode } from './agentSpawn.capabi
 import { resolveClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import type { ModelPick } from '../models/modelLadder'
 import { defaultModelEnv, modelRequest, type ModelEnv } from '../models/modelRequest'
+
+const log = createLogger('spawn')
 
 /** Deepest allowed generation: root (0) -> its agents (1) -> their sub-agents (2). */
 export const SPAWN_MAX_DEPTH_DEFAULT = 2
@@ -193,7 +196,12 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
     register(req.parent, childId)
     // Rule 12: ids, kind and shape only; never the prompt, cwd or argv.
     record({ kind: 'agent.spawn', source: 'spawn', actor: req.parent, subject: childId, nodeId, workspaceId: req.workspaceId ?? null, trust: 'trusted', payload: { kind, mode: req.mode, door: req.door, depth, name } })
-    void handle?.done.then((o) => exited(childId, o.exitCode, o.timedOut ? 'timeout' : 'exit'))
+    void handle?.done.then((o) => exited(childId, o.exitCode, o.timedOut ? 'timeout' : 'exit')).catch((err: unknown) => {
+      // A rejected `done` (or a failing exit record) must not become an unhandled rejection, which exits
+      // the server; the child is freed so it stops counting against its parent's cap.
+      log.warn('agent.spawn.done_failed', `headless child ${childId} ended with an error: ${err instanceof Error ? err.message : String(err)}`, { childId, kind })
+      exited(childId, null, 'error')
+    })
     return { ok: true, childId, nodeId, depth, name, ...(handle ? { handle } : {}) }
   }
 

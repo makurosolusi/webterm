@@ -4,21 +4,18 @@ import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { onUncaughtExceptionMonitor, onUnhandledRejection, UNHANDLED_REJECTION_EXIT_CODE } from './processCrash'
 
-test('the handler logs the cause and exits with code 1', () => {
-  const lines: string[] = []
-  const codes: number[] = []
-  const handler = onUnhandledRejection({ error: (event, message) => void lines.push(`${event} ${message}`) }, (c) => void codes.push(c))
+test('the handler logs the cause, flushes the log, then exits with code 1', () => {
+  const steps: string[] = []
+  const handler = onUnhandledRejection({ error: (event, message) => void steps.push(`${event} ${message}`) }, () => void steps.push('flush'), (c) => void steps.push(`exit ${c}`))
   handler(new Error('ENOENT asset'))
-  expect(codes).toEqual([UNHANDLED_REJECTION_EXIT_CODE])
-  expect(lines[0]).toContain('server.unhandled_rejection')
-  expect(lines[0]).toContain('Error: ENOENT asset')
+  expect(steps).toEqual(['server.unhandled_rejection Unhandled promise rejection, exiting: Error: ENOENT asset', 'flush', `exit ${UNHANDLED_REJECTION_EXIT_CODE}`])
 })
 
 test('a real process with the handler installed exits 1 and the exit hook sees 1', () => {
   const mod = join(import.meta.dirname, 'processCrash.ts')
   const script = `
     const { onUnhandledRejection } = await import(${JSON.stringify(mod)})
-    process.on('unhandledRejection', onUnhandledRejection({ error: (e, m) => console.log(e, m) }))
+    process.on('unhandledRejection', onUnhandledRejection({ error: (e, m) => console.log(e, m) }, () => {}))
     process.on('exit', (code) => console.log('exit-hook', code))
     Promise.reject(new Error('boom'))
     setTimeout(() => console.log('still-alive'), 2000)
