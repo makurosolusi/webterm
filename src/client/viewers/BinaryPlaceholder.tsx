@@ -2,29 +2,28 @@ import { useEffect, useState } from 'react'
 import { formatBytes } from '../../shared/fsLimits'
 import { Button } from '../components/ui/button'
 import { writeClipboard } from '../clipboard'
-import { rawUrl, stat } from '../fsClient'
+import { rawUrl } from '../fsClient'
 
 export interface BinaryPlaceholderProps {
   path: string
-  /** Download hanya ditawarkan bila UPLOAD aktif (endpoint transfer terbuka). */
+  /** Download is offered only when UPLOAD is on (the transfer endpoint is open). */
   canDownload: boolean
-  /** Alasan tampil sebagai placeholder, mis. gagal dimuat. */
+  /** File size in bytes, once known (ViewerHost stats the file). */
+  size?: number
+  /** Why this is a placeholder, e.g. the viewer failed to load. */
   note?: string
+  /** Shown with `note`: load the viewer again. */
+  onRetry?: () => void
+  /** Reopen the file in the text editor (VS Code "Open Anyway"): misdetected text, SVG source. */
+  onOpenAsText?: () => void
 }
 
 const COPIED_MS = 1500
 
-/** Kartu file yang tak bisa ditampilkan: nama, ukuran, Download (bila UPLOAD aktif), Copy Path. */
-export function BinaryPlaceholder({ path, canDownload, note }: BinaryPlaceholderProps) {
+/** Card for a file that cannot be shown: name, size, Retry (after a failure), Open as Text, Download (UPLOAD on), Copy Path. */
+export function BinaryPlaceholder({ path, canDownload, size, note, onRetry, onOpenAsText }: BinaryPlaceholderProps) {
   const name = path.split('/').filter(Boolean).pop() ?? path
-  const [size, setSize] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    let live = true
-    void stat(path).then((r) => { if (live && r.ok && r.meta.size !== undefined) setSize(r.meta.size) })
-    return () => { live = false }
-  }, [path])
 
   useEffect(() => {
     if (!copied) return
@@ -33,11 +32,13 @@ export function BinaryPlaceholder({ path, canDownload, note }: BinaryPlaceholder
   }, [copied])
 
   return (
-    <div className="viewer viewer-placeholder" role="note">
+    <div className="viewer viewer-placeholder" role={note ? 'alert' : 'note'}>
       <div className="viewer-name">{name}</div>
-      <div className="viewer-meta">{size === null ? 'Preview not available' : `${formatBytes(size)} · Preview not available`}</div>
+      <div className="viewer-meta">{size === undefined ? 'Preview not available' : `${formatBytes(size)} · Preview not available`}</div>
       {note ? <div className="viewer-meta">{note}</div> : null}
       <div className="viewer-actions">
+        {note && onRetry ? <Button type="button" size="xs" className="viewer-btn" onClick={onRetry}>Retry</Button> : null}
+        {onOpenAsText ? <Button type="button" size="xs" className="viewer-btn" onClick={onOpenAsText}>Open as Text</Button> : null}
         {canDownload ? <a className="viewer-btn" href={`${rawUrl(path)}&download=1`} download={name}>Download</a> : null}
         <Button type="button" size="xs" className="viewer-btn" onClick={() => void writeClipboard(path).then(setCopied)}>
           {copied ? 'Copied' : 'Copy Path'}

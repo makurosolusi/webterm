@@ -1,5 +1,6 @@
 // The user's start-page shortcuts (per client, localStorage, like `browser.recent.ts`). Never stored = the defaults
 // from `browser.startpage.data.ts`; once the user adds, edits or removes one, the whole list is saved.
+import { resolveOmniboxAddress } from '../shared/browser.omnibox'
 import { parseBrowserUrl } from '../shared/browser.url'
 import { SHORTCUTS, type Shortcut } from './browser.startpage.data'
 import { randomId } from './randomId'
@@ -40,9 +41,8 @@ function save(list: Shortcut[]): Shortcut[] {
 
 /** Normalized shortcut fields, or null when the URL is not an allowed http(s) address. Empty name = the host. */
 export function cleanShortcut(label: string, rawUrl: string): { label: string; url: string } | null {
-  const raw = rawUrl.trim()
-  const p = parseBrowserUrl(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`)
-  if (!p.ok) return null
+  const p = resolveOmniboxAddress(rawUrl)
+  if (!p?.ok) return null
   return { label: label.trim().slice(0, LABEL_MAX) || p.host, url: p.url }
 }
 
