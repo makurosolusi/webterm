@@ -36,6 +36,8 @@ const fake = vi.hoisted(() => {
             return { dispose: () => added.forEach((b) => remove(b).dispose()) }
           },
           updateOptions: () => {},
+          getModel: () => null,
+          onDidChangeCursorSelection: () => ({ dispose: () => {} }), onDidChangeModelOptions: () => ({ dispose: () => {} }), onDidChangeModelLanguage: () => ({ dispose: () => {} }),
           dispose: () => {},
         }
         return editor

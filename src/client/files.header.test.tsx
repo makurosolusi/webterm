@@ -90,7 +90,7 @@ describe('row icons', () => {
     expect(iconClass(false, false, 'a.js')).toBe('codicon codicon-file-code files-icon files-icon--yellow')
     expect(iconClass(false, false, 'p.json')).toBe('codicon codicon-json files-icon files-icon--yellow')
     expect(iconClass(false, false, 'R.md')).toBe('codicon codicon-markdown files-icon files-icon--blue')
-    expect(iconClass(false, false, 'ci.yml')).toBe('codicon codicon-file-code files-icon files-icon--purple')
+    expect(iconClass(false, false, 'ci.yml')).toBe('codicon codicon-settings-gear files-icon files-icon--purple')
     expect(iconClass(false, false, '.env.local')).toBe('codicon codicon-key files-icon files-icon--yellow')
     expect(iconClass(false, false, '.gitignore')).toBe('codicon codicon-source-control files-icon files-icon--orange')
     expect(iconClass(false, false, 'logo.png')).toBe('codicon codicon-file-media files-icon files-icon--purple')

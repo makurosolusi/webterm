@@ -30,8 +30,14 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
+}
+/* The "…" lives on this inner span: `text-overflow` does nothing on a flex container (the title). */
+.editor-node__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Ikon file di judul (codicon, 16px) dan titik "dirty" tab VS Code (circle-filled, 8px). */
@@ -347,3 +353,30 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Loading: VS Code's thin indeterminate bar at the top of the editor until the file is up. */
+.editor-node__progress {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.editor-node__placeholder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Compare (conflict bar): the diff editor fills the overlay under its bar. */
+.editor-node__compare-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Status bar: facts sit at the right like VS Code's editor items; static ones are not buttons. */
+.editor-statusbar__items { justify-content: flex-end; }
+.editor-statusbar__static { cursor: default; }

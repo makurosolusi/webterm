@@ -252,11 +252,13 @@ button.vscode-status-bar__item:focus-visible {
   display: inline-flex; flex: none; align-items: center; justify-content: center;
   color: var(--vscode-breadcrumb-separator, var(--vscode-descriptionForeground));
 }
+/* inline-block, not inline-flex: `text-overflow` only puts a "…" on a block's inline content, and
+   the label is a bare text node next to the icon. As a flex item with overflow hidden it shrinks. */
 .vscode-breadcrumbs__segment {
-  display: inline-flex; align-items: center; box-sizing: border-box;
-  max-width: 220px; height: 20px; gap: 4px; margin: 0; padding: 0 3px;
+  display: inline-block; box-sizing: border-box;
+  max-width: 220px; height: 20px; margin: 0; padding: 0 3px;
   overflow: hidden; border: 0; border-radius: 2px; background: transparent;
-  color: inherit; font: inherit; text-overflow: ellipsis; white-space: nowrap;
+  color: inherit; font: inherit; line-height: 20px; text-overflow: ellipsis; white-space: nowrap;
 }
 button.vscode-breadcrumbs__segment { cursor: default; }
 button.vscode-breadcrumbs__segment:hover {
@@ -271,7 +273,7 @@ button.vscode-breadcrumbs__segment:focus-visible {
 }
 .vscode-breadcrumbs__icon {
   display: inline-flex; flex: none; align-items: center; justify-content: center;
-  width: 14px; height: 14px;
+  width: 14px; height: 14px; margin-right: 4px; vertical-align: -3px;
 }
 .vscode-breadcrumbs__separator > .codicon { font-size: var(--ui-icon-size, 16px); }
 .vscode-breadcrumbs__overflow {

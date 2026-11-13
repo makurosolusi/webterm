@@ -15,6 +15,8 @@ const fake = vi.hoisted(() => {
     onDidChangeModelContent: (cb: () => void) => { state.onChange = cb },
     addAction: (d: { id: string; run: () => void }) => { if (d.id === 'webterm.editor.save') state.save = d.run; return { dispose: () => {} } },
     updateOptions: () => {},
+    getModel: () => null,
+    onDidChangeCursorSelection: () => ({ dispose: () => {} }), onDidChangeModelOptions: () => ({ dispose: () => {} }), onDidChangeModelLanguage: () => ({ dispose: () => {} }),
     dispose: () => {},
   }
   const monaco = {
@@ -219,10 +221,12 @@ describe('EditorNode biner & non-UTF-8', () => {
     expect(screen.queryByText('Save')).toBeNull()
   })
 
-  it('utf8 biasa: editor tidak read-only dan ada Save', async () => {
-    mount()
+  it('utf8 biasa: editor tidak read-only; Save sits in the header menu, not as a permanent button', async () => {
+    const { container } = mount()
     await waitFor(() => expect(fake.state.createdWith).toMatchObject({ readOnly: false }))
-    expect(screen.getByText('Save')).toBeTruthy()
+    expect(screen.queryByText('Save')).toBeNull()
+    fireEvent.contextMenu(container.querySelector('.node-header')!)
+    expect(screen.getByRole('menuitem', { name: /^Save/ }).getAttribute('aria-disabled')).toBe('true')
   })
 
   it('audio lewat ViewerHost, zip jadi placeholder; file tidak dibaca dan Monaco tidak dimuat', async () => {

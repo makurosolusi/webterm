@@ -1,27 +1,27 @@
 import { lazy, memo, Suspense, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useReactFlow, type NodeProps } from '@xyflow/react'
-import { NodeLayoutResizer, NodeResizeToggle } from './nodeResize/NodeLayoutResizer'
-import { Button as VscodeButton, ToolbarButton, ToolbarContainer } from '@/vscode/register'
-import { fileIconClass } from './fileIcon'
-import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
+import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
+import { Button as VscodeButton, ToolbarButton } from '@/vscode/register'
 import * as fsClient from './fsClient'
-import { writeClipboard } from './clipboard'
-import { ActionResult, useAction } from '@/components/ui/action'
 import { EditorConflictBar } from './EditorConflictBar'
+import { EditorCrumbs, EditorHeader, PREVIEW_COMMAND_ID, useFilesRoot } from './EditorNode.header'
+import { EditorCompare } from './EditorNode.compare'
+import { CopyText, EditorLoadFailure, EditorLoading } from './EditorNode.notices'
+import EditorStatusBar, { runEditorAction, type ViewerMeta } from './EditorStatusBar'
+import type { MenuRow } from './NodeContextMenu'
 import { useEditorFile, type WriteChecked } from './useEditorFile'
 import { useEditorSync } from './useEditorSync'
 import { ViewerHost } from './viewers/ViewerHost'
 import type { FileKind } from '../shared/fileKind'
 import type { ReadMeta } from '../shared/fsContract'
-import { editorFileKind, fileBaseName, fileExt } from './editorFile'
+import { editorFileKind, fileBaseName, fileExt, isMarkdownExt, loadRefusal } from './editorFile'
 import { dismissLspHint, lspLanguageIdForExt, useLspHint } from './editorLsp.hints'
 import { EditorRenamePreview } from './EditorRenamePreview'
 import { loadMonaco } from './lazyMonaco'
-import { ShowInFilesButton, useShowInFiles } from './ShowInFilesButton'
+import { useShowInFiles } from './ShowInFilesButton'
 import './editor.css'
-import { NodeNameLabel } from './nodeName.label'
-import { useWrapChord, WordWrapButton, wrapChordLabel } from './editorWrap'
+import { useWrapChord, wrapChordLabel } from './editorWrap'
 import { useNodeHost } from './tabLayout.context'
 import TabNodeActions, { type TabAction } from './tabLayout.nodeActions'
 import { useEditorView } from './EditorNode.view'
@@ -29,9 +29,6 @@ import { chordLabel, useCommands } from './commandRegistry'
 import { useKeybindingOverrides } from './keybindings.store'
 import { commandKey, commandMatches } from './keybindings.resolve'
 import { isMacPlatform } from './terminalKeys.platform'
-
-/** Registry command (`commandRegistry.defaults`) for the hover-gated Markdown preview toggle. */
-const PREVIEW_COMMAND_ID = 'editor.togglePreview'
 
 // marked + DOMPurify load with the first preview, not with the board.
 const EditorMarkdownPreview = lazy(() => import('./EditorMarkdownPreview'))
@@ -51,6 +48,9 @@ export interface EditorNodeProps extends NodeProps {
   stat?: typeof fsClient.stat
 }
 
+/** Props ViewerHost takes once the viewer side lands; spread (not typed attributes) so this compiles before it. */
+type ViewerExtras = { onOpenAsText?: () => void; onMeta?: (meta: ViewerMeta) => void }
+
 /**
  * Node editor/preview file. Teks dimuat/disimpan lewat `useEditorFile` (cek versi, konflik,
  * biner, non-UTF-8); gambar dan PDF jadi preview; audio/video/archive/biner jadi placeholder jujur.
@@ -69,13 +69,20 @@ function EditorNode({
   stat = fsClient.stat
 }: EditorNodeProps) {
   const rf = useReactFlow()
-  const d = data as { filePath?: string; color?: string; name?: string }
+  // `viewAs: 'text'` = "Open as Text" on a file the viewers would show (SVG, misdetected types); kept on
+  // the node for this session only (not in the workspace shape yet).
+  const d = data as { filePath?: string; color?: string; name?: string; viewAs?: 'text' }
   const filePath = d.filePath ?? ''
   const swatch = d.color ?? '#0a84ff'
 
   const fileName = fileBaseName(filePath) || 'untitled'
   const ext = fileExt(filePath)
-  const kind = editorFileKind(filePath)
+  const detected = editorFileKind(filePath)
+  const kind = d.viewAs === 'text' ? 'text' : detected
+  const markdown = isMarkdownExt(ext)
+  const [viewerMeta, setViewerMeta] = useState<ViewerMeta | null>(null)
+  useEffect(() => setViewerMeta(null), [filePath, kind])
+  const [comparing, setComparing] = useState(false)
 
   const hostRef = useRef<HTMLDivElement>(null)
   const hoveredRef = useRef(false)
@@ -86,24 +93,42 @@ function EditorNode({
     enabled: kind === 'text', openMarkdownPreview, onPreviewChange
   })
   const isBinary = kind === 'text' && ef.encoding === 'binary'
-  // Monaco hanya dipasang untuk teks yang BUKAN biner: tombol Save/Preview ikut hilang untuk sisanya.
+  // Monaco hanya dipasang untuk teks yang BUKAN biner: aksi Save/Preview ikut hilang untuk sisanya.
   const editable = kind === 'text' && !isBinary && !loadError
   const readOnly = ef.encoding === 'non-utf8'
   // No language server for this file's language: say so, with the one command that fixes it.
   const lspLanguage = editable ? lspLanguageIdForExt(ext) : ''
   const lspHint = useLspHint(lspLanguage)
-  const view = useEditorView(id, filePath, ef.live, MIN_WIDTH)
+  useEffect(() => { if (!ef.conflict) setComparing(false) }, [ef.conflict])
+  const live = ef.live
+  const reopenAsPreview = d.viewAs === 'text' && detected !== 'text' ? () => rf.updateNodeData(id, { viewAs: undefined }) : null
+  const menuLead: MenuRow[] = [
+    ...(!readOnly ? [{ label: ef.saving ? 'Saving…' : 'Save', hint: 'Save (⌘S)', disabled: !ef.dirty || ef.saving, onClick: () => void ef.save() }] : []),
+    { label: 'Go to Line/Column…', hint: 'Go to Line/Column (Ctrl+G)', disabled: !live, onClick: () => live && runEditorAction(live.editor, 'editor.action.gotoLine') },
+    { label: 'Command Palette…', hint: 'Show All Commands (F1)', disabled: !live, onClick: () => live && runEditorAction(live.editor, 'editor.action.quickCommand') },
+    ...(reopenAsPreview ? [{ label: 'Reopen as Preview', onClick: reopenAsPreview }] : []),
+  ]
+  const view = useEditorView(id, filePath, ef.live, MIN_WIDTH, menuLead)
   const previewChord = commandKey(PREVIEW_COMMAND_ID, useCommands(), useKeybindingOverrides())
   const previewKey = previewChord ? chordLabel(previewChord, isMacPlatform()) : ''
   const previewTitle = previewKey ? `Toggle markdown preview (${previewKey})` : 'Toggle markdown preview'
   const wrapKey = wrapChordLabel(useWrapChord())
   const showInFiles = useShowInFiles(id)
+  const filesRoot = useFilesRoot(id)
+  const close = () => { void rf.deleteElements({ nodes: [{ id }] }) }
+  const viewerExtras: ViewerExtras = { onOpenAsText: () => rf.updateNodeData(id, { viewAs: 'text' }), onMeta: setViewerMeta }
+  const compareSides = async () => {
+    const meta = await readMeta(filePath)
+    const refusal = loadRefusal(meta.content, 'File', true)
+    if (refusal) throw new Error(refusal)
+    return { path: filePath, original: meta.content, modified: live?.editor.getValue() ?? '' }
+  }
   // Tab mode: the tab is the header, so the header's actions move to the tab strip and tab menu.
   const host = useNodeHost()
   const tabActions: TabAction[] = [
     ...(showInFiles ? [{ id: 'show-in-files', label: 'Show in Files', icon: 'folder-opened', onSelect: showInFiles }] : []),
     ...(editable ? [
-      { id: 'preview', label: ef.preview ? 'Edit' : 'Preview', tooltip: previewTitle, icon: ef.preview ? 'edit' : 'open-preview', checked: ef.preview, onSelect: ef.togglePreview },
+      ...(markdown ? [{ id: 'preview', label: ef.preview ? 'Edit' : 'Preview', tooltip: previewTitle, icon: ef.preview ? 'edit' : 'open-preview', checked: ef.preview, onSelect: ef.togglePreview }] : []),
       { id: 'wrap', label: 'Word wrap', tooltip: wrapKey ? `Toggle word wrap (${wrapKey})` : 'Toggle word wrap', icon: 'word-wrap', checked: view.wrap, onSelect: view.toggleWrap },
       ...(lspLanguage ? [{ id: 'outline', label: 'Outline', tooltip: 'Go to symbol in file (⇧⌘O)', icon: 'symbol-class', onSelect: () => void showOutline(id) }] : []),
       ...(!readOnly ? [{ id: 'save', label: ef.saving ? 'Saving…' : 'Save', tooltip: 'Save (⌘S)', disabled: !ef.dirty || ef.saving, busy: ef.saving, onSelect: () => void ef.save() }] : []),
@@ -132,22 +157,24 @@ function EditorNode({
   }, [])
 
   const body = (): React.ReactNode => {
-    if (loadError) return <span className="editor-node__notice">{loadError}</span>
+    if (loadError) return <EditorLoadFailure message={loadError} filePath={filePath} onRetry={ef.retryLoad} onShowInFiles={showInFiles} />
     if (kind !== 'text')
       return sync.missing ? (
         <span className="editor-node__notice">{fileName} was deleted on disk.</span>
       ) : (
-        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} />
+        <ViewerHost path={filePath} kind={kind as FileKind} version={sync.viewVersion} {...viewerExtras} />
       )
     if (isBinary)
       return (
         <div className="editor-node__placeholder">
           <span>Binary file — can’t be opened as text.</span>
           <CopyText text={filePath} title="Copy file path">Copy Path</CopyText>
+          {reopenAsPreview && <VscodeButton secondary onClick={reopenAsPreview}>Reopen as Preview</VscodeButton>}
         </div>
       )
     return (
       <>
+        {!live && <EditorLoading />}
         {/* `nokey` KRUSIAL: React Flow hanya berhenti mengambil keyboard untuk input/select/
             textarea atau atribut contenteditable (`isInputDOMNode` di @xyflow/system), sementara
             Monaco 0.57 mengetik lewat div EditContext (opsi `editContext` default true) yang bukan
@@ -166,6 +193,9 @@ function EditorNode({
             </Suspense>
           </div>
         )}
+        {comparing && ef.conflict && (
+          <EditorCompare fileName={fileName} load={compareSides} onClose={() => setComparing(false)} />
+        )}
       </>
     )
   }
@@ -180,76 +210,20 @@ function EditorNode({
         onMouseLeave={() => (hoveredRef.current = false)}
       >
         {host.inTab ? <TabNodeActions id={id} visible={host.visible} items={[]} actions={tabActions} dirty={editable && ef.dirty} /> : (
-        <div className="node-header" onContextMenu={editable ? view.openMenu : undefined}>
-          <span
-            className="node-title editor-node__name"
-            title={filePath}
-          >
-            <span className={`${fileIconClass(fileName)} editor-node__icon`} aria-hidden="true" />
-            <NodeNameLabel name={d.name} label={fileName} />
-            {editable && ef.dirty && (
-              <span className="codicon codicon-circle-filled editor-node__dirty" role="img" aria-label="Unsaved changes" />
-            )}
-          </span>
-          <span className="editor-node__spacer" />
-          <ShowInFilesButton editorId={id} />
-          <NodeResizeToggle />
-          <ToolbarContainer className="nodrag editor-node__actions">
-            {editable && (
-              <>
-                <ToolbarButton
-                  label={ef.preview ? 'Edit' : 'Preview'}
-                  title={previewTitle} data-title={previewTitle}
-                  toggleable checked={ef.preview}
-                  onClick={ef.togglePreview}
-                >
-                  <span className={`codicon codicon-${ef.preview ? 'edit' : 'open-preview'}`} aria-hidden="true" />
-                </ToolbarButton>
-                <WordWrapButton on={view.wrap} onToggle={view.toggleWrap} />
-                {lspLanguage && (
-                  <ToolbarButton label="Outline" title="Go to symbol in file (⇧⌘O)" data-title="Go to symbol in file (⇧⌘O)" onClick={() => void showOutline(id)}>
-                    <span className="codicon codicon-symbol-class" aria-hidden="true" />
-                  </ToolbarButton>
-                )}
-                {/* Save memakai tombol primer VS Code, bukan toolbar button: ia satu-satunya aksi
-                    yang mengubah file, dan hanya menyala saat ada perbedaan yang belum tersimpan. */}
-                {!readOnly && (
-                  <VscodeButton secondary disabled={!ef.dirty || ef.saving} aria-busy={ef.saving ? 'true' : 'false'} title="Save (⌘S)" onClick={ef.save}>
-                    {ef.saving ? 'Saving…' : 'Save'}
-                  </VscodeButton>
-                )}
-              </>
-            )}
-            <ToolbarButton
-              label="Close"
-              title="Close"
-              onClick={() => {
-                void rf.deleteElements({ nodes: [{ id }] })
-              }}
-            >
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </ToolbarButton>
-          </ToolbarContainer>
-        </div>
-        )}
-        {view.menu}
-        {/* Breadcrumb path file seperti di bawah tab editor VS Code: 3 segmen terakhir, statis. */}
-        {filePath && (
-          <VscodeBreadcrumbs
-            className="nodrag editor-node__crumbs"
-            ariaLabel="File path"
-            segments={filePath.split('/').filter(Boolean).slice(-3).map((name, i, all) => ({
-              id: `${i}:${name}`,
-              label: name,
-              title: filePath,
-              icon: i === all.length - 1 ? <span className={`${fileIconClass(name)} editor-node__icon`} aria-hidden="true" /> : undefined,
-            }))}
+          <EditorHeader
+            id={id} name={d.name} fileName={fileName} filePath={filePath} dirty={ef.dirty} editable={editable} markdown={markdown}
+            preview={ef.preview} onTogglePreview={ef.togglePreview} wrap={view.wrap} onToggleWrap={view.toggleWrap}
+            onOutline={lspLanguage ? () => void showOutline(id) : undefined} onClose={close}
+            onContextMenu={editable ? view.openMenu : undefined}
           />
         )}
+        {view.menu}
+        {/* Breadcrumb under the header, as under a VS Code editor tab: the path relative to the Files node. */}
+        {filePath && <EditorCrumbs filePath={filePath} root={filesRoot} onFolder={showInFiles} />}
         <div className={`node-body editor-node__body editor-node__body--${kind}`}>
           {body()}
           {/* Strip DI ATAS body, bukan pengganti body: editor tetap terpasang, isinya tetap
-              terlihat, dan tombol Save tetap `dirty` sehingga bisa dicoba ulang. */}
+              terlihat, dan buffer tetap `dirty` sehingga ⌘S / Retry bisa mencoba ulang. */}
           {editable && readOnly && (
             <div className="editor-node__banner nodrag" role="status">
               Not UTF-8: opened read-only so the original bytes are not corrupted.
@@ -266,7 +240,7 @@ function EditorNode({
           )}
           {editable && <EditorRenamePreview nodeId={id} />}
           {editable && ef.conflict && (
-            <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} />
+            <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} onCompare={() => setComparing(true)} />
           )}
           {ef.saveError && (
             <div className="editor-node__save-error nodrag" role="alert">
@@ -275,19 +249,8 @@ function EditorNode({
             </div>
           )}
         </div>
+        <EditorStatusBar live={live} encoding={ef.encoding} saving={ef.saving} readOnly={readOnly} meta={kind !== 'text' ? viewerMeta : null} />
       </div>
-    </>
-  )
-}
-
-/** Copy `text` to the clipboard, then say "Copied" (or that copying failed, with Retry). */
-function CopyText({ text, title, children }: { text: string; title: string; children: string }) {
-  const act = useAction(() => writeClipboard(text), { label: children, ok: (r) => r, success: (r) => (r ? 'Copied' : 'Copy failed: the browser blocked the clipboard') })
-  const click = (): void => { void act.run() }
-  return (
-    <>
-      <VscodeButton secondary title={title} disabled={act.busy} aria-busy={act.busy ? 'true' : 'false'} onClick={click}>{children}</VscodeButton>
-      <ActionResult action={act} />
     </>
   )
 }
