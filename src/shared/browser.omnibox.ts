@@ -16,8 +16,12 @@ export const SEARCH_ENGINES: Record<SearchEngine, { label: string; prefix: strin
 }
 export const DEFAULT_SEARCH_ENGINE: SearchEngine = 'google'
 
-// localhost / 127.x / 0.0.0.0 / [IPv6] tanpa skema -> http (server dev lokal jarang ber-TLS).
-const LOCAL_ADDRESS = /^(?:localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[[0-9a-f:]+\])(?::\d+)?(?:[/?#].*)?$/i
+// Hosts Chrome opens over http when typed without a scheme: loopback, RFC 1918 private ranges,
+// link-local, IPv6 literals, `*.localhost` and mDNS `*.local` (LAN dev servers rarely have TLS).
+const PRIVATE_V4 = /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.|0\.0\.0\.0$)/
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/
+// A single-label intranet host with a port (`intranet:8080`); without the port a bare word is a search.
+const SINGLE_LABEL_PORT = /^[a-z0-9-]+:\d+(?:[/?#].*)?$/i
 // Ketikan berbentuk domain bertitik = navigasi; prosa polos seperti "react hooks" tetap pencarian.
 const LOOKS_LIKE_URL = /^[^\s]+\.[a-z]{2,}(\/.*)?$/i
 const DOMAIN_PORT = /^([^\s/\\:@?#]+):\d+(?:[/?#].*)?$/
@@ -42,21 +46,40 @@ export function looksLikeSearchQuery(input: string): boolean {
   return !(input.includes('.') || input.includes(':'))
 }
 
-// `host.tld:port` tanpa skema: tanpa ini `new URL` membaca `host.tld` sebagai skema. `.localhost` -> http.
+const isLocalHost = (host: string): boolean =>
+  host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.startsWith('[') ||
+  (IPV4.test(host) && PRIVATE_V4.test(host))
+
+// Scheme-less local/LAN/intranet address -> `http://…`, else null.
+function localAddress(input: string): string | null {
+  if (/\s/.test(input) || /^[a-z][a-z0-9+.-]*:\/\//i.test(input)) return null
+  let host: string
+  try {
+    host = new URL(`http://${input}`).hostname.toLowerCase().replace(/\.$/, '')
+  } catch {
+    return null // `javascript:…`, `about:blank` and the like: an explicit scheme, decided further on
+  }
+  const intranet = SINGLE_LABEL_PORT.test(input) && DNS_LABEL.test(host)
+  return intranet || isLocalHost(host) ? `http://${input}` : null
+}
+
+// `host.tld:port` tanpa skema: tanpa ini `new URL` membaca `host.tld` sebagai skema.
 function domainPortAddress(input: string): string | null {
   const m = DOMAIN_PORT.exec(input)
   if (!m || !m[1].includes('.')) return null
   try {
     const host = new URL(`https://${input}`).hostname.toLowerCase().replace(/\.$/, '')
     if (host.length > 253 || !host.split('.').every((l) => l.length <= 63 && DNS_LABEL.test(l))) return null
-    return `${host.endsWith('.localhost') ? 'http' : 'https'}://${input}`
+    return `https://${input}`
   } catch {
     return null // bukan host valid -> biarkan cabang berikutnya memutuskan
   }
 }
 
-function candidate(text: string, engine: SearchEngine): string {
-  if (LOCAL_ADDRESS.test(text)) return `http://${text}`
+/** The address `text` names, or null when it reads as a search query. */
+function address(text: string): string | null {
+  const local = localAddress(text)
+  if (local) return local
   const domainPort = domainPortAddress(text)
   if (domainPort) return domainPort
   try {
@@ -71,7 +94,7 @@ function candidate(text: string, engine: SearchEngine): string {
   } catch {
     // Bahkan dengan https:// tak terurai (mis. ada spasi di host) -> pencarian.
   }
-  return buildSearchUrl(text, engine)
+  return null
 }
 
 /**
@@ -81,5 +104,15 @@ function candidate(text: string, engine: SearchEngine): string {
 export function resolveOmniboxInput(raw: string, engine: SearchEngine = DEFAULT_SEARCH_ENGINE): ParsedBrowserUrl | null {
   const text = raw.trim()
   if (!text) return null
-  return parseBrowserUrl(candidate(text, engine))
+  return parseBrowserUrl(address(text) ?? buildSearchUrl(text, engine))
+}
+
+/**
+ * Address-only variant for URL fields (start-page shortcuts): the same local/LAN/https rules, and
+ * where the omnibox would search, a bare word becomes `https://word/` (Chrome's URL fixup). null when empty.
+ */
+export function resolveOmniboxAddress(raw: string): ParsedBrowserUrl | null {
+  const text = raw.trim()
+  if (!text) return null
+  return parseBrowserUrl(address(text) ?? `https://${text}`)
 }
