@@ -160,6 +160,14 @@ npm run dev:native     # build the UI and run the app in development
 - The app runs the server in-process and opens a signed-in window. If a server is already running for the same data dir, the app attaches to it instead, and quitting the app leaves that server running.
 - The app is not signed or notarized yet, so Gatekeeper blocks a downloaded build: right-click the app and choose Open.
 
+Updates use Electrobun's built-in updater and stay off until an update host is set: `UPDATE_BASE_URL` in `src/native/release.config.ts`, the public folder the release files are served from. A build bakes it in. With a host set, the app checks 30 seconds after launch and then every 6 hours. A new version downloads in the background, then a notification appears and the webterm menu gets "Restart to Update". Choosing it stops the in-process server, installs and relaunches; an attached external server keeps running. Ignoring it leaves the update downloaded, and the next launch offers it again. A failed check (offline, 404, bad patch) is logged and retried later, backing off from 15 minutes.
+
+To publish a release:
+
+1. Bump `version` in `package.json`.
+2. Run `npm run release:native`. It builds the stable app and copies this build's update files (`stable-macos-arm64-update*.json`, the `.tar.zst` bundle, and a `.patch` when a previous release is on the host) into `release/native/<version>/`. It refuses a version that already has a folder, and never uploads.
+3. Upload those files flat to `UPDATE_BASE_URL`, the bundle and patch before the `update*.json` manifests.
+
 One server per data dir: a start (`bun run dev`, `./webterm`, the native app) refuses with one line and exit code 1 while another webterm is alive and answering for the same `WEBTERM_DATA_DIR`. Open that one, or set a different `WEBTERM_DATA_DIR`. A record left by a crashed server is ignored.
 
 ### Command-line options

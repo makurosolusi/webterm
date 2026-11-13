@@ -40,3 +40,5 @@ src/server/distAssets.generated.ts
 hutch.lock
 /build/
 /artifacts/
+# npm run release:native: per-version folders of update files to upload (never committed)
+/release/
