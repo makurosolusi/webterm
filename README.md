@@ -147,6 +147,19 @@ bun run build:binary   # emits ./webterm
 ./webterm              # runs from any directory; reads HOST / PORT (and a .env) from the cwd
 ```
 
+### Native app (macOS)
+
+A desktop window around the same server, built with [Electrobun](https://electrobun.dev) on the system webview (WKWebView, no bundled Chromium). macOS only for now.
+
+```sh
+npm run build:native   # emits build/stable-macos-arm64/webterm.app
+npm run dev:native     # build the UI and run the app in development
+```
+
+- The first build downloads the Electrobun toolchain into `~/.hutch`; later builds reuse it.
+- The app runs the server in-process and opens a signed-in window. If a server is already running for the same data dir, the app attaches to it instead, and quitting the app leaves that server running.
+- The app is not signed or notarized yet, so Gatekeeper blocks a downloaded build: right-click the app and choose Open.
+
 One server per data dir: a start (`bun run dev`, `./webterm`, the native app) refuses with one line and exit code 1 while another webterm is alive and answering for the same `WEBTERM_DATA_DIR`. Open that one, or set a different `WEBTERM_DATA_DIR`. A record left by a crashed server is ignored.
 
 ### Command-line options
