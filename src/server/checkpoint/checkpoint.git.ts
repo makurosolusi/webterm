@@ -58,7 +58,7 @@ async function git(cwd: string, args: string[], opts: { env?: Record<string, str
   try {
     const g = gitCommand(['-C', cwd, ...args], { env: { ...CHECKPOINT_ENV, ...opts.env } })
     const p = run(g.file, g.args, { env: g.env, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER })
-    endChildStdin(p.child.stdin, opts.input, { op: `checkpoint ${args[0]}`, command: 'git' })
+    endChildStdin(p.child.stdin, opts.input, { op: `checkpoint ${args[0]}`, command: g.file })
     return (await p).stdout
   } catch (err) {
     throw new Error(`git ${args[0]} failed in ${cwd}`, { cause: err })

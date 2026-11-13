@@ -38,7 +38,7 @@ function git(cwd: string, args: string[], input?: string): Promise<Run> {
   return new Promise((resolve) => {
     const g = gitCommand(['--no-optional-locks', '-C', cwd, ...args])
     const child = execFile(g.file, g.args, { timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: g.env }, (err, stdout, stderr) => resolve({ ok: !err, stdout: String(stdout), stderr: String(stderr) }))
-    endChildStdin(child.stdin, input, { op: `gitDiff ${args[0]}`, command: 'git' })
+    endChildStdin(child.stdin, input, { op: `gitDiff ${args[0]}`, command: g.file })
   })
 }
 
