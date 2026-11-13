@@ -8,6 +8,7 @@
 // must be an entry of the current status, so a directory can never be staged wholesale (that is how
 // a `.env` under it would slip in). Hunks are re-derived on the server by id, never taken from the client.
 import { spawn } from 'node:child_process'
+import { endChildStdin } from './childStdin'
 import { parseHunks, checkRelPath, GitDiffError } from './gitDiff'
 import { ptyEnv } from './ptyShell'
 import { gitCommand } from './gitExec'
@@ -56,8 +57,7 @@ export function run(cmd: string, args: string[], opts: { cwd: string; input?: st
     }, opts.timeoutMs)
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: null, stdout, stderr: `${stderr}${e.message}`, timedOut }) })
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, timedOut }) })
-    child.stdin.on('error', () => {}) // EPIPE when the child exits before reading stdin; its exit code reports the failure
-    child.stdin.end(opts.input ?? '')
+    endChildStdin(child.stdin, opts.input, { op: 'gitScm.run', command: cmd })
   })
 }
 
