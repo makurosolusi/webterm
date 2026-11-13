@@ -108,3 +108,9 @@ export function installBrowserAgentShim(home: string = homedir()): void {
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(join(skillDir, 'SKILL.md'), buildBrowserSkillBody(file))
 }
+
+let shimInstalled = false
+/** installBrowserAgentShim at most once per process: the browser runtime's `onAgentUse` hook. */
+export function ensureBrowserAgentShim(): void {
+  if (!shimInstalled) { installBrowserAgentShim(); shimInstalled = true }
+}

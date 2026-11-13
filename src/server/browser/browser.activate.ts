@@ -66,6 +66,11 @@ export function stopBrowser(): Promise<void> {
   return p
 }
 
+// Browser di canvas: hook kemampuan `browser` menyalakan/mematikan runtime tanpa restart; /ws/browser dan
+// /api/browser selalu terdaftar dan membaca `activeBrowser()` per panggilan. Opsi sesi PTY dihitung ulang
+// tiap perubahan (hook kedua jalan setelah hook runtime). Agent terminal memakai token node-nya sendiri; node
+// browser target dicari per panggilan dari edge kabel di workspace (`workspaces`), jadi tanpa capability/restart sesi.
+// Shim + skill agent dipasang sekali per proses saat runtime start (`onAgentUse`); sub `browserAgent` off cukup ditolak handler.
 /** Pasang hook kemampuan `browser`; mengembalikan pembatal daftar. */
 export function registerBrowserCapability(deps: RuntimeDeps): () => void {
   return onCapabilityChange('browser', { start: () => startBrowser(deps), stop: () => stopBrowser() })

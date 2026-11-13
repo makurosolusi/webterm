@@ -2,14 +2,15 @@
 // mengikuti PLAN ENV-MINIMAL (b) §2.4 dan DILARANG diubah — tiap langkah bergantung pada yang
 // sebelumnya. index.ts hanya memanggil fungsi di sini.
 import type { ServerResponse } from 'node:http'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { writeTokenToEnv } from './auth'
 import { dataDir } from './config'
 import { recordDotenvBoot } from './dotenvFiles'
 import { describeListenError, isKnownListenError } from './listenError'
 import { createLogger } from './logs'
 import { resolveHostPort } from './serverConfig'
-import { bootstrapToken, setTokenState, tokenFilePath, type TokenState } from './tokenBootstrap'
+import { bootstrapToken, getTokenState, setTokenState, tokenFilePath, type TokenState } from './tokenBootstrap'
+import { writeInstanceFile } from './instanceFile'
 
 const SECRETS_SUBDIR = 'secrets'
 const LISTEN_FAILED_EXIT_CODE = 1
@@ -66,4 +67,21 @@ export function onListenError(host: string, port: number): (err: unknown) => voi
     process.stderr.write(`${describeListenError(err, host, port)}\n`)
     process.exit(LISTEN_FAILED_EXIT_CODE)
   }
+}
+
+/**
+ * Main listener bound: record this server in the run dir (the native app finds it there instead of
+ * starting a second one, instanceFile.ts), log the start line, then run `autoOpen`.
+ */
+export function announceListening(o: { host: string; port: number; dev: boolean; runDir: string; autoOpen: () => void }): void {
+  try { writeInstanceFile(o.runDir, { pid: process.pid, host: o.host, port: o.port }) } catch (e) {
+    log.warn('server.instance_file_failed', 'Cannot record this server in the run dir', { cause: e instanceof Error ? e.message : String(e) })
+  }
+  // Never log the token itself — only whether one is in force, how long it is, and where it came from.
+  const { token: TOKEN, source } = getTokenState()
+  const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
+  log.info('server.start', `webterm listening on http://${o.host}:${o.port} (${o.dev ? 'dev+HMR' : 'prod'}, token ${token}, source ${source})`, {
+    host: o.host, port: o.port, mode: o.dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
+  })
+  o.autoOpen()
 }

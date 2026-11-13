@@ -1,74 +1,60 @@
 // The server itself, loaded by index.ts only after the CLI gate and the one-server-per-data-dir guard:
 // importing this module opens webterm.db, starts the runtimes and binds the port.
 import http from 'node:http'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { WebSocketServer } from 'ws'
 import { WS_PATH } from '../shared/protocol'
 import { serveTerminalSocket } from './terminalSocket'
 import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
 import { fsWatchHub } from './fsWatch'
-import { createTrashReaper, sweepTrashOnBoot } from './fsBoot'
+import { sweepTrashOnBoot } from './fsBoot'
 import { filesFlagOn } from './envRegistry.files'
 import { applyPtyOptions, handleApi } from './api'
 import { installContextLink } from './contextLink'
 import { authorizeRequest, denyReason, isLoopbackHost, isNodeTokenPath, logAuthLogin, logAuthReject } from './auth'
 import { dataDir } from './config'
-import { configureLogging, createLogger, flushLogsSync } from './logs'
+import { configureLogging, createLogger } from './logs'
 import { capabilityStore } from './control/mount'
 import { isValidNodeToken } from './hooks'
-import { activeLedgerRuntime, startLedgerReaper, startLedgerRuntime } from './ledger/ledgerRuntime'
+import { activeLedgerRuntime, startLedgerRuntime } from './ledger/ledgerRuntime'
 import { buildButtonDeps } from './channels/channelButtons'
 import { createTelegramHot, registerTelegramHot } from './channels/telegramHot'
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
-import { bootCentralNotices } from './central/centralNotices'
-import { ensureRoutines } from './routines/routinesRuntime'
-import { startCostCapture } from './cost/costRuntime'
-import { armDagLoop } from './dag/dag.runtime'
 import { bootCa2 } from './central/ca2Boot'
 import { registerCanvasBroadcast, registerCanvasTeardown } from './canvas/canvasPush.runtime'
 import { createCanvasTeardown } from './canvas/canvasTeardown'
 import { initEnvSettings } from './envSettings.runtime'
-import { announceSetup, bootWiring, onListenError, refuseRequest } from './bootWiring'
+import { announceListening, announceSetup, bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { embedHost } from './embedHost'
-import { removeInstanceFile, writeInstanceFile } from './instanceFile'
 import { uiSessions } from './uiSession'
 import { uiUsers } from './uiUser'
 import { ensureSetupCode } from './setupCode'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
 import { requestOrigin } from './staticAssets.origin'
-import { onUnhandledRejection } from './processCrash'
-import { closeStores } from './shutdown'
+import { installShutdown } from './shutdown'
 import { upgradeRoute } from './upgradeRouting'
 import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
-import { installBrowserAgentShim } from './browserAgentShim'
+import { ensureBrowserAgentShim } from './browserAgentShim'
 import { isSafeWorkspaceId } from './browser/profile.paths'
 import { activeBrowser, registerBrowserCapability } from './browser/browser.activate'
 import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
-import { syncLinkedSettings } from './featureCapabilities.service'
 import { createFileSecretStore } from './envSecrets.store'
 import { db } from './db'
-import { backfillSetup } from './setupBackfill'
-import { flushBootChanges, queueBootChange } from './bootChanges'
-import { announceRetentionSweep } from './central/retentionNotice'
-import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
-import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
-import { pruneCanvasBackgrounds } from './canvasBackground.gc'
-import { backgroundsDir } from './canvasBackground.store'
+import { applyLinkedSettings, migrateStoredSettings } from './bootSettings'
+import { startCentralLoops, startDeviceLoops, startLedgerLoops } from './bootLoops'
+import { activeAgentChatPool } from './agentChat/agentChat.pool'
 import { guardWorkspaceRepos } from './repoHygiene'
-import { startPortScanner } from './ports/ports.runtime'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
 import { viteCacheDir } from './serverConfig'
-import { startWebPush } from './push/push.runtime'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
-import { activeAgentChatPool } from './agentChat/agentChat.pool'
 
 const LOG_DIR = 'logs'
 // Host/port, provenance .env, dataDir, token (env > berkas > bangkitkan) — urutannya di bootWiring.ts.
@@ -79,16 +65,7 @@ const envSettings = initEnvSettings()
 // After env overrides are applied: level / buffer / file sink come from WEBTERM_LOG_*.
 configureLogging({ dir: join(dataDir(), LOG_DIR) })
 const log = createLogger('server')
-// Kartu Worker/Otonomi yang sudah on sebelum nilai turunannya ada: isi sekarang, tanpa toggle ulang (zero-config).
-// Gagal (mis. Pengaturan dikunci) tidak menghentikan boot: kartu tetap bisa dimatikan-nyalakan.
-try {
-  queueBootChange('default_on', envSettings.defaultsApplied())
-  const linked = syncLinkedSettings(envSettings, process.env)
-  queueBootChange('linked', linked)
-  if (linked.length > 0) log.info('capabilities.linked_synced', 'Applied card-linked settings for capabilities already on', { keys: linked })
-} catch (err) {
-  log.warn('capabilities.linked_sync_failed', 'Cannot apply card-linked settings at boot', { error: err instanceof Error ? err.message : String(err) })
-}
+applyLinkedSettings(envSettings, log) // Worker/Autonomy cards already on get their derived values (bootSettings.ts)
 const dev = process.env.NODE_ENV !== 'production'
 
 // Always started (`on`, or `shadow` under WEBTERM_LEDGER_SHADOW). Boot passes no explicit mode, so a ledger
@@ -97,25 +74,8 @@ const ledgerRuntime = startLedgerRuntime()
 // Workspaces live in webterm.db, never the ledger file: project chats, node.list, browser tools and
 // project.discover resolve them through this store.
 registerWorkspaceLookup((id) => db.get(id), () => db.list())
-// Upgrade path for the first-run wizard: an install already in use is marked set up (once, see setupBackfill.ts).
-try {
-  if (backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() }) === 'completed') queueBootChange('setup', ['setup'])
-} catch (e) {
-  log.warn('settings.setup.backfill_failed', 'Cannot backfill first-run setup state at boot', { cause: e instanceof Error ? e.message : String(e) })
-}
-// Command mode's profile is the default for new agents (saved together since the Claude page); an older
-// install that saved command mode alone gets the default written once (idempotent: equal = no write).
-try {
-  const id = defaultProfileAfter({ mode: 'login' }, loadConfig(), db.getSettings().defaultClaudeProfileId)
-  if (id !== null) { db.saveSettings({ defaultClaudeProfileId: id }); queueBootChange('profile', ['defaultClaudeProfileId']) }
-} catch (e) {
-  log.warn('settings.claude_default.migrate_failed', 'Cannot align the default Claude profile with command mode at boot', { cause: e instanceof Error ? e.message : String(e) })
-}
-if (ledgerRuntime) {
-  createLogger('ledger').info('ledger.start', `Ledger ${ledgerRuntime.mode}`, { mode: ledgerRuntime.mode, file: basename(ledgerRuntime.path) })
-  startLedgerReaper({ task: ledgerRuntime.ledger.task, retention: ledgerRuntime.ledger.retention, trash: createTrashReaper(), onRetention: (changed) => announceRetentionSweep(changed) })
-  try { flushBootChanges(ledgerRuntime.db) } catch (e) { log.warn('boot.changes_notice_failed', 'Cannot post the startup changes notice', { cause: e instanceof Error ? e.message : String(e) }) }
-}
+migrateStoredSettings(log) // first-run backfill + default Claude profile, once (bootSettings.ts)
+if (ledgerRuntime) startLedgerLoops(ledgerRuntime, log) // reaper + the startup changes notice (bootLoops.ts)
 
 // Telegram hot-apply: runtime kanal + poller dibangun/dihentikan hook kemampuan `telegram`, bukan di boot;
 // token tak dibaca di sini. Opsi berupa getter agar tiap start memakai flag central terbaru.
@@ -139,17 +99,7 @@ if (isEnabled('telegram')) await telegramHot.start()
 // liveness probe feeds the autonomy reconciler.
 const ca2 = bootCa2({ runtime: activeLedgerRuntime(), sessions, bots: telegramHot.channels?.bots ?? null, settings: () => db.getSettings() })
 startCentralAutonomyBoot({ runtime: activeLedgerRuntime(), ...(ca2 ? { agentAlive: ca2.agentAlive } : {}) })
-// Central is the notification hub with or without Telegram: gate and agent notices land in its chat.
-if (process.env.NODE_ENV !== 'test') bootCentralNotices()
-// Schedules and event triggers must fire without the UI open (otherwise the first /api/routines call starts them); never under a test runner.
-if (process.env.NODE_ENV !== 'test') {
-  try { ensureRoutines() } catch (e) { log.warn('routines.start.failed', 'Cannot start routines at boot', { cause: e instanceof Error ? e.message : String(e) }) }
-  // Cost capture listens to agent hooks from the first session; a DAG left active by a restart resumes polling.
-  startCostCapture().catch((e: unknown) => log.warn('cost.start.failed', 'Cannot start cost capture at boot', { cause: e instanceof Error ? e.message : String(e) }))
-  try { armDagLoop() } catch (e) { log.warn('dag.start.failed', 'Cannot arm the DAG scheduler at boot', { cause: e instanceof Error ? e.message : String(e) }) }
-  // Wallpaper GC: overrides of deleted workspaces + image files nothing references (one readdir).
-  pruneCanvasBackgrounds(db, new Set(db.list().map((w) => w.id)), backgroundsDir()).catch((e: unknown) => log.warn('canvas-background.prune_failed', 'Cannot prune canvas backgrounds at boot', { cause: e instanceof Error ? e.message : String(e) }))
-}
+startCentralLoops(log) // notices, routines, cost, DAG, wallpaper GC; never under a test runner (bootLoops.ts)
 
 const API_PREFIX = '/api/'
 // In-process host (src/native): its window gets the sign-in URL and it may package dist/ elsewhere.
@@ -197,15 +147,9 @@ export { isNodeTokenPath }
 // (file itu terbaca semua proses dengan uid yang sama).
 installContextLink()
 
-// Browser di canvas: hook kemampuan `browser` menyalakan/mematikan runtime tanpa restart; /ws/browser dan
-// /api/browser selalu terdaftar dan membaca `activeBrowser()` per panggilan. Opsi sesi PTY dihitung ulang
-// tiap perubahan (hook kedua jalan setelah hook runtime). Agent terminal memakai token node-nya sendiri; node
-// browser target dicari per panggilan dari edge kabel di workspace (`workspaces`), jadi tanpa capability/restart sesi.
-// Shim + skill agent dipasang sekali per proses saat runtime start (`onAgentUse`); sub `browserAgent` off cukup ditolak handler.
-let shimInstalled = false
-const ensureAgentShim = () => { if (!shimInstalled) { installBrowserAgentShim(); shimInstalled = true } }
+// Browser on the canvas: started/stopped by the `browser` capability, no restart (browser.activate.ts).
 registerBrowserCapability({
-  env: process.env, webtermPort: PORT, loopbackBind: isLoopbackHost(HOST), onAgentUse: ensureAgentShim,
+  env: process.env, webtermPort: PORT, loopbackBind: isLoopbackHost(HOST), onAgentUse: ensureBrowserAgentShim,
   dataRoot: dataDir(), secrets: createFileSecretStore(join(dataDir(), 'secrets')), workspaces: () => db.list(),
 })
 onCapabilityChange('browser', { start: applyPtyOptions, stop: applyPtyOptions })
@@ -215,10 +159,7 @@ booted = true
 applyPtyOptions()
 void sweepTrashOnBoot() // retensi trash R-11; no-op bila WEBTERM_FILES_MUTATE off
 void guardWorkspaceRepos(db.list()) // secrets guard: auto-.gitignore untracked secret files in workspace repos
-// Port events must exist without the UI open (otherwise the first GET /api/ports starts it); never under a test runner.
-if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => log.warn('ports.start.failed', 'Cannot start port scanner at boot', { cause: e instanceof Error ? e.message : String(e) }))
-// Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
-if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
+startDeviceLoops(log) // port scanner + Web Push, without the UI open (bootLoops.ts)
 
 // In-process host: its window loads the sign-in file, never the OS browser.
 const RUN_DIR = join(dataDir(), RUN_SUBDIR)
@@ -335,61 +276,14 @@ export const openUi = (): Promise<void> => uiOpener.open()
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {
   markReady({ host: HOST, port: PORT })
-  // Lets the native app find this server for the data dir instead of starting a second one (instanceFile.ts).
-  try { writeInstanceFile(RUN_DIR, { pid: process.pid, host: HOST, port: PORT }) } catch (e) {
-    log.warn('server.instance_file_failed', 'Cannot record this server in the run dir', { cause: e instanceof Error ? e.message : String(e) })
-  }
-  // Never log the token itself — only whether one is in force, how long it is, and where it came from.
-  const { token: TOKEN, source } = getTokenState()
-  const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
-  log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token}, source ${source})`, {
-    host: HOST, port: PORT, mode: dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
-  })
-  // An in-process host opens its own window (openUi), so no auto-open there.
-  void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: !host && process.stderr.isTTY === true })
+  announceListening({ host: HOST, port: PORT, dev, runDir: RUN_DIR, autoOpen: () => {
+    // An in-process host opens its own window (openUi), so no auto-open there.
+    void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: !host && process.stderr.isTTY === true })
+  } })
 })
 
-// Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.
-process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
-// Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
-process.on('unhandledRejection', onUnhandledRejection(log))
-let storesClosed = false
-/** Once per process (`exit` hook, or stopServer() for an in-process host that may exit natively without it): drop the run-dir record, close the stores. */
-function closeStoresOnce(code: number): void {
-  if (storesClosed) return
-  storesClosed = true
-  try { removeInstanceFile(RUN_DIR, process.pid) } catch (e) {
-    log.warn('server.instance_file_failed', 'Cannot remove this server\'s record from the run dir', { cause: e instanceof Error ? e.message : String(e) })
-  }
-  closeStores([['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])], log)
-  log.info('server.stop', 'webterm stopping', { code })
-  flushLogsSync()
-}
-process.on('exit', closeStoresOnce)
-const BROWSER_SHUTDOWN_CAP_MS = 5000
-/** Chat Queries aborted (no Claude child outlives the server), Chromium + proxy closed (capped). */
-function releaseRuntimes(): Promise<unknown> {
-  activeAgentChatPool()?.closeAll()
-  const rt = activeBrowser()
-  return rt ? Promise.race([rt.shutdown(), new Promise((r) => setTimeout(r, BROWSER_SHUTDOWN_CAP_MS))]) : Promise.resolve()
-}
-for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
-  // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.
-  process.on(signal, () => { void releaseRuntimes().finally(() => process.exit(exitCode)) })
-}
-
-/**
- * In-process stop (src/native, tests): release runtimes, drop every socket, close the main and proxy
- * listeners so both ports are free, then close the stores. Electrobun quits through a native exit that
- * skips the process `exit` hook, so the stores cannot wait for it. The process is expected to exit next.
- */
-export async function stopServer(): Promise<void> {
-  log.info('server.stop_requested', 'In-process host is stopping webterm')
-  await releaseRuntimes()
-  for (const c of [...wss.clients, ...browserWss.clients]) c.terminate()
-  // close() first, then drop keep-alive sockets: under Bun, closeAllConnections() before close() stops the listener and close() then throws.
-  const closed = new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(new Error('cannot close the webterm listener', { cause: err })) : resolve())))
-  server.closeAllConnections()
-  await Promise.all([closed, devProxy.then((p) => p?.close())])
-  closeStoresOnce(0)
-}
+/** In-process stop (src/native, tests); also installs the exit/signal hooks that close the stores (shutdown.ts). */
+export const stopServer = installShutdown({
+  log, runDir: RUN_DIR, server, devProxy, sockets: () => [...wss.clients, ...browserWss.clients],
+  stores: [['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])],
+})
