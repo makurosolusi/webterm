@@ -143,4 +143,21 @@ process.stdout.write(${JSON.stringify(JSON.stringify(RESULT))})`)
     setTimeout(() => ac.abort(), 50)
     expect(await p.then(() => 'resolved', (err: Error) => err.message)).toContain('claude exited')
   })
+
+  test('a claude killed before it reads the prompt rejects with its exit, never an uncaught EPIPE', async () => {
+    const bin = join(dir, 'claude-dies')
+    writeFileSync(bin, '#!/bin/sh\nkill -TERM $$\n', { mode: 0o755 }) // test-only: SIGTERM at once (exit 143)
+    const uncaught: unknown[] = []
+    const seen = (err: unknown): void => { uncaught.push(err) }
+    process.on('uncaughtException', seen)
+    try {
+      const out = await createAnalysisRunner({ bin })({ prompt: 'x'.repeat(1 << 20), schema: {}, cwd: dir }, new AbortController().signal)
+        .then(() => 'resolved', (err: Error) => err.message)
+      await new Promise((r) => setTimeout(r, 100))
+      expect(out).toContain('claude exited')
+    } finally {
+      process.off('uncaughtException', seen)
+    }
+    expect(uncaught).toEqual([])
+  })
 })

@@ -268,6 +268,20 @@ describe('exec runner agents', { timeout: 20_000 }, () => {
     expect(s.ex.store.get(id)?.state).toBe('rejected')
     expect(allRows(s.f.db, "SELECT kind, title FROM inbox_item WHERE source = 'verifier'")).toEqual([{ kind: 'notify', title: `${id} failed verification: no changes` }])
   })
+  it('an exit whose settlement throws (agent row gone) is logged, never an unhandled rejection', async () => {
+    const s = setup(undefined, headless('setTimeout(()=>process.exit(2),300)'))
+    const unhandled: unknown[] = []
+    const seen = (reason: unknown): void => { unhandled.push(reason) }
+    process.on('unhandledRejection', seen)
+    try {
+      const id = String((await s.ex.spawn(s.input())).data?.agentId)
+      s.f.db.query('DELETE FROM central_agents WHERE id = ?').run(id) // test-only: the row vanishes mid-run
+      await wait(1_000)
+    } finally {
+      process.off('unhandledRejection', seen)
+    }
+    expect(unhandled).toEqual([])
+  })
   it('F4-c: a verifier crash ends failed, not accepted', async () => {
     const s = setup(undefined, headless('process.exit(0)'), async () => { throw new Error('tool missing') })
     const id = String((await s.ex.spawn(s.input())).data?.agentId)
