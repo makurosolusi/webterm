@@ -12,6 +12,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionsPanel, { type SessionsPanelProps } from './SessionsPanel'
+import { __resetNodeStatusForTests } from './nodeStatus.store'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
@@ -72,7 +73,7 @@ function select(el: Element): void {
 }
 
 beforeEach(() => localStorage.clear())
-afterEach(cleanup)
+afterEach(() => { cleanup(); __resetNodeStatusForTests() })
 
 describe('SessionsPanel sebagai VS Code tree', () => {
   it('merender grup sebagai branch dan sesi sebagai leaf', () => {
@@ -82,14 +83,14 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     expect(screen.getByText('Alpha')).toBeTruthy()
     expect(screen.getByText('Beta')).toBeTruthy()
     expect(screen.getByText('Build')).toBeTruthy()
-    expect(item('Build — Running')).toBeTruthy()
+    expect(item('Build — Working')).toBeTruthy()
   })
 
   it('memilih sesi memfokuskan node-nya', () => {
     const onFocusNode = vi.fn()
     render(<SessionsPanel {...baseProps()} onFocusNode={onFocusNode} />)
 
-    select(item('Build — Running'))
+    select(item('Build — Working'))
 
     expect(onFocusNode).toHaveBeenCalledWith('t1')
   })
@@ -99,7 +100,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     render(<SessionsPanel {...baseProps()} onFocusNode={onFocusNode} />)
 
     tree().dispatchEvent(
-      new CustomEvent('vsc-tree-select', { detail: { selectedItems: [item('Build — Running')] } }),
+      new CustomEvent('vsc-tree-select', { detail: { selectedItems: [item('Build — Working')] } }),
     )
 
     expect(onFocusNode).toHaveBeenCalledWith('t1')
@@ -155,19 +156,13 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     expect(onCloseSession).toHaveBeenCalledWith('t1')
   })
 
-  it('tab Status mengelompokkan per status dan tetap menyembunyikan seksi kosong', () => {
-    render(<SessionsPanel {...baseProps()} />)
+  it('tab Status: lifecycle buckets, empty ones hidden, no "No status" and no attention-0 header', () => {
+    render(<SessionsPanel {...baseProps()} statuses={{ t1: 'working', t2: 'waiting', t3: 'done' }} />)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Status' }))
 
-    const groups = [...document.querySelectorAll('vscode-tree-item[data-group]')].map((el) =>
-      el.getAttribute('data-group'),
-    )
-    expect(groups).toContain('status:working')
-    expect(groups).toContain('status:idle')
-    // attention nol, bukan "belum dihitung" — headernya tetap tampil.
-    expect(groups).toContain('status:attention')
-    expect(groups).not.toContain('status:unknown')
+    const groups = [...document.querySelectorAll('vscode-tree-item[data-group]')].map((el) => el.getAttribute('data-group'))
+    expect(groups).toEqual(['status:working', 'status:idle', 'status:exited'])
   })
 
   it('filter memangkas baris tanpa kehilangan pohonnya', () => {

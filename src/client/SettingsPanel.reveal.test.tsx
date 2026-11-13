@@ -45,9 +45,16 @@ describe('deep link to a setting', () => {
     panel('terminal', 'appTheme')
     const el = await revealed('appTheme')
     expect(scrolled.find((s) => s.el === el)?.arg).toEqual({ block: 'center' })
-    expect(document.activeElement).toBe(within(el).getByRole('combobox'))
+    // Theme is a segmented choice: focus lands on the checked option (System), not the first (Light).
+    expect(document.activeElement).toBe(within(el).getByRole('radio', { name: 'System' }))
     expect(el.classList.contains(REVEAL_CLASS)).toBe(true)
     await waitFor(() => expect(el.classList.contains(REVEAL_CLASS)).toBe(false), { timeout: REVEAL_MS + 1000 })
+  })
+
+  it('a segmented row with a non-first value focuses that checked option', async () => {
+    render(<SettingsPanel settings={{ ...DEFAULT_SETTINGS, cursorStyle: 'underline' }} onChange={vi.fn()} onClose={vi.fn()} section="terminal" field="cursorStyle" />)
+    const el = await revealed('cursorStyle')
+    await waitFor(() => expect(document.activeElement).toBe(within(el).getByRole('radio', { name: /Underline/ })))
   })
 
   it('opens the collapsed group around the field first (Central › Advanced)', async () => {
@@ -57,9 +64,9 @@ describe('deep link to a setting', () => {
     await waitFor(() => expect(document.activeElement).toBe(el.querySelector('select')))
   })
 
-  it('opens a page\'s Advanced disclosure around the field (Terminal › Advanced › Default shell)', async () => {
-    panel('shell', 'defaultShell') // a legacy section id still lands on the page that holds the field
-    const el = await revealed('defaultShell')
+  it('opens a page\'s Advanced disclosure around the field (Terminal › Advanced › Word separators)', async () => {
+    panel('shell', 'terminalWordSeparator') // a legacy section id still lands on the page that holds the field
+    const el = await revealed('terminalWordSeparator')
     expect((el.closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 

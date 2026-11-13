@@ -1,43 +1,24 @@
-// Baris sesi sidebar kiri sebagai simpul VS Code tree (`TreeItem`), plus header grupnya.
-// Dipisah dari `SessionsPanel` supaya kerangka panel (tab, filter, pohon) tetap terbaca dalam satu
-// layar. Yang tinggal di sini hanya BENTUK baris: judulnya, glyph status, slot ikon, dan tombol
-// akhiri sesi. Logika pengelompokan tetap di `./sessionList` (bebas DOM, dites di node-env).
-import { useEffect, useRef, type ReactNode } from 'react'
+// Baris sesi sidebar kiri sebagai simpul VS Code tree (`TreeItem`): sesi hidup dan baris "Recently
+// closed". Header grupnya hidup di `./SessionGroupItem`. Yang tinggal di sini hanya BENTUK baris:
+// ikon kind, judul, deskripsi, glyph status (dari model bersama), waktu, dan aksi hover. Apa yang
+// baris itu KATAKAN diputuskan di `./sessionList.row` (bebas DOM, dites di node-env).
+import { useEffect, useRef } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { TreeItem } from './vscode/register'
-import { rowMeta, type SessionRowVM, type SignalCounts } from './sessionList'
-import { signalOf, UNREAD_LABEL } from './sessionSignal'
-import { SWITCH_WORKSPACE_LABEL } from './sessionMenu'
-import { WORKSPACE_DOT_LABEL, type WorkspaceDot } from './sessionList.workspace'
-
-/** Chip after the name of the workspace open on the board. */
-export const CURRENT_CHIP = 'Current'
-
-/** Glyph rule shared with the node tab strips (`./sessionSignal`). */
-const signalOfRow = (row: SessionRowVM) => signalOf(row.statusKind, row.unread === true, row.stateLabel)
-
-/** Satu glyph status di slot decoration (kanan baris), seperti dekorasi terminal VS Code. Prioritas:
- *  bel (giliranmu) → centang belum-dibaca → centang (selesai) → spinner (jalan) → titik. Satu baris
- *  hanya punya satu slot, jadi sinyal yang paling menuntut tindakan yang menang. */
-function StatusGlyph({ row }: { row: SessionRowVM }) {
-  const { tone, label: title } = signalOfRow(row)
-  const icon = tone === 'attention' ? 'bell'
-    : tone === 'unread' || tone === 'done' ? 'check'
-    : tone === 'working' ? 'loading codicon-modifier-spin'
-    : 'circle-small-filled'
-  return (
-    <span slot="decoration" className={`ss-glyph ss-glyph--${tone}`} title={title}>
-      <span className={`codicon codicon-${icon}`} aria-hidden />
-    </span>
-  )
-}
+import { KIND_ICON } from './nodeList'
+import { relativeTime } from './SessionHistory.model'
+import { SessionStatusGlyph } from './SessionStatusGlyph'
+import { sessionLabel, type SessionRowVM } from './sessionList'
+import { rowAge, rowDescription, rowTooltip } from './sessionList.row'
+import type { ClosedEntry } from './closedHistory'
 
 interface InlineActionProps {
   icon: string
   tooltip: string
   ariaLabel: string
   className: string
-  onActivate: () => void
+  /** Gets the button, so a menu can anchor to it. */
+  onActivate: (el: HTMLElement) => void
 }
 
 /**
@@ -50,7 +31,7 @@ interface InlineActionProps {
  * Enter/Space juga ditangkap di sini: `vscode-tree` mem-preventDefault keduanya di host, jadi
  * tanpa ini keyboard memilih/melipat barisnya alih-alih menekan tombol.
  */
-function InlineAction({ icon, tooltip, ariaLabel, className, onActivate }: InlineActionProps) {
+export function InlineAction({ icon, tooltip, ariaLabel, className, onActivate }: InlineActionProps) {
   const ref = useRef<HTMLButtonElement>(null)
   const onActivateRef = useRef(onActivate)
   onActivateRef.current = onActivate
@@ -60,7 +41,7 @@ function InlineAction({ icon, tooltip, ariaLabel, className, onActivate }: Inlin
     const run = (e: Event) => {
       e.preventDefault()
       e.stopPropagation()
-      onActivateRef.current()
+      onActivateRef.current(el)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') run(e)
@@ -84,27 +65,42 @@ function InlineAction({ icon, tooltip, ariaLabel, className, onActivate }: Inlin
 /** Target aksi sebuah simpul pohon. Panel memetakan elemen → target lewat ref supaya klik/Enter
  *  dari shadow tree tetap bisa memanggil callback React tanpa bergantung pada atribut DOM. */
 export type TreeTarget =
-  | { kind: 'session'; id: string; path?: string }
+  | { kind: 'session'; id: string; path?: string; renamable?: boolean }
   | { kind: 'node'; id: string; path?: string }
   | { kind: 'reopen'; id: string; path?: string }
   | { kind: 'group'; key: string; projectId?: string; isActive?: boolean }
 
 export type RegisterTreeTarget = (el: Element | null, target: TreeTarget) => void
 
+/** Anchor of a menu opened from a row's ⋯ action: just below the button. */
+const below = (el: HTMLElement) => {
+  const r = el.getBoundingClientRect()
+  return { x: r.left, y: r.bottom }
+}
+
 export interface SessionTreeItemProps {
   row: SessionRowVM
-  /** Tampilkan nama workspace di meta. Mode status meratakan semua workspace, jadi di sana
-   *  nama itu satu-satunya petunjuk sesi ini milik siapa. */
-  showProject: boolean
+  /** Project tab: under its workspace header. Status tab: mixed boards under a bucket header,
+   *  which already shows the status icon, so the row only keeps the unread mark. */
+  mode: 'project' | 'status'
+  /** The group's folder (Project tab): the row repeats its own folder only when it differs. */
+  groupCwd?: string
+  /** Shared 1s clock (`useStatusNow`) the relative time is read against. */
+  now: number
   onCloseSession: (id: string) => void
+  /** Absent = this row cannot be renamed here (its board is not the open one). */
+  onRename?: (row: SessionRowVM) => void
+  onMoreActions: (target: TreeTarget, anchor: { x: number; y: number }) => void
   register: RegisterTreeTarget
 }
 
-/** Satu baris sesi (leaf). Ikon status duduk di slot ikon leaf milik tree — kolom yang sama dengan
+/** Satu baris sesi (leaf). Ikon kind duduk di slot ikon leaf milik tree — kolom yang sama dengan
  *  glyph VS Code, jadi indentasi dan tinggi baris 22px datang dari library, bukan dari kita. */
-export function SessionTreeItem({ row, showProject, onCloseSession, register }: SessionTreeItemProps) {
-  const meta = rowMeta(showProject ? row.projectName : undefined, row.cwd)
-  const aria = `${row.label} — ${row.stateLabel}${signalOfRow(row).tone === 'unread' ? ` — ${UNREAD_LABEL}` : ''}`
+export function SessionTreeItem({ row, mode, groupCwd, now, onCloseSession, onRename, onMoreActions, register }: SessionTreeItemProps) {
+  const description = rowDescription(row, mode, groupCwd)
+  const age = rowAge(row.view.since, now)
+  const showGlyph = mode === 'project' || row.view.unread
+  const target: TreeTarget = { kind: 'session', id: row.id, path: row.cwd, renamable: !!onRename }
   const closeRef = useRef(onCloseSession)
   closeRef.current = onCloseSession
 
@@ -112,7 +108,7 @@ export function SessionTreeItem({ row, showProject, onCloseSession, register }: 
   // di host (bukan `onAuxClick` React) karena satu file ini sudah hidup di dua sisi shadow boundary
   // yang berbeda; listener host pasti menerima bubble dari isi yang di-slotted.
   const registerRow = (el: HTMLElement | null) => {
-    register(el, { kind: 'session', id: row.id, path: row.cwd })
+    register(el, target)
     if (!el) return
     const handler = (e: Event) => {
       const mouse = e as MouseEvent
@@ -126,169 +122,61 @@ export function SessionTreeItem({ row, showProject, onCloseSession, register }: 
 
   return (
     <TreeItem
-      className="ss-tree__leaf"
-      aria-label={aria}
+      className={row.view.unread ? 'ss-tree__leaf ss-tree__leaf--unread' : 'ss-tree__leaf'}
+      aria-label={`${row.label} — ${row.view.label}`}
       ref={registerRow}
     >
-      {/* Ikon tipe di slot ikon; warna sesi menempel di ikon (seperti warna terminal VS Code), label tetap netral. */}
+      {/* Ikon kind di slot ikon; warna sesi menempel di ikon (seperti warna terminal VS Code), label tetap netral. */}
       <span slot="icon-leaf" className="ss-tree__kind" style={row.color ? { color: row.color } : undefined} aria-hidden>
-        <span className={`codicon codicon-${row.isAgent ? 'hubot' : 'terminal'}`} />
+        <span className={`codicon codicon-${KIND_ICON[row.kind]}`} />
       </span>
-      <span className="ss-tree__label">{row.label}</span>
-      {meta.length > 0 && (
+      {/* The hover text sits on the label: `@lit/react` drops a `title` given to the tree item. */}
+      <span className="ss-tree__label" title={rowTooltip(row, now)}>{row.label}</span>
+      {description && (
         <span slot="description" className="ss-meta">
-          {meta.join(' · ')}
+          {description}
         </span>
       )}
-      <StatusGlyph row={row} />
-      <InlineAction
-        icon="trash"
-        tooltip="End session"
-        ariaLabel={`End session ${row.label}`}
-        className="ss-tree__end"
-        onActivate={() => onCloseSession(row.id)}
-      />
+      <span slot="decoration" className="ss-tree__decoration">
+        {showGlyph && <SessionStatusGlyph view={row.view} className="ss-glyph" />}
+        {age && <span className="ss-age">{age}</span>}
+      </span>
+      {onRename && (
+        <InlineAction icon="edit" tooltip="Rename" ariaLabel={`Rename ${row.label}`} className="ss-tree__rename" onActivate={() => onRename(row)} />
+      )}
+      <InlineAction icon="trash" tooltip="End session" ariaLabel={`End session ${row.label}`} className="ss-tree__end" onActivate={() => onCloseSession(row.id)} />
+      <InlineAction icon="ellipsis" tooltip="More Actions…" ariaLabel={`More actions for ${row.label}`} className="ss-tree__more" onActivate={(el) => onMoreActions(target, below(el))} />
     </TreeItem>
   )
 }
 
-export interface SessionGroupItemProps {
-  /** Kunci lipatan yang dipersist panel (`collapsed`). */
-  groupKey: string
-  label: string
-  count: number
-  open: boolean
+export interface ClosedTreeItemProps {
+  entry: ClosedEntry
+  now: number
+  onRestore: (id: string) => void
   register: RegisterTreeTarget
-  /** Board yang sedang terbuka di canvas: hanya tab Project yang mengisinya. */
-  isActive?: boolean
-  projectId?: string
-  /** Inisial workspace, menggantikan ikon kind. */
-  monogram?: string
-  color?: string
-  /** Glyph untuk grup non-workspace (tab Status/Nodes). */
-  icon?: ReactNode
-  signals?: SignalCounts
-  /**
-   * Grup workspace membawa id board untuk inline action / context menu "Switch to Workspace".
-   * Klik header (grup apa pun) hanya melipat: pindah board dari klik expand adalah bug lama.
-   */
-  workspace?: boolean
-  /** Inline "Switch to Workspace" action; rendered for a workspace group that is not the open board. */
-  onSwitchWorkspace?: (projectId: string) => void
-  /** Workspace header only: status dot and the "folder · branch" second line. */
-  dot?: WorkspaceDot
-  sub?: string
-  children: ReactNode
 }
 
-/** Workspace header label (Orca layout): dot, name, Current chip, then folder · branch below. */
-function WorkspaceLabel({ label, isActive, dot, sub }: { label: string; isActive: boolean; dot?: WorkspaceDot; sub?: string }) {
-  return (
-    <span className="ss-ws">
-      <span className="ss-ws__line">
-        {dot && <span className={`ss-ws__dot ss-ws__dot--${dot}`} role="img" aria-label={WORKSPACE_DOT_LABEL[dot]} />}
-        <span className={isActive ? 'ss-tree__group-label ss-tree__group-label--active' : 'ss-tree__group-label'}>
-          {label}
-        </span>
-        {isActive && <span className="ss-ws__chip">{CURRENT_CHIP}</span>}
-      </span>
-      {sub && <span className="ss-ws__sub">{sub}</span>}
-    </span>
-  )
-}
-
-/** Header grup sebagai branch tree. Chevron, hover, dan tinggi 22px milik library; di sini hanya
- *  isi barisnya (label 11px uppercase, badge hitungan, monogram). */
-export function SessionGroupItem(props: SessionGroupItemProps) {
-  const {
-    groupKey,
-    label,
-    count,
-    open,
-    register,
-    isActive = false,
-    projectId,
-    monogram,
-    color,
-    icon,
-    signals,
-    workspace = false,
-    onSwitchWorkspace,
-    dot,
-    sub,
-    children,
-  } = props
-  const groupClass = ['ss-tree__group', workspace && 'ss-tree__group--ws', isActive && 'ss-tree__group--active']
-    .filter(Boolean)
-    .join(' ')
-
-  const iconSlots =
-    monogram !== undefined ? (
-      <>
-        <span slot="icon-branch" className="ss-tree__monogram" style={color ? { background: color } : undefined} aria-hidden>
-          {monogram}
-        </span>
-        <span
-          slot="icon-branch-opened"
-          className="ss-tree__monogram"
-          style={color ? { background: color } : undefined}
-          aria-hidden
-        >
-          {monogram}
-        </span>
-      </>
-    ) : icon ? (
-      <>
-        <span slot="icon-branch" className="ss-tree__kind" aria-hidden>
-          {icon}
-        </span>
-        <span slot="icon-branch-opened" className="ss-tree__kind" aria-hidden>
-          {icon}
-        </span>
-      </>
-    ) : null
-
+/** One "Recently closed" row: kind icon, name, "workspace · 5m ago", inline Restore on hover. */
+export function ClosedTreeItem({ entry, now, onRestore, register }: ClosedTreeItemProps) {
+  const label = sessionLabel(entry.node)
+  const when = relativeTime(entry.closedAt, now)
   return (
     <TreeItem
-      branch
-      open={open}
-      className={groupClass}
-      aria-current={isActive ? 'true' : undefined}
-      data-group={groupKey}
-      ref={(el) =>
-        register(
-          el,
-          workspace
-            ? { kind: 'group', key: groupKey, projectId, isActive }
-            : { kind: 'group', key: groupKey },
-        )
-      }
+      className="ss-tree__leaf"
+      aria-label={`Reopen ${label}`}
+      ref={(el) => register(el, { kind: 'reopen', id: entry.node.id, path: entry.node.cwd })}
     >
-      {iconSlots}
-      {workspace ? (
-        <WorkspaceLabel label={label} isActive={isActive} dot={dot} sub={sub} />
-      ) : (
-        <span className="ss-tree__group-label">{label}</span>
-      )}
-      <span slot="decoration" className="ss-tree__decoration">
-        {signals && signals.attention > 0 && (
-          <span className="ss-signal ss-signal--attention">{signals.attention}</span>
-        )}
-        {signals && signals.working > 0 && (
-          <span className="ss-signal ss-signal--working">{signals.working}</span>
-        )}
-        <span className="ss-tree__count">{count}</span>
+      <span slot="icon-leaf" className="ss-tree__kind" aria-hidden>
+        <span className={`codicon codicon-${KIND_ICON[entry.node.kind]}`} />
       </span>
-      {workspace && projectId && !isActive && onSwitchWorkspace && (
-        <InlineAction
-          icon="arrow-right"
-          tooltip={SWITCH_WORKSPACE_LABEL}
-          ariaLabel={`${SWITCH_WORKSPACE_LABEL} ${label}`}
-          className="ss-tree__switch"
-          onActivate={() => onSwitchWorkspace(projectId)}
-        />
-      )}
-      {children}
+      <span className="ss-tree__label" title={[label, entry.node.cwd, `Closed ${when}`].filter(Boolean).join(' — ')}>{label}</span>
+      {/* Nama workspace SELALU ikut: daftar ini meruntuhkan dinding workspace, jadi tanpa itu
+          barisnya tidak bilang akan muncul kembali di board mana. */}
+      <span slot="description" className="ss-meta">
+        {`${entry.workspaceName} · ${when}`}
+      </span>
+      <InlineAction icon="discard" tooltip="Restore" ariaLabel={`Restore ${label}`} className="ss-tree__restore" onActivate={() => onRestore(entry.node.id)} />
     </TreeItem>
   )
 }

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Settings > Canvas background: live preview, reset, contrast guard, missing-file notice,
 // upload wiring, the one "This workspace: Same as all / Custom" choice, and a preset selected only on an exact match.
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
@@ -33,13 +33,17 @@ function Host({ initial, projectId }: { initial: Partial<Settings>; projectId?: 
 }
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
+/** Picks `name` in the segmented choice labelled `group`. */
+const pick = (group: string, name: string): void => { fireEvent.click(within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })) }
+const picked = (group: string): string | null | undefined =>
+  within(screen.getByRole('radiogroup', { name: group })).getAllByRole('radio').find((r) => r.getAttribute('aria-checked') === 'true')?.textContent
 const previewBase = () => document.querySelector('[data-testid="canvas-background-preview"] [data-testid="canvas-wallpaper-base"]') as HTMLElement | null
 
 describe('CanvasBackgroundSection', () => {
   it('applies a style immediately (live preview) and a preset', () => {
     render(<Host initial={{}} />)
     expect(previewBase()).toBeNull()
-    fireEvent.change(screen.getByLabelText('Background style'), { target: { value: 'color' } })
+    pick('Background style', 'Solid color')
     expect(latest.canvasBackground.mode).toBe('color')
     expect(previewBase()).not.toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Midnight navy' }))
@@ -53,10 +57,13 @@ describe('CanvasBackgroundSection', () => {
     expect(latest.canvasBackground.gradient.angle).toBe(200)
   })
 
-  it('Reset to default restores the default background', async () => {
+  it('the Background style row\'s own Reset restores the default background (no separate reset button)', async () => {
     render(<Host initial={{ canvasBackground: bg({ mode: 'color', color: '#2a1e2e' }) }} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
+    expect(screen.queryByRole('button', { name: 'Reset to default' })).toBeNull()
+    expect(document.querySelector('.st-group-title')?.textContent).toBe('Canvas background')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Background style' }))
     await waitFor(() => expect(latest.canvasBackground).toEqual(DEFAULT_CANVAS_BACKGROUND))
+    expect(screen.queryByRole('button', { name: 'Reset Setting: Background style' })).toBeNull() // at the default: no dot, no Reset
   })
 
   it('warns on a bright, undimmed image; one click applies the recommended dim', async () => {
@@ -107,20 +114,20 @@ describe('CanvasBackgroundSection', () => {
   it('This workspace: Same as all edits the shared background; Custom copies it and edits only this workspace', () => {
     render(<Host initial={{ canvasBackground: bg({ mode: 'color', color: '#17241e' }) }} projectId="w1" />)
     expect(screen.queryByLabelText('Edit background for')).toBeNull() // one choice, not two stacked selects
-    expect((screen.getByLabelText('This workspace') as HTMLSelectElement).value).toBe('same')
+    expect(picked('This workspace')).toBe('Same as all workspaces')
     fireEvent.click(screen.getByRole('button', { name: 'Midnight navy' }))
     expect(latest.canvasBackground.color).toBe('#141b2d')
-    fireEvent.change(screen.getByLabelText('This workspace'), { target: { value: 'custom' } })
+    pick('This workspace', 'Custom')
     expect(latest.canvasBackgroundByWorkspace.w1?.color).toBe('#141b2d')
-    fireEvent.change(screen.getByLabelText('Background style'), { target: { value: 'gradient' } })
+    pick('Background style', 'Gradient')
     expect(latest.canvasBackgroundByWorkspace.w1?.mode).toBe('gradient')
     expect(latest.canvasBackground.mode).toBe('color')
   })
 
   it('back to Same as all drops the workspace override', async () => {
     render(<Host initial={{ canvasBackgroundByWorkspace: { w1: bg({ mode: 'color', color: '#2a1e2e' }) } }} projectId="w1" />)
-    expect((screen.getByLabelText('This workspace') as HTMLSelectElement).value).toBe('custom')
-    fireEvent.change(screen.getByLabelText('This workspace'), { target: { value: 'same' } })
+    expect(picked('This workspace')).toBe('Custom')
+    pick('This workspace', 'Same as all workspaces')
     await waitFor(() => expect(latest.canvasBackgroundByWorkspace.w1).toBeUndefined())
   })
 

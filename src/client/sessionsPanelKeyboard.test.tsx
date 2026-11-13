@@ -5,6 +5,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionsPanel, { type SessionsPanelProps } from './SessionsPanel'
+import SideBar from './sideBar/SideBar'
+import { __resetNodeStatusForTests } from './nodeStatus.store'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Workspace, WsNode } from '../shared/workspace'
 
@@ -61,18 +63,18 @@ const press = (el: Element, key: string, init: KeyboardEventInit = {}) =>
   fireEvent.keyDown(el, { key, ...init })
 
 beforeEach(() => localStorage.clear())
-afterEach(cleanup)
+afterEach(() => { cleanup(); __resetNodeStatusForTests() })
 
 describe('navigasi keyboard pohon sesi', () => {
   it('Home dan End memindah fokus ke baris pertama dan terakhir yang terlihat', () => {
     render(<SessionsPanel {...baseProps()} />)
     openAll()
 
-    press(item('Test — Done'), 'Home')
+    press(item('Test — Exited'), 'Home')
     expect(group('project:p0').active).toBe(true)
 
     press(group('project:p1'), 'End')
-    expect(item('Deploy — Done').active).toBe(true)
+    expect(item('Deploy — Exited').active).toBe(true)
   })
 
   it('type-ahead melompat ke baris berawalan huruf yang diketik', () => {
@@ -81,7 +83,16 @@ describe('navigasi keyboard pohon sesi', () => {
 
     press(group('project:p1'), 'd')
 
-    expect(item('Deploy — Done').active).toBe(true)
+    expect(item('Deploy — Exited').active).toBe(true)
+  })
+
+  it('type-ahead reaches workspace headers (their label sits in .ss-ws > .ss-ws__line)', () => {
+    render(<SessionsPanel {...baseProps()} />)
+    openAll()
+
+    press(item('Build — Working'), 'b')
+
+    expect(group('project:p2').active).toBe(true)
   })
 
   it('Delete mengakhiri sesi dan tidak bocor ke keyboard canvas', () => {
@@ -90,7 +101,7 @@ describe('navigasi keyboard pohon sesi', () => {
     document.addEventListener('keydown', leaked)
     render(<SessionsPanel {...baseProps()} onCloseSession={onCloseSession} />)
 
-    press(item('Build — Running'), 'Delete')
+    press(item('Build — Working'), 'Delete')
     document.removeEventListener('keydown', leaked)
 
     expect(onCloseSession).toHaveBeenCalledWith('t1')
@@ -103,7 +114,7 @@ describe('navigasi keyboard pohon sesi', () => {
     document.addEventListener('keydown', leaked)
     render(<SessionsPanel {...baseProps()} onCloseSession={onCloseSession} />)
 
-    press(item('Build — Running'), 'Backspace')
+    press(item('Build — Working'), 'Backspace')
     document.removeEventListener('keydown', leaked)
 
     expect(onCloseSession).not.toHaveBeenCalled()
@@ -116,10 +127,12 @@ describe('context menu baris', () => {
     const onCloseSession = vi.fn()
     render(<SessionsPanel {...baseProps()} onCloseSession={onCloseSession} />)
 
-    fireEvent.contextMenu(item('Build — Running'))
+    fireEvent.contextMenu(item('Build — Working'))
 
     expect(screen.getByRole('menu')).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Reveal on Canvas' })).toBeTruthy()
+    // p1 is not the open board, so its node cannot be renamed from here.
+    expect(screen.getByRole('menuitem', { name: 'Rename…' }).getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(screen.getByRole('menuitem', { name: 'End Session' }))
 
     expect(onCloseSession).toHaveBeenCalledWith('t1')
@@ -131,7 +144,7 @@ describe('context menu baris', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     render(<SessionsPanel {...baseProps()} />)
 
-    fireEvent.contextMenu(item('Build — Running'))
+    fireEvent.contextMenu(item('Build — Working'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Path' }))
 
     expect(writeText).toHaveBeenCalledWith('/srv/build')
@@ -152,7 +165,7 @@ describe('context menu baris', () => {
   it('Shift+F10 membuka menu untuk baris terfokus', () => {
     render(<SessionsPanel {...baseProps()} />)
 
-    press(item('Build — Running'), 'F10', { shiftKey: true })
+    press(item('Build — Working'), 'F10', { shiftKey: true })
 
     expect(screen.getByRole('menu')).toBeTruthy()
   })
@@ -194,9 +207,26 @@ describe('chrome sidebar', () => {
     expect(document.querySelector('.sessions-view svg')).toBeNull()
   })
 
-  it('daftar kosong menampilkan welcome view dengan tombol utama', () => {
+  it('Collapse all sits in the side bar title row (VS Code view title), next to Hide Side Bar', () => {
+    render(<SideBar open view="sessions" onClose={() => {}} layers={null} history={null} sessions={<SessionsPanel {...baseProps()} />} />)
+    const head = document.querySelector('.sessions-sidebar__head')
+    expect(head?.querySelector('[aria-label="Collapse all"]')).not.toBeNull()
+    expect(document.querySelector('.sessions-view__toolbar [aria-label="Collapse all"]')).toBeNull()
+  })
+
+  it('boot (no workspace hydrated yet) shows no "No sessions yet"; an empty board offers New Terminal / New Agent', () => {
     render(<SessionsPanel {...baseProps()} workspaces={[]} />)
-    expect(screen.getByText('No sessions yet.')).toBeTruthy()
+    expect(screen.queryByText(/No sessions yet/)).toBeNull()
+
+    cleanup()
+    const onAddTerminal = vi.fn()
+    const onAddAgent = vi.fn()
+    render(<SessionsPanel {...baseProps()} workspaces={[CURRENT]} liveActiveNodes={[]} onAddTerminal={onAddTerminal} onAddAgent={onAddAgent} />)
+    expect(screen.getByText(/No sessions yet/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New Agent' }))
+    expect(onAddTerminal).toHaveBeenCalledTimes(1)
+    expect(onAddAgent).toHaveBeenCalledTimes(1)
 
     cleanup()
     render(<SessionsPanel {...baseProps()} />)

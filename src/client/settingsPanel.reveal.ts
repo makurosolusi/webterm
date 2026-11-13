@@ -9,6 +9,8 @@ const POLL_MS = 50
 const POLL_TRIES = 40 // sections that load async (capability cards, env values) render a moment later
 const ENABLE_TRIES = 10 // a control may stay disabled for good (Central off): reveal it anyway after ~0.5 s
 const CONTROL = 'input,select,textarea,[role="switch"],[role="combobox"],[role="radio"]'
+/** A segmented choice's tab stop: the checked radio (SettingsSegmented gives only it tabindex 0). */
+const CHECKED_RADIO = '[role="radio"][tabindex="0"]'
 const FOCUSABLE = 'button:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'
 
 /** Reveal `field` inside `root()` once it renders; returns the cleanup (stops waiting, ends the flash). */
@@ -20,7 +22,7 @@ export function revealSettingsField(root: () => HTMLElement | null, field: Setti
   const attempt = (): boolean => {
     const el = root()?.querySelector<HTMLElement>(`[data-field="${field}"]`)
     if (!el) return ++tries > POLL_TRIES
-    const control = el.querySelector<HTMLElement>(CONTROL) ?? el.querySelector<HTMLElement>(FOCUSABLE)
+    const control = el.querySelector<HTMLElement>(CHECKED_RADIO) ?? el.querySelector<HTMLElement>(CONTROL) ?? el.querySelector<HTMLElement>(FOCUSABLE)
     // A control still disabled while its value loads (env, capabilities): give it a moment to enable.
     if (control?.matches(':disabled') && ++waited <= ENABLE_TRIES) return false
     for (let d = el.parentElement?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true

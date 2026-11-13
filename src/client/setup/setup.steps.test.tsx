@@ -320,7 +320,7 @@ describe('Basics step', () => {
     expect((opened.mock.calls[1][0] as CustomEvent).detail).toEqual({ section: 'terminal', field: 'appTheme' })
     window.removeEventListener('webterm:open-settings', opened)
     expect(screen.getByRole('button', { name: SETUP_TEXT.finish })).toBeTruthy()
-    expect(await screen.findByText(/In use:/)).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Default projects folder' })).toBeTruthy() // the projects folder row, Browse + recent
   })
 
   const notifySwitch = (): HTMLElement => screen.getByRole('switch', { name: SETUP_TEXT.basics.notify })
