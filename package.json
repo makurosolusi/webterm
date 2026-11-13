@@ -8,11 +8,14 @@
     "dev:fresh": "bun scripts/devFresh.ts",
     "build": "vite build && bun scripts/embedDist.ts",
     "build:binary": "bun run build && bun build --compile --define \"process.env.NODE_ENV='production'\" --no-compile-autoload-bunfig --external vite --outfile webterm src/server/index.ts",
+    "build:native": "vite build && electrobun build --env=stable",
+    "build:native:cef": "WEBTERM_NATIVE_CEF=1 npm run build:native",
+    "dev:native": "vite build && electrobun dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:related": "vitest related --run",
     "test:changed": "vitest --changed --run",
-    "test:bun": "HOME=$(mktemp -d \"${TMPDIR:-/tmp}/webterm-home.XXXXXX\") bun test --no-env-file $(find src/server scripts -name '*.bun.test.ts' ! -name '*.real.bun.test.ts' | sort) && R=$(find src/server -name '*.real.bun.test.ts' | sort) && { [ -z \"$R\" ] || bun test --no-env-file $R; }"
+    "test:bun": "HOME=$(mktemp -d \"${TMPDIR:-/tmp}/webterm-home.XXXXXX\") bun test --no-env-file $(find src/server src/native scripts -name '*.bun.test.ts' ! -name '*.real.bun.test.ts' | sort) && R=$(find src/server -name '*.real.bun.test.ts' | sort) && { [ -z \"$R\" ] || bun test --no-env-file $R; }"
   },
   "overrides": {
     "dompurify": "^3.4.17"
@@ -36,6 +39,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.17",
+    "electrobun": "^2.0.6",
     "lucide-react": "^1.62.0",
     "marked": "^18.1.2",
     "marked-footnote": "^1.4.0",

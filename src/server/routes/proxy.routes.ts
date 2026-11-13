@@ -4,15 +4,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { startPortScanner } from '../ports/ports.runtime'
 import { parseProxyUrl } from '../proxy/proxy.service'
-import { preferredProxyPort, startProxyListener } from '../proxy/proxy.listener'
+import { preferredProxyPort, startProxyListener, type ProxyListener } from '../proxy/proxy.listener'
 import { getTokenState } from '../tokenBootstrap'
 import { uiSessions } from '../uiSession'
 import { json, type ApiRoute } from './route.core'
 
 let proxyPort: number | undefined
 
-/** Boot: start the proxy listener next to the main server (same host). */
-export async function startDevProxy(o: { host: string; mainPort: number; env: NodeJS.ProcessEnv }): Promise<void> {
+/** Boot: start the proxy listener next to the main server (same host); the listener lets an in-process host close it. */
+export async function startDevProxy(o: { host: string; mainPort: number; env: NodeJS.ProcessEnv }): Promise<ProxyListener> {
   const l = await startProxyListener({
     host: o.host, port: preferredProxyPort(o.env, o.mainPort),
     deps: {
@@ -24,6 +24,7 @@ export async function startDevProxy(o: { host: string; mainPort: number; env: No
     },
   })
   proxyPort = l.port
+  return l
 }
 
 /**

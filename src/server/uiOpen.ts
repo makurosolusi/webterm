@@ -23,8 +23,10 @@ export const RUN_SUBDIR = 'run'
 /** A `Host` naming this machine's loopback; only such a Host may steer where the redirect file points. */
 const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})$/
 
-/** Launch the OS default handler for a file path. The seam tests replace: never a real browser there. */
-export type OpenFile = (path: string) => Promise<void>
+/** Launch the OS default handler for a file path. The seam tests replace: never a real browser there.
+ *  `url` is the same sign-in URL the file redirects to, for an in-process host that shows it in its own
+ *  window (src/server/embedHost.ts) instead of handing a path to the OS. */
+export type OpenFile = (path: string, url: string) => Promise<void>
 
 export interface UiOpener {
   /** Mint a code (replacing any pending one), write the redirect file, hand its path to the opener.
@@ -84,15 +86,16 @@ export function createUiOpener(o: { runDir: string; bindHost: string; port: numb
     async open(hostHeader, next) {
       const code = randomBytes(CODE_BYTES).toString('base64url')
       const nextQuery = next && next !== '/' ? `&next=${encodeURIComponent(next)}` : ''
+      const url = `${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}${nextQuery}`
       try {
-        writeRedirectFile(o.runDir, file, redirectHtml(`${openOrigin(o.bindHost, o.port, hostHeader)}/auth/open?code=${code}${nextQuery}`))
+        writeRedirectFile(o.runDir, file, redirectHtml(url))
       } catch (err) {
         throw new Error(`cannot write the sign-in file in ${o.runDir}`, { cause: err })
       }
       pending = { code, expires: now() + CODE_TTL_MS }
       // Expired codes leave no file behind; unref: never holds the process open.
       setTimeout(() => { if (pending?.code === code) discard() }, CODE_TTL_MS).unref()
-      await openFile(file)
+      await openFile(file, url)
       log.info('auth.open_window', 'Opened a signed-in webterm window', { file: `${RUN_SUBDIR}/open-${process.pid}.html` })
     },
     consume(candidate) {

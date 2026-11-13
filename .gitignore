@@ -34,3 +34,9 @@ service-account*.json
 .gcp/
 # Written by scripts/embedDist.ts on every `bun run build`; a fresh tree uses distAssets.generated.d.ts
 src/server/distAssets.generated.ts
+# Electrobun native app (npm run build:native): Hutch devkit/lock state, build and release output
+.hutch/
+.cottontail-tmp/
+hutch.lock
+/build/
+/artifacts/

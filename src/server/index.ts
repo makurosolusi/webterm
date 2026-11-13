@@ -35,6 +35,7 @@ import { getTokenState } from './tokenBootstrap'
 import { tokenAccessRoute } from './tokenAccess.api'
 import { createUiAuthRoute, revokeOtherSessions } from './routes/auth.routes'
 import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
+import { embedHost } from './embedHost'
 import { uiSessions } from './uiSession'
 import { uiUsers } from './uiUser'
 import { ensureSetupCode } from './setupCode'
@@ -150,8 +151,10 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const API_PREFIX = '/api/'
+// In-process host (src/native): its window gets the sign-in URL and it may package dist/ elsewhere.
+const host = embedHost()
 /** Vite's outDir, relative to this file (src/server), not the cwd: `bun src/server/index.ts` runs from anywhere. */
-const DIST_DIR = join(import.meta.dirname, '../../dist')
+const DIST_DIR = host?.distDir ?? join(import.meta.dirname, '../../dist')
 /** bootId + build: sent as the socket `hello` and by GET /api/health (health.api.ts). */
 const identity = createServerIdentity({ distDir: DIST_DIR, dev })
 
@@ -216,7 +219,8 @@ if (process.env.NODE_ENV !== 'test') startPortScanner().catch((e: unknown) => lo
 // Web Push to the /m PWA: a gate must reach a phone that is asleep, so the loop runs without /m open.
 if (process.env.NODE_ENV !== 'test') startWebPush().catch((e: unknown) => log.warn('push.start.failed', 'Cannot start web push at boot', { cause: e instanceof Error ? e.message : String(e) }))
 
-const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT })
+// In-process host: the sign-in URL goes to its window, never the OS browser.
+const uiOpener = createUiOpener({ runDir: join(dataDir(), RUN_SUBDIR), bindHost: HOST, port: PORT, ...(host ? { openFile: (_path: string, url: string) => host.openUrl(url) } : {}) })
 const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, users: uiUsers, opener: uiOpener, token: () => getTokenState().token, dataDir })
 announceSetup(() => ensureSetupCode(dataDir())) // no account yet: one line naming the setup-code file
 const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
@@ -236,8 +240,8 @@ function routeApp(req: http.IncomingMessage, res: http.ServerResponse, url: URL)
 const server = http.createServer()
 // Dev-server proxy (/proxy/<port>/, /absproxy/<port>/) lives on its OWN port = own origin, so a proxied
 // page (arbitrary npm code) cannot read the UI's token. Same bind host; PORT+1 or WEBTERM_PROXY_PORT, busy -> OS port.
-startDevProxy({ host: HOST, mainPort: PORT, env: process.env })
-  .catch((e: unknown) => log.warn('proxy.start.failed', 'Cannot start the dev-server proxy', { cause: e instanceof Error ? e.message : String(e) }))
+const devProxy = startDevProxy({ host: HOST, mainPort: PORT, env: process.env })
+  .catch((e: unknown) => { log.warn('proxy.start.failed', 'Cannot start the dev-server proxy', { cause: e instanceof Error ? e.message : String(e) }); return null })
 
 if (dev) {
   // Vite in middleware mode shares this port, so the app and its HMR websocket
@@ -320,32 +324,63 @@ wss.on('connection', (ws, req: http.IncomingMessage) => serveTerminalSocket(ws, 
   streams: { upgrade: req, dispatch: streamDispatch },
 }))
 
+let markReady: (bound: { host: string; port: number }) => void = () => {}
+/** Resolves once the main listener is bound; for an in-process host (src/native) that imports this module. */
+export const ready = new Promise<{ host: string; port: number }>((resolve) => { markReady = resolve })
+/** Open a signed-in UI window through the opener (the in-process host's window when one is registered). */
+export const openUi = (): Promise<void> => uiOpener.open()
+
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {
+  markReady({ host: HOST, port: PORT })
   // Never log the token itself — only whether one is in force, how long it is, and where it came from.
   const { token: TOKEN, source } = getTokenState()
   const token = TOKEN === undefined ? 'off: loopback only' : `on: len=${TOKEN.length}`
   log.info('server.start', `webterm listening on http://${HOST}:${PORT} (${dev ? 'dev+HMR' : 'prod'}, token ${token}, source ${source})`, {
     host: HOST, port: PORT, mode: dev ? 'dev' : 'prod', dataDir: basename(dataDir()), authRequired: TOKEN !== undefined,
   })
-  void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: process.stderr.isTTY === true })
+  // An in-process host opens its own window (openUi), so no auto-open there.
+  void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: !host && process.stderr.isTTY === true })
 })
 
 // Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.
 process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
 // Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
 process.on('unhandledRejection', onUnhandledRejection(log))
-process.on('exit', (code) => {
+let storesClosed = false
+/** Once per process: the `exit` hook, or stopServer() for an in-process host whose runtime may exit natively without it. */
+function closeStoresOnce(code: number): void {
+  if (storesClosed) return
+  storesClosed = true
   closeStores([['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])], log)
   log.info('server.stop', 'webterm stopping', { code })
   flushLogsSync()
-})
+}
+process.on('exit', closeStoresOnce)
+const BROWSER_SHUTDOWN_CAP_MS = 5000
+/** Chat Queries aborted (no Claude child outlives the server), Chromium + proxy closed (capped). */
+function releaseRuntimes(): Promise<unknown> {
+  activeAgentChatPool()?.closeAll()
+  const rt = activeBrowser()
+  return rt ? Promise.race([rt.shutdown(), new Promise((r) => setTimeout(r, BROWSER_SHUTDOWN_CAP_MS))]) : Promise.resolve()
+}
 for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
   // Chromium + proxy dimatikan bersih (batas 5 dtk) sebelum proses keluar; tanpa runtime browser = perilaku lama.
-  process.on(signal, () => {
-    activeAgentChatPool()?.closeAll() // aborts every chat Query: no Claude child outlives the server
-    const rt = activeBrowser()
-    if (!rt) return process.exit(exitCode)
-    Promise.race([rt.shutdown(), new Promise((r) => setTimeout(r, 5000))]).finally(() => process.exit(exitCode))
-  })
+  process.on(signal, () => { void releaseRuntimes().finally(() => process.exit(exitCode)) })
+}
+
+/**
+ * In-process stop (src/native, tests): release runtimes, drop every socket, close the main and proxy
+ * listeners so both ports are free, then close the stores. Electrobun quits through a native exit that
+ * skips the process `exit` hook, so the stores cannot wait for it. The process is expected to exit next.
+ */
+export async function stopServer(): Promise<void> {
+  log.info('server.stop_requested', 'In-process host is stopping webterm')
+  await releaseRuntimes()
+  for (const c of [...wss.clients, ...browserWss.clients]) c.terminate()
+  // close() first, then drop keep-alive sockets: under Bun, closeAllConnections() before close() stops the listener and close() then throws.
+  const closed = new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(new Error('cannot close the webterm listener', { cause: err })) : resolve())))
+  server.closeAllConnections()
+  await Promise.all([closed, devProxy.then((p) => p?.close())])
+  closeStoresOnce(0)
 }
