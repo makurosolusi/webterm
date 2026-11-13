@@ -26,7 +26,7 @@ import {
 } from './terminalKeys'
 import { installPointerScaleFix } from './terminalScale'
 import { fitTerminal } from './terminalFit'
-import { osc52Clipboard } from './terminalClipboard'
+import { loadOsc52Clipboard } from './terminalClipboard'
 import { resolveTerminalTheme } from './themes'
 import { useLiveSettings } from './useSettings'
 import type { AgentId } from '../shared/workspace'
@@ -191,7 +191,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     const term = new Terminal(xtermOptionsFromSettings(p.settings, p.fontZoom))
     const search = new SearchAddon()
     term.loadAddon(search)
-    term.loadAddon(osc52Clipboard((text) => copyText(live.current.id, text)))
+    let disposed = false
+    void loadOsc52Clipboard(term, (text) => copyText(live.current.id, text), () => !disposed, p.id)
     // nodeterm sengaja TIDAK memakai addon ini (TerminalNode.tsx:3283): addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
@@ -320,6 +321,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
       detachMiddle()
       detachCopy()
       unsub()
+      disposed = true
       term.dispose() // ikut men-dispose addon yang dimuatnya, WebGL termasuk
       termRef.current = null
       searchRef.current = null
