@@ -21,7 +21,7 @@ import type { SessionInfo, SessionsOptions } from './sessionsTypes'
 import { refuseKind, replay, sameKind } from './sessionsAttach'
 import { NODE_STATUS_FILE, StatusStore } from './sessionsStatusStore'
 import { missingBinaryText } from './sessionsNotices'
-import { locateBinary } from './loginShellPath'
+import { findOnPath } from './binaryOnPath'
 import { dataDir } from './config'
 import { recordEvent } from './events/producers'
 import { recordLaunchLevel } from './permission/permission.mode'
@@ -104,7 +104,7 @@ export class Sessions extends SessionsAdopt {
       // anything spawns. Plain names only (a path or env prefix is left to the shell); a held tmux
       // session ignores `cmd`; an injected spawn (test) runs no program. Login-shell PATH on a miss.
       const bin = msg.agentId && !held && !this.options.spawn ? leadingBinary(cmd) : null
-      if (bin && !bin.includes('/') && !SHELL_WORDS.has(bin) && !locateBinary(bin, agentPath())) throw new Error(missingBinaryText(bin))
+      if (bin && !bin.includes('/') && !SHELL_WORDS.has(bin) && !findOnPath(bin, agentPath())) throw new Error(missingBinaryText(bin))
       // Claude provider (Settings > Capabilities): key/base URL reach THIS claude process only, via a
       // one-shot 0600 file, never argv or the tmux -e list (claudeProvider/claudeProvider.launch.ts).
       if (launch && msg.agentId && hasClaudeHookSettings(msg.agentId)) recordLaunchLevel(msg.id, launch.workspaceId, launch.level)
