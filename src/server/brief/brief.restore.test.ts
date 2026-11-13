@@ -21,8 +21,10 @@ test('adoptSupervised records agent.restored per adopted agent session', () => {
     { id: 'shell1', cols: 80, rows: 24, orphan: false, history: 0 },
     { id: 'gone1', cols: 80, rows: 24, agentId: 'claude', orphan: false, history: 0 },
   ]
+  const mouse: string[] = []
   const supervisor = {
     list: () => live,
+    mouseOn: (id: string) => { mouse.push(id) }, // adoption turns mouse on for claude sessions made before it existed
     attach: () => new FakePty(),
     capture: () => undefined,
     markOrphan: () => {},
@@ -31,5 +33,6 @@ test('adoptSupervised records agent.restored per adopted agent session', () => {
   off = eventBus.subscribe('agent.restored', (e) => { seen.push(e) })
   const res = new Sessions({}, supervisor).adoptSupervised((id) => id !== 'gone1')
   expect(res).toEqual({ adopted: ['agent1', 'shell1'], orphans: ['gone1'], reaped: [] })
+  expect(mouse).toEqual(['agent1'])
   expect(seen.map((e) => [e.kind, e.nodeId, e.payload])).toEqual([['agent.restored', 'agent1', { agentId: 'claude' }]])
 })
