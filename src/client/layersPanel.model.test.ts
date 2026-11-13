@@ -16,9 +16,10 @@ describe('nodeTabItems', () => {
     expect(nodeTabItems(nodes, ['c', 'a'], {}).map((i) => i.id)).toEqual(['c', 'a', 'b', 'd'])
   })
 
-  it('carries the status dot for agent kinds, unread beating done, none for terminals', () => {
-    const items = nodeTabItems(nodes, [], { b: 'done', a: 'done' }, new Set(['b', 'a']))
-    expect(items.find((i) => i.id === 'b')?.signal).toEqual({ tone: 'unread', label: UNREAD_LABEL })
+  it('carries the status dot for agent kinds, unread on a turn that ended, none for terminals', () => {
+    const items = nodeTabItems(nodes, [], { b: 'waiting', a: 'done' }, new Set(['b', 'a']))
+    expect(items.find((i) => i.id === 'b')?.signal).toEqual({ tone: 'unread', label: `Turn ended — ${UNREAD_LABEL}` })
+    expect(nodeTabItems(nodes, [], { b: 'done' })[1].signal).toBeUndefined() // exited is calm: no dot
     expect(items.find((i) => i.id === 'a')?.signal).toBeUndefined()
     expect(nodeTabItems(nodes, [], { b: 'working' }, new Set(['b']))[1].signal?.tone).toBe('working')
   })

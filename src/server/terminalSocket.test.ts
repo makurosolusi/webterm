@@ -150,3 +150,17 @@ describe('sse streams', () => {
     expect(ws.sent).toEqual([{ t: 'sse.end', id: 's1', status: 404 }])
   })
 })
+
+describe('status snapshot on connect', () => {
+  test('a new socket gets every known status right after hello, before any open', () => {
+    const ws = new FakeSocket()
+    const snap: ServerMsg[] = [
+      { t: 'status', id: 'other-board', status: 'blocked', reason: 'permission', detail: 'Bash', snapshot: true },
+      { t: 'status', id: 'chat', status: 'working', snapshot: true },
+    ]
+    const sessions = { handle: vi.fn(), detach: vi.fn(), resync: vi.fn(), statusSnapshot: () => snap }
+    const hub = { watch: vi.fn(), unwatch: vi.fn(), dropClient: vi.fn() }
+    serveTerminalSocket(ws as never, { sessions: sessions as never, fsWatchHub: hub as never, watchOn: () => false, clients: () => 1, identity: { bootId: 'b', build: 'x' } })
+    expect(ws.sent).toEqual([{ t: 'hello', bootId: 'b', build: 'x' }, ...snap])
+  })
+})

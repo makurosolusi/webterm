@@ -59,13 +59,20 @@ export function tmuxArg(arg: string): string {
  *  jebakan yang nodeterm catat sebagai MIGRATION (`pty-manager.ts:497-503`).
  *
  *  `smcup@:rmcup@`: tmux digambar di layar NORMAL xterm.js, bukan alternate screen, supaya baris
- *  yang bergulir masuk scrollback xterm.js dan wheel/seleksi bawaan tetap jalan. nodeterm memilih
- *  `mouse on` + OSC 52, tapi client webterm tidak menangani OSC 52, jadi jalur itu mematikan copy. */
+ *  yang bergulir masuk scrollback xterm.js dan wheel/seleksi bawaan tetap jalan.
+ *
+ *  `mouse` stays at its default `off` globally: plain shells keep xterm.js's native drag selection
+ *  and scrollback. Claude sessions turn it on per session (`CLAUDE_MOUSE_AGENT`, see `open`).
+ *  `set-clipboard on` + the client's OSC 52 handler (`@xterm/addon-clipboard` in TerminalCore.tsx)
+ *  carry a copy made inside tmux or by the app to the browser clipboard. `focus-events on` forwards
+ *  xterm.js focus in/out (DECSET 1004) to the app; Claude Code asks for it under tmux. */
 const SERVER_OPTS: string[][] = [
   ['set', '-g', 'status', 'off'],
   ['set', '-g', 'history-limit', String(HISTORY_LINES)],
   ['set', '-g', 'default-terminal', 'xterm-256color'],
   ['set', '-sg', 'escape-time', '10'],
+  ['set', '-s', 'focus-events', 'on'],
+  ['set', '-s', 'set-clipboard', 'on'],
   ['set', '-g', 'destroy-unattached', 'off'],
   ['set', '-g', 'window-size', 'latest'],
   ['set', '-g', 'terminal-overrides', ',xterm*:smcup@:rmcup@'],
@@ -75,6 +82,12 @@ const SERVER_OPTS: string[][] = [
 ]
 
 /** Env yang diwarisi pane: identitas terminal yang di jalur non-tmux datang dari env anak langsung. */
+/** Agent whose sessions get `mouse on`. Claude Code reads the OPTION, not the behaviour: under tmux with
+ *  `mouse off` it shows "scroll with PgUp/PgDn · or add 'set -g mouse on'" even though wheel reports
+ *  already reach it (its fullscreen UI turns mouse tracking on). A session option, so plain shells in
+ *  the same server keep native selection. `$TMUX` stays set: Claude needs it for tmux passthrough. */
+export const CLAUDE_MOUSE_AGENT = 'claude'
+
 const SESSION_ENV_KEYS = ['PATH', 'LANG', 'COLORTERM', 'TERM_PROGRAM'] as const
 
 export interface SupervisedSession {
@@ -185,7 +198,21 @@ export class TmuxSupervisor {
         log.error('pty.supervisor_create_failed', 'tmux new-session failed', { ids: { nodeId: id }, code: (err as { status?: number }).status })
       }
     }
+    // Every open, not only create: a Claude session made before this option existed gets it too.
+    // Adoption after a restart attaches directly, so `SessionsAdopt.adoptSupervised` sets it as well.
+    if (opts.agentId === CLAUDE_MOUSE_AGENT) this.mouseOn(id)
     return this.attach(id, opts.cols, opts.rows)
+  }
+
+  /** Session-level `mouse on` for a Claude session (see `CLAUDE_MOUSE_AGENT`). Idempotent. */
+  mouseOn(id: string): void {
+    try {
+      this.run(['set-option', '-t', `=${supervisedName(id)}:`, 'mouse', 'on'])
+    } catch (err) {
+      // Not fatal (the session still works, Claude just shows its tmux hint); the attach below
+      // reports a missing session on its own.
+      log.warn('pty.supervisor_mouse_failed', 'tmux set-option mouse failed', { ids: { nodeId: id }, code: exitStatus(err) })
+    }
   }
 
   private create(id: string, opts: SupervisedOpen): void {

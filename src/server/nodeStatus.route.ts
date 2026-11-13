@@ -5,6 +5,7 @@
 import type { Database } from 'bun:sqlite'
 import { isSafeNodeId } from '../shared/workspace'
 import type { AgentStatus } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
 import { NODE_STATUS_MAX_IDS, NODE_STATUS_PATH, type NodeStatusInfo } from '../shared/nodeStatusBar'
 import { getRow } from './ledger/ledgerCore'
 import { createWorkStore } from './central/work/workStore'
@@ -17,7 +18,7 @@ const MAX_TITLE_CHARS = 120
 /** The slice of `sessions` this route reads. */
 export interface NodeStatusSessions {
   ptyInfoOf(id: string): { pid: number; startedAt: number; cols: number; rows: number } | undefined
-  statusEntryOf(id: string): { status: AgentStatus; updatedAt: number; since?: number } | undefined
+  statusEntryOf(id: string): { status: AgentStatus; updatedAt: number; since?: number; reason?: StatusReason } | undefined
   getExit(id: string): { code: number; reason: string; at: number } | undefined
 }
 
@@ -79,7 +80,7 @@ export function nodeStatusOf(id: string, s: NodeStatusSessions, db: Database | n
     live: !!pty,
     ...(pty ? { pid: pty.pid, startedAt: pty.startedAt } : {}),
     ...(exit ? { exit: { code: exit.code, reason: exit.reason, at: exit.at } } : {}),
-    ...(st ? { status: st.status, lastHookAt: st.updatedAt, ...(st.since !== undefined ? { statusSince: st.since } : {}) } : {}),
+    ...(st ? { status: st.status, lastHookAt: st.updatedAt, ...(st.since !== undefined ? { statusSince: st.since } : {}), ...st.reason } : {}),
     ...(db ? { ...costOf(db, id), outbox: outboxOf(db, id) } : {}),
     ...(work ? { work } : {}),
   }

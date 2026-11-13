@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { AgentStatus } from '../shared/workspace'
 import { CLAUDE_HOOK_EVENTS, hookEventName } from './hooks'
-import { hookStatus } from './hookStatus'
+import { hookStatus, hookStatusReason } from './hookStatus'
 
 describe('hookStatus', () => {
   // Tabel LENGKAP event→status, satu baris per event yang dilanggani. Ditulis eksplisit supaya
@@ -172,5 +172,25 @@ describe('aktivitas anak tidak menggerakkan status induk', () => {
     expect(OLD_SUBAGENT_STATUS['SubagentStop']).toBe('working')
     expect(hookStatus({ hook_event_name: 'SubagentStop' })).not.toBe(OLD_SUBAGENT_STATUS['SubagentStop'])
     expect(hookStatus({ hook_event_name: 'SubagentStart' })).not.toBe(OLD_SUBAGENT_STATUS['SubagentStart'])
+  })
+})
+
+describe('hookStatusReason', () => {
+  it('a permission request names its tool', () => {
+    expect(hookStatusReason({ hook_event_name: 'PermissionRequest', tool_name: 'Bash' })).toEqual({ reason: 'permission', detail: 'Bash' })
+  })
+
+  it('notifications: permission prompt vs a question, with the message; info types give none', () => {
+    expect(hookStatusReason({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Edit' }))
+      .toEqual({ reason: 'permission', detail: 'Claude needs your permission to use Edit' })
+    expect(hookStatusReason({ hook_event_name: 'Notification', notification_type: 'elicitation_dialog' })).toEqual({ reason: 'question' })
+    expect(hookStatusReason({ hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'x' })).toBeUndefined()
+  })
+
+  it('a failed stop is an error; ordinary events carry no reason; non-string fields are ignored', () => {
+    expect(hookStatusReason({ hook_event_name: 'StopFailure', error: 'rate_limit' })).toEqual({ reason: 'error', detail: 'rate_limit' })
+    expect(hookStatusReason({ hook_event_name: 'Stop' })).toBeUndefined()
+    expect(hookStatusReason({ hook_event_name: 'PreToolUse', tool_name: 'Bash' })).toBeUndefined()
+    expect(hookStatusReason({ hook_event_name: 'PermissionRequest', tool_name: { evil: 1 } })).toEqual({ reason: 'permission' })
   })
 })
