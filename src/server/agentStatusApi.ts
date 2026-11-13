@@ -10,8 +10,9 @@
 // pemanggil lama (`contextLinkApi`, test) tidak berubah.
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { AgentStatus, Workspace } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
 import { isSafeNodeId } from '../shared/workspace'
-import { hookStatus, type HookStatusBody } from './hookStatus'
+import { hookStatus, hookStatusReason, type HookStatusBody } from './hookStatus'
 import { stateVerified } from './hooks'
 import { buildLinkDoc, findWorkspaceFor } from './contextLink'
 import { nextHookContext } from './hookContext'
@@ -54,7 +55,8 @@ export const MAX_HOOK_BODY_BYTES = 256 * 1024
 
 /** Sisi tulis route, di-inject supaya route bisa diuji tanpa `bun:sqlite`/PTY. */
 export interface AgentStatusDeps {
-  setStatus(nodeId: string, status: AgentStatus): void
+  /** `reason` = why it needs you or failed (tool name, notification line), when the hook said. */
+  setStatus(nodeId: string, status: AgentStatus, reason?: StatusReason): void
   setTranscript(nodeId: string, path: string): void
   workspaceFor(nodeId: string): Workspace | null | undefined
   /** Gives a browser node's lease back to the human; absent = browser runtime not wired (tests). */
@@ -90,7 +92,7 @@ async function defaultDeps(): Promise<AgentStatusDeps> {
   // jadi tidak ada flag/konfigurasi — dan test dengan deps palsu tidak pernah memuatnya.
   await startLinkNotes()
   return {
-    setStatus: (nodeId, status) => sessions.setStatus(nodeId, status),
+    setStatus: (nodeId, status, reason) => sessions.setStatus(nodeId, status, undefined, reason),
     setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
     workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
     releaseBrowser: (id) => activeBrowser()?.releaseLease(id),
@@ -148,7 +150,7 @@ export async function agentStatusRoute(
     json(res, 413, { error: 'payload_too_large' })
     return true
   }
-  let body: HookStatusBody & { message?: string; transcript_path?: string }
+  let body: HookStatusBody & { transcript_path?: string }
   try { body = JSON.parse(read.ok ? read.body : '') } catch { body = {} }
 
   // Strict gate (on by default, agentStatusAuth.ts): a request without this node's token is
@@ -170,7 +172,7 @@ export async function agentStatusRoute(
   const deps = opts?.deps ?? (await defaultDeps())
   const status = hookStatus(body)
   log.debug('hooks.event', 'Hook received', { ids: { nodeId: node }, event: body.hook_event_name, status })
-  if (status) deps.setStatus(node, status)
+  if (status) deps.setStatus(node, status, hookStatusReason(body))
   // Hanya DISIMPAN: pembacaan file terjadi di `contextLink`, dan path sepanjang apa pun di sini
   // akan ditulis ulang oleh setiap hook berikutnya pada node yang sama.
   if (transcript !== undefined) deps.setTranscript(node, transcript)

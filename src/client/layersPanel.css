@@ -106,6 +106,7 @@
 .layers-row__status--done,
 .layers-row__status--idle { background: var(--state-success); }
 .layers-row__status--unread { background: var(--accent); }
+.layers-row__status--error { background: var(--vscode-errorForeground, var(--state-attention)); }
 
 .layers-row__hint {
   overflow: hidden;

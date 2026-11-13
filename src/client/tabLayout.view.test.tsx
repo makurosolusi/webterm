@@ -101,8 +101,8 @@ describe('TabsView', () => {
   it('shows agent and agent-chat status as a labelled dot, same selector as the canvas strip', () => {
     const nodes = [...NODES, node('h', 'agentChat', 'chat')]
     render(<TabsView {...props({ nodes, statuses: { b: 'blocked', a: 'working', h: 'done' } })} />)
-    expect(within(tab('beta')).getByRole('img', { name: sessionSignal('blocked', false).label })).toBeTruthy()
-    expect(within(tab('chat')).getByRole('img', { name: 'Done' })).toBeTruthy()
+    expect(within(tab('beta')).getByRole('img', { name: sessionSignal('blocked', false)!.label })).toBeTruthy()
+    expect(within(tab('chat')).queryByRole('img')).toBeNull() // exited is calm: no dot
     expect(within(tab('alpha')).queryByRole('img')).toBeNull() // terminals carry no dot
     expect(within(tab('gamma')).queryByRole('img')).toBeNull()
   })
