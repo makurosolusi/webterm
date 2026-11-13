@@ -66,6 +66,7 @@
 .tabs-tab__status--attention { background: var(--state-attention); }
 .tabs-tab__status--done { background: var(--state-success); }
 .tabs-tab__status--unread { background: var(--accent); }
+.tabs-tab__status--error { background: var(--vscode-errorForeground, var(--state-attention)); }
 .tabs-strip__editor-actions { display: flex; align-items: center; gap: 2px; }
 /* Editor actions of the active tab, set off from the strip's own controls. */
 .tabs-strip__editor-actions:not(:empty) { padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--vscode-tab-border); }
