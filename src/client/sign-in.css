@@ -1,0 +1,13 @@
+/* Sign-in and first-run setup screens (SignInScreen, signIn/*). Unlayered, so these win over the
+   Tailwind utilities on Brand and over the /m sheet's generic `.m-signin input` rule. */
+
+/* Brand is the 40px welcome-screen logo; on the sign-in card it is a modest mark above the title. */
+.sign-in-brand svg { width: 28px; height: 28px; }
+.sign-in-brand span { font-size: 18px; letter-spacing: -0.3px; }
+
+/* /m restyles every input under .m-signin (margin-top, 12px side padding); keep the toggle inside. */
+.m-signin .sign-in-field__input { margin-top: 0; height: auto; }
+.m-signin .sign-in-field__input.pr-8 { padding-right: 36px; }
+
+.sign-in-check { color: var(--vscode-descriptionForeground); }
+.sign-in-check[data-met='true'] { color: var(--vscode-charts-green, #89d185); }
