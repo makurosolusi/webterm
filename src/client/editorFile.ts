@@ -40,10 +40,8 @@ export function isMarkdownExt(ext: string): boolean {
 }
 
 /**
- * Apakah node yang baru dibuka langsung tampil sebagai preview terender.
- * Sengaja lebih sempit daripada toggle Preview/Edit (yang jalan di file teks apa pun): auto-preview
- * hanya untuk file yang memang markdown — membuka .ts sebagai render markdown adalah default yang
- * membingungkan untuk setting bernama `openMarkdownPreview`.
+ * Whether a newly opened node starts in the rendered preview. Like the Preview/Edit toggle (and
+ * VS Code's "Open Preview"), it applies to Markdown files only.
  */
 export function opensInPreview(ext: string, openMarkdownPreview: boolean): boolean {
   return openMarkdownPreview && isMarkdownExt(ext)

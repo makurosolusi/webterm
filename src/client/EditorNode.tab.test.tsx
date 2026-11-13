@@ -24,6 +24,8 @@ const fake = vi.hoisted(() => {
           onDidChangeModelContent: (cb: () => void) => { st.onChange = cb },
           addAction: () => ({ dispose: () => {} }),
           updateOptions: () => {},
+          getModel: () => null,
+          onDidChangeCursorSelection: () => ({ dispose: () => {} }), onDidChangeModelOptions: () => ({ dispose: () => {} }), onDidChangeModelLanguage: () => ({ dispose: () => {} }),
           dispose: () => {},
         }
       },
@@ -124,12 +126,12 @@ describe('EditorNode in tab mode', () => {
     expect(document.querySelector('.editor-node')).not.toBeNull()
   })
 
-  it('on the canvas keeps its own header with Save and Close, and publishes nothing to the strip', async () => {
+  it('on the canvas keeps its own header with Close (Save lives in its menu), and publishes nothing to the strip', async () => {
     mount(false)
     await waitFor(() => expect(fake.editors).toHaveLength(1))
     expect(document.querySelector('.editor-node .node-header')).not.toBeNull()
     expect(document.querySelector('.editor-node .node-header .codicon-close')).not.toBeNull()
-    expect(within(document.querySelector<HTMLElement>('.editor-node .node-header')!).getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(within(document.querySelector<HTMLElement>('.editor-node .node-header')!).queryByRole('button', { name: 'Save' })).toBeNull()
     expect(strip().queryAllByRole('button')).toHaveLength(0)
     expect(tabNodeMenuItems('e1')).toEqual([])
   })
@@ -184,7 +186,7 @@ describe('EditorNode in tab mode', () => {
     expect(rows.some((l) => /fit width/i.test(l))).toBe(false)
   })
 
-  it('on the canvas the header keeps its dirty dot and Save reads "Saving…" while in flight', async () => {
+  it('on the canvas the header keeps its dirty dot and the status bar reads "Saving…" while in flight', async () => {
     mount(false, <DirtyProbe />)
     await waitFor(() => expect(fake.editors).toHaveLength(1))
     const header = within(document.querySelector<HTMLElement>('.editor-node .node-header')!)
@@ -193,11 +195,12 @@ describe('EditorNode in tab mode', () => {
     edit()
     expect(header.getByRole('img', { name: 'Unsaved changes' })).toBeTruthy()
     expect(screen.getByTestId('dirty').textContent).toBe('')
-    await act(async () => { fireEvent.click(header.getByRole('button', { name: 'Save' })) })
-    // jsdom does not reflect vscode-button's `disabled`; the busy flag is what it can observe.
-    expect(header.getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true')
+    fireEvent.contextMenu(document.querySelector('.editor-node .node-header')!)
+    await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: /^Save/ })) })
+    const bar = () => within(document.querySelector<HTMLElement>('.editor-node footer.editor-statusbar')!)
+    expect(bar().getByText('Saving…')).toBeTruthy()
     await act(async () => { settle().resolve({ ok: true, version: 'v2' }) })
     await waitFor(() => expect(header.queryByRole('img', { name: 'Unsaved changes' })).toBeNull())
-    expect(header.getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(document.querySelector('.editor-node footer.editor-statusbar')).toBeNull()
   })
 })

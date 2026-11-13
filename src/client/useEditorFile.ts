@@ -69,15 +69,18 @@ export function useEditorFile(a: UseEditorFileArgs) {
   /** Which operation `saveError` came from, so Retry repeats that one. */
   const [failedOp, setFailedOp] = useState<'save' | 'reload'>('save')
   const fail = (op: 'save' | 'reload', msg: string) => { setFailedOp(op); setSaveError(msg) }
+  /** Bumped by `retryLoad` so the load effect runs again after a read failure. */
+  const [loadKey, setLoadKey] = useState(0)
   /** The mounted editor (null until Monaco is up), for options and actions owned by the node. */
   const [live, setLive] = useState<{ monaco: MonacoApi; editor: MonacoEditor.IStandaloneCodeEditor } | null>(null)
 
+  // Preview renders Markdown, so it exists only for Markdown files (VS Code's "Open Preview").
   const togglePreview = () => {
-    if (!enabled || !loadedRef.current) return
+    if (!enabled || !loadedRef.current || !isMarkdownExt(ext)) return
     const next = !preview
     if (next && editorRef.current) setPreviewSource(editorRef.current.getValue())
     setPreview(next)
-    if (isMarkdownExt(ext)) a.onPreviewChange?.(next)
+    a.onPreviewChange?.(next)
   }
 
   /** Satu percobaan tulis; `opts` menentukan seberapa ketat (versi / harus ada). Resolves true only
@@ -162,6 +165,9 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
   /** Repeat the save or reload that set `saveError`. */
   const retry = (): void => { void (failedOp === 'reload' ? reload() : save()) }
+
+  /** Read the file again after a load failure (VS Code's "Try Again"). */
+  const retryLoad = (): void => setLoadKey((k) => k + 1)
 
   /** Pandangan sesaat untuk `useEditorSync`: dirty/saving/versi terakhir yang dikenal. */
   const snapshot = () => ({
@@ -255,8 +261,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
       editorRef.current = null
       setLive(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) yang memuat ulang
-  }, [enabled])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path lewat pathRef; hanya jenis (enabled) dan Retry (loadKey) yang memuat ulang
+  }, [enabled, loadKey])
 
   // Unsaved-changes registry for the close gate (editorDirty.ts): the save it runs is this node's
   // own, awaited, so "Save" before close only closes once the write landed.
@@ -265,5 +271,5 @@ export function useEditorFile(a: UseEditorFileArgs) {
   }, [id, dirty])
   useEffect(() => () => setEditorDirty(id, false), [id])
 
-  return { live, dirty, saving, preview, previewSource, encoding, conflict, saveError, retry, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
+  return { live, dirty, saving, preview, previewSource, encoding, conflict, saveError, retry, retryLoad, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }
