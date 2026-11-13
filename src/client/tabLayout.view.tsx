@@ -15,6 +15,7 @@ import { activateTab, reconcileWithNodes, reorderTabs, toggleFilesPanel, useTabL
 import { nodeTabSignal } from './sessionSignal'
 import { useUnreadIds } from './unread'
 import TabStrip, { type TabItem } from './tabLayout.strip'
+import { isAutoName } from './nodeIdentity'
 import FilesDock from './tabLayout.filesDock'
 import NewTabMenu, { type NewTabMenuProps } from './tabLayout.newMenu'
 import { setEditorActionsSlot, tabNodeMenuItems, useDirtyTabs } from './tabLayout.nodeActions'
@@ -68,7 +69,8 @@ export default function TabsView(p: TabsViewProps) {
 
   const items: TabItem[] = order.filter((id) => live.has(id)).map((id) => {
     const n = byId.get(id) as Node
-    return { id, title: titleOf(n), name: (n.data as Partial<WsNode>).name, icon: KIND_ICON[kindOf(n)], kind: NODE_KIND_LABEL[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)), dirty: dirty.has(id) }
+    const d = n.data as Partial<WsNode>
+    return { id, title: titleOf(n), name: d.name, custom: !!d.title?.trim() && !isAutoName(d.title), icon: KIND_ICON[kindOf(n)], kind: NODE_KIND_LABEL[kindOf(n)], signal: nodeTabSignal(kindOf(n), p.statuses[id], unread.has(id)), dirty: dirty.has(id) }
   })
   const filesId = nodes.find((n) => kindOf(n) === 'files')?.id ?? null
   // Tab context menu: the node's own "More Actions…" rows (published by its NodeChrome), then Close.

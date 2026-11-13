@@ -16,9 +16,10 @@ import './tab-layout.css'
 /** `signal`: status dot, from the selector the Sessions side bar uses (`nodeTabSignal`). */
 /**
  * `title` is the editable label (the rename draft); `name` is the node's fixed name. The tab shows
- * the name alone (VS Code: icon + name), the title (often the node type) goes in the tooltip.
+ * the user's own title when `custom`, otherwise the name alone (VS Code: icon + name); the tooltip
+ * always carries name, title and type.
  */
-export interface TabItem { id: string; title: string; name?: string; icon: string; signal?: SessionSignal; /** Node type label ("Browser"). */ kind?: string; /** Unsaved changes: a dot in place of the × until hover/focus. */ dirty?: boolean }
+export interface TabItem { id: string; title: string; name?: string; /** `title` is a user rename, not a fallback (file name, kind). */ custom?: boolean; icon: string; signal?: SessionSignal; /** Node type label ("Browser"). */ kind?: string; /** Unsaved changes: a dot in place of the × until hover/focus. */ dirty?: boolean }
 
 /** Tooltip: `name · title`, plus the node type when the title is not already the type. */
 export const tabTooltip = (t: TabItem): string =>
@@ -148,7 +149,7 @@ export default function TabStrip({ items, active, onActivate, onClose, onRename,
                 onClick={(e) => e.stopPropagation()} onFocus={(e) => e.currentTarget.select()}
               />
             ) : (
-              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}>{t.name || t.title}</span>
+              <span className="tabs-tab__title" onDoubleClick={() => { setDraft(t.title); setEditing(t.id) }}>{t.custom ? t.title : t.name || t.title}</span>
             )}
             {t.signal && (
               <span className={cn('tabs-tab__status', `tabs-tab__status--${t.signal.tone}`)} role="img" aria-label={t.signal.label} />
