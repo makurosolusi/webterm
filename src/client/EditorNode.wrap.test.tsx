@@ -16,6 +16,7 @@ const fake = vi.hoisted(() => {
   const monaco = {
     Uri: { file: (p: string) => { nextPath = p; return { with: () => p } } },
     KeyMod: { CtrlCmd: 2048, Alt: 512 }, KeyCode: { KeyS: 49, KeyZ: 56 },
+    languages: { getLanguages: () => [{ id: 'typescript', aliases: ['TypeScript'] }] },
     editor: {
       EditorOption: { fontInfo: 50 },
       getModel: () => null,
@@ -33,7 +34,10 @@ const fake = vi.hoisted(() => {
           },
           updateOptions: (o: { wordWrap: string }) => st.wrap.push(o.wordWrap),
           getOption: () => ({ typicalHalfwidthCharacterWidth: 8 }),
-          getModel: () => ({ getOptions: () => ({ tabSize: 4 }), getLineContent: (l: number) => lines[l - 1] }),
+          getModel: () => ({ getOptions: () => ({ tabSize: 4, insertSpaces: true }), getLineContent: (l: number) => lines[l - 1], getLanguageId: () => 'typescript', getEOL: () => '\n', getValueLengthInRange: () => 0 }),
+          getPosition: () => ({ lineNumber: 1, column: 1 }),
+          getSelections: () => [],
+          onDidChangeCursorSelection: () => ({ dispose: () => {} }), onDidChangeModelOptions: () => ({ dispose: () => {} }), onDidChangeModelLanguage: () => ({ dispose: () => {} }),
           getVisibleRanges: () => [{ startLineNumber: 1, endLineNumber: 1 }],
           getLayoutInfo: () => ({ width: 398, contentLeft: 50, minimap: { minimapWidth: 0 }, verticalScrollbarWidth: 14 }),
           dispose: () => {},
@@ -77,7 +81,7 @@ const ed = (id: string, filePath: string, extra: Record<string, unknown> = {}): 
   ({ id, type: 'editor', position: { x: id === 'b' ? 900 : 0, y: 0 }, data: { filePath, ...extra }, width: 400, height: 300 })
 const mount = (nodes: Node[]) => render(<ReactFlowProvider><Canvas init={nodes} /></ReactFlowProvider>)
 const nodeEl = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement
-const wrapBtn = (id: string) => nodeEl(id).querySelector('vscode-toolbar-button[data-title^="Toggle word wrap"]') as HTMLElement
+const wrapBtn = (id: string) => nodeEl(id).querySelector('button[aria-label="Word wrap"]') as HTMLElement
 const dataOf = (id: string) => latest.find((n) => n.id === id)?.data as { wordWrap?: boolean }
 const ready = (...paths: string[]) => waitFor(() => paths.forEach((p) => expect(fake.of(p)?.wrap.length).toBeGreaterThan(0)))
 const openMenu = (id: string) => { flowStore!.setState({ width: 4000 }); fireEvent.contextMenu(nodeEl(id).querySelector('.node-header')!) }
@@ -89,7 +93,8 @@ describe('EditorNode word wrap', () => {
     await ready('/r/README.md', '/r/app.ts')
     expect(fake.of('/r/README.md').wrap.at(-1)).toBe('on')
     expect(fake.of('/r/app.ts').wrap.at(-1)).toBe('off')
-    expect(wrapBtn('a').getAttribute('data-title')).toMatch(/^Toggle word wrap \((⌥Z|Alt\+Z)\)$/)
+    expect(wrapBtn('a').getAttribute('aria-pressed')).toBe('true')
+    expect(wrapBtn('b').getAttribute('aria-pressed')).toBe('false')
   })
 
   it('the toggle flips the Monaco option live and stores the choice on the node', async () => {

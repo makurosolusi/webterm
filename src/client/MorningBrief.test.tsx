@@ -150,6 +150,7 @@ test('Continue from yesterday: button and ⌘K command post once per click and o
   expect(props.onOpenWorkspace).toHaveBeenCalledWith('w1')
   const cmd = listCommands().find((c) => c.id === 'handoff.continue.w1')
   expect(cmd?.label).toBe('Agents: Continue from yesterday in api')
+  expect(cmd?.bindable).toBe(false) // palette only: not listed in Keyboard Shortcuts
   await act(async () => { cmd!.run!() })
   expect(calls('/api/handoff/continue')).toHaveLength(2)
 })

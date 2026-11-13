@@ -1,0 +1,14 @@
+/* File-type icon colours (fileIconTone in fileIcon.ts), shared by the Files tree and the editor
+   title/breadcrumb. Imported by fileIcon.ts so it loads wherever icons are drawn, not only with the
+   Files node. The neutral colour sits here (not in files.css) so the tones always come after it. */
+.files-icon { color: var(--vscode-icon-foreground, var(--muted)); }
+/* Subtle per-type tone; chart tokens with VS Code's dark defaults as fallback. */
+.files-icon--blue { color: var(--vscode-charts-blue, #3794ff); }
+.files-icon--yellow { color: var(--vscode-charts-yellow, #cca700); }
+.files-icon--purple { color: var(--vscode-charts-purple, #b180d7); }
+.files-icon--orange { color: var(--vscode-charts-orange, #d18616); }
+.files-icon--green { color: var(--vscode-charts-green, #89d185); }
+:root[data-theme='light'] .files-icon--blue { color: var(--vscode-charts-blue, #1a85ff); }
+:root[data-theme='light'] .files-icon--yellow { color: var(--vscode-charts-yellow, #bf8803); }
+:root[data-theme='light'] .files-icon--purple { color: var(--vscode-charts-purple, #652d90); }
+:root[data-theme='light'] .files-icon--green { color: var(--vscode-charts-green, #388a34); }

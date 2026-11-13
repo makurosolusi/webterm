@@ -1,6 +1,7 @@
 // Ikon file/folder untuk node Files dan Editor: nama codicon per ekstensi (VS Code tanpa icon theme
 // ekstensi memakai codicon generik `file`/`folder`; di sini ditambah beberapa jenis yang jelas).
 import { fileExt } from './editorFile'
+import './fileIcon.css'
 
 const BY_EXT: Record<string, string> = {
   json: 'json', jsonc: 'json',
@@ -13,7 +14,9 @@ const BY_EXT: Record<string, string> = {
   ts: 'file-code', tsx: 'file-code', js: 'file-code', jsx: 'file-code', mjs: 'file-code',
   cjs: 'file-code', py: 'file-code', go: 'file-code', rs: 'file-code', java: 'file-code',
   c: 'file-code', cpp: 'file-code', h: 'file-code', rb: 'file-code', php: 'file-code',
-  css: 'file-code', html: 'file-code', yml: 'file-code', yaml: 'file-code', toml: 'file-code',
+  css: 'file-code', html: 'file-code',
+  // Config formats get a gear so a .yml never reads like a .png (both purple, near-identical page glyphs).
+  yml: 'settings-gear', yaml: 'settings-gear', toml: 'settings-gear',
 }
 
 // Nama KHUSUS menang atas ekstensi (set ikon penuh tidak diambil, P-3). `package.json` dan README
@@ -35,7 +38,7 @@ export function fileIconClass(name: string): string {
 }
 
 // Subtle per-type colour (Seti-like) so same-glyph types (ts vs js) still read apart; mapped to
-// `.files-icon--<tone>` in files.css. Unlisted types stay neutral, folders too (VS Code default).
+// `.files-icon--<tone>` in fileIcon.css. Unlisted types stay neutral, folders too (VS Code default).
 const TONE_BY_EXT: Record<string, string> = {
   ts: 'blue', tsx: 'blue', md: 'blue', mdx: 'blue', markdown: 'blue',
   js: 'yellow', jsx: 'yellow', mjs: 'yellow', cjs: 'yellow', json: 'yellow', jsonc: 'yellow',
@@ -50,6 +53,12 @@ export function fileIconTone(name: string): string | undefined {
   if (base === '.env' || base.startsWith('.env.')) return 'yellow'
   if (base.startsWith('.git')) return 'orange'
   return TONE_BY_EXT[fileExt(name)]
+}
+
+/** Codicon class plus its colour tone for file `name`, for icons drawn outside the Files tree. */
+export function fileIconToneClass(name: string): string {
+  const tone = fileIconTone(name)
+  return tone ? `${fileIconClass(name)} files-icon--${tone}` : fileIconClass(name)
 }
 
 /** Class codicon folder, terbuka atau tertutup. */

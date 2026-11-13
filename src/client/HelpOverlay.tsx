@@ -56,7 +56,9 @@ function useChordRecorder(target: string | null, isMac: boolean, done: () => voi
 export default function HelpOverlay({ onClose, platform, commands }: { onClose: () => void; platform?: string; commands?: readonly Command[] }) {
   const isMac = detectDialogPlatform(platform) === 'mac'
   const live = useCommands()
-  const list = commands ?? live
+  const source = commands ?? live
+  // Per-instance palette entries (one per workspace) are not shortcuts.
+  const list = useMemo(() => source.filter((c) => c.bindable !== false), [source])
   const overrides = useKeybindingOverrides()
   const conflicts = useMemo(() => findConflicts(list, overrides), [list, overrides])
   const labelOf = useMemo(() => new Map(list.map((c) => [c.id, c.label])), [list])

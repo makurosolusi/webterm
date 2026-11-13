@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // WS-FM-02 fase 2: node editor ikut event bus fs (rename/delete/tulis remote) dan memasang ViewerHost.
 // Monaco dipalsukan (yang diuji kabel React-nya); fsClient dipalsukan di batas modul.
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ReactFlow } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { installCanvasDom } from './canvasHarness'
@@ -15,6 +15,8 @@ const fake = vi.hoisted(() => {
     onDidChangeModelContent: (cb: () => void) => { state.onChange = cb },
     addAction: () => ({ dispose: () => {} }),
     updateOptions: () => {},
+    getModel: () => null,
+    onDidChangeCursorSelection: () => ({ dispose: () => {} }), onDidChangeModelOptions: () => ({ dispose: () => {} }), onDidChangeModelLanguage: () => ({ dispose: () => {} }),
     dispose: () => {},
   }
   const monaco = {
@@ -109,7 +111,8 @@ describe('renamed', () => {
     await waitFor(() => expect(filePathOf()).toBe('/x/new.json'))
     typed('z')
     fake.state.onChange()
-    act(() => screen.getByText('Save').click())
+    fireEvent.contextMenu(document.querySelector('.editor-node .node-header')!)
+    act(() => screen.getByRole('menuitem', { name: /^Save/ }).click())
     await waitFor(() => expect(writeChecked).toHaveBeenCalled())
     expect((writeChecked.mock.calls as unknown[][])[0][0]).toBe('/x/new.json')
   })

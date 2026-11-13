@@ -207,3 +207,55 @@ test('a plain open never attaches to a not-yet-adopted agent tmux session under 
   expect(got[1]).toMatchObject({ t: 'exit', reason: 'kind_mismatch' })
   agent.close('k2')
 })
+
+const tmuxShow = (args: string[]) =>
+  execFileSync('tmux', ['-L', SOCKET, 'show-options', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+
+test('Claude sessions get `mouse on` per session; plain shells keep the global `off`', async () => {
+  const s = supervised()
+  s.open({ t: 'open', id: 'm1', cols: 80, rows: 24, cmd: 'sleep 100', agentId: 'claude' }, () => {})
+  s.open({ t: 'open', id: 'm2', cols: 80, rows: 24, cmd: 'sleep 100' }, () => {})
+  s.open({ t: 'open', id: 'm3', cols: 80, rows: 24, cmd: 'sleep 100', agentId: 'codex' }, () => {})
+  await until(() => sup.has('m1') && sup.has('m2') && sup.has('m3'), 'sessions created')
+  // `-A` = the value the pane sees (session, else global): exactly what Claude Code's hint probes.
+  const mouse = (id: string) => tmuxShow(['-Av', '-t', `=${supervisedName(id)}:`, 'mouse'])
+  expect(mouse('m1')).toBe('on')
+  expect(mouse('m2')).toBe('off')
+  expect(mouse('m3')).toBe('off')
+  expect(tmuxShow(['-gv', 'mouse'])).toBe('off')
+  for (const id of ['m1', 'm2', 'm3']) s.close(id)
+  await until(() => !sup.has('m1') && !sup.has('m2') && !sup.has('m3'), 'sessions killed')
+})
+
+test('server options forward focus events and app clipboard writes (OSC 52) to the client', async () => {
+  const s = supervised()
+  const out: string[] = []
+  s.open({ t: 'open', id: 'f9', cols: 80, rows: 24 }, (m) => { if (m.t === 'output') out.push(m.data) })
+  await until(() => sup.has('f9'), 'session created')
+  expect(tmuxShow(['-sv', 'focus-events'])).toBe('on')
+  expect(tmuxShow(['-sv', 'set-clipboard'])).toBe('on')
+  // An app in the pane copies "hello"; tmux must pass it on to xterm.js, where addon-clipboard takes it.
+  // The payload is split in the command so its echo cannot satisfy the match; ESC is a real byte only
+  // in what tmux forwards.
+  s.input('f9', "printf '\\033]52;c;%s\\a' aGVs'bG8='\r")
+  await until(() => /\x1b\]52;c?;aGVsbG8=/.test(out.join('')), 'OSC 52 reaches the client')
+  s.close('f9')
+  await until(() => !sup.has('f9'), 'session killed')
+})
+
+test('an adopted Claude session made before mouse-on existed gets it after a restart', async () => {
+  const s = supervised()
+  s.open({ t: 'open', id: 'm4', cols: 80, rows: 24, cmd: 'sleep 100', agentId: 'claude' }, () => {})
+  await until(() => sup.has('m4'), 'session created')
+  const mouse = () => tmuxShow(['-Av', '-t', `=${supervisedName('m4')}:`, 'mouse'])
+  // Simulate an old session: drop the session option, then "restart" (old client dies, session lives).
+  execFileSync('tmux', ['-L', SOCKET, 'set-option', '-u', '-t', `=${supervisedName('m4')}:`, 'mouse'])
+  expect(mouse()).toBe('off')
+  process.kill(s.pidOf('m4')!, 'SIGKILL')
+  await until(() => !s.isLive('m4'), 'old client gone')
+  const after = supervised()
+  expect(after.adoptSupervised().adopted).toContain('m4')
+  expect(mouse()).toBe('on')
+  after.close('m4')
+  await until(() => !sup.has('m4'), 'session killed')
+})

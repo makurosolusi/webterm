@@ -54,21 +54,12 @@
 .files-chevron { flex: none; width: 16px; margin-right: -4px; }
 .files-input-slot { padding-left: calc(var(--files-depth, 0) * 12px + 16px); }
 
-/* Ikon codicon 16px; file dan folder sama-sama netral (tema ikon default VS Code tanpa warna). */
-.files-icon { flex: none; font-size: 16px; color: var(--vscode-icon-foreground, var(--muted)); }
+/* Ikon codicon 16px; warna netral + nada per jenis ada di fileIcon.css (dimuat bersama fileIcon.ts,
+   jadi judul node Editor ikut berwarna tanpa node Files). */
+.files-icon { flex: none; font-size: 16px; }
 /* Warna baris terpilih datang dari `:host([selected]) .wrapper` (VS Code); ikon di dalam slot
    tidak ikut aturan `::slotted(vscode-icon)`, jadi ia mengikuti warna teks secara eksplisit. */
 .files-row--sel .files-icon { color: inherit; }
-/* Subtle per-type tone (fileIconTone); chart tokens with VS Code's dark defaults as fallback. */
-.files-icon--blue { color: var(--vscode-charts-blue, #3794ff); }
-.files-icon--yellow { color: var(--vscode-charts-yellow, #cca700); }
-.files-icon--purple { color: var(--vscode-charts-purple, #b180d7); }
-.files-icon--orange { color: var(--vscode-charts-orange, #d18616); }
-.files-icon--green { color: var(--vscode-charts-green, #89d185); }
-:root[data-theme='light'] .files-icon--blue { color: var(--vscode-charts-blue, #1a85ff); }
-:root[data-theme='light'] .files-icon--yellow { color: var(--vscode-charts-yellow, #bf8803); }
-:root[data-theme='light'] .files-icon--purple { color: var(--vscode-charts-purple, #652d90); }
-:root[data-theme='light'] .files-icon--green { color: var(--vscode-charts-green, #388a34); }
 
 .files-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
