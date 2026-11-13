@@ -7,6 +7,15 @@ export const SETUP_TEXT = {
   stepOf: (n: number, total: number): string => `Step ${n} of ${total}`,
   steps: { claude: 'Claude', browser: 'Browser', central: 'Central Agent', basics: 'Basics' } as Record<SetupStep, string>,
   state: { done: 'Done', skipped: 'Skipped', current: 'Current', todo: 'Not started' },
+  /** Codicon per answered/unanswered state; the wizard stepper and Welcome's card share it. */
+  stateIcon: { done: 'pass-filled', skipped: 'circle-slash', todo: 'circle-large-outline' },
+  progress: 'Setup progress',
+  description: {
+    claude: 'Choose how webterm signs in to Claude. Every Claude agent and Central use it.',
+    browser: 'Browser nodes show live web pages on the canvas. Choose the browser they use.',
+    central: 'Central is an assistant that sees all your projects and nodes.',
+    basics: 'Theme, projects folder and notifications. Each one applies as you choose it.',
+  } as Record<SetupStep, string>,
   back: 'Back',
   skip: 'Skip',
   next: 'Continue',
@@ -16,20 +25,23 @@ export const SETUP_TEXT = {
   retrying: 'Retrying…',
   saved: 'Saved',
   waitForLoad: 'Available once this step has loaded.',
-  changeLater: (where: string): string => `Change later in Settings › ${where}`,
+  changeLater: (where: string): string => `You can change this later in Settings › ${where}.`,
+  openSettings: 'Open in Settings',
   doneTitle: 'webterm is ready',
+  complete: 'Setup complete',
   doneBody: 'Start with a project. Everything you chose here can be changed in Settings.',
   doneActions: { newProject: 'New project', openFolder: 'Open folder', clone: 'Clone repository' },
   close: 'Close',
 
   claude: {
-    intro: 'This applies to every Claude agent and Central.',
     where: 'Claude › Connection',
     saveFailed: 'Could not save the Claude provider. Fix the error above, then Continue again.',
+    untested: 'Not tested with a real request yet. You can continue and test it later.',
+    failed: 'The connection test did not pass. You can continue and fix it later in Settings.'
   },
 
   browser: {
-    where: 'Capabilities › Browser on canvas',
+    where: 'Features › Browser on canvas',
     installed: 'Use installed browser',
     other: 'Use another path',
     off: "Don't use browser nodes",
@@ -54,8 +66,7 @@ export const SETUP_TEXT = {
   },
 
   central: {
-    where: 'Capabilities › Central Agent',
-    intro: 'Central is an assistant that sees all your projects and nodes.',
+    where: 'Central › What Central may do',
     pick: 'How much Central may do',
     modes: {
       off: 'Off',
@@ -75,13 +86,13 @@ export const SETUP_TEXT = {
   },
 
   basics: {
-    where: 'Appearance, Workspaces and Canvas',
+    where: 'Appearance, Canvas and Notifications',
     theme: 'Theme',
     themes: { auto: 'System', light: 'Light', dark: 'Dark' },
     notify: 'Desktop notifications',
     notifyHint: 'Shown when an agent finishes or needs input while you are not looking.',
     telegram: 'Telegram',
-    telegramLater: 'Connect later in Settings › Capabilities',
+    telegramLater: 'Connect later in Settings › Features',
     telemetry: 'webterm sends no telemetry.',
   },
 }

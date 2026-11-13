@@ -14,9 +14,10 @@ import { ChromiumDownload } from '../ChromiumDownload'
 import { ChromiumPathField } from '../ChromiumPathField'
 import { useCapabilities } from '../useCapabilities'
 import { SETUP_TEXT } from './setup.labels'
-import { LoadRetry, StepFooter, Tiles, type StepProps } from './setup.ui'
+import { StepFooter, StepLoading, StepPage, Tiles, type StepProps, type StepSetting } from './setup.ui'
 
 const T = SETUP_TEXT.browser
+const SETTING: StepSetting = { where: T.where, section: 'capabilities', field: 'capability.browser' }
 export type BrowserChoice = 'installed' | 'other' | 'download' | 'off'
 
 /** Step 2: pick the browser for browser nodes, or switch them off. */
@@ -41,13 +42,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
   }, [chromium, choice, download])
 
   if (!data || !chromium || choice === null) {
-    return (
-      <div className="flex flex-col gap-3" data-setup-step="browser">
-        <p role={error ? 'alert' : 'status'} className={`m-0 text-xs ${error ? 'text-destructive' : 'opacity-70'}`}>{error ? T.loadFailed : T.loading}</p>
-        {error ? <LoadRetry load={refresh} /> : null}
-        <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} locked={SETUP_TEXT.waitForLoad} />
-      </div>
-    )
+    return <StepLoading step="browser" setting={SETTING} nav={nav} error={error} loading={T.loading} failed={T.loadFailed} retry={refresh} />
   }
 
   const options: BrowserChoice[] = [
@@ -79,10 +74,11 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
   const setHeadless = (v: boolean): void => { void env.write(headlessKey, v ? 'on' : null) }
 
   return (
-    <div className="flex flex-col gap-3" data-setup-step="browser">
+    <StepPage step="browser" setting={SETTING} footer={<StepFooter nav={nav} commit={commit} locked={continueLock} />}>
+      <Tiles<BrowserChoice> label={SETUP_TEXT.steps.browser} options={options} names={T} value={choice} onChange={setChoice} />
       {candidates.length === 0 ? (
-        <div className="flex flex-col gap-1 text-xs" data-browser-none>
-          <p className="m-0">{T.noneFound}</p>
+        <div className="flex flex-col gap-1.5 text-xs" data-browser-none>
+          <p className="m-0 flex items-center gap-1.5"><span className="codicon codicon-warning" aria-hidden="true" />{T.noneFound}</p>
           <div className="flex items-center gap-2">
             <a className="underline" href={T.chromeUrl} target="_blank" rel="noreferrer">{T.getChrome}</a>
             <ActionButton size="sm" variant="outline" action={check} busyLabel={T.checking}>{T.checkAgain}</ActionButton>
@@ -90,7 +86,6 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
           <ActionResult action={check} stamp="checked" />
         </div>
       ) : null}
-      <Tiles<BrowserChoice> label={SETUP_TEXT.steps.browser} options={options} names={T} value={choice} onChange={setChoice} />
       {choice === 'installed' && candidates.length > 1 ? (
         <Tiles label={T.pick} options={candidates} names={Object.fromEntries(candidates.map((c) => [c, c]))} value={picked ?? candidates[0]} onChange={setPicked} />
       ) : null}
@@ -114,13 +109,12 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
             disabled={headlessLock !== undefined || env.saveState(headlessKey)?.status === 'saving'} onCheckedChange={setHeadless} />
           <div className="flex flex-col">
             <Label htmlFor="setup-headless">{T.headless}</Label>
-            <span className="text-xs opacity-70">{T.headlessHint}</span>
+            <span className="text-xs text-(--vscode-descriptionForeground)">{T.headlessHint}</span>
             {headlessLock ? <DisabledReason id="setup-headless-reason" reason={headlessLock} /> : null}
             {env.saveState(headlessKey)?.status === 'error' ? <span role="alert" className="text-xs text-destructive">{T.saveFailed}</span> : null}
           </div>
         </div>
       ) : null}
-      <StepFooter nav={nav} where={T.where} at={{ section: 'capabilities', field: 'capability.browser' }} commit={commit} locked={continueLock} />
-    </div>
+    </StepPage>
   )
 }
