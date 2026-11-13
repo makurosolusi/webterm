@@ -3,6 +3,7 @@
 // no tokens, no paths: it feeds the node status bar and its "Copy diagnostics".
 import type { WorkStatus } from './centralWork'
 import type { AgentStatus } from './workspace'
+import type { StatusReasonKind } from './protocol'
 
 export const NODE_STATUS_PATH = '/api/node-status'
 /** Most ids one request may ask for; the client batches every mounted node into pages of this size. */
@@ -15,6 +16,9 @@ export interface NodeStatusInfo {
   startedAt?: number
   exit?: { code: number; reason: string; at: number }
   status?: AgentStatus
+  /** Why the current status needs you or failed; `detail` is short (tool name, capped). */
+  reason?: StatusReasonKind
+  detail?: string
   /** When the current status began; absent after a server restart until the status changes. */
   statusSince?: number
   /** Last hook write of any status (ms). */

@@ -4,6 +4,7 @@
 import { getCanvasPush } from '../canvas/canvasPush.runtime'
 import { findWorkspaceFor } from '../contextLinkRoute'
 import { db } from '../db'
+import { sessions } from '../sessions'
 import { PORT } from '../launchLine'
 import { createLogger } from '../logs/logger'
 import { agentChatQueryOpener } from './agentChat.options'
@@ -36,6 +37,7 @@ export function agentChatPool(): AgentChatPool {
       return agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, settings: db.getSettings() }))
     },
     persist,
+    onStatus: (nodeId, st) => sessions.setStatus(nodeId, st.status, undefined, st.reason),
   })
   setAgentChatPool(pool)
   return pool

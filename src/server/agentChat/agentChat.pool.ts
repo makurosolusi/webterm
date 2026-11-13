@@ -18,6 +18,7 @@ import { AgentChatLock } from './agentChat.lock'
 import { agentChatLadderPick } from './agentChat.ladder'
 import { nodeConfigOf, nodeModeOf, sameNodeConfig } from './agentChat.snapshot'
 import { recordEvent } from '../events/producers'
+import { chatNodeStatus, type ChatNodeStatus } from './agentChat.status'
 
 /** Recorded on every Agent Chat mode switch and every saved approval-level change (routes/settings.routes.ts). */
 export const MODE_CHANGE_EVENT = 'permission.mode_change'
@@ -45,6 +46,8 @@ export interface AgentChatPoolDeps {
   gate?: AgentChatBroker
   lock?: AgentChatLock
   maxLive?: number
+  /** Node status from this chat's events (agentChat.status.ts); production: sessions.setStatus. Absent = not reported. */
+  onStatus?(nodeId: string, s: ChatNodeStatus): void
   /** Test override of the session idle close. */
   idleMs?: number
   /** Test override of AGENT_CHAT_CONTROL_TIMEOUT_MS. */
@@ -132,6 +135,8 @@ export class AgentChatPool {
    * event: an open UI then gets the same values by push and its own save of them is a no-op.
    */
   private record(nodeId: string, e: AgentChatEvent): void {
+    const st = this.deps.onStatus && chatNodeStatus(e, this.entries.get(nodeId)?.phase !== undefined)
+    if (st) this.deps.onStatus?.(nodeId, st)
     this.signalTurn(nodeId, e)
     if (!this.deps.persist || (e.t !== 'init' && e.t !== 'reset' && e.t !== 'config' && e.t !== 'mode')) return
     const t = this.target(nodeId)

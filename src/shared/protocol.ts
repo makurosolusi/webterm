@@ -39,7 +39,12 @@ export interface ExitMsg { t: 'exit'; id: string; code: number; reason?: 'self' 
 export interface ResetMsg { t: 'reset'; id: string; epoch: string }
 // `status` ABSEN = "tidak ada status lagi" (sapuan basi, lihat `agentStale.ts`), bukan "tidak
 // berubah". Satu-satunya cara server bisa MENCABUT klaim yang pernah ia kirim.
-export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus }
+// `reason`/`detail` = why a node needs you or failed (tool name, question, error), when the source said.
+export type StatusReasonKind = 'permission' | 'question' | 'error'
+export interface StatusReason { reason: StatusReasonKind; detail?: string }
+// `snapshot` = state replayed to a socket that just connected, not news: a status the tab did not know
+// before (reload) marks nothing unread.
+export interface StatusMsg { t: 'status'; id: string; status?: AgentStatus; reason?: StatusReasonKind; detail?: string; snapshot?: true }
 // Petunjuk "isi `dir` berubah" (bukan diff): klien menjawab dengan me-refresh listing.
 export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // The server added `nodes`/`bridges` to board `workspaceId`, on top of stored version `base`, storing

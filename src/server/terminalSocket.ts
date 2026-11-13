@@ -31,7 +31,8 @@ export const WS_RESYNC_SWEEP_MS = 250
 export const WS_HEARTBEAT_MS = 30_000
 
 export interface TerminalSocketDeps {
-  sessions: Pick<Sessions, 'handle' | 'detach' | 'resync'>
+  /** `statusSnapshot` absent = no status frames on connect (tests that do not care). */
+  sessions: Pick<Sessions, 'handle' | 'detach' | 'resync'> & Partial<Pick<Sessions, 'statusSnapshot'>>
   fsWatchHub: Pick<typeof fsWatchHub, 'watch' | 'unwatch' | 'dropClient'>
   /** Files watch capability; off = fswatch/fsunwatch are ignored. */
   watchOn: () => boolean
@@ -75,6 +76,8 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
   }
 
   if (deps.identity) send({ t: 'hello', bootId: deps.identity.bootId, build: deps.identity.build })
+  // Every known status right away: a reloaded tab lists nodes of every board, most of which it never opens.
+  for (const m of deps.sessions.statusSnapshot?.() ?? []) send(m)
   const streams = deps.streams ? createStreamBridge(deps.streams.upgrade, send, deps.streams.dispatch, () => ws.bufferedAmount) : null
 
   let alive = true
