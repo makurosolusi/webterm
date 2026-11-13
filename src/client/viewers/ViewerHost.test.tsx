@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FsCapabilities } from '../../shared/fsContract'
 
 const caps: FsCapabilities = { mutate: false, viewers: true, watch: false, git: false, quickOpen: false, upload: false, listMax: 10 }
-const h = vi.hoisted(() => ({ caps: null as unknown as FsCapabilities }))
+const h = vi.hoisted(() => ({ caps: null as unknown as FsCapabilities, capsFail: 0 }))
 vi.mock('../fsClient', () => ({
-  capabilities: () => Promise.resolve(h.caps),
+  capabilities: () => (h.capsFail-- > 0 ? Promise.reject(new Error('offline')) : Promise.resolve(h.caps)),
   rawUrl: (p: string) => `/api/fs/raw?path=${encodeURIComponent(p)}&token=t`,
   stat: () => Promise.resolve({ ok: true, version: '1-2048', meta: { name: 'x', dir: false, ignored: false, size: 2048 } }),
 }))
@@ -17,7 +17,7 @@ vi.mock('../clipboard', () => ({ writeClipboard }))
 
 import { ViewerHost } from './ViewerHost'
 
-beforeEach(() => { h.caps = { ...caps } })
+beforeEach(() => { h.caps = { ...caps }; h.capsFail = 0 })
 afterEach(cleanup)
 
 describe('ViewerHost', () => {
