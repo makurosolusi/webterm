@@ -5,7 +5,7 @@
 import type { Server } from 'node:http'
 import { flushLogsSync, type Logger } from './logs'
 import { removeInstanceFile } from './instanceFile'
-import { onUnhandledRejection } from './processCrash'
+import { onUncaughtExceptionMonitor, onUnhandledRejection } from './processCrash'
 import { activeBrowser } from './browser/browser.activate'
 import { activeAgentChatPool } from './agentChat/agentChat.pool'
 
@@ -50,8 +50,8 @@ function releaseRuntimes(): Promise<unknown> {
  * skips the process `exit` hook, so the stores cannot wait for it. The process is expected to exit next.
  */
 export function installShutdown({ log, runDir, stores, server, sockets, devProxy }: ShutdownDeps): () => Promise<void> {
-  // Observe-only crash hook (does not change crash behaviour) + synchronous flush on every exit path.
-  process.on('uncaughtExceptionMonitor', (err) => log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`))
+  // Observe-only crash hook, flushed at once (processCrash.ts: Electrobun's native exit skips the `exit` hook).
+  process.on('uncaughtExceptionMonitor', onUncaughtExceptionMonitor(log, flushLogsSync))
   // Bun dies on an unhandled rejection but reports exit code 0 to the `exit` hook; log it and exit 1.
   process.on('unhandledRejection', onUnhandledRejection(log))
   let storesClosed = false

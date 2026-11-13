@@ -82,14 +82,14 @@ export async function findRunningServer(runDir: string): Promise<{ origin: strin
 
 /** Attach to the data dir's running server, else start one in-process; `showSignInFile` gets the path of the
  *  0600 redirect file to load in the window (a path, never the code-bearing URL). */
-export async function openNativeSession(o: { showSignInFile: (path: string) => void | Promise<void>; distDir?: string }): Promise<NativeSession> {
+export async function openNativeSession(o: { showSignInFile: (path: string) => void | Promise<void>; distDir?: string; selfEntry?: string }): Promise<NativeSession> {
   const running = await findRunningServer(join(dataDir(), RUN_SUBDIR))
   if (running) {
     console.info(`[webterm] attaching to the running server at ${running.origin}`)
     await o.showSignInFile(running.signInFile)
     return { mode: 'attached', origin: running.origin, quit: async () => {} } // not ours to stop
   }
-  const server = await startEmbeddedServer({ port: await freeLoopbackPort(), openFile: async (p) => { await o.showSignInFile(p) }, ...(o.distDir ? { distDir: o.distDir } : {}) })
+  const server = await startEmbeddedServer({ port: await freeLoopbackPort(), openFile: async (p) => { await o.showSignInFile(p) }, ...(o.distDir ? { distDir: o.distDir } : {}), ...(o.selfEntry ? { selfEntry: o.selfEntry } : {}) })
   await server.openUi()
   return { mode: 'embedded', origin: server.url, quit: server.stop }
 }
