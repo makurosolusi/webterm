@@ -5,7 +5,7 @@
  * mocked `Notification`. Workspaces come from a mocked `fetchWorkspaces`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 vi.mock('./api', () => ({
   fetchWorkspaces: vi.fn(async () => [
@@ -238,9 +238,51 @@ describe('Settings › Notifications', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(toggle)
     expect(readNotifyPrefs().enabled).toBe(false)
-    expect(screen.getByText('Saved on this browser').closest('[role="status"]')).toBeTruthy() // stored locally, said so
-    fireEvent.click(screen.getByLabelText('Notification sound')) // beforeEach stores sound off
+    expect((await screen.findByText('Saved on this browser')).closest('[role="status"]')).toBeTruthy() // stored locally, said so
+    // Off differs from the default (on): the row shows its dot and its own Reset.
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Desktop notifications' }))
+    await waitFor(() => expect(readNotifyPrefs().enabled).toBe(true))
+    // beforeEach stores sound off: modified, and Reset turns it back on.
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Notification sound' }))
     expect(readNotifyPrefs().sound).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Reset Setting: Notification sound' })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Notification sound'))
+    expect(readNotifyPrefs().sound).toBe(false)
     expect(screen.queryByText(/Mute notifications:/)).toBeNull() // per-workspace mute is in the workspace menu
+  })
+
+  it('a dismissed prompt is not "Saved": the row says the browser did not allow it, and Ask again asks again', async () => {
+    vi.useRealTimers()
+    FakeNotification.permission = 'default'
+    FakeNotification.requestPermission.mockImplementationOnce(async () => 'default')
+    const { readNotifyPrefs } = await load()
+    const { NotificationsSection, NOTIFY_TEXT } = await import('./osNotify.settings')
+    render(<NotificationsSection />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Desktop notifications' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(NOTIFY_TEXT.refused)
+    expect(screen.queryByText('Saved on this browser')).toBeNull() // nothing the user asked for was stored
+    expect(screen.getByRole('switch', { name: 'Desktop notifications' }).getAttribute('aria-checked')).toBe('false')
+    expect(readNotifyPrefs().enabled).toBe(false)
+    FakeNotification.requestPermission.mockImplementationOnce(async () => { FakeNotification.permission = 'granted'; return 'granted' })
+    fireEvent.click(within(alert).getByRole('button', { name: NOTIFY_TEXT.askAgain }))
+    expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Desktop notifications' }).getAttribute('aria-checked')).toBe('true'))
+    expect((await screen.findByText('Saved on this browser')).closest('[role="status"]')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('blocked by the browser: locked with how to allow it, and Check again re-reads the permission', async () => {
+    vi.useRealTimers()
+    FakeNotification.permission = 'denied'
+    await load()
+    const { NotificationsSection, NOTIFY_TEXT } = await import('./osNotify.settings')
+    render(<NotificationsSection />)
+    expect(screen.getByText(NOTIFY_TEXT.blocked)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reset Setting: Desktop notifications' })).toBeNull()
+    FakeNotification.permission = 'granted'
+    fireEvent.click(screen.getByRole('button', { name: NOTIFY_TEXT.checkAgain }))
+    expect(screen.queryByText(NOTIFY_TEXT.blocked)).toBeNull()
+    expect((screen.getByRole('switch', { name: 'Desktop notifications' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

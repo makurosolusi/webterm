@@ -32,6 +32,12 @@ function renderPanel(overrides: Partial<Settings> = {}) {
 }
 
 const nav = () => screen.getByRole('navigation', { name: 'Section settings' })
+/** Settings opened on Terminal, where the terminal look (font, cursor) lives since it left Appearance. */
+function renderTerminal(overrides: Partial<Settings> = {}) {
+  const view = renderPanel(overrides)
+  fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
+  return view
+}
 
 describe('SettingsPanel layout', () => {
   it('fills the viewport without the shadcn centering utilities (prod minifier drops a CSS translate reset)', () => {
@@ -55,6 +61,7 @@ describe('SettingsPanel layout', () => {
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
+    fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
     const fontSize = screen.getByRole('spinbutton', { name: 'Font size' })
     expect(fontSize.getAttribute('aria-valuenow')).toBe(String(DEFAULT_SETTINGS.fontSize))
     const row = fontSize.closest('[data-slot="settings-field"]') as HTMLElement
@@ -140,27 +147,31 @@ describe('SettingsPanel section icons and descriptions', () => {
 })
 
 describe('SettingsPanel item placement', () => {
-  it('Appearance holds theme, colors and font; Terminal holds History length; Canvas holds the grid', () => {
+  it('Appearance holds theme and canvas background; Terminal holds the look (preview, colors, font, cursor) and History length; Canvas holds the grid', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
     renderPanel()
-    expect(screen.getByLabelText('Theme')).toBeTruthy()
-    expect(screen.getByLabelText('Terminal colors')).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Font' })).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeTruthy()
     expect(document.querySelector('[data-field="canvasBackground"]')).toBeTruthy()
+    for (const moved of ['Terminal colors', 'Font size', 'Cursor blink']) expect(screen.queryByLabelText(moved), moved).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Font' })).toBeNull()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Terminal' }))
+    expect(screen.getByTestId('terminal-preview')).toBeTruthy()
+    expect(screen.getByLabelText('Terminal colors')).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Font' })).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'Cursor style' })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'History length' })).toBeTruthy()
-    expect(screen.queryByLabelText('Theme')).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Theme' })).toBeNull()
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Canvas' }))
-    expect(screen.getByLabelText('Grid')).toBeTruthy()
-    expect(screen.queryByLabelText('Theme')).toBeNull()
+    expect(screen.getByRole('radiogroup', { name: 'Grid' })).toBeTruthy()
+    expect(screen.queryByRole('radiogroup', { name: 'Theme' })).toBeNull()
   })
 
   it('a link with an old section id lands on the page that now holds the field', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
-    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="terminal" field="fontSize" />)
-    expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeTruthy()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="appearance" field="fontSize" />)
+    expect(screen.getByRole('heading', { level: 2, name: 'Terminal' })).toBeTruthy() // the look moved to Terminal; old links follow
     cleanup()
     render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={vi.fn()} onClose={vi.fn()} section="shell" field="defaultProjectsFolder" />)
     expect(screen.getByRole('heading', { level: 2, name: 'Canvas' })).toBeTruthy()
@@ -222,7 +233,7 @@ describe('SettingsPanel keyboard', () => {
 
 describe('SettingsPanel persistence', () => {
   it('emits the patch for a stepper change (buttons and arrow keys)', () => {
-    const { onChange } = renderPanel()
+    const { onChange } = renderTerminal()
 
     fireEvent.click(screen.getByRole('button', { name: 'Increase Font size' }))
     expect(onChange).toHaveBeenLastCalledWith({ fontSize: DEFAULT_SETTINGS.fontSize + 1 })
@@ -231,7 +242,7 @@ describe('SettingsPanel persistence', () => {
   })
 
   it('the stepper stops at the setting range', () => {
-    const { onChange, rerender } = renderPanel()
+    const { onChange, rerender } = renderTerminal()
 
     fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Font size' }), { key: 'End' })
     expect(onChange).toHaveBeenLastCalledWith({ fontSize: SETTING_RANGES.fontSize.max })
@@ -243,7 +254,7 @@ describe('SettingsPanel persistence', () => {
   })
 
   it('toggles a boolean through a switch in the control column, named by the row label', () => {
-    const { onChange } = renderPanel()
+    const { onChange } = renderTerminal()
 
     const toggle = screen.getByRole('switch', { name: 'Cursor blink' })
     expect(toggle.getAttribute('aria-checked')).toBe('true')
@@ -255,7 +266,7 @@ describe('SettingsPanel persistence', () => {
   })
 
   it('outside search: no page prefix, a modified dot and a visible Reset that resets the item', () => {
-    const { onChange } = renderPanel({ cursorBlink: false })
+    const { onChange } = renderTerminal({ cursorBlink: false })
 
     const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).getByText('(Modified)')).toBeTruthy()
@@ -268,7 +279,7 @@ describe('SettingsPanel persistence', () => {
   })
 
   it('does not show Modified or a reset gear for a default value', () => {
-    renderPanel()
+    renderTerminal()
 
     const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(within(field).queryByText('(Modified)')).toBeNull()
@@ -276,25 +287,25 @@ describe('SettingsPanel persistence', () => {
   })
 
   it('renders every dropdown as the same native select with a codicon chevron', () => {
-    const { onChange } = renderPanel()
+    const { onChange } = renderTerminal()
 
-    const select = screen.getByLabelText('Cursor style') as HTMLSelectElement
+    const select = screen.getByLabelText('Terminal colors') as HTMLSelectElement
     expect(select.tagName).toBe('SELECT')
     expect(select.className).toBe('st-select')
     expect(select.parentElement?.querySelector('.codicon-chevron-down')).toBeTruthy()
-    fireEvent.change(select, { target: { value: 'bar' } })
+    fireEvent.change(select, { target: { value: 'dracula' } })
 
-    expect(onChange).toHaveBeenCalledWith({ cursorStyle: 'bar' })
+    expect(onChange).toHaveBeenCalledWith({ terminalTheme: 'dracula' })
   })
 
   it('one modified indicator per row: the dot, no left bar element; Reset page… resets the page after a confirm', () => {
-    const { onChange } = renderPanel({ cursorBlink: false, fontSize: DEFAULT_SETTINGS.fontSize + 2 })
+    const { onChange } = renderTerminal({ cursorBlink: false, fontSize: DEFAULT_SETTINGS.fontSize + 2 })
     const field = screen.getByLabelText('Cursor blink').closest('[data-slot="settings-field"]') as HTMLElement
     expect(field.querySelectorAll('.st-modified-dot')).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset page…' }))
     const dialog = screen.getByRole('alertdialog')
-    expect(within(dialog).getByText('Reset 2 settings on Appearance?')).toBeTruthy()
+    expect(within(dialog).getByText('Reset 2 settings on Terminal?')).toBeTruthy()
     expect(dialog.textContent).toContain('Font size')
     expect(dialog.textContent).toContain('Cursor blink')
     expect(onChange).not.toHaveBeenCalled() // nothing until confirmed

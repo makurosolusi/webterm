@@ -33,11 +33,14 @@ export function installedFontPresets(): ComboPreset[] {
 const WEIGHT_NAMES: Record<number, string> = {
   100: 'Thin', 200: 'Extra light', 300: 'Light', 400: 'Normal', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Extra bold', 900: 'Black',
 }
-export const FONT_WEIGHT_OPTIONS = Object.entries(WEIGHT_NAMES).map(([w, name]) => ({ value: Number(w), label: `${w} · ${name}` }))
+export const FONT_WEIGHT_OPTIONS = Object.entries(WEIGHT_NAMES).map(([w, name]) => ({ value: Number(w), label: `${name} (${w})` }))
+
+/** History length as people read it: "25,000 lines" (also the at-rest text of a custom value). */
+export const formatLines = (v: string): string => (Number.isFinite(Number(v)) && v.trim() ? `${Number(v).toLocaleString('en-US')} lines` : v)
 
 export const SCROLLBACK_PRESETS: readonly ComboPreset[] = [1_000, 5_000, 10_000, 50_000].map((n) => ({
   value: String(n),
-  label: `${n.toLocaleString('en-US')} lines${n === DEFAULT_SETTINGS.scrollbackLines ? ' (default)' : ''}`,
+  label: `${formatLines(String(n))}${n === DEFAULT_SETTINGS.scrollbackLines ? ' (default)' : ''}`,
 }))
 
 /**

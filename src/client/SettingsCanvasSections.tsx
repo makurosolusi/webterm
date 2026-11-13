@@ -1,10 +1,10 @@
-// Settings › Canvas: the grid (one choice: off / dots / dots + snap), quick move & resize, and where new
+// Settings › Canvas: the grid (one segmented choice: off / dots / dots + snap), quick move & resize, and where new
 // projects go. Grid size and cables sit under Advanced. New nodes take the size of the last resize
 // (App `resizedNodeSize`), so there is no node-size setting.
 import { QUICK_DRAG_PRESETS, DEFAULT_SETTINGS, type Settings } from '../shared/settings'
 import { Input } from '@/components/ui/input'
 import { Field, SelectField, ToggleField } from './SettingsFields'
-import { SettingsAdvanced, SettingsSelect } from './SettingsControls'
+import { SettingsAdvanced, SettingsGroup, SettingsSegmented, type SegmentedOption } from './SettingsControls'
 import { NumberSelectField } from './SettingsPickerFields'
 import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS } from './settingsPresets'
 import { Swatch } from './CanvasBackgroundControls'
@@ -26,6 +26,10 @@ type GridMode = 'off' | 'dots' | 'snap'
 export const gridMode = (s: Pick<Settings, 'canvasDots' | 'snapToGrid'>): GridMode => (s.snapToGrid ? 'snap' : s.canvasDots ? 'dots' : 'off')
 export const gridPatch = (m: GridMode): Pick<Settings, 'canvasDots' | 'snapToGrid'> => ({ canvasDots: m !== 'off', snapToGrid: m === 'snap' })
 
+const GRID_OPTIONS: readonly SegmentedOption<GridMode>[] = [
+  { value: 'off', label: 'Off' }, { value: 'dots', label: 'Dots' }, { value: 'snap', label: 'Dots and snap' },
+]
+
 function GridField({ settings: s, onChange }: P): React.JSX.Element {
   const mode = gridMode(s)
   const save = useFieldSave(settingsSaves, 'canvasDots')
@@ -33,8 +37,7 @@ function GridField({ settings: s, onChange }: P): React.JSX.Element {
     <Field label="Grid" htmlFor="st-grid" field="canvasDots" save={save}
       hint="Snap rounds a dragged node’s position to the dots."
       modified={mode !== gridMode(DEFAULT_SETTINGS)} onReset={() => onChange(gridPatch(gridMode(DEFAULT_SETTINGS)))}>
-      <SettingsSelect<GridMode> id="st-grid" value={mode} onChange={(m) => onChange(gridPatch(m))}
-        options={[{ value: 'off', label: 'Off' }, { value: 'dots', label: 'Dots' }, { value: 'snap', label: 'Dots and snap' }]} />
+      <SettingsSegmented<GridMode> id="st-grid" ariaLabel="Grid" value={mode} onChange={(m) => onChange(gridPatch(m))} options={GRID_OPTIONS} />
     </Field>
   )
 }
@@ -60,15 +63,19 @@ function CableColorField({ value, onChange }: { value: string; onChange: (v: str
 export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
   return (
     <>
-      <GridField settings={s} onChange={onChange} />
-      <SelectField setting="quickDrag" id="st-quickDrag" label="Quick move & resize" value={s.quickDrag}
-        hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it."
-        options={QUICK_DRAG_PRESETS.map((p) => ({ value: p, label: quickDragLabel(p, isMacPlatform()) }))}
-        onChange={(v) => onChange({ quickDrag: v })} />
-      <ToggleField setting="nodeStatusBar" id="st-nodeStatusBar" label="Status bar" value={s.nodeStatusBar}
-        hint="Show session and agent details at the bottom of each node, with warnings when something looks wrong."
-        onChange={(v) => onChange({ nodeStatusBar: v })} />
-      <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
+      <SettingsGroup title="Nodes">
+        <GridField settings={s} onChange={onChange} />
+        <SelectField setting="quickDrag" id="st-quickDrag" label="Quick move & resize" value={s.quickDrag}
+          hint="Hold the keys and drag anywhere on a node: the middle moves it, an edge or corner resizes it."
+          options={QUICK_DRAG_PRESETS.map((p) => ({ value: p, label: quickDragLabel(p, isMacPlatform()) }))}
+          onChange={(v) => onChange({ quickDrag: v })} />
+        <ToggleField setting="nodeStatusBar" id="st-nodeStatusBar" label="Status bar" value={s.nodeStatusBar}
+          hint="Show session and agent details at the bottom of each node, with warnings when something looks wrong."
+          onChange={(v) => onChange({ nodeStatusBar: v })} />
+      </SettingsGroup>
+      <SettingsGroup title="New projects">
+        <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
+      </SettingsGroup>
       <SettingsAdvanced>
         <NumberSelectField setting="gridSize" id="st-gridSize" label="Grid size" value={s.gridSize} options={GRID_SIZE_OPTIONS}
           onChange={(v) => onChange({ gridSize: v })} />
