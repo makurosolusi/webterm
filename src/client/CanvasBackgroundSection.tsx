@@ -1,8 +1,8 @@
 // Canvas background in Settings › Appearance: edits the wallpaper of all workspaces; with a workspace
 // open, ONE choice "This workspace: Same as all workspaces / Custom" decides whether the controls edit
-// the shared wallpaper or this workspace's own. Changes apply live (canvas + preview box).
+// the shared wallpaper or this workspace's own. Changes apply live (canvas + preview box). Back to the
+// default is the "Background style" row's own Reset (one place, like every other row).
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
 import { CANVAS_BG_MODES, DEFAULT_CANVAS_BACKGROUND, type CanvasBackground, type CanvasBackgroundMode } from '../shared/canvasBackground.schema'
@@ -11,10 +11,14 @@ import { needsContrastWarning } from './canvasBackground.style'
 import { CanvasBackgroundLayer, useWallpaper } from './CanvasBackgroundLayer'
 import { ColorControls, GradientControls, ImageControls } from './CanvasBackgroundControls'
 import { Field } from './SettingsFields'
-import { SettingsSelect } from './SettingsControls'
+import { SettingsGroup, SettingsSegmented } from './SettingsControls'
 import './canvasBackground.css'
 
 const MODE_LABELS: Record<CanvasBackgroundMode, string> = { default: 'Default', color: 'Solid color', gradient: 'Gradient', image: 'Image' }
+
+/** Differs from the default anywhere (key order normalized onto the default's, so a server copy compares equal). */
+export const isDefaultBackground = (bg: CanvasBackground): boolean =>
+  JSON.stringify({ ...DEFAULT_CANVAS_BACKGROUND, ...bg, gradient: { ...DEFAULT_CANVAS_BACKGROUND.gradient, ...bg.gradient } }) === JSON.stringify(DEFAULT_CANVAS_BACKGROUND)
 
 interface Props {
   settings: Settings
@@ -62,35 +66,36 @@ export function CanvasBackgroundSection({ settings: s, onChange, projectId }: Pr
 
   return (
     <div data-field="canvasBackground" className="cbg-section">
-      <h3 className="st-group-title">Canvas background</h3>
-      {projectId && (
-        <Field label="This workspace" htmlFor="cbg-scope" hint="Same as all workspaces, or a background of its own. The controls below edit the one in use.">
-          <SettingsSelect id="cbg-scope" value={own ? 'custom' : 'same'} onChange={(v) => setCustom(v === 'custom')}
-            options={[{ value: 'same', label: 'Same as all workspaces' }, { value: 'custom', label: 'Custom' }]} />
+      <SettingsGroup title="Canvas background">
+        {projectId && (
+          <Field label="This workspace" htmlFor="cbg-scope" hint="Same as all workspaces, or a background of its own. The controls below edit the one in use.">
+            <SettingsSegmented id="cbg-scope" ariaLabel="This workspace" value={own ? 'custom' : 'same'} onChange={(v) => setCustom(v === 'custom')}
+              options={[{ value: 'same', label: 'Same as all workspaces' }, { value: 'custom', label: 'Custom' }]} />
+          </Field>
+        )}
+        <Field label="Preview" block>
+          <div className="cbg-preview" data-testid="canvas-background-preview">
+            <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
+            <div className="cbg-preview__dots" style={{ backgroundImage: `radial-gradient(${wallpaper.dotColor} 1.2px, transparent 1.2px)` }} />
+            <div className="cbg-preview__node">Preview</div>
+          </div>
         </Field>
-      )}
-      <div className="cbg-preview" data-testid="canvas-background-preview">
-        <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
-        <div className="cbg-preview__dots" style={{ backgroundImage: `radial-gradient(${wallpaper.dotColor} 1.2px, transparent 1.2px)` }} />
-        <div className="cbg-preview__node">Preview</div>
-      </div>
-      <Field label="Background style" htmlFor="cbg-mode" hint="Default keeps the theme's canvas color. Changes apply immediately.">
-        <SettingsSelect id="cbg-mode" value={bg.mode} onChange={(mode) => set({ mode })}
-          options={CANVAS_BG_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }))} />
-      </Field>
-      {bg.mode === 'color' && <ColorControls bg={bg} onChange={set} />}
-      {bg.mode === 'gradient' && <GradientControls bg={bg} onChange={set} />}
-      {bg.mode === 'image' && (
-        <ImageControls bg={bg} onChange={set}
-          onUpload={async (file) => fromServer(await uploadCanvasImage(file, ws))}
-          onRemove={async () => fromServer(await removeCanvasImage(ws))}
-          missing={wallpaper.imageStatus === 'missing'}
-          lowContrast={needsContrastWarning(bg, wallpaper.imageLuminance)} />
-      )}
-      <div className="cbg-actions">
-        <Button type="button" variant="secondary" size="sm" onClick={reset}>Reset to default</Button>
-      </div>
-      {error && <p className="cbg-notice cbg-notice--error" role="alert">{error}</p>}
+        <Field label="Background style" htmlFor="cbg-mode" hint="Default keeps the theme's canvas color. Changes apply immediately."
+          modified={!isDefaultBackground(bg)} onReset={reset}>
+          <SettingsSegmented id="cbg-mode" ariaLabel="Background style" value={bg.mode} onChange={(mode) => set({ mode })}
+            options={CANVAS_BG_MODES.map((m) => ({ value: m, label: MODE_LABELS[m] }))} />
+        </Field>
+        {bg.mode === 'color' && <ColorControls bg={bg} onChange={set} />}
+        {bg.mode === 'gradient' && <GradientControls bg={bg} onChange={set} />}
+        {bg.mode === 'image' && (
+          <ImageControls bg={bg} onChange={set}
+            onUpload={async (file) => fromServer(await uploadCanvasImage(file, ws))}
+            onRemove={async () => fromServer(await removeCanvasImage(ws))}
+            missing={wallpaper.imageStatus === 'missing'}
+            lowContrast={needsContrastWarning(bg, wallpaper.imageLuminance)} />
+        )}
+        {error && <p className="cbg-notice cbg-notice--error" role="alert">{error}</p>}
+      </SettingsGroup>
     </div>
   )
 }

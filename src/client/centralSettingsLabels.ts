@@ -3,14 +3,13 @@
 import type { CentralGroup } from './centralSettings.registry'
 
 export const CENTRAL_GROUP_TITLE: Readonly<Record<CentralGroup, string>> = {
-  status: 'Central',
+  status: 'Central Agent',
   autonomy: 'What Central may do',
-  cost: 'Daily limit',
+  cost: 'Spending',
   advanced: 'Advanced',
 }
 
 export const CENTRAL_TEXT = {
-  sectionHint: 'Everything about the Central Agent in one place.',
   offReason: 'Turn on Central Agent first.',
   workersOffReason: 'Choose "Propose work" or "Work on its own" first.',
   autonomyOffReason: 'Choose "Work on its own" first.',
@@ -23,26 +22,30 @@ export const CENTRAL_TEXT = {
   loadFailed: (why: string): string => `Could not load these settings: ${why}`,
   decrease: (label: string): string => `Decrease ${label}`,
   increase: (label: string): string => `Increase ${label}`,
-  confirmAutonomy:
-    'Let Central work on its own?\n\nIt will start workers without asking at every step. Only turn it on if you trust the agents that run.',
+  confirmAutonomy: {
+    title: 'Let Central work on its own?',
+    body: 'It will start workers without asking at every step. Only turn this on if you trust the agents that run.',
+    action: 'Let it work on its own',
+  },
+  cancel: 'Cancel',
   checkinUsed: (used: number, limit: number): string => `Used today: ${used} of ${limit}`,
+  checkinCount: (n: number): string => `${n} per day`,
+  capabilitiesFailed: 'Could not load Central.',
   checkinFailed: 'Could not load the check-in settings.',
-  summaryTitle: 'Central Agent',
-  summaryLink: 'Managed in Central →',
 } as const
 
 /** Label + hint per registry id. */
 export const CENTRAL_FIELD_TEXT = {
   central: { label: 'Central Agent', hint: 'An assistant that knows all your projects and nodes, and that you can talk to.' },
-  level: { label: 'What Central may do', hint: 'Propose work = Central asks you before each worker it starts.' },
+  level: { label: 'What Central may do', hint: 'Chat only: Central answers but starts no workers. Propose work: it asks you before each worker. On its own: it starts workers without asking.' },
   checkin: { label: 'Let Central check in by itself', hint: 'Central starts a turn on its own when something needs a decision, such as a stalled task or a reminder that came due.' },
-  costLimit: { label: 'Daily spending limit', hint: 'Near the limit work moves to cheaper models.' },
+  costLimit: { label: 'Daily spending limit', hint: 'At 80% work moves to cheaper models; at 100% Central, routines, plans and bake-offs pause until the next day. Empty = no limit.' },
   spendWarning: { label: 'Warn when today\'s spend passes $10', hint: 'One notice per day. It never stops work. Turning it off also closes the open warnings.' },
   dailySpawns: { label: 'Workers per day', hint: 'How many workers Central may start per day. 0 = none.' },
   checkinLimit: { label: 'Check-ins per day', hint: 'The most check-ins Central may start in one day.' },
   maxInflight: { label: 'Max workers at once', hint: 'How many workers Central runs side by side when it works on its own. Applies to the next worker it starts.' },
 } as const
 
-export const LEVEL_TEXT = { none: 'Chat only', workers: 'Propose work (asks first)', autonomy: 'Work on its own' } as const
+export const LEVEL_TEXT = { none: 'Chat only', workers: 'Propose work', autonomy: 'On its own' } as const
 
 export const UNIT_TEXT = { workers: 'workers' } as const

@@ -10,20 +10,25 @@ import { IMAGE_TOO_LARGE_MESSAGE } from './canvasBackground.api'
 import { COLOR_PRESETS, GRADIENT_PRESETS } from './canvasBackground.presets'
 import { gradientCss, RECOMMENDED_IMAGE_DIM } from './canvasBackground.style'
 import { Field } from './SettingsFields'
-import { SettingsCheckbox, SettingsSelect } from './SettingsControls'
+import { Switch } from '@/components/ui/switch'
+import { SettingsSegmented } from './SettingsControls'
 
 type Patch = (patch: Partial<CanvasBackground>) => void
 
-const FIT_LABELS: Record<CanvasImageFit, string> = { cover: 'Fill (cover)', contain: 'Fit (contain)', tile: 'Tile' }
+const FIT_LABELS: Record<CanvasImageFit, string> = { cover: 'Fill', contain: 'Fit', tile: 'Tile' }
 
 function Range({ id, label, value, range, unit, onChange }: {
   id: string; label: string; value: number; range: { min: number; max: number; step: number }; unit: string; onChange: (v: number) => void
 }): React.JSX.Element {
   return (
     <Field label={label} htmlFor={id}>
-      <Input id={id} type="range" className="st-range" min={range.min} max={range.max} step={range.step} value={value}
-        onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="st-unit">{value}{unit}</span>
+      <span className="st-slider" data-control="slider">
+        <span className="st-slider-bound" aria-hidden="true">{range.min}{unit}</span>
+        <Input id={id} type="range" className="st-range" min={range.min} max={range.max} step={range.step} value={value} aria-valuetext={`${value}${unit}`}
+          onChange={(e) => onChange(Number(e.target.value))} />
+        <span className="st-slider-bound" aria-hidden="true">{range.max}{unit}</span>
+        <output htmlFor={id} className="st-slider-value">{value}{unit}</output>
+      </span>
     </Field>
   )
 }
@@ -129,11 +134,11 @@ export function ImageControls({ bg, onChange, onUpload, onRemove, missing, lowCo
       <Range id="cbg-blur" label="Blur" value={bg.imageBlur} range={CANVAS_BG_RANGES.imageBlur} unit="px" onChange={(imageBlur) => onChange({ imageBlur })} />
       <Range id="cbg-dim" label="Dim" value={bg.imageDim} range={CANVAS_BG_RANGES.imageDim} unit="%" onChange={(imageDim) => onChange({ imageDim })} />
       <Field label="Image fit" htmlFor="cbg-fit">
-        <SettingsSelect id="cbg-fit" value={bg.imageFit} options={CANVAS_IMAGE_FITS.map((f) => ({ value: f, label: FIT_LABELS[f] }))}
+        <SettingsSegmented id="cbg-fit" ariaLabel="Image fit" value={bg.imageFit} options={CANVAS_IMAGE_FITS.map((f) => ({ value: f, label: FIT_LABELS[f] }))}
           onChange={(imageFit) => onChange({ imageFit })} />
       </Field>
       <Field label="Gradient overlay" htmlFor="cbg-overlay" hint="Tint the image with the gradient below.">
-        <SettingsCheckbox id="cbg-overlay" checked={bg.imageGradientOverlay} onChange={(imageGradientOverlay) => onChange({ imageGradientOverlay })} />
+        <Switch id="cbg-overlay" checked={bg.imageGradientOverlay} onCheckedChange={(imageGradientOverlay) => onChange({ imageGradientOverlay })} />
       </Field>
       {bg.imageGradientOverlay && <GradientControls bg={bg} onChange={onChange} />}
     </>

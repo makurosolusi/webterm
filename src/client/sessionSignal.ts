@@ -2,20 +2,14 @@
 // (`sessionStatus.model.ts`), so a node never reads one thing in its tab and another in the side bar.
 import type { AgentStatus, WsNodeKind } from '../shared/workspace'
 import type { StatusReason } from '../shared/protocol'
-import { sessionStatusView, UNREAD_LABEL } from './sessionStatus.model'
-import type { StatusKind } from './sessionList'
+import { sessionStatusView, UNREAD_LABEL, type StatusTone } from './sessionStatus.model'
 
 export { UNREAD_LABEL }
 
-export type SignalTone = StatusKind | 'unread' | 'error'
+/** A dot's tone; calm tones (idle, muted) never reach a dot. */
+export type SignalTone = Exclude<StatusTone, 'idle' | 'muted'>
 
 export interface SessionSignal { tone: SignalTone; label: string }
-
-/** Legacy glyph rule of the Sessions side bar rows (SessionRow.tsx) until they read the model. */
-export function signalOf(kind: StatusKind, unread: boolean, label: string): SessionSignal {
-  if (unread && kind !== 'attention' && kind !== 'working') return { tone: 'unread', label: UNREAD_LABEL }
-  return { tone: kind, label }
-}
 
 /** Dot of a session: needs you (attention), working, error, unread; undefined = calm, no dot. */
 export function sessionSignal(status: AgentStatus | undefined, unread: boolean, reason?: StatusReason): SessionSignal | undefined {

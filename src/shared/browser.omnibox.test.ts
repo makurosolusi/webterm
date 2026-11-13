@@ -22,8 +22,18 @@ describe('resolveOmniboxInput', () => {
     ['[::1]:3000', 'http://[::1]:3000/'],
     ['app.localhost:3000', 'http://app.localhost:3000/'],
     ['example.com:8443/x', 'https://example.com:8443/x'],
-    ['192.168.1.1', 'https://192.168.1.1/'],
-    ['192.168.1.5:8080', 'https://192.168.1.5:8080/'],
+    ['192.168.1.1', 'http://192.168.1.1/'],
+    ['192.168.1.5:3000', 'http://192.168.1.5:3000/'],
+    ['10.0.0.7:8080/app', 'http://10.0.0.7:8080/app'],
+    ['172.20.1.2', 'http://172.20.1.2/'],
+    ['169.254.1.1', 'http://169.254.1.1/'],
+    ['intranet:8080', 'http://intranet:8080/'],
+    ['intranet:8080/wiki?a=1', 'http://intranet:8080/wiki?a=1'],
+    ['printer.local', 'http://printer.local/'],
+    ['nas.local:5000', 'http://nas.local:5000/'],
+    ['localhost', 'http://localhost/'],
+    ['172.32.0.1', 'https://172.32.0.1/'],
+    ['8.8.8.8', 'https://8.8.8.8/'],
   ])('navigates %s -> %s', (input, url) => expect(go(input)).toBe(url))
 
   it.each([
@@ -42,6 +52,10 @@ describe('resolveOmniboxInput', () => {
     ['about:blank', 'scheme'],
     ['https://u:p@a.com/', 'userinfo'],
   ])('rejects %s (%s) without navigating', (input, reason) => expect(go(input)).toEqual({ ok: false, reason }))
+
+  it('LAN rules never let userinfo through', () => {
+    expect(go('u:p@192.168.1.1')).toEqual({ ok: false, reason: 'userinfo' })
+  })
 
   it('returns null for blank input', () => {
     expect(resolveOmniboxInput('')).toBeNull()

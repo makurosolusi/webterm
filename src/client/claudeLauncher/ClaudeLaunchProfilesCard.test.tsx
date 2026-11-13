@@ -191,6 +191,7 @@ describe('ClaudeLaunchProfilesCard', () => {
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
     const delBtn = within(screen.getByRole('alertdialog')).getByRole('button', { name: PROFILES_TEXT.removing })
     expect(delBtn.getAttribute('aria-busy')).toBe('true') // busy while the server answers
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull()) // closes on the answer
     expect((await within(row('Malik')).findByRole('alert')).textContent).toContain(PROFILES_TEXT.inUse('Malik', 'provider'))
     expect(row('Malik').querySelector('[data-action-result="failed"]')).toBeTruthy()
   })

@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
 import { SettingsItemScopeProvider } from '../settingsContext'
-import { ProjectsFolderSetting } from './ProjectsFolderSetting'
+import { PROJECTS_FOLDER_TEXT, ProjectsFolderSetting } from './ProjectsFolderSetting'
+
+// The real picker browses the server's disk; here it is one button that picks a fixed folder.
+vi.mock('../FolderPicker', () => ({
+  default: ({ onPick }: { onPick(p: string): void }) => <button type="button" onClick={() => onPick('/picked/folder')}>Pick this folder</button>,
+}))
 
 const BUILTIN = '/home/u/webterm/projects'
 let checked: string[]
@@ -27,28 +32,46 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('Default projects folder setting', () => {
-  it('shows the built-in default in use, saves a valid folder after the server check', async () => {
-    const onChange = vi.fn()
-    render(<ProjectsFolderSetting value="" onChange={onChange} />)
-    expect((await screen.findByRole('status')).textContent).toBe(`In use: ${BUILTIN} (default)`)
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull() // nothing to save yet
-    fireEvent.change(screen.getByLabelText('Default projects folder'), { target: { value: '/code/projects' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByRole('button', { name: /Checking…/ })).toBeTruthy() // busy while the server checks
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith('/code/projects'))
-    expect(checked).toEqual(['/code/projects'])
+  const box = () => screen.getByRole('combobox', { name: 'Default projects folder' }) as HTMLInputElement
+
+  it('shows the built-in default as the box placeholder and offers it as a suggestion; no Save button', async () => {
+    render(<ProjectsFolderSetting value="" onChange={vi.fn()} />)
+    await waitFor(() => expect(box().placeholder).toBe(BUILTIN))
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull() // commits like every combobox row
+    fireEvent.keyDown(box(), { key: 'ArrowDown' })
+    expect(screen.getByRole('option').textContent).toBe(PROJECTS_FOLDER_TEXT.defaultLabel(BUILTIN))
   })
 
-  it('rejects a relative path and one inside the data dir without saving', async () => {
+  it('a typed folder commits on Enter after the server check, saying "Checking folder…" meanwhile', async () => {
     const onChange = vi.fn()
     render(<ProjectsFolderSetting value="" onChange={onChange} />)
-    const input = screen.getByLabelText('Default projects folder')
-    fireEvent.change(input, { target: { value: 'code' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('absolute path')
-    await screen.findByRole('button', { name: 'Save' }) // the check finished
-    fireEvent.change(input, { target: { value: '/home/u/.webterm-server/p' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(box(), { target: { value: '/code/projects' } })
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(screen.getByRole('status').textContent).toBe(PROJECTS_FOLDER_TEXT.checking)
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('/code/projects'))
+    expect(checked).toEqual(['/code/projects'])
+    expect(screen.queryByText(PROJECTS_FOLDER_TEXT.checking)).toBeNull()
+  })
+
+  it('Browse… picks a folder without typing, checked by the server first', async () => {
+    const onChange = vi.fn()
+    render(<ProjectsFolderSetting value="" onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: PROJECTS_FOLDER_TEXT.browse }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pick this folder' }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('/picked/folder'))
+    expect(checked).toEqual(['/picked/folder'])
+    expect(screen.queryByRole('button', { name: 'Pick this folder' })).toBeNull() // the picker closed
+  })
+
+  it('rejects a relative path at once and one inside the data dir after the check, without saving', async () => {
+    const onChange = vi.fn()
+    render(<ProjectsFolderSetting value="" onChange={onChange} />)
+    fireEvent.change(box(), { target: { value: 'code' } })
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(screen.getByRole('alert').textContent).toBe(PROJECTS_FOLDER_TEXT.notAbsolute)
+    expect(checked).toEqual([]) // never sent
+    fireEvent.change(box(), { target: { value: '/home/u/.webterm-server/p' } })
+    fireEvent.keyDown(box(), { key: 'Enter' })
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('data folder'))
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -60,7 +83,7 @@ describe('Default projects folder setting', () => {
         <ProjectsFolderSetting value="/code/projects" onChange={vi.fn()} />
       </SettingsItemScopeProvider>,
     )
-    expect((await screen.findByText(/In use:/)).textContent).toBe('In use: /code/projects')
+    expect(box().value).toBe('/code/projects')
     expect(screen.queryByRole('button', { name: 'Reset to default' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Reset Setting: Default projects folder' }))
     expect(onChange).toHaveBeenCalledWith({ defaultProjectsFolder: '' })

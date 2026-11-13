@@ -11,11 +11,11 @@ import { useLiveSettings } from './useSettings'
 import { formatBytes } from '../shared/fsLimits'
 import type { ReadEncoding } from '../shared/fsContract'
 import type { MonacoApi } from './lazyMonaco'
+import type { ViewerMeta } from './viewers/ViewerHost'
 import './node-statusbar.css'
 
 export type EditorLive = { monaco: MonacoApi; editor: MonacoEditor.IStandaloneCodeEditor } | null
-/** Facts a non-text viewer reports about its file (ViewerHost `onMeta`). */
-export interface ViewerMeta { width?: number; height?: number; bytes?: number }
+export type { ViewerMeta }
 
 export const EDITOR_STATUS_TEXT = {
   bar: 'Editor status',

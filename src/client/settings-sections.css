@@ -25,3 +25,36 @@
 @media (prefers-reduced-motion: reduce) {
   .st-reveal { animation: none; outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
 }
+
+/* Terminal › Look live sample (TerminalPreview.tsx): a terminal-colored box with a drawn cursor. */
+.st-terminal-preview {
+  padding: 10px 12px;
+  border-radius: var(--vscode-cornerRadius-small, 4px);
+  white-space: pre;
+  overflow: hidden;
+}
+.st-tp-cursor { display: inline-block; width: 1ch; }
+.st-tp-cursor--block { background: var(--st-tp-cursor); }
+.st-tp-cursor--bar { box-shadow: inset 2px 0 0 var(--st-tp-cursor); }
+.st-tp-cursor--underline { box-shadow: inset 0 -2px 0 var(--st-tp-cursor); }
+.st-tp-cursor--blink { animation: st-tp-blink 1s step-end infinite; }
+@keyframes st-tp-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .st-tp-cursor--blink { animation: none; }
+}
+
+/* Theme choice swatches (Appearance › Theme): a half light / half dark chip for System. */
+.st-theme-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--vscode-editorWidget-border, currentColor);
+  vertical-align: -2px;
+}
+.st-theme-swatch--light { background: #ffffff; }
+.st-theme-swatch--dark { background: #1e1e1e; }
+.st-theme-swatch--auto { background: linear-gradient(135deg, #ffffff 50%, #1e1e1e 50%); }
+
+/* Notifications: the "browser did not allow" line sits at the rows' inset inside the card. */
+.st-notify-refused { margin: 0; padding: 0 14px 10px; }

@@ -5,6 +5,8 @@ import { TIER_TABLE, type Tier } from '../server/models/modelLadder'
 import { Field } from './SettingsFields'
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+/** Effort in words; the ladder's ids (xhigh) are not product text. */
+const EFFORT_LABEL: Readonly<Record<string, string>> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' }
 
 /** What each rung is used for; model + effort come from the ladder's own table. */
 const LADDER_ROWS: readonly { tier: Exclude<Tier, 'T0'>; use: string }[] = [
@@ -29,7 +31,7 @@ export function ModelsSettings(): React.JSX.Element {
           <thead><tr><th>Model</th><th>Effort</th><th>Used for</th></tr></thead>
           <tbody>
             {LADDER_ROWS.map((r) => (
-              <tr key={r.tier}><td>{cap(TIER_TABLE[r.tier].model ?? '')}</td><td>{TIER_TABLE[r.tier].effort}</td><td>{r.use}</td></tr>
+              <tr key={r.tier}><td>{cap(TIER_TABLE[r.tier].model ?? '')}</td><td>{EFFORT_LABEL[TIER_TABLE[r.tier].effort ?? ''] ?? ''}</td><td>{r.use}</td></tr>
             ))}
           </tbody>
         </table>

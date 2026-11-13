@@ -78,9 +78,22 @@
   color: var(--vscode-badge-foreground, var(--text));
 }
 
+/* Title toolbar: the shown view's own actions (Collapse all) portal here (`SideBarTitleActions`),
+   at the right end before Hide Side Bar. Like VS Code they show on hover or focus of the side bar. */
+.sessions-sidebar__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.sessions-sidebar:not(:hover):not(:focus-within) .sessions-sidebar__actions {
+  visibility: hidden;
+}
+
 /* Tombol Hide Side Bar: selalu terlihat (bukan hover-reveal), di ujung kanan baris judul. */
 .ss-action--hide {
-  margin-left: auto;
   flex: none;
 }
 
@@ -255,6 +268,19 @@
   background: var(--vscode-button-hoverBackground, var(--accent));
 }
 
+.ss-empty__button + .ss-empty__button {
+  margin-top: 6px;
+}
+
+.ss-empty__button--secondary {
+  background: var(--vscode-button-secondaryBackground, var(--raised));
+  color: var(--vscode-button-secondaryForeground, var(--text));
+}
+
+.ss-empty__button--secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground, var(--raised));
+}
+
 /* ---- Pohon ---- */
 /* Font tree = font sidebar (13px VS Code): baris 22px tetap. */
 .ss-tree {
@@ -355,8 +381,10 @@
 /* Baris di-hover/di-fokus: aksi (End session) mengambil sisi kanan dan meta redup mengalah, seperti
    baris tree VS Code yang menyembunyikan deskripsi saat toolbar aksinya muncul. Hanya leaf: baris
    grup memuat anak-anaknya, jadi `:hover` di sana menyala untuk anak juga. */
-.ss-tree__leaf:has(.ss-tree__end):hover .ss-meta,
-.ss-tree__leaf:has(.ss-tree__end):focus-within .ss-meta {
+.ss-tree__leaf:has(.ss-tree__action):hover .ss-meta,
+.ss-tree__leaf:has(.ss-tree__action):focus-within .ss-meta,
+.ss-tree__leaf:has(.ss-tree__action):hover .ss-age,
+.ss-tree__leaf:has(.ss-tree__action):focus-within .ss-age {
   display: none;
 }
 
@@ -369,37 +397,30 @@
   outline-offset: -1px;
 }
 
-/* ---- Dekorasi status baris (slot decoration): codicon berwarna, seperti dekorasi terminal VS Code.
-   Warna ditulis di sini (luar shadow), jadi tetap terbaca pada baris yang terseleksi. ---- */
+/* ---- Row decoration (slot decoration): the model's status glyph (`SessionStatusGlyph`, colored
+   inline) and the relative last-activity time, right-aligned like ChatGPT / Linear lists. ---- */
 .ss-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: var(--muted);
 }
 
-.ss-glyph--attention {
-  color: var(--state-attention);
+.ss-age {
+  color: var(--vscode-descriptionForeground, var(--muted-2));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
-.ss-glyph--done,
-.ss-glyph--idle {
-  color: var(--state-success);
-}
-
-/* "Selesai" dan "selesai DAN baru untukmu" adalah dua fakta; yang kedua memakai aksen. */
-.ss-glyph--unread {
-  color: var(--accent);
-}
-
-.ss-glyph--working {
-  color: var(--state-working);
+/* Unread = a turn ended while you were not watching: bold name, as in Linear / ChatGPT. */
+.ss-tree__leaf--unread .ss-tree__label {
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ss-glyph .codicon-modifier-spin {
+  .ss-glyph .codicon-modifier-spin,
+  .ss-status__icon.codicon-modifier-spin {
     animation: none;
   }
 }
@@ -424,40 +445,20 @@
   color: var(--state-attention);
 }
 
-.ss-signal--working {
-  background: color-mix(in srgb, var(--state-working) 22%, transparent);
-  color: var(--state-working);
-}
-
-/* ---- Ikon header seksi status (codicon di slot ikon branch) ---- */
-.ss-status__icon--attention {
+/* ---- Status bucket header icon (branch icon slot): the one status mark of the Status tab ---- */
+.ss-status__icon--needs-input {
   color: var(--state-attention);
-}
-
-/* Titik status kecil: codicon-circle-filled dikecilkan supaya terbaca sebagai penanda, bukan ikon. */
-.ss-status__icon--unread,
-.ss-status__icon--working,
-.ss-status__icon--idle,
-.ss-status__icon--unknown {
-  font-size: 8px;
-}
-
-/* Unread = selesai tapi belum dilihat. Memakai --accent (pilihan warna nodeterm juga): ia satu
-   token yang sudah ada di kedua tema, dan "baru untukmu" memang bahasa aksen, bukan bahasa status. */
-.ss-status__icon--unread {
-  color: var(--accent);
 }
 
 .ss-status__icon--working {
   color: var(--state-working);
 }
 
-/* Idle = turn yang sudah mendarat: hijau sukses, tapi diredam supaya tidak menarik mata. */
-.ss-status__icon--idle {
-  color: var(--state-success);
-  opacity: 0.7;
+.ss-status__icon--idle,
+.ss-status__icon--exited {
+  color: var(--muted-2);
 }
 
-.ss-status__icon--unknown {
-  color: var(--muted-2);
+.ss-status__icon--error {
+  color: var(--vscode-errorForeground, var(--state-attention));
 }

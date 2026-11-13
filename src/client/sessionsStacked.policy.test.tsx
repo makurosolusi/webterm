@@ -3,10 +3,11 @@
 // only moves the Current mark. Bug it locks: the tab used to leave the open workspace out, so a
 // row click (which switches board to that row's workspace) swapped which groups were listed and
 // the list flipped between "laya-api" and "noc" on every click.
-// Also: a Recently closed row asks (`confirmReopen`) before reopening.
+// Also: a Recently closed row asks (`confirmReopen`) before reopening onto ANOTHER board.
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SessionsPanel, { type SessionsPanelProps } from './SessionsPanel'
+import { __resetNodeStatusForTests } from './nodeStatus.store'
 import { confirmReopen } from './reopenConfirm'
 import type { ClosedEntry } from './closedHistory'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
@@ -48,6 +49,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  __resetNodeStatusForTests()
   vi.unstubAllGlobals()
   vi.mocked(confirmReopen).mockReset()
 })
@@ -77,7 +79,8 @@ describe('Project tab is stable across a board switch', () => {
     render(<SessionsPanel {...props()} />)
     const subs = () => [...document.querySelectorAll('.ss-ws__sub')].map((s) => s.textContent)
     await waitFor(() => expect(subs()).toEqual(['laya-api · main', 'noc']))
-    expect(fetch).toHaveBeenCalledTimes(1)
+    // One git info request; the node-status facts fetch (`/api/node-status`) is a separate store.
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => !String(url).startsWith('/api/node-status'))).toHaveLength(1)
   })
 })
 
@@ -88,6 +91,16 @@ describe('Recently closed row asks before reopening', () => {
     if (!row) throw new Error('closed row not rendered')
     emitSelect(row)
   }
+
+  it('same board: reopens straight away, no confirm (undo exists)', async () => {
+    const onReopenSession = vi.fn()
+    render(<SessionsPanel {...props({ activeId: 'pb', closedSessions: [CLOSED], onReopenSession })} />)
+    const row = document.querySelector('vscode-tree-item[aria-label="Reopen Old"]')
+    if (!row) throw new Error('closed row not rendered')
+    emitSelect(row)
+    expect(onReopenSession).toHaveBeenCalledWith('old1')
+    expect(confirmReopen).not.toHaveBeenCalled()
+  })
 
   it('declined: does not reopen', async () => {
     vi.mocked(confirmReopen).mockResolvedValue(false)
