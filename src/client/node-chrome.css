@@ -1,6 +1,6 @@
 /* Chrome node: tab-style header, frame, glow status, toolbar, pill, comments.
    Bentuknya mengikuti editor group + tab VS Code (Dark/Light Modern): header 35px, border 1px
-   netral `editorGroup-border` (warna node hanya titik kecil di header, BUKAN border), `focusBorder`
+   netral `editorGroup-border` (warna node hanya aksen 2px di tepi kiri header, BUKAN border), `focusBorder`
    saat dipilih, tanpa bayangan pada frame (shadow hanya untuk widget melayang).
    Nama selector datar (`node-*`); nama ANIMASI dipertahankan (`nt-*`) supaya cocok dengan nodeterm.
 
@@ -143,8 +143,11 @@
 }
 
 /* ---- Header (tab) ----
-   Tinggi tetap 35px seperti tab editor. Tidak terpilih = tab nonaktif: latar dan teks redup. */
+   Tinggi tetap 35px seperti tab editor. Tidak terpilih = tab nonaktif: latar dan teks redup.
+   The node colour is only a 2px accent on the left edge (VS Code tab colour), set inline as
+   `--nc-node-color`; it is changed from "…" › Node color…, so no coloured mark reads as a status. */
 .node-header {
+  box-shadow: inset 2px 0 0 var(--nc-node-color, transparent);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -200,14 +203,7 @@
   --vscode-font-size: 13px;
 }
 
-/* ---- Pemilih warna node: titik penanda di tombol 22px + popover (`VscodePopover`, portal ke body) ---- */
-.node-swatch__dot {
-  display: block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--swatch);
-}
+/* ---- Node colour picker (popover from the "…" menu, `VscodePopover`, portal to body) ---- */
 .node-swatch-pop { padding: 6px; }
 .node-swatch-grid { display: grid; grid-template-columns: repeat(4, 16px); gap: 4px; }
 .node-swatch {
@@ -222,40 +218,32 @@
 .node-swatch[aria-pressed='true'] { outline: 1px solid var(--nc-focus); outline-offset: 1px; }
 .node-swatch:focus-visible { outline: 1px solid var(--nc-focus); outline-offset: 1px; }
 
-/* ---- Chip status ----
-   Teks label-nya LITERAL di markup (nodeterm: 'RUNNING', 'NEEDS YOU', 'unread'), jadi sengaja TIDAK
-   ada `text-transform` di sini — chip 'unread' nodeterm memang huruf kecil. Ukuran dan bobot mengikuti
-   item status bar VS Code (11px, normal), bukan huruf tebal berspasi. */
+/* ---- Status chip (agent nodes) ----
+   One labelled chip from the shared session status model (`NodeStatusChip`): words + tone + a codicon
+   for the states that need one. Tones mirror SessionStatusGlyph; only Needs you pulses, since only
+   that state stalls until you act. */
 .node-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  height: 18px;
   margin-left: 4px;
+  padding: 0 6px;
   flex-shrink: 0;
+  border-radius: 9px;
   font-size: var(--ui-font-size-label);
   font-weight: 400;
-  color: var(--state-success);
+  white-space: nowrap;
+  color: var(--vscode-descriptionForeground, var(--muted));
+  background: color-mix(in srgb, currentColor 12%, transparent);
 }
-.node-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-/* RUNNING senada dengan glow working (clay), bukan hijau dasar. */
-.node-status--busy { color: var(--state-working); }
-.node-status--busy .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
-/* NEEDS YOU (blocked) merah di mana pun, dan satu-satunya chip yang berdenyut selain RUNNING:
-   kerjanya MANDEG sampai kamu menjawab. */
+.node-status .codicon { font-size: 12px; }
+.node-status:focus-visible { outline: 1px solid var(--nc-focus); outline-offset: 1px; }
+.node-status--working { color: var(--state-working); }
 .node-status--attention { color: var(--state-attention); }
-.node-status--attention .node-status-dot { animation: nt-pulse 1.1s ease-in-out infinite; }
-/* TURN ENDED (waiting) amber — token yang sama dengan yang dipakai MiniMap & Kanban untuk status
-   ini. Dot-nya DIAM dengan sengaja: gerak dicadangkan untuk yang masih berubah (RUNNING) atau yang
-   memblokir (NEEDS YOU), jadi diam adalah bagian dari pesannya, bukan gaya yang terlupa. */
-.node-status--waiting { color: var(--state-warning); }
-/* FAILED red but still: the process is gone, nothing is changing. STOPPED neutral: the user ended it. */
-.node-status--failed { color: var(--state-attention); }
-.node-status--stopped { color: var(--state-queued); }
+.node-status--attention .codicon { animation: nt-pulse 1.1s ease-in-out infinite; }
+.node-status--error { color: var(--vscode-errorForeground, var(--state-attention)); }
+.node-status--unread { color: var(--accent); }
 
 @keyframes nt-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -292,6 +280,27 @@
 
 /* ---- Body ---- */
 .node-body { flex: 1; min-height: 0; overflow: hidden; }
+/* Agent body: terminal on top, lifecycle bar (failed / ended) in the flow under it, so the bar
+   shrinks the terminal instead of covering its last rows. */
+.node-body--stack { display: flex; flex-direction: column; }
+.node-body__term { position: relative; flex: 1; min-height: 0; }
+
+/* [Terminal | Chat] in the header: the shared SettingsSegmented at header size. */
+.claude-view-toggle { display: inline-flex; flex-shrink: 0; margin-left: 4px; }
+.claude-view-toggle .st-seg { flex-wrap: nowrap; padding: 1px; border-radius: 4px; }
+.claude-view-toggle .st-seg-option { min-height: 18px; padding: 0 6px; font-size: var(--ui-font-size-label); }
+
+/* ---- Edge resize (NodeLayoutResizer) ----
+   Outside resize mode the edges and corners still resize, like OS windows, VS Code sashes and other
+   node editors: invisible hit strips that only change the cursor. Above the body (z-index) so the
+   inner half of the strip is not covered by the terminal. */
+.react-flow__resize-control.node-edge-resize { z-index: 5; border-color: transparent; background: transparent; }
+.react-flow__resize-control.line.node-edge-resize.left,
+.react-flow__resize-control.line.node-edge-resize.right { width: 6px; border-width: 0; }
+.react-flow__resize-control.line.node-edge-resize.top,
+.react-flow__resize-control.line.node-edge-resize.bottom { height: 6px; border-width: 0; }
+.react-flow__resize-control.handle.node-edge-resize { width: 10px; height: 10px; border: none; }
+.react-flow__resize-control.line.node-edge-resize:hover { background: var(--vscode-sash-hoverBorder, var(--accent)); opacity: 0.6; }
 /* Collapse is a canvas-only layout: a tab pane (outside .react-flow__node) always shows the body. */
 .react-flow__node .term-node--collapsed { height: auto !important; }
 .react-flow__node .term-node--collapsed .node-body { display: none; }
@@ -370,8 +379,7 @@
 /* Reduce Motion: glow tetap MENYALA (statis) alih-alih hilang — status node adalah informasi, dan
    nilai statisnya diambil dari frame istirahat tiap keyframe. */
 @media (prefers-reduced-motion: reduce) {
-  .node-status--busy .node-status-dot,
-  .node-status--attention .node-status-dot {
+  .node-status--attention .codicon {
     animation: none;
   }
   .react-flow__node:has(.term-node.working)::after {

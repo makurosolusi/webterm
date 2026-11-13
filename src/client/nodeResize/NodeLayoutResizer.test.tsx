@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
-// Resize mode is explicit: selection never shows handles; the header toggle or the command does,
-// and Esc, an outside press, typing in the node, collapse, removal and the view lock end it.
+// Edges always resize through invisible strips (no visible handles on select or click). Resize mode
+// is explicit: the toggle or the command shows the visible handles, and Esc, an outside press, typing
+// in the node, collapse, removal and the view lock end it.
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react'
 import { ReactFlow, ReactFlowProvider, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -37,7 +38,9 @@ function mount(nodes: Node[]) {
   const r = render(ui(nodes))
   return { rerender: (ns: Node[]) => r.rerender(ui(ns)) }
 }
-const handles = () => document.querySelectorAll('.react-flow__resize-control')
+/** Visible resize-mode handles; the always-on invisible edge strips carry `node-edge-resize`. */
+const handles = () => document.querySelectorAll('.react-flow__resize-control:not(.node-edge-resize)')
+const edges = (id = 'a') => document.querySelectorAll(`.react-flow__node[data-id="${id}"] .react-flow__resize-control.node-edge-resize`)
 const toggleOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] [data-slot="icon-button"]`) as HTMLButtonElement
 const textareaOf = (id: string) => document.querySelector(`.react-flow__node[data-id="${id}"] textarea`) as HTMLTextAreaElement
 
@@ -48,6 +51,24 @@ describe('NodeLayoutResizer', () => {
     expect(handles().length).toBe(0)
     expect(toggleOf('a').getAttribute('aria-pressed')).toBe('false')
     expect(toggleOf('a').getAttribute('aria-label')).toBe('Resize this node')
+  })
+
+  it('edges and corners resize without any mode: invisible strips on every side and corner', () => {
+    mount([node('a')])
+    expect(edges().length).toBe(8)
+    expect([...edges()].some((e) => e.classList.contains('line') && e.classList.contains('right'))).toBe(true)
+    expect([...edges()].some((e) => e.classList.contains('handle') && e.classList.contains('bottom') && e.classList.contains('right'))).toBe(true)
+    // Not painted with the node colour (NodeResizer would set it inline).
+    for (const e of edges()) expect((e as HTMLElement).style.borderColor + (e as HTMLElement).style.backgroundColor).toBe('')
+  })
+
+  it('no edge strips while collapsed or while the view is locked', () => {
+    mount([node('a', { data: { collapsed: true } })])
+    expect(edges().length).toBe(0)
+    cleanup()
+    act(() => setNodeResizeLocked(true))
+    mount([node('a')])
+    expect(edges().length).toBe(0)
   })
 
   it('the toggle shows the handles and turns them off again', () => {

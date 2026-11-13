@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import NodeColorSwatch, { NODE_COLORS } from './NodeColorSwatch'
+import NodeColorPicker, { NODE_COLOR_MENU_LABEL, NODE_COLORS } from './NodeColorSwatch'
 import NodeComments from './NodeComments'
 import NodeToolbar from './NodeToolbar'
 import NodeChrome from './NodeChrome'
@@ -9,35 +9,43 @@ import UsagePill from './UsagePill'
 
 afterEach(cleanup)
 
-describe('NodeColorSwatch', () => {
+describe('NodeColorPicker', () => {
   // Popover diportal ke body (tidak ter-clip `.term-node`), jadi dicari lewat `document`.
   const pop = () => document.querySelector('.node-swatch-pop')
+  const anchor = () => document.body.appendChild(document.createElement('div'))
 
-  it('opens a popover of swatches, marks the current one and closes on pick', () => {
-    const onColor = vi.fn()
-    const { container } = render(<NodeColorSwatch color={NODE_COLORS[1]} onColor={onColor} />)
-    expect(pop()).toBeNull()
-    fireEvent.click(container.querySelector('[data-title="Color"]') as Element)
+  it('shows the swatches, marks the current one, and picking one sets it and closes', () => {
+    const onColor = vi.fn(); const onClose = vi.fn()
+    render(<NodeColorPicker anchor={anchor()} color={NODE_COLORS[1]} onColor={onColor} onClose={onClose} />)
     expect(pop()?.getAttribute('data-slot')).toBe('vscode-popover')
-    expect(container.querySelector('.node-swatch-pop')).toBeNull()
     const swatches = document.querySelectorAll('button.node-swatch')
     expect(swatches).toHaveLength(NODE_COLORS.length)
     expect(document.querySelectorAll('button.node-swatch[aria-pressed="true"]')).toHaveLength(1)
     expect(swatches[1].getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(swatches[3])
     expect(onColor).toHaveBeenCalledWith(NODE_COLORS[3])
-    expect(pop()).toBeNull()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('closes on Escape and on a press outside', () => {
-    const { container } = render(<NodeColorSwatch color={NODE_COLORS[0]} onColor={() => {}} />)
-    const open = () => fireEvent.click(container.querySelector('[data-title="Color"]') as Element)
-    open()
-    expect(pop()).not.toBeNull()
+  it('Escape and a press outside close it', () => {
+    const onClose = vi.fn()
+    render(<NodeColorPicker anchor={anchor()} color={NODE_COLORS[0]} onColor={() => {}} onClose={onClose} />)
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(pop()).toBeNull()
-    open()
-    fireEvent.pointerDown(document.body)
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('NodeChrome has no colour button in the header; "…" › Node color… opens the picker, the colour is the header edge accent', () => {
+    const onColor = vi.fn()
+    const { container } = render(<NodeChrome title="api" onRename={() => {}} collapsed={false} onToggleCollapse={() => {}}
+      color={NODE_COLORS[2]} onColor={onColor} comments={[]} onAddComment={() => {}} onClose={() => {}} />)
+    expect(container.querySelector('[data-title="Color"]')).toBeNull()
+    expect(container.querySelector('.node-swatch__dot')).toBeNull()
+    expect((container.querySelector('.node-header') as HTMLElement).style.getPropertyValue('--nc-node-color')).toBe(NODE_COLORS[2])
+    fireEvent.click(container.querySelector('[data-title="More Actions…"]') as Element)
+    fireEvent.click([...document.querySelectorAll('[role^="menuitem"]')].find((r) => r.textContent === NODE_COLOR_MENU_LABEL) as Element)
+    expect(pop()).not.toBeNull()
+    fireEvent.click(document.querySelectorAll('button.node-swatch')[4])
+    expect(onColor).toHaveBeenCalledWith(NODE_COLORS[4])
     expect(pop()).toBeNull()
   })
 })
@@ -201,11 +209,11 @@ describe('NodeChrome tab anatomy', () => {
     expect(container.querySelector('.node-description')).toBeNull()
   })
 
-  it('renders the status chip as a plain span with the literal label', () => {
-    const { container } = render(<NodeChrome {...props} status="blocked" />)
-    const chip = container.querySelector('.node-status--attention') as HTMLElement
-    expect(chip.tagName).toBe('SPAN')
-    expect(chip.textContent).toBe('NEEDS YOU')
+  it('renders the status chip it is given after the title, and none for a plain node', () => {
+    const a = render(<NodeChrome {...props} statusChip={<span className="node-status">Ready</span>} />)
+    expect(a.container.querySelector('.node-title + .node-status')?.textContent).toBe('Ready')
+    a.unmount()
+    expect(render(<NodeChrome {...props} />).container.querySelector('.node-status')).toBeNull()
   })
 })
 

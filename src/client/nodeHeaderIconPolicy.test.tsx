@@ -4,7 +4,7 @@
 //    now fills the canvas pane only, so nothing in the client may request the OS full screen.
 // 2. Two near-identical squares (Full Screen + Stop agent) sat side by side; a destructive action
 //    looked like a layout one. No two visible header buttons may come from one confusable icon group.
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -86,5 +86,24 @@ describe('node header icon policy', () => {
     const icons = destructive.map((b) => b.icon)
     expect(new Set(icons).size).toBe(icons.length)
     for (const d of destructive) expect(buttons.filter((b) => b.icon === d.icon), d.title).toHaveLength(1)
+  })
+
+  it('gives every header icon a real tooltip (shadcn), never a native title', () => {
+    const { container } = render(<NodeChrome {...base} onStop={() => {}} onToggleMic={() => {}} onAiName={() => {}} />)
+    const hosts = [...container.querySelectorAll<HTMLElement>('.node-header vscode-toolbar-button')]
+    expect(hosts.length).toBeGreaterThanOrEqual(5)
+    for (const host of hosts) {
+      const name = host.getAttribute('data-title')
+      expect(host.hasAttribute('title'), `${name} has a native title`).toBe(false)
+      fireEvent.keyDown(document, { key: 'Tab' }) // keyboard modality: focus opens the tooltip
+      fireEvent.focus(host)
+      expect(document.querySelector('[role="tooltip"]')?.textContent, name ?? '').toBe(name)
+      fireEvent.blur(host)
+    }
+  })
+
+  it('has no resize-mode button: nodes resize from their edges', () => {
+    const { container } = render(<NodeChrome {...base} />)
+    expect(container.querySelector('.node-resize-toggle, .codicon-arrow-both')).toBeNull()
   })
 })

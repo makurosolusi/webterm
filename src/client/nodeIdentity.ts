@@ -29,13 +29,6 @@ export function isAutoName(title: string | undefined): boolean {
   return !!m && ADJ.has(m[1]) && NOUN.has(m[2])
 }
 
-/** Stable identity color for a node id (FNV-1a hue), independent of the user-picked node color. */
-export function identityColor(id: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193)
-  return `hsl(${(h >>> 0) % 360}, 65%, 55%)`
-}
-
 /** Statuses that mean "nothing is running and nobody is being asked": safe to bulk-stop. */
 const IDLE: ReadonlySet<AgentStatus | undefined> = new Set<AgentStatus | undefined>(['waiting', 'done'])
 

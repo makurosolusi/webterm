@@ -1,6 +1,7 @@
-// Status bar at the bottom of terminal and agent nodes (VS Code / JetBrains style): session and agent
-// facts on the left, anomaly badges on the right. Hover or keyboard focus shows the full value; a click
-// opens every field plus "Copy diagnostics". Settings › Canvas › Status bar turns it off.
+// Status bar at the bottom of terminal and agent nodes (VS Code / JetBrains style): what you act on
+// (folder, model, context, cost, task) on the left, anomaly badges on the right; debug facts (process
+// id, uptime, size, output and hook age, outbox) only in the details popover. Hover or keyboard focus
+// shows the full value; a click (or Details) opens every field plus "Copy diagnostics". Settings › Canvas › Status bar turns it off.
 import { useEffect, useRef, useState } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
@@ -16,6 +17,7 @@ import './node-statusbar.css'
 
 export const STATUS_BAR_TEXT = {
   bar: 'Node status',
+  details: 'Details',
   copy: 'Copy diagnostics',
   copying: 'Copying…',
   copied: 'Diagnostics copied',
@@ -75,6 +77,11 @@ function Bar({ sessionId, kind, cwd }: NodeStatusBarProps): React.JSX.Element {
           </IconTooltip>
         ))}
       </span>
+      <IconTooltip label={STATUS_BAR_TEXT.details} side="top">
+        <button type="button" className="node-statusbar__item" data-item="details" aria-label={STATUS_BAR_TEXT.details} aria-expanded={open} onClick={toggle}>
+          <span className="codicon codicon-info" aria-hidden="true" />
+        </button>
+      </IconTooltip>
       <span className="sr-only" aria-live="polite" role="status">{announced}</span>
       {open && ref.current && (
         <VscodePopover anchor={ref.current} open onOpenChange={setOpen} placement="top" ariaLabel={STATUS_BAR_TEXT.bar} className="node-statusbar__pop">
@@ -86,7 +93,7 @@ function Bar({ sessionId, kind, cwd }: NodeStatusBarProps): React.JSX.Element {
             </ul>
           )}
           <dl className="node-statusbar__pop-fields">
-            {model.items.map((it) => (<div key={it.id}><dt>{it.id}</dt><dd>{it.full}</dd></div>))}
+            {[...model.items, ...model.details].map((it) => (<div key={it.id} data-field={it.id}><dt>{it.label}</dt><dd>{it.full}</dd></div>))}
           </dl>
           <ActionButton action={copy} busyLabel={STATUS_BAR_TEXT.copying} size="sm" variant="secondary">{STATUS_BAR_TEXT.copy}</ActionButton>
           <ActionResult action={copy} />
