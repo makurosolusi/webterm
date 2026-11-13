@@ -50,8 +50,8 @@ const e = (page: SectionId, field: SettingsFieldId | undefined, label: string, h
 
 /** Words per page that are not in its title: what people type when they look for it. */
 const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
-  appearance: 'look font theme color colors dark light mode cursor wallpaper background',
-  terminal: 'keyboard mouse clipboard scrollback buffer shell zsh bash fish',
+  appearance: 'look theme dark light mode wallpaper background',
+  terminal: 'look font color colors cursor keyboard mouse clipboard scrollback buffer shell zsh bash fish',
   keyboard: 'keybinding keybindings shortcut shortcuts hotkey key keys chord record rebind conflict',
   canvas: 'grid node cable edge snap folder',
   notifications: 'alert alerts sound chime notify permission mute',
@@ -73,25 +73,25 @@ const CARDS = CARD_IDS.map((id) => e('capabilities', `capability.${id}`, CAPABIL
 const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Appearance (SettingsAppearanceSection.tsx, CanvasBackgroundSection.tsx)
   e('appearance', 'appTheme', 'Theme', 'System follows your computer’s light or dark mode.', 'dark light mode system appearance'),
-  e('appearance', 'terminalTheme', 'Terminal colors', undefined, 'color scheme theme palette dark light'),
-  e('appearance', 'fontFamily', 'Font', 'Fonts installed on this computer.', 'font family typeface monospace'),
-  e('appearance', 'fontSize', 'Font size', undefined, 'text size zoom px'),
-  e('appearance', 'cursorStyle', 'Cursor style', undefined, 'block bar underline caret'),
-  e('appearance', 'cursorBlink', 'Cursor blink', undefined, 'caret'),
   e('appearance', 'canvasBackground', 'Canvas background', 'Color, gradient or image behind the nodes, for all workspaces or just this one.', 'wallpaper image gradient color photo'),
-  // Terminal (SettingsTerminalSections.tsx)
-  e('terminal', 'copyOnSelect', 'Copy on select', 'Copy text to the clipboard as soon as you select it.', 'clipboard mouse'),
-  e('terminal', 'terminalShortcutPolicy', 'Keyboard shortcuts go to', 'While you type in a terminal, who gets a shortcut that both could use.', 'shortcut priority keys keybinding'),
-  e('terminal', 'scrollbackLines', 'History length', 'How many lines you can scroll back in a terminal.', 'scrollback history lines buffer replay reload'),
+  // Terminal › Look, Behavior, Advanced (SettingsTerminalSections.tsx); ids kept from when the look sat on Appearance
+  e('terminal', 'terminalTheme', 'Terminal colors', undefined, 'color scheme theme palette dark light preview'),
+  e('terminal', 'fontFamily', 'Font', 'Fonts installed on this computer.', 'font family typeface monospace'),
+  e('terminal', 'fontSize', 'Font size', undefined, 'text size zoom px'),
   e('terminal', 'fontWeight', 'Normal text weight', undefined, 'font thin'),
   e('terminal', 'fontWeightBold', 'Bold text weight', undefined, 'font'),
-  e('terminal', 'drawBoldTextInBrightColors', 'Draw bold text in bright colors', undefined, 'font color'),
   e('terminal', 'terminalLineHeight', 'Line height', 'A multiple of the font size.', 'spacing leading'),
   e('terminal', 'terminalLetterSpacing', 'Letter spacing', 'Extra space between characters.', 'font'),
-  e('terminal', 'terminalWordSeparator', 'Word separators', 'Characters that end a word when you double-click to select.', 'select double-click'),
-  e('terminal', 'terminalFontZoomKeys', 'Keyboard font zoom', 'Change the font size of the focused terminal with the keyboard.', 'shortcut size'),
+  e('terminal', 'cursorStyle', 'Cursor style', undefined, 'block bar underline caret'),
+  e('terminal', 'cursorBlink', 'Cursor blink', undefined, 'caret'),
+  e('terminal', 'copyOnSelect', 'Copy on select', 'Copy text to the clipboard as soon as you select it.', 'clipboard mouse'),
+  e('terminal', 'terminalShortcutPolicy', 'Shortcut priority', 'While you type in a terminal, who gets a shortcut that both could use.', 'keyboard shortcuts keys keybinding program'),
+  e('terminal', 'scrollbackLines', 'History length', 'How many lines you can scroll back in a terminal.', 'scrollback history lines buffer replay reload'),
   e('terminal', 'defaultShell', 'Default shell', 'Shells installed on this computer.', 'zsh bash fish pwsh'),
+  e('terminal', 'terminalFontZoomKeys', 'Keyboard font zoom', 'Change the font size of the focused terminal with the keyboard.', 'shortcut size'),
+  e('terminal', 'terminalWordSeparator', 'Word separators', 'Characters that end a word when you double-click to select.', 'select double-click'),
   e('terminal', 'terminalMinContrast', 'Minimum contrast', 'Raise it when colored text is hard to read.', 'accessibility wcag readability'),
+  e('terminal', 'drawBoldTextInBrightColors', 'Draw bold text in bright colors', undefined, 'font color'),
   // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
   e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
   e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),

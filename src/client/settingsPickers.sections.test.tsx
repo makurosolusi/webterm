@@ -22,14 +22,53 @@ const optionsOf = (name: string): string[] => {
 }
 
 describe('settings pickers per screen', () => {
-  it('Appearance: Theme is Light/Dark/System, font size a stepper, fonts a combobox', () => {
+  it('Appearance: Theme is a Light/Dark/System segmented choice; the terminal look is not here', () => {
+    const onChange = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
-    render(<AppearanceSection settings={DEFAULT_SETTINGS} onChange={vi.fn()} />)
-    expect([...select('Theme').options].map((o) => o.textContent)).toEqual(['System', 'Light', 'Dark'])
-    expect(screen.getByRole('spinbutton', { name: 'Font size' })).toBeTruthy()
-    expect(optionsOf('Font')[0]).toMatch(/\(default\)/)
-    expect(screen.getByTestId('scheme-preview')).toBeTruthy()
-    expect(screen.queryByText(/edited by hand/)).toBeNull() // no developer hint text
+    render(<AppearanceSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
+    const theme = screen.getByRole('radiogroup', { name: 'Theme' })
+    expect(within(theme).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Light', 'Dark', 'System'])
+    expect(within(theme).getByRole('radio', { name: 'System' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(theme).getByRole('radio', { name: 'Dark' }))
+    expect(onChange).toHaveBeenLastCalledWith({ appTheme: 'dark' })
+    for (const moved of ['Font size', 'Terminal colors', 'Cursor blink']) expect(screen.queryByText(moved), moved).toBeNull()
+    expect(document.querySelectorAll('[data-slot="settings-group"]').length).toBe(2) // Theme, Canvas background
+    expect(document.querySelector('h4')).toBeNull()
+  })
+
+  it('Terminal › Look: preview first, font size a stepper, fonts by family name, cursor style a segmented choice with glyphs', () => {
+    const onChange = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(<TerminalSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
+    const [look, behavior] = [...document.querySelectorAll<HTMLElement>('[data-slot="settings-group"]')]
+    expect(look!.querySelector('.st-group-title')?.textContent).toBe('Look')
+    expect(look!.querySelector('[data-slot="settings-field"]')?.querySelector('[data-testid="terminal-preview"]')).toBeTruthy()
+    expect(behavior!.querySelector('.st-group-title')?.textContent).toBe('Behavior')
+    expect(within(look!).getByRole('spinbutton', { name: 'Font size' })).toBeTruthy()
+    // At rest the Font box shows the family name, never the CSS stack.
+    expect(combo('Font').value).not.toContain(',')
+    expect(optionsOf('Font')[0]).toMatch(/\(default\)$/)
+    const cursor = within(look!).getByRole('radiogroup', { name: 'Cursor style' })
+    expect(within(cursor).getAllByRole('radio').map((r) => r.textContent)).toEqual(['█Block', '▏Bar', '▁Underline'])
+    fireEvent.click(within(cursor).getByRole('radio', { name: /Underline/ }))
+    expect(onChange).toHaveBeenLastCalledWith({ cursorStyle: 'underline' })
+    expect(within(look!).getByLabelText('Normal text weight')).toBeTruthy()
+    expect([...select('Normal text weight').options].find((o) => o.value === '400')?.textContent).toBe('Normal (400)')
+    expect(screen.getByLabelText('Line height').closest('.st-slider')?.querySelector('output')?.textContent).toBe('1.0×')
+  })
+
+  it('Terminal: Shortcut priority is webterm / Terminal program over the stored values; History length reads "10,000 lines"', () => {
+    const onChange = vi.fn()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
+    render(<TerminalSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
+    const priority = screen.getByRole('radiogroup', { name: 'Shortcut priority' })
+    expect(within(priority).getAllByRole('radio').map((r) => r.textContent)).toEqual(['webterm', 'Terminal program'])
+    fireEvent.click(within(priority).getByRole('radio', { name: 'Terminal program' }))
+    expect(onChange).toHaveBeenLastCalledWith({ terminalShortcutPolicy: 'terminal-first' })
+    expect(combo('History length').value).toBe('10,000 lines (default)')
+    cleanup()
+    render(<TerminalSection settings={{ ...DEFAULT_SETTINGS, scrollbackLines: 25_000 }} onChange={onChange} />)
+    expect(combo('History length').value).toBe('25,000 lines')
   })
 
   it('Terminal: History length drives both buffers; the rest is under Advanced; shells come from the server', async () => {
@@ -37,8 +76,9 @@ describe('settings pickers per screen', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url === '/api/settings/shells' ? { shells: ['/bin/zsh', '/opt/homebrew/bin/fish'] } : {}))))
     render(<TerminalSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
     expect(select('Normal text weight').tagName).toBe('SELECT')
-    expect(select('Normal text weight').closest('details')).not.toBeNull()
-    expect(select('Keyboard shortcuts go to').closest('details')).toBeNull()
+    expect(select('Normal text weight').closest('details')).toBeNull() // weights are part of the Look now
+    expect(screen.getByLabelText('Word separators').closest('details')).not.toBeNull()
+    expect(screen.getByRole('switch', { name: 'Draw bold text in bright colors' }).closest('details')).not.toBeNull()
     expect([...select('Bold text weight').options].map((o) => o.value)).toEqual(['100', '200', '300', '400', '500', '600', '700', '800', '900'])
     for (const name of ['Line height', 'Letter spacing', 'Minimum contrast']) expect((screen.getByLabelText(name) as HTMLInputElement).type).toBe('range')
     fireEvent.change(screen.getByLabelText('Line height'), { target: { value: '1.5' } })
@@ -59,18 +99,20 @@ describe('settings pickers per screen', () => {
     }
   })
 
-  it('Canvas section: one Grid choice over dots + snap; grid size a select; no node-size settings', () => {
+  it('Canvas section: one Grid segmented choice over dots + snap; grid size a select; no node-size settings', () => {
     const onChange = vi.fn()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')))
     render(<CanvasSection settings={DEFAULT_SETTINGS} onChange={onChange} />)
-    expect(select('Grid').value).toBe('dots')
-    fireEvent.change(select('Grid'), { target: { value: 'snap' } })
+    const grid = screen.getByRole('radiogroup', { name: 'Grid' })
+    expect(within(grid).getByRole('radio', { name: 'Dots' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(grid).getByRole('radio', { name: 'Dots and snap' }))
     expect(onChange).toHaveBeenLastCalledWith({ canvasDots: true, snapToGrid: true })
-    fireEvent.change(select('Grid'), { target: { value: 'off' } })
+    fireEvent.click(within(grid).getByRole('radio', { name: 'Off' }))
     expect(onChange).toHaveBeenLastCalledWith({ canvasDots: false, snapToGrid: false })
     expect(select('Grid size').tagName).toBe('SELECT')
     expect(screen.queryByText('New node width')).toBeNull()
     expect(screen.queryByText('Browser search engine')).toBeNull()
+    expect([...document.querySelectorAll('[data-slot="settings-group"] .st-group-title')].map((h) => h.textContent)).toEqual(['Nodes', 'New projects'])
     // A hand-edited value outside the presets stays visible and selected.
     cleanup()
     render(<CanvasSection settings={{ ...DEFAULT_SETTINGS, gridSize: 30 }} onChange={onChange} />)

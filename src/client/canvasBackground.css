@@ -3,7 +3,7 @@
   position: relative;
   height: 140px;
   max-width: 420px;
-  margin: 8px 0 12px;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--vscode-editorWidget-border);
   border-radius: var(--vscode-cornerRadius-small, 4px);
@@ -46,11 +46,13 @@
   width: 48px;
   padding: 0 2px;
 }
+/* shadcn Input as a range inside the Settings slider: no text-box chrome. */
 .st-range {
-  max-width: 240px;
+  height: auto;
   padding: 0;
   border: 0;
   background: transparent;
+  box-shadow: none;
 }
 .cbg-notice {
   display: flex;
@@ -67,6 +69,5 @@
 .cbg-notice--error {
   border-left-color: var(--vscode-errorForeground, #f14c4c);
 }
-.cbg-actions {
-  margin: 8px 0;
-}
+/* A notice between rows of the Settings card sits at the rows' inset. */
+.st-group-card > .cbg-notice { margin: 8px 14px; }
