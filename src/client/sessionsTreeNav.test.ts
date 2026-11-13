@@ -37,6 +37,15 @@ describe('sessionsTreeNav', () => {
     expect(treeItemLabel(open)).toBe('Alpha')
   })
 
+  it('treeItemLabel reaches a workspace header label nested in .ss-ws > .ss-ws__line', () => {
+    const ws = document.createElement('vscode-tree-item')
+    ws.innerHTML = '<span class="ss-ws"><span class="ss-ws__line"><span class="ss-tree__group-label">laya-api</span></span></span>'
+    const child = item('Nested')
+    ws.append(child)
+    expect(treeItemLabel(ws)).toBe('laya-api')
+    expect(treeItemLabel(child)).toBe('Nested')
+  })
+
   it('edgeTarget memilih baris pertama/terakhir dan null bila kosong', () => {
     const { root, open, closed } = fixture()
     const items = visibleTreeItems(root)

@@ -7,6 +7,8 @@ import type { TreeTarget } from './SessionRow'
 export interface SessionMenuActions {
   onFocusNode: (id: string) => void
   onCloseSession: (id: string) => void
+  /** Opens the rename prompt; only offered for a session the target marks `renamable`. */
+  onRenameSession?: (id: string) => void
   onReopenSession?: (id: string) => void
   onSelectWorkspace: (id: string) => void
   /** Lipat/buka grup; `expanded` = keadaan SEBELUM aksi. */
@@ -36,6 +38,8 @@ export function buildSessionMenu(target: TreeTarget, expanded: boolean, a: Sessi
     case 'session':
       return [
         item('reveal', 'Reveal on Canvas', () => a.onFocusNode(target.id)),
+        // Disabled off the open board: the rename writes the canvas node, which only that board has.
+        item('rename', 'Rename…', () => a.onRenameSession?.(target.id), !target.renamable || !a.onRenameSession),
         SEPARATOR,
         copyPath(target.path, a),
         SEPARATOR,
@@ -54,7 +58,7 @@ export function buildSessionMenu(target: TreeTarget, expanded: boolean, a: Sessi
       if (!target.projectId) return [toggle]
       const projectId = target.projectId
       return [
-        item('switch', SWITCH_WORKSPACE_LABEL,() => a.onSelectWorkspace(projectId), target.isActive === true),
+        item('switch', SWITCH_WORKSPACE_LABEL, () => a.onSelectWorkspace(projectId), target.isActive === true),
         SEPARATOR,
         toggle,
       ]

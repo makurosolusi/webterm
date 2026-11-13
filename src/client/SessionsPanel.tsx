@@ -3,9 +3,9 @@
 // Orca's workspace sidebar) or per status (cross-board triage). Kerangka pohonnya VS Code tree (`Tree`/`TreeItem` dari `./vscode/register`):
 // tinggi baris 22px, indent 8px, hover/seleksi VS Code — semuanya dari library, bukan tiruan CSS.
 // Props-driven untuk SEMUA data board (workspace, node, status): integrator yang menyuplainya.
-// SATU pengecualian, dan alasannya: tanda `unread` disubscribe langsung dari `./unread` di sini.
-// Ia state turunan-transport dengan tepat satu pembaca — section "Unread" di panel ini — jadi
-// mengalirkannya lewat prop dari `App` berarti menambah parameter yang tak ada pembaca keduanya.
+// Two exceptions, read here directly: the `unread` marks (`./unread`) and the server facts of the
+// listed ids (`useNodeStatusFactsMap`: exit, status since), which only this view needs. Each row's
+// status meaning comes from the shared model (`sessionStatusView`, via `./sessionList`).
 // Semua logika yang bisa dites hidup di `./sessionList` (vitest di sini tanpa DOM).
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
@@ -15,22 +15,29 @@ import type { RegisterTreeTarget, TreeTarget } from './SessionRow'
 import { SessionsFilter } from './SessionsFilter'
 import { SessionsGroupingTabs } from './SessionsGroupingTabs'
 import { buildSessionMenu } from './sessionMenu'
+import { SessionRenameDialog, type RenameTarget } from './sessionRename'
+import { SideBarTitleActions } from './sideBar/sideBarTitleActions'
+import { useNodeStatusFactsMap, useStatusNow } from './nodeStatus.store'
+import { filterClosed } from './sessionList.row'
 import { useSessionsTreeEvents } from './useSessionsTreeEvents'
 import {
   buildSessionList,
   buildStatusList,
   isProjectCollapsed,
-  parseCollapsed,
   projectCollapseKey,
+  sessionIds,
   sidebarEmptyState,
+  type SessionRowVM,
   type SidebarGrouping,
 } from './sessionList'
 import { CLOSED_KEY, SessionsTree } from './SessionsPanel.tree'
 import type { ClosedEntry } from './closedHistory'
 import { confirmReopen } from './reopenConfirm'
 import { useGitBranches } from './useGitBranches'
+import { useCollapsedGroups } from './SessionsPanel.collapsed'
 import { useUnreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
+import type { StatusReason } from '../shared/protocol'
 import './sessions-panel.css'
 
 export { useSessionsOpen } from './SessionsPanel.open'
@@ -44,10 +51,6 @@ interface MenuState {
   expanded: boolean
 }
 
-/** Peta lipatan (JSON `{ kunci: terlipat }`). Dipersist karena membuka ulang board tiap reload
- *  adalah kerja yang pengguna sudah lakukan sekali. */
-const COLLAPSED_KEY = 'webterm.sessionsCollapsed'
-
 export interface SessionsPanelProps {
   /** True while Sessions is the visible side bar view; native tree listeners attach only then. */
   active: boolean
@@ -57,6 +60,8 @@ export interface SessionsPanelProps {
   /** Node canvas workspace aktif (live). `null` sebelum workspace pertama termuat. */
   liveActiveNodes: WsNode[] | null
   statuses: Record<string, AgentStatus>
+  /** Why a status needs you or failed (`useStatusReasons`); absent = the fetched facts' reason. */
+  reasons?: Record<string, StatusReason>
   onFocusNode: (id: string) => void
   onCloseSession: (id: string) => void
   onSelectWorkspace: (id: string) => void
@@ -65,50 +70,47 @@ export interface SessionsPanelProps {
    *  closed" tanpa isi adalah chrome mati di tiap install baru. */
   closedSessions?: ClosedEntry[]
   onReopenSession?: (nodeId: string) => void
-}
-
-function readCollapsed(): Record<string, boolean> {
-  // Sama seperti `readOpen`: akses localStorage sendiri bisa melempar (mode privat / site data
-  // diblokir), dan panel harus tetap jalan tanpa penyimpanan.
-  try {
-    return parseCollapsed(localStorage.getItem(COLLAPSED_KEY))
-  } catch {
-    return {}
-  }
+  /** Renames a node of the OPEN board (App `onRenameNode`); rows of other boards cannot be renamed. */
+  onRenameNode?: (id: string, title: string) => void
+  /** Empty state's primary actions. */
+  onAddTerminal?: () => void
+  onAddAgent?: () => void
 }
 
 export default function SessionsPanel(props: SessionsPanelProps) {
   const { workspaces, activeId, liveActiveNodes, statuses, onFocusNode, onCloseSession, onSelectWorkspace } = props
-  const { active, closedSessions = [], onReopenSession } = props
+  const { active, closedSessions = [], onReopenSession, reasons, onRenameNode, onAddTerminal, onAddAgent } = props
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(readCollapsed)
+  const [collapsed, setCollapsed] = useCollapsedGroups()
   // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
   // panel ini bisa di-mount setelah status pertama sudah lewat.
   const unread = useUnreadIds()
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed))
-    } catch {
-      // Penyimpanan ditolak (mode privat): lipatan berlaku untuk sesi tab ini saja.
-    }
-  }, [collapsed])
-
+  const ids = useMemo(() => sessionIds(workspaces, liveActiveNodes, activeId), [workspaces, liveActiveNodes, activeId])
+  const facts = useNodeStatusFactsMap(ids, active)
+  const now = useStatusNow()
+  const src = useMemo(() => ({ reasons, facts }), [reasons, facts])
   const groups = useMemo(
     // Every workspace, in tab order: switching board (a row click does) must not reshape the list.
-    () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
-    [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
+    () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, filter, unread, src),
+    [workspaces, liveActiveNodes, activeId, statuses, filter, unread, src],
   )
   const sections = useMemo(
-    () => buildStatusList(workspaces, liveActiveNodes, activeId, statuses, filter, unread),
-    [workspaces, liveActiveNodes, activeId, statuses, filter, unread],
+    () => buildStatusList(workspaces, liveActiveNodes, activeId, statuses, filter, unread, src),
+    [workspaces, liveActiveNodes, activeId, statuses, filter, unread, src],
   )
+  const closed = useMemo(() => filterClosed(closedSessions, filter), [closedSessions, filter])
 
-  const total = sections.reduce((n, s) => n + s.rows.length, 0)
-  const rowCount = grouping === 'status' ? total : groups.reduce((n, g) => n + g.sessions.length, 0)
-  const empty = sidebarEmptyState(rowCount === 0, filter)
+  const rowCount = grouping === 'status' ? sections.reduce((n, s) => n + s.rows.length, 0) : groups.reduce((n, g) => n + g.sessions.length, 0)
+  // Workspaces not hydrated yet (boot): show nothing rather than "No sessions yet".
+  const empty = sidebarEmptyState(rowCount === 0, filter, workspaces.length === 0 && liveActiveNodes === null)
   const branches = useGitBranches(useMemo(() => workspaces.map((w) => w.cwd), [workspaces]))
+  const [renaming, setRenaming] = useState<RenameTarget | null>(null)
+  const startRename = (row: Pick<SessionRowVM, 'id' | 'label' | 'title'>) => setRenaming({ id: row.id, label: row.label, title: row.title })
+  // Only the open board's nodes can be renamed: App's rename writes the live canvas.
+  const renameOf = (row: SessionRowVM) => (onRenameNode && row.projectId === activeId ? startRename : undefined)
+  const rowById = (id: string) => groups.flatMap((g) => g.sessions).find((r) => r.id === id)
 
   const treeRef = useRef<TreeElement>(null)
   // Elemen pohon → aksi. Klik/Enter di dalam shadow tree tidak sampai ke root React, jadi satu
@@ -121,7 +123,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const filterEmpty = filter.trim() === ''
   // Selagi memfilter semuanya dibuka: hasil yang disembunyikan di balik baris terlipat terbaca
   // seperti "tidak ada hasil".
-  const groupOpen = (key: string) => !filterEmpty || !(collapsed[key] ?? false)
+  // Recently closed starts collapsed (it would push live sessions off screen); others start open.
+  const groupOpen = (key: string) => !filterEmpty || !(collapsed[key] ?? key === CLOSED_KEY)
   const projectOpen = (key: string) => !filterEmpty || !isProjectCollapsed(collapsed, key)
 
   const onSelectRef = useRef<(event: VscTreeSelectEvent) => void>(() => {})
@@ -145,10 +148,12 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       return
     }
     if (target.kind === 'reopen') {
-      // A list row is easy to hit by accident and the reopen can switch board, so it asks first.
-      // The context menu's "Reopen" item is already explicit and stays direct (`./sessionMenu`).
+      // A list row is easy to hit by accident; it asks first only when the reopen switches board.
+      // Same board = straight through (undo exists, `closedUndo`). The inline Restore and the
+      // menu's "Reopen Session" are explicit and never ask.
       const entry = closedSessions.find((e) => e.node.id === target.id)
       if (!entry || !onReopenSession) return
+      if (entry.workspaceId === activeId) return onReopenSession(target.id)
       void confirmReopen(entry, activeId).then((ok) => {
         if (ok) onReopenSession(target.id)
       })
@@ -176,6 +181,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         ? buildSessionMenu(menu.target, menu.expanded, {
             onFocusNode,
             onCloseSession,
+            onRenameSession: (id) => { const row = rowById(id); if (row) startRename(row) },
             onReopenSession,
             onSelectWorkspace,
             onToggleGroup: (key, expanded) => setCollapsed((prev) => ({ ...prev, [key]: expanded })),
@@ -186,17 +192,15 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             },
           })
         : [],
-    [menu, onFocusNode, onCloseSession, onReopenSession, onSelectWorkspace],
+    // `groups` feeds `rowById` (Rename…); `startRename` only calls a state setter.
+    [menu, onFocusNode, onCloseSession, onReopenSession, onSelectWorkspace, groups],
   )
 
   /** Kunci semua header grup yang sedang dirender pada tab aktif (untuk Collapse All). */
-  const groupKeys = (): string[] => {
-    const keys =
-      grouping === 'status'
-        ? sections.map((s) => `status:${s.kind}`)
-        : groups.map((g) => projectCollapseKey(g.projectId))
-    return closedSessions.length > 0 ? [...keys, CLOSED_KEY] : keys
-  }
+  const groupKeys = (): string[] =>
+    grouping === 'status'
+      ? sections.map((s) => `status:${s.bucket}`)
+      : [...groups.map((g) => projectCollapseKey(g.projectId)), ...(closed.length > 0 ? [CLOSED_KEY] : [])]
   const collapseAll = () =>
     setCollapsed((prev) => ({ ...prev, ...Object.fromEntries(groupKeys().map((k) => [k, true])) }))
 
@@ -204,16 +208,19 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     <div className="sessions-view">
       <div className="sessions-view__toolbar">
         <SessionsGroupingTabs value={grouping} onChange={setGrouping} />
+      </div>
+      {/* VS Code: a view's own actions sit in its title row, next to Hide Side Bar. */}
+      <SideBarTitleActions>
         <IconTooltip label="Collapse all groups">
           <button type="button" className="ss-action" aria-label="Collapse all" onClick={collapseAll}>
             <span className="codicon codicon-collapse-all" aria-hidden />
           </button>
         </IconTooltip>
-      </div>
+      </SideBarTitleActions>
       <SessionsFilter value={filter} onChange={setFilter} />
 
       {/* nowheel: tanpa itu scroll di sini justru mem-pan canvas di belakangnya. */}
-      <div className="sessions-sidebar__body nowheel">
+      <div className="sessions-sidebar__body nowheel" aria-busy={empty === 'loading' || undefined}>
         {/* Welcome view VS Code: teks deskriptif + tombol utama. */}
         {empty === 'no-matches' && (
           <div className="ss-empty">
@@ -225,7 +232,17 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         )}
         {empty === 'no-sessions' && (
           <div className="ss-empty">
-            <p>No sessions yet.</p>
+            <p>No sessions yet. Start one on this board.</p>
+            {onAddTerminal && (
+              <button type="button" className="ss-empty__button" onClick={() => onAddTerminal()}>
+                New Terminal
+              </button>
+            )}
+            {onAddAgent && (
+              <button type="button" className="ss-empty__button ss-empty__button--secondary" onClick={() => onAddAgent()}>
+                New Agent
+              </button>
+            )}
           </div>
         )}
 
@@ -234,13 +251,16 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           grouping={grouping}
           sections={sections}
           groups={groups}
-          closedSessions={closedSessions}
-          empty={empty}
+          closedSessions={closed}
           groupOpen={groupOpen}
           projectOpen={projectOpen}
           register={register}
+          now={now}
           onCloseSession={onCloseSession}
           onSelectWorkspace={onSelectWorkspace}
+          renameOf={renameOf}
+          onMoreActions={(target, anchor) => setMenu({ target, anchor, expanded: false })}
+          onRestore={(id) => onReopenSession?.(id)}
           branches={branches}
         />
       </div>
@@ -251,6 +271,9 @@ export default function SessionsPanel(props: SessionsPanelProps) {
         onClose={() => setMenu(null)}
         ariaLabel="Session actions"
       />
+      {renaming && onRenameNode && (
+        <SessionRenameDialog target={renaming} onRename={onRenameNode} onClose={() => setRenaming(null)} />
+      )}
     </div>
   )
 }

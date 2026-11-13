@@ -7,6 +7,7 @@ import './test-setup'
 import { Tree, TreeItem } from './register'
 import { SessionTreeItem } from '../SessionRow'
 import type { SessionRowVM } from '../sessionList'
+import { sessionStatusView } from '../sessionStatus.model'
 
 afterEach(cleanup)
 
@@ -34,11 +35,11 @@ describe('keepRefCleanup on the vscode-elements wrappers', () => {
 })
 
 describe('SessionTreeItem middle-click', () => {
-  const row: SessionRowVM = { id: 's1', label: 'shell', isAgent: false, statusKind: 'unknown', stateLabel: 'Idle', projectId: 'w1', projectName: 'W' }
+  const row: SessionRowVM = { id: 's1', label: 'shell', title: 'shell', kind: 'terminal', view: sessionStatusView({}), projectId: 'w1', projectName: 'W' }
 
   it('closes the session exactly once after many re-renders', () => {
     const onClose = vi.fn()
-    const view = () => <Tree><SessionTreeItem row={row} showProject={false} onCloseSession={onClose} register={() => {}} /></Tree>
+    const view = () => <Tree><SessionTreeItem row={row} mode="project" now={0} onCloseSession={onClose} onMoreActions={() => {}} register={() => {}} /></Tree>
     const { rerender, container } = render(view())
     for (let i = 0; i < RENDERS; i++) rerender(view())
     container.querySelector('vscode-tree-item')!.dispatchEvent(new MouseEvent('auxclick', { button: 1, bubbles: true }))

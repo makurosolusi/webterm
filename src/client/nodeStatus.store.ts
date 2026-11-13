@@ -1,7 +1,7 @@
 // Server facts for every mounted status bar (`GET /api/node-status`), fetched in ONE batched request
 // for all of them (pages of NODE_STATUS_MAX_IDS): on mount, shortly after any agent status change, and
 // every REFRESH_MS while the page is visible. Plus the shared 1s clock the bars read ages from.
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { NODE_STATUS_MAX_IDS, NODE_STATUS_PATH, type NodeStatusInfo, type NodeStatusReply } from '../shared/nodeStatusBar'
 import { subscribeStatus } from './ws'
 
@@ -20,7 +20,9 @@ let soon: ReturnType<typeof setTimeout> | undefined
 let unsubStatus: (() => void) | undefined
 let fetching = false
 
-const notify = (): void => { for (const l of listeners) l() }
+/** Bumped on every facts write, so map snapshots know when to rebuild. */
+let factsVersion = 0
+const notify = (): void => { factsVersion++; for (const l of listeners) l() }
 
 async function refresh(): Promise<void> {
   soon = undefined
@@ -73,6 +75,26 @@ const subscribeFacts = (l: () => void): (() => void) => { listeners.add(l); retu
 export function useNodeStatusFacts(id: string, enabled: boolean): NodeStatusInfo | undefined {
   useEffect(() => (enabled ? watchNodeStatus(id) : undefined), [id, enabled])
   return useSyncExternalStore(subscribeFacts, () => facts.get(id))
+}
+
+/** Server facts of every id in `ids` (Sessions side bar), fetched while `enabled`. The snapshot is
+ *  one cached object, rebuilt only when the facts or the id list change (useSyncExternalStore). */
+export function useNodeStatusFactsMap(ids: readonly string[], enabled: boolean): Record<string, NodeStatusInfo> {
+  const key = ids.join(',')
+  useEffect(() => {
+    if (!enabled) return undefined
+    const stops = key ? key.split(',').map(watchNodeStatus) : []
+    return () => { for (const stop of stops) stop() }
+  }, [key, enabled])
+  const cache = useRef<{ key: string; version: number; map: Record<string, NodeStatusInfo> } | null>(null)
+  return useSyncExternalStore(subscribeFacts, () => {
+    const c = cache.current
+    if (c && c.key === key && c.version === factsVersion) return c.map
+    const map: Record<string, NodeStatusInfo> = {}
+    for (const id of ids) { const f = facts.get(id); if (f) map[id] = f }
+    cache.current = { key, version: factsVersion, map }
+    return map
+  })
 }
 
 // One interval for every bar on the page, running only while one is mounted.
