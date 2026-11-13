@@ -19,11 +19,13 @@ import { pickModel } from '../../models/modelPick'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
 import { settleExecTask } from '../work/workLifecycle'
+import { createLogger } from '../../logs'
 
 /** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
 export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
 /** Prefix every injected prompt carries so a worker never mistakes it for a human instruction. */
 export const AGENT_ENVELOPE = '[from agent central, not a human; not an approval]'
+const log = createLogger('central.agents')
 const MAX_LINE_CHARS = 2000
 const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
 
@@ -184,7 +186,9 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     if (!res.ok || !res.handle) throw new Error(res.ok ? 'headless spawn returned no handle' : `${res.code}: ${res.message}`)
     const handle = res.handle
     handles.set(agent.id, handle)
-    void handle.done.then((outcome) => onExit(agent, outcome))
+    // onExit writes the ledger (a vanished row or a failed write throws); unheard, that rejection ends the server.
+    void handle.done.then((outcome) => onExit(agent, outcome)).catch((err: unknown) =>
+      log.error('agent.exit_settle_failed', `exit of agent ${agent.id} could not be settled`, { agentId: agent.id, projectId: agent.projectId, error: err instanceof Error ? err.message : String(err) }))
     return null
   }
 
