@@ -20,7 +20,8 @@ export type CentralSource =
   /** A boolean key of the shared Settings row (saved through the section's `onChange`). */
   | { kind: 'setting'; key: 'dailySpendWarning' }
 
-export interface CentralOption { value: string; label: string; confirm?: string }
+/** `confirm`: asked in a dialog before this option is applied. */
+export interface CentralOption { value: string; label: string; confirm?: { title: string; body: string; action: string } }
 export interface CentralField {
   id: keyof typeof CENTRAL_FIELD_TEXT
   group: CentralGroup
@@ -63,7 +64,7 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
   f('spendWarning', { group: 'cost', control: 'switch', source: { kind: 'setting', key: 'dailySpendWarning' }, always: true }),
 
   f('dailySpawns', { group: 'advanced', control: 'stepper', source: env('WEBTERM_CENTRAL_DAILY_SPAWNS', { unit: UNIT_TEXT.workers }), min: 0, max: 500, step: 5, needs: 'workers' }),
-  f('checkinLimit', { group: 'advanced', control: 'select', source: { kind: 'checkin', key: 'dailyLimit' }, options: CHECKIN_DAILY_LIMITS.map((n) => ({ value: String(n), label: String(n) })) }),
+  f('checkinLimit', { group: 'advanced', control: 'select', source: { kind: 'checkin', key: 'dailyLimit' }, options: CHECKIN_DAILY_LIMITS.map((n) => ({ value: String(n), label: CENTRAL_TEXT.checkinCount(n) })) }),
   f('maxInflight', { group: 'advanced', control: 'stepper', source: env('WEBTERM_CENTRAL_MAX_INFLIGHT', { unit: UNIT_TEXT.workers }), min: 1, max: 20, step: 1, needs: 'autonomy' }),
 ]
 

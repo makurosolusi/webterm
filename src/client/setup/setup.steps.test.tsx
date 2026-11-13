@@ -112,7 +112,7 @@ describe('Claude step', () => {
   it('Continue saves pending provider edits first, then moves on; a failed save keeps the step with the error', async () => {
     const s = fakeServer({ providerSaveFail: true })
     render(<ClaudeStep nav={nav} />)
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
+    fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.apiKey }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: 'sk-test-only' } }) // test-only
     click(SETUP_TEXT.next)
     expect(await screen.findByText(SETUP_TEXT.claude.saveFailed)).toBeTruthy()
