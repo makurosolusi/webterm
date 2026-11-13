@@ -1,0 +1,9 @@
+/* The xterm element fills its host, with a small gutter so text does not touch the node border
+   (VS Code / Warp style). `fitTerminal` (terminalFit.ts) subtracts this padding before counting
+   cells, so changing it never clips a row or column. The host carries the theme background
+   (TerminalCore.tsx), so padding and the last partial cell are the terminal's colour. */
+.wt-term-host .xterm {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 4px 4px 0 8px;
+}
