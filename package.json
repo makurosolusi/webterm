@@ -26,7 +26,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@vscode-elements/react-elements": "2.4.0",
     "@vscode/codicons": "0.0.45",
-    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-search": "0.16.0",
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-web-links": "^0.12.0",

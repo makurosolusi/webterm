@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { fitGeometry } from './terminalFit'
 
 const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
 
@@ -22,7 +23,8 @@ const flat = (s: string) => s.replace(/\s+/g, ' ')
 
 /** Gerbang harus menempel di call site-nya, bukan "ada di file ini entah di mana". */
 const GATE_WINDOW = 80
-const fitSites = (s: string) => flat(s).split('fit.fit()').slice(0, -1)
+// Both the old addon-fit call and today's `fitTerminal(term, el)` count as a fit call site.
+const fitSites = (s: string) => flat(s).split(/fit\.fit\(\)|fitTerminal\(term, el\)/).slice(0, -1)
 const ungatedFits = (s: string) =>
   fitSites(s).filter((before) => !before.slice(-GATE_WINDOW).includes('hasSize(el)')).length
 
@@ -99,7 +101,57 @@ describe('gerbang fit TerminalCore', () => {
 
   it('gerbangnya tidak membunuh fitur: `refit` tetap fit, gambar ulang, dan kabari PTY', () => {
     const s = flat(src('TerminalCore.tsx'))
-    expect(s).toContain('fit.fit() term.refresh(0, term.rows - 1)')
+    expect(s).toContain('fitTerminal(term, el) term.refresh(0, term.rows - 1)')
     expect(s).toContain("send({ t: 'resize', id, ...next })")
+  })
+})
+
+const NO_PAD = { top: 0, right: 0, bottom: 0, left: 0 }
+
+/**
+ * Symptom: Claude's prompt rule stopped ~2 columns short of the node's right edge.
+ * Cause: addon-fit subtracts a 14 px scrollbar from the width, but xterm 6 draws an overlay
+ * scrollbar that takes no layout width. `fitGeometry` counts every whole cell in the padded box.
+ */
+describe('fitGeometry', () => {
+  const cell = { width: 8, height: 17 }
+
+  it('uses the full width: no scrollbar reserve', () => {
+    // 800 px / 8 px = 100 columns. addon-fit would give floor((800 - 14) / 8) = 98.
+    expect(fitGeometry({ width: 800, height: 340, padding: NO_PAD, cell })).toEqual({ cols: 100, rows: 20 })
+  })
+
+  it('subtracts the element padding on both axes', () => {
+    const padding = { top: 4, right: 4, bottom: 0, left: 8 }
+    expect(fitGeometry({ width: 812, height: 344, padding, cell })).toEqual({ cols: 100, rows: 20 })
+    // One px less than a whole cell drops it: the grid never overflows the box.
+    expect(fitGeometry({ width: 811, height: 343, padding, cell })).toEqual({ cols: 99, rows: 19 })
+  })
+
+  it('a box that is an exact multiple of a fractional cell keeps its last column', () => {
+    // (6.05 * 13) / 6.05 is 12.999999999999998 in floating point: a bare floor loses a column.
+    const frac = { width: 6.05, height: 6.05 }
+    expect(Math.floor((6.05 * 13) / 6.05)).toBe(12) // the noise is real, so the case below bites
+    expect(fitGeometry({ width: 6.05 * 13, height: 6.05 * 13, padding: NO_PAD, cell: frac })).toEqual({ cols: 13, rows: 13 })
+  })
+
+  it('keeps addon-fit\'s minimum grid and refuses an unmeasured cell', () => {
+    expect(fitGeometry({ width: 1, height: 1, padding: NO_PAD, cell })).toEqual({ cols: 2, rows: 1 })
+    expect(fitGeometry({ width: 800, height: 340, padding: NO_PAD, cell: { width: 0, height: 17 } })).toBeUndefined()
+  })
+})
+
+describe('terminal surface', () => {
+  it('TerminalCore no longer fits through addon-fit, and paints the host with the theme background', () => {
+    const s = src('TerminalCore.tsx')
+    expect(s).not.toContain('@xterm/addon-fit')
+    expect(s).not.toContain('fit.fit()')
+    expect(flat(s)).toContain('style={{ background: resolveTerminalTheme(settings.terminalTheme).theme.background }}')
+  })
+
+  it('the xterm element fills the host, so no band shows under the last row', () => {
+    const css = flat(src('terminal-surface.css'))
+    expect(css).toMatch(/\.wt-term-host \.xterm \{[^}]*height: 100%/)
+    expect(src('TerminalCore.tsx')).toContain("import './terminal-surface.css'")
   })
 })
