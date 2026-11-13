@@ -106,22 +106,27 @@ describe('fixDoctor', () => {
 })
 
 describe('launch profile in the claude check', () => {
-  it('names the wrapper when ready, and reports a missing wrapper as a warning with its reason', async () => {
-    const via = 'envman (via profile Malik)'
-    expect((await byId(deps({ claudeReady: async () => ({ ok: true, via }) }))).claude)
-      .toMatchObject({ status: 'ok', detail: 'Installed and logged in. Launch: envman (via profile Malik).' })
-    const c = (await byId(deps({ claudeReady: async () => ({ ok: false, missing: true, via, reason: 'envman not found on PATH.' }) }))).claude
+  it('names the wrapper and its profile when ready, and reports a missing wrapper as a warning with its reason', async () => {
+    const named = { method: 'envman', profile: 'Malik' }
+    expect((await byId(deps({ claudeReady: async () => ({ ok: true, ...named }) }))).claude)
+      .toMatchObject({ status: 'ok', detail: 'Ready via envman (launch profile "Malik").' })
+    const c = (await byId(deps({ claudeReady: async () => ({ ok: false, missing: true, ...named, reason: 'envman not found on PATH.' }) }))).claude
     expect(c.status).toBe('warn')
-    expect(c.detail).toMatch(/^envman not found on PATH\. .*Launch: envman \(via profile Malik\)\.$/)
+    expect(c.detail).toMatch(/^Not ready: envman not found on PATH\. .*Launch profile "Malik"\.$/)
   })
 })
 
 describe('Claude provider in the claude check', () => {
-  const prov = (view: Partial<ProviderView> & Pick<ProviderView, 'mode'>, lastTest: { ok: boolean; message: string } | null = null) =>
-    deps({ claudeReady: async () => ({ ok: false, reason: 'not logged in' }), claudeProvider: () => ({ view: { secretSet: false, ready: false, ...view }, lastTest }) })
+  const prov = (view: Partial<ProviderView> & Pick<ProviderView, 'mode'>, lastTest: { ok: boolean; message: string } | null = null, ready = true) =>
+    deps({
+      claudeReady: async () => (ready ? { ok: true } : { ok: false, reason: 'Claude Code is not signed in. Run "claude auth login" on the server.' }),
+      claudeProvider: () => ({ view: { secretSet: false, ready: false, ...view }, lastTest }),
+    })
   it('login mode (also when the dependency is absent) still checks the Claude Code login', async () => {
-    expect((await byId(deps())).claude).toMatchObject({ status: 'ok', detail: 'Installed and logged in.' })
-    expect((await byId(prov({ mode: 'login', ready: true }))).claude).toMatchObject({ status: 'fail' })
+    expect((await byId(deps())).claude).toMatchObject({ status: 'ok', detail: 'Ready via Claude Code login.' })
+    const out = (await byId(prov({ mode: 'login', ready: true }, null, false))).claude
+    expect(out).toMatchObject({ status: 'fail' })
+    expect(out.detail).toMatch(/^Not ready via Claude Code login: .*claude auth login/)
   })
   it('a key provider replaces the login check: no key fails, untested warns, the last test decides', async () => {
     expect((await byId(prov({ mode: 'apiKey' }))).claude).toMatchObject({ status: 'fail' })
@@ -131,5 +136,13 @@ describe('Claude provider in the claude check', () => {
     expect(untested.detail).toContain('gw.example.test')
     expect(await byId(prov(custom, { ok: false, message: 'The endpoint rejected the credential.' }))).toMatchObject({ claude: { status: 'fail' } })
     expect(await byId(prov(custom, { ok: true, message: 'Connected.' }))).toMatchObject({ claude: { status: 'ok' } })
+  })
+  it('command mode: a deleted profile fails, a failed last test fails, never a login hint', async () => {
+    const gone = (await byId(prov({ mode: 'command', profileId: 'x', ready: false }))).claude
+    expect(gone).toMatchObject({ status: 'fail', go: { field: 'claude-provider' } })
+    const cmd = { mode: 'command' as const, profileId: 'x', ready: true }
+    const failed = (await byId(prov(cmd, { ok: false, message: 'Failed at Request: 401' }))).claude
+    expect(failed).toMatchObject({ status: 'fail' })
+    expect(failed.detail).not.toMatch(/claude auth login/)
   })
 })

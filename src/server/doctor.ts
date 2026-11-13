@@ -25,13 +25,14 @@ export interface DoctorCheck {
 
 /** A file webterm generates (shim, skill, house rules): `expected` is what the current build writes. */
 export interface GeneratedFile { label: string; path: string; expected: string }
-/** Claude readiness through the default launch profile: `via` names a wrapper (`envman (via profile X)`), `missing` = binary not found. */
-export type ClaudeLaunchReady = { ok: true; via?: string } | { ok: false; reason: string; via?: string; missing?: boolean }
+/** Claude readiness through the provider's launch (claudeStartup). `method`: how Claude gets its credential (a wrapper's
+ *  name such as `envman`, else the provider mode's name); `profile`: the launch profile of a wrapper; `missing` = binary not found. */
+export type ClaudeLaunchReady = { ok: true; method?: string; profile?: string } | { ok: false; reason: string; method?: string; profile?: string; missing?: boolean }
 export type TelegramProbe = { state: 'unset' } | { state: 'ok'; name?: string } | { state: 'rejected' | 'unreachable' }
 
 export interface DoctorDeps {
   onPath(bin: string): boolean
-  /** Staged probe of the default Claude launch profile (wrapper/claude on PATH, then login). */
+  /** Staged probe of the provider's Claude launch (wrapper/claude on PATH, then sign-in as the mode judges it). */
   claudeReady(): Promise<ClaudeLaunchReady>
   /** Saved Claude provider (never the secret) + the last Test connection of this process; absent = login. */
   claudeProvider?(): { view: ProviderView; lastTest: { ok: boolean; message: string } | null }
@@ -64,19 +65,23 @@ const GO_TELEGRAM = { field: 'capability.telegram' }
 const PROBES: Record<DoctorId, Probe> = {
   async claude(d) {
     const t = 'Claude Code CLI'
-    const r = await d.claudeReady()
-    const via = r.via ? ` Launch: ${r.via}.` : ''
-    if (!r.ok && r.missing) return check('claude', t, 'warn', `${r.reason || 'The claude command is not on PATH.'} Claude agent nodes and the Claude engine cannot start until it is found.${via}`)
-    // Active Claude provider: a key/endpoint replaces the login, so it is checked instead.
     const { view: v, lastTest } = d.claudeProvider?.() ?? { view: { mode: 'login', secretSet: false, ready: true }, lastTest: null }
-    if (v.mode !== 'login') {
-      const what = v.mode === 'apiKey' ? 'Anthropic API key' : `custom endpoint ${hostOf(v.baseUrl)}`
-      if (!v.ready) return check('claude', t, 'fail', `Installed; provider ${what} is selected but no key is saved, so Claude cannot start. Add it in the Claude provider settings.`, undefined, GO_PROVIDER)
-      if (!lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in the Claude provider settings.`, undefined, GO_PROVIDER)
-      return check('claude', t, lastTest.ok ? 'ok' : 'fail', `Installed; provider ${what}: ${lastTest.message}`)
-    }
-    return r.ok ? check('claude', t, 'ok', `Installed and logged in.${via}`)
-      : check('claude', t, 'fail', `Installed but not ready (${r.reason}). Open a terminal node, run claude and log in.${via}`)
+    const key = v.mode === 'apiKey' || v.mode === 'custom'
+    const what = v.mode === 'apiKey' ? 'Anthropic API key' : `custom endpoint ${hostOf(v.baseUrl)}`
+    // Not startable as saved: no probe needed (and none would test what the user chose).
+    if (key && !v.ready) return check('claude', t, 'fail', `Not ready: provider ${what} is selected but no key is saved, so Claude cannot start. Add it in the Claude provider settings.`, undefined, GO_PROVIDER)
+    if (v.mode === 'command' && !v.ready) return check('claude', t, 'fail', 'Not ready: the launch profile chosen for the custom command no longer exists. Pick another one in the Claude provider settings.', undefined, GO_PROVIDER)
+    const r = await d.claudeReady()
+    const method = key ? what : r.method ?? 'Claude Code login'
+    const profile = r.profile ? ` (launch profile "${r.profile}")` : ''
+    const go = v.mode === 'login' ? undefined : GO_PROVIDER
+    if (!r.ok && r.missing) return check('claude', t, 'warn', `Not ready: ${r.reason || 'The claude command is not on PATH.'} Claude agent nodes and the Claude engine cannot start until it is found.${r.profile ? ` Launch profile "${r.profile}".` : ''}`, undefined, go)
+    if (!r.ok) return check('claude', t, 'fail', `Not ready via ${method}${profile}: ${r.reason}`, undefined, go)
+    // A key/endpoint is only proven by a real request, so the last Test connection decides; a command's
+    // wrapper already proved its credential to `claude auth status`, unless the last test says otherwise.
+    if (key && !lastTest) return check('claude', t, 'warn', `Installed; provider ${what} is saved but not tested since the server started. Press Test connection in the Claude provider settings.`, undefined, GO_PROVIDER)
+    if (v.mode !== 'login' && lastTest && !lastTest.ok) return check('claude', t, 'fail', `Not ready via ${method}${profile}: ${lastTest.message}`, undefined, GO_PROVIDER)
+    return check('claude', t, 'ok', `Ready via ${method}${profile}.${key && lastTest ? ` ${lastTest.message}` : ''}`)
   },
   async tools(d) {
     const t = 'webterm tool server (MCP)'
