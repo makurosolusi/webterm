@@ -5,15 +5,16 @@
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { claudeHeadersPath, claudeSettingsPath, ensureNodeSettingsDir } from '../hooksPaths'
-import { MCP_STDIO_COMMAND, isCompiledBinary, selfLaunch } from '../selfLaunch'
+import { MCP_STDIO_COMMAND, type SelfLaunchMode, selfLaunch, selfLaunchMode } from '../selfLaunch'
 import { MCP_SERVER_NAME } from './mcp.paths'
 
-/** Absolute path of the stdio entry point. */
+/** Absolute path of the stdio entry point (dev only: a compiled binary or bundled host re-enters itself, selfLaunch.ts). */
 export const MCP_MAIN = fileURLToPath(new URL('./main.ts', import.meta.url))
 
-/** Executable + leading args that start the MCP stdio server: `bun main.ts` in dev, `webterm __mcp-stdio` when compiled. */
-export const mcpLaunchBase = (compiled: boolean = isCompiledBinary()): { command: string; args: string[] } =>
-  selfLaunch(MCP_STDIO_COMMAND, MCP_MAIN, compiled)
+/** Executable + leading args that start the MCP stdio server: `bun main.ts` in dev, `webterm __mcp-stdio` when
+ *  compiled, `bun <bundle> __mcp-stdio` in the native app. */
+export const mcpLaunchBase = (mode: SelfLaunchMode = selfLaunchMode()): { command: string; args: string[] } =>
+  selfLaunch(MCP_STDIO_COMMAND, MCP_MAIN, mode)
 
 /** How a CLI starts the MCP server for `nodeId`. */
 export function mcpServerCommand(nodeId: string, port: number): { command: string; args: string[] } {

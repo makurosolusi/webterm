@@ -8,7 +8,8 @@ import { claudeHeadersPath } from '../hooksPaths'
 import { claudeNodeSettings } from '../hooksSettings'
 import { nodeToken } from '../hooksTokens'
 import { launchLine } from '../launchLine'
-import { isCompiledBinary } from '../selfLaunch'
+import { registerEmbedHost } from '../embedHost'
+import { isCompiledBinary, selfLaunch, selfLaunchMode } from '../selfLaunch'
 import { MCP_MAIN, mcpConfigPath, mcpLaunchBase } from './mcp.launch'
 
 const DIR = mkdtempSync(join(tmpdir(), 'mcp-launch-'))
@@ -24,11 +25,30 @@ const open = (agentId: string, cmd = agentId) => ({ t: 'open' as const, id: 'n1'
 
 describe('mcpLaunchBase', () => {
   it('dev: the running bun (or bun on PATH) + main.ts', () => {
-    expect(mcpLaunchBase(false)).toEqual({ command: process.versions.bun ? process.execPath : 'bun', args: [MCP_MAIN] })
+    expect(mcpLaunchBase({ kind: 'dev' })).toEqual({ command: process.versions.bun ? process.execPath : 'bun', args: [MCP_MAIN] })
   })
 
   it('compiled binary: the binary itself with the hidden __mcp-stdio subcommand, never a /$bunfs path', () => {
-    expect(mcpLaunchBase(true)).toEqual({ command: process.execPath, args: ['__mcp-stdio'] })
+    expect(mcpLaunchBase({ kind: 'compiled' })).toEqual({ command: process.execPath, args: ['__mcp-stdio'] })
+  })
+
+  it('bundled host (native app): its own runtime re-enters the declared bundle with the hidden subcommand', () => {
+    const entry = '/Applications/webterm.app/Contents/Resources/app/bun/index.js' // test-only
+    expect(mcpLaunchBase({ kind: 'bundled', entry })).toEqual({ command: process.execPath, args: [entry, '__mcp-stdio'] })
+    expect(selfLaunch('__eval-run', '/src/evalRun.main.ts', { kind: 'bundled', entry })).toEqual({ command: process.execPath, args: [entry, '__eval-run'] })
+  })
+
+  it('mode: dev from source, bundled once a host declares its entry (no path sniffing)', () => {
+    expect(selfLaunchMode()).toEqual({ kind: 'dev' })
+    const entry = '/tmp/bundle/index.js' // test-only
+    registerEmbedHost({ openFile: async () => {}, selfEntry: entry })
+    try {
+      expect(selfLaunchMode()).toEqual({ kind: 'bundled', entry })
+      expect(mcpLaunchBase()).toEqual({ command: process.execPath, args: [entry, '__mcp-stdio'] })
+    } finally {
+      registerEmbedHost(null)
+    }
+    expect(selfLaunchMode()).toEqual({ kind: 'dev' })
   })
 
   it('detects the compiled binary from a /$bunfs (POSIX) or ~BUN (Windows) module URL only', () => {

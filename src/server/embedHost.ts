@@ -8,12 +8,15 @@ export interface EmbedHost {
   openFile(path: string): Promise<void>
   /** Built UI (vite `dist/`) on disk when the host packages it somewhere other than `<repo>/dist`. */
   distDir?: string
+  /** The JS bundle this host's runtime (`process.execPath`) runs, when the server lives in one: children
+   *  re-enter it as `execPath <selfEntry> <hidden subcommand>` (selfLaunch.ts). */
+  selfEntry?: string
 }
 
 let current: EmbedHost | null = null
 
-/** Called once by the in-process host, before `import('./index')`. */
-export function registerEmbedHost(host: EmbedHost): void {
+/** Called once by the in-process host, before `import("./index")`; null unregisters (tests). */
+export function registerEmbedHost(host: EmbedHost | null): void {
   current = host
 }
 

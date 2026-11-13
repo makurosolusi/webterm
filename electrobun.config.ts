@@ -1,5 +1,6 @@
 // Electrobun (native macOS shell) config: `npm run build:native` / `npm run dev:native`.
-// The main process is src/native/main.ts: it attaches to the data dir's running server or runs one in-process; the window
+// The main process is src/native/main.ts, a router: hidden subcommands (selfLaunch.ts) go to the CLI gate, anything
+// else loads nativeApp.ts, which attaches to the data dir's running server or runs one in-process; the window
 // loads the server's own URL, so there is no separate view bundle.
 import pkg from './package.json'
 import { UPDATE_BASE_URL } from './src/native/release.config'

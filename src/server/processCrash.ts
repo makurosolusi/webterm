@@ -25,3 +25,16 @@ export function onUnhandledRejection(
     exit(UNHANDLED_REJECTION_EXIT_CODE)
   }
 }
+
+/**
+ * Build the `uncaughtExceptionMonitor` listener: log the exception and flush the log to disk at once.
+ * Observe-only (the crash still happens). The flush is the point: inside the native app Electrobun's own
+ * `uncaughtException` handler exits natively (forceExit) without the `exit` hook, so a buffered line would
+ * be lost and the crash would leave nothing in the log.
+ */
+export function onUncaughtExceptionMonitor(log: Pick<Logger, 'error'>, flush: () => void): (err: Error) => void {
+  return (err) => {
+    log.error('server.error', `Uncaught exception: ${err.name}: ${err.message}`, { stack: err.stack })
+    flush()
+  }
+}
