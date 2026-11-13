@@ -1,8 +1,8 @@
-// Settings › Claude: everything about how webterm runs Claude, in four parts. Connection = the provider
-// card (one choice + staged test), the launch profiles under it (badges from the server's resolver) and one
-// line saying what agents, Central and helpers really start with. Permissions = one 3-level choice
-// (settings.approvalLevel.ts). Models = read-only ladder. Advanced = Central's own profile, the raw
-// permission mode, the Add menu, custom agent CLIs and the automation token.
+// Settings › Claude: everything about how webterm runs Claude, as grouped cards. Connection = the provider
+// card (one choice + staged test). How Claude starts = one block saying what agents, Central and helpers
+// really start with, then the launch profiles (badges from the server's resolver). Permissions = one
+// 3-level choice (settings.approvalLevel.ts). Models = read-only ladder. Advanced (folded) = Central's own
+// profile, the raw permission mode, the Add menu, custom agent CLIs and the automation token.
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Settings } from '../shared/settings'
@@ -17,14 +17,15 @@ import { fetchEffectiveLaunch } from './claudeLauncher/claudeLaunch.client'
 import { openSettingsAt } from './settings.link'
 import { CustomAgentsSettings } from './SettingsAgents'
 import { ModelsSettings } from './SettingsModels'
-import { Field, SelectField } from './SettingsFields'
-import { SettingsSelect } from './SettingsControls'
+import { SelectField } from './SettingsFields'
+import { SettingsAdvanced, SettingsGroup } from './SettingsControls'
+import { SettingsMessage } from './SettingsMessage'
 import { TokenAccessCard } from './TokenAccessCard'
 
 export const CLAUDE_TEXT = {
+  launch: 'How Claude starts',
   permissions: 'Permissions',
   models: 'Models',
-  advanced: 'Advanced',
   startsWith: 'New Claude agents, Central and helpers start with:',
   agentsStartWith: 'New Claude agents and helpers start with:',
   centralUses: (name: string): string => `Central uses ${name}.`,
@@ -75,55 +76,62 @@ function useEffectiveLaunch(s: Settings): { data: EffectiveClaudeLaunch | null; 
 export function EffectiveLaunchLine({ effective: e, error, onRetry }: { effective: EffectiveClaudeLaunch | null; error: string | null; onRetry(): void }): React.JSX.Element {
   if (error) {
     return (
-      <p role="alert" className="st-hint" data-effective-launch>
-        {CLAUDE_TEXT.effectiveFailed(error)} <Button size="xs" variant="secondary" onClick={onRetry}>{CLAUDE_TEXT.retry}</Button>
-      </p>
+      <div className="st-facts" data-effective-launch>
+        <SettingsMessage kind="error" action={{ label: CLAUDE_TEXT.retry, run: onRetry }}>{CLAUDE_TEXT.effectiveFailed(error)}</SettingsMessage>
+      </div>
     )
   }
-  if (!e) return <p role="status" className="st-hint" data-effective-launch>{CLAUDE_TEXT.effectiveLoading}</p>
+  if (!e) return <div className="st-facts" data-effective-launch><SettingsMessage kind="loading">{CLAUDE_TEXT.effectiveLoading}</SettingsMessage></div>
   const central = e.deviations.find((d) => d.who === 'central')
   return (
-    <div role="status" className="flex flex-col gap-1 text-xs" data-effective-launch>
-      <p className="m-0">{central ? CLAUDE_TEXT.agentsStartWith : CLAUDE_TEXT.startsWith} <code className="st-mono">{e.agents.command}</code></p>
+    <div role="status" className="st-facts" data-effective-launch>
+      <p>{central ? CLAUDE_TEXT.agentsStartWith : CLAUDE_TEXT.startsWith} <code className="st-mono">{e.agents.command}</code></p>
       {central ? (
-        <p className="m-0">
+        <p>
           {CLAUDE_TEXT.centralUses(central.name)}{' '}
           <Button size="xs" variant="link" className="h-auto px-0" onClick={() => openSettingsAt('claude', 'centralClaudeProfileId')}>{CLAUDE_TEXT.change}</Button>
         </p>
       ) : null}
-      <p className="m-0 opacity-70">{CLAUDE_TEXT.credential[e.credential]}</p>
+      <p className="st-hint">{CLAUDE_TEXT.credential[e.credential]}</p>
     </div>
   )
 }
+
+/** Rows under Advanced: Central's profile, the raw mode, the Add menu, custom agents, the automation token. */
+const ADVANCED_ROWS = 5
 
 export function ClaudeSettingsSection({ settings: s, onChange, projectId }: { settings: Settings; onChange(patch: SettingsPatch): void; projectId?: string }): React.JSX.Element {
   const effective = useEffectiveLaunch(s)
   return (
     <div className="st-claude" data-section="claude">
-      {/* The card is the Connection region (its own heading); the line and profiles belong to it. */}
       <div data-claude-group="connection">
         <ClaudeProviderCard onSaved={effective.reload} />
-        <EffectiveLaunchLine effective={effective.data} error={effective.error} onRetry={effective.reload} />
-        <ClaudeLaunchProfilesCard settings={s} onChange={onChange} effective={effective.data} />
+        <SettingsGroup title={CLAUDE_TEXT.launch}>
+          <EffectiveLaunchLine effective={effective.data} error={effective.error} onRetry={effective.reload} />
+          <ClaudeLaunchProfilesCard settings={s} onChange={onChange} effective={effective.data} />
+        </SettingsGroup>
       </div>
-      <section aria-label={CLAUDE_TEXT.permissions} data-claude-group="permissions">
-        <h4 className="st-group-title">{CLAUDE_TEXT.permissions}</h4>
-        <ApprovalModeFields settings={s} projectId={projectId} />
-      </section>
-      <section aria-label={CLAUDE_TEXT.models} data-claude-group="models">
-        <h4 className="st-group-title">{CLAUDE_TEXT.models}</h4>
-        <ModelsSettings />
-      </section>
-      <details className="st-capabilities-advanced" data-claude-group="advanced">
-        <summary className="px-3.5">{CLAUDE_TEXT.advanced}</summary>
-        <CentralProfileField settings={s} onChange={onChange} />
-        <SelectField id="st-claudePermissionMode" setting="claudePermissionMode" label="Claude permission mode" hint={CLAUDE_TEXT.rawModeHint}
-          value={s.claudePermissionMode} options={PERMISSION_OPTIONS}
-          lock={s.skipApprovals ? { reason: CLAUDE_TEXT.rawModeLocked, fix: { label: CLAUDE_TEXT.rawModeFix, run: () => onChange({ agentApprovalLevel: 'risky' }) } } : undefined}
-          onChange={(v) => onChange({ claudePermissionMode: v })} />
-        <CustomAgentsSettings settings={s} onChange={onChange} />
-        <TokenAccessCard />
-      </details>
+      <div data-claude-group="permissions">
+        <SettingsGroup title={CLAUDE_TEXT.permissions}>
+          <ApprovalModeFields settings={s} projectId={projectId} />
+        </SettingsGroup>
+      </div>
+      <div data-claude-group="models">
+        <SettingsGroup title={CLAUDE_TEXT.models}>
+          <ModelsSettings />
+        </SettingsGroup>
+      </div>
+      <div data-claude-group="advanced">
+        <SettingsAdvanced count={ADVANCED_ROWS}>
+          <CentralProfileField settings={s} onChange={onChange} />
+          <SelectField id="st-claudePermissionMode" setting="claudePermissionMode" label="Claude permission mode" hint={CLAUDE_TEXT.rawModeHint}
+            value={s.claudePermissionMode} options={PERMISSION_OPTIONS}
+            lock={s.skipApprovals ? { reason: CLAUDE_TEXT.rawModeLocked, fix: { label: CLAUDE_TEXT.rawModeFix, run: () => onChange({ agentApprovalLevel: 'risky' }) } } : undefined}
+            onChange={(v) => onChange({ claudePermissionMode: v })} />
+          <CustomAgentsSettings settings={s} onChange={onChange} />
+          <TokenAccessCard />
+        </SettingsAdvanced>
+      </div>
     </div>
   )
 }

@@ -14,7 +14,7 @@ import type { Settings } from '../shared/settings'
 import { APPROVAL_LEVEL_TEXT, type ApprovalLevel } from '../shared/settings.approvalLevel'
 import { approvalLevelFor } from '../shared/settings.projectApprovalLevels'
 import { Field, FieldSaveStatus } from './SettingsFields'
-import { SettingsSelect } from './SettingsControls'
+import { SettingsSegmented, SettingsSelect } from './SettingsControls'
 import { useFieldSave } from './settingsSave'
 import { settingsSaves, useLiveSettings } from './useSettings'
 import {
@@ -78,7 +78,7 @@ function StaleLine({ n }: { n: number }): React.JSX.Element | null {
 
 const OPTIONS = MODE_ORDER.map((v) => ({ value: v, label: APPROVAL_LEVEL_TEXT[v].label }))
 
-/** Settings › Claude › Permissions: the mode for all projects and, with a project open, its own. */
+/** Settings › Claude › Permissions: the mode for all projects (segmented, three choices) and, with a project open, its own. */
 export function ApprovalModeFields({ settings: s, projectId }: { settings: Settings; projectId?: string }): React.JSX.Element {
   const change = useApprovalModeChange(s)
   const level = s.agentApprovalLevel
@@ -88,7 +88,7 @@ export function ApprovalModeFields({ settings: s, projectId }: { settings: Setti
     <>
       <Field label={APPROVAL_TEXT.allLabel} hint={APPROVAL_LEVEL_TEXT[level].hint} htmlFor="st-agentApprovalLevel" setting="agentApprovalLevel"
         tone={level === 'never' ? 'warning' : undefined}>
-        <SettingsSelect id="st-agentApprovalLevel" value={level} options={OPTIONS} onChange={(v) => change.choose({ scope: 'global' }, v)} />
+        <SettingsSegmented id="st-agentApprovalLevel" ariaLabel={APPROVAL_TEXT.allLabel} value={level} options={OPTIONS} onChange={(v) => change.choose({ scope: 'global' }, v)} />
       </Field>
       {projectId ? (
         <Field label={APPROVAL_TEXT.projectLabel} hint={own ? APPROVAL_LEVEL_TEXT[own].hint : APPROVAL_TEXT.projectHint}

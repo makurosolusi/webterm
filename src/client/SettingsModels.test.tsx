@@ -15,10 +15,10 @@ describe('Settings › Claude › Models', () => {
     expect((table.closest('details') as HTMLDetailsElement).open).toBe(false)
     expect(within(table).getAllByRole('row').map((r) => r.textContent)).toEqual([
       'ModelEffortUsed for',
-      'HaikulowHelpers and quick exploration',
-      'SonnetmediumDefault: Central, routines, reviews, workers',
-      'OpushighPlanners and complex tasks',
-      'FablexhighOnly when you ask for it',
+      'HaikuLowHelpers and quick exploration',
+      'SonnetMediumDefault: Central, routines, reviews, workers',
+      'OpusHighPlanners and complex tasks',
+      'FableExtra highOnly when you ask for it',
     ])
   })
 

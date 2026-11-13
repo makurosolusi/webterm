@@ -81,7 +81,7 @@ describe('ClaudeProviderCard', () => {
     const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => undefined))
     serve({ mode: 'login', secretSet: false, ready: true })
     render(<ClaudeProviderCard />)
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.custom }))
+    fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.custom }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.baseUrl), { target: { value: 'https://gw.example.test' } })
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
     fireEvent.click(screen.getByRole('button', { name: TEST }))
@@ -98,7 +98,7 @@ describe('ClaudeProviderCard', () => {
   it('a passing test after Save keeps the plain "✓ Saved" and the restart hint', async () => {
     serve({ mode: 'login', secretSet: false, ready: true }, { ok: true, message: 'Connected.', at: 1 })
     render(<ClaudeProviderCard />)
-    fireEvent.click(await screen.findByRole('button', { name: PROVIDER_TEXT.modes.apiKey }))
+    fireEvent.click(await screen.findByRole('radio', { name: PROVIDER_TEXT.modes.apiKey }))
     fireEvent.change(screen.getByLabelText(PROVIDER_TEXT.key), { target: { value: KEY } })
     fireEvent.click(screen.getByRole('button', { name: TEST }))
     expect(await screen.findByText('Connected.')).toBeTruthy()
@@ -130,7 +130,9 @@ describe('ClaudeProviderCard', () => {
     expect(validateGatewayUrl('https://gw.example.test/v1')).toBeNull()
     const model = screen.getByRole('combobox', { name: PROVIDER_TEXT.model })
     fireEvent.keyDown(model, { key: 'ArrowDown' })
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Claude Code default', 'haiku', 'sonnet', 'opus', 'fable'])
+    // Human labels; the stored alias stays visible beside each one.
+    expect(screen.getAllByRole('option').map((o) => o.querySelector('.st-combo-label')?.textContent)).toEqual(['Claude Code default', 'Haiku', 'Sonnet', 'Opus', 'Fable'])
+    expect(screen.getAllByRole('option')[3]?.querySelector('.st-combo-value')?.textContent).toBe('opus')
     expect((screen.getByLabelText(PROVIDER_TEXT.key) as HTMLInputElement).type).toBe('password')
   })
 
@@ -149,7 +151,7 @@ describe('ClaudeProviderCard', () => {
       expect((await screen.findByRole('tooltip')).textContent).toContain(PROVIDER_TEXT.noChanges)
       typeKey()
       expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
-      fireEvent.click(screen.getByRole('button', { name: PROVIDER_TEXT.modes.login }))
+      fireEvent.click(screen.getByRole('radio', { name: PROVIDER_TEXT.modes.login }))
       expect(saveButton(PROVIDER_TEXT.save).disabled).toBe(false)
     })
 

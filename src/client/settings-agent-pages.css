@@ -1,0 +1,61 @@
+/* Settings › Claude and Settings › Central: page notices (SettingsMessage), the card footer row for
+   explicit-save forms (provider key, launch command, automation token) and the read-only result lines. */
+
+/* ------------------------------------------------------------- notices */
+.st-message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--st-card-border);
+  border-radius: var(--st-card-radius, 8px);
+  background: var(--st-card-background);
+  font-size: 12px;
+}
+
+.st-message-text { flex: 1 1 200px; min-width: 0; }
+.st-message--error { border-color: var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground, var(--destructive))); }
+.st-message--error > .codicon { color: var(--vscode-errorForeground, var(--destructive)); }
+.st-message--warning > .codicon { color: var(--vscode-editorWarning-foreground, #cca700); }
+.st-message--loading { color: var(--vscode-descriptionForeground, var(--muted)); }
+
+/* A notice inside a card row sits flush with the row text. */
+.st-group-card .st-message { margin: 0; }
+
+/* --------------------------------------------------------- card footer */
+/* Save / Test / Remove of a form that saves on a button (GitHub settings forms), right-aligned. */
+.st-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.st-group-card > * + .st-actions { border-top: 1px solid var(--st-card-border); }
+.st-actions-status { margin-right: auto; font-size: 12px; color: var(--vscode-descriptionForeground, var(--muted)); }
+.st-actions-status--warning { color: var(--vscode-editorWarning-foreground, #cca700); }
+
+/* Rows of read-only facts in a card (what Claude starts with, the connection test result). */
+.st-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+
+.st-group-card > * + .st-facts { border-top: 1px solid var(--st-card-border); }
+.st-facts p { margin: 0; }
+.st-facts code { word-break: break-all; }
+
+/* A password / command box in the right column: the shared control width. */
+.st-control > .st-input-wide { width: var(--st-control-width, 240px); max-width: 100%; }
+.st-field--block .st-control > .st-input-wide { width: 100%; }
+
+/* Custom agent cards: empty state inside the card. */
+.st-empty { margin: 0; padding: 10px 14px; color: var(--vscode-descriptionForeground, var(--muted)); font-size: 12px; }
