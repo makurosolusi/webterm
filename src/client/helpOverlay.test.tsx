@@ -29,7 +29,10 @@ const chips = (label: string) => Array.from(row(label).querySelectorAll('kbd')).
 
 describe('HelpOverlay', () => {
   it('is generated from the command registry: one row per registered command', () => {
+    const offWs = registerCommands([{ id: 'handoff.continue.w1', label: 'Agents: Continue from yesterday in api', bindable: false, run: open }])
     render(<HelpOverlay onClose={() => {}} platform="Linux x86_64" />)
+    expect(screen.queryByText('Agents: Continue from yesterday in api')).toBeNull() // per-workspace: palette only
+    offWs()
     expect(screen.getByRole('dialog', { name: HELP_TEXT.title })).not.toBeNull()
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Command', 'Keybinding'])
     // App commands registered here + the surface-owned shortcuts registered on import, + header row.
@@ -64,13 +67,13 @@ describe('HelpOverlay', () => {
     expect(row('Search: Find in Files').querySelector('[data-slot="help-conflict"]')?.textContent).toBe(`${HELP_TEXT.conflict}Go to File…`)
     expect(row('Go to File…').querySelector('[data-slot="help-conflict"]')?.textContent).toBe(`${HELP_TEXT.conflict}Search: Find in Files`)
     // The Files-node ⌘P is another scope: no conflict note there.
-    expect(row('Files: Go to File in This Folder (focused Files node)').querySelector('[data-slot="help-conflict"]')).toBeNull()
+    expect(row('Files: Go to File in This Folder').querySelector('[data-slot="help-conflict"]')).toBeNull()
   })
 
   it('Escape while recording cancels the recording, not the overlay; fixed rows are not editable', () => {
     const onClose = vi.fn()
     render(<HelpOverlay onClose={onClose} platform="Linux" />)
-    expect(row('File: Save (editor node)').querySelector('button')).toBeNull()
+    expect(row('File: Save').querySelector('button')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: `${HELP_TEXT.change}: Go to File…` }))
     act(() => { fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' }) })
     expect(onClose).not.toHaveBeenCalled()

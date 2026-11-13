@@ -14,7 +14,7 @@ export interface HandoffAgent { nodeId: string; title: string; card: HandoffCard
 export interface HandoffWorkspace { id: string; name: string; agents: HandoffAgent[] }
 interface ContinueReply { results: Array<{ nodeId: string; injected: boolean; skipped?: string }> }
 
-/** Loads the workspaces with resumable agents and registers one ⌘K command per workspace. */
+/** Loads the workspaces with resumable agents and registers one ⌘K command per workspace (palette only: not bindable). */
 export function useContinue(onOpenWorkspace?: (workspaceId: string) => void) {
   const [workspaces, setWorkspaces] = useState<HandoffWorkspace[]>([])
   const [status, setStatus] = useState<Record<string, string>>({})
@@ -46,7 +46,7 @@ export function useContinue(onOpenWorkspace?: (workspaceId: string) => void) {
   }, [load])
 
   const commands = useMemo<Command[]>(() => workspaces.map((ws) => ({
-    id: `handoff.continue.${ws.id}`, label: `Agents: Continue from yesterday in ${ws.name}`, run: () => resume(ws),
+    id: `handoff.continue.${ws.id}`, label: `Agents: Continue from yesterday in ${ws.name}`, bindable: false, run: () => resume(ws),
   })), [workspaces, resume])
   useRegisterCommands(commands)
 

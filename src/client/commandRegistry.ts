@@ -31,6 +31,8 @@ export interface Command {
   fixed?: boolean
   /** Hidden from the palette (still in the overlay). */
   hidden?: boolean
+  /** `false` for per-instance palette entries (one per workspace...): never listed in Keyboard Shortcuts or bound. */
+  bindable?: false
   run?: () => void
 }
 
@@ -121,6 +123,7 @@ export const chordLabel = (chord: string, isMac: boolean): string => chordKeys(c
 
 /** The chord a command answers to: user override (`null` = removed) over its default. */
 export function effectiveKey(cmd: Command, overrides: KeybindingOverrides, isMac: boolean = isMacPlatform()): string | undefined {
+  if (cmd.bindable === false) return undefined // a stale override cannot bind a per-instance command
   if (!cmd.fixed && Object.hasOwn(overrides, cmd.id)) return overrides[cmd.id] ? normalizeChord(overrides[cmd.id] as string, isMac) : undefined
   return cmd.defaultKey ? normalizeChord(cmd.defaultKey, isMac) : undefined
 }
