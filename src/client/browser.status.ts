@@ -25,10 +25,11 @@ const ERROR_TEXT: Record<BrowserErrorCode, string> = {
   too_large: 'Too large to send.',
   bad_request: 'The server rejected that input.',
   crashed: 'The page crashed. Reload to try again.',
+  launch_failed: "The browser couldn't start. Try again.",
 }
 
 /** Kode galat yang tidak hilang sendiri (butuh tindakan operator/pengguna). */
-export const STICKY_ERRORS: ReadonlySet<BrowserErrorCode> = new Set(['no_binary', 'disabled', 'crashed'])
+export const STICKY_ERRORS: ReadonlySet<BrowserErrorCode> = new Set(['no_binary', 'disabled', 'crashed', 'launch_failed'])
 
 export interface BrowserNotice { tone: 'info' | 'error'; text: string }
 
@@ -78,6 +79,8 @@ const NET_ERRORS: Record<string, NetErrorText> = {
 }
 const CERT_ERROR = net('Your connection is not private', UNTRUSTED)
 const UNKNOWN = net("This page couldn't load", '')
+/** Chromium did not start (e.g. its profile is still held by a leftover process); Try again relaunches it. */
+const LAUNCH_FAILED = net("The browser couldn't start", 'Chromium stopped before it was ready. If this keeps happening, restart webterm.')
 
 /**
  * Plate text for a Chromium net error name ("net::ERR_NAME_NOT_RESOLVED"); null for ERR_ABORTED (the user,
@@ -105,6 +108,8 @@ const NEVER_OFFER = /^(169\.254\.|\[?fe[89ab][0-9a-f]:)/i
 export function noticeAction(i: { state?: BrowserState; error?: BrowserErr; target?: string }): NoticeAction | null {
   const code = i.state?.blocked ?? i.error?.code
   if (code === 'no_binary' || code === 'disabled') return { kind: 'offer' }
+  // Same plate as a failed navigation: it covers the start page, which hid the old text notice.
+  if (code === 'launch_failed') return { kind: 'netError', code, ...LAUNCH_FAILED }
   const ne = !code && i.state?.netError
   const text = ne ? netErrorText(ne) : null
   if (ne && text) return { kind: 'netError', code: ne, host: i.state?.url ? hostOnly(i.state.url) : undefined, ...text }

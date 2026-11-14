@@ -7,6 +7,7 @@ import { newRec, pushFrame } from './browserHost.targets'
 import { CDP, CDP_EVENT } from './cdp.client'
 import { DENIED_PERMISSIONS } from './chromium.flags'
 import { LaunchError } from './chromium.launch'
+import { logBus } from '../logs'
 import { makeHostRig, SILENT, stubGuard, waitFor } from './fakeCdp.testkit'
 
 type Rig = Awaited<ReturnType<typeof makeHostRig>>
@@ -75,6 +76,20 @@ describe('open', () => {
     const host = new BrowserHost({ guard: stubGuard(), launcher: { acquire: async () => { throw new LaunchError('no_binary', 'none') }, shutdown: () => undefined } })
     await expect(host.open('n9', 'w1', 'https://example.com/')).rejects.toMatchObject({ name: 'BrowserError', code: 'no_binary' })
     expect(host.state('n9')?.blocked).toBe('no_binary')
+  })
+
+  it('a failed launch -> launch_failed (warn log with ids + code); Reload, the plate retry, relaunches', async () => {
+    rig = await makeHostRig()
+    logBus.clear()
+    let n = 0
+    const acquire = async () => { if (++n === 1) throw new LaunchError('profile_locked', 'held'); return rig.fake.url }
+    const host = new BrowserHost({ guard: stubGuard(), launcher: { acquire, shutdown: () => undefined } })
+    await expect(host.open('n9', 'w1')).rejects.toMatchObject({ name: 'BrowserError', code: 'launch_failed' })
+    const warn = logBus.snapshot().find((e) => e.event === 'browser.launch_failed')
+    expect(warn).toMatchObject({ level: 'warn', ids: { workspaceId: 'w1', nodeId: 'n9' }, data: { code: 'profile_locked' } })
+    await host.navAction('n9', 'reload')
+    expect(host.state('n9')?.live).toBe('live')
+    await host.dispose()
   })
 
   it('retries the connection on the next open after a launcher failure', async () => {

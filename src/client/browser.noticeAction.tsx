@@ -3,7 +3,7 @@
 //   jadi kolom lokasi Chromium muncul di tempat, bukan teks "atur lewat Pengaturan".
 // - `allowHost`: alamat privat diblokir -> "Izinkan host:port" menulis allowlist Pengaturan lalu membuka ulang.
 // - `netError`: navigasi gagal -> plate menutupi halaman galat mentah Chromium (judul, host, petunjuk, Try again = reload).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
 import { allowBrowserHosts } from './browser.api'
@@ -26,11 +26,14 @@ const BOX = 'nodrag nowheel absolute bottom-12 left-2 z-10 flex max-w-80 flex-co
 const PLATE = 'nodrag nowheel absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 p-4 text-center text-xs ' +
   'bg-(--vscode-editor-background) text-(--vscode-foreground)'
 const TRY_AGAIN = 'Try again'
+const RETRYING = 'Trying again…'
 
 export default function BrowserNoticeAction({ state, error, target, nav }: NoticeActionProps) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  // A retry ends when the server answers with a new state or error (busy only for the plate's Try again here).
+  useEffect(() => { setBusy(false) }, [state, error])
   const action = noticeAction({ state, error, target })
   if (!action) return null
   if (action.kind === 'netError') {
@@ -40,7 +43,9 @@ export default function BrowserNoticeAction({ state, error, target, nav }: Notic
         {action.host && <p className="m-0 opacity-80">{action.host}</p>}
         {action.hint && <p className="m-0 opacity-80">{action.hint}</p>}
         <p className="m-0 font-mono opacity-60">{action.code}</p>
-        {action.retryable && <Button size="xs" variant="secondary" onClick={() => nav('reload')}>{TRY_AGAIN}</Button>}
+        {action.retryable && (
+          <Button size="xs" variant="secondary" disabled={busy} onClick={() => { setBusy(true); nav('reload') }}>{busy ? RETRYING : TRY_AGAIN}</Button>
+        )}
       </div>
     )
   }

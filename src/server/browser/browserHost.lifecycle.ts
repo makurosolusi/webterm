@@ -102,7 +102,11 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     } catch (err) {
       const noBin = err instanceof LaunchError && err.code === 'no_binary'
       if (noBin) ops.patch(rec, { blocked: 'no_binary' })
-      throw new BrowserError(noBin ? 'no_binary' : 'crashed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err)
+      // Without this line a failed launch left only a stream of info "chromium exited" in the log.
+      else log.warn('browser.launch_failed', 'browser could not start for this node', {
+        ids: { workspaceId, nodeId }, code: err instanceof LaunchError ? err.code : err instanceof Error ? err.name : typeof err,
+      })
+      throw new BrowserError(noBin ? 'no_binary' : 'launch_failed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err)
     }
     const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
     table.bind(rec, targetId, sessionId)
