@@ -7,6 +7,8 @@ import { ENV_BROWSER } from '../../shared/browser.contract'
 import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
 import { childEnv } from '../childEnv'
+import { lockHolder, reclaimProfile } from './chromium.profileLock'
+import type { ProfileLockDeps } from './chromium.profileLock'
 
 const log = createLogger('browser.launch')
 export const START_TIMEOUT_MS = 20_000
@@ -95,7 +97,7 @@ export function chromiumCandidates(
 }
 
 export class LaunchError extends Error {
-  constructor(readonly code: 'no_binary' | 'sandbox_unavailable' | 'launch_failed', message: string, cause?: unknown) {
+  constructor(readonly code: 'no_binary' | 'sandbox_unavailable' | 'launch_failed' | 'profile_locked', message: string, cause?: unknown) {
     super(message, cause === undefined ? undefined : { cause })
     this.name = 'LaunchError'
   }
@@ -138,7 +140,7 @@ export interface ChildLike {
   once(ev: 'exit' | 'error', cb: (...a: any[]) => void): unknown // eslint-disable-line @typescript-eslint/no-explicit-any
   kill(sig?: NodeJS.Signals): boolean
 }
-export interface LaunchDeps {
+export interface LaunchDeps extends ProfileLockDeps {
   spawn?: (bin: string, args: string[]) => ChildLike
   readFile?: (path: string) => string | null
   sleep?: (ms: number) => Promise<void>
@@ -146,6 +148,7 @@ export interface LaunchDeps {
 }
 export interface Launched { wsUrl: string; kill(): void }
 
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 const defaultRead = (p: string): string | null => (existsSync(p) ? readFileSync(p, 'utf8') : null)
 // Filtered env (sec-208-7): the browser and anything it launches never inherit the server's secrets.
 const defaultSpawn = (bin: string, args: string[]): ChildLike => nodeSpawn(bin, args, { env: childEnv(), stdio: ['ignore', 'ignore', 'pipe'] })
@@ -156,7 +159,7 @@ export async function launchChromium(
   deps: LaunchDeps = {},
 ): Promise<Launched> {
   const read = deps.readFile ?? defaultRead
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+  const sleep = deps.sleep ?? defaultSleep
   mkdirSync(o.profileDir, { recursive: true, mode: PROFILE_DIR_MODE })
   const portFile = join(o.profileDir, ACTIVE_PORT_FILE)
   rmSync(portFile, { force: true }) // berkas basi dari proses lama menipu pembacaan port
@@ -178,6 +181,10 @@ export async function launchChromium(
     if (exited) {
       // stderr hanya dicocokkan, tidak pernah di-log mentah (bisa memuat path/URL).
       const sandbox = /sandbox/i.test(stderrTail)
+      const holder = sandbox ? null : lockHolder(o.profileDir, deps)
+      if (holder !== null && holder !== child.pid) {
+        throw new LaunchError('profile_locked', `Chromium profile is still locked by another process (pid ${holder})`, spawnError ?? undefined)
+      }
       throw new LaunchError(sandbox ? 'sandbox_unavailable' : 'launch_failed',
         sandbox ? 'browser_sandbox_unavailable: Chromium sandbox cannot start (no automatic --no-sandbox)' : 'Chromium exited before DevTools was ready',
         spawnError ?? undefined)
@@ -214,8 +221,12 @@ export function createChromiumPool(cfg: {
           const bin = resolveBinary(cfg.env, cfg.exists)
           const headless = headlessReason(cfg.env, cfg.platform)
           if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { workspaceId } })
+          const profileDir = profileDirFor(cfg.dataRoot, workspaceId)
+          // Not in `live` = no Chromium of this pool owns the profile; a holder is a leftover of an earlier run.
+          const reclaimed = await reclaimProfile(profileDir, KILL_GRACE_MS, cfg.deps?.sleep ?? defaultSleep, cfg.deps)
+          if (reclaimed !== null) log.warn('browser.profile_reclaimed', 'reclaimed the workspace profile from a stale Chromium', { ids: { workspaceId }, pid: reclaimed })
           return launchChromium({
-            bin, profileDir: profileDirFor(cfg.dataRoot, workspaceId), proxyServer: cfg.proxyServer(), headless: headless !== null,
+            bin, profileDir, proxyServer: cfg.proxyServer(), headless: headless !== null,
             onExit: () => { live.delete(workspaceId); log.info('browser.exit', 'chromium exited', { ids: { workspaceId } }) },
           }, cfg.deps)
         })()
