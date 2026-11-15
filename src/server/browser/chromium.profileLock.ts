@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { readlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { childEnv } from '../childEnv'
 import { isProcessAlive } from '../instanceFile'
 
 export const SINGLETON_LOCK = 'SingletonLock'
@@ -33,7 +34,7 @@ const defaultReadLock = (lockPath: string): string | null => {
 const run = promisify(execFile)
 const defaultCommandOf = async (pid: number): Promise<string | null> => {
   try {
-    return (await run('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' })).stdout.trim() || null
+    return (await run('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', env: childEnv() })).stdout.trim() || null
   } catch (err) {
     if ((err as { code?: unknown }).code === 1) return null // ps exits 1 when the pid no longer exists
     throw new Error(`cannot read the command line of pid ${pid}`, { cause: err })
