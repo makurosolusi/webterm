@@ -79,7 +79,9 @@ test('a --compile binary of the entry answers --version and --bogus, and starts 
   const box = sandbox()
   const out = join(box.home, 'webterm-bin')
   const build = spawnSync(process.execPath, ['build', '--compile', '--no-compile-autoload-bunfig', '--external', 'vite', '--outfile', out, ENTRY], { encoding: 'utf8', timeout: COMPILE_TIMEOUT_MS })
-  expect(build.status).toBe(0)
+  // Surface bun's stderr: a bare "1 !== 0" hid that a stale gitignored distAssets.generated.ts (it points at
+  // dist/ hashes that a later `vite build` replaced) was the cause. Fix: `bun run build` regenerates it.
+  if (build.status !== 0) throw new Error(`bun build --compile exited ${build.status}:\n${build.stderr}${build.stdout}\n(stale distAssets.generated.ts? run \`bun run build\`)`)
   const v = run([out], ['--version'])
   expect(v.code).toBe(0)
   expect(v.out).toContain(`webterm ${pkg.version} (`)
