@@ -6,15 +6,16 @@ Panduan singkat bekerja di repo **webterm**. Sengaja ramping.
 
 **webterm** — node-based terminal manager untuk web channel: banyak shell nyata jadi node
 xterm drag-able di canvas pan/zoom (React Flow v12). Tiap workspace (nama + cwd + layout)
-dipersist server-side di SQLite (`bun:sqlite`), jadi board bertahan lintas restart. Rewrite
-ramping berbasis **Bun** dari nodeterm (`src/client` + `src/server` + `src/shared`, TANPA
-`src/core`). Fork dari nodeterm upstream (lisensi **BUSL-1.1**).
+dipersist server-side di SQLite (`bun:sqlite`), jadi board bertahan lintas restart. Berbasis
+**Bun** (`src/client` + `src/server` + `src/shared`, TANPA `src/core`). webterm dibuat dari
+nol sebagai project baru: BUKAN fork dan BUKAN turunan repo nodeterm, hanya terinspirasi
+nodeterm. nodeterm (lisensi **BUSL-1.1**) adalah repo referensi.
 
 ## Identitas vs protokol (PENTING)
 
 webterm entitas berbeda dari nodeterm (nodeterm disempurnakan untuk kebutuhan web channel).
 Permukaan **terlihat** pakai nama `webterm`. Yang **tetap `nodeterm`** demi wire-protocol &
-kompat upstream — JANGAN rename tanpa perintah eksplisit:
+kompat protokol dengan nodeterm — JANGAN rename tanpa perintah eksplisit:
 
 - env var sesi agent `NODETERM_NODE_ID`, `NODETERM_PORT`; header `x-nodeterm-node-token`
 - nama event/channel `nodeterm:`

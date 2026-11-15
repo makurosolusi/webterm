@@ -41,8 +41,8 @@ per node, dijalankan di server Bun.**
   `--input-format stream-json --output-format stream-json` + `--permission-prompt-tool` (tool MCP webterm
   yang menahan jawaban sampai user klik), Stop = tutup proses + `--resume`. Tidak ada improvisasi ketiga.
 
-**D3. Mitigasi alasan upstream membuang node chat SDK** (`nodeterm-web/CLAUDE.md.bak:2596`, 2026-07):
-1. *Binary native ~240–320 MB per platform*: upstream adalah app Electron yang mengemas binary itu ke
+**D3. Mitigasi alasan nodeterm membuang node chat SDK** (`nodeterm-web/CLAUDE.md.bak:2596`, 2026-07):
+1. *Binary native ~240–320 MB per platform*: nodeterm adalah app Electron yang mengemas binary itu ke
    installer. webterm server Bun yang memakai CLI terpasang lewat `spawnClaudeCodeProcess`, jadi binary
    bundled tidak dipakai dan tidak dikirim ke siapa pun. S0 membuktikan SDK jalan tanpa binary bundled; bila
    paket optional tetap terunduh, biayanya hanya disk `node_modules` (dicatat di docs).
@@ -122,7 +122,7 @@ LATER: rewind/fork, @-mention file, komentar inline di plan, pre-warm.
 
 | Risiko | Mitigasi | Bukti test |
 |---|---|---|
-| Paritas fitur setengah (penyebab dugaan upstream) | Lingkup MUST di §3 = paritas inti VS Code; SHOULD dijadwalkan, bukan dilupakan | checklist W3 |
+| Paritas fitur setengah (penyebab dugaan di nodeterm) | Lingkup MUST di §3 = paritas inti VS Code; SHOULD dijadwalkan, bukan dilupakan | checklist W3 |
 | `env` SDK mengganti env → PATH/auth hilang | builder merge `process.env`+profil+identitas | unit builder |
 | Profil wrapper (envman) rusak oleh argv SDK | spawn hook; argv profil di depan | unit + S0 nyata |
 | `canUseTool` menggantung (WS putus) | broker server + replay + abort; restart → expired | bun test broker |
