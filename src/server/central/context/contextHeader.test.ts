@@ -151,11 +151,13 @@ describe('state header: time and open work', () => {
     expect(rich(buildStateHeader(f.db, 'central:global', NOW)).work[0]?.open).toHaveLength(8)
   })
 
+  // 40 projects x 3 assignments is already far past the cap (the shrink drops all detail); each task() is a real ledger write (~0.6 ms), so
+  // the old 8 per project cost ~200 ms alone and blew the 5 s default when the full suite ran in parallel.
   it('shrinks detail first and is deterministic: time, needsYou and viewing survive any load', () => {
     workspaces = Array.from({ length: 60 }, (_, i) => ({ id: `ws-${i}`, name: `${'n'.repeat(55)}${i}`, nodes: [] }))
     active = 'ws-7'
     buildStateHeader(f.db, 'central:global', NOW)
-    for (let i = 0; i < 40; i += 1) for (let j = 0; j < 8; j += 1) task(`ws-${i}`, j === 0 ? 'stalled' : 'running', `node-${i}-${j}`, `${'t'.repeat(70)}${j}`)
+    for (let i = 0; i < 40; i += 1) for (let j = 0; j < 3; j += 1) task(`ws-${i}`, j === 0 ? 'stalled' : 'running', `node-${i}-${j}`, `${'t'.repeat(70)}${j}`)
     const text = buildStateHeader(f.db, 'central:global', NOW)
     const header = rich(text)
     expect(text.length).toBeLessThanOrEqual(HEADER_MAX_CHARS)

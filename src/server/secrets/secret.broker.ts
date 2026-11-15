@@ -100,11 +100,25 @@ function runChild(argv: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs
       })
     }
     const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL') }, timeoutMs)
-    child.on('error', (err: NodeJS.ErrnoException) => { clearTimeout(timer); done({ spawnError: err.code ?? 'spawn_failed' }) })
-    child.on('close', (code) => {
+    let finished = false
+    const finish = (code: number | null): void => {
+      if (finished) return
+      finished = true
       clearTimeout(timer)
+      clearInterval(watchdog)
       done({ exitCode: code, stdout: Buffer.concat(bufs.stdout).toString('utf8'), stderr: Buffer.concat(bufs.stderr).toString('utf8'), timedOut, truncated })
-    })
+    }
+    // Workaround: under heavy parallel load Bun sometimes sets `exitCode` on a fast-exiting child yet never
+    // emits 'exit'/'close' (observed: ~2 in 24 parallel runs of `true`; the run then hangs to the 120 s timeout).
+    // Poll the state Bun does keep; the grace tick lets already-buffered output drain. Remove once Bun emits reliably.
+    let seenDead = false
+    const watchdog = setInterval(() => {
+      if (child.exitCode === null && child.signalCode === null) return
+      if (seenDead) finish(child.exitCode)
+      seenDead = true
+    }, 250)
+    child.on('error', (err: NodeJS.ErrnoException) => { if (finished) return; finished = true; clearTimeout(timer); clearInterval(watchdog); done({ spawnError: err.code ?? 'spawn_failed' }) })
+    child.on('close', (code) => finish(code))
   })
 }
 
