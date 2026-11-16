@@ -20,7 +20,7 @@ import { linkNoteTold } from './linkNoteDelivery'
 import { outboxHookContext } from './outbox/outboxRuntime'
 import { awarenessExtras } from './awareness/awarenessHook'
 import { transcriptPathAllowed } from './transcriptPath'
-import { MAX_HOOK_BODY_BYTES, readHookBody } from './agentStatusBody'
+import { MAX_HOOK_BODY_BYTES, readHookBody, sendHookReply, TRUNCATED_HEADER } from './agentStatusBody'
 import { createLogger } from './logs'
 import { produceHookEvent } from './events/producers'
 import { stashHookStop } from './agentStatusStash'
@@ -44,8 +44,7 @@ export const TRANSCRIPT_PATH_MAX = 4096
 
 export { MAX_HOOK_BODY_BYTES }
 
-/** Response header that flags a hook body read only up to its cap. */
-export const TRUNCATED_HEADER = 'x-webterm-truncated'
+export { TRUNCATED_HEADER }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
@@ -143,13 +142,6 @@ export async function agentStatusRoute(
     const answer = await deps.answerPermission({ nodeId: node, nodeTitle: title, workspaceId: ws?.id ?? null, body, signal: gone.signal, ...(mode ? { mode } : {}) })
     if (answer) Object.assign(out, answer.hookSpecificOutput)
   }
-  const reply = Object.keys(out).length > 0 ? { hookSpecificOutput: { hookEventName: event, ...out } } : {}
-  // The oversize marker rides a header, not the body: Claude Code documents only its own schema for a hook reply,
-  // so the body stays exactly the normal reply (or the body-less 204). Nothing reads the header; it is for logs/curl.
-  if (oversize) res.setHeader(TRUNCATED_HEADER, '1')
-  if (Object.keys(out).length > 0) {
-    json(res, 200, reply)
-    return true
-  }
-  res.statusCode = 204; res.end(); return true
+  sendHookReply(res, out, event, oversize)
+  return true
 }

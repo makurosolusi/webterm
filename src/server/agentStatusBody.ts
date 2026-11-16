@@ -1,7 +1,7 @@
 // Body intake for `POST /api/agent-status`. A hook body past the hard cap is NOT rejected: the
 // status/result of a finished turn matters more than its payload, so only a bounded prefix is kept
 // and the small fields a status needs are scanned out of it (agentStatusPrefix.ts).
-import type { IncomingMessage } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { HookStatusBody } from './hookStatus'
 import { scanHookPrefix } from './agentStatusPrefix'
 
@@ -57,4 +57,23 @@ export function readHookBody(req: IncomingMessage): Promise<HookBodyRead> {
     req.on('end', onEnd)
     req.on('error', onError)
   })
+}
+
+/** Response header that flags a hook body read only up to its cap. */
+export const TRUNCATED_HEADER = 'x-webterm-truncated'
+
+/** Sends the hook reply: 200 JSON when `out` has content, else the body-less 204; flags an oversize body via a header. */
+export function sendHookReply(res: ServerResponse, out: Record<string, unknown>, event: unknown, oversize: boolean): void {
+  const reply = Object.keys(out).length > 0 ? { hookSpecificOutput: { hookEventName: event, ...out } } : {}
+  // The oversize marker rides a header, not the body: Claude Code documents only its own schema for a hook reply,
+  // so the body stays exactly the normal reply (or the body-less 204). Nothing reads the header; it is for logs/curl.
+  if (oversize) res.setHeader(TRUNCATED_HEADER, '1')
+  if (Object.keys(out).length > 0) {
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(reply))
+    return
+  }
+  res.statusCode = 204
+  res.end()
 }
