@@ -149,6 +149,7 @@ export const RETENTION: Record<string, RetentionEntry> = {
   central_checkpoint: exempt('conversation context state, replaced per conversation'),
   central_state: exempt('one capped document per scope, overwritten in place; project rows cascade with their project'),
   central_breaker: exempt('one row per breaker key'),
+  connectivity_episode: exempt('bounded by its own module (connectivity.store.ts: 30 days and EPISODE_MAX_ROWS)'),
   bakeoff: exempt('human-started runs that own worktree cleanup state'),
   bakeoff_candidate: exempt('children of bakeoff'),
   eval_case: exempt('curated eval dataset'),
