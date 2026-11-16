@@ -13,6 +13,7 @@ import { createPolicy, isDestructive, type Policy } from '../../policy/policy.de
 import type { Classifier, GatedOutcome } from '../../policy/policy.classifier'
 import type { AppendEventInput } from '../../events/eventModel'
 import { classifyGuardCall } from './guardClassifier'
+import { taintNeedsApproval } from './taintClassify'
 
 /** I11: concurrent workers per project and across the whole server. */
 export const MAX_WORKERS_PER_PROJECT = 3
@@ -159,6 +160,8 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
       if (d.effect === 'deny') return deny('policy_denied', d.reason)
       if (d.effect === 'ask') { askRule = d.ruleId; return { verdict: 'needs_approval', level, tier } }
     }
+    // Taint: a Central conversation that read untrusted web content asks a human before any impactful tool (taintClassify.ts).
+    if (req.action !== 'turn' && taintNeedsApproval(req, now())) return { verdict: 'needs_approval', level, tier, tainted: true }
     return ladder.verdict === 'needs_approval' ? { verdict: 'needs_approval', level, tier } : { verdict: 'allow', level }
   }
 
@@ -167,19 +170,21 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     policy,
     effectiveLevel,
     recordUsage: (usage) => addUsage(db, usage, now),
-    classifyLater: (req, decision) => classifyGuardCall({
+    // A tainted ask is never delegated to the classifier: a model must not wave through what untrusted data may have steered.
+    classifyLater: (req, decision) => (decision.verdict === 'needs_approval' && decision.tainted ? Promise.resolve(null) : classifyGuardCall({
       db, now, policy, ...(deps.classifier ? { classifier: deps.classifier } : {}), ...(deps.record ? { record: deps.record } : {}),
-    }, { ...req, destructive: isDestructive(req.tool) }, decision),
+    }, { ...req, destructive: isDestructive(req.tool) }, decision)),
     skipsApprovals,
     check(req) {
       const level = effectiveLevel(req.projectId)
       const judged = judge(req, level)
       const skipped = judged.verdict === 'needs_approval' && skipsApprovals(req.projectId)
       const decision: GuardDecision = skipped ? { verdict: 'allow', level } : judged
+      const tainted = judged.verdict === 'needs_approval' && judged.tainted ? { code: 'tainted' } : {}
       const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : skipped ? { skipped: true, ...(askRule ? { rule: askRule } : {}) } : {}
       appendEvent({ db, now }, {
         actor: 'guard', kind: GUARD_AUDIT_KIND, ...projectRef(db, req.projectId),
-        payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code },
+        payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code, ...tainted },
       })
       return decision
     },
@@ -196,7 +201,7 @@ function canonical(value: unknown): string {
 }
 
 /** Request/verdict shapes of the WS-03 registry port (`tools/toolTypes.ts`), kept structural on purpose. */
-export interface ToolGuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown> }
+export interface ToolGuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown>; conversationId?: string }
 export type ToolGuardVerdict = { ok: true } | { ok: false; code: string }
 
 /**
@@ -210,10 +215,11 @@ export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean;
       try {
         const digest = createHash('sha256').update(`${req.tool}\n${canonical(req.input)}`).digest('hex').slice(0, 32)
         const action = guardActionOf(req.tool)
-        const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest })
+        const url = typeof req.input.url === 'string' ? req.input.url : undefined
+        const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest, ...(req.conversationId ? { conversationId: req.conversationId } : {}), ...(url !== undefined ? { url } : {}) })
         if (d.verdict === 'allow' || (d.verdict === 'needs_approval' && opts.approved)) return { ok: true }
         // F4-d: off by default; never blocks the caller, a failure leaves the card for the human.
-        if (d.verdict === 'needs_approval') guard.classifyLater?.(req, d).catch((err: unknown) => opts.onError?.(err))
+        if (d.verdict === 'needs_approval' && !d.tainted) guard.classifyLater?.(req, d).catch((err: unknown) => opts.onError?.(err))
         return { ok: false, code: d.verdict === 'deny' ? d.code : 'approval_required' }
       } catch (err) {
         opts.onError?.(err)

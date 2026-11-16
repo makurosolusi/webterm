@@ -28,6 +28,10 @@ export interface GuardRequest {
   tier: Tier
   /** Stable digest of the proposal, for doom-loop detection. */
   digest?: string
+  /** Central conversation making the call; set only on Central's own tool path, it is what taint is keyed by. */
+  conversationId?: string
+  /** `url` input of a browser tool, for the taint navigation rule. */
+  url?: string
 }
 
 /** Why the guard refused or deferred. */
@@ -49,7 +53,8 @@ export type GuardCode =
 /** `allow` runs now, `needs_approval` becomes an approval card, `deny` stops with a code. */
 export type GuardDecision =
   | { verdict: 'allow'; level: ControlLevel }
-  | { verdict: 'needs_approval'; level: ControlLevel; tier: Tier }
+  /** `tainted`: the ask is because the conversation read untrusted web content (never auto-approved by the classifier). */
+  | { verdict: 'needs_approval'; level: ControlLevel; tier: Tier; tainted?: true }
   | { verdict: 'deny'; level: ControlLevel; code: GuardCode; reason: string }
 
 /** Usage added to `central_budget` for the current UTC day. */

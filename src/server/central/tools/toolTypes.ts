@@ -16,7 +16,7 @@ export type ToolValidationCode = 'forbidden_key' | 'project_required' | 'project
 /** Every code `execTool` can return itself, on top of handler-specific codes. */
 export type ToolCode = ToolValidationCode | 'unknown_tool' | 'flag_off' | 'tier_denied' | 'guard_denied'
 
-export interface GuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown> }
+export interface GuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown>; conversationId?: string }
 export type GuardVerdict = { ok: true } | { ok: false; code: string }
 /** Port to the server-side control guard (level, budget, breaker); injected, mocked in tests. */
 export interface ControlGuard {
