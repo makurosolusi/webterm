@@ -9,7 +9,7 @@ import { panicSnapshotAll } from '../checkpoint/checkpoint.service'
 import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
-import { type SkillAction, closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
+import { type SkillAction, closeAgent, closeAllAgents, createSkill, relayAgent, skillAction } from './ca2Routes.act'
 import { agentsView, memoryView, skillsView, statusView } from './ca2Routes.read'
 import { type BoardDeps, nodesView } from './ca2Routes.nodes'
 import { isMemoryPath, memoryDispatch } from './ca2Routes.memory'
@@ -56,6 +56,7 @@ export async function ca2Dispatch(
     '/status': () => statusView(h), '/memory': () => memoryView(h, query),
     '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query), '/tools': () => toolsView(h),
   }
+  if (path === `${BASE}/skills` && method === 'POST') return createSkill(h, await req.body(), actor)
   const read = reads[path.slice(BASE.length)]
   if (read) return method === 'GET' ? read() : notAllowed
   const agent = AGENT_ACTION.exec(path)

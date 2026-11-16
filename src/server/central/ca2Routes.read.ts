@@ -126,7 +126,8 @@ export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
     const text = recordText(h.skillsRoot, record)
     const lint = text === null ? null : lintSkill(text, { expectedName: record.name })
     return {
-      record, diff: text === null || record.status === 'active' ? '' : redactSecrets(lineDiff(activeText(h, record.name) ?? '', text)).slice(0, MAX_TEXT * 10),
+      // description/body feed the Skills library (read-only view of the draft or active text).
+      record, description: lint?.meta?.description ?? '', body: redactSecrets(lint?.body ?? '').slice(0, MAX_TEXT * 10), diff: text === null || record.status === 'active' ? '' : redactSecrets(lineDiff(activeText(h, record.name) ?? '', text)).slice(0, MAX_TEXT * 10),
       canRollback: record.status === 'active' && record.origin !== 'builtin' && archived.some((a) => a.name === record.name && Number(a.version) < Number(record.version)),
       lint: { ok: lint?.ok ?? false, findings: lint ? lint.issues.map((i) => clip(typeof i === 'string' ? i : JSON.stringify(i))) : ['draft_missing'] },
       confirmPhrase: confirmPhrase(record.name, record.version),
