@@ -11,7 +11,7 @@ process.env.WEBTERM_DATA_DIR = join(SANDBOX, 'data')
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Workspace } from '../shared/workspace'
 import { nodeToken, NODE_TOKEN_HEADER } from './hooks'
-import { agentStatusRoute, MAX_HOOK_BODY_BYTES, type AgentStatusDeps } from './agentStatusApi'
+import { agentStatusRoute, MAX_HOOK_BODY_BYTES, TRUNCATED_HEADER, type AgentStatusDeps } from './agentStatusApi'
 import { readHookBody } from './agentStatusBody'
 import { scanHookPrefix } from './agentStatusPrefix'
 import { readCappedBody } from './channels/channelHttp'
@@ -40,13 +40,14 @@ function req(body: string | Buffer, headers: Record<string, string> = { [NODE_TO
   return r
 }
 
-const res = (): ServerResponse & { body: string } => {
-  const o = { statusCode: 0, body: '', setHeader() {}, end(c?: string) { o.body = c ?? '' } }
-  return o as unknown as ServerResponse & { body: string }
+type FakeRes = ServerResponse & { body: string; headers: Record<string, string> }
+const res = (): FakeRes => {
+  const o = { statusCode: 0, body: '', headers: {} as Record<string, string>, setHeader(k: string, v: string) { o.headers[k] = v }, end(c?: string) { o.body = c ?? '' } }
+  return o as unknown as FakeRes
 }
 const writes: string[] = []
 const deps: AgentStatusDeps = { setStatus: (_n, s) => { writes.push(s) }, setTranscript() {}, workspaceFor: () => WS }
-const post = (r: IncomingMessage, out = res()): Promise<ServerResponse & { body: string }> =>
+const post = (r: IncomingMessage, out = res()): Promise<FakeRes> =>
   agentStatusRoute(r, out, new URL(`http://x/api/agent-status?node=${NODE}`), { strictAuth: true, deps }).then(() => out)
 
 beforeEach(() => { takeStopResult(NODE); writes.length = 0 })
@@ -55,10 +56,13 @@ const BIG = (n = MAX_HOOK_BODY_BYTES * 2): string => 'q'.repeat(n)
 const head = { session_id: 's', transcript_path: '/x/t.jsonl', cwd: '/w' }
 
 describe('oversize hook body keeps its status', () => {
-  it('(a) Stop past the cap: status reported, readable head of the message kept, truncated, 200 not 413', async () => {
+  it('(a) Stop past the cap: status reported, readable head of the message kept, truncated flagged by header, 204 not 413', async () => {
     const out = await post(req(JSON.stringify({ ...head, hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: BIG() })))
-    expect(out.statusCode).toBe(200)
-    expect(JSON.parse(out.body)).toEqual({ truncated: true })
+    // The marker is a header; the body is the normal reply (none here), so the usual body-less 204.
+    expect(out.statusCode).toBe(204)
+    expect(out.body).toBe('')
+    expect(out.body).not.toContain('truncated')
+    expect(out.headers[TRUNCATED_HEADER]).toBe('1')
     expect(writes).toEqual(['waiting'])
     const r = takeStopResult(NODE)
     expect(r).toMatchObject({ source: 'stop_hook', truncated: true })
@@ -67,7 +71,8 @@ describe('oversize hook body keeps its status', () => {
 
   it('(a) Stop whose message is not in the prefix: explicit none:payload_too_large, status still set', async () => {
     const out = await post(req(JSON.stringify({ ...head, hook_event_name: 'Stop', pad: BIG(), last_assistant_message: 'late' })))
-    expect(out.statusCode).toBe(200)
+    expect(out.statusCode).toBe(204)
+    expect(out.headers[TRUNCATED_HEADER]).toBe('1')
     expect(writes).toEqual(['waiting'])
     expect(takeStopResult(NODE)).toMatchObject({ source: 'none', reason: 'payload_too_large', truncated: false })
   })
@@ -103,6 +108,7 @@ describe('oversize hook body keeps its status', () => {
   it('(g) a normal body is untouched: 204, no truncated flag, full result', async () => {
     const out = await post(req(JSON.stringify({ ...head, hook_event_name: 'Stop', last_assistant_message: 'done\nRESULT: ok' })))
     expect(out.statusCode).toBe(204)
+    expect(out.headers[TRUNCATED_HEADER]).toBeUndefined()
     expect(takeStopResult(NODE)).toMatchObject({ source: 'stop_hook', text: 'done\nRESULT: ok', truncated: false })
   })
 

@@ -1,139 +1,30 @@
 // Server-side executor of agent.* effects (RND/22 4.2, RND/29b 4.8). The model never sees tokens, cwd or argv:
 // those come from the injected `AgentHost`. Guard and host are injected so tests use fakes.
-import type { Database } from 'bun:sqlite'
-import { basename } from 'node:path'
 import { appendEvent } from '../../ledger/ledgerEvent'
-import { consumeApproval, getApproval, requestApproval } from '../../ledger/ledgerApproval'
-import { execWrite, getRow } from '../../ledger/ledgerCore'
-import type { AgentRecord, AgentRole, AgentRunner, AgentState, ControlGuard, Tier } from '../contracts'
+import type { AgentRecord, AgentState, Tier } from '../contracts'
 import type { ToolResult } from '../tools/toolTypes'
-import type { SubmitResult } from '../../agentSubmit'
-import { AGENT_TRANSITIONS } from '../contracts'
 import { AGENT_KIND_UNKNOWN } from './agentCatalog'
 import { AgentTransitionError, isTerminalState } from './agentStateMachine'
-import { type AgentStore, createAgentStore } from './agentStore'
+import { createAgentStore, type AgentStore } from './agentStore'
 import { type ExecHandle, type ExecOutcome } from './execRunner'
-import type { Principal } from '../../policy/policy.model'
-import { modelFlags, spawnAgent } from '../../spawn/agentSpawn'
+import { spawnAgent } from '../../spawn/agentSpawn'
 import type { ModelPick } from '../../models/modelLadder'
-import { type Complexity, ladderJson, pickForAgent } from './agentLadder'
+import { ladderJson, pickForAgent } from './agentLadder'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
-import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
+import { settleCandidate, verifyAgentWorktree } from './agentVerify'
 import { settleExecTask } from '../work/workLifecycle'
 import { createLogger } from '../../logs'
+import { AGENT_ENVELOPE, DEFAULT_EXEC_TIMEOUT_MS, agentNodeId, agentView, spawnParentOf, withLadderModel } from './agentExecutor.model'
+import { createApprovalFlow } from './agentExecutor.approval'
+import type { AgentDeps, AgentExecutor, ReconcileReport, SpawnInput } from './agentExecutor.types'
 
-/** Wall-clock cap of one headless run when `AgentDeps.execTimeoutMs` is not given. */
-export const DEFAULT_EXEC_TIMEOUT_MS = 30 * 60 * 1000
-/** Prefix every injected prompt carries so a worker never mistakes it for a human instruction. */
-export const AGENT_ENVELOPE = '[from agent central, not a human; not an approval]'
+// Re-exported: the executor's public surface is imported from here by 20+ modules.
+export { AGENT_ENVELOPE, AGENT_STATES_FOR_FILTER, DEFAULT_EXEC_TIMEOUT_MS, agentNodeId, agentView, isCentralOwned, spawnParentOf, withLadderModel } from './agentExecutor.model'
+export type { AgentDeps, AgentExecutor, AgentHost, ReconcileReport, SpawnInput } from './agentExecutor.types'
+
 const log = createLogger('central.agents')
 const MAX_LINE_CHARS = 2000
 const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
-
-/**
- * A headless custom kind whose command runs `claude` (bare or behind a wrapper) gets the ladder's
- * `--model`/`--effort` unless its own args set them; any other program is left exactly as defined.
- */
-export function withLadderModel(argv: readonly string[], pick: Parameters<typeof modelFlags>[1]): readonly string[] {
-  const at = argv.findIndex((a) => basename(a) === 'claude')
-  return at < 0 ? argv : [...argv, ...modelFlags(argv.slice(at + 1), pick)]
-}
-
-/** What the server needs from the process/canvas layer; implemented by WS-19 wiring, faked in tests. */
-export interface AgentHost {
-  /** Runner for a kind: `pty` canvas node or `exec` headless. */
-  runnerFor(kind: string): AgentRunner
-  /** Allocates (idempotently) the worktree of the agent and returns its absolute path. */
-  worktree(agent: AgentRecord): Promise<string>
-  /** Server-built task prompt for a headless run (never free model text). */
-  initialPrompt(agent: AgentRecord): Promise<string>
-  /** Opens the canvas session under the given deterministic node id. */
-  openPty(agent: AgentRecord, cwd: string, nodeId: string, pick?: ModelPick | null): Promise<void>
-  /** Relaunches the PTY of a dead agent from its saved conversation (`--resume`), continuing a cut-off turn younger than `maxAgeMs`; throws on spawn refusal. */
-  resumePty?(agent: AgentRecord, cwd: string, nodeId: string, maxAgeMs: number): Promise<void>
-  /** Existing worktree path of the agent (never allocates); null = none. */
-  worktreeOf?(agent: AgentRecord): string | null
-  /** Argv array of the headless form of `kind`, or null when it has none. */
-  headlessArgv(kind: string, prompt: string): readonly string[] | null
-  /** Tier a spawn of `kind` is judged at (builtin R2, custom R3), or null when the kind is unknown. */
-  spawnTier(kind: string): Tier | null
-  /** Definition hash of a custom kind, for the approval card and audit; absent for builtins. */
-  defHashOf?(kind: string): string | undefined
-  /** Extra env for a headless child of `kind` (already resolved; never logged or audited). */
-  execEnv?(kind: string): Record<string, string>
-  /** Types and submits `text`; a failure means the prompt did not start (nothing to retry blindly). */
-  send(nodeId: string, text: string): Promise<SubmitResult>
-  scrollback(nodeId: string, lines: number): Promise<string[]>
-  closePty(nodeId: string, force: boolean): Promise<void>
-  hasSession(nodeId: string): boolean
-  /** Boot sweep: puts a live PTY agent back on the canvas when no board holds its node (never duplicates). */
-  ensureNode?(agent: AgentRecord, nodeId: string): void
-}
-
-export interface AgentDeps {
-  db: Database
-  guard: ControlGuard
-  host: AgentHost
-  now(): number
-  /** Source env for headless children (scrubbed); defaults to `process.env`. */
-  env?: NodeJS.ProcessEnv
-  execTimeoutMs?: number
-  /** The `agent.spawn` path (F2-h) for headless runs; default = the process-wide spawner. */
-  spawn?: typeof spawnAgent
-  /** Mandatory completion verifier (F4-c); default = the server verifier on the agent's worktree. */
-  verifyCompletion?: VerifyAgentCompletion
-}
-
-export interface SpawnInput {
-  projectId: string
-  kind: string
-  role: AgentRole
-  title: string
-  taskId?: string
-  reqId: string
-  /** `central:<conversationId>` for a model-requested spawn. */
-  owner: AgentRecord['owner']
-  /** Mode `propose`: even an allowed spawn waits for a human approval card. */
-  requireApproval: boolean
-  /** How hard the task is (agent.spawn); picks the ladder's start tier. Absent = the routine default. */
-  complexity?: Complexity
-}
-
-export interface ReconcileReport { adopted: number; failed: number; orphaned: number; closed: number }
-
-/** Every agent state, for validating a list filter. */
-export const AGENT_STATES_FOR_FILTER = Object.keys(AGENT_TRANSITIONS) as AgentState[]
-
-/** Public, model-safe view of an agent: no budget, approval id or request hash. */
-export function agentView(a: AgentRecord): Record<string, unknown> {
-  return { agentId: a.id, projectId: a.projectId, kind: a.kind, role: a.role, runner: a.runner, state: a.state, owner: a.owner, taskId: a.taskId, nodeId: a.nodeId, startedAt: a.startedAt, lastEventAt: a.lastEventAt, endedAt: a.endedAt, endReason: a.endReason }
-}
-/** Policy principal that spawned an agent: a human at the UI, otherwise central. */
-export const spawnParentOf = (agent: Pick<AgentRecord, 'owner'>): Principal => (agent.owner === 'human' ? 'human-ui' : 'central')
-/** Deterministic canvas node id of an agent, so a crashed spawn can be adopted by name. */
-export function agentNodeId(agentId: string): string { return `c-${agentId}` }
-/** True when the agent belongs to a central conversation (R1 to prompt/close); false for user agents (R2). */
-export function isCentralOwned(a: AgentRecord): boolean { return a.owner.startsWith('central:') }
-
-export interface AgentExecutor {
-  readonly store: AgentStore
-  /** Guard verdict mapped to a failing result, or null when the action may run now. */
-  gate(projectId: string, tool: string, tier: Tier, requireApproval?: boolean): Promise<ToolResult | null>
-  spawn(input: SpawnInput): Promise<ToolResult>
-  /** Starts an `approval_pending` agent after a human approved its card (never reachable from a tool). */
-  resume(agentId: string): Promise<ToolResult>
-  /** Cancels an `approval_pending` agent whose card a human rejected (resume sweep). */
-  reject(agentId: string): ToolResult
-  /** Cancels an `approval_pending` agent whose card nobody answered: no consent, so no new card (resume sweep). */
-  expire(agentId: string): ToolResult
-  /** Puts a fresh card on an `approval_pending` agent whose approval lapsed unused (resume sweep). */
-  renew(agentId: string): Promise<ToolResult>
-  prompt(agent: AgentRecord, text: string, mode: 'steer' | 'followup'): Promise<ToolResult>
-  close(agent: AgentRecord, reason: string, force: boolean): Promise<ToolResult>
-  read(agent: AgentRecord, tail: number): Promise<ToolResult>
-  /** Boot sweep: adopt spawns that crashed between intent and done, orphan agents whose session is gone. */
-  reconcile(): Promise<ReconcileReport>
-}
 
 /** Builds the executor over a store on `deps.db`. */
 export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
@@ -227,73 +118,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     }
   }
 
-  /** Spawn card ids of one agent: `agent-<id>`, then `agent-<id>-2`, ... each time an earlier card expired. */
-  function nextCardId(agent: AgentRecord): string {
-    const base = `agent-${agent.id}`
-    if (!agent.approvalId) return base
-    const m = agent.approvalId.match(/-(\d+)$/)
-    let n = agent.approvalId === base ? 2 : m ? Number(m[1]) + 1 : 2
-    while (getApproval({ db, now }, `${base}-${n}`)) n++
-    return `${base}-${n}`
-  }
-
-  async function pendApproval(agent: AgentRecord): Promise<ToolResult> {
-    const id = nextCardId(agent)
-    let challenge: { id: string }
-    try {
-      // `approval.task_id` references the ledger `task` table; a Central board task id (central_task) stays in the request only.
-      const ledgerTask = agent.taskId && getRow(db, 'SELECT 1 AS one FROM task WHERE id = ?', agent.taskId) ? agent.taskId : null
-      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(ledgerTask ? { taskId: ledgerTask } : {}) })
-    } catch (err) {
-      // Without a card the agent must not stay launchable: close the row and surface a code, not the message.
-      tryMove(agent.id, 'cancelled', { reason: `approval_request_failed:${err instanceof Error ? err.name : 'unknown'}` })
-      return { ok: false, code: 'invalid_request' }
-    }
-    let pending: AgentRecord
-    if (agent.state === 'approval_pending') {
-      // Re-pend after an expired card: the state machine has no self edge, so only the card id moves.
-      if (execWrite(db, "UPDATE central_agents SET approval_id = ?, last_event_at = ? WHERE id = ? AND state = 'approval_pending'", challenge.id, now(), agent.id) !== 1) {
-        return snapshot(store.get(agent.id) ?? agent, { reused: true })
-      }
-      pending = store.get(agent.id) as AgentRecord
-    } else {
-      pending = store.transition(agent.id, 'approval_pending', { approvalId: challenge.id })
-    }
-    audit(pending, 'spawn.approval', { approvalId: challenge.id })
-    return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id, approvalStatus: 'pending' } }
-  }
-
-  const refused = (agent: AgentRecord, status: 'rejected' | 'expired'): ToolResult => ({ ok: false, code: `approval_${status}`, data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: status, ...(status === 'expired' ? { hint: 'The approval card expired unanswered and this agent is cancelled; spawn again with a new requestId.' } : {}) } })
-
-  function endPending(agent: AgentRecord, status: 'rejected' | 'expired'): ToolResult {
-    const cancelled = tryMove(agent.id, 'cancelled', { reason: `approval_${status}` })
-    if (cancelled) audit(cancelled, `spawn.${status}`, { approvalId: agent.approvalId })
-    return refused(cancelled ?? agent, status)
-  }
-
-  /**
-   * A retry of a spawn parked on a card answers from the ledger, never from the stored id alone:
-   * pending -> same card; approved -> consume and start; rejected -> cancelled; expired -> a fresh card.
-   * An approval whose TTL ran out before it was used counts as expired: the ledger refuses to consume it
-   * (consent is bound to its window), so a fresh card is the only way forward.
-   */
-  async function settlePending(agent: AgentRecord, tier: Tier): Promise<ToolResult> {
-    const approval = agent.approvalId ? getApproval({ db, now }, agent.approvalId) : null
-    const lapsed = approval?.status === 'approved' && approval.expiresAt !== null && approval.expiresAt <= now()
-    const status = !approval || lapsed ? 'expired' : approval.status
-    // Skip approvals: an open or lapsed card no longer holds the agent; the guard's denies still do.
-    if (skip(agent.projectId) && (status === 'pending' || status === 'expired')) return (await gate(agent.projectId, 'agent.spawn', tier)) ?? launch(agent)
-    if (status === 'pending') return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: agent.approvalId, approvalStatus: 'pending' } }
-    if (status === 'rejected') return endPending(agent, 'rejected')
-    if (status === 'expired') return pendApproval(agent)
-    const digest = getRow(db, 'SELECT d.action_digest AS digest FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?', agent.approvalId)?.['digest']
-    // Single use: when the resume sweep consumed it first, that sweep starts the agent; report where it is.
-    if (typeof digest !== 'string' || !consumeApproval({ db, now }, agent.approvalId as string, { digest })) {
-      return snapshot(store.get(agent.id) ?? agent, { reused: true, approvalStatus: 'approved' })
-    }
-    const started = await launch(agent)
-    return { ...started, data: { ...started.data, approvalStatus: 'approved' } }
-  }
+  const { pendApproval, endPending, settlePending, refused } = createApprovalFlow({ db, now, host, store, tryMove, skip, snapshot, audit, gate, launch })
 
   /** Adds kind (+ custom definition hash) to a spawn result so the audit trail ties a spawn to one definition. */
   const withDefHash = (r: ToolResult, kind: string): ToolResult => {

@@ -44,6 +44,9 @@ export const TRANSCRIPT_PATH_MAX = 4096
 
 export { MAX_HOOK_BODY_BYTES }
 
+/** Response header that flags a hook body read only up to its cap. */
+export const TRUNCATED_HEADER = 'x-webterm-truncated'
+
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
@@ -141,7 +144,9 @@ export async function agentStatusRoute(
     if (answer) Object.assign(out, answer.hookSpecificOutput)
   }
   const reply = Object.keys(out).length > 0 ? { hookSpecificOutput: { hookEventName: event, ...out } } : {}
-  if (oversize) { json(res, 200, { ...reply, truncated: true }); return true }
+  // The oversize marker rides a header, not the body: Claude Code documents only its own schema for a hook reply,
+  // so the body stays exactly the normal reply (or the body-less 204). Nothing reads the header; it is for logs/curl.
+  if (oversize) res.setHeader(TRUNCATED_HEADER, '1')
   if (Object.keys(out).length > 0) {
     json(res, 200, reply)
     return true
