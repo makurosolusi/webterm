@@ -1,6 +1,7 @@
 import { callFingerprint, createMemoryReceiptLog, type Receipt, type ReceiptLog, runOnce } from '../../capability/capability.receipt'
 import { checkpointBeforeAction } from '../../checkpoint/checkpoint.service'
 import { type ApprovalStatus, getApproval } from '../../ledger/ledgerApproval'
+import { announceCentralAct } from './toolAct'
 import { auditTool } from './toolAudit'
 import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, defEnabled, tierWithin } from './toolTypes'
 import { validateToolInput } from './toolValidate'
@@ -21,6 +22,7 @@ async function execAudited(ctx: ToolCtx, name: string, args: ToolInput, options:
   const trusted = options.prevalidated && typeof args.projectId === 'string' && args.projectId.trim() ? args.projectId.trim() : undefined
   const finish = (result: ToolResult, projectId = trusted): { result: ExecResult; auditSeq: number } => {
     const auditSeq = auditTool(ctx, name, def, projectId, result)
+    announceCentralAct(ctx, name, projectId, result)
     return { result: { ...result, tool: name, ...(projectId ? { projectId } : {}) }, auditSeq }
   }
   if (!def) return finish({ ok: false, code: 'unknown_tool' })

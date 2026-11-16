@@ -17,7 +17,7 @@ import { addStream, dispatchStreamFrame, streamsSocketClosed, streamsSocketOpene
 
 export { replayOpen } from './ws.replayOpen'
 export { STREAM_CLOSED, STREAM_CONNECTING, STREAM_OPEN, type WsEventSource } from './ws.streams'
-export { getStatus, onReconnect, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
+export { getStatus, onReconnect, subscribeAct, subscribeCanvas, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
 
 interface Sub {
   onOutput: (data: string) => void

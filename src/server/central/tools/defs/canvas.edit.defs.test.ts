@@ -139,7 +139,7 @@ describe('canvas.edit', () => {
   it('links the pairs the UI allows with a hand-drawn cable id, keeps duplicates, refuses the rest', async () => {
     const res = await edit([{ op: 'link', from: 'Pear', to: 'Plum' }, { op: 'link', from: 'n2', to: 'a1' }])
     expect(updates[0].bridgesAdd).toEqual([{ id: 'bridge-a1-a2', source: 'a1', target: 'a2', kind: 'context' }])
-    expect(res.data).toMatchObject({ linked: [{ cable: 'bridge-a1-a2', from: 'Pear', to: 'Plum' }], unlinked: [], count: 1 })
+    expect(res.data).toMatchObject({ linked: [{ cable: 'bridge-a1-a2', from: 'Pear', to: 'Plum' }], unlinked: [], wired: [['a1', 'a2']], count: 1 })
     updates = []
     for (const [from, to] of [['n1', 'a1'], ['n2', 'n1'], ['e1', 'a1'], ['a1', 'a1']]) {
       expect(await edit([{ op: 'link', from, to }])).toMatchObject({ ok: false, code: 'link_not_allowed', data: { hint: expect.any(String) } })

@@ -50,7 +50,7 @@ test('routing central: the card stays off every human surface, Central allows on
   s.onWait((id) => {
     expect(humanVisible(s)).toBe(0)
     expect(s.woken).toEqual([id])
-    expect(s.centralDecide(id, 'allow', 'plain test run')).toEqual({ ok: true, status: 'approved' })
+    expect(s.centralDecide(id, 'allow', 'plain test run')).toEqual({ ok: true, status: 'approved', nodeId: 'a1' })
   })
   expect(await answerPermission(s.deps, ask('npm test'))).toEqual(ALLOW)
   expect(rows(s.db, 'SELECT approved_by FROM approval')[0].approved_by).toBe(CENTRAL_ACTOR)

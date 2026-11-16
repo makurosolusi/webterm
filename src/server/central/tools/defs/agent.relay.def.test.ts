@@ -33,7 +33,7 @@ describe('agent.relay', () => {
   it('queues while the target works, delivers wrapped when idle', async () => {
     const busy = setup('working')
     const held = await execTool(busy.ctx, 'agent.relay', args())
-    expect(held).toMatchObject({ ok: true, data: { delivered: false } })
+    expect(held).toMatchObject({ ok: true, data: { delivered: false, nodeId: 'c-a1' } })
     expect(busy.typed).toHaveLength(0)
     f.close()
     const idle = setup('waiting')
