@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BROWSER_VERB_CAP, BlockedError } from '../../../../shared/browser.contract'
 import type { BrowserState } from '../../../../shared/browser.contract'
 import type { AgentVerbs } from '../../../browser/browserAgent.verbs.ctx'
+import { createLatencyRecorder, setActiveLatency, activeLatency } from '../../../browser/browserAgent.latency'
 import { BrowserError } from '../../../browser/browserHost.targets'
 import type { BrowserControlDeps } from '../../../browser/browserControl.handler'
 import { createNavigationGuard } from '../../../browser/navigation.guard'
@@ -246,5 +247,32 @@ describe('browser_read: reader failures', () => {
     const s = rig()
     const r = await execTool({ ...s.ctx, registry: (() => { const reg = createRegistry(); reg.register(createBrowserReadDef({ ...s.deps, control: async (_n, verb) => ({ status: 200, body: verb === 'snapshot' ? { ok: true, data: {} } : { ok: true } }), openProject: s.deps.openProject!, reader: s.reader })); return reg })() }, 'browser_read', { projectId: 'p1', url: 'https://example.com/' })
     expect(r).toMatchObject({ ok: false, code: 'snapshot_failed' })
+  })
+})
+
+describe('browser_read: latency phases', () => {
+  it('records navigate, waitLoaded, snapshot and reader (numbers + host only) and leaves the result unchanged', async () => {
+    const before = activeLatency()
+    const rec = createLatencyRecorder()
+    try {
+      const plain = await rig().run()
+      setActiveLatency(rec)
+      const r = await rig().run({ question: 'secret question?' })
+      expect(r).toEqual(plain)
+      const phases = rec.records().filter((x) => x.verb.startsWith('browser_read.'))
+      expect(phases.map((x) => x.verb)).toEqual(['browser_read.navigate', 'browser_read.waitLoaded', 'browser_read.snapshot', 'browser_read.reader'])
+      expect(phases.every((x) => x.ok)).toBe(true)
+      expect(phases[0]?.host).toBe('example.com')
+      expect(JSON.stringify(rec.records())).not.toMatch(/RAW-PAGE-TEXT|secret question/)
+    } finally { setActiveLatency(before) }
+  })
+  it('a failing reader is recorded ok:false with its code', async () => {
+    const before = activeLatency()
+    const rec = createLatencyRecorder()
+    try {
+      setActiveLatency(rec)
+      await rig({ reader: async () => ({ ok: false, code: 'reader_unavailable' }) }).run()
+      expect(rec.records().find((x) => x.verb === 'browser_read.reader')).toMatchObject({ ok: false, code: 'reader_unavailable' })
+    } finally { setActiveLatency(before) }
   })
 })
