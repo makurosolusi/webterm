@@ -8,7 +8,7 @@
  */
 import type { Database } from 'bun:sqlite'
 import { allRows } from '../ledger/ledgerCore'
-import { PERMISSION_KIND } from '../permission/permission.model'
+import { HELD_FOR_CENTRAL_SQL, PERMISSION_KIND } from '../permission/permission.model'
 import {
   type InboxCategory,
   type InboxCounts,
@@ -101,7 +101,7 @@ function unionSql(now: number, projectId: string | undefined): { sql: string; pa
               NULL AS spec, a.request_json AS payload, a.status AS status,
               a.created_at AS created_at, NULL AS fence
             FROM approval a LEFT JOIN project p ON p.id = a.project_id
-            WHERE a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?)${filter('a')}`,
+            WHERE a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?) AND NOT ${HELD_FOR_CENTRAL_SQL}${filter('a')}`,
     },
     {
       params: extra,

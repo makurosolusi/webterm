@@ -29,6 +29,7 @@ import { normalizeProjectApprovalLevels } from './settings.projectApprovalLevels
 import { normalizeInputHistory } from './settings.inputHistory'
 import { DEFAULT_SETUP, normalizeSetup, type SetupState } from './settings.setup'
 import { DEFAULT_APPROVAL_LEVEL, approvalLevelOf, approvalLevelPatch } from './settings.approvalLevel'
+import { DEFAULT_PERMISSION_ROUTING, permissionRoutingOf } from './settings.permissionRouting'
 
 export type { TerminalCursorStyle, TerminalShortcutPolicy, AppTheme } from './settings.terminal'
 export { KEYBINDINGS_LIMITS, normalizeKeybindings } from './settings.keybindings'
@@ -146,6 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // The default level decides the three keys above (one line in settings.approvalLevel.ts).
   ...approvalLevelPatch(DEFAULT_APPROVAL_LEVEL),
   agentApprovalLevel: DEFAULT_APPROVAL_LEVEL,
+  permissionRouting: DEFAULT_PERMISSION_ROUTING,
   centralCheckins: true,
   centralCheckinDailyLimit: 10,
   projectModels: {},
@@ -231,6 +233,7 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.inputHistory = normalizeInputHistory(src.inputHistory)
   out.setup = normalizeSetup(src.setup)
   // Enum: shape matching lets any string through, so an unknown preset falls back to the default.
+  out.permissionRouting = permissionRoutingOf(out.permissionRouting)
   if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
   if (out.edgeColor !== 'default' && !HEX_COLOR.test(out.edgeColor)) out.edgeColor = DEFAULT_SETTINGS.edgeColor
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))

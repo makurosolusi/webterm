@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import { requestApproval } from '../ledger/ledgerApproval'
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
 import { FABLE_KIND } from '../models/fableGrant'
-import { PERMISSION_KIND } from '../permission/permission.model'
+import { HELD_FOR_CENTRAL_SQL, PERMISSION_KIND } from '../permission/permission.model'
 import { INBOX_KIND_RANK, decodeInboxCursor, encodeInboxCursor, kindRank } from './inboxCursor'
 import { allowedActions, toolImpact, type Impact, type InboxEntry, type InboxItemKind, type InboxItemStatus } from './inboxItemModel'
 
@@ -155,13 +155,28 @@ export function syncApprovalGates(ctx: LedgerContext): void {
       (SELECT id FROM approval WHERE status != 'pending' OR (expires_at IS NOT NULL AND expires_at <= ?))`, now, now)
   const fresh = allRows(ctx.db, `SELECT a.*, p.workspace_id AS ws FROM approval a LEFT JOIN project p ON p.id = a.project_id
     WHERE a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?)
-      AND NOT EXISTS (SELECT 1 FROM inbox_item i WHERE i.approval_id = a.id) LIMIT ?`, now, LIST_MAX)
-  for (const r of fresh) {
-    const m = mirrorOf(r)
-    execWrite(ctx.db, `INSERT OR IGNORE INTO inbox_item (id, kind, source, project_id, workspace_id, node_id, approval_id, title, impact_json, args_json, editable, created_at, updated_at)
-      VALUES (?, 'gate', 'approval', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, String(r['id']), r['project_id'] ?? null, r['ws'] ?? null, m.nodeId,
-    String(r['id']), m.title, json(m.impact), json(m.args), m.editable ? 1 : 0, Number(r['created_at']), now)
-  }
+      AND NOT EXISTS (SELECT 1 FROM inbox_item i WHERE i.approval_id = a.id) AND NOT ${HELD_FOR_CENTRAL_SQL} LIMIT ?`, now, LIST_MAX)
+  for (const r of fresh) insertGate(ctx, r, null)
+}
+
+function insertGate(ctx: LedgerContext, r: Row, note: string | null): void {
+  const m = mirrorOf(r)
+  execWrite(ctx.db, `INSERT OR IGNORE INTO inbox_item (id, kind, source, project_id, workspace_id, node_id, approval_id, title, body, impact_json, args_json, editable, created_at, updated_at)
+    VALUES (?, 'gate', 'approval', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, String(r['id']), r['project_id'] ?? null, r['ws'] ?? null, m.nodeId,
+  String(r['id']), m.title, note ? note.slice(0, BODY_MAX) : null, json(m.impact), json(m.args), m.editable ? 1 : 0, Number(r['created_at']), ctx.now())
+}
+
+/**
+ * Shows a pending approval held for Central to the human (Central escalated, or could not decide), with the
+ * reason in the item body. False when it is no longer pending or already shown. Same row `syncApprovalGates` writes.
+ */
+export function escalateApprovalToHuman(ctx: LedgerContext, approvalId: string, note: string): boolean {
+  const r = getRow(ctx.db, `SELECT a.*, p.workspace_id AS ws FROM approval a LEFT JOIN project p ON p.id = a.project_id
+    WHERE a.id = ? AND a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?)
+      AND NOT EXISTS (SELECT 1 FROM inbox_item i WHERE i.approval_id = a.id)`, approvalId, ctx.now())
+  if (!r) return false
+  insertGate(ctx, r, note)
+  return true
 }
 
 /** Source of review items mirrored from Diff "Send to agent" notes (outbox `diff-notes:` mail). */

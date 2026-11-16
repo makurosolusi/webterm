@@ -8,7 +8,9 @@ import { allRows } from '../ledger/ledgerCore'
 import { decideApproval, toApproval } from '../ledger/ledgerApproval'
 import { LedgerError } from '../ledger/ledgerModel'
 import type { Policy } from '../policy/policy.decide'
-import { PERMISSION_KIND, TOOL_CAPABILITY_PREFIX } from './permission.model'
+import { HELD_FOR_CENTRAL_SQL, PERMISSION_KIND, TOOL_CAPABILITY_PREFIX } from './permission.model'
+import { CLASSIFIER_ACTOR } from '../policy/policy.classifier'
+import { CENTRAL_ACTOR } from './permission.central'
 import type { PermissionRequestView } from './permission.wait'
 
 export interface PendingPermission extends PermissionRequestView {
@@ -23,8 +25,8 @@ const LIST_MAX = 50
 
 /** Pending, unexpired permission prompts, oldest first. */
 export function listPendingPermissions(db: Database, now: number): PendingPermission[] {
-  return allRows(db, `SELECT * FROM approval WHERE kind = ? AND status = 'pending' AND (expires_at IS NULL OR expires_at > ?)
-    ORDER BY created_at ASC, id ASC LIMIT ?`, PERMISSION_KIND, now, LIST_MAX).map((row) => {
+  return allRows(db, `SELECT * FROM approval a WHERE a.kind = ? AND a.status = 'pending' AND (a.expires_at IS NULL OR a.expires_at > ?) AND NOT ${HELD_FOR_CENTRAL_SQL}
+    ORDER BY a.created_at ASC, a.id ASC LIMIT ?`, PERMISSION_KIND, now, LIST_MAX).map((row) => {
     const a = toApproval(row)
     return { ...(a.request as PermissionRequestView), id: a.id, expiresAt: a.expiresAt, createdAt: a.createdAt }
   })
@@ -56,6 +58,8 @@ type Choice = (typeof CHOICES)[number]
 
 /** `POST { id, choice }`. 409 when the prompt is gone (decided elsewhere, expired, or the hook left). */
 export function decidePermission(db: Database, policy: Policy | null, body: Record<string, unknown>, actor: string, now: number): Result {
+  // A human route never speaks for the automatic deciders (docs/decisions/central-approver.md, limit c/d).
+  if (actor === CENTRAL_ACTOR || actor === CLASSIFIER_ACTOR) return { status: 403, body: { error: 'human_only' } }
   const id = typeof body.id === 'string' ? body.id : ''
   const choice = body.choice as Choice
   if (!id || id.length > 200) return { status: 400, body: { error: 'invalid_id' } }
