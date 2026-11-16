@@ -16,6 +16,7 @@ import { KNOWLEDGE_FLAG, createKnowledgeDefs } from './defs/kb.defs'
 import { createRepoMapDef } from '../../knowledge/repoMap.def'
 import { createMemoryDefs } from './defs/memory.defs'
 import { HEALTH_DEFS } from './defs/health.defs'
+import { PERMISSION_DEFS } from './defs/permission.defs'
 import { REMINDER_DEFS } from './defs/reminder.defs'
 import { STATE_DEFS } from './defs/state.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
@@ -105,6 +106,8 @@ export function registerCa2Tools(registry: ToolRegistry, deps: Ca2ToolDeps, env:
     [central, () => STATE_DEFS],
     [central, () => REMINDER_DEFS],
     [central, () => HEALTH_DEFS],
+    // Central answers workers' held permission prompts (permission/permission.central.ts holds the hard limits).
+    [central, () => PERMISSION_DEFS],
     // Shared blackboard (F5-b): read + propose; nodes see them through Central's MCP projection.
     [central, () => BLACKBOARD_DEFS],
     [on(env, BOTS_FLAG) && !!deps.bots, () => [createChannelBotDef(deps.bots as ChannelBotDefDeps)]],
