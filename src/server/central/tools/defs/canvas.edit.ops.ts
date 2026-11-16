@@ -3,7 +3,7 @@
 import { BROWSER_KIND } from '../../../../shared/browser.contract'
 import { arrange, ARRANGE_LAYOUTS, type ArrangeLayout } from '../../../../shared/canvasArrange'
 import { OPEN_GAP, type Size } from '../../../../shared/canvasPlace'
-import { isNodeName } from '../../../../shared/nodeNames'
+import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import { classifyLink, isContextCapable, type BridgeLink } from '../../../../shared/workspace'
 import type { CanvasNode } from '../../../canvas/canvasPush'
 import { isSafeId } from './read.shared'
@@ -73,6 +73,14 @@ export function opShape(v: unknown): v is Op {
     default:
       return false
   }
+}
+
+/** Node ref (id wins over a name, any case) -> id, over a stored board; shared by canvas.edit and canvas.open's connectTo. */
+export function nodeRefResolver(nodes: CanvasNode[]): { nameOf: Map<string, string>; resolve: (r: string) => string | undefined } {
+  const named = withNodeNames(nodes.map((n) => ({ id: n.id, name: typeof n.name === 'string' ? n.name : undefined })))
+  const nameOf = new Map(named.map((n) => [n.id, n.name]))
+  const idOfName = new Map(named.map((n) => [n.name.toLowerCase(), n.id]))
+  return { nameOf, resolve: (r) => (nameOf.has(r) ? r : idOfName.get(r.toLowerCase())) }
 }
 
 /** Every node reference an op names (cable ids are not node refs). */

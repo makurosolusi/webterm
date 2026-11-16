@@ -6,7 +6,7 @@ export interface ToolLabel { title: string; text: string }
 export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'node.list': { title: 'List nodes', text: 'Lists the terminals, agents, browsers and files on a project canvas.' },
   'node.inspect': { title: 'Read a node', text: 'Reads what a terminal or Claude session on the canvas shows, its status and model.' },
-  'canvas.open': { title: 'Open nodes', text: 'Opens new terminals, Claude sessions, a browser, files, an editor or a diff on a project canvas.' },
+  'canvas.open': { title: 'Open nodes', text: 'Opens new terminals, Claude sessions, a browser, files, an editor or a diff on a project canvas, optionally cabled to an existing node.' },
   'canvas.type': { title: 'Type in a terminal', text: 'Types into or presses keys in a terminal or Claude node after you approve.' },
   'chat.send': { title: 'Message a chat', text: 'Sends a message to an Agent Chat node after you approve.' },
   'chat.config': { title: 'Set chat model', text: 'Changes the model, effort or thinking of an Agent Chat node.' },
