@@ -41,8 +41,8 @@ export interface Playbook {
   /** How hard the spawned agent's task honestly is; sets its model (agent.spawn `complexity`). */
   complexity: Complexity
   steps: PlaybookStep[]
-  /** `runId` names what the run sets up for the agent (its browser node). */
-  brief(p: Params, runId: string): PlaybookBrief
+  /** `runId` names what the run sets up for the agent (its browser node); `browserNode` overrides it with an existing one (a reused agent's). */
+  brief(p: Params, runId: string, browserNode?: string): PlaybookBrief
 }
 
 const MAX_GOAL = 2000
@@ -73,7 +73,7 @@ function delegate(pb: Omit<Playbook, 'steps'>, role: 'worker' | 'reviewer', extr
   return {
     ...pb,
     steps: [
-      { tool: 'task.create', saveAs: 'task', args: (p, _prev, runId) => ({ projectId: p.projectId, title: named(p), objective: renderBrief(pb.brief(p, runId)).slice(0, MAX_OBJECTIVE), acceptance: 'review' }) },
+      { tool: 'task.create', saveAs: 'task', args: (p, prev, runId) => ({ projectId: p.projectId, title: named(p), objective: renderBrief(pb.brief(p, runId, (prev.reuse?.browserNodeId as string | undefined))).slice(0, MAX_OBJECTIVE), acceptance: 'review' }) },
       { tool: 'agent.spawn', saveAs: 'agent', args: (p, prev, runId) => ({ projectId: p.projectId, requestId: `pb-${runId}`, kind: p.kind ?? DEFAULT_AGENT_KIND, role, title: named(p), taskId: prev.task?.taskId, complexity: pb.complexity }) },
       ...extra,
     ],
@@ -89,9 +89,9 @@ const webResearch = delegate({
   summary: 'Research the web: a task, an agent with its own cabled browser, a fixed brief; reports RESULT with sources.',
   match: [WEB_RESEARCH_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), url: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
-  brief: (p, runId) => ({
+  brief: (p, runId, browserNode) => ({
     objective: p.goal ?? '',
-    instructions: `webterm opens browser node ${browserNodeOf(runId)} beside you, cabled to you. Go to ${p.url ?? SEARCH_URL + encodeURIComponent(p.goal ?? '')} with \`webterm-browser navigate <url>\` (no --node needed while it is your only cabled browser; if none is cabled yet, \`webterm-browser open <url>\` opens one), read the pages with \`webterm-browser snapshot\`, follow the links that matter and gather evidence.`,
+    instructions: `webterm opens browser node ${browserNode ?? browserNodeOf(runId)} beside you, cabled to you. Go to ${p.url ?? SEARCH_URL + encodeURIComponent(p.goal ?? '')} with \`webterm-browser navigate <url>\` (no --node needed while it is your only cabled browser; if none is cabled yet, \`webterm-browser open <url>\` opens one), read the pages with \`webterm-browser snapshot\`, follow the links that matter and gather evidence.`,
     outputFormat: `${RESULT_LINE} markdown: the findings, then a Sources list with every URL you used.`,
     boundaries: 'Read-only research: do not sign in, post, buy or change anything on the web or in the repository.',
   }),

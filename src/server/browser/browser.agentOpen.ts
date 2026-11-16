@@ -8,7 +8,7 @@ import type { ControlResult } from '../control/controlTypes'
 import { cableGrants } from '../policy/policy.cable'
 
 /** Same size as the client's URL-open path (`BROWSER_OPEN_SIZE`, client/browser.open.place.ts). */
-const OPEN_SIZE = { width: 640, height: 400 }
+export const OPEN_SIZE ={ width: 640, height: 400 }
 
 export interface AgentOpenDeps {
   /** Async so the shared db is only loaded when an agent really opens a browser (same lazy pattern as `outbox`). */

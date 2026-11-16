@@ -56,8 +56,9 @@ export interface McpDeps {
 /** Route capabilities with an MCP executor. Control verbs node.*, approval.*, plan.read stay
  *  capability-token only (minted for Central/orchestrator), so a node never sees them here. */
 const ROUTE_TOOLS = new Set(['browser.read', 'browser.act', 'git.diff', 'secret.run', 'secret.list', APP_OPEN_CAPABILITY])
-/** Central's project-scoped wrappers of the browser verbs; nodes use the cable-gated browser.* above. */
-const SUPERSEDED = new Set(['browser_status', 'browser_act'])
+/** Central's project-scoped browser tools; nodes use the cable-gated browser.* above. `browser_read` here would also
+ *  claim the MCP name of the `browser.read` capability and break the node tool list. */
+const SUPERSEDED = new Set(['browser_status', 'browser_act', 'browser_read'])
 
 /** MCP tool name: dots become underscores (Anthropic/OpenAI tool names allow `[A-Za-z0-9_-]` only). */
 export const mcpName = (capability: string): string => capability.replace(/\./g, '_')

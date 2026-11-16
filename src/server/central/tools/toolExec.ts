@@ -5,6 +5,7 @@ import { announceCentralAct } from './toolAct'
 import { auditTool } from './toolAudit'
 import { type ControlGuard, type ExecResult, type ToolCtx, type ToolDef, type ToolInput, type ToolResult, defEnabled, tierWithin } from './toolTypes'
 import { validateToolInput } from './toolValidate'
+import { markTainted, originOf } from '../guard/taintStore'
 
 /** Guard that permits everything, for callers whose gating happened upstream (proposal pipeline). */
 export const ALLOW_ALL_GUARD: ControlGuard = { check: () => ({ ok: true }) }
@@ -23,6 +24,7 @@ async function execAudited(ctx: ToolCtx, name: string, args: ToolInput, options:
   const finish = (result: ToolResult, projectId = trusted): { result: ExecResult; auditSeq: number } => {
     const auditSeq = auditTool(ctx, name, def, projectId, result)
     announceCentralAct(ctx, name, projectId, result)
+    noteTaint(ctx, args, result)
     return { result: { ...result, tool: name, ...(projectId ? { projectId } : {}) }, auditSeq }
   }
   if (!def) return finish({ ok: false, code: 'unknown_tool' })
@@ -34,11 +36,17 @@ async function execAudited(ctx: ToolCtx, name: string, args: ToolInput, options:
     projectId = checked.projectId
   }
   if (!tierWithin(def.tier, ctx.maxTier)) return finish({ ok: false, code: 'tier_denied' }, projectId)
-  const verdict = ctx.guard.check({ tool: name, tier: def.tier, ...(projectId ? { projectId } : {}), input: args })
+  const verdict = ctx.guard.check({ tool: name, tier: def.tier, ...(projectId ? { projectId } : {}), input: args, conversationId: ctx.conversationId })
   if (!verdict.ok) return finish({ ok: false, code: verdict.code || 'guard_denied' }, projectId)
   // F3-c: snapshot the project's workspace before any effect (R1+) so Rewind can undo it; never throws.
   await checkpointBeforeAction(ctx.db, projectId, def.tier)
   return finish(await runHandler(def, ctx, args, projectId), projectId)
+}
+
+/** A result that says `tainted: true` (untrusted web data, e.g. browser_read) taints this conversation; the flag decides, not the tool name. */
+function noteTaint(ctx: ToolCtx, args: ToolInput, result: ToolResult): void {
+  if (!result.ok || result.data?.tainted !== true) return
+  markTainted(ctx.conversationId, originOf(args.url), ctx.now())
 }
 
 async function runHandler(def: ToolDef, ctx: ToolCtx, args: ToolInput, projectId: string | undefined): Promise<ToolResult> {

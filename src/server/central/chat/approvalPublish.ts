@@ -8,6 +8,7 @@ import { type Approval, type ApprovalStatus, expireApprovals, getApproval, onApp
 import { createLogger } from '../../logs'
 import { ConversationError, type MessagePart, type ToolCardState } from '../conversationModel'
 import { appendConversationEvent, appendMessage, getConversation } from '../conversationStore'
+import { TAINT_REASON, wasTaintedAsk } from '../guard/taintStore'
 import type { StreamHub } from './streamHub'
 
 /** Exact frame payload of `approval.requested` / `approval.updated` (the client builds against it). */
@@ -68,8 +69,10 @@ function ownerConversation(db: Database, approval: Approval): string | null {
   }
 }
 
-function titleOf(approval: Approval): string | undefined {
+function titleOf(approval: Approval, conversationId: string, now: number): string | undefined {
   const r = asRecord(approval.request)
+  // A card raised by the taint rule says why (the guard noted the tool just before the card was requested).
+  if (typeof r['tool'] === 'string' && wasTaintedAsk(conversationId, r['tool'], now)) return `Run ${r['tool']}: ${TAINT_REASON}`
   if (typeof r['title'] === 'string') return r['title']
   if (approval.kind === 'agent.spawn' && typeof r['kind'] === 'string') return `Start a ${r['kind']} ${typeof r['role'] === 'string' ? r['role'] : ''} agent`.replace(/\s+/g, ' ')
   if (typeof r['tool'] === 'string') return `Run ${r['tool']}`
@@ -115,7 +118,7 @@ export function publishApprovalChange(ctx: LedgerContext, approval: Approval): v
   const requested = approval.status === 'pending'
   if (requested) persistRequested(ctx.db, conversationId, approval, now)
   else persistUpdated(ctx.db, conversationId, approval)
-  const title = titleOf(approval)
+  const title = titleOf(approval, conversationId, now)
   const frame: ApprovalFrame = { approvalId: approval.id, state: approval.status, ...(title ? { title } : {}) }
   const event = appendConversationEvent(ctx.db, { conversationId, type: requested ? 'approval.requested' : 'approval.updated', payload: frame, now })
   for (const hub of hubs.get(ctx.db) ?? []) hub.publish(conversationId, event)

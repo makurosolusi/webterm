@@ -6,6 +6,7 @@ import type { BrowserState, Lease, LiveState } from '../../../../shared/browser.
 import { hostOnly } from '../../../../shared/browser.url'
 import { projectWorkspace } from '../../workspaceLookup'
 import type { ToolCtx, ToolDef, ToolResult } from '../toolTypes'
+import type { PageReader } from '../../context/pageReader'
 import { clip, readPage } from './read.shared'
 import { obj, S } from '../../../capability/capability.schema'
 
@@ -14,6 +15,9 @@ export const BROWSER_TOOLS_FLAG = ENV_BROWSER.enabled
 const TITLE_MAX = 80
 const DOMAINS_MAX = 100
 
+/** Verbs Central's tools send through the control path; `snapshot` and `wait` are reads, the rest need `browser.act`. */
+export type ControlVerb = 'navigate' | 'click' | 'type' | 'snapshot' | 'wait' | 'release'
+
 /** Ports the browser tools need from the process; resolved by the integrator, faked in tests. */
 export interface BrowserToolDeps {
   /** Live state of one browser node, undefined when the host does not know it. */
@@ -21,9 +25,21 @@ export interface BrowserToolDeps {
   /** Cookie domain names (never values) saved in the vault of a workspace. */
   listDomains(workspaceId: string): Array<{ domain: string }>
   /** Calls the agent control path (`handleBrowserControl`) with a capability minted for `nodeId`. */
-  control(nodeId: string, verb: 'navigate' | 'click' | 'type', body: Record<string, unknown>): Promise<{ status: number; body?: unknown }>
+  control(nodeId: string, verb: ControlVerb, body: Record<string, unknown>): Promise<{ status: number; body?: unknown }>
   /** Opens browser node `nodeId` beside agent node `requesterId`, cabled to it, or reuses one already cabled (its id in `nodeId`); absent = no `browser_open`. */
+  /** Adds a standalone browser node (no agent, no cable) to a workspace and starts its page, under the MAX_LIVE gate; absent = no `browser_read`. */
+  openProject?(workspaceId: string, nodeId: string): Promise<{ ok: true } | { ok: false; code: string }>
+  /** The quarantined page reader (pageReader.ts); absent = no `browser_read`. */
+  reader?: PageReader
   open?(requesterId: string, nodeId: string): Promise<{ ok: true; started: boolean; nodeId?: string } | { ok: false; code: string }>
+}
+
+const ERROR_CODE_RE = /^[a-z_]{1,32}$/
+
+/** Maps a non-200 control response to a short snake_case code (the control path's own error name, else the status). */
+export function failCode(status: number, body: unknown): string {
+  const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined
+  return typeof error === 'string' && ERROR_CODE_RE.test(error) ? error : `browser_http_${status}`
 }
 
 export type NodeLookup = { ok: true; workspaceId: string; nodeIds: string[] } | { ok: false; code: string }

@@ -14,8 +14,9 @@ import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { settleCandidate, verifyAgentWorktree } from './agentVerify'
 import { settleExecTask } from '../work/workLifecycle'
 import { createLogger } from '../../logs'
+import { slotRefusal } from '../guard/controlGuard'
 import { AGENT_ENVELOPE, DEFAULT_EXEC_TIMEOUT_MS, agentNodeId, agentView, spawnParentOf, withLadderModel } from './agentExecutor.model'
-import { createApprovalFlow } from './agentExecutor.approval'
+import { createApprovalFlow, isTaintedOwner } from './agentExecutor.approval'
 import type { AgentDeps, AgentExecutor, ReconcileReport, SpawnInput } from './agentExecutor.types'
 
 // Re-exported: the executor's public surface is imported from here by 20+ modules.
@@ -161,7 +162,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return proceed(created.agent, created.verdict, input.requireApproval)
   }
 
-  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || (requireApproval && !skip(agent.projectId)) ? pendApproval(agent) : launch(agent))
+  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || ((requireApproval || isTaintedOwner(agent.owner, now())) && !skip(agent.projectId)) ? pendApproval(agent) : launch(agent))
 
   const live = (a: AgentRecord): boolean => (a.runner === 'exec' ? handles.has(a.id) : !!a.nodeId && host.hasSession(a.nodeId))
 
@@ -196,6 +197,8 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       if (agent.state !== 'working' && agent.state !== 'waiting_input' && agent.state !== 'candidate_done') return { ok: false, code: 'agent_not_active' }
       if (mode === 'followup' && agent.state === 'working') return { ok: false, code: 'agent_busy' }
       if (!host.hasSession(agent.nodeId)) return { ok: false, code: 'session_gone' }
+      // A finished agent holds no slot: waking it claims one (the single activation point; a user typing into the node bypasses it, the work is already running).
+      if (agent.state === 'candidate_done') { const full = slotRefusal(db, agent.projectId); if (full) return { ok: false, code: full } }
       const sent = await host.send(agent.nodeId, `${AGENT_ENVELOPE}\n${filterHandoffContext(text).replace(CONTROL_CHARS, '')}`)
       if (!sent.ok) return { ok: false, code: sent.reason, data: { hint: sent.message } }
       const moved = agent.state === 'working' ? agent : tryMove(agent.id, 'working') ?? agent

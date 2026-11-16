@@ -115,7 +115,7 @@ describe('Settings › Central Agent', () => {
 
   it('automatic rows are gone: model, context window, reply limits, token budget, skills, engine, browser, telegram, links, experiments', async () => {
     const main = await open()
-    expect(CENTRAL_FIELDS.map((f) => f.id)).toEqual(['central', 'level', 'checkin', 'costLimit', 'spendWarning', 'dailySpawns', 'checkinLimit', 'maxInflight'])
+    expect(CENTRAL_FIELDS.map((f) => f.id)).toEqual(['central', 'level', 'checkin', 'tidy', 'costLimit', 'spendWarning', 'dailySpawns', 'checkinLimit', 'maxInflight'])
     for (const gone of ['Model', 'Context window', 'Reply time limit', 'Steps per reply', 'Daily token budget', 'Use approved skills', 'Suggest new skills',
       'Summarize long conversations', 'Engine', 'Claude profile', 'Project knowledge', 'Steadier autonomy', 'Agent mail', 'Ask before each worker runs']) {
       expect(within(main).queryByLabelText(gone), gone).toBeNull()
@@ -139,6 +139,16 @@ describe('Settings › Central Agent', () => {
     expect(sw.hasAttribute('disabled')).toBe(false)
     fireEvent.click(sw)
     expect(onChange).toHaveBeenCalledWith({ dailySpendWarning: true })
+  })
+
+  it('tidy switch: on by default, one plain sentence, saves the Settings key', async () => {
+    const onChange = vi.fn()
+    render(<SettingsPanel settings={DEFAULT_SETTINGS} onChange={onChange} onClose={vi.fn()} initialSection="central" />)
+    const sw = await screen.findByRole('switch', { name: 'Tidy up finished workers' })
+    expect(sw.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(/never touches your own nodes/)).toBeTruthy()
+    fireEvent.click(sw)
+    expect(onChange).toHaveBeenCalledWith({ centralTidy: false })
   })
 
   it('"What Central may do" is the shared segmented control; On its own asks in the app dialog first', async () => {

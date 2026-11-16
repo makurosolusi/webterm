@@ -13,6 +13,7 @@ import { createPolicy, isDestructive, type Policy } from '../../policy/policy.de
 import type { Classifier, GatedOutcome } from '../../policy/policy.classifier'
 import type { AppendEventInput } from '../../events/eventModel'
 import { classifyGuardCall } from './guardClassifier'
+import { taintNeedsApproval } from './taintClassify'
 
 /** I11: concurrent workers per project and across the whole server. */
 export const MAX_WORKERS_PER_PROJECT = 3
@@ -25,8 +26,8 @@ const MAX_DIGEST = 64
 const MAX_TOOL = 64
 const GUARD_AUDIT_KIND = 'central.guard'
 const SPAWN_TOOLS: readonly string[] = ['agent.spawn']
-/** Agent states that no longer hold a worker slot (`approval_pending` has not started yet). */
-const SLOT_FREE_STATES = ['approval_pending', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
+/** Agent states that no longer hold a worker slot (`approval_pending` has not started yet; `candidate_done` is idle, it takes a slot again when it works). */
+const SLOT_FREE_STATES = ['approval_pending', 'candidate_done', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
 /** Central acts as this principal in the policy (PLAN S2). */
 const CENTRAL_PRINCIPAL = 'central'
 
@@ -84,6 +85,12 @@ function activeAgents(db: Database, projectId: string | null): number {
   const where = projectId ? ' AND project_id = ?' : ''
   const row = getRow(db, `SELECT count(*) AS c FROM central_agents WHERE ended_at IS NULL AND state NOT IN (${marks})${where}`, ...SLOT_FREE_STATES, ...(projectId ? [projectId] : []))
   return Number(row?.c ?? 0)
+}
+
+/** Cap code that refuses one more working agent in `projectId` (a finished agent being woken takes a slot again), else null. */
+export function slotRefusal(db: Database, projectId: string): 'cap_project' | 'cap_global' | null {
+  if (activeAgents(db, projectId) >= MAX_WORKERS_PER_PROJECT) return 'cap_project'
+  return activeAgents(db, null) >= MAX_WORKERS_GLOBAL ? 'cap_global' : null
 }
 
 /** Builds the guard; flag wiring and mounting belong to the integrator. */
@@ -153,6 +160,8 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
       if (d.effect === 'deny') return deny('policy_denied', d.reason)
       if (d.effect === 'ask') { askRule = d.ruleId; return { verdict: 'needs_approval', level, tier } }
     }
+    // Taint: a Central conversation that read untrusted web content asks a human before any impactful tool (taintClassify.ts).
+    if (req.action !== 'turn' && taintNeedsApproval(req, now())) return { verdict: 'needs_approval', level, tier, tainted: true }
     return ladder.verdict === 'needs_approval' ? { verdict: 'needs_approval', level, tier } : { verdict: 'allow', level }
   }
 
@@ -161,19 +170,21 @@ export function createControlGuard(deps: GuardDeps): SyncControlGuard {
     policy,
     effectiveLevel,
     recordUsage: (usage) => addUsage(db, usage, now),
-    classifyLater: (req, decision) => classifyGuardCall({
+    // A tainted ask is never delegated to the classifier: a model must not wave through what untrusted data may have steered.
+    classifyLater: (req, decision) => (decision.verdict === 'needs_approval' && decision.tainted ? Promise.resolve(null) : classifyGuardCall({
       db, now, policy, ...(deps.classifier ? { classifier: deps.classifier } : {}), ...(deps.record ? { record: deps.record } : {}),
-    }, { ...req, destructive: isDestructive(req.tool) }, decision),
+    }, { ...req, destructive: isDestructive(req.tool) }, decision)),
     skipsApprovals,
     check(req) {
       const level = effectiveLevel(req.projectId)
       const judged = judge(req, level)
       const skipped = judged.verdict === 'needs_approval' && skipsApprovals(req.projectId)
       const decision: GuardDecision = skipped ? { verdict: 'allow', level } : judged
+      const tainted = judged.verdict === 'needs_approval' && judged.tainted ? { code: 'tainted' } : {}
       const code = decision.verdict === 'deny' ? { code: decision.code, reason: decision.reason } : skipped ? { skipped: true, ...(askRule ? { rule: askRule } : {}) } : {}
       appendEvent({ db, now }, {
         actor: 'guard', kind: GUARD_AUDIT_KIND, ...projectRef(db, req.projectId),
-        payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code },
+        payload: { action: req.action, tool: req.tool.slice(0, MAX_TOOL), tier: req.tier, projectId: req.projectId, level, verdict: decision.verdict, ...code, ...tainted },
       })
       return decision
     },
@@ -190,7 +201,7 @@ function canonical(value: unknown): string {
 }
 
 /** Request/verdict shapes of the WS-03 registry port (`tools/toolTypes.ts`), kept structural on purpose. */
-export interface ToolGuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown> }
+export interface ToolGuardRequest { tool: string; tier: Tier; projectId?: string; input: Record<string, unknown>; conversationId?: string }
 export type ToolGuardVerdict = { ok: true } | { ok: false; code: string }
 
 /**
@@ -204,10 +215,11 @@ export function toToolGuard(guard: SyncControlGuard, opts: { approved?: boolean;
       try {
         const digest = createHash('sha256').update(`${req.tool}\n${canonical(req.input)}`).digest('hex').slice(0, 32)
         const action = guardActionOf(req.tool)
-        const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest })
+        const url = typeof req.input.url === 'string' ? req.input.url : undefined
+        const d = guard.check({ action, projectId: req.projectId ?? null, tool: req.tool, tier: req.tier, digest, ...(req.conversationId ? { conversationId: req.conversationId } : {}), ...(url !== undefined ? { url } : {}) })
         if (d.verdict === 'allow' || (d.verdict === 'needs_approval' && opts.approved)) return { ok: true }
         // F4-d: off by default; never blocks the caller, a failure leaves the card for the human.
-        if (d.verdict === 'needs_approval') guard.classifyLater?.(req, d).catch((err: unknown) => opts.onError?.(err))
+        if (d.verdict === 'needs_approval' && !d.tainted) guard.classifyLater?.(req, d).catch((err: unknown) => opts.onError?.(err))
         return { ok: false, code: d.verdict === 'deny' ? d.code : 'approval_required' }
       } catch (err) {
         opts.onError?.(err)
