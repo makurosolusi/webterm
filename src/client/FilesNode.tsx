@@ -1,5 +1,5 @@
 // Node file-manager: a folder TREE rooted at `dirPath` (rows keyed by path relative to it). Ported
-// from nodeterm `FilesNode.tsx` + Explorer `TreeEntry`; pure decisions live in `./fileBrowse.ts`,
+// as a file-tree node; pure decisions live in `./fileBrowse.ts`,
 // `./filesView.ts`, `./filesSelection.ts`, `./filesTree.ts` and `./filesKeys.ts`. This file is frame +
 // state; tree state in `useFilesTree`, hand actions in `useFilesActions`, list in `FilesList`, row in
 // `FilesRow`, name input in `FilesInput`, menu in `FilesMenu`; features plug in via `FILES_SLOTS`.

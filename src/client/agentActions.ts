@@ -2,7 +2,7 @@
 // meluncurkannya ulang dengan `--resume` miliknya sendiri sehingga percakapannya kembali utuh.
 // Bebas DOM/transport supaya context menu, koreografi restart, dan test memakai SATU set aturan.
 //
-// Diporting dari nodeterm `src/renderer/terminal/agent-restart.ts` (v0.4.5). Yang TIDAK diporting:
+// Logika restart agent. Yang TIDAK tercakup:
 // polling pane tmux (`performExitPhase`). webterm menjalankan agent sebagai `shell -l -c "<cmd>"`,
 // jadi saat CLI keluar shell-nya keluar juga dan PTY-nya habis — tidak ada pane shell untuk
 // diintip atau diketik. Lihat `AgentNode` untuk bagaimana fase relaunch-nya diisi.
@@ -12,12 +12,12 @@ import { canResume, capabilityAgentId, isSafeSessionId, type AgentId, type Agent
 /**
  * Perintah exit in-band per CLI agent. Hanya agent yang terdaftar di sini yang bisa di-restart
  * in-place — CLI tak dikenal (termasuk CLI non-Claude yang dijalankan di terminal) tidak punya cara
- * aman untuk diminta keluar. Nilai dibaca dari nodeterm `EXIT_SEQUENCES`.
+ * aman untuk diminta keluar. Nilainya `EXIT_SEQUENCES`.
  */
 const EXIT_SEQUENCES: Record<string, string> = { claude: '/exit' }
 
 /**
- * Berapa Ctrl-C yang mengeluarkan agent. Diukur nodeterm terhadap binary terpasang: satu Ctrl-C
+ * Berapa Ctrl-C yang mengeluarkan agent. Diukur terhadap binary terpasang: satu Ctrl-C
  * membersihkan composer, berikutnya mempersenjatai "press again to exit", yang ketiga keluar —
  * dengan composer kosong yang kedua sudah keluar. Jumlah tetap ini keluar dengan ATAU tanpa draft.
  */
@@ -90,7 +90,7 @@ export interface ExitWrite {
 
 /**
  * Urutan write yang meminta sebuah agent keluar, atau null bila agent-nya tidak bisa diminta keluar.
- * Ctrl-C berulang, persis seperti nodeterm. TIDAK ada Ctrl-U di depan: Ctrl-C sudah membersihkan
+ * Ctrl-C berulang. TIDAK ada Ctrl-U di depan: Ctrl-C sudah membersihkan
  * seluruh composer, dan tidak ada CR yang dikirim sehingga draft tidak pernah ikut terkirim.
  */
 export function exitWrites(agentId: AgentId | undefined): ExitWrite[] | null {
@@ -107,7 +107,7 @@ export function exitWrites(agentId: AgentId | undefined): ExitWrite[] | null {
 /**
  * Berapa lama menunggu CLI melepaskan PTY setelah urutan exit dikirim, sebelum relaunch dipaksakan.
  *
- * ponytail: jendela tetap, bukan verifikasi. nodeterm meng-poll `pane_current_command` tmux sampai
+ * ponytail: jendela tetap, bukan verifikasi. alternatifnya meng-poll `pane_current_command` tmux sampai
  * pane-nya kembali jadi shell; webterm tidak punya pane untuk ditanya (agent-nya ADALAH proses
  * PTY-nya, lihat header modul). Plafonnya: CLI yang keluar lebih lambat dari ini akan di-kill
  * sebelum sempat keluar sendiri, dan `--resume` lalu memulihkan percakapan dari transcript di disk

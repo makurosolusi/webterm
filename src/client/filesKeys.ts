@@ -4,7 +4,7 @@
  * SEMANTIK path dan listing, ini soal apa yang dilakukan tangan pengguna; keduanya tidak saling
  * bergantung, dan satu file berisi keduanya melewati batas ukuran.
  *
- * Murni dan tanpa DOM (vitest webterm berjalan di node-env). Diport dari nodeterm
+ * Murni dan tanpa DOM (vitest webterm berjalan di node-env). 
  * `src/renderer/lib/filesNode.ts`.
  */
 

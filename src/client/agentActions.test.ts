@@ -14,7 +14,7 @@ const CTRL_C = '\x03'
 const SID = 'd3f0a1b2-0000-4000-8000-000000000000'
 
 describe('exitSequence', () => {
-  it('matches the nodeterm table for claude', () => {
+  it('matches the expected table for claude', () => {
     expect(exitSequence('claude')).toBe('/exit')
   })
   it('has no sequence for a retired builtin (a plain terminal program now), an unknown agent or none', () => {

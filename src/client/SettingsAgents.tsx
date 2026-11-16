@@ -1,5 +1,5 @@
 // Settings › Claude › Advanced: the Add-menu checklist and `customAgents` (a list of records, more than one
-// input each). Shaped after nodeterm `src/renderer/components/settings/sections/CustomAgentsSection.tsx`: one
+// input each). One
 // card per custom agent, inside the "Custom agents" row, with an empty state. Claude's launch command lives
 // in the launch profiles card; other CLIs have no builtin row.
 import type { CustomAgent, Settings } from '../shared/settings'

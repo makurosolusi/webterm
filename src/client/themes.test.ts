@@ -13,9 +13,9 @@ describe('terminal themes', () => {
     expect(DEFAULT_SETTINGS.terminalTheme).toBe(DEFAULT_TERMINAL_THEME_ID)
   })
 
-  it('no theme id leaks the nodeterm name', () => {
-    // Id tema adalah permukaan TERLIHAT (dropdown settings) — beda dari wire-protocol nodeterm.
-    for (const t of TERMINAL_THEMES) expect(t.id).not.toContain('nodeterm')
+  it('no theme id leaks a legacy name', () => {
+    // Id tema adalah permukaan TERLIHAT (dropdown settings).
+    for (const t of TERMINAL_THEMES) expect(t.id).not.toContain('legacy')
   })
 
   it('ids are unique and every theme is fully populated', () => {
@@ -103,7 +103,6 @@ describe('terminal themes', () => {
     expect(resolveTerminalTheme('tema-yang-dihapus')).toBe(fallback)
     expect(resolveTerminalTheme('')).toBe(fallback)
     expect(resolveTerminalTheme(undefined)).toBe(fallback)
-    expect(resolveTerminalTheme('nodeterm-dark')).toBe(fallback)
   })
 
   it('returns an identical object for the same id', () => {

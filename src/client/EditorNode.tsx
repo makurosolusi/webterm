@@ -58,7 +58,7 @@ export interface EditorNodeProps extends NodeProps {
  * Node editor/preview file. Teks dimuat/disimpan lewat `useEditorFile` (cek versi, konflik,
  * biner, non-UTF-8); gambar dan PDF jadi preview; audio/video/archive/biner jadi placeholder jujur.
  *
- * Port dari nodeterm `src/renderer/nodes/EditorNode.tsx`. Bedanya: fs masuk sebagai prop callback
+ * Fs masuk sebagai prop callback
  * (webterm tidak punya preload Electron), dan tidak ada cabang SSH/worktree.
  */
 function EditorNode({
@@ -150,7 +150,7 @@ function EditorNode({
   })
 
   // Markdown: Toggle Preview (default ⌘M / Ctrl+M, rebindable via the registry) menukar preview
-  // saat node ini di-hover — gerbang hover yang sama dengan nodeterm (`canvasOwnsMarkdownChord`),
+  // saat node ini di-hover — gerbang hover (`canvasOwnsMarkdownChord`),
   // supaya satu chord tidak menyalakan setiap node editor di board.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

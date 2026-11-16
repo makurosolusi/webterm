@@ -53,7 +53,7 @@ export interface NodeChromeProps {
   menuItems?: VscodeMenuItem[]    // item tambahan menu More Actions (⋯) khusus tipe node
 }
 
-/** Judul yang dipakai saat node belum punya nama — nodeterm merender `data.title || 'Untitled'`. */
+/** Judul yang dipakai saat node belum punya nama — dirender sebagai `data.title || 'Untitled'`. */
 export const UNTITLED = 'Untitled'
 
 /**
@@ -61,7 +61,7 @@ export const UNTITLED = 'Untitled'
  *
  * `working`/`attention` sengaja TANPA prefiks: glow node digantung pada
  * `.react-flow__node:has(.term-node.working)::after` (dan padanannya `[data-tab-node]` di tab; pseudo-nya harus hidup di luar `.term-node`
- * yang `overflow: hidden`), dan selector itu disalin apa adanya dari nodeterm.
+ * yang `overflow: hidden`), dan selector itu dipertahankan apa adanya.
  *
  * Turn ended (`waiting`) gets no class: the shared status model treats it as calm idle, so the node
  * shows no ring. `attention` (red, pulsing) belongs to `blocked` only.

@@ -1,12 +1,12 @@
 // Logika murni di balik panel daftar sesi (sidebar kiri): pengelompokan, pengurutan, pelabelan,
-// dan pencocokan filter. Porting dari nodeterm v0.4.5 `src/renderer/lib/sessionList.ts` +
+// dan pencocokan filter. Daftar sesi
 // `src/renderer/lib/sidebarFilter.ts`. Semua di sini bebas DOM supaya bisa dites di node-env.
 //
 // Tanda `unread` datang dari `./unread` — murni sisi klien, diturunkan dari kanal status dan BUKAN
 // dari protokol (`StatusMsg` hanya membawa `AgentStatus`). Modul ini tidak membacanya sendiri:
 // himpunan id unread disuntikkan sebagai argumen supaya di sini tetap bebas state global.
 //
-// Yang DIBUANG dari nodeterm, beserta alasannya (bukan kelalaian):
+// Yang SENGAJA tidak ada, beserta alasannya (bukan kelalaian):
 // - Frame group canvas (`kind: 'group'`). `WsNodeKind` webterm tidak punya frame, jadi pohonnya
 //   dua tingkat (workspace → sesi), bukan rekursif.
 // Status meaning (bucket, label, glyph) is NOT decided here: every row reads `sessionStatusView`
@@ -21,7 +21,7 @@ import { withNodeName } from './nodeName.label'
 import { AGENT_CHAT_TITLE } from '../shared/agentChat.node'
 
 /** Kind node yang dihitung sebagai "sesi". `files`/`editor` adalah penampil, bukan shell —
- *  nodeterm juga hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
+ *  Hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
  *  without a terminal, so it is listed (and reopenable) like an agent node. */
 export const SESSION_KINDS: readonly WsNodeKind[] = ['terminal', 'agent', 'agentChat']
 
@@ -190,8 +190,8 @@ export function sessionIds(workspaces: Workspace[], liveActiveNodes: WsNode[] | 
   return [...new Set(workspaces.flatMap((ws) => nodesOf(ws, liveActiveNodes, ws.id === activeProjectId).map((n) => n.id)))]
 }
 
-// Dicocokkan: nama sesi + cwd — dua hal yang BARIS ITU tampilkan. nodeterm mencocokkan judul +
-// nama sesi; webterm tidak punya nama sesi provider, dan cwd adalah identitas lain barisnya.
+// Dicocokkan: nama sesi + cwd — dua hal yang BARIS ITU tampilkan. Tidak mencocokkan
+// nama sesi provider; webterm tidak punya nama sesi provider, dan cwd adalah identitas lain barisnya.
 function matches(row: SessionRowVM, needle: string): boolean {
   return `${row.label} ${row.cwd ?? ''}`.toLowerCase().includes(needle)
 }

@@ -1,9 +1,9 @@
 // Clicks on links inside RENDERED MARKDOWN must never navigate webterm's own tab.
 //
-// Port of nodeterm `src/renderer/lib/markdownLinks.ts` (decideMarkdownLinkClick + the click /
+// Markdown link handling (decideMarkdownLinkClick + the click /
 // middle-click guard). `renderMarkdown` keeps an anchor's href as written, and agents write relative
 // links constantly (`[pty.ts](src/server/pty.ts:41)`). A plain click resolved it against the app URL
-// and the whole canvas was gone; a middle click opened a stray 404 tab. Differences from nodeterm:
+// and the whole canvas was gone; a middle click opened a stray 404 tab. Notes:
 // webterm knows the folder of the file being previewed, so local links open the file in an editor
 // node instead of a "can't open" toast; `#anchor` scrolls inside the preview; `mailto:`/`tel:` keep
 // the browser's default (it hands them to the OS without leaving the page).

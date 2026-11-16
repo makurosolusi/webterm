@@ -8,7 +8,7 @@ import { codicon } from './dockCodicon'
 import { useShownBottomView } from './bottomPanelHost'
 import { useTabLayout } from './tabLayout.store'
 
-/** Preset zoom status bar, disalin dari nodeterm `src/renderer/lib/zoomPresets.ts`. */
+/** Preset zoom status bar, untuk bar status zoom. */
 export const ZOOM_PRESETS = [25, 50, 75, 100, 150, 200] as const
 
 /** Status bar items that toggle a bottom-panel view, by the view they show. */

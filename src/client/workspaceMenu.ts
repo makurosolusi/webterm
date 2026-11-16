@@ -22,7 +22,7 @@ export function normalizeWorkspaceName(raw: string): string | null {
  * bukan yang aktif, tab yang mengambil alih slotnya bila ya, dan `null` bila tak ada sisa sama
  * sekali (App jatuh ke layar `Welcome`).
  *
- * Aturan slot-nya disalin dari nodeterm `state/projects.ts#deleteProject`
+ * Aturan slot-nya
  * (`remaining[Math.min(index, remaining.length - 1)]`): tab tetangga KANAN, kecuali yang dihapus
  * tab terakhir — maka tetangga kirinya. Pengganti tidak boleh ditebak sembarangan: `activeId` yang
  * menunjuk id mati membuat `PUT /api/active` dan `GET /api/workspaces/:id` gagal, dan canvas
@@ -55,8 +55,7 @@ export function bootWorkspaceId(ids: string[], activeId: string | null): string 
 }
 
 /**
- * Kalimat konfirmasi hapus. Bentuknya mengikuti nodeterm `lib/projectCloseSessions.ts`
- * (`deleteConfirmCopy`): sebut NAMA-nya, sebut apa yang ikut berakhir, lalu tegaskan apa yang TIDAK
+ * Kalimat konfirmasi hapus. Bentuknya (`deleteConfirmCopy`): sebut NAMA-nya, sebut apa yang ikut berakhir, lalu tegaskan apa yang TIDAK
  * ikut terhapus — folder di disk — supaya "Delete" tidak terbaca sebagai menghapus pekerjaan.
  */
 export function deleteWorkspaceMessage(name: string, sessions: number): string {

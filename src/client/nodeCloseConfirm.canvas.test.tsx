@@ -53,7 +53,7 @@ describe('node close confirm (canvas)', () => {
     await waitFor(() => expect(dialog()).not.toBeNull())
     expect(screen.getByText('Close “shell”?')).toBeTruthy()
     expect(screen.getByText('Its terminal session and any process running in it will end.')).toBeTruthy()
-    // nodeterm's keyboard rule: focus starts on Cancel, never on the destructive button.
+    // keyboard rule: focus starts on Cancel, never on the destructive button.
     expect(document.activeElement?.textContent).toBe('Cancel')
     expect(nodeIds()).toContain('term-1')
 

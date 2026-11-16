@@ -78,7 +78,7 @@ export default function Dock(props: DockProps) {
   }, [addOpen, workspaceOpen])
 
   const addBuiltin = (id: BuiltinAgentId) => {
-    // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti nodeterm yang
+    // cwd dibiarkan undefined: server memakai cwd workspace, sama seperti perilaku project yang
     // menambah agent dengan satu klik tanpa form.
     props.onAddAgent(assembleCmd(id, launchCmds[id]), id)
     setAddOpen(false)

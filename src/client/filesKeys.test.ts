@@ -1,4 +1,4 @@
-// Diadaptasi dari nodeterm `src/renderer/lib/filesNode.test.ts` — bagian interaksi keyboard; sisi
+// Bagian interaksi keyboard; sisi
 // semantik path/listing ada di `./fileBrowse.test.ts`.
 import { describe, expect, it } from 'vitest'
 import { listKeyAction, scrollTopToReveal, TYPEAHEAD_RESET_MS, typeAhead, typeAheadIndex, type KeyRow } from './filesKeys'

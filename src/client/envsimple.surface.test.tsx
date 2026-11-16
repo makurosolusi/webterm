@@ -15,7 +15,7 @@ import { resetCapabilitiesCache } from './useCapabilities'
 
 // `mode` as a whole word (jargon), not inside "model": Central Agent has a Model & cost group.
 const BANNED_WORDS = /webhook|polling|secret|\bmodes?\b|restart|berbahaya|operator/i
-const ENV_NAMES = /\b(WEBTERM|NODETERM)_[A-Z0-9_]+/
+const ENV_NAMES = /\bWEBTERM_[A-Z0-9_]+/
 const NEW_LABELS = ['advancedLabels.ts', 'capabilitiesLabels.ts', 'telegramCardLabels.ts', 'centralSettingsLabels.ts']
 const UI_SOURCES = [...NEW_LABELS, 'CapabilitiesSection.tsx', 'AdvancedSection.tsx', 'CapabilityCard.tsx', 'CapabilityOffer.tsx', 'TelegramCard.tsx', 'CentralSettingsSection.tsx', 'centralSettings.controls.tsx']
 const OLD_UI = /Diubah|Perlu restart|Berbahaya|Segarkan|Default|Aktif sekarang|Tersimpan|Atur ulang|Ledger|Bayangan|Belum berpengaruh|tab Channels|Dikunci|Token root|Info server/

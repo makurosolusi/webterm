@@ -4,7 +4,7 @@
  * dicocokkan filter, dan apa yang terjadi saat sesuatu dibuka. Vitest webterm berjalan di node-env
  * tanpa DOM, jadi semua logika yang perlu dites memang harus duduk di sini, bukan di `.tsx`.
  *
- * Porting dari nodeterm `src/renderer/lib/filesNode.ts` + `src/renderer/lib/explorerCreate.ts`
+ * Logika browse/buat file
  * (path helper) + `src/renderer/lib/openTarget.ts` (ekstensi) + `isMediaFile` dari
  * `src/renderer/state/workspace.ts`. Digabung jadi satu modul karena webterm tidak punya Explorer
  * drawer maupun quick-open yang ikut memakai helper-helper itu.
@@ -13,7 +13,7 @@
  * `displacedFilesPatch` (tidak ada binding worktree yang bisa menggeser sebuah node).
  *
  * Path selalu absolut dipisah `/`. Celah Windows (`C:\x\y` terbaca satu segmen) diwarisi apa
- * adanya dari nodeterm; server webterm berjalan di POSIX.
+ * adanya; server webterm berjalan di POSIX.
  */
 
 /** Satu entry direktori. Kembaran sisi server ada di `src/server/fsOps.ts` — dua deklarasi, satu
@@ -212,9 +212,9 @@ export function opensInEditor(path: string): boolean {
  *  `canvas` — buka sebagai node di canvas (editor untuk teks/gambar, player untuk media).
  *  `os`     — serahkan ke aplikasi default sistem operasi.
  *
- * BEDA DARI nodeterm: webterm SELALU tab browser, dan tab browser tidak bisa menyerahkan file ke
+ * webterm SELALU tab browser, dan tab browser tidak bisa menyerahkan file ke
  * OS mesin server. Jadi `os` di sini bukan aksi, ia VERDIKT "tidak bisa dibuka dari sini" — persis
- * cabang browser-runtime yang sudah ada di nodeterm. Pemanggil memberi tahu pengguna alih-alih
+ * cabang browser-runtime di runtime lain. Pemanggil memberi tahu pengguna alih-alih
  * membuka buffer sampah; itu juga alasan `fsLimits.ts` memaksa file kelewat besar MENOLAK dibuka
  * ketimbang terbuka kosong.
  */

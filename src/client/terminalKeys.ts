@@ -10,12 +10,10 @@ export * from './terminalKeys.mouse'
 
 /**
  * Keputusan MURNI untuk gestur input terminal — keyboard dan mouse — plus dua pemasang listener
- * DOM yang memakainya. Port dari nodeterm `terminal-config.ts` (chord copy/paste/Shift+Enter),
- * `terminal-font-zoom.ts`, `copy-on-select.ts` dan `middle-click.ts`.
+ * DOM yang memakainya: chord copy/paste/Shift+Enter, font zoom, copy-on-select dan middle-click.
  *
- * Satu modul, bukan empat, karena webterm hanya punya SATU call site xterm (`TerminalCore`) —
- * nodeterm punya tiga (canvas node, modal kanban, preview settings) dan memecahnya supaya ketiganya
- * tidak menyimpang. Semua yang perlu dites di sini murni dan tidak menyentuh DOM saat diimpor,
+ * Satu modul karena webterm hanya punya SATU call site xterm (`TerminalCore`) —
+ * satu tempat supaya perilakunya tidak menyimpang. Semua yang perlu dites di sini murni dan tidak menyentuh DOM saat diimpor,
  * karena vitest webterm jalan di environment node tanpa jsdom.
  */
 
@@ -37,8 +35,8 @@ export interface TerminalKeyEvent {
  * Shift+Enter → newline, bukan submit. Keymap default xterm mengirim `\r` polos untuk Shift+Enter,
  * yang dibaca CLI agent (Claude Code, Codex) sebagai "submit". Kita petakan ke ESC+CR (`\x1b\r`):
  * CLI agent memperlakukannya sebagai "sisipkan newline" — binding Alt/Option+Enter mereka. CSI-u
- * (`\x1b[13;2u`) ditolak nodeterm karena hanya lolos tmux dengan `extended-keys`; webterm tidak
- * punya tmux, tapi tetap ESC+CR supaya byte yang sampai ke agent identik dengan nodeterm.
+ * (`\x1b[13;2u`) ditolak karena hanya lolos tmux dengan `extended-keys`; webterm tidak
+ * punya tmux, tapi tetap ESC+CR supaya byte yang sampai ke agent konsisten.
  * Dikirim di SEMUA terminal, agent atau bukan — di shell polos ESC+CR paling buruk accept-line.
  */
 export const SHIFT_ENTER_SEQ = '\x1b\r'

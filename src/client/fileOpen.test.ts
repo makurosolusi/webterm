@@ -56,7 +56,7 @@ describe('planFileOpen', () => {
     expect(plan.edge).toEqual({ id: 'bridge-f2-e1', source: 'f2', target: 'e1', kind: 'file' })
   })
 
-  it('carries nodeterm EDITOR_SIZE so the editor is not born unreadably small', () => {
+  it('carries EDITOR_SIZE so the editor is not born unreadably small', () => {
     expect(EDITOR_SIZE).toEqual({ width: 660, height: 460 })
   })
 })

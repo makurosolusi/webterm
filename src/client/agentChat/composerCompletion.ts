@@ -1,4 +1,4 @@
-// Pure decisions behind the composer's completion menu, ported from nodeterm
+// Pure decisions behind the composer's completion menu
 // (renderer/lib/chatComposerComplete.ts + shared/chat-catalog.ts): which token the caret is in
 // (`/command` at the start of the message, `@path` at the start of any word), how a list is ranked,
 // and what accepting an item does to the draft. Accepting only INSERTS text; sending stays the

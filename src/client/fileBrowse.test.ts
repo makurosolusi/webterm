@@ -1,4 +1,4 @@
-// Diadaptasi dari nodeterm `src/renderer/lib/filesNode.test.ts`. Dua describe upstream tidak ikut
+// Tes pohon file. Dua describe tidak ikut
 // karena fungsinya tidak diport (`downloadMenuEntries`, `displacedFilesPatch`); ditambah cakupan
 // untuk helper path yang di webterm tinggal di modul yang sama (`newEntryPath`, `ancestorDirs`,
 // `createTargetDir`).

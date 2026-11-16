@@ -3,7 +3,7 @@
 import { bridgeExists } from './floatingEdge'
 import type { BridgeLink } from '../shared/workspace'
 
-/** EDITOR_SIZE nodeterm (`src/renderer/state/workspace.ts:77`). Node yang lahir dari `rf.addNodes`
+/** Ukuran awal editor (EDITOR_SIZE). Node yang lahir dari `rf.addNodes`
  *  TIDAK lewat `addFlowNode`, jadi tidak kebagian default node workspace — tanpa ukuran eksplisit
  *  ia memakai fallback 400×300 `store.toFlow` dan isi file-nya nyaris tak terbaca. */
 export const EDITOR_SIZE = { width: 660, height: 460 }
@@ -15,7 +15,7 @@ interface EdgeLike { source: string; target: string }
  *
  *  Sumber kebenaran dedupe adalah ADA/TIDAKNYA node editor, BUKAN kabelnya: kabel cuma penanda,
  *  jadi pengguna yang menghapus kabel saja tetap punya file yang terbuka dan tidak boleh
- *  mendapat jendela kedua. Sama seperti `openFile` nodeterm (`canvas/Canvas.tsx:5960`). */
+ *  mendapat jendela kedua.  */
 export function openEditorFor(nodes: NodeLike[], filePath: string): string | null {
   return nodes.find((n) => n.type === 'editor' && n.data?.filePath === filePath)?.id ?? null
 }
@@ -32,7 +32,7 @@ export interface OpenFilePlan {
  * Apa yang harus terjadi saat `filePath` dibuka dari node files `filesNodeId`: pakai node editor
  * yang sudah ada atau lahirkan `newNodeId`, dan pasang kabel penanda bila belum ada (termasuk saat
  * node-nya ada tapi kabelnya sudah dihapus pengguna). Satu file = satu node: node editor lain tidak
- * pernah dipakai ulang untuk file berbeda, karena node adalah ruang kerja pengguna (nodeterm juga begitu).
+ * pernah dipakai ulang untuk file berbeda, karena node adalah ruang kerja pengguna.
  *
  * Id kabel mengikuti konvensi `bridge-<source>-<target>` supaya `bridgeExists` tetap jadi dedupe-nya.
  */

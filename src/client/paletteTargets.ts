@@ -1,5 +1,5 @@
 // Palette targets: node → row conversion and the ranking the omnibox and VS Code quick picks share.
-// Ported from nodeterm `src/renderer/canvas/Canvas.tsx` (the old canvas palette).
+// Targets for the canvas palette.
 
 export interface PaletteTarget {
   id: string
@@ -37,7 +37,7 @@ const isWordStart = (s: string, i: number): boolean => i === 0 || /[^\p{L}\p{N}]
  * Lebih kecil = lebih baik; `null` = tidak cocok. Tier, terbaik dulu: substring label di awal kata,
  * substring label di mana pun, substring hint, subsequence label, subsequence label+hint.
  * Ranking HARUS sebelum cap: tanpa ini query pendek mengisi daftar dengan baris yang cuma
- * kebetulan punya huruf-hurufnya, dan node yang benar-benar berjudul itu terpotong (nodeterm #SEO).
+ * kebetulan punya huruf-hurufnya, dan node yang benar-benar berjudul itu terpotong.
  */
 export function targetScore(t: PaletteTarget, q: string): number | null {
   const query = q.trim().toLowerCase()

@@ -1,4 +1,4 @@
-// Attachments of the chat composer (opt-in through `ChatComposerProps.attach`), after nodeterm's
+// Attachments of the chat composer (opt-in through `ChatComposerProps.attach`)
 // ChatComposer: "+" opens a picker, a paste or a drop attaches files, an `attachNote` shows progress
 // or the failure. Images wait as removable thumbnails until sent; other files come back as paths the
 // composer inserts into the draft. The drop zone may be larger than the composer (the whole chat):

@@ -65,7 +65,7 @@ describe('buildCanvasMenuRows — bentuk menu', () => {
     expect(keys(after)).toEqual(['select-all', 'fit-view'])
   })
 
-  it('TIDAK memuat item nodeterm yang kemampuannya belum ada di webterm', () => {
+  it('TIDAK memuat item yang kemampuannya belum ada di webterm', () => {
     const labels = buildCanvasMenuRows(handlers(), ctx()).flatMap((r) =>
       isSeparator(r) ? [] : [r.label, ...(r.children ?? []).map((c) => c.label)],
     )
