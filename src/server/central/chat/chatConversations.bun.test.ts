@@ -11,7 +11,7 @@ import type { Database } from 'bun:sqlite'
 import { openLedgerDb } from '../../ledger/migration'
 import { centralChatRoute, type CentralChatDeps } from '../../centralChatApi'
 import type { LedgerRuntime } from '../../ledger/ledgerRuntime'
-import { listConversationEvents } from '../conversationStore'
+import { getOrCreateConversation, listConversationEvents } from '../conversationStore'
 import { MockRuntime } from '../runtime/mockRuntime'
 import { ClaudeRuntime } from '../runtime/claudeRuntime'
 import { createCentralMcpLink } from '../runtime/claudeMcp'
@@ -68,6 +68,16 @@ describe('create and list', () => {
     expect(listed.status).toBe(200)
     expect(rows(listed.json).map((r) => r.id)).toContain('central:global')
     expect(listed.json['nextOffset']).toBe(null)
+  })
+
+  it('titles a project chat with the project name, or its id when the project row is gone', () => {
+    const { db } = setup()
+    db.exec("INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','Billing API','/tmp/p1',1,1)")
+    getOrCreateConversation(db, 'project:p1', 5)
+    getOrCreateConversation(db, 'project:gone', 6)
+    const titles = Object.fromEntries(listConversationSummaries(db).items.map((r) => [r.id, r.title]))
+    expect(titles['central:project:p1']).toBe('Billing API')
+    expect(titles['central:project:gone']).toBe('gone')
   })
 
   it('paginates with limit/offset and rejects bad params', async () => {

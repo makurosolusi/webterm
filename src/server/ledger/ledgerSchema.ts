@@ -33,6 +33,7 @@ import { applyV31 } from './ledgerSchemaV31'
 import { applyV32 } from './ledgerSchemaV32'
 import { applyV33 } from './ledgerSchemaV33'
 import { applyV34 } from './ledgerSchemaV34'
+import { applyV35 } from './ledgerSchemaV35'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -106,4 +107,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 33, up: applyV33 },
   // v34: central_playbook_run (cursor of a playbook waiting on an approval); additive, nothing to backfill.
   { version: 34, up: applyV34 },
+  // v35: central_checkin_reason.conversation_id (check-ins return to the conversation that asked); nullable, unsent reasons backfilled from their task.
+  { version: 35, up: applyV35 },
 ]
