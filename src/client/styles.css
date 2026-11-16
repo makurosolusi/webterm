@@ -421,3 +421,8 @@ body.clean-view .app-shell {
   opacity: 1;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
 }
+
+/* Handle spawn menu (handleMenu.view.tsx): a click on the dot opens it, so say so; the list reuses quick-pick rows. */
+.react-flow__handle.bridge-handle { cursor: pointer; }
+.handle-menu { width: 260px; padding: 0 0 6px; }
+.handle-menu .vscode-quick-pick__list { max-height: 320px; }

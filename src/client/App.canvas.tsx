@@ -21,6 +21,7 @@ import { closestNodeRoot } from './nodeRoot'
 import NodeMaximizeOverlay from './nodeMaximize.overlay'
 import { beforeNodeDelete, useCancelNodeCloseOnUnmount } from './nodeCloseConfirm'
 import { useCentralAct } from './centralAct.store'
+import { useHandleMenu } from './handleMenu.hook'
 import CentralActMount, { markTouched } from './centralAct.layer'
 
 const edgeTypes = { context: ContextEdge }
@@ -54,7 +55,13 @@ export default function BoardCanvas({
   const { nodes, edges } = useMemo(() => markTouched(boardNodes, boardEdges, acted), [boardNodes, boardEdges, acted])
   const touchedIds = useMemo(() => new Set(acted.map((e) => e.nodeId)), [acted])
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
-  const { openBrowserAt, workspaceId } = useNodeActions()
+  const { openBrowserAt, workspaceId, spawn } = useNodeActions()
+  // Click a bridge handle / release a cable on the pane -> spawn menu (needs connectOnClick off below).
+  const handleMenu = useHandleMenu({
+    nodes: boardNodes, settings, spawn,
+    // Gentle: frame both ends, never zoom in past where the user already is.
+    frame: (ids) => { const i = rf.current; void i?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.3, duration: 300, maxZoom: i.getZoom() }) },
+  })
   // Wallpaper sits behind the pane (no pan/zoom); workspace override -> global -> default.
   const wallpaper = useWallpaper(resolveCanvasBackground(settings, workspaceId))
   useNodeResizeWiring(locked, rf)
@@ -89,6 +96,9 @@ export default function BoardCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      connectOnClick={false}
+      onConnectStart={handleMenu.onConnectStart}
+      onConnectEnd={handleMenu.onConnectEnd}
       // Every user node close (× buttons, tabs, sessions panel, Delete key) asks first: nodeCloseConfirm.tsx.
       onBeforeDelete={beforeNodeDelete}
       onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
@@ -130,6 +140,7 @@ export default function BoardCanvas({
         }}
       />
     </ReactFlow>
+    {handleMenu.menu}
     </>
   )
 }

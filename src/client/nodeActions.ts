@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
+import type { HandleSpawners } from './handleMenu.model'
 
 export type NodeActions = {
   /** Node mencetak session uuid-nya sendiri (atau restart) dan perlu dipersist ke node itu. */
@@ -9,6 +10,8 @@ export type NodeActions = {
   openBrowserAt?: (req: OpenBrowserReq) => OpenResult
   /** Active workspace id (canvas wallpaper resolves its per-workspace override with it). */
   workspaceId?: string | null
+  /** Node spawners for the handle menu (handleMenu.hook.tsx); absent = the menu stays closed. */
+  spawn?: HandleSpawners
 }
 
 /**
