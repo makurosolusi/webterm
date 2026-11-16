@@ -4,6 +4,7 @@ import { binaryExists, leadingBinary, spawnPty, unwrapMissingWrapper } from './p
 import { NODE_HEADERS_ENV, hookEnv, writeNodeHeaders } from './hooks'
 import { CANVAS_OWNER, bootSupervisor } from './ptySupervisor'
 import { claudeHeadersPath } from './hooksPaths'
+import { retryWatchdogEnv } from './agentEnv'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
 import { SessionsAdopt } from './sessionsAdopt'
@@ -133,6 +134,8 @@ export class Sessions extends SessionsAdopt {
       // `<dataDir>/bin` first on PATH so the `webterm` CLI resolves by name; it carries no token
       // (curl reads the header file above), so this adds a command, not a credential.
       ...(msg.agentId ? { PATH: agentPath() } : {}),
+      // Zero-config outage resilience for Claude sessions; an explicit server-env value wins (agentEnv.retryWatchdogEnv).
+      ...(msg.agentId && hasClaudeHookSettings(msg.agentId) ? retryWatchdogEnv(process.env) : {}),
     }
     const spawnOpts = {
       cols: msg.cols,

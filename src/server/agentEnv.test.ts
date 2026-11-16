@@ -8,6 +8,6 @@ describe('scrubAgentEnv', () => {
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:4000', OPENCODE_CONFIG: '/x', // test-only
       WEBTERM_TOKEN: 'root-secret', NODETERM_TOKEN: 'nd-secret', RANDOM_UNRELATED: 'drop-me', // test-only
     })
-    expect(env).toEqual({ PATH: '/usr/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'sk-ant-test', ANTHROPIC_BASE_URL: 'http://127.0.0.1:4000', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' })
+    expect(env).toEqual({ PATH: '/usr/bin', HOME: '/home/u', ANTHROPIC_API_KEY: 'sk-ant-test', ANTHROPIC_BASE_URL: 'http://127.0.0.1:4000', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1', CLAUDE_CODE_RETRY_WATCHDOG: '1' })
   })
 })
