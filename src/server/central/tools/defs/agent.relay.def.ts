@@ -1,6 +1,7 @@
 // `agent.relay` (RND/30b WS-11): central sends a message to a worker or to itself. The sender is the
 // calling conversation (server-side), never a model-supplied field; delivery into a PTY happens only when idle.
-import type { MailDeliver } from '../../agents/mailDeliver'
+import { agentNodeId } from '../../agents/agentExecutor'
+import { AGENT_PREFIX, type MailDeliver } from '../../agents/mailDeliver'
 import { MAIL_KINDS, MAX_MAIL_BODY_BYTES, createMailStore, isMailRef } from '../../agents/mailStore'
 import type { MailKind } from '../../contracts/mail.types'
 import type { ToolDef } from '../toolTypes'
@@ -20,7 +21,7 @@ export function createAgentRelayDef(deps: { deliver?: MailDeliver } = {}): ToolD
     flag: AGENT_MAIL_FLAG,
     usage: '{"projectId":"<id>","to":"agent:<id>","text":"<=8KB","kind":"msg|ask|reply","threadId":"<optional>","reqId":"<optional idempotency key>"}. The recipient sees it labelled as an agent message, never as human input or approval.',
     input: obj({ to: S.str(), text: S.str(), kind: S.oneOf(...CENTRAL_KINDS), threadId: S.str(200), reqId: S.str(200) }, ['to', 'text']),
-    output: S.keys('mailId', 'threadId', 'duplicate', 'delivered'),
+    output: S.keys('mailId', 'threadId', 'duplicate', 'delivered', 'nodeId'),
     auditKeys: ['mailId', 'threadId', 'delivered'],
     validate(input, ctx) {
       const { to, text, kind, threadId, reqId, from } = input
@@ -45,7 +46,9 @@ export function createAgentRelayDef(deps: { deliver?: MailDeliver } = {}): ToolD
       })
       if (!result.ok) return { ok: false, code: result.code }
       const delivered = deps.deliver ? await deps.deliver.flush(result.mail.toRef) : false
-      return { ok: true, data: { mailId: result.mail.id, threadId: result.mail.threadId, duplicate: result.duplicate, delivered } }
+      // The recipient's node, so the UI can show who Central just messaged (see toolAct).
+      const nodeId = result.mail.toRef.startsWith(AGENT_PREFIX) ? agentNodeId(result.mail.toRef.slice(AGENT_PREFIX.length)) : undefined
+      return { ok: true, data: { mailId: result.mail.id, threadId: result.mail.threadId, duplicate: result.duplicate, delivered, ...(nodeId ? { nodeId } : {}) } }
     },
   }
 }

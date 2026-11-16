@@ -39,6 +39,7 @@ export function notifyScanResult(db: Database, result: FinishScanResult, now: nu
   const { scan, opened, changedDismissed } = result
   const name = projectName(db, scan.projectId)
   let queued = 0
+  // No conversationId on purpose: a scan is a system signal with no asking chat, so it routes by project (then global).
   const queue = (input: Parameters<typeof queueCheckinReason>[1]): void => { if (queueCheckinReason(db, input)) queued++ }
 
   if (scan.origin === 'scan') {

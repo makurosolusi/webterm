@@ -34,7 +34,7 @@ test('every live ledger table has a retention entry or an exemption with a reaso
 // editing this list next to its reason, so an unbounded table never slips in through the registry alone.
 const EXEMPT_TABLES = [
   'agent', 'bakeoff', 'bakeoff_candidate', 'budget', 'central_breaker', 'central_checkpoint', 'central_control',
-  'central_conversation', 'central_state', 'channel_store', 'cost_cap', 'embed_cache', 'eval_case', 'event_chain_base',
+  'central_conversation', 'central_state', 'channel_store', 'connectivity_episode', 'cost_cap', 'embed_cache', 'eval_case', 'event_chain_base',
   'memory', 'memory_embedding', 'memory_fts', 'memory_fts_config', 'memory_fts_data', 'memory_fts_docsize', 'memory_fts_idx',
   'memory_fts_tri', 'memory_fts_tri_config', 'memory_fts_tri_data', 'memory_fts_tri_docsize', 'memory_fts_tri_idx',
   'memory_incognito', 'memory_tombstone', 'plan', 'plan_item', 'policy_grant', 'policy_principal', 'policy_tier_min',

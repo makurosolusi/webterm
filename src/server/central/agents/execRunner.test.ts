@@ -10,7 +10,7 @@ const node = (script: string, extra: Partial<Parameters<typeof startExec>[0]> = 
 describe('scrubExecEnv', () => {
   it('drops WEBTERM_/NODETERM_ names, wcap_ values, non-allowlisted vars; keeps PATH and overrides', () => {
     const out = scrubExecEnv({ PATH: '/bin', HOME: '/h', WEBTERM_TOKEN: 'a', NODETERM_NODE_ID: 'b', RANDOM_VAR: 'c', LANG: 'wcap_leak' }, { HOME: '/sandbox', WEBTERM_X: 'y', XDG_CONFIG_HOME: '/sandbox/c' })
-    expect(out).toEqual({ PATH: '/bin', HOME: '/sandbox', XDG_CONFIG_HOME: '/sandbox/c' })
+    expect(out).toEqual({ PATH: '/bin', HOME: '/sandbox', XDG_CONFIG_HOME: '/sandbox/c', CLAUDE_CODE_RETRY_WATCHDOG: '1' })
   })
 })
 

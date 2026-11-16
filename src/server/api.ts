@@ -19,6 +19,7 @@ import { ledgerRoutes } from './routes/ledger.routes'
 import { routinesRoutes } from './routes/routines.routes'
 import { sensorRoutes } from './routes/sensors.routes'
 import { costRoutes } from './routes/cost.routes'
+import { connectivityRoutes } from './routes/connectivity.routes'
 import { dagRoutes } from './routes/dag.routes'
 import { knowledge2Routes } from './routes/knowledge2.routes'
 import { handoffRoutes } from './routes/handoff.routes'
@@ -68,6 +69,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...routinesRoutes,
   ...ledgerRoutes,
   ...costRoutes,
+  ...connectivityRoutes,
   ...dagRoutes,
   ...knowledge2Routes,
   ...pushRoutes,

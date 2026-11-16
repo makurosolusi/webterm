@@ -8,6 +8,8 @@
 //
 // Event: trailing debounce per routine (a burst is one run). Events from routines themselves and
 // from agents a routine is running are ignored (no self-wake loop, PLAN rnd/04 pitfall).
+import type { ConnectivityView } from '../central/work/workHold'
+import { createWorkHold } from '../central/work/workHold'
 import type { EventBus } from '../events/eventBus'
 import { kindMatches } from '../events/eventBus'
 import type { SenseEvent } from '../events/eventModel'
@@ -17,6 +19,8 @@ import { ROUTINE_SOURCE, type FireResult, type RoutineRunner } from './routineRu
 import type { RoutineStore } from './routineStore'
 
 export const ROUTINE_TICK_MS = 30_000
+/** A failed run waits this long before its one retry: the detector needs a few probes to call an outage (a guess, tune from real outages). */
+export const RETRY_DELAY_MS = 120_000
 
 export interface SchedulerDeps {
   store: RoutineStore
@@ -26,6 +30,14 @@ export interface SchedulerDeps {
   tickMs?: number
   /** Called with every run the scheduler starts (tests await `done`). */
   onFire?: (fired: FireResult) => void
+  /** Claude API reachability (late-bound: the detector boots after routines). Absent/null = never held (old behaviour). */
+  connectivity?: () => ConnectivityView | null
+  /** Pending rate-limit reset instant (workRateLimit), null when none. */
+  rateLimitResetAt?(now: number): number | null
+  /** Connectivity episodes (newest first), read at boot to tell an outage-killed run from a crash. */
+  episodes?(): readonly { startedAt: number; endedAt: number | null }[]
+  /** One call per hold episode that delayed or retried routines, with the real counts. Must not throw. */
+  note?(info: { delayed: number; retried: number; reason: string }): void
 }
 
 export function createRoutineScheduler(deps: SchedulerDeps) {
@@ -35,9 +47,41 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
   const pending = new Map<string, { timer: ReturnType<typeof setTimeout>; trusted: boolean }>()
   let interval: ReturnType<typeof setInterval> | null = null
   let unsubscribe: (() => void) | null = null
+  // The same gate the work layer uses (hold while impaired or rate limited, then one grace cycle); it has no leases here.
+  let reason = ''
+  const hold = createWorkHold({
+    store: { holdLeases: () => 0 },
+    connectivity: deps.connectivity ? { isImpaired: () => deps.connectivity?.()?.isImpaired() === true, state: () => deps.connectivity!()!.state() } : null,
+    ...(deps.rateLimitResetAt ? { rateLimitResetAt: deps.rateLimitResetAt } : {}),
+    onHold: (info) => { reason = info.reason },
+  })
+  /** Routines whose slot or retry was delayed by the current hold episode (counted once each). */
+  const delayed = new Set<string>()
+
+  function retryPending(): number {
+    let retried = 0
+    for (const run of deps.store.retryCandidates(RETRY_DELAY_MS)) {
+      deps.store.markRetried(run.id) // spent first: the retry can never be taken twice, whatever its outcome
+      const r = deps.store.get(run.routineId)
+      if (!r?.enabled) continue
+      fired(deps.runner.fire(r, 'catch_up', { scheduledFor: run.scheduledFor, retry: true }))
+      retried += 1
+    }
+    return retried
+  }
 
   function tick(): void {
     const now = deps.now()
+    const verdict = hold.check(now)
+    if (!verdict.penalize) {
+      // Unreachable Claude (or its grace): slots stay due and unmarked, the catch-up below takes them once afterwards.
+      for (const r of deps.store.due(now)) if (r.trigger.type === 'schedule' && r.nextRunAt !== null) delayed.add(r.id)
+      if (verdict.held) for (const run of deps.store.retryCandidates(RETRY_DELAY_MS)) delayed.add(run.routineId)
+      return
+    }
+    const retried = retryPending()
+    if (delayed.size > 0 || retried > 0) deps.note?.({ delayed: delayed.size, retried, reason: delayed.size > 0 ? reason : 'retry' })
+    delayed.clear()
     for (const r of deps.store.due(now)) {
       if (r.trigger.type !== 'schedule' || r.nextRunAt === null) continue
       const { cron } = r.trigger
@@ -81,7 +125,7 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
     refresh,
     start(): void {
       if (interval) return
-      deps.store.failOrphans()
+      deps.store.failOrphans(deps.episodes?.())
       refresh()
       unsubscribe = deps.bus.subscribe('*', onEvent)
       tick()

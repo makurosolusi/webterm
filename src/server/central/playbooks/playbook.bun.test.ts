@@ -158,6 +158,16 @@ describe('approval cursor', () => {
     expect(records.at(-1)).toBe('auto.playbook_resumed "Central resumed web research after approval: compare bun and node"')
   })
 
+  test('the resumed outcome returns to the conversation the run started in: global stays global, not the project chat', async () => {
+    createWorkStore(db, () => clock).createTask({ id: 'task-1', projectId: 'p1', title: 'web research', objective: 'o', actor: { kind: 'central' } })
+    card('agent-ag-1')
+    script['agent.spawn'] = [{ ok: false, tool: 'agent.spawn', code: 'approval_required', data: { agentId: 'ag-1', approvalId: 'agent-ag-1', approvalStatus: 'pending' } }]
+    await runPlaybook(ctxFor('central:global'), pb('web_research'), { goal: 'compare bun and node' }, 'p1', deps)
+    decide('agent-ag-1', false)
+    await resumeOnApproval(db, ctxFor, { id: 'agent-ag-1', status: 'rejected' } as Parameters<typeof resumeOnApproval>[2], deps)
+    expect(rows(db, 'SELECT conversation_id FROM central_checkin_reason')).toEqual([{ conversation_id: 'central:global' }])
+  })
+
   test('a rejected card ends the run and tells the user; a second decision event changes nothing', async () => {
     await parkOnCard()
     decide('agent-ag-1', false)

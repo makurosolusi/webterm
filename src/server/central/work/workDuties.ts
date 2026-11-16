@@ -1,11 +1,11 @@
-// Central's open duties: tasks it delegated whose latest attempt went wrong. The state header lists them and the
+// Central's open duties: tasks whose latest attempt went wrong (Central owns them, see workOwner.ts). The state header lists them and the
 // escalation ladder (workEscalation.ts) walks them, so both read the same rows from one query.
 import type { Database } from 'bun:sqlite'
 import type { WorkStatus } from '../../../shared/centralWork'
 import { allRows, parseJson } from '../../ledger/ledgerCore'
 
 /**
- * A task in one of these, whose latest attempt Central started, is Central's to fix. So is a `todo` task whose
+ * A task in one of these is Central's to fix. So is a `todo` task whose
  * latest attempt never got sent (task.assign on an existing card puts it back where it was).
  */
 export const DUTY_STATUSES: readonly WorkStatus[] = ['stalled', 'failed', 'waiting_input']
@@ -28,8 +28,8 @@ export interface Duty {
 
 const PLACEHOLDERS = DUTY_STATUSES.map(() => '?').join(', ')
 
-// One statement, no per-task reads: the "started by Central" test is the same as workCheckin's handoff check
-// (the latest attempt's work.assignment.open event has actor 'central').
+// One statement, no per-task reads. Every task counts whoever opened its attempt: Central is the owner of a stalled,
+// failed or waiting task (workOwner.ts), not only of the ones it delegated itself.
 const dutiesSql = (oneTask: boolean): string => `
 SELECT t.id, t.project_id, t.title, t.status, t.updated_at, a.node_id, a.attempt, a.end_reason, a.result_json,
   (SELECT e.ts FROM event e WHERE e.correlation_id = t.id AND json_extract(e.payload_json, '$.to') = t.status ORDER BY e.seq DESC LIMIT 1) AS since,
@@ -37,7 +37,6 @@ SELECT t.id, t.project_id, t.title, t.status, t.updated_at, a.node_id, a.attempt
 FROM central_task t
 JOIN central_assignment a ON a.task_id = t.id AND a.attempt = (SELECT MAX(x.attempt) FROM central_assignment x WHERE x.task_id = t.id)
 WHERE (t.status IN (${PLACEHOLDERS}) OR (t.status = 'todo' AND a.end_reason = 'send_failed'))${oneTask ? ' AND t.id = ?' : ''}
-  AND EXISTS (SELECT 1 FROM event e WHERE e.correlation_id = t.id AND e.kind = 'work.assignment.open' AND e.actor = 'central' AND json_extract(e.payload_json, '$.assignmentId') = a.id)
 ORDER BY since DESC, t.id
 LIMIT ?`
 

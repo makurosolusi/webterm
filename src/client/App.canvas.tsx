@@ -1,8 +1,8 @@
 import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react'
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
-import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
+import { useMemo, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import ContextEdge from './ContextEdge'
-import { connectionLineStyle } from './canvasStyle'
+import { connectionLineStyle, withTouchedAccent } from './canvasStyle'
 import './canvas-ui.css'
 import { nodeTypes } from './nodeTypes'
 import McpAppsWatcher from './mcpapps/McpAppsWatcher'
@@ -20,6 +20,8 @@ import type { Viewport } from '../shared/workspace'
 import { closestNodeRoot } from './nodeRoot'
 import NodeMaximizeOverlay from './nodeMaximize.overlay'
 import { beforeNodeDelete, useCancelNodeCloseOnUnmount } from './nodeCloseConfirm'
+import { useCentralAct } from './centralAct.store'
+import CentralActMount, { markTouched } from './centralAct.layer'
 
 const edgeTypes = { context: ContextEdge }
 
@@ -43,10 +45,14 @@ interface CanvasProps {
 
 /** Canvas React Flow board aktif beserta background dan minimap-nya. */
 export default function BoardCanvas({
-  rf, nodes, edges, settings, hydrated, viewport, locked, nodeColor, syncViewport,
+  rf, nodes: boardNodes, edges: boardEdges, settings, hydrated, viewport, locked, nodeColor, syncViewport,
   onNodesChange, onEdgesChange, onConnect, onMoveEnd, onPaneContextMenu,
 }: CanvasProps) {
-  useRecordLegacyClaudeProfiles(nodes, hydrated, settings, rf)
+  useRecordLegacyClaudeProfiles(boardNodes, hydrated, settings, rf)
+  // Central's recent actions: classes on the touched nodes/cables (centralAct.css); the camera and selection are left alone.
+  const { entries: acted } = useCentralAct()
+  const { nodes, edges } = useMemo(() => markTouched(boardNodes, boardEdges, acted), [boardNodes, boardEdges, acted])
+  const touchedIds = useMemo(() => new Set(acted.map((e) => e.nodeId)), [acted])
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
   const { openBrowserAt, workspaceId } = useNodeActions()
   // Wallpaper sits behind the pane (no pan/zoom); workspace override -> global -> default.
@@ -111,8 +117,10 @@ export default function BoardCanvas({
       {/* Hold ⌘⌃ (preset) and drag anywhere on a node to move or resize it (quickDrag/useQuickDrag.ts). */}
       <QuickDrag preset={settings.quickDrag} />
       <NodeMaximizeOverlay nodes={nodes} />
+      {/* Chips on touched nodes + the one tray notice (centralAct.layer.tsx). */}
+      <CentralActMount rf={rf} nodes={nodes} workspaceId={workspaceId ?? null} />
       <MiniMap
-        className="minimap-dock" pannable zoomable nodeColor={nodeColor}
+        className="minimap-dock" pannable zoomable nodeColor={withTouchedAccent(nodeColor, touchedIds)}
         // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.
         // `setCenter` tanpa `zoom` jatuh ke maxZoom, bukan zoom sekarang — klik cuma boleh
         // memindahkan titik pandang, jadi zoom berjalan diteruskan eksplisit.

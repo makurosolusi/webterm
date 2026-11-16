@@ -165,7 +165,7 @@ test('health dismissal memory: notice + record with Forget', () => {
 })
 
 test('supervisor nudge and respawn are announced with their own kinds', async () => {
-  const { fakePorts } = await import('./work/workRig.testutil')
+  const { fakePorts, putTaskInStatus } = await import('./work/workRig.testutil')
   const { createWorkSupervisor, WORK_LIVENESS_RULES } = await import('./work/workSupervisor')
   const store = createWorkStore(db, now)
   const seen: string[] = []
@@ -173,11 +173,11 @@ test('supervisor nudge and respawn are announced with their own kinds', async ()
   const sup = createWorkSupervisor({ store, ports: fake.ports, now, announce: (a) => { seen.push(a.name); automaticAction({ db, now }, { name: a.name, text: a.text, noticeKey: a.key, actor: 'system:work' }) } })
   store.createTask({ id: 'n1', projectId: 'p1', title: 'Quiet one', objective: 'o', actor: { kind: 'central' } })
   store.openAssignment({ taskId: 'n1', nodeId: 'node-a', channel: 'terminal', instruction: 'go', actor: { kind: 'central' } })
-  run(db, "UPDATE central_task SET status = 'running' WHERE id = 'n1'")
+  putTaskInStatus(store, 'n1', 'running')
   await sup.tick(T0 + WORK_LIVENESS_RULES.heartbeat.afterMs)
   store.createTask({ id: 'r1', projectId: 'p1', title: 'Chat one', objective: 'o', actor: { kind: 'central' } })
   store.openAssignment({ taskId: 'r1', nodeId: 'node-b', channel: 'chat', instruction: 'go', actor: { kind: 'central' } })
-  run(db, "UPDATE central_task SET status = 'running' WHERE id = 'r1'")
+  putTaskInStatus(store, 'r1', 'running')
   fake.state.chatGone = true
   await sup.tick(T0 + 1000)
   expect(seen.sort()).toEqual(['work_nudge', 'work_respawn'])

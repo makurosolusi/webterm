@@ -5,6 +5,7 @@ import type { RuntimeResult, TurnInput } from './centralRuntime'
 import type { ClaudeTurnState, TurnFailure } from './claudeSession'
 import { stderrReason } from './runtimeShared'
 import { createLogger } from '../../logs'
+import { failureKindOfText, isTransientKind } from '../work/workFailureKind'
 
 const log = createLogger('central')
 
@@ -27,7 +28,6 @@ export interface ClaudeFailureFacts {
 const AUTH = /not logged in|please run \/login|invalid api key|authentication[_ ]failed|oauth token (?:has )?expired|\b401\b/i
 const UNKNOWN_OPTION = /unknown option|unrecognized option|unknown argument/i
 const NO_SESSION = /no conversation found with session id/i
-const TRANSIENT = /overloaded|rate.?limit|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|network|\b5\d\d\b/i
 
 /** Claude could not resume the requested session (its failed result text or stderr says so). */
 export function isMissingSession(resultText: string | null | undefined, stderr: string): boolean {
@@ -41,7 +41,7 @@ export function classifyClaudeFailure(f: ClaudeFailureFacts): TurnFailure {
     return { code: 'runtime_error', reason: `Claude could not be started (${f.spawnCode}): check the Claude launch profile in Settings` }
   }
   const text = `${f.resultText ?? ''}\n${f.stderr}`
-  if (AUTH.test(text)) return { code: 'runtime_unavailable', unavailable: 'claude_not_authenticated' }
+  if (AUTH.test(text)) return { code: 'runtime_unavailable', unavailable: 'claude_not_authenticated', kind: 'auth' }
   const detail = stderrReason(f.resultText ?? '', f.secrets) || stderrReason(f.stderr, f.secrets)
   if (NO_SESSION.test(text)) {
     return { code: 'runtime_error', reason: 'Claude could not find the saved session for this chat; start a new chat to continue' }
@@ -50,11 +50,13 @@ export function classifyClaudeFailure(f: ClaudeFailureFacts): TurnFailure {
     return { code: 'runtime_error', reason: `Claude rejected an option (${detail}): your Claude CLI may be too old, run "claude update"` }
   }
   const when = f.sawInit ? '' : ' before starting'
-  if (f.resultText) return { code: 'runtime_error', retryable: TRANSIENT.test(text), reason: `Claude reported an error${when}: ${detail}` }
+  const kind = failureKindOfText(text)
+  const retryable = isTransientKind(kind)
+  if (f.resultText) return { code: 'runtime_error', retryable, kind, reason: `Claude reported an error${when}: ${detail}` }
   // A signal we did not send (cancel/timeout are handled before this) is usually an OOM kill or a restart.
-  if (f.exitCode === null && f.signal) return { code: 'runtime_error', retryable: true, reason: `Claude was stopped by ${f.signal}${when}` }
+  if (f.exitCode === null && f.signal) return { code: 'runtime_error', retryable: true, kind: 'unknown', reason: `Claude was stopped by ${f.signal}${when}` }
   const status = f.exitCode === null ? 'ended without a result' : `exited with code ${f.exitCode}`
-  return { code: 'runtime_error', retryable: TRANSIENT.test(text), reason: `Claude ${status}${when}${detail ? `: ${detail}` : ''}` }
+  return { code: 'runtime_error', retryable, kind, reason: `Claude ${status}${when}${detail ? `: ${detail}` : ''}` }
 }
 
 /**

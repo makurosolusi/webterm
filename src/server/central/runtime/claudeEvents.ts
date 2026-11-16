@@ -14,6 +14,8 @@ import { type ClaudeTurnState, failTurn } from './claudeSession'
 import { MCP_SERVER_NAME, MCP_USABLE } from '../../mcp/mcp.paths'
 import { recordCentralMcpStatus } from '../../mcp/mcp.health'
 import { createLogger } from '../../logs'
+import { failureKindOfStop, isTransientKind } from '../work/workFailureKind'
+import { processRateLimit } from '../work/workRateLimit'
 import { WEBTERM_MCP_TOOL_PREFIX } from './claudeOptions'
 import { stderrReason } from './runtimeShared'
 import { type ClaudeResultEvent, type ClaudeUsage, type Rec, parseClaudeResult, parseUsage, rec, str } from './claudeResult'
@@ -29,6 +31,8 @@ export type ClaudeEvent =
   | { type: 'assistant'; messageId: string | null; text: string; toolUses: ClaudeToolUse[]; error: string | null; usage: ClaudeUsage | null }
   | { type: 'tool_results'; results: ClaudeToolResult[] }
   | { type: 'retry' }
+  /** `rate_limit_event`: the account's limit state; `resetsAt` is in the CLI's unit (normalized by workRateLimit). */
+  | { type: 'rateLimit'; status: string; resetsAt?: number }
   | ClaudeResultEvent
 
 /** Names of an init list whose items are strings or `{name}` objects (tools are strings, servers objects). */
@@ -89,6 +93,11 @@ export function parseClaudeMessage(message: unknown): ClaudeEvent | null {
         return { type: 'init', sessionId: str(obj.session_id), tools: names(obj.tools), servers: names(obj.mcp_servers), webtermStatus: webtermStatus(obj.mcp_servers) }
       }
       return obj.subtype === 'api_retry' ? { type: 'retry' } : null
+    case 'rate_limit_event': {
+      const info = rec(obj.rate_limit_info)
+      const status = str(info?.status)
+      return status ? { type: 'rateLimit', status, ...(typeof info?.resetsAt === 'number' ? { resetsAt: info.resetsAt } : {}) } : null
+    }
     case 'stream_event': {
       const event = rec(obj.event)
       const delta = rec(event?.delta)
@@ -189,8 +198,6 @@ const log = createLogger('central')
 export const mcpNotStartedReason = (status: string): string =>
   `Central's tools did not start (webterm MCP server: ${status}). Retry, or see Settings › Health.`
 
-const RETRYABLE_ASSISTANT_ERRORS: ReadonlySet<string> = new Set(['rate_limit', 'overloaded', 'server_error'])
-
 function checkLimits(ctx: ApplyContext): void {
   const { state } = ctx
   if (state.messages.size > ctx.maxTurns) {
@@ -217,7 +224,8 @@ function applyAssistant(event: Extract<ClaudeEvent, { type: 'assistant' }>, ctx:
     } else {
       // The CLI's own error line (e.g. "API Error: 400 ..."), redacted and capped; never model output.
       const reason = stderrReason(event.text) || `Claude reported "${event.error}"`
-      failTurn(emitter, state, { code: 'runtime_error', retryable: RETRYABLE_ASSISTANT_ERRORS.has(event.error), reason })
+      const kind = failureKindOfStop(event.error)
+      failTurn(emitter, state, { code: 'runtime_error', retryable: isTransientKind(kind), kind, reason })
     }
     return
   }
@@ -268,6 +276,9 @@ export function applyClaudeEvent(event: ClaudeEvent, ctx: ApplyContext): void {
       return
     case 'retry':
       state.retries += 1
+      return
+    case 'rateLimit':
+      processRateLimit.note(event)
       return
     case 'result':
       state.result = event

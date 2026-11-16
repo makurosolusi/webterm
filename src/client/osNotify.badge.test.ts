@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // The tab icon: static /favicon.svg when nothing is unread, a badged data URL otherwise, always one link.
 import { describe, it, expect, beforeEach } from 'vitest'
-import { setBadgeCount, FAVICON_PATH } from './osNotify.badge'
+import { setBadgeCount, setChatBadgeCount, FAVICON_PATH } from './osNotify.badge'
 
 const icons = () => document.head.querySelectorAll<HTMLLinkElement>('link[rel="icon"]')
 
@@ -34,5 +34,14 @@ describe('setBadgeCount', () => {
     setBadgeCount(2)
     setBadgeCount(5)
     expect(icons()).toHaveLength(1)
+  })
+
+  it('sums session unread and chat unread into one number', () => {
+    setBadgeCount(2)
+    setChatBadgeCount(3)
+    expect(document.title).toBe('(5) webterm')
+    setBadgeCount(0)
+    setChatBadgeCount(0)
+    expect(document.title).toBe('webterm')
   })
 })

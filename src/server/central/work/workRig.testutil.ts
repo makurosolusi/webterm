@@ -3,6 +3,7 @@ import type { SubmitResult } from '../../agentSubmit'
 import { createEventBus } from '../../events/eventBus'
 import type { EventTrust, SenseEvent } from '../../events/eventModel'
 import { freshDb, T0 } from '../guard/controlGuard.testutil'
+import { WORK_TRANSITIONS } from '../../../shared/centralWork'
 import type { AssignmentChannel, AssignmentView, WorkEventView, WorkStatus } from '../../../shared/centralWork'
 import type { AgentState } from '../contracts'
 import type { WorkStore } from './workModel'
@@ -39,6 +40,24 @@ export function fakePorts() {
   }
 }
 
+/**
+ * Puts a task in `status` by walking the legal edges with `moveTask`, so the owner's lease matches the status
+ * exactly as in production. Never set `central_task.status` with raw SQL: that skips the lease (workStore.applyMove).
+ */
+export function putTaskInStatus(store: WorkStore, taskId: string, status: WorkStatus): void {
+  const from = store.getTask(taskId)?.status
+  if (!from) throw new Error(`putTaskInStatus: unknown task ${taskId}`)
+  const prev = new Map<WorkStatus, WorkStatus>([[from, from]])
+  for (const queue = [from]; queue.length > 0 && !prev.has(status);) {
+    const cur = queue.shift() as WorkStatus
+    for (const next of WORK_TRANSITIONS[cur]) if (!prev.has(next)) { prev.set(next, cur); queue.push(next) }
+  }
+  if (!prev.has(status)) throw new Error(`putTaskInStatus: no path ${from} -> ${status} for ${taskId}`)
+  const path: WorkStatus[] = []
+  for (let s = status; s !== from; s = prev.get(s) as WorkStatus) path.unshift(s)
+  for (const to of path) store.moveTask(taskId, to, { actor: { kind: 'human', id: 'test' }, rule: 'test_fixture', reason: `fixture -> ${status}` })
+}
+
 export function rig() {
   const db = freshDb()
   const clock = { t: T0 }
@@ -54,7 +73,7 @@ export function rig() {
     const id = `t${n}`
     store.createTask({ id, projectId: 'p1', title: `title ${id}`, objective: 'o', actor: { kind: 'central' }, ...(opts.acceptance ? { acceptance: opts.acceptance } : {}) })
     const assignment = store.openAssignment({ taskId: id, nodeId: opts.nodeId ?? NODE, channel: opts.channel ?? 'terminal', instruction: 'do it', actor: { kind: 'central' }, ...(opts.agentId ? { agentId: opts.agentId } : {}) })
-    if (status !== 'assigned') db.query('UPDATE central_task SET status = ? WHERE id = ?').run(status, id)
+    if (status !== 'assigned') putTaskInStatus(store, id, status)
     return { taskId: id, assignmentId: assignment.id }
   }
   const statusOf = (id: string): WorkStatus | undefined => store.getTask(id)?.status

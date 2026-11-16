@@ -67,6 +67,9 @@ export interface RoutineRun {
   childId: string | null
 }
 
+/** Reason prefix of a failed run that may be retried once (`retryable[network]: ...`); `retried[...]` once its retry was taken. */
+export const RETRYABLE_PREFIX = 'retryable'
+export const RETRIED_PREFIX = 'retried'
 export const PRECHECK_TIMEOUT_DEFAULT_S = 60
 export const PRECHECK_TIMEOUT_MAX_S = 600
 export const EVENT_DEBOUNCE_DEFAULT_MS = 5000

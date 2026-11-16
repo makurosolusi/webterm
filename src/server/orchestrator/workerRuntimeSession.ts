@@ -13,6 +13,8 @@ export interface WorkerSessionPort {
     agentId?: string
     /** Id sesi baru per run; `launchLine` yang memvalidasi + menggerbangi flag-nya. */
     sessionId?: string
+    /** Relaunch the saved conversation of `sessionId` (`--resume`) instead of minting it. */
+    resume?: boolean
     cols?: number
     rows?: number
   }): void | Promise<void>
@@ -47,6 +49,7 @@ export function createSessionsPort(source: SessionsLike): WorkerSessionPort {
           ...(input.cmd ? { cmd: input.cmd } : {}),
           ...(input.agentId ? { agentId: input.agentId } : {}),
           ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+          ...(input.resume ? { resume: true } : {}),
         },
         noop
       ),

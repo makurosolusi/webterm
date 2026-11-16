@@ -213,6 +213,13 @@ function titleOf(partsJson: unknown): string | null {
   return text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1)}…` : text
 }
 
+/** A project chat is titled with its project's name (the id when the project is gone); other chats by their first line. */
+function projectTitle(row: Record<string, unknown>): string | null {
+  const projectId = row['project_id']
+  if (projectId === null || projectId === undefined) return titleOf(row['first_human'])
+  return typeof row['project_name'] === 'string' && row['project_name'] !== '' ? row['project_name'] : String(projectId)
+}
+
 /** Every conversation (global, extra chats, projects), newest first, one page at a time. */
 export function listConversationSummaries(
   db: Database, options: { limit?: number; offset?: number; now?: number } = {}
@@ -231,7 +238,8 @@ export function listConversationSummaries(
     `SELECT c.*,
        (SELECT m.parts_json FROM central_message m WHERE m.conversation_id = c.id AND m.role = 'human' AND m.state != 'superseded'
         ORDER BY m.seq ASC LIMIT 1) AS first_human,
-       (SELECT COUNT(*) FROM central_turn t WHERE t.conversation_id = c.id) AS turn_count
+       (SELECT COUNT(*) FROM central_turn t WHERE t.conversation_id = c.id) AS turn_count,
+       (SELECT p.name FROM project p WHERE p.id = c.project_id) AS project_name
      FROM central_conversation c ORDER BY c.updated_at DESC, c.id ASC LIMIT ? OFFSET ?`,
     limit + 1, offset
   )
@@ -241,7 +249,7 @@ export function listConversationSummaries(
     activeTurnId: optional(row['active_turn_id']),
     lastEventSeq: Number(row['last_event_seq']), lastMessageSeq: Number(row['last_message_seq']),
     createdAt: Number(row['created_at']), updatedAt: Number(row['updated_at']),
-    title: titleOf(row['first_human']), turnCount: Number(row['turn_count']),
+    title: projectTitle(row), turnCount: Number(row['turn_count']),
   }))
   return { items, nextOffset: rows.length > limit ? offset + limit : null }
 }

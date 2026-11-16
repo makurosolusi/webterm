@@ -1,6 +1,10 @@
 // Tool activity in the Central thread: a run of consecutive tool calls collapses into one native
 // `<details>` row ("Used 3 tools · 1 failed"), as in Claude.ai / ChatGPT / Cursor. The cards inside
 // are unchanged. Approval parts are never grouped: they need the user, so they stay visible.
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { showNodeOnCanvas } from '../centralAct.store'
+import '../centralAct.css'
 import type { ChatMessage, ChatPart } from './chatTypes'
 
 export type ToolPart = Extract<ChatPart, { type: 'tool' }>
@@ -25,14 +29,45 @@ function summarize(value: unknown): string {
   }
 }
 
+/** Tools whose success changes a node, as MCP names them (`mcp__webterm__` stripped, dots as underscores). Keep equal to ACT_TOOLS in
+ *  server/central/tools/toolAct.ts (locked by chatToolGroup.act.test.tsx). Tools that close a node are left out: nothing to show. */
+export const ACT_SHOW_TOOLS: ReadonlySet<string> = new Set([
+  'agent_spawn', 'agent_prompt', 'agent_relay', 'canvas_open', 'canvas_type', 'canvas_edit', 'browser_open', 'browser_act',
+  'chat_send', 'permission_decide', 'task_assign', 'chat_config', 'chat_mode',
+])
+
+const asRecord = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
+
+/** Node an acting tool call changed, read from the receipt's `data` (what the server announces); null when it names none. */
+export function actNodeId(part: ToolPart): string | null {
+  if (part.state !== 'succeeded' || !ACT_SHOW_TOOLS.has(part.name.replace(/^mcp__webterm__/, ''))) return null
+  const data = asRecord(asRecord(part.result).data)
+  if (part.name.endsWith('canvas_open')) return firstString(data.ids)
+  if (part.name.endsWith('canvas_edit')) return firstString(Array.isArray(data.wired) ? data.wired[0] : undefined)
+  return typeof data.nodeId === 'string' && data.nodeId !== '' ? data.nodeId : null
+}
+const firstString = (v: unknown): string | null => (Array.isArray(v) && typeof v[0] === 'string' && v[0] !== '' ? v[0] : null)
+
+/** The card is a record, not a notice: its button is the same user-gesture reveal as the tray's Show. */
+function ShowOnCanvas({ nodeId }: { nodeId: string }) {
+  const [gone, setGone] = useState(false)
+  return (
+    <Button type="button" variant="ghost" size="xs" className="chat-tool__show" disabled={gone} onClick={() => setGone(!showNodeOnCanvas(nodeId))}>
+      {gone ? 'Node not on this board' : 'Show on canvas'}
+    </Button>
+  )
+}
+
 export function ToolCard(props: { part: ToolPart }) {
   const { part } = props
   const summary = summarize(part.result ?? part.args)
+  const nodeId = actNodeId(part)
   return (
     <div className="chat-tool" data-state={part.state}>
       <span className="chat-tool__icon codicon codicon-tools" aria-hidden="true" />
       <span className="chat-tool__name">{part.name}</span>
       <span className={`chat-tool__state chat-tool__state--${part.state}`}>{part.state.replace('_', ' ')}</span>
+      {nodeId && <ShowOnCanvas nodeId={nodeId} />}
       {summary !== '' && (
         <details className="chat-tool__detail">
           <summary>{part.result !== undefined ? 'result' : 'arguments'}</summary>

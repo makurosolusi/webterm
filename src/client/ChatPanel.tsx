@@ -12,10 +12,11 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { IconTooltip } from '@/components/ui/icon-button'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
+import { clearOpenRequest, loadMore, refresh, upsertConversation, useChatFeed, watchConversation } from './chat/chatFeed'
 import { NeedsYouStrip } from './chat/needsYouStrip'
 import type { ChatClient, ChatConversation } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
-import { chatApi, chatErrorMessage, isAbortError, openChatStream } from './chatApi'
+import { chatApi, chatErrorMessage, openChatStream } from './chatApi'
 import { InboxPanelSurface } from './inboxPanelSurface'
 import { relativeTime } from './SessionHistory.model'
 import './chat/chat.css'
@@ -65,47 +66,41 @@ export default function ChatPanel(props: ChatPanelProps) {
   const streamRef = useRef<StreamFactory>(props.streamFactory ?? openChatStream)
   streamRef.current = props.streamFactory ?? openChatStream
 
-  const [conversations, setConversations] = useState<ChatConversation[] | null>(null)
-  const [listError, setListError] = useState<string | null>(null)
-  // Terpisah dari `conversations === null`: setelah gagal muat daftar juga masih null, dan "Loading…"
-  // tidak boleh tampil di samping banner error.
-  const [loading, setLoading] = useState(true)
+  const feed = useChatFeed(clientRef.current, open)
+  const conversations = feed.rows
   const [selected, setSelected] = useState<string | null>(readSelected)
-  const [refreshKey, setRefreshKey] = useState(0)
   const [history, setHistory] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   // The chat just created by "New chat": its composer takes focus once.
   const [fresh, setFresh] = useState<string | null>(null)
-  // History paging: offset of the next older page (null = none), and the Show more request state.
-  const [nextOffset, setNextOffset] = useState<number | null>(null)
-  const [more, setMore] = useState<{ loading: boolean; error: string | null }>({ loading: false, error: null })
+  // Set when the remembered conversation vanished and the panel moved to another one: told once, not silently.
+  const [moved, setMoved] = useState<string | null>(null)
 
+  const select = (id: string): void => { setSelected(id); setMoved(null) }
+
+  // The remembered id is gone (first load only: later polls merge, never drop): fall back, and say so.
   useEffect(() => {
-    if (!open) return
-    const controller = new AbortController()
-    setListError(null)
-    setLoading(true)
-    clientRef.current.listConversations({ signal: controller.signal }).then(
-      ({ items: rows, nextOffset: next }) => {
-        if (controller.signal.aborted) return
-        setLoading(false)
-        setConversations(rows)
-        setNextOffset(next)
-        setMore({ loading: false, error: null })
-        setSelected((current) => {
-          if (current !== null && rows.some((row) => row.id === current)) return current
-          return rows[0]?.id ?? null
-        })
-      },
-      (error: unknown) => {
-        if (controller.signal.aborted || isAbortError(error)) return
-        setLoading(false)
-        setListError(chatErrorMessage(error))
-      }
-    )
-    return () => controller.abort()
-  }, [open, refreshKey])
+    if (conversations === null || (selected !== null && conversations.some((row) => row.id === selected))) return
+    const fallback = conversations[0] ?? null
+    setSelected(fallback?.id ?? null)
+    setMoved(fallback && selected !== null ? `That conversation is no longer available. Showing ${conversationLabel(fallback)}.` : null)
+  }, [conversations, selected])
+
+  // An OS banner click asked for a conversation.
+  useEffect(() => {
+    if (feed.openRequest === null || conversations === null) return
+    if (conversations.some((row) => row.id === feed.openRequest)) select(feed.openRequest)
+    clearOpenRequest()
+  }, [feed.openRequest, conversations])
+
+  // Watching = selected, panel visible (not a hidden tab, not behind History) and open; the feed adds window focus.
+  const compactMode = props.compact === true
+  const visible = open && props.actionsHost !== null && !(compactMode && history)
+  useEffect(() => {
+    watchConversation(visible ? selected : null)
+    return () => watchConversation(null)
+  }, [visible, selected])
 
   useEffect(() => {
     if (!open) return
@@ -114,22 +109,6 @@ export default function ChatPanel(props: ChatPanelProps) {
 
   if (!open) return null
 
-  const showMore = (): void => {
-    if (nextOffset === null || more.loading) return
-    setMore({ loading: true, error: null })
-    clientRef.current.listConversations({ offset: nextOffset }).then(
-      ({ items, nextOffset: next }) => {
-        setConversations((rows) => {
-          const known = new Set((rows ?? []).map((row) => row.id))
-          return [...(rows ?? []), ...items.filter((row) => !known.has(row.id))]
-        })
-        setNextOffset(next)
-        setMore({ loading: false, error: null })
-      },
-      (error: unknown) => setMore({ loading: false, error: `Could not load more: ${chatErrorMessage(error)}` })
-    )
-  }
-
   const newChat = (): void => {
     if (creating) return
     setCreating(true)
@@ -137,7 +116,7 @@ export default function ChatPanel(props: ChatPanelProps) {
     clientRef.current.createConversation().then(
       (row) => {
         setCreating(false)
-        setConversations((rows) => [row, ...(rows ?? []).filter((other) => other.id !== row.id)])
+        upsertConversation(row)
         setSelected(row.id)
         setFresh(row.id)
         setHistory(false)
@@ -158,33 +137,31 @@ export default function ChatPanel(props: ChatPanelProps) {
     </IconTooltip>
   )
   const current = conversations?.find((row) => row.id === selected) ?? null
-  const compact = props.compact === true
+  const compact = compactMode
+  const repliedRows = feed.replied.flatMap((id) => conversations?.find((row) => row.id === id) ?? [])
   const historyLabel = history ? 'Back to the conversation' : `Show conversations${current ? ` (current: ${conversationLabel(current)})` : ''}`
+  const unreadCount = feed.unread.size
   const historyButton = compact && (
-    <IconTooltip label={historyLabel}>
-      <button type="button" className="vscode-panel-action" aria-label="Show conversations" aria-pressed={history}
+    <IconTooltip label={unreadCount > 0 ? `${historyLabel}, ${unreadCount} unread` : historyLabel}>
+      <button type="button" className="vscode-panel-action chat-history-button"
+        aria-label={unreadCount > 0 ? `Show conversations, ${unreadCount} unread` : 'Show conversations'} aria-pressed={history}
         onClick={() => setHistory((shown) => !shown)}>
         <span className="codicon codicon-history" aria-hidden="true" />
+        {unreadCount > 0 && <span className="chat-history-button__badge" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
     </IconTooltip>
   )
 
   const body = (
     <>
-      {listError !== null && (
+      {feed.error !== null && (
         <div className="chat-error" role="alert">
           <span className="codicon codicon-error" aria-hidden="true" />
-          <span>{listError}</span>
+          <span>{feed.error}</span>
           <button type="button" className="chat-error__retry"
-            onClick={() => setRefreshKey((key) => key + 1)}>
+            onClick={refresh}>
             Retry
           </button>
-          <IconTooltip label="Dismiss error">
-            <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
-              onClick={() => setListError(null)}>
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </button>
-          </IconTooltip>
         </div>
       )}
 
@@ -202,24 +179,50 @@ export default function ChatPanel(props: ChatPanelProps) {
         </div>
       )}
 
+      {/* Always mounted so the announcement is read; one line however many replies landed. */}
+      <div className="chat-live" role="status" aria-live="polite">
+        {moved !== null && (
+          <div className="chat-notice chat-notice--info chat-live__line">
+            <span className="chat-notice__text">{moved}</span>
+            <IconTooltip label="Dismiss notice">
+              <button type="button" className="chat-error__dismiss" aria-label="Dismiss notice" onClick={() => setMoved(null)}>
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </button>
+            </IconTooltip>
+          </div>
+        )}
+        {repliedRows.length > 0 && (
+          <div className="chat-notice chat-notice--info chat-live__line">
+            <span className="chat-notice__text">
+              {`Central replied in ${conversationLabel(repliedRows[0]!)}${repliedRows.length > 1 ? ` and ${repliedRows.length - 1} more` : ''}`}
+            </span>
+            <button type="button" className="chat-error__retry" onClick={() => { select(repliedRows[0]!.id); setHistory(false) }}>Open</button>
+          </div>
+        )}
+      </div>
       <NeedsYouStrip />
       <div className={cn('chat-body', compact && 'chat-body--compact')}>
-        {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations">
+        {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations" aria-busy={feed.refreshing || undefined}>
           {conversations === null ? (
-            loading && <p className="chat-list-status">Loading…</p>
+            feed.loading && <p className="chat-list-status">Loading…</p>
           ) : conversations.length === 0 ? (
             <p className="chat-list-status">No conversations yet</p>
           ) : (
             <ul className="chat-list">
-              {conversations.map((conversation) => (
+              {conversations.map((conversation) => {
+                const isUnread = feed.unread.has(conversation.id)
+                const running = conversation.activeTurnId !== null
+                return (
                 <li key={conversation.id}>
                   <button
                     type="button"
-                    className={cn('chat-list-item', conversation.id === selected && 'is-active')}
+                    className={cn('chat-list-item', conversation.id === selected && 'is-active', isUnread && 'is-unread')}
                     aria-current={conversation.id === selected ? 'true' : undefined}
-                    onClick={() => { setSelected(conversation.id); setHistory(false) }}
+                    aria-label={isUnread ? `${conversationLabel(conversation)}, unread${running ? ', turn running' : ''}` : undefined}
+                    onClick={() => { select(conversation.id); setHistory(false) }}
                   >
                     <span className="chat-list-item__label">{conversationLabel(conversation)}</span>
+                    {isUnread && <span className="chat-list-item__unread" title="Unread" aria-hidden="true" />}
                     {conversation.updatedAt > 0 && (
                       <span className="chat-list-item__time">{relativeTime(conversation.updatedAt)}</span>
                     )}
@@ -228,14 +231,15 @@ export default function ChatPanel(props: ChatPanelProps) {
                     )}
                   </button>
                 </li>
-              ))}
-              {nextOffset !== null && (
+                )
+              })}
+              {feed.nextOffset !== null && (
                 <li className="chat-list-more">
-                  {more.error !== null && <p className="chat-list-status" role="alert">{more.error}</p>}
-                  <button type="button" className="chat-list-item" disabled={more.loading}
-                    aria-busy={more.loading || undefined} onClick={showMore}>
+                  {feed.more.error !== null && <p className="chat-list-status" role="alert">{feed.more.error}</p>}
+                  <button type="button" className="chat-list-item" disabled={feed.more.loading}
+                    aria-busy={feed.more.loading || undefined} onClick={loadMore}>
                     <span className="chat-list-item__label">
-                      {more.loading ? 'Loading…' : more.error !== null ? 'Retry' : 'Show more'}
+                      {feed.more.loading ? 'Loading…' : feed.more.error !== null ? 'Retry' : 'Show more'}
                     </span>
                   </button>
                 </li>
