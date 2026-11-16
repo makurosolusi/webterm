@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { AgentChatEvent } from '../../shared/agentChat.wire'
+import { processRateLimit, rateLimitResetAt } from '../central/work/workRateLimit'
 import { createAgentChatMapper } from './agentChat.events'
 import { FakeQuery, fx } from './agentChat.fakeQuery'
 import { AgentChatSession } from './agentChat.session'
@@ -9,6 +10,25 @@ const tick = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms))
 describe('mapper: replayed user messages, rate limits, tasks', () => {
   test('a replayed user message (replay-user-messages) maps to nothing', () => {
     expect(createAgentChatMapper().map(fx.replay('u-1', 'hello'))).toEqual([])
+  })
+
+  test('rate_limit_event feeds the work-layer hold with ms (from seconds or ms) and holds until the reset', () => {
+    const noted: { status: string; resetsAt?: number }[] = []
+    const original = processRateLimit.note
+    processRateLimit.note = (i) => { noted.push(i) }
+    try {
+      const m = createAgentChatMapper()
+      m.map(fx.rateLimit('rejected', 1_800_000_000))
+      m.map(fx.rateLimit('allowed_warning', 1_800_000_000_000, 'seven_day'))
+      m.map(fx.rateLimit('bogus'))
+      expect(noted).toEqual([{ status: 'rejected', resetsAt: 1_800_000_000_000 }, { status: 'allowed_warning', resetsAt: 1_800_000_000_000 }])
+    } finally { processRateLimit.note = original }
+    // Real hold: a rejection resetting in 5 s (given in seconds) is pending now, gone after the reset. test-only short horizon
+    const now = Date.now()
+    createAgentChatMapper().map(fx.rateLimit('rejected', Math.floor((now + 5_000) / 1_000) + 1))
+    const at = rateLimitResetAt(now)
+    expect(at).not.toBeNull()
+    expect(rateLimitResetAt(at! + 1)).toBeNull()
   })
 
   test('rate_limit_event: seconds become ms, an unchanged state is dropped, allowed passes through', () => {
