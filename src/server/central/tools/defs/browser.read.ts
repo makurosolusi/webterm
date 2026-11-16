@@ -10,7 +10,7 @@ import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import { obj, S } from '../../../capability/capability.schema'
 import { QUESTION_MAX_CHARS, type PageRead, type PageReader } from '../../context/pageReader'
 import { createLogger } from '../../../logs'
-import { timed } from '../../../browser/browserAgent.latency'
+import { timed, type TimedMeta } from '../../../browser/browserAgent.latency'
 import { classifyBrowserNode } from '../../../browser/browser.idle'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { type BrowserToolDeps, browserNodesOf, failCode, idlePortsOf } from './browser.status'
@@ -109,7 +109,9 @@ export function createBrowserReadDef(deps: BrowserReadDeps): ToolDef {
       }
       if (!attempt.ok) return fail(attempt.code, nodeId)
       const read = attempt // const keeps the narrowing inside the timing closure
-      const summary = await timed('browser_read.reader', () => reader({ text: read.text, url, ...(typeof input.question === 'string' ? { question: input.question } : {}), truncated: read.truncated }), { judge: (r: PageRead) => (r.ok ? { ok: true } : { ok: false, code: r.code }) })
+      // The judge runs before the record is written, so it hands the CLI's API time to the phase record (telemetry only).
+      const meta: TimedMeta = { judge: (r: PageRead) => { if (r.apiMs !== undefined) meta.apiMs = r.apiMs; return r.ok ? { ok: true } : { ok: false, code: r.code } } }
+      const summary = await timed('browser_read.reader', () => reader({ text: read.text, url, ...(typeof input.question === 'string' ? { question: input.question } : {}), truncated: read.truncated }), meta)
       if (!summary.ok) return fail(summary.code, nodeId)
       const { answer, sources, truncated, injectionSuspected } = summary
       return { ok: true, data: { nodeId, host, answer, sources, truncated, injectionSuspected, provenance: 'untrusted-web', tainted: true } }

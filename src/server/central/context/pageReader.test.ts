@@ -81,6 +81,11 @@ describe('createPageReader', () => {
     expect(await read(async () => { calls += 1; return GOOD }, PAGE, true)).toEqual({ ok: false, code: 'connection_impaired' })
     expect(calls).toBe(0)
   })
+  it('passes the CLI API time through as apiMs (ok and refused answers alike) without touching the summary', async () => {
+    const withApi = (output: unknown): StructuredCall => async (req) => { req.onApiMs?.(2842); return output }
+    expect(await read(withApi(GOOD))).toEqual({ ok: true, ...GOOD, apiMs: 2842 })
+    expect(await read(withApi({ ...GOOD, toolCall: 'agent.spawn' }))).toEqual({ ok: false, code: 'reader_unavailable', apiMs: 2842 })
+  })
   it('marks truncated when the snapshot or the reader input was cut', async () => {
     const r = createPageReader({ call: async () => GOOD, impaired: () => false })
     expect(await r({ text: PAGE, url: URL0, truncated: true })).toMatchObject({ ok: true, truncated: true })

@@ -8,7 +8,7 @@ import { writeFakeClaude } from '../runtime/claude.fakeBin'
 import { resetProviderConfig, saveProvider } from '../../claudeProvider/claudeProvider.store'
 import { createClaudeClassifier } from '../../policy/policy.classifier.claude'
 import type { HelperKind, HelperUsage } from '../../cost/costCapture'
-import { HELPER_EFFORT, createClaudeStructured, createStructuredRunner, parseStructuredAnswer } from './claudeStructured'
+import { HELPER_EFFORT, createClaudeStructured, createStructuredRunner, parseStructuredAnswer, structuredArgv } from './claudeStructured'
 
 const dir = mkdtempSync(join(tmpdir(), 'structured-'))
 const prevData = process.env.WEBTERM_DATA_DIR
@@ -111,5 +111,43 @@ process.stdout.write(${JSON.stringify(JSON.stringify(bare))})`)
     const bare = JSON.stringify({ subtype: 'success', structured_output: {}, usage: {} })
     expect(parseStructuredAnswer(bare, 'opus').usage).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costMicros: null, model: 'opus' })
     expect(() => parseStructuredAnswer(JSON.stringify({ subtype: 'error_max_turns' }))).toThrow(/no structured output/)
+  })
+})
+
+describe('API time and isolation flags', () => {
+  it('parseStructuredAnswer carries the CLI duration_api_ms as apiMs, and omits it when absent or not a number', () => {
+    const base = { subtype: 'success', structured_output: { ok: true } }
+    expect(parseStructuredAnswer(JSON.stringify({ ...base, duration_api_ms: 2842 })).apiMs).toBe(2842)
+    expect(parseStructuredAnswer(JSON.stringify(base))).not.toHaveProperty('apiMs')
+    expect(parseStructuredAnswer(JSON.stringify({ ...base, duration_api_ms: 'fast' }))).not.toHaveProperty('apiMs')
+  })
+  it('createClaudeStructured hands the API time to onApiMs without changing the returned output', async () => {
+    const bin = writeFakeClaude(dir, `readStdin()
+process.stdout.write(${JSON.stringify(JSON.stringify({ ...RESULT({ ok: true }), duration_api_ms: 1234 }))})`)
+    let seen: number | undefined
+    const out = await createClaudeStructured('page_reader', { bin, book: () => undefined })({ prompt: 'x', schema: {}, onApiMs: (ms) => { seen = ms } }, signal())
+    expect(out).toEqual({ ok: true })
+    expect(seen).toBe(1234)
+  })
+  it('the child env carries the traffic switch and still no WEBTERM_/OPENAI_/OAuth secret from the server env', async () => {
+    const out = join(dir, 'env.json')
+    const bin = writeFakeClaude(dir, `readStdin()
+fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))
+process.stdout.write(${JSON.stringify(JSON.stringify(RESULT({ ok: true })))})`)
+    const prev = { ...process.env }
+    Object.assign(process.env, { WEBTERM_TOKEN: 'root-test-only', OPENAI_API_KEY: 'sk-test-only', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-test-only' }) // test-only
+    try { await createStructuredRunner('page_reader', { bin })({ prompt: 'x', schema: {} }, signal()) } finally {
+      for (const k of ['WEBTERM_TOKEN', 'OPENAI_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN']) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k] }
+    }
+    const env = JSON.parse(readFileSync(out, 'utf8')) as Record<string, string>
+    expect(env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']).toBe('1')
+    expect(Object.keys(env).filter((k) => /^(WEBTERM_|NODETERM_|OPENAI_|CLAUDE_CODE_OAUTH)/.test(k))).toEqual([])
+  })
+  it('the helper argv always keeps every isolation flag (no tools, no MCP, no settings, no slash commands, no session)', () => {
+    const argv = structuredArgv({ type: 'object' })
+    const flag = (f: string): string | undefined => argv[argv.indexOf(f) + 1]
+    expect(flag('--tools')).toBe('')
+    expect(flag('--setting-sources')).toBe('')
+    for (const f of ['--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--json-schema', '--max-budget-usd']) expect(argv).toContain(f)
   })
 })
