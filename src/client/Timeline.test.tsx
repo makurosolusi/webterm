@@ -80,6 +80,18 @@ async function mount(onFocusNode = vi.fn()) {
   return onFocusNode
 }
 
+describe('TimelinePanel: Central acts', () => {
+  it('a central.act line is a button that focuses its node', async () => {
+    server.history = [ev('central.act', { nodeId: 'n1', workspaceId: 'w1', payload: { v: 1, tool: 'canvas.type', verb: 'typed', nodeId: 'n1', n: 1 } })]
+    const onFocusNode = await mount()
+    await waitFor(() => expect(lineTexts()).toEqual(['Central typed brisk-otter']))
+    fireEvent.click(screen.getByText('Central typed brisk-otter').closest('button')!)
+    expect(onFocusNode).toHaveBeenCalledWith('n1')
+    fireEvent.change(screen.getByLabelText('Filter by kind'), { target: { value: 'central' } })
+    expect(lineTexts()).toEqual(['Central typed brisk-otter'])
+  })
+})
+
 describe('TimelinePanel', () => {
   it('renders history grouped by task, with readable lines and a level badge', async () => {
     server.history = [
