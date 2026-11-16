@@ -60,11 +60,11 @@ export interface CopyOnSelectTerminal {
   getSelection(): string
 }
 
+
 /**
- * Apakah SelectionService xterm mengambil mousedown ini? Mencerminkan `handleMouseDown` +
- * `shouldForceSelection` xterm: tombol primer saja; selalu saat tidak ada app yang melacak mouse
- * (service-nya aktif); selain itu hanya saat dipaksa — Option (dengan
- * `macOptionClickForcesSelection`) di macOS, Shift di tempat lain.
+ * Whether xterm's own selection handling takes this mousedown: primary button only; always when
+ * no program inside the terminal is tracking the mouse; otherwise only when selection is forced
+ * (Option with `macOptionClickForcesSelection` on macOS, Shift elsewhere).
  */
 export function xtermOwnsMouseDown(
   e: Pick<MouseEvent, 'button' | 'altKey' | 'shiftKey'>,
@@ -73,96 +73,97 @@ export function xtermOwnsMouseDown(
 ): boolean {
   if (e.button !== 0) return false
   if (mouseTrackingMode === 'none') return true
-  return platform.isMac ? e.altKey && platform.optionForces : e.shiftKey
+  const forceKey = platform.isMac ? e.altKey && platform.optionForces : e.shiftKey
+  return forceKey
 }
 
 export interface CopyOnSelectDeps {
-  /** Setting live. Dibaca pada waktu event, tidak pernah ditangkap closure. */
+  /** Live setting, read at event time rather than captured. */
   enabled: () => boolean
-  /** Menulis clipboard sistem. */
+  /** Writes to the system clipboard. */
   write: (text: string) => void
   isMac?: boolean
 }
 
 /**
- * Pasang copy-on-select ke terminal yang sudah DIBUKA. Mengembalikan disposer.
+ * Copy the terminal selection to the clipboard when a mouse selection gesture ends. Returns a
+ * disposer. A no-op for a terminal that is not opened yet.
  *
- * SELEKSI MANA YANG DIHITUNG — dan kenapa ini BUKAN subscription `onSelectionChange`. Event itu
- * juga menyala untuk seleksi PROGRAMATIK (addon search memanggil `Terminal.select()` untuk setiap
- * hit yang dilangkahi pengguna) dan saat seleksi dihapus. Jadi pemicunya adalah GESTUR-nya: tekan
- * tombol primer di dalam `term.element` yang diambil SelectionService xterm (`xtermOwnsMouseDown`),
- * diikuti rilis DI MANA PUN di window — drag sangat sering melewati batas node, dan xterm sendiri
- * mendengarkan rilis itu di document. Seleksi kata/baris dari double/triple-click adalah gestur
- * yang sama dengan `detail` 2/3 dan ikut tercakup gratis.
+ * Why a gesture instead of `onSelectionChange`: that event also fires for programmatic selections
+ * (the search addon selects every hit) and when a selection is cleared. So a gesture starts with a
+ * primary press inside the terminal element that xterm handles itself, and ends with a primary
+ * release anywhere in the window (drags often leave the node). Double/triple-click word and line
+ * selections are the same gesture.
  *
- * URUTAN: pada mousedown, xterm menambahkan listener `mouseup` fase-bubble di DOCUMENT dan
- * memfinalkan seleksi di sana. Listener rilis kita ada di WINDOW fase CAPTURE (supaya tak ada yang
- * di bawahnya bisa menghentikannya), jadi ia jalan SEBELUM milik xterm. Pembacaan karenanya
- * ditunda dengan macrotask (`setTimeout 0`) — BUKAN `queueMicrotask`: untuk event pengguna nyata,
- * checkpoint microtask jalan di antara callback listener, yang masih sebelum listener document
- * xterm.
+ * Timing: xterm finalizes the selection from a bubble-phase `mouseup` listener on the document,
+ * whereas ours runs in the window capture phase, i.e. earlier. The read is therefore deferred with
+ * a macrotask (`setTimeout 0`); a microtask would still run before xterm's listener.
  *
- * TIDAK PERNAH MENULIS KOSONG: klik biasa menghapus seleksi; menulis `''` akan mengosongkan
- * clipboard.
+ * An empty selection is never written, because a plain click clears the selection and writing ''
+ * would wipe the clipboard.
  */
 export function attachCopyOnSelect(term: CopyOnSelectTerminal, deps: CopyOnSelectDeps): () => void {
   const element = term.element
   if (!element) return () => {}
   const win = element.ownerDocument.defaultView ?? window
   const isMac = deps.isMac ?? isMacPlatform()
-  let pendingUp: ((e: MouseEvent) => void) | null = null
-  let readTimer: ReturnType<typeof setTimeout> | null = null
 
-  // Mengakhiri gestur yang ter-arm TANPA menulis. Gestur yang kehilangan rilisnya dan listener-nya
-  // tetap hidup akan menyalin apa pun yang terseleksi saat rilis BERIKUTNYA datang — highlight
-  // basi atau hit pencarian. Tiga cara rilis bisa hilang: blur (tombol ditahan, dilepas di app
-  // lain), mousedown lain di window, dan dispose.
-  const disarm = (): void => {
-    if (pendingUp) win.removeEventListener('mouseup', pendingUp, true)
-    pendingUp = null
-    win.removeEventListener('blur', disarm)
-    win.removeEventListener('mousedown', disarm, true)
+  // Everything belonging to one in-flight gesture hangs off this controller; aborting it removes
+  // the window listeners. A gesture that loses its release (window blur, another press, dispose)
+  // is dropped without writing, otherwise a stale selection would be copied on the next release.
+  let gesture: AbortController | null = null
+  let pendingRead: ReturnType<typeof setTimeout> | undefined
+
+  const dropGesture = (): void => {
+    gesture?.abort()
+    gesture = null
+  }
+  const reset = (): void => {
+    dropGesture()
+    clearTimeout(pendingRead)
+    pendingRead = undefined
   }
 
-  const clearPending = (): void => {
-    disarm()
-    if (readTimer !== null) clearTimeout(readTimer)
-    readTimer = null
+  const copySelection = (): void => {
+    pendingRead = undefined
+    if (!deps.enabled() || !term.hasSelection()) return
+    const text = term.getSelection()
+    if (text) deps.write(text)
   }
 
-  const onDown = (e: MouseEvent): void => {
+  const onPress = (press: MouseEvent): void => {
     if (!deps.enabled()) return
-    const owned = xtermOwnsMouseDown(e, term.modes.mouseTrackingMode, {
+    const handledByXterm = xtermOwnsMouseDown(press, term.modes.mouseTrackingMode, {
       isMac,
       optionForces: term.options.macOptionClickForcesSelection === true,
     })
-    if (!owned) return
-    clearPending()
-    const onUp = (up: MouseEvent): void => {
-      // Hanya rilis PRIMER yang menyelesaikan gestur: rilis kanan/tengah di tengah drag akan
-      // menyalin seleksi separuh jalan dan menjatuhkan yang sebenarnya.
-      if (up.button !== 0) return
-      disarm()
-      readTimer = setTimeout(() => {
-        readTimer = null
-        if (!deps.enabled() || !term.hasSelection()) return
-        const text = term.getSelection()
-        if (text) deps.write(text)
-      }, 0)
-    }
-    pendingUp = onUp
-    win.addEventListener('mouseup', onUp, true)
-    win.addEventListener('blur', disarm)
-    // Ditambahkan selagi fase capture ELEMENT dari tekanan INI, jadi ia tidak bisa menyala untuk
-    // tekanan ini: fase capture window sudah terlewat.
-    win.addEventListener('mousedown', disarm, true)
+    if (!handledByXterm) return
+    reset()
+    const ctl = new AbortController()
+    gesture = ctl
+    const opts = { capture: true, signal: ctl.signal }
+    win.addEventListener(
+      'mouseup',
+      (release) => {
+        // Only the primary release completes it; a right/middle release mid-drag must not copy
+        // a half-made selection.
+        if (release.button !== 0) return
+        dropGesture()
+        pendingRead = setTimeout(copySelection, 0)
+      },
+      opts,
+    )
+    win.addEventListener('blur', dropGesture, { signal: ctl.signal })
+    // Registered during this press's element-capture phase, so it cannot fire for this press
+    // (the window capture phase has already passed) - only for the next one.
+    win.addEventListener('mousedown', dropGesture, opts)
   }
 
-  // Fase capture karena xterm memanggil `stopPropagation` pada mousedown yang dipaksa, dari
-  // listener bubble-nya di elemen yang sama.
-  element.addEventListener('mousedown', onDown, true)
+  // Capture phase: xterm stops propagation of a forced-selection mousedown from its own bubble
+  // listener on this same element.
+  element.addEventListener('mousedown', onPress, true)
   return () => {
-    element.removeEventListener('mousedown', onDown, true)
-    clearPending()
+    element.removeEventListener('mousedown', onPress, true)
+    reset()
   }
 }
