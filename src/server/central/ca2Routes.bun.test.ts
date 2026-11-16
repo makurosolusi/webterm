@@ -233,7 +233,8 @@ describe('a family whose feature is off answers 503 <feature>_off, not a fall-th
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/rollback'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/reject'))).toEqual({ status: 503, body: { error: 'skills_off' } })
-    expect((await ca2Dispatch(off, req('POST', '/api/central/skills')))?.status).toBe(405)
+    expect(await ca2Dispatch(off, req('POST', '/api/central/skills'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect((await ca2Dispatch(off, req('PUT', '/api/central/skills')))?.status).toBe(405)
     for (const p of ['/api/central/status', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
   })
   it('with the feature on the same reads list as before', async () => {

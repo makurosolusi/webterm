@@ -5,6 +5,7 @@
 import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
+import { createSkillRequest } from './skillCreateApi'
 import type {
   AgentActionResult, AgentRow, BoardNodeRow, BoardProject, CentralControlClient, ContextView, ControlView, MemoryRow,
   SkillReviewRow, StateDoc, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView, TurnContext, WorkingState,
@@ -65,7 +66,7 @@ const toBoardNode = (r: unknown): BoardNodeRow | null => (isRec(r) && str(r.node
 const toProject = (r: unknown): BoardProject | null => (isRec(r) && str(r.id) ? { id: str(r.id), name: str(r.name), workspaceId: str(r.workspaceId) || null, cwd: str(r.cwd) || null } : null)
 
 const toSkill = (r: unknown): SkillReviewRow | null => (isRec(r) && isRec(r.record) && str(r.record.name)
-  ? { record: r.record as unknown as SkillReviewRow['record'], lint: { ok: isRec(r.lint) && r.lint.ok === true, findings: isRec(r.lint) && Array.isArray(r.lint.findings) ? r.lint.findings.map(str) : [] }, diff: str(r.diff), canRollback: r.canRollback === true }
+  ? { record: r.record as unknown as SkillReviewRow['record'], lint: { ok: isRec(r.lint) && r.lint.ok === true, findings: isRec(r.lint) && Array.isArray(r.lint.findings) ? r.lint.findings.map(str) : [] }, diff: str(r.diff), canRollback: r.canRollback === true, description: str(r.description), body: str(r.body) }
   : null)
 
 const toMemory = (r: unknown): MemoryRow | null => (isRec(r) && str(r.id)
@@ -161,6 +162,7 @@ export const centralControlApi: CentralControlClient = {
   async listSkills(signal) { return compact(rowsOf(await request(SKILLS_PATH, { signal })).map(toSkill)) },
   async approveSkill(name, version, phrase) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, phrase }) },
   async rejectSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/reject`, { version }) },
+  createSkill: (input) => createSkillRequest(SKILLS_PATH, input),
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
   async listMemory(offset, signal, filter = {}) {
     const narrow = `${filter.projectId ? `&projectId=${encodeURIComponent(filter.projectId)}` : ''}${filter.status ? `&status=${filter.status}` : ''}`

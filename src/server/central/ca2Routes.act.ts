@@ -7,6 +7,7 @@ import type { Ca2Handle } from './ca2Boot'
 import { FEATURE_OFF } from './ca2Routes.read'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { SkillError } from './skills/skillIndex'
+import { MAX_BODY_CHARS, MAX_CAPS, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME_RE } from './skills/skillLint'
 import type { ToolResult } from './tools/toolTypes'
 
 /** Actor prefix the skill admin steps require. */
@@ -79,6 +80,28 @@ export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw
     if (phrase !== CONFIRM_PHRASE) return fail(400, 'confirm_phrase_mismatch')
     h.skills.approve(name, version, actor, confirmPhrase(name, version))
     return { status: 200, body: { status: 'done' } }
+  } catch (err) {
+    return skillFailure(err)
+  }
+}
+
+const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
+
+/**
+ * `POST /skills` — a human drafts a skill. It enters the same propose -> evaluate -> pending_approval path as a
+ * Central proposal (same lint, same limits); activation stays the separate typed-phrase approve step.
+ */
+export async function createSkill(h: Ca2Handle, raw: unknown, actor: string): Promise<RouteResult> {
+  if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
+  if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
+  const { name, description, body, caps = [] } = bodyOf(raw)
+  if (typeof name !== 'string' || name.length > MAX_SKILL_NAME || !SKILL_NAME_RE.test(name)) return fail(400, 'invalid_name')
+  if (!isText(description, MAX_DESCRIPTION) || /[\r\n]/.test(description)) return fail(400, 'invalid_description')
+  if (!isText(body, MAX_BODY_CHARS)) return fail(400, 'invalid_body')
+  if (!Array.isArray(caps) || caps.length > MAX_CAPS || caps.some((c) => typeof c !== 'string')) return fail(400, 'invalid_caps')
+  try {
+    const rec = await h.skills.propose({ name, description, body, caps: caps as string[] }, actor)
+    return { status: 201, body: { name: rec.name, version: rec.version, state: rec.status } }
   } catch (err) {
     return skillFailure(err)
   }

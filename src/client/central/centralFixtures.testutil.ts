@@ -12,11 +12,12 @@ export function fakeClient(over: Partial<CentralControlClient> = {}): CentralCon
     agentAction: vi.fn(async () => ({ status: 'done' as const })),
     listSkills: vi.fn(async () => [{
       record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval' as const, origin: 'central' as const, caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 0.9 },
-      lint: { ok: true, findings: [] }, diff: '+added line\n-removed line\n context', canRollback: false,
+      lint: { ok: true, findings: [] }, diff: '+added line\n-removed line\n context', canRollback: false, description: 'Summarize project status.', body: '1. Read the portfolio.',
     }]),
     approveSkill: vi.fn(async () => undefined),
     rejectSkill: vi.fn(async () => undefined),
     rollbackSkill: vi.fn(async () => undefined),
+    createSkill: vi.fn(async () => undefined),
     listMemory: vi.fn(async () => [
       { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react', status: 'fact', sourceKind: 'human-edit', sourceRef: null, createdAt: 1, projectName: 'Webterm' },
       { id: 'm2', scope: 'user' as const, trust: 'agent' as const, kind: 'fact' as const, key: 'note', value: 'api_key=sk_live_abcdefghijklmnop1234', status: 'claim', sourceKind: 'central', sourceRef: 'central:global', createdAt: 1, projectName: '' },
