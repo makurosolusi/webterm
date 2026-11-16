@@ -2,19 +2,24 @@
 
 ## Status (diperbarui)
 
-Jujur: webterm **bukan clean-room murni**. Bagian berikut sudah ditulis ulang dari perilaku
-(bukan dari teks sumber), tetapi penulisnya mengenal referensi:
+Semua 15 file/kelompok yang ditandai audit ini kini sudah **ditulis ulang dari perilaku dan dokumentasi**:
 
-- `linkNoteComposer`
-- `browser.discard`
-- `tsWorkerReaper`
-- `terminalKeys.mouse` (copy-on-select)
-- `fileBrowse`
-- `daReplyGate`
-- `settings.terminal`
+- Gelombang pertama (tujuh): `linkNoteComposer`, `browser.discard`, `tsWorkerReaper`, `terminalKeys.mouse` (copy-on-select), `fileBrowse`, `daReplyGate`, `settings.terminal`.
+- Adaptasi dekat (delapan): `fsLimits`, `themes`, `contextLinkTranscript`, `terminalConfig`, `shellQuote`, `workspace.capabilities`, `contextLinkRender`, `workspace.agents`.
+- Ditambah tinjauan `agentActions`, `filesKeys`, `editorFile`, `markdownLinks`, serta tes turunan untuk `agentActions`, `editorFile`, `fileBrowse`, `filesKeys`, `themes` dan chrome-kit.
 
-**Belum ditulis ulang**, delapan adaptasi dekat: `fsLimits`, `themes`, `contextLinkTranscript`,
-`terminalConfig`, `shellQuote`, `workspace.capabilities`, `contextLinkRender`, `workspace.agents`.
+Jujur: webterm **bukan clean-room murni**. Penulis ulang membaca versi lama lebih dulu. Yang berubah nyata:
+struktur, penamaan, komentar dan data tes. Sumber fakta sekarang dokumentasi resmi atau spesifikasi
+(referensi CLI, pola WAI-ARIA, aturan POSIX, referensi opsi xterm, palet berlisensi terbuka). Tes policy
+menjaga agar penanda "ported/copied from/verbatim" tidak kembali:
+`src/shared/independentRewrite.policy.test.ts` dan `src/client/independentSource.policy.test.ts`.
+
+Masih terbuka:
+
+- (a) `shellQuote` sengaja mempertahankan perilaku backslash-dalam-kutip-ganda yang lama (tidak POSIX ketat) karena kontrak pemakainya.
+- (b) Bentuk baris JSONL transkrip Claude Code tidak terdokumentasi rinci; pembaca transkrip diturunkan dari kode dan tes repo ini.
+- (c) Palet tema: nilai bright Tokyo Night ditulis dari ingatan akan tokyonight.nvim, dan lisensi Gruvbox terkonfirmasi dari README (file LICENSE 404).
+- (d) Tinjauan hukum oleh manusia disarankan bila kepastian lisensi penting.
 
 Rename protokol `nodeterm` -> `webterm` tidak mengubah status ini; nama lama hanya diterima
 sementara sebagai fallback (batas 0.10.0), tanpa migrasi data dir.
