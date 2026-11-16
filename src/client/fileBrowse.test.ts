@@ -1,7 +1,3 @@
-// Tes pohon file. Dua describe tidak ikut
-// karena fungsinya tidak diport (`downloadMenuEntries`, `displacedFilesPatch`); ditambah cakupan
-// untuk helper path yang di webterm tinggal di modul yang sama (`newEntryPath`, `ancestorDirs`,
-// `createTargetDir`).
 import { describe, expect, it } from 'vitest'
 import {
   ancestorDirs,
@@ -19,246 +15,220 @@ import {
   parentDir,
 } from './fileBrowse'
 
-describe('folderTitle', () => {
-  it('names the deepest segment', () => {
-    expect(folderTitle('/Users/me/src/webterm')).toBe('webterm')
-    expect(folderTitle('/Users/me/src/webterm/')).toBe('webterm')
+const names = (...list: string[]) => list.map((name) => ({ name }))
+
+describe('path helpers', () => {
+  it.each([
+    ['/srv/app/site', 'site'],
+    ['/srv/app/site///', 'site'],
+    ['/', '/'],
+  ])('folderTitle(%s) is %s', (path, title) => {
+    expect(folderTitle(path)).toBe(title)
   })
 
-  it('names the root', () => {
-    expect(folderTitle('/')).toBe('/')
+  it.each([
+    ['/x/y/z', '/x/y'],
+    ['/x/y/z//', '/x/y'],
+    ['/x', '/'],
+    ['/', '/'],
+    ['~', '/'],
+  ])('parentDir(%s) is %s', (path, parent) => {
+    expect(parentDir(path)).toBe(parent)
   })
-})
 
-describe('parentDir', () => {
-  it('walks up one level', () => {
-    expect(parentDir('/a/b/c')).toBe('/a/b')
-    expect(parentDir('/a/b/c/')).toBe('/a/b')
+  it.each([
+    ['/', 'tmp', '/tmp'],
+    ['/x/', 'y', '/x/y'],
+    ['/x/y', 'f.log', '/x/y/f.log'],
+  ])('childPath(%s, %s) is %s', (dir, name, joined) => {
+    expect(childPath(dir, name)).toBe(joined)
   })
 
-  // Naik dari sebuah anak root mendarat di root, dan naik dari root tetap di root — bukan '' yang
-  // akan membuat panggilan `fs.list` berikutnya relatif terhadap cwd server.
-  it('bottoms out at the root', () => {
-    expect(parentDir('/a')).toBe('/')
-    expect(parentDir('/')).toBe('/')
-  })
-})
-
-describe('childPath', () => {
-  it('joins without doubling the separator at the root', () => {
-    expect(childPath('/a/b', 'c.txt')).toBe('/a/b/c.txt')
-    expect(childPath('/', 'etc')).toBe('/etc')
-    expect(childPath('/a/', 'b')).toBe('/a/b')
-  })
-})
-
-describe('createTargetDir', () => {
-  it('creates inside a folder, but beside a file', () => {
-    expect(createTargetDir('/a/b', true)).toBe('/a/b')
-    expect(createTargetDir('/a/b/c.ts', false)).toBe('/a/b')
+  it('createTargetDir picks the folder itself or the file parent', () => {
+    expect(createTargetDir('/p/q/readme.md', false)).toBe('/p/q')
+    expect(createTargetDir('/p/q', true)).toBe('/p/q')
   })
 })
 
 describe('newEntryPath', () => {
-  it('appends a simple name', () => {
-    expect(newEntryPath('/a/b', 'c.ts')).toBe('/a/b/c.ts')
-    expect(newEntryPath('/a/b', '  c.ts  ')).toBe('/a/b/c.ts')
-    expect(newEntryPath('/', 'c.ts')).toBe('/c.ts')
+  const base = '/work'
+
+  it('trims the typed name and resolves it under the base', () => {
+    expect(newEntryPath(base, ' main.go ')).toBe('/work/main.go')
+    expect(newEntryPath('/', 'main.go')).toBe('/main.go')
+    expect(newEntryPath(base + '/', 'main.go')).toBe('/work/main.go')
   })
 
-  it('allows a nested relative name', () => {
-    expect(newEntryPath('/a', 'x/y/z.ts')).toBe('/a/x/y/z.ts')
+  it('accepts nested relative names, dotfiles and leading dots', () => {
+    expect(newEntryPath(base, 'one/two/three.txt')).toBe('/work/one/two/three.txt')
+    expect(newEntryPath(base, '.gitignore')).toBe('/work/.gitignore')
+    expect(newEntryPath(base, '..hidden')).toBe('/work/..hidden')
   })
 
-  it('refuses a NUL byte and a segment over 255 bytes', () => {
-    expect(newEntryPath('/a', 'x\0y')).toBeNull()
-    expect(newEntryPath('/a', 'a'.repeat(255))).toBe(`/a/${'a'.repeat(255)}`)
-    expect(newEntryPath('/a', 'a'.repeat(256))).toBeNull()
-    // 86 x 3 byte = 258 byte walau hanya 86 karakter: batasnya byte, bukan panjang string.
-    expect(newEntryPath('/a', '€'.repeat(86))).toBeNull()
-    expect(newEntryPath('/a', `${'a'.repeat(200)}/${'b'.repeat(200)}`)).not.toBeNull()
+  it.each(['', '   ', '/abs', '\\abs', 'D:/dir', 'd:file'])('rejects %j as empty or absolute', (typed) => {
+    expect(newEntryPath(base, typed)).toBeNull()
   })
 
-  it('refuses empty, absolute and drive-letter names', () => {
-    expect(newEntryPath('/a', '')).toBeNull()
-    expect(newEntryPath('/a', '   ')).toBeNull()
-    expect(newEntryPath('/a', '/etc/passwd')).toBeNull()
-    expect(newEntryPath('/a', '\\etc')).toBeNull()
-    expect(newEntryPath('/a', 'C:/Windows')).toBeNull()
+  it.each(['..', '../up', 'in/../../up', '..\\up', 'in\\..\\up'])('rejects traversal in %j', (typed) => {
+    expect(newEntryPath(base, typed)).toBeNull()
   })
 
-  // Traversal diperiksa pada kedua separator: `..\x` lolos cek `/` saja lalu baru keluar dari
-  // baseDir di filesystem yang mengurai backslash.
-  it('refuses traversal on either separator', () => {
-    expect(newEntryPath('/a', '../b')).toBeNull()
-    expect(newEntryPath('/a', 'x/../../b')).toBeNull()
-    expect(newEntryPath('/a', '..\\b')).toBeNull()
+  it.each(['dir/', 'dir\\', 'a//b'])('rejects %j (trailing separator or empty segment)', (typed) => {
+    expect(newEntryPath(base, typed)).toBeNull()
   })
 
-  it('refuses a name that ends in a separator or has an empty segment', () => {
-    expect(newEntryPath('/a', 'b/')).toBeNull()
-    expect(newEntryPath('/a', 'b\\')).toBeNull()
-    expect(newEntryPath('/a', 'b//c')).toBeNull()
+  it('treats a mid-name backslash as an ordinary character', () => {
+    expect(newEntryPath(base, 'odd\\name')).toBe('/work/odd\\name')
   })
 
-  // Backslash adalah karakter nama file yang SAH di POSIX, jadi menolaknya akan menolak file nyata.
-  it('keeps a lone backslash inside a name', () => {
-    expect(newEntryPath('/a', 'we\\ird.ts')).toBe('/a/we\\ird.ts')
+  it('enforces the 255-byte segment limit in bytes, per segment', () => {
+    expect(newEntryPath(base, 'z'.repeat(255))).not.toBeNull()
+    expect(newEntryPath(base, 'z'.repeat(256))).toBeNull()
+    // 3 bytes each: 85 chars = 255 bytes (ok), 86 chars = 258 bytes (too long)
+    expect(newEntryPath(base, '€'.repeat(85))).not.toBeNull()
+    expect(newEntryPath(base, '€'.repeat(86))).toBeNull()
+    expect(newEntryPath(base, `${'q'.repeat(250)}/${'r'.repeat(250)}`)).not.toBeNull()
+    expect(newEntryPath(base, `ok/${'q'.repeat(300)}`)).toBeNull()
   })
 
-  it('allows a dotfile and a name merely starting with dots', () => {
-    expect(newEntryPath('/a', '.env')).toBe('/a/.env')
-    expect(newEntryPath('/a', '...x')).toBe('/a/...x')
+  it('rejects an embedded NUL', () => {
+    expect(newEntryPath(base, 'a\0b')).toBeNull()
   })
 })
 
 describe('ancestorDirs', () => {
-  it('lists intermediate directories shallowest first', () => {
-    expect(ancestorDirs('/a', 'x/y/z.ts')).toEqual(['/a/x', '/a/x/y'])
+  it('returns each intermediate directory, outermost first', () => {
+    expect(ancestorDirs('/w/', 'p/q/r/file.txt')).toEqual(['/w/p', '/w/p/q', '/w/p/q/r'])
   })
 
-  it('is empty for a flat name', () => {
-    expect(ancestorDirs('/a', 'z.ts')).toEqual([])
+  it('returns nothing for a name without a slash', () => {
+    expect(ancestorDirs('/w', 'file.txt')).toEqual([])
   })
 })
 
 describe('breadcrumbs', () => {
-  it('starts at the root and walks down', () => {
-    expect(breadcrumbs('/a/b')).toEqual([
+  it('lists root plus every segment when it fits', () => {
+    expect(breadcrumbs('/m/n')).toEqual([
       { name: '/', path: '/' },
-      { name: 'a', path: '/a' },
-      { name: 'b', path: '/a/b' },
+      { name: 'm', path: '/m' },
+      { name: 'n', path: '/m/n' },
     ])
+    expect(breadcrumbs('/k/l/m', 3).map((c) => c.name)).toEqual(['/', 'k', 'l', 'm'])
   })
 
-  it('is just the root for the root', () => {
+  it('returns only the root for "/"', () => {
     expect(breadcrumbs('/')).toEqual([{ name: '/', path: '/' }])
   })
 
-  it('keeps the last max segments and collapses the rest', () => {
-    const crumbs = breadcrumbs('/a/b/c/d/e', 3)
-    expect(crumbs.map((c) => c.name)).toEqual(['/', '…', 'c', 'd', 'e'])
+  it('collapses deep paths into a navigable ellipsis', () => {
+    const trail = breadcrumbs('/1/2/3/4/5/6', 2)
+    expect(trail.map((c) => c.name)).toEqual(['/', '…', '5', '6'])
+    expect(trail[1].path).toBe('/1/2/3/4')
+    expect(trail[3].path).toBe('/1/2/3/4/5/6')
   })
 
-  // Crumb elipsis harus NAVIGABLE — ia menuju direktori tersembunyi terdalam, jadi satu klik
-  // membawa pengguna ke dalam bagian path yang diringkas alih-alih melompat ke root.
-  it('points the ellipsis at the deepest hidden directory', () => {
-    const crumbs = breadcrumbs('/a/b/c/d/e', 3)
-    expect(crumbs[1].path).toBe('/a/b')
-  })
-
-  it('does not collapse a path that already fits', () => {
-    expect(breadcrumbs('/a/b/c', 3).map((c) => c.name)).toEqual(['/', 'a', 'b', 'c'])
+  it('honours the default of three trailing segments', () => {
+    expect(breadcrumbs('/a/b/c/d').map((c) => c.name)).toEqual(['/', '…', 'b', 'c', 'd'])
   })
 })
 
 describe('classifyEmptyListing', () => {
-  const entries = (...names: string[]) => names.map((name) => ({ name }))
-
-  it('calls a folder listed by its parent empty', () => {
-    expect(classifyEmptyListing('/a/b', entries('b', 'c'))).toBe('empty')
+  it('is empty when the parent lists the folder', () => {
+    expect(classifyEmptyListing('/p/q', names('other', 'q'))).toBe('empty')
   })
 
-  it('calls a folder absent from a readable parent missing', () => {
-    expect(classifyEmptyListing('/a/b', entries('c', 'd'))).toBe('missing')
+  it('is missing when a populated parent lacks the folder', () => {
+    expect(classifyEmptyListing('/p/q', names('other', 'another'))).toBe('missing')
   })
 
-  // Induk memuat kita, jadi ia tidak mungkin benar-benar tidak-beranak: listing induk yang kosong
-  // berarti filesystem-nya yang tidak terjangkau, bukan folder kita yang hilang.
-  it('calls an unreadable or empty parent unreachable', () => {
-    expect(classifyEmptyListing('/a/b', [])).toBe('unreachable')
-    expect(classifyEmptyListing('/a/b', null)).toBe('unreachable')
+  it('is unreachable when the parent listing is empty or null', () => {
+    expect(classifyEmptyListing('/p/q', [])).toBe('unreachable')
+    expect(classifyEmptyListing('/p/q', null)).toBe('unreachable')
   })
 
-  it('calls the root empty without asking a parent', () => {
+  it('treats the root (and a slash-only path) as empty with no parent lookup', () => {
     expect(classifyEmptyListing('/', null)).toBe('empty')
+    expect(classifyEmptyListing('///', null)).toBe('empty')
   })
 
-  // Dicocokkan per nama, bukan per `dir`: symlink-ke-direktori terdaftar sebagai entry non-dir.
-  it('matches by name, so a symlinked directory is not reported missing', () => {
-    expect(classifyEmptyListing('/a/link', entries('link'))).toBe('empty')
+  it('matches by name only, so symlinks count as present', () => {
+    expect(classifyEmptyListing('/p/ln', [{ name: 'ln', dir: false } as { name: string }])).toBe('empty')
   })
 
-  it('accepts a case-folded match on case-insensitive filesystems', () => {
-    expect(classifyEmptyListing('/a/Build', entries('build'))).toBe('empty')
+  it('falls back to case-insensitive matching', () => {
+    expect(classifyEmptyListing('/p/Docs', names('docs'))).toBe('empty')
   })
 
-  // Bentuk-bentuk path yang listing induknya tidak bisa menjawab. Tanpa cabang ini masing-masing
-  // akan gagal cocok-nama dan melaporkan "folder hilang" atas direktori yang terbaca sempurna.
-  it('gives up on path shapes no parent listing can answer', () => {
-    expect(classifyEmptyListing('~', null)).toBe('unknown')
-    expect(classifyEmptyListing('~/src', entries('src'))).toBe('unknown')
-    expect(classifyEmptyListing('/a/.', entries('a'))).toBe('unknown')
-    expect(classifyEmptyListing('/a/..', entries('a'))).toBe('unknown')
-    expect(classifyEmptyListing('/a/.git', entries('x'))).toBe('unknown')
-    expect(classifyEmptyListing('relative/dir', entries('dir'))).toBe('unknown')
+  it.each(['~', '~/code', 'rel/path', '/p/.', '/p/..', '/p/.git'])('is unknown for %s', (cwd) => {
+    expect(classifyEmptyListing(cwd, names('x'))).toBe('unknown')
   })
 })
 
 describe('filterEntries', () => {
-  const list = [{ name: 'README.md' }, { name: 'src' }, { name: 'package.json' }]
+  const sample = [{ name: 'Dockerfile' }, { name: 'lib' }, { name: 'tsconfig.json' }]
 
-  it('matches a case-insensitive substring', () => {
-    expect(filterEntries(list, 'json').map((e) => e.name)).toEqual(['package.json'])
-    expect(filterEntries(list, 'READ').map((e) => e.name)).toEqual(['README.md'])
-    expect(filterEntries(list, 'ME').map((e) => e.name)).toEqual(['README.md'])
+  it('keeps entries containing the query, ignoring case', () => {
+    expect(filterEntries(sample, 'DOCK').map((e) => e.name)).toEqual(['Dockerfile'])
+    expect(filterEntries(sample, 'i').map((e) => e.name)).toEqual(['Dockerfile', 'lib', 'tsconfig.json'])
+    expect(filterEntries(sample, 'ig.j').map((e) => e.name)).toEqual(['tsconfig.json'])
   })
 
-  it('matches everything for an empty or blank query', () => {
-    expect(filterEntries(list, '')).toHaveLength(3)
-    expect(filterEntries(list, '   ')).toHaveLength(3)
+  it('returns a copy of everything for blank queries', () => {
+    const all = filterEntries(sample, '  ')
+    expect(all).toEqual(sample)
+    expect(all).not.toBe(sample)
   })
 
-  it('matches nothing when nothing matches', () => {
-    expect(filterEntries(list, 'zzz')).toEqual([])
+  it('returns an empty list when nothing matches', () => {
+    expect(filterEntries(sample, 'nope')).toEqual([])
   })
 })
 
-describe('isMediaFile / opensInEditor / fileOpenTarget', () => {
-  it('recognises video and audio by extension', () => {
-    expect(isMediaFile('/a/clip.MP4')).toBe(true)
-    expect(isMediaFile('/a/song.flac')).toBe(true)
-    expect(isMediaFile('/a/notes.md')).toBe(false)
-    expect(isMediaFile('/a/mp4')).toBe(false)
+describe('open target', () => {
+  it.each(['/v/a.MKV', '/v/b.mov', '/m/c.OPUS', '/m/d.aiff'])('%s is media', (p) => {
+    expect(isMediaFile(p)).toBe(true)
   })
 
-  it('opens text, code and extensionless files in the editor', () => {
-    expect(opensInEditor('/a/notes.md')).toBe(true)
-    expect(opensInEditor('/a/Makefile')).toBe(true)
-    expect(opensInEditor('/a/.env')).toBe(true)
+  it.each(['/v/mkv', '/v/.mp3', '/v/readme.txt', '/'])('%s is not media', (p) => {
+    expect(isMediaFile(p)).toBe(false)
   })
 
-  it('leaves archives, installers and binaries to the OS', () => {
-    expect(opensInEditor('/a/app.dmg')).toBe(false)
-    expect(opensInEditor('/a/bundle.tar')).toBe(false)
-    expect(opensInEditor('/a/data.sqlite')).toBe(false)
+  it.each(['/s/app.ts', '/s/Makefile', '/s/.bashrc', '/s/pic.png', '/'])('%s opens in the editor', (p) => {
+    expect(opensInEditor(p)).toBe(true)
   })
 
-  // Setiap segmen diperiksa, bukan hanya basename: sebuah file DI DALAM bundle `.app` juga bukan
-  // urusan editor, meski namanya sendiri tampak seperti teks biasa.
-  it('checks every path segment, not just the basename', () => {
-    expect(opensInEditor('/A/Thing.app/Contents/Info')).toBe(false)
+  it.each(['/d/setup.pkg', '/d/archive.7z', '/d/store.db', '/d/m.wasm', '/d/Tool.app/Contents/readme'])(
+    '%s is left to the OS',
+    (p) => {
+      expect(opensInEditor(p)).toBe(false)
+    }
+  )
+
+  it('backslash-separated paths are also scanned per segment', () => {
+    expect(opensInEditor('C:\\x\\Thing.app\\Info')).toBe(false)
   })
 
-  it('routes media to the canvas even though the OS set contains it', () => {
-    expect(fileOpenTarget('/a/clip.mp4')).toBe('canvas')
-    expect(fileOpenTarget('/a/notes.md')).toBe('canvas')
-    expect(fileOpenTarget('/a/app.dmg')).toBe('os')
+  it('maps files to canvas/os, with media always on the canvas', () => {
+    expect(fileOpenTarget('/m/song.mp3')).toBe('canvas')
+    expect(fileOpenTarget('/s/app.ts')).toBe('canvas')
+    expect(fileOpenTarget('/d/setup.exe')).toBe('os')
+    expect(fileOpenTarget('/d/Tool.app/Contents/readme')).toBe('os')
   })
 })
 
 describe('childOnPath', () => {
-  it('names the child leading back toward where we came from', () => {
-    expect(childOnPath('/a', '/a/b/c')).toBe('b')
-    expect(childOnPath('/a/b', '/a/b/c')).toBe('c')
-    expect(childOnPath('/', '/a/b')).toBe('a')
+  it('returns the next segment toward the origin', () => {
+    expect(childOnPath('/', '/u/v')).toBe('u')
+    expect(childOnPath('/u', '/u/v/w')).toBe('v')
+    expect(childOnPath('/u/v', '/u/v/w')).toBe('w')
   })
 
-  it('answers null when the target is not a strict ancestor', () => {
-    expect(childOnPath('/a/b/c', '/a')).toBeNull()
-    expect(childOnPath('/a/b', '/a/b')).toBeNull()
-    expect(childOnPath('/x', '/a/b')).toBeNull()
-    expect(childOnPath('/a', 'a/b')).toBeNull()
+  it.each([
+    ['/u/v/w', '/u'],
+    ['/u', '/u'],
+    ['/other', '/u/v'],
+    ['/u', 'u/v'],
+  ])('is null for (%s, %s)', (to, from) => {
+    expect(childOnPath(to, from)).toBeNull()
   })
 })
-
