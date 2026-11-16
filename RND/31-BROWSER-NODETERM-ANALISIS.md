@@ -102,7 +102,7 @@ Tes: `test/acceptance/control-verb-disposition.test.ts` hanya disposisi verb; se
 | Partition per-project + gerbang load | `browser-partition.ts` | konsep portabel (profil dir) |
 | Trace-sebelum-baca cookie | `browser-cookies.ts` | portabel (sink audit: SQLite) |
 
-Lisensi: nodeterm **BUSL-1.1** (`LICENSE`); Additional Use Grant melarang menawarkan ke pihak ketiga sebagai hosted/embedded — webterm adalah fork yang sama-sama BUSL (CLAUDE.md webterm), jadi menyalin kode terikat syarat itu.
+Lisensi: nodeterm **BUSL-1.1** (`LICENSE`); Additional Use Grant melarang menawarkan ke pihak ketiga sebagai hosted/embedded — webterm bukan fork nodeterm (dibuat dari nol, hanya terinspirasi; CLAUDE.md webterm); nodeterm adalah repo referensi berlisensi BUSL-1.1, jadi kode yang disalin-adaptasi darinya tetap terikat syarat itu.
 
 ### 3.3 Server Edition nodeterm sengaja menyerah
 

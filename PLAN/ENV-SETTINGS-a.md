@@ -14,7 +14,7 @@ Sumber: `RND/39..41`. Branch kerja rencana: `chore/rnd-env-settings` (worktree `
 4. Hubungan antar-flag hidup (`requires`) sehingga "kenapa fitur tak jalan" terjawab di UI.
 5. Registry menjadi data berskema v2 + tes invarian, sehingga domain baru (ca2, file manager, browser) tak bisa mengotori halaman lagi.
 
-**Non-tujuan:** tidak mengubah mekanisme inti (override > env > default, secret file 0600, gerbang `dangerous`+root token, `WEBTERM_ENV_SETTINGS=off`, satu baris JSON `app.env_overrides`); tidak ada tabel/skema DB baru; tidak ada dependency baru; tidak rename kunci env mana pun (kompat protokol/upstream, CLAUDE.md); tidak membuat endpoint restart; tidak mengubah semantik pembaca env di luar registry.
+**Non-tujuan:** tidak mengubah mekanisme inti (override > env > default, secret file 0600, gerbang `dangerous`+root token, `WEBTERM_ENV_SETTINGS=off`, satu baris JSON `app.env_overrides`); tidak ada tabel/skema DB baru; tidak ada dependency baru; tidak rename kunci env mana pun (kompat protokol nodeterm, CLAUDE.md); tidak membuat endpoint restart; tidak mengubah semantik pembaca env di luar registry.
 
 **Keputusan arsitektur (satu rekomendasi):** registry v2 = *data murni berskema* (`owner/section/audience/requires/restart/effectiveDefault/stage/since/aliases/dangerNote`) dengan **derivasi default** agar entri lama dan entri domain lain tetap valid tanpa diedit; server menormalisasi dan memvalidasi nilai efektif (field `valid`); klien hanya me-render data itu (tanpa daftar grup/urutan hardcode).
 - *Ditolak 1:* UI per-fitur ditulis tangan tanpa registry — duplikasi, drift (terbukti di `channelsLabels.ts`).
