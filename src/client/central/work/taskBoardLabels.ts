@@ -1,4 +1,4 @@
-import type { BoardColumn, GoalCardStatus, WorkStatus } from '../../../shared/centralWork'
+import type { BoardColumn, GoalCardStatus, WorkOwner, WorkStatus } from '../../../shared/centralWork'
 
 /** Every English string of the task board. */
 export const TL = {
@@ -87,6 +87,25 @@ export const TL = {
   remindersFailed: 'Could not load the reminders.',
   overdue: 'Overdue',
   dueIn: (span: string) => `Due in ${span}`,
+  overdueBy: (span: string) => `Overdue ${span}`,
+  owners: { agent: 'Agent', central: 'Central', verifier: 'Verifier', human: 'You' } satisfies Record<WorkOwner, string>,
+  // One line per OPEN status (those workOwner.ts gives an owner); a policy test fails when a new open status has none.
+  nextSteps: {
+    assigned: 'Agent is starting', running: 'Agent is working', stalled: 'Central is deciding what to do', waiting_input: 'Waiting for an answer',
+    reported: 'Result is being checked', verifying: 'Verifier is checking', needs_review: 'Waiting for your review', failed: 'Central is handling the failure',
+  } satisfies Partial<Record<WorkStatus, string>>,
+  ownerAria: (owner: string, step: string) => `Owner ${owner}. Next: ${step}.`,
+  paused: 'Paused · no connection to Claude',
+  noResult: 'No result captured',
+  noResultBecause: (reason: string) => `No result captured: ${reason}`,
+  interrupted: (kind: string) => `Interrupted: ${kind}`,
+  interruptedPlain: 'Interrupted',
+  failureKinds: { network: 'network', rate_limited: 'rate limit', overloaded: 'service overloaded', server: 'server error', auth: 'sign-in needed', permanent: 'request rejected', unknown: 'unknown cause' } as Record<string, string>,
+  resultOf: (line: string) => `Result: ${line}`,
+  ownerHeading: 'Owner',
+  nextHeading: 'Next step',
+  leaseHeading: 'Lease',
+  resultHeading: 'Result',
   detail: 'Task details',
   closeDetail: 'Close task details',
   detailLoading: 'Loading task…',
