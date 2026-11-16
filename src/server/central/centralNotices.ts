@@ -23,6 +23,7 @@ import { redactSecrets } from '../redactSecrets'
 import { appendCentralNotice } from './chat/conversationNotice'
 import type { AssignmentChannel, WorkStatus } from '../../shared/centralWork'
 import type { WorkMove } from './work/workModel'
+import { RECOVER_RULE } from './work/workRecover.model'
 
 const log = createLogger('central')
 export const CENTRAL_NOTICE_INTERVAL_MS = 3000
@@ -73,6 +74,8 @@ export function sweepCentralNotices(db: Database, seen: Set<string>, opts: { now
  */
 export function noticeWorkMove(db: Database, move: WorkMove, opts: { presence?: PresenceTracker; now?: () => number } = {}): void {
   const verb = WORK_NOTICE[move.to]
+  // The recovery sweep steps a replaced session through `stalled` on its way to a respawn: not news (workCheckin ignores it too).
+  if (move.rule === RECOVER_RULE) return
   if (!verb || (move.to === 'waiting_input' && move.channel !== null && HOOK_FORWARDED.includes(move.channel))) return
   const presence = opts.presence ?? processPresence
   const store = telegramMirror
