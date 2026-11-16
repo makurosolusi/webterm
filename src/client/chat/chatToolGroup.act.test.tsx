@@ -18,7 +18,8 @@ describe('actNodeId (receipt shapes from toolAct.ts nodesOf)', () => {
   it.each([
     ['agent_spawn', { nodeId: 'n1' }, 'n1'], ['agent_prompt', { nodeId: 'n1' }, 'n1'], ['agent_relay', { nodeId: 'n1' }, 'n1'],
     ['canvas_open', { ids: ['e1', 'e2'] }, 'e1'], ['canvas_type', { nodeId: 't1' }, 't1'], ['canvas_edit', { wired: [['a', 'b']] }, 'a'],
-    ['browser_open', { nodeId: 'br', agentNode: 'ag' }, 'br'], ['browser_act', { nodeId: 'br' }, 'br'], ['chat_send', { nodeId: 'c1' }, 'c1'],
+    ['browser_open', { nodeId: 'br', agentNode: 'ag' }, 'br'], ['browser_act', { nodeId: 'br' }, 'br'], ['browser_read', { nodeId: 'br', host: 'example.com' }, 'br'],
+['chat_send', { nodeId: 'c1' }, 'c1'],
     ['permission_decide', { nodeId: 'p1' }, 'p1'], ['task_assign', { nodeId: 'k1' }, 'k1'], ['chat_config', { nodeId: 'c1' }, 'c1'], ['chat_mode', { nodeId: 'c1' }, 'c1'],
   ])('%s -> node', (name, data, id) => { expect(actNodeId(part(name, data))).toBe(id) })
 
@@ -28,6 +29,9 @@ describe('actNodeId (receipt shapes from toolAct.ts nodesOf)', () => {
     expect(actNodeId(part('agent_close', { nodeId: 'n1' }))).toBeNull()
     expect(actNodeId(part('canvas_type', { nodeId: 'n1' }, 'failed'))).toBeNull()
     expect(actNodeId(part('agent_relay', { mailId: 'm' }))).toBeNull()
+    expect(actNodeId(part('browser_read', { host: 'example.com' }))).toBeNull()
+    expect(actNodeId({ ...part('browser_read', null), result: { ok: false, code: 'reader_unavailable' } })).toBeNull()
+    expect(actNodeId(part('browser_read', { nodeId: 'br' }, 'failed'))).toBeNull()
     expect(actNodeId({ ...part('canvas_type', null), result: undefined })).toBeNull()
   })
 
