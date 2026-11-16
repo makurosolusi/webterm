@@ -41,7 +41,7 @@ const deps = () => ({
   },
   record: () => undefined,
   reuse: {
-    hasSession: () => live, focusedNode: () => focus, cabledBrowsers: (n: string) => cabled[n] ?? [], browserBusy: (b: string) => busy.has(b),
+    hasSession: () => live, focusedNode: () => focus, cabledBrowsers: (n: string) => cabled[n] ?? [], browserBusy: (_db: unknown, b: string) => busy.has(b),
     idleBrowsers: () => idle, link: (a: string, b: string) => { linked.push([a, b]); return linkOk },
   },
 })
