@@ -20,6 +20,27 @@ const CREDENTIAL_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC
 /** Strips credentials from Bash/hook/MCP subprocesses of the claude process (docs: env-vars, "What the subprocess environment scrub removes"). */
 export const SCRUB_VAR = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
 
+/** Claude Code CLI retry watchdog (docs env-vars, v2.1.295+): 429/529 retried without bound, other transient errors up to ~3h. */
+export const RETRY_WATCHDOG_VAR = 'CLAUDE_CODE_RETRY_WATCHDOG'
+
+/**
+ * The watchdog var for an agent session: an explicit value in `env` (user or provider, `0` included) is kept
+ * as is, otherwise `1`, so a worker rides out an outage instead of dying (zero-config). Unknown to an older CLI = ignored.
+ * Single source for every spawn path (PTY, headless exec, agent chat).
+ */
+export function retryWatchdogEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  return { [RETRY_WATCHDOG_VAR]: env[RETRY_WATCHDOG_VAR] ?? '1' }
+}
+
+/** `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` (v2.1.309+): continue a turn cut off by a dead process; the age var bounds how stale it may be. */
+export const RESUME_TURN_VAR = 'CLAUDE_CODE_RESUME_INTERRUPTED_TURN'
+export const RESUME_TURN_MAX_AGE_VAR = 'CLAUDE_CODE_RESUME_INTERRUPTED_TURN_MAX_AGE_MS'
+
+/** Shell prefix `VAR=value ...` that makes one resumed claude continue its interrupted turn (values are ours, digits only). */
+export function resumeTurnPrefix(maxAgeMs: number): string {
+  return `${RESUME_TURN_VAR}=1 ${RESUME_TURN_MAX_AGE_VAR}=${Math.max(1, Math.floor(maxAgeMs))}`
+}
+
 /** Provider vars present in `env`; a forwarded credential turns on the subprocess scrub, as the Provider card does. */
 export function providerEnvFrom(env: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {}
@@ -41,7 +62,7 @@ const FORBIDDEN_PREFIXES = ['WEBTERM_', 'NODETERM_']
 
 /** Keep only allowlisted variables; drop WEBTERM_ (and legacy NODETERM_) prefixed values and root tokens. */
 export function scrubAgentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = providerEnvFrom(env)
+  const out: NodeJS.ProcessEnv = { ...providerEnvFrom(env), ...retryWatchdogEnv(env) }
   for (const name of BASE_ENV_ALLOWLIST) {
     if (FORBIDDEN_PREFIXES.some((prefix) => name.startsWith(prefix))) continue
     const value = env[name]

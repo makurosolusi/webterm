@@ -11,6 +11,7 @@
 // too), CLAUDECODE dropped (nested-session guard), capability-token values (`wcap_`) dropped.
 import { applyProviderEnv, type ProviderEnv } from '../claudeProvider/claudeProvider.model'
 import { activeProviderEnv } from '../claudeProvider/claudeProvider.store'
+import { retryWatchdogEnv } from '../agentEnv'
 import { claudeHeadersPath } from '../hooksPaths'
 import { NODE_HEADERS_ENV } from '../hooksTokens'
 import { ptyEnv } from '../ptyShell'
@@ -30,6 +31,7 @@ export function agentChatEnv(i: {
   for (const [k, v] of Object.entries(base)) if (v.startsWith(CAPABILITY_TOKEN_PREFIX)) delete base[k]
   const env: Record<string, string> = {
     ...applyProviderEnv(base, i.provider ?? activeProviderEnv()),
+    ...retryWatchdogEnv(base),
     ...i.profileEnv,
     [NODE_HEADERS_ENV]: claudeHeadersPath(i.nodeId),
     WEBTERM_NODE_ID: i.nodeId,
