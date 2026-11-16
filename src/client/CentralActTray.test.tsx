@@ -8,7 +8,7 @@ const rowText = (): string | null | undefined => document.querySelector('.centra
 const entry = (nodeId: string, over: Partial<ActEntry> = {}): ActEntry => ({ nodeId, verb: 'typed', tool: 'canvas.type', n: 1, ts: 0, seq: 1, ...over })
 const props = (over: Partial<CentralActTrayProps> = {}): CentralActTrayProps => ({
   entries: [], dropped: 0, activeWorkspaceId: 'w1', nodeTitle: (id) => (id === 'a' || id === 'b' ? `Node ${id}` : undefined), boardName: (id) => (id === 'w2' ? 'Backend' : undefined),
-  onShow: vi.fn(), onOpenBoard: vi.fn(), ...over,
+  follow: { on: true, status: 'following', resumeInS: 0, heldNodeId: null, more: 0 }, onToggleFollow: vi.fn(), onShow: vi.fn(), onOpenBoard: vi.fn(), ...over,
 })
 
 beforeEach(() => { vi.useFakeTimers() })
@@ -69,5 +69,31 @@ describe('CentralActTray', () => {
     rerender(<CentralActTray {...props()} />)
     expect(screen.queryByRole('button')).toBeNull()
     expect(screen.getByRole('status').textContent).toBe('')
+  })
+
+  it('the Follow switch shows the status and toggles; paused shows the countdown, spoken once without it', () => {
+    const on = props({ entries: [entry('a')] })
+    const { rerender } = render(<CentralActTray {...on} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Following Central' }))
+    expect(on.onToggleFollow).toHaveBeenCalledTimes(1)
+    const paused = props({ entries: [entry('a')], follow: { on: true, status: 'paused', resumeInS: 7, heldNodeId: null, more: 0 } })
+    rerender(<CentralActTray {...paused} />)
+    expect(screen.getByRole('button', { name: /Paused \(you moved the canvas\) · resumes in 7s/ })).toBeTruthy()
+    const spoken = (): string => document.querySelector('.central-act-tray__live--follow')?.textContent ?? ''
+    expect(spoken()).toBe('Following Central') // held back by the 3 s gap
+    act(() => { vi.advanceTimersByTime(ANNOUNCE_GAP_MS) })
+    expect(spoken()).toBe('Follow paused')
+    rerender(<CentralActTray {...props({ entries: [entry('a')], follow: { ...paused.follow, resumeInS: 3 } })} />)
+    act(() => { vi.advanceTimersByTime(ANNOUNCE_GAP_MS) })
+    expect(spoken()).toBe('Follow paused') // the countdown is never spoken
+  })
+
+  it('held says "acted on" with Show, and Off stays reachable while idle', () => {
+    const held = props({ entries: [entry('a')], follow: { on: true, status: 'held', resumeInS: 0, heldNodeId: 'a', more: 0 } })
+    const { rerender } = render(<CentralActTray {...held} />)
+    expect(rowText()).toBe('Central acted on Node a')
+    expect(screen.getByRole('button', { name: 'Show' })).toBeTruthy()
+    rerender(<CentralActTray {...props({ follow: { on: false, status: 'off', resumeInS: 0, heldNodeId: null, more: 0 } })} />)
+    expect(screen.getByRole('button', { name: 'Follow off' })).toBeTruthy()
   })
 })

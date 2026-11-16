@@ -1,5 +1,6 @@
 // Glue between the act record and the board: marks touched nodes/cables, draws their chips, and hosts the tray.
-// Nothing here moves the camera or changes selection by itself; only the user's click on Show does (nodeReveal.ts).
+// Camera: the user's click on Show, or Follow (centralFollow.ts: ON by default, pauses when the user moves the canvas).
+// Neither touches the user's selection from Follow; an act frame itself (store, chips, tray) never moves anything.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ViewportPortal, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
@@ -9,6 +10,7 @@ import { fetchWorkspaces } from './api'
 import { useAppRoute } from './appRoute'
 import { CentralActTray } from './CentralActTray'
 import { isCableVerb, isNewVerb, setShowNodeHandler, useCentralAct, type ActEntry } from './centralAct.store'
+import { useCentralFollow } from './centralFollow'
 import { rectOfNode, revealNode, selectOnly } from './nodeReveal'
 import './centralAct.css'
 
@@ -79,6 +81,7 @@ export function CentralActLayer({ rf, nodes, workspaceId, onOpenBoard }: LayerPr
   const { entries, dropped } = useCentralAct()
   const here = useMemo(() => new Map(nodes.map((n) => [n.id, titleOf(n)])), [nodes])
   const latest = entries[0]
+  const { view: follow, setOn: setFollow } = useCentralFollow(rf, entries, workspaceId)
   const foreign = !!latest && !here.has(latest.nodeId) && !!latest.workspaceId && latest.workspaceId !== workspaceId
   const boardName = useBoardNames(foreign)
   // Over .app-main (it stays visible in tab mode, unlike the hidden canvas); body in isolated renders.
@@ -87,7 +90,7 @@ export function CentralActLayer({ rf, nodes, workspaceId, onOpenBoard }: LayerPr
   const show = (id: string): boolean => {
     const n = rf.current?.getNode(id)
     if (!n || !rf.current) return false
-    revealNode(rf.current, id, rectOfNode(n), { focus: true })
+    revealNode(rf.current, id, rectOfNode(n), { focus: true, zoomToReadable: true })
     selectOnly(rf.current, id)
     return true
   }
@@ -100,7 +103,7 @@ export function CentralActLayer({ rf, nodes, workspaceId, onOpenBoard }: LayerPr
       {host && createPortal(
         <CentralActTray
           entries={entries} dropped={dropped} activeWorkspaceId={workspaceId} nodeTitle={(id) => here.get(id)} boardName={boardName}
-          onShow={(id) => { show(id) }} onOpenBoard={(id) => onOpenBoard?.(id)}
+          follow={follow} onToggleFollow={() => setFollow(!follow.on)} onShow={(id) => { show(id) }} onOpenBoard={(id) => onOpenBoard?.(id)}
         />, host,
       )}
     </>

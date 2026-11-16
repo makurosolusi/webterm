@@ -1,5 +1,5 @@
-// Policy lock: Central's actions never take the camera. Only a user gesture may move it, and only
-// the files named here may call a camera method. "Follow" (opt-in) will live in centralFollow.ts.
+// Policy lock: an act frame (store, chips, tray) never moves the camera. Only a user gesture or the Follow
+// controller (centralFollow.ts, via revealNode) may, and only the files named here may call a camera method.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { expect, it } from 'vitest'
@@ -7,11 +7,10 @@ import { expect, it } from 'vitest'
 const CLIENT = __dirname
 /** Files allowed to call a camera method, each a user-initiated or lifecycle move that predates the act signal. */
 const CAMERA_ALLOWLIST: Readonly<Record<string, string>> = {
-  'nodeReveal.ts': 'revealNode: Show / open-file, only when the node is off screen',
+  'nodeReveal.ts': 'revealNode: Show / open-file / Follow, when the node is off screen or too small to read',
   'canvasViewport.ts': 'zoom / fit buttons and view history',
   'workspaceLifecycle.ts': 'board boot and switch; onFocus for the user\'s own click',
   'App.canvas.tsx': 'mini-map click',
-  'centralFollow.ts': 'reserved: opt-in Follow (next wave)',
   // Pre-existing, user-triggered:
   'App.tsx': 'fit-view shortcut wiring',
   'commandRegistry.defaults.ts': 'command palette: Fit view',
@@ -43,6 +42,17 @@ it('only named files call a camera method (and none of the Central act files doe
   const strays = callers.filter((p) => !(p.split('/').pop()! in CAMERA_ALLOWLIST))
   expect(strays).toEqual([])
   expect(callers.filter((p) => /centralAct|CentralAct/.test(p))).toEqual([])
+})
+
+it('Follow moves the camera only through revealNode, and only the controller does', () => {
+  const follow = readFileSync(join(CLIENT, 'centralFollow.ts'), 'utf8')
+  expect(CAMERA.test(code(follow))).toBe(false)
+  expect(code(follow)).toMatch(/revealNode\([\s\S]*?focus:\s*false/)
+  const users = sources(CLIENT).filter((p) => /zoomToReadable:\s*true/.test(code(readFileSync(p, 'utf8')))).map((p) => relative(CLIENT, p)).sort()
+  // Follow (automatic) and the layer's Show click (user gesture) are the only zoom-to-readable callers.
+  expect(users).toEqual(['centralAct.layer.tsx', 'centralFollow.ts'])
+  const store = readFileSync(join(CLIENT, 'centralAct.store.ts'), 'utf8')
+  expect(code(store)).not.toMatch(/revealNode|centralFollow/)
 })
 
 it('the act styles keep a static branch under prefers-reduced-motion', () => {

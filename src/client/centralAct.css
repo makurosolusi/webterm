@@ -99,6 +99,9 @@
 .chat-tool__show:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 2px; }
 .chat-tool__show:disabled { color: var(--vscode-disabledForeground, var(--muted)); }
 
+.central-act-tray__follow { display: inline-flex; align-items: center; gap: 4px; }
+.central-act-tray__follow[data-follow='off'], .central-act-tray__follow[data-follow='paused'] { color: var(--vscode-disabledForeground, var(--muted)); }
+
 /* Visually hidden, still read: the polite live region. */
 .central-act-tray__live {
   position: absolute;
