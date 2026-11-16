@@ -1,10 +1,30 @@
 // Production ports of the worker-reuse policy: live sessions, the user's focus, the browser runtime and the board's cables.
 // Loaded lazily (like the node tools in registerAll) so importing the playbooks never boots sessions or the board runtime.
+import type { Database } from 'bun:sqlite'
+import type { BrowserState } from '../../../shared/browser.contract'
 import { cableGrants } from '../../policy/policy.cable'
-import { linkedPeerIds } from '../../contextLinkRoute'
+import { classifyBrowserNode, isInUse } from '../../browser/browser.idle'
+import { ledgerAgentOfNode, storedBoards } from '../browserIdle.ports'
 import { browserNodesOf } from '../tools/defs/browser.status'
-import { lookupWorkspace } from '../workspaceLookup'
 import type { ReusePorts } from './agentReuse'
+
+/**
+ * `browserBusy` and `idleBrowsers` of the reuse policy, both answered by the shared idle classifier (browser/browser.idle.ts).
+ * ponytail: a human using the page unfocused for <HUMAN_IDLE_MS is not seen (only the agent lease and the focus are).
+ */
+export function browserIdlePorts(src: { state(id: string): BrowserState | undefined; focused(): string | null; workspaceIdOf(nodeId: string): string | undefined }): Pick<ReusePorts, 'browserBusy' | 'idleBrowsers'> {
+  const verdict = (db: Database, workspaceId: string, id: string) => classifyBrowserNode({ stateOf: src.state, focusedNode: src.focused, ...storedBoards(), agentOfNode: ledgerAgentOfNode(db) }, workspaceId, id)
+  return {
+    browserBusy(db, browserNodeId) {
+      const ws = src.workspaceIdOf(browserNodeId)
+      return ws === undefined ? false : isInUse(verdict(db, ws, browserNodeId))
+    },
+    idleBrowsers(db, projectId) {
+      const found = browserNodesOf(db, projectId)
+      return found.ok ? found.nodeIds.filter((id) => verdict(db, found.workspaceId, id).idle) : []
+    },
+  }
+}
 
 /** Builds the process-wide ports; resolved on first use. */
 export async function productionReusePorts(): Promise<ReusePorts> {
@@ -13,9 +33,6 @@ export async function productionReusePorts(): Promise<ReusePorts> {
   ])
   const canvas = getCanvasPush()
   const focused = (): string | null => presence.focusedNode()?.nodeId ?? null
-  // The lease holder is the only activity signal the runtime exposes: an agent lease means someone drives it; a human
-  // typing is caught by the focus check. ponytail: a human using the page unfocused for <HUMAN_IDLE_MS is not seen.
-  const busy = (id: string): boolean => activeBrowser()?.state(id)?.lease === 'agent' || focused() === id
   return {
     hasSession: (nodeId) => sessions.isLive(nodeId),
     focusedNode: focused,
@@ -23,16 +40,7 @@ export async function productionReusePorts(): Promise<ReusePorts> {
       const ws = canvas.workspaceOfNode(agentNodeId)
       return ws ? cableGrants([ws], agentNodeId).map((g) => g.scope.slice('node:'.length)) : []
     },
-    browserBusy: busy,
-    idleBrowsers(db, projectId) {
-      const found = browserNodesOf(db, projectId)
-      const ws = found.ok ? lookupWorkspace(found.workspaceId) : null
-      if (!found.ok || !ws || !Array.isArray((ws as { bridges?: unknown }).bridges)) return []
-      return found.nodeIds.filter((id) => {
-        const live = activeBrowser()?.state(id)?.live
-        return live !== undefined && live !== 'discarded' && !busy(id) && linkedPeerIds(ws as never, id).size === 0
-      })
-    },
+    ...browserIdlePorts({ state: (id) => activeBrowser()?.state(id), focused, workspaceIdOf: (id) => canvas.workspaceOfNode(id)?.id }),
     link(agentNodeId, browserNodeId) {
       const ws = canvas.workspaceOfNode(agentNodeId)
       if (!ws) return false

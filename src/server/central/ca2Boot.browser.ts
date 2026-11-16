@@ -4,6 +4,7 @@ import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, ENV_BROWSER } from '../../sha
 import { flagOn } from '../envFlag'
 import { type BrowserRuntime, activeBrowser } from '../browser/browser.state'
 import { CAPABILITY_HEADER } from '../auth'
+import { presence } from '../channels/channelPresence'
 import type { CapabilityStore } from '../control/capabilities'
 import { allows, clampTtl } from '../control/capabilities'
 import type { ControlCapabilities } from '../control/controlTypes'
@@ -32,6 +33,7 @@ export function createBrowserToolDeps(env: Record<string, string | undefined>, s
   const reader = createPageReader()
   return {
     state: (nodeId) => active()?.state(nodeId),
+    focused: () => presence.focusedNode()?.nodeId ?? null,
     listDomains: (workspaceId) => active()?.listDomains(workspaceId).map(({ domain }) => ({ domain })) ?? [],
     async control(nodeId, verb, body) {
       const rt = active()

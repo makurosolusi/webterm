@@ -27,9 +27,9 @@ export interface ReusePorts {
   focusedNode(): string | null
   /** Browser nodes cabled to this agent node. */
   cabledBrowsers(agentNodeId: string): string[]
-  /** True while someone else drives the browser (human typing or another agent's lease). */
-  browserBusy(browserNodeId: string): boolean
-  /** Browser nodes of the project's board that no agent is cabled to, not busy. */
+  /** True while an agent, the user or a cabled active agent is using the browser (browser.idle `isInUse`). */
+  browserBusy(db: Database, browserNodeId: string): boolean
+  /** Central-owned browser nodes of the project's board that the shared idle classifier calls idle (a cable to a finished agent does not count). */
   idleBrowsers(db: Database, projectId: string): string[]
   /** Draws the agent<->browser cable (the canvas.edit `link`); false = refused. */
   link(agentNodeId: string, browserNodeId: string): boolean
@@ -76,7 +76,7 @@ function refusal(db: Database, ports: ReusePorts, q: ReuseQuery, a: AgentRecord,
   }
   const focus = ports.focusedNode()
   const nodes = [a.nodeId, ...ports.cabledBrowsers(a.nodeId)]
-  if ((focus !== null && nodes.includes(focus)) || ports.cabledBrowsers(a.nodeId).some((b) => ports.browserBusy(b))) return 'in_use'
+  if ((focus !== null && nodes.includes(focus)) || ports.cabledBrowsers(a.nodeId).some((b) => ports.browserBusy(db, b))) return 'in_use'
   return null
 }
 

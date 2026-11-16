@@ -8,7 +8,7 @@ import type { BrowserControlDeps } from '../../../browser/browserControl.handler
 import { createNavigationGuard } from '../../../browser/navigation.guard'
 import { parseAllowHosts } from '../../../browser/ssrf.allowlist'
 import { CapabilityStore, allows } from '../../../control/capabilities'
-import { allRows } from '../../../ledger/ledgerCore'
+import { allRows, execWrite } from '../../../ledger/ledgerCore'
 import { type PageRead, type PageReader } from '../../context/pageReader'
 import { openFixture, seedPortfolio, type Fixture } from '../../centralTestFixture.testutil'
 import { registerWorkspaceLookup } from '../../workspaceLookup'
@@ -43,8 +43,8 @@ interface Opts {
 }
 
 function rig(o: Opts = {}) {
-  const board = { nodes: o.nodes ?? [{ id: 'b1', kind: 'browser' }, { id: 't1', kind: 'terminal' }] }
-  const states: Record<string, BrowserState> = o.states ?? { b1: st('b1') }
+  const board = { nodes: o.nodes ?? [{ id: 'br-1', kind: 'browser' }, { id: 't1', kind: 'terminal' }] }
+  const states: Record<string, BrowserState> = o.states ?? { 'br-1': st('br-1') }
   unregister = registerWorkspaceLookup((id) => (id === 'w-p1' ? { name: id, nodes: board.nodes, bridges: o.bridges ?? [] } as never : null))
   const store = new CapabilityStore()
   const calls: Array<[string, string, string]> = []
@@ -87,6 +87,11 @@ function rig(o: Opts = {}) {
   return { run, calls, opened, minted, reader, registry, deps, states, ctx }
 }
 
+/** A ledger agent that runs on board node `nodeId`. */
+const agentRow = (id: string, nodeId: string, state: string): void => {
+  execWrite(f.db, "INSERT INTO central_agents (id, project_id, kind, runner, node_id, state, owner, started_at) VALUES (?, 'p1', 'claude', 'pty', ?, ?, 'central:global', 1)", id, nodeId, state)
+}
+
 const audits = () => allRows(f.db, "SELECT payload_json FROM event WHERE kind = 'central.proposal' ORDER BY seq").map((row) => String(row.payload_json))
 
 describe('browser_read: registration', () => {
@@ -105,7 +110,7 @@ describe('browser_read: policy (the page text never reaches Central)', () => {
   it('the result carries exactly the summary fields, tainted and untrusted-web; the raw text appears nowhere in result or audit', async () => {
     const s = rig()
     const r = await s.run({ question: 'what is it?' })
-    expect(r).toMatchObject({ ok: true, data: { nodeId: 'b1', host: 'example.com', answer: SUMMARY.ok && SUMMARY.answer, truncated: false, injectionSuspected: false, provenance: 'untrusted-web', tainted: true } })
+    expect(r).toMatchObject({ ok: true, data: { nodeId: 'br-1', host: 'example.com', answer: SUMMARY.ok && SUMMARY.answer, truncated: false, injectionSuspected: false, provenance: 'untrusted-web', tainted: true } })
     expect(Object.keys(r.data!).sort()).toEqual(['answer', 'host', 'injectionSuspected', 'nodeId', 'provenance', 'sources', 'tainted', 'truncated'])
     expect(JSON.stringify(r)).not.toContain('RAW-PAGE-TEXT')
     expect(audits().join('\n')).not.toContain('RAW-PAGE-TEXT')
@@ -134,19 +139,49 @@ describe('browser_read: policy (the page text never reaches Central)', () => {
 describe('browser_read: node choice', () => {
   it('reuses an idle project browser before opening one', async () => {
     const s = rig()
-    expect(await s.run()).toMatchObject({ ok: true, data: { nodeId: 'b1' } })
+    expect(await s.run()).toMatchObject({ ok: true, data: { nodeId: 'br-1' } })
     expect(s.opened).toEqual([])
   })
-  it('opens a standalone browser only when no node is idle (agent lease, cable, discarded page, unknown state all disqualify)', async () => {
+  it('opens a standalone browser only when no node is idle (agent lease, active agent cable, discarded page, unknown state, user-owned all disqualify)', async () => {
+    agentRow('ag1', 'a1', 'working')
     const s = rig({
-      nodes: [{ id: 'b1', kind: 'browser' }, { id: 'b2', kind: 'browser' }, { id: 'b3', kind: 'browser' }, { id: 'b4', kind: 'browser' }, { id: 'a1', kind: 'agent' }],
-      states: { b1: st('b1', { lease: 'agent' }), b2: st('b2'), b3: st('b3', { live: 'discarded' }) },
-      bridges: [{ source: 'a1', target: 'b2' }],
+      nodes: [{ id: 'br-1', kind: 'browser' }, { id: 'br-2', kind: 'browser' }, { id: 'br-3', kind: 'browser' }, { id: 'br-4', kind: 'browser' }, { id: 'ub', kind: 'browser' }, { id: 'a1', kind: 'agent' }],
+      states: { 'br-1': st('br-1', { lease: 'agent' }), 'br-2': st('br-2'), 'br-3': st('br-3', { live: 'discarded' }), ub: st('ub') },
+      bridges: [{ source: 'a1', target: 'br-2' }],
     })
     const r = await s.run()
     expect(s.opened).toHaveLength(1)
     expect(r).toMatchObject({ ok: true, data: { nodeId: s.opened[0] } })
     expect(s.calls[0]?.[0]).toBe(s.opened[0])
+    expect(s.opened[0]).toMatch(/^br-/)
+  })
+  it('screenshot case: a Central browser still cabled to a FINISHED agent is reused, nothing opened, the cable is left alone', async () => {
+    agentRow('ag1', 'a1', 'candidate_done')
+    const s = rig({ nodes: [{ id: 'br-1', kind: 'browser' }, { id: 'a1', kind: 'agent' }], states: { 'br-1': st('br-1') }, bridges: [{ source: 'a1', target: 'br-1' }] })
+    expect(await s.run()).toMatchObject({ ok: true, data: { nodeId: 'br-1' } })
+    expect(s.opened).toEqual([])
+    expect(s.calls.every(([n]) => n === 'br-1')).toBe(true)
+  })
+  it('a cable to a closed agent or to a node that left the board does not block either', async () => {
+    agentRow('ag1', 'a1', 'closed')
+    const s = rig({ nodes: [{ id: 'br-1', kind: 'browser' }, { id: 'a1', kind: 'agent' }, { id: 'br-2', kind: 'browser' }], states: { 'br-1': st('br-1'), 'br-2': st('br-2') }, bridges: [{ source: 'a1', target: 'br-1' }, { source: 'gone', target: 'br-2' }] })
+    expect(await s.run()).toMatchObject({ ok: true, data: { nodeId: 'br-1' } })
+    expect(s.opened).toEqual([])
+  })
+  it('picks the first idle Central browser in board order, deterministically, and never a user browser', async () => {
+    const s = rig({ nodes: [{ id: 'ub', kind: 'browser' }, { id: 'br-old', kind: 'browser' }, { id: 'br-new', kind: 'browser' }], states: { ub: st('ub'), 'br-old': st('br-old'), 'br-new': st('br-new') } })
+    expect(await s.run()).toMatchObject({ ok: true, data: { nodeId: 'br-old' } })
+    expect(s.opened).toEqual([])
+    const u = rig({ nodes: [{ id: 'ub', kind: 'browser' }], states: { ub: st('ub') } })
+    await u.run()
+    expect(u.opened).toHaveLength(1) // a user browser is never taken over by itself
+    expect(u.calls[0]?.[0]).not.toBe('ub')
+  })
+  it('an explicit nodeId is still honoured, even a user browser or one cabled to an active agent', async () => {
+    agentRow('ag1', 'a1', 'working')
+    const s = rig({ nodes: [{ id: 'ub', kind: 'browser' }, { id: 'a1', kind: 'agent' }], states: { ub: st('ub') }, bridges: [{ source: 'a1', target: 'ub' }] })
+    expect(await s.run({ nodeId: 'ub' })).toMatchObject({ ok: true, data: { nodeId: 'ub' } })
+    expect(s.opened).toEqual([])
   })
   it('MAX_LIVE full: browser_limit with a plain message, nothing navigated', async () => {
     const s = rig({ nodes: [], states: {}, openCode: 'browser_limit' })
@@ -159,15 +194,15 @@ describe('browser_read: node choice', () => {
     const s = rig()
     expect(await s.run({ nodeId: 't1' })).toMatchObject({ ok: false, code: 'node_not_found' })
     expect(await s.run({ nodeId: 'zz' })).toMatchObject({ ok: false, code: 'node_not_found' })
-    expect(await s.run({ nodeId: 'b1' })).toMatchObject({ ok: true })
+    expect(await s.run({ nodeId: 'br-1' })).toMatchObject({ ok: true })
   })
   it('the user is on the reused browser: a fresh one is opened instead; an explicit node is not swapped', async () => {
-    const s = rig({ humanActive: new Set(['b1']) })
+    const s = rig({ humanActive: new Set(['br-1']) })
     const r = await s.run()
     expect(s.opened).toHaveLength(1)
     expect(r).toMatchObject({ ok: true, data: { nodeId: s.opened[0] } })
-    const t = rig({ humanActive: new Set(['b1']) })
-    expect(await t.run({ nodeId: 'b1' })).toMatchObject({ ok: false, code: 'human_active' })
+    const t = rig({ humanActive: new Set(['br-1']) })
+    expect(await t.run({ nodeId: 'br-1' })).toMatchObject({ ok: false, code: 'human_active' })
     expect(t.opened).toEqual([])
   })
   it('releases the lease even when the navigation fails', async () => {
@@ -203,7 +238,7 @@ describe('browser_read: reader failures', () => {
   it.each(['reader_unavailable', 'connection_impaired'] as const)('%s is an explicit error with no raw fallback', async (code) => {
     const s = rig({ reader: async () => ({ ok: false, code }) })
     const r = await s.run()
-    expect(r).toMatchObject({ ok: false, code, data: { nodeId: 'b1', host: 'example.com' } })
+    expect(r).toMatchObject({ ok: false, code, data: { nodeId: 'br-1', host: 'example.com' } })
     expect(r.data).not.toHaveProperty('answer')
     expect(JSON.stringify(r)).not.toContain('RAW-PAGE-TEXT')
   })

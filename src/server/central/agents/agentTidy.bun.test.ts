@@ -69,7 +69,7 @@ function setup() {
   const records: unknown[] = []
   const tidy = createAgentTidy({
     db, now, executor: () => ex, canvas: () => canvas as never, focused: () => (flags.focus ? { nodeId: flags.focus } : null), bus,
-    enabled: () => flags.enabled, impaired: () => flags.impaired, browserLease: (id) => (flags.leased.has(id) ? 'agent' : 'human'),
+    enabled: () => flags.enabled, impaired: () => flags.impaired, browserState: (id) => ({ id, url: 'about:blank', title: '', loading: false, canBack: false, canForward: false, lease: flags.leased.has(id) ? 'agent' : 'human', live: 'live' }),
     notify: { record: (e) => { records.push(e) } },
   })
   const works = createWorkStore(db, now)
@@ -157,6 +157,20 @@ test('parks after PARK_AFTER, closes (agent, node, idle Central browser only) af
   expect(stateOf('a')).toBe('cancelled')
   expect(s.closed).toEqual(['n-a'])
   expect(nodeIds(s).sort()).toEqual(['br-leased', 'userbr'])
+})
+
+test('a Central browser also cabled to a still-working agent stays when the finished agent closes (shared idle classifier)', async () => {
+  const s = setup()
+  s.agent('a', { browser: 'br-shared' })
+  s.agent('w', { state: 'working' })
+  s.board.bridges.push({ id: 'bw', source: 'n-w', target: 'br-shared' })
+  clock = T0 + PARK_AFTER_MS
+  await s.tidy.sweep()
+  expect(s.board.nodes.find((n) => n.id === 'br-shared')?.collapsed).toBe(undefined)
+  clock += CLOSE_AFTER_MS
+  expect(await s.tidy.sweep()).toEqual({ parked: 0, closed: 1 })
+  expect(nodeIds(s)).toContain('br-shared')
+  expect(nodeIds(s)).not.toContain('n-a')
 })
 
 test('over MAX_IDLE_PER_PROJECT the oldest are closed once past the grace; younger ones stay', async () => {

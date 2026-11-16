@@ -7,7 +7,10 @@ import { appendEvent } from '../../ledger/ledgerEvent'
 import { allRows, getRow } from '../../ledger/ledgerCore'
 import { createLogger } from '../../logs'
 import type { CanvasPush, NodePatch } from '../../canvas/canvasPush'
+import type { BrowserState } from '../../../shared/browser.contract'
 import { isContextCapable } from '../../../shared/workspace'
+import { classifyBrowserNode } from '../../browser/browser.idle'
+import { boardPorts, ledgerAgentOfNode } from '../browserIdle.ports'
 import { automaticAction, type AutomaticActionDeps } from '../automaticAction'
 import { PROJECT_PAUSED } from '../centralModel'
 import type { AgentRecord } from '../contracts'
@@ -26,7 +29,6 @@ const DEAD_LOOKBACK_MS = 3 * 24 * 60 * 60_000
 const DEAD_BATCH = 30
 const MAX_UNDO_IDS = 20
 const TIDY_EVENT = 'central.tidy'
-const BROWSER_PREFIX = 'br-'
 /** Task states whose result the user has (or never needs); everything else may still be worked on. */
 const REVIEWED = ['done', 'cancelled', 'failed']
 const SETTLED = ['reported', 'needs_review', ...REVIEWED]
@@ -45,8 +47,8 @@ export interface AgentTidyDeps {
   enabled(): boolean
   /** Connectivity impaired: do nothing. */
   impaired(): boolean
-  /** Lease holder of a browser node; undefined = page not live. */
-  browserLease?(nodeId: string): 'agent' | 'human' | undefined
+  /** Live state of a browser node; undefined = page not live (the idle classifier then keeps the node). */
+  browserState?(nodeId: string): BrowserState | undefined
   notify?: Pick<AutomaticActionDeps, 'record'>
   bus?: EventBus
 }
@@ -93,11 +95,12 @@ export function createAgentTidy(deps: AgentTidyDeps): AgentTidy {
   }
   const idleSince = (a: AgentRecord, last: Last | null): number => Math.max(a.lastEventAt ?? a.startedAt ?? 0, last?.action === 'unpark' ? last.ts : 0)
 
-  /** Browser nodes cabled to the agent that Central made (id `br-`), idle, and not on the user's screen. */
+  /** Browsers cabled to the agent that the shared classifier calls idle (Central-owned `br-`, not on screen) and that no other node is cabled to. */
   const idleBrowsers = (ws: Board, node: string): string[] => {
-    const focus = deps.focused()?.nodeId
+    const ports = { stateOf: (id: string) => deps.browserState?.(id), focusedNode: () => deps.focused()?.nodeId ?? null, ...boardPorts(() => ws), agentOfNode: ledgerAgentOfNode(db) }
     const ends = ws.bridges.filter((b) => b.source === node || b.target === node).map((b) => (b.source === node ? b.target : b.source))
-    return [...new Set(ends)].filter((id) => id.startsWith(BROWSER_PREFIX) && ws.nodes.some((n) => n.id === id && n.kind === 'browser') && id !== focus && deps.browserLease?.(id) !== 'agent')
+    const onlyThisAgent = (id: string): boolean => ws.bridges.every((b) => (b.source !== id && b.target !== id) || b.source === node || b.target === node)
+    return [...new Set(ends)].filter((id) => ws.nodes.some((n) => n.id === id && n.kind === 'browser') && onlyThisAgent(id) && classifyBrowserNode(ports, ws.id, id).idle)
   }
 
   const patchOf = (ws: Board, node: string, browsers: string[]): { patches: NodePatch[]; prior: Record<string, Prior> } => {

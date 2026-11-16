@@ -226,7 +226,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
       handle.tidy ??= createAgentTidy({
         db, now, executor: () => handle.executor, canvas: getCanvasPush, focused: () => presence.focusedNode(),
         enabled: () => (opts.settings?.() ?? DEFAULT_SETTINGS).centralTidy !== false, impaired: () => activeConnectivity()?.isImpaired() === true,
-        browserLease: (id) => activeBrowser()?.state(id)?.lease,
+        browserState: (id) => activeBrowser()?.state(id),
       })
       const tidy = handle.tidy
       tidyTimer = setInterval(() => { void tidy.sweep() }, TIDY_SWEEP_MS)
