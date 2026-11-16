@@ -6,10 +6,7 @@
 //  - rate_limit_event repeats while nothing changed: an identical state maps to nothing.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentChatEventBody, AgentChatTask } from '../../shared/agentChat.wire'
-
-/** `resetsAt` below this is in seconds (the CLI passes the API's epoch-seconds header through). */
-const EPOCH_MS_MIN = 1e12
-const MS_PER_S = 1_000
+import { normalizeResetsAt, processRateLimit } from '../central/work/workRateLimit'
 
 type Frame = Record<string, unknown> & { type: string; subtype?: string }
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
@@ -42,7 +39,9 @@ export function createTaskMapper(): TaskMapper {
     const status = info.status
     if (status !== 'allowed' && status !== 'allowed_warning' && status !== 'rejected') return []
     const raw = typeof info.resetsAt === 'number' && Number.isFinite(info.resetsAt) ? info.resetsAt : undefined
-    const resetsAt = raw === undefined ? undefined : raw < EPOCH_MS_MIN ? raw * MS_PER_S : raw
+    const resetsAt = raw === undefined ? undefined : normalizeResetsAt(raw)
+    // Every agent chat, not only Central's own turns, holds the work-layer penalties until the limit resets (before the dedupe: repeats are idempotent).
+    processRateLimit.note({ status, ...(resetsAt !== undefined ? { resetsAt } : {}) })
     const limit = str(info.rateLimitType)
     const utilization = typeof info.utilization === 'number' && Number.isFinite(info.utilization) ? info.utilization : undefined
     const key = `${status}|${resetsAt ?? ''}|${limit ?? ''}`

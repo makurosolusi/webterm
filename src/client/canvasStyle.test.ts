@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import {
   ARROW_SIZE, connectionLineStyle, decorateEdges, EDGE_INTERACTION_WIDTH, EDGE_STROKE, EDGE_STROKE_OPACITY_PCT, EDGE_STROKE_SELECTED,
-  EDGE_WIDTH, EDGE_WIDTH_EXTRA, IDLE_ARROW_STROKE, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, SELECTED_ARROW_STROKE,
+  EDGE_WIDTH, EDGE_WIDTH_EXTRA, IDLE_ARROW_STROKE, miniMapNodeColor, MINIMAP_NODE_NEUTRAL, MINIMAP_NODE_TOUCHED, SELECTED_ARROW_STROKE, withTouchedAccent,
 } from './canvasStyle'
 
 const nodes: Node[] = [
@@ -84,5 +84,17 @@ describe('miniMapNodeColor — minimap netral', () => {
     expect(miniMapNodeColor(n('a', 'agent'), { a: 'waiting' })).toBe('var(--state-warning)')
     expect(miniMapNodeColor(n('a', 'agent'), { a: 'blocked' })).toBe('var(--state-attention)')
     expect(miniMapNodeColor(n('a', 'agent'), { a: 'done' })).toBe(MINIMAP_NODE_NEUTRAL)
+  })
+
+  // Deliberate change: the minimap stays neutral EXCEPT a node Central just acted on (centralAct.store TTL), which gets the focus-border accent.
+  it('node yang baru disentuh Central beraksen focusBorder; sisanya tetap netral/status', () => {
+    const base = (node: Node): string => miniMapNodeColor(node, { a: 'working' })
+    const color = withTouchedAccent(base, new Set(['t']))
+    expect(color(n('t', 'terminal'))).toBe(MINIMAP_NODE_TOUCHED)
+    expect(color(n('f', 'files'))).toBe(MINIMAP_NODE_NEUTRAL)
+    expect(color(n('a', 'agent'))).toBe('var(--state-working)')
+    expect(MINIMAP_NODE_TOUCHED).toContain('--vscode-focusBorder')
+    expect(MINIMAP_NODE_TOUCHED).not.toBe(MINIMAP_NODE_NEUTRAL)
+    expect(withTouchedAccent(base, new Set())(n('t', 'terminal'))).toBe(MINIMAP_NODE_NEUTRAL)
   })
 })

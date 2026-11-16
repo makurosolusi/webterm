@@ -11,6 +11,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
 import { useCommands } from './commandRegistry'
 import { AGENT_CHAT_COMMAND_ID } from './agentChat.add'
+import { chatApi } from './chatApi'
+import { useChatFeed } from './chat/chatFeed'
 import { CanvasStatusBar } from './Dock.statusBar'
 import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
@@ -136,6 +138,10 @@ export default function Dock(props: DockProps) {
   }
 
   const waiting = props.needsYouCount ?? 0
+  // Keeps the Central conversation list live while the side bar is closed; the badge is needs-you + unread chats.
+  const chatUnread = useChatFeed(chatApi, props.onToggleChat !== undefined).unread.size
+  const chatBadge = waiting + chatUnread
+  const chatTip = [waiting > 0 && `${waiting} need${waiting === 1 ? 's' : ''} you`, chatUnread > 0 && `${chatUnread} unread`].filter(Boolean).join(', ')
   // One door to Central (like Copilot in VS Code): opens the side bar on Chat; its Control tab is one click
   // further. The tooltip shows ⌥⌘B through `commandId` (the side bar toggle), so a rebinding never drifts.
   const attention = props.sessionsAttention ?? 0
@@ -149,7 +155,7 @@ export default function Dock(props: DockProps) {
     ...(props.onToggleChat
       ? [{
           id: 'chat', label: 'Central', icon: codicon('comment-discussion'), commandId: 'view.secondarySideBar',
-          badge: props.needsYouCount, tooltip: waiting > 0 ? `Central (${waiting} need${waiting === 1 ? 's' : ''} you)` : undefined,
+          badge: chatBadge, tooltip: chatTip ? `Central (${chatTip})` : undefined,
         }]
       : []),
     { id: 'board', label: 'Board', tooltip: 'Toggle Kanban board', icon: codicon('project'), commandId: 'view.board' },

@@ -23,6 +23,13 @@ export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>)
   return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }
 
+/** Accent for a node Central just acted on (outline + chip on the node, this on the mini-map). Focus-border token: not a status colour. */
+export const MINIMAP_NODE_TOUCHED = 'var(--vscode-focusBorder, var(--accent))'
+
+/** `base` with the touched nodes accented; every other node keeps its (neutral or status) colour. */
+export const withTouchedAccent = (base: (n: Node) => string, touched: ReadonlySet<string>) =>
+  (n: Node): string => (touched.has(n.id) ? MINIMAP_NODE_TOUCHED : base(n))
+
 /** Warna edge: `--edge-color` (Settings › Cable color, dipasang di root canvas) atau foreground editor
  *  ~70% opaque supaya terbaca di atas latar kustom; terpilih = `focusBorder`. Fallback ke token lama
  *  bila `--vscode-*` belum dipetakan. `canvas-ui.css` memakai ekspresi yang sama untuk

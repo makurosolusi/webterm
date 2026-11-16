@@ -15,12 +15,14 @@ import { allRows } from '../../ledger/ledgerCore'
 import type { LedgerRuntime } from '../../ledger/ledgerRuntime'
 import { resetActiveLedgerRuntimeForTest, setActiveLedgerRuntime } from '../../ledger/ledgerRuntimeState'
 import { resetActivePolicyForTest } from '../../policy/policy.runtime'
+import { getOrCreateConversation } from '../conversationStore'
 import { createAgentStore } from '../agents/agentStore'
 import { createMailStore, MAIL_TTL_MS } from '../agents/mailStore'
 import { openWork } from '../context/contextHeaderWork'
 import { recordAgentReport, resetReportRateForTest } from './workAgentReport'
 import { createWorkCheckin } from './workCheckin'
 import { event, rig } from './workRig.testutil'
+import { buildResult, stashStopResult, type WorkResult } from './workResult'
 import { startWorkWatcher } from './workWatcher'
 import { onWorkMove } from './workStore'
 
@@ -90,6 +92,16 @@ test('done, blocked and question each move the task and wake Central with their 
   expect(openWork(s.db, s.now()).projects[0]?.open[0]?.report).toBe('progress: half way')
 })
 
+test('the progress wake carries the conversation the agent was started from, not the project chat', async () => {
+  const s = setup()
+  const origin = getOrCreateConversation(s.db, `chat:${crypto.randomUUID()}`).id // a chat that is neither global nor the project chat
+  s.db.query('UPDATE central_agents SET owner = ? WHERE id = ?').run(`central:${origin}`, AGENT)
+  s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  createMailStore(s.db, s.now).send(`central:${origin}`, { projectId: 'p1', threadId: '', toRef: `agent:${AGENT}`, kind: 'ask', body: 'how far?', reqId: 'ask2' })
+  await report(s.deps, { kind: 'progress', text: 'tests left' })
+  expect(allRows(s.db, "SELECT conversation_id FROM central_checkin_reason WHERE kind = 'task_report'")).toEqual([{ conversation_id: origin }])
+})
+
 test('progress wakes Central once when it asked (an open ask from Central), and answers that ask', async () => {
   const s = setup()
   s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
@@ -148,4 +160,42 @@ test('an agent spawned with no task has no card (agent.defs), so its boot turn (
   stop()
   expect(s.store.listTasks({ projectId: 'p1' })).toEqual([])
   expect(s.wakes()).toEqual([])
+})
+
+const resultOf = (s: ReturnType<typeof setup>, id: string) => s.store.getAssignment(id)?.result as WorkResult | null
+
+test('report --done stores its text as the attempt result (source agent_report) before the task is reported', async () => {
+  const s = setup()
+  const { taskId, assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  const seen: unknown[] = []
+  onWorkMove(s.db, (m) => { if (m.to === 'reported') seen.push(resultOf(s, assignmentId)?.source) })
+  await report(s.deps, { kind: 'done', text: 'RESULT: shipped the fix' })
+  expect(s.statusOf(taskId)).toBe('reported')
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'agent_report', text: 'RESULT: shipped the fix', resultLine: 'shipped the fix' })
+  expect(seen).toEqual(['agent_report'])
+  // blocked / question / progress are not results.
+  const t = setup()
+  const b = t.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  await report(t.deps, { kind: 'question', text: 'which db?' })
+  expect(resultOf(t, b.assignmentId)).toBeNull()
+})
+
+test('report --done does not overwrite the richer result a Stop already captured', async () => {
+  const s = setup()
+  const { assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  s.store.recordResult(assignmentId, buildResult('stop_hook', 'long final message from the Stop hook', s.now()))
+  await report(s.deps, { kind: 'done', text: 'short done' })
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'stop_hook', text: 'long final message from the Stop hook' })
+})
+
+test('a Stop that arrives after report --done replaces the report text with its richer capture', async () => {
+  const s = setup()
+  const { taskId, assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  const off = startWorkWatcher({ store: s.store, now: s.now, bus: s.bus, onReported: () => {}, onSessionEnded: () => {} })
+  await report(s.deps, { kind: 'done', text: 'short done' })
+  stashStopResult(NODE, buildResult('stop_hook', 'the full last message', s.now()))
+  s.bus.publish(event('hook.Stop', {}, NODE))
+  off()
+  expect(s.statusOf(taskId)).toBe('reported')
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'stop_hook', text: 'the full last message' })
 })

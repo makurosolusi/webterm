@@ -217,7 +217,9 @@ describe('ChatPanel busy + errors', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Central needs Claude')
-    expect(tipOf(within(alert).getByRole('button', { name: 'Dismiss error' }))).toBe('Dismiss error')
+    // Sticky: no Dismiss for the list error, only Retry.
+    expect(within(alert).getByRole('button', { name: 'Retry' })).not.toBeNull()
+    expect(within(alert).queryByRole('button', { name: 'Dismiss error' })).toBeNull()
   })
 
   it('G-17: a failed list shows no Loading or empty copy beside the error, and Retry refetches', async () => {

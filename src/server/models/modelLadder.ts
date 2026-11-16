@@ -68,7 +68,9 @@ export function defaultTier(kind: CallKind, complexity?: ResolveInput['complexit
     case 'helper': case 'explore': return 'T1'
     case 'dag-planner': return 'T3'
     case 'dag-worker': return complexity === 'complex' ? 'T3' : 'T2'
-    default: return 'T2' // central, routine, prreview, bakeoff, agent-spawn
+    // Central states how hard the worker's task is; no hint = the routine default. Never above T3 (T4 is a human grant).
+    case 'agent-spawn': return complexity === 'simple' ? 'T1' : complexity === 'complex' ? 'T3' : 'T2'
+    default: return 'T2' // central, routine, prreview, bakeoff
   }
 }
 

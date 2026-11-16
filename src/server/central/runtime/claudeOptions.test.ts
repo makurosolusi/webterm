@@ -56,6 +56,18 @@ describe('centralQueryOptions', () => {
     expect(CENTRAL_STEWARD_PROMPT).toMatch(/chat\.config for an Agent Chat node; for a Claude terminal node, canvas\.type the text "\/model <alias>" then press Enter/)
   })
 
+  // Root-cause lock: Central typed /model into a research worker on its own and overrode the complexity ladder.
+  it('changes a worker model only when the user asks; otherwise the system picks it from complexity', () => {
+    const p = CENTRAL_STEWARD_PROMPT
+    expect(p).toContain('Change an agent\'s model only when the user asks for it')
+    expect(p).toMatch(/picks the worker model from complexity/)
+    expect(p).toContain('never request Fable')
+    // every "/model" instruction must sit inside the conditional sentence (no unconditional typing)
+    expect(p).not.toMatch(/(^|\. )(To switch|Type|Always type)[^.]*\/model/)
+    expect(p.indexOf('/model <alias>')).toBeGreaterThan(p.indexOf('only when the user asks'))
+    expect(p.indexOf('only when the user asks')).toBeLessThan(p.indexOf('/model <alias>'))
+  })
+
   // Policy lock (root cause: "Use reminder.set for anything you should check later" made Central poll its own delegations).
   it('says delegated work reports by itself and keeps reminders for what only time can tell', () => {
     expect(CENTRAL_STEWARD_PROMPT).not.toContain('Use reminder.set for anything you should check later')

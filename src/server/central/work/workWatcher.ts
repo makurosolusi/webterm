@@ -3,6 +3,8 @@ import { type EventBus, eventBus } from '../../events/eventBus'
 import type { SenseEvent } from '../../events/eventModel'
 import { createLogger } from '../../logs'
 import type { WorkActor, WorkStore } from './workModel'
+import { isTransientKind } from './workFailureKind'
+import { noResult, takeStopResult } from './workResult'
 
 const log = createLogger('central.work')
 const SYSTEM: WorkActor = { kind: 'system' }
@@ -10,6 +12,7 @@ const NEEDS_INPUT = new Set(['agent_needs_input', 'elicitation_dialog', 'permiss
 const SESSION_END_RULE = 'session_end'
 const REVIEWABLE: readonly WorkStatus[] = ['reported', 'verifying', 'needs_review']
 const INTERRUPTIBLE: readonly WorkStatus[] = ['assigned', 'running', 'stalled', 'waiting_input']
+export const INTERRUPTED_EVENT = 'work.interrupted'
 
 /** `activity` only proves the agent is alive (a subagent's tool use): it touches the signal, never the status. */
 type Signal = 'busy' | 'stop' | 'failure' | 'input' | 'end' | 'activity'
@@ -58,6 +61,8 @@ export interface WorkWatcherDeps {
 
 /** Subscribes to agent signals and moves open assignments' tasks; returns the unsubscribe function. */
 export function startWorkWatcher({ store, now, bus = eventBus, onReported, onSessionEnded }: WorkWatcherDeps): () => void {
+  // ponytail: in memory, so a restart may log one interruption twice; the event is a hint for the sweep, not a count.
+  const interrupted = new Set<string>()
   const apply = (nodeId: string, event: SenseEvent, signal: Signal): void => {
     const assignment = store.openAssignmentOfNode(nodeId)
     if (!assignment || !store.touchSignal(assignment.id, event.kind, now())) return
@@ -70,9 +75,32 @@ export function startWorkWatcher({ store, now, bus = eventBus, onReported, onSes
       return
     }
     const move = WORK_SIGNAL_MOVES[signal]
+    // A Stop that lands after `webterm report --done` already moved the task: its richer capture still replaces the report text.
+    if (signal === 'stop' && REVIEWABLE.includes(task.status)) {
+      const late = takeStopResult(nodeId)
+      if (late) store.recordResult(assignment.id, late)
+      return
+    }
     if (!move.from.includes(task.status)) return
     const options = { actor: SYSTEM, rule: move.rule, reason: event.kind, assignmentId: assignment.id }
     if (signal === 'input' && task.status === 'assigned') store.moveTask(task.id, 'running', options)
+    // The result is written BEFORE the move: a `reported` task never exists without one (text, or `none` + reason).
+    // Only Stop/StopFailure park a capture; another channel (chat turn end) leaves none, which is recorded as such.
+    if (signal === 'stop' || signal === 'failure') {
+      const captured = event.kind.startsWith('hook.') ? takeStopResult(nodeId) : undefined
+      const result = captured ?? noResult(`no_hook_payload:${event.kind}`, now())
+      store.recordResult(assignment.id, result)
+      // A drop, a limit or an overload is the API's fault, not the agent's: it stays running (the signal above renewed its lease)
+      // and the interruption is recorded once, for the next sweep. Auth and permanent failures still need a human.
+      const kind = result.failure?.kind
+      if (signal === 'failure' && isTransientKind(kind)) {
+        if (!interrupted.has(`${assignment.id}:${kind}`)) {
+          interrupted.add(`${assignment.id}:${kind}`)
+          store.noteAssignment(assignment.id, INTERRUPTED_EVENT, { rule: 'interrupted', reason: String(kind) })
+        }
+        return
+      }
+    }
     store.moveTask(task.id, move.to, options)
     if (move.to === 'reported') onReported(task.id)
   }

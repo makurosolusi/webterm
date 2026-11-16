@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Workspace } from '../shared/workspace'
-import { autoUndoOf, buildContext, describeEvent, groupEvents, matchesFilter, mergeEvents, NO_FILTER, type TimelineEvent } from './Timeline.model'
+import { filterKindOf, KIND_LABELS, autoUndoOf, buildContext, describeEvent, groupEvents, matchesFilter, mergeEvents, NO_FILTER, type TimelineEvent } from './Timeline.model'
 import { effectiveLevel, parseControl, parseIntegrity } from './Timeline.status'
 
 // test-only fixtures
@@ -17,6 +17,19 @@ let seq = 0
 const ev = (kind: string, patch: Partial<TimelineEvent> = {}): TimelineEvent => ({
   seq: ++seq, ts: 1000 + seq, kind, source: 'test', actor: 'test', subject: null, workspaceId: null, nodeId: null,
   trust: 'trusted', dedupeKey: null, payload: null, prevHash: '', hash: '', ...patch,
+})
+
+describe('central.act', () => {
+  it('reads "Central <verb> <node>", points the click at the node, and has its own filter', () => {
+    const e = ev('central.act', { nodeId: 'n1', payload: { v: 1, tool: 'canvas.type', verb: 'typed', nodeId: 'n1', n: 3 } })
+    expect(describeEvent(e, ctx)).toEqual({ text: 'Central typed brisk-otter (3 actions)', focusId: 'n1' })
+    expect(describeEvent(ev('central.act', { nodeId: 'n1', payload: { verb: 'opened', n: 1 } }), ctx).text).toBe('Central opened brisk-otter')
+    expect(filterKindOf('central.act')).toBe('central')
+    expect(filterKindOf('central.guard')).toBe('permissions') // the guard stays under Permissions
+    expect(KIND_LABELS.central).toBe('Central actions')
+    expect(matchesFilter(e, { ...NO_FILTER, kind: 'central' }, ctx)).toBe(true)
+    expect(matchesFilter(ev('hook.Stop', { nodeId: 'n1' }), { ...NO_FILTER, kind: 'central' }, ctx)).toBe(false)
+  })
 })
 
 describe('describeEvent', () => {

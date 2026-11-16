@@ -83,6 +83,12 @@ describe('registry', () => {
     expect(records).toEqual(['auto.playbook_started "Central started web research: analyse GitHub trending today"'])
   })
 
+  test('every playbook states an honest complexity on its spawn; web_research is moderate (sonnet), never the strongest tier', async () => {
+    expect(PLAYBOOKS.map((p) => [p.id, p.complexity])).toEqual([['review', 'moderate'], ['code_change', 'moderate'], ['web_research', 'moderate']])
+    await runPlaybook(ctx, pb('web_research'), { goal: 'read this repo and judge if it runs on an 8 GB Mac' }, 'p1', deps)
+    expect(calls.find((c) => c.tool === 'agent.spawn')?.args).toMatchObject({ complexity: 'moderate' })
+  })
+
   test('web_research without a url searches for the goal', async () => {
     await runPlaybook(ctx, pb('web_research'), { goal: 'best sqlite orm' }, 'p1', deps)
     expect(objective()).toContain('https://duckduckgo.com/?q=best%20sqlite%20orm')
@@ -156,6 +162,16 @@ describe('approval cursor', () => {
     expect(calls[2]?.args.requestId).toBe(calls[1]?.args.requestId)
     expect(calls[2]?.args.requestId).toBe(`pb-${String(r.data?.runId)}`)
     expect(records.at(-1)).toBe('auto.playbook_resumed "Central resumed web research after approval: compare bun and node"')
+  })
+
+  test('the resumed outcome returns to the conversation the run started in: global stays global, not the project chat', async () => {
+    createWorkStore(db, () => clock).createTask({ id: 'task-1', projectId: 'p1', title: 'web research', objective: 'o', actor: { kind: 'central' } })
+    card('agent-ag-1')
+    script['agent.spawn'] = [{ ok: false, tool: 'agent.spawn', code: 'approval_required', data: { agentId: 'ag-1', approvalId: 'agent-ag-1', approvalStatus: 'pending' } }]
+    await runPlaybook(ctxFor('central:global'), pb('web_research'), { goal: 'compare bun and node' }, 'p1', deps)
+    decide('agent-ag-1', false)
+    await resumeOnApproval(db, ctxFor, { id: 'agent-ag-1', status: 'rejected' } as Parameters<typeof resumeOnApproval>[2], deps)
+    expect(rows(db, 'SELECT conversation_id FROM central_checkin_reason')).toEqual([{ conversation_id: 'central:global' }])
   })
 
   test('a rejected card ends the run and tells the user; a second decision event changes nothing', async () => {

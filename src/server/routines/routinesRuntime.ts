@@ -1,10 +1,15 @@
 // Process-wide routines: store + runner + scheduler over the active ledger, real deps wired here.
 // `ensureRoutines()` is idempotent; boot calls it once the ledger is up, and the HTTP route calls it
 // too so the panel works even before that.
+import type { Database } from 'bun:sqlite'
 import { execFile, spawn as spawnProcess, type ChildProcess } from 'node:child_process'
 import { gitCommand } from '../gitExec'
 import { homedir } from 'node:os'
 import { binaryOnPath } from '../binaryOnPath'
+import { rateLimitResetAt } from '../central/work/workRateLimit'
+import { activeConnectivity } from '../connectivity/connectivity.runtime'
+import { createEpisodeStore } from '../connectivity/connectivity.store'
+import { createInboxItem } from '../inbox/inboxItemStore'
 import { lookupWorkspace } from '../central/workspaceLookup'
 import { beginCostRunLive, costGateLive, endCostRunLive } from '../cost/costRuntime'
 import { eventBus } from '../events/eventBus'
@@ -71,6 +76,19 @@ export function gitTreeState(cwd: string): Promise<string | null> {
   })
 }
 
+const EPISODES_AT_BOOT = 5
+
+/** One event + one Inbox note per outage episode that delayed or retried routines (counts are real; no routine names or text). */
+function announceDelay(ctx: { db: Database; now: () => number }, info: { delayed: number; retried: number; reason: string }): void {
+  try {
+    recordEvent({ kind: 'routine.offline', source: 'routines', actor: 'routines', subject: null, workspaceId: null, trust: 'trusted', payload: { ...info } })
+    const parts = [info.delayed > 0 ? `${info.delayed} delayed` : '', info.retried > 0 ? `${info.retried} retried` : ''].filter(Boolean)
+    createInboxItem(ctx, { kind: 'notify', source: 'routines', workspaceId: null, nodeId: null, title: `Routines paused while Claude was unreachable: ${parts.join(', ')}`, body: 'Due runs were held until the connection came back and then ran once; interrupted runs were retried once.' })
+  } catch (err) {
+    log.warn('routines.offline_note_failed', 'Cannot record the routines outage note', { cause: err instanceof Error ? err.message : String(err) })
+  }
+}
+
 export interface RoutinesRuntime { store: RoutineStore; runner: RoutineRunner; scheduler: RoutineScheduler }
 
 let active: { db: unknown; runtime: RoutinesRuntime } | null = null
@@ -90,8 +108,16 @@ export function ensureRoutines(): RoutinesRuntime | null {
     cost: { gate: costGateLive, begin: beginCostRunLive, end: endCostRunLive },
     treeState: gitTreeState,
     prReview: pollPrReviews,
+    connectivity: activeConnectivity,
   })
-  const scheduler = createRoutineScheduler({ store, runner, bus: eventBus, now: Date.now })
+  const episodes = createEpisodeStore(ledger.db, Date.now)
+  const scheduler = createRoutineScheduler({
+    store, runner, bus: eventBus, now: Date.now,
+    connectivity: activeConnectivity, rateLimitResetAt,
+    // Read from the ledger, not the detector: routines start before it does.
+    episodes: () => episodes.recent(EPISODES_AT_BOOT, Date.now()),
+    note: (info) => announceDelay(ctx, info),
+  })
   scheduler.start()
   active = { db: ledger.db, runtime: { store, runner, scheduler } }
   return active.runtime

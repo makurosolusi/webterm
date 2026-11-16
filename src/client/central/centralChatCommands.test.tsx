@@ -97,11 +97,11 @@ describe('Central chat draft handoff', () => {
 })
 
 describe('Central chat permission mode', () => {
-  it('sits in the composer toolbar under the box, not in the header (status, context, model only)', async () => {
+  it('sits in the composer toolbar under the box, not above the thread', async () => {
     await setup()
     const mode = screen.getByRole('button', { name: /^Permission mode/ })
     expect(mode.closest('.chat-composer__toolbar')).toBeTruthy()
-    expect(document.querySelector('.chat-conversation__head [aria-label^="Permission mode"]')).toBeNull()
+    expect(document.querySelector('.chat-conversation > [aria-label^="Permission mode"]')).toBeNull()
   })
 })
 

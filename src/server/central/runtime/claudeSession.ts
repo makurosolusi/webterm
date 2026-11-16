@@ -8,12 +8,15 @@ import type { TurnEmitter } from './runtimeEvents'
 import type { ClaudeResultEvent, ClaudeUsage } from './claudeResult'
 import { type ClaudeUnavailableCode, MICROS_PER_USD } from './claudeOptions'
 import { classifyClaudeFailure } from './claudeFailure'
+import type { FailureKind } from '../work/workFailureKind'
 
 const WORK_DIR_MODE = 0o700
 
 export interface TurnFailure {
   code: RuntimeErrorCode
   retryable?: boolean
+  /** Why it failed, finer than `retryable` (workFailureKind.ts): a drop, a limit, an overload, a server fault, a login, a hard stop. */
+  kind?: FailureKind
   /** Which input-free message to use when `code` is `runtime_unavailable`. */
   unavailable?: ClaudeUnavailableCode
   /** Redacted human cause shown instead of the bare `runtime_error` / `runtime_unavailable` message. */

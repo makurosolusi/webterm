@@ -2,6 +2,7 @@
 import { getRow } from '../../../ledger/ledgerCore'
 import { AGENT_STATES_FOR_FILTER, agentNodeId, agentView, isCentralOwned, type AgentExecutor } from '../../agents/agentExecutor'
 import { agentReqId } from '../../agents/agentStore'
+import { COMPLEXITIES, type Complexity } from '../../agents/agentLadder'
 import type { AgentRecord, AgentState } from '../../contracts'
 import { beginDelegation, settleSend, type DelegationInput } from '../../work/workDelegation'
 import { createWorkStore } from '../../work/workStore'
@@ -104,14 +105,14 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
   }
   const spawn: ToolDef = {
     name: 'agent.spawn', summary: 'Start a worker or reviewer agent; the server picks cwd and command. A pty agent appears on the project canvas.', tier: 'R2', auditKeys: AUDIT_KEYS,
-    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional task from task.create>"}. May return approval_required. Tracked as a delegation on its task. A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. Create the task first (task.create, objective = the full brief) and pass its taskId: the agent starts with the task title and objective as its first message, so do not send the same brief again with agent.prompt (keep agent.prompt for follow-ups). Without taskId it starts idle with no card and waits for agent.prompt, which opens its card. Its result, a stall, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.',
-    input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), role: S.oneOf(...ROLES), title: S.str(MAX_TITLE), taskId: S.str(MAX_ID) }, ['requestId', 'kind', 'role', 'title']),
-    output: S.anyObj('Agent id and state, or approval_required.'),
+    usage: '{"projectId":"<id>","requestId":"<safe id, same value on retry>","kind":"<agent kind>","role":"worker|reviewer","title":"<=200 chars","taskId":"<optional task from task.create>","complexity":"simple|moderate|complex (optional)"}. complexity says how hard the task is and sets which model the worker runs on: simple = lookups and fetches (smallest model), moderate or omitted = routine work (default), complex = multi-file changes (strongest automatic tier); never ask for more than the task needs. The result returns the tier and model used. May return approval_required. Tracked as a delegation on its task. A pty agent is a node on the canvas the user can watch and type into, and it can open and drive its own browser node. Create the task first (task.create, objective = the full brief) and pass its taskId: the agent starts with the task title and objective as its first message, so do not send the same brief again with agent.prompt (keep agent.prompt for follow-ups). Without taskId it starts idle with no card and waits for agent.prompt, which opens its card. Its result, a stall, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.',
+    input: obj({ requestId: S.str(MAX_ID), kind: S.str(MAX_KIND), role: S.oneOf(...ROLES), title: S.str(MAX_TITLE), taskId: S.str(MAX_ID), complexity: S.oneOf(...COMPLEXITIES) }, ['requestId', 'kind', 'role', 'title']),
+    output: S.anyObj('Agent id, state, tier and model, or approval_required.'),
     // `role` is a forbidden key for other tools but is this tool's own field; everything else stays forbidden.
     forbidden: (input) => Object.keys(input).some((k) => k !== 'role' && FORBIDDEN_KEYS.has(k)),
     validate(input, ctx) {
-      const { requestId, kind, role, title, taskId } = input
-      const ok = onlyKeys(input, ['projectId', 'requestId', 'kind', 'role', 'title', 'taskId']) && safeId(requestId) && safeId(kind, MAX_KIND) && ROLES.includes(role as string)
+      const { requestId, kind, role, title, taskId, complexity } = input
+      const ok = onlyKeys(input, ['projectId', 'requestId', 'kind', 'role', 'title', 'taskId', 'complexity']) && (complexity === undefined || COMPLEXITIES.includes(complexity as Complexity)) && safeId(requestId) && safeId(kind, MAX_KIND) && ROLES.includes(role as string)
         && typeof title === 'string' && title.length >= 1 && title.length <= MAX_TITLE && noControl(title) && (taskId === undefined || safeId(taskId))
       if (!ok) return 'invalid_shape'
       return typeof taskId === 'string' && getRow(ctx.db, 'SELECT 1 AS one FROM central_task WHERE id = ? AND project_id = ?', taskId, String(input.projectId).trim()) === null ? 'task_not_found' : null
@@ -119,7 +120,7 @@ export function createAgentDefs(executor: AgentExecutor): ToolDef[] {
     // `taskId` (a central board task) rides on the agent row, so the boot prompt carries its title and objective.
     handler: flagged(async (ctx, input, projectId) => recordSpawn(ctx, input, projectId, await executor.spawn({
       projectId, kind: String(input.kind), role: input.role as 'worker' | 'reviewer', title: String(input.title), reqId: agentReqId(projectId, String(input.requestId)),
-      ...(typeof input.taskId === 'string' ? { taskId: input.taskId } : {}), owner: `central:${ctx.conversationId}`, requireApproval: agentsMode(ctx) === 'propose',
+      ...(typeof input.taskId === 'string' ? { taskId: input.taskId } : {}), ...(input.complexity ? { complexity: input.complexity as Complexity } : {}), owner: `central:${ctx.conversationId}`, requireApproval: agentsMode(ctx) === 'propose',
     }))),
   }
   const prompt: ToolDef = {

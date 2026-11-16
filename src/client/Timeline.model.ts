@@ -15,7 +15,7 @@ import { isAutoMode, isDangerMode, isPermissionKind, permissionText, type LineTo
 export type TimelineEvent = SenseEvent
 export type GroupMode = 'task' | 'node' | 'workspace'
 /** Kind filter values: an event family, or everything. */
-export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge' | 'permissions' | 'auto'
+export type KindFilter = 'all' | 'hook' | 'pty' | 'fs' | 'edge' | 'permissions' | 'auto' | 'central'
 
 export interface TimelineFilter { workspaceId: string; kind: KindFilter; nodeId: string }
 export const NO_FILTER: TimelineFilter = { workspaceId: '', kind: 'all', nodeId: '' }
@@ -57,7 +57,7 @@ export interface TimelineGroup {
 }
 
 export const KIND_LABELS: Record<KindFilter, string> = {
-  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables', permissions: 'Permissions', auto: 'Automatic',
+  all: 'All kinds', hook: 'Agent activity', pty: 'Terminal exits', fs: 'File changes', edge: 'Cables', permissions: 'Permissions', auto: 'Automatic', central: 'Central actions',
 }
 export const GROUP_LABELS: Record<GroupMode, string> = { task: 'Task', node: 'Node', workspace: 'Workspace' }
 
@@ -80,9 +80,11 @@ type Rec = Record<string, unknown>
 const rec = (v: unknown): Rec => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Rec) : {})
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+/** Senses kind of "Central acted on a node" (server/central/tools/toolAct.ts); a click on its line goes to the node. */
+export const CENTRAL_ACT_KIND = 'central.act'
 export const familyOf = (kind: string): string => kind.split('.')[0] ?? kind
 /** Filter value an event kind falls under (permission, Central guard and policy events share one). */
-export const filterKindOf = (kind: string): string => (isPermissionKind(kind) ? 'permissions' : familyOf(kind))
+export const filterKindOf = (kind: string): string => (isPermissionKind(kind) ? 'permissions' : kind === CENTRAL_ACT_KIND ? 'central' : familyOf(kind))
 
 /** Workspace an event belongs to: recorded id, else its node's board, else the deepest cwd holding an fs path. */
 export function workspaceOf(e: TimelineEvent, ctx: TimelineContext): string | null {
@@ -198,6 +200,10 @@ export function describeEvent(e: TimelineEvent, ctx: TimelineContext): Described
     return { text: fsText(p, ctx.workspaces.find((w) => w.id === wsId)), focusId: null }
   }
   if (e.kind === 'edge.change') return edgeText(p, ctx)
+  if (e.kind === CENTRAL_ACT_KIND) {
+    const n = typeof p.n === 'number' && p.n > 1 ? ` (${p.n} actions)` : ''
+    return { text: `Central ${str(p.verb) ?? 'acted on'} ${e.nodeId ? ctx.nodeName(e.nodeId) : 'a node'}${n}`, focusId: e.nodeId }
+  }
   if (isAutoKind(e.kind)) return { text: str(p.text) ?? autoKindName(e.kind), focusId: e.nodeId, auto: true }
   if (e.kind === 'work.auto_done_set' && str(p.text)) return { text: str(p.text)!, focusId: e.nodeId }
   return { text: e.subject ? `${e.kind} (${e.subject})` : e.kind, focusId: e.nodeId }

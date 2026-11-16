@@ -22,7 +22,7 @@ import { DERIVED_FLAGS } from '../../shared/featureCapabilities'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
 import { getCanvasPush } from '../canvas/canvasPush.runtime'
 import { type BrowserBootSources, createBrowserToolDeps } from './ca2Boot.browser'
-import { createAgentExecutor, type AgentExecutor } from './agents/agentExecutor'
+import { createAgentExecutor, type AgentExecutor, type AgentHost } from './agents/agentExecutor'
 import { type AgentCatalog, createAgentCatalog, DEFAULT_DENY_ROOTS } from './agents/agentCatalog'
 import { createAgentHost } from './agents/agentHost'
 import { startAgentPtyWatcher } from './agents/agentPtyWatcher'
@@ -107,7 +107,7 @@ export interface Ca2Handle {
 
 export { activeCa2, setActiveCa2 }
 
-function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGuard, env: Env, now: () => number, dir: string): { executor: AgentExecutor; catalog: AgentCatalog } | null {
+function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGuard, env: Env, now: () => number, dir: string): { executor: AgentExecutor; catalog: AgentCatalog; host: AgentHost } | null {
   const deps = { ledger: opts.runtime, dataDir: () => dir }
   const wt = resolveWorktrees(deps, worktreeRoot(deps))
   if (!wt.ok) { log.warn('ca2.worktrees_unavailable', 'agent worktree root unavailable; agents disabled'); return null }
@@ -118,7 +118,7 @@ function buildExecutor(opts: Ca2BootOptions, db: Database, guard: SyncControlGua
     return row ? { title: String(row.title), objective: row.objective === null ? '' : String(row.objective) } : null
   }
   const host = createAgentHost({ sessions: createSessionsPort(opts.sessions), worktrees: wt.worktrees, repoOf: (id) => projectRepo(db, id), catalog, canvas: getCanvasPush(), task })
-  return { executor: createAgentExecutor({ db, guard, host, now, env }), catalog }
+  return { executor: createAgentExecutor({ db, guard, host, now, env }), catalog, host }
 }
 
 function buildSkills(db: Database, root: string, now: () => number): SkillAdminStore | null {
@@ -151,11 +151,14 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let stopWork: (() => void) | null = null
   let unwatchPlaybooks: (() => void) | null = null
   let unmapCapabilities: (() => void) | null = null
-  const work = createWorkTracking({ db, sessions, now, noTimer: opts.noTimer === true })
+  let built: ReturnType<typeof buildExecutor> | undefined
+  const work = createWorkTracking({ db, sessions, now, noTimer: opts.noTimer === true, recover: {
+    // Looked up on use: the executor exists only after `start` and only in agent mode; `propose` makes a respawn wait for its card.
+    runtime: () => ({ executor: built?.executor ?? null, host: built?.host ?? null, guard, requireApproval: (effectiveEnv(env).WEBTERM_CENTRAL_AGENTS ?? '').trim().toLowerCase() === 'propose' }),
+  } })
   let armed = false
   // Crash recovery runs once per process: a re-arm (Central off -> on) must not sweep turns this process is still running.
   let turnsReconciled = false
-  let built: ReturnType<typeof buildExecutor> | undefined
   const registry = opts.registry ?? defaultRegistry()
   const handle: Ca2Handle = {
     db, env, now, guard, executor: null, skills: null, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, registry, toolNames: [], toolsHash: toolsHash(registry),

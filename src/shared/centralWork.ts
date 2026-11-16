@@ -3,6 +3,9 @@ export const WORK_STATUSES = ['todo', 'blocked', 'assigned', 'running', 'waiting
 /** Lifecycle status of a central task. */
 export type WorkStatus = (typeof WORK_STATUSES)[number]
 
+/** Who must act next on an open task; derived from its status (server `ownerOf`). */
+export type WorkOwner = 'agent' | 'central' | 'verifier' | 'human'
+
 /** Legal moves of the task state machine. */
 export const WORK_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]>> = {
   todo: ['assigned', 'blocked', 'cancelled'],
@@ -64,6 +67,8 @@ export interface TaskView {
   turnId: string | null
   verification: unknown
   blockedBy: string[]
+  /** Who must act next (open tasks only, else null); always set by the server. */
+  owner?: WorkOwner | null
   createdAt: number
   updatedAt: number
 }
@@ -82,6 +87,8 @@ export interface AssignmentView {
   lastSignal: string | null
   lastSignalAt: number | null
   nudgedAt: number | null
+  /** When the owner of this task must have acted (epoch ms); always set by the server, null on attempts that ended before leases existed. */
+  leaseUntil?: number | null
   restarts: number
   endedAt: number | null
   endReason: string | null

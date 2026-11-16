@@ -27,3 +27,11 @@ export function assertTransition(agentId: string, from: AgentState, to: AgentSta
     throw new AgentTransitionError('illegal_transition', agentId, from, to)
   }
 }
+
+/** Terminal states a typed resume may bring back to `working`: the process died but its Claude conversation lives on. */
+export const RESUMABLE_STATES: readonly AgentState[] = ['orphaned', 'session_exited']
+
+/** Throws `illegal_transition` unless `from` is a state a resume may revive; the general table stays closed. */
+export function assertResumeFrom(agentId: string, from: AgentState): void {
+  if (!RESUMABLE_STATES.includes(from)) throw new AgentTransitionError('illegal_transition', agentId, from, 'working')
+}

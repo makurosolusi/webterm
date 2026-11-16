@@ -51,7 +51,7 @@ export function createCanvasEditDefs(deps: CanvasEditDeps): ToolDef[] {
     flag: READ_TOOLS_FLAG,
     usage: USAGE,
     input: obj({ ops: S.arr(S.anyObj('one op, see usage'), MAX_OPS) }, ['ops']),
-    output: S.keys('changed', 'linked', 'unlinked', 'clamped', 'count', 'ids'),
+    output: S.keys('changed', 'linked', 'wired', 'unlinked', 'clamped', 'count', 'ids'),
     auditKeys: ['count', 'ids'],
     validate: (input) => (editShape(input) ? null : 'invalid_shape'),
     async handler(ctx, input, projectId): Promise<ToolResult> {
@@ -90,7 +90,7 @@ export function createCanvasEditDefs(deps: CanvasEditDeps): ToolDef[] {
 
       const res = (await deps.canvas()).update({ workspaceId: found.workspaceId, patches, bridgesAdd: added, bridgesRemove: removed.map((b) => b.id) })
       if (!res.ok) return fail(res.code)
-      const data = { changed, linked: added.map(cable), unlinked: removed.map(cable), count: changed.length + added.length + removed.length, ids: changed.map((c) => c.id) }
+      const data = { changed, linked: added.map(cable), wired: added.map((b) => [b.source, b.target]), unlinked: removed.map(cable), count: changed.length + added.length + removed.length, ids: changed.map((c) => c.id) }
       return { ok: true, data: applied.clamped.length ? { ...data, clamped: applied.clamped } : data }
     },
   }

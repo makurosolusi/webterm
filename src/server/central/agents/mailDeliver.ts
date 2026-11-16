@@ -6,7 +6,8 @@ import { getRow } from '../../ledger/ledgerCore'
 import type { MailEnvelope, MailRecord, MailSender } from '../contracts/mail.types'
 import type { MailStore } from './mailStore'
 
-const AGENT_PREFIX = 'agent:'
+/** Mail ref prefix of a worker agent (`agent:<id>`). */
+export const AGENT_PREFIX = 'agent:'
 const CENTRAL_PREFIX = 'central:'
 // C0 controls except \n and \t, DEL and C1: an escape or \r typed into a PTY would act as input, not text.
 const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g

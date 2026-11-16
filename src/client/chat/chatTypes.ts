@@ -164,10 +164,10 @@ export function isActiveTurnStatus(status: ChatTurnStatus | null): boolean {
   return status !== null && ACTIVE.includes(status)
 }
 
-/** Conversation list label: the project id, else the title, else "Global" / "New chat". */
+/** Conversation list label: the server title (a project's name), else the project id, else "Global" / "New chat". */
 export function conversationLabel(conversation: Pick<ChatConversation, 'id' | 'projectId'> & { title?: string | null }): string {
-  if (conversation.projectId) return conversation.projectId
   if (conversation.title) return conversation.title
+  if (conversation.projectId) return conversation.projectId
   if (conversation.id === GLOBAL_CONVERSATION_ID) return 'Global'
   if (conversation.id.startsWith(CHAT_PREFIX)) return 'New chat'
   if (conversation.id.startsWith(PROJECT_PREFIX)) return conversation.id.slice(PROJECT_PREFIX.length)

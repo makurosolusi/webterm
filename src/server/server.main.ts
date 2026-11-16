@@ -3,7 +3,7 @@
 import http from 'node:http'
 import { join } from 'node:path'
 import { WebSocketServer } from 'ws'
-import { WS_PATH } from '../shared/protocol'
+import { type ServerMsg, WS_PATH } from '../shared/protocol'
 import { serveTerminalSocket } from './terminalSocket'
 import { createServerIdentity, healthRoute } from './health.api'
 import { sessions } from './sessions'
@@ -23,6 +23,8 @@ import { createTelegramHot, registerTelegramCentralRefresh, registerTelegramHot 
 import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { bootCa2 } from './central/ca2Boot'
+import { registerActBroadcast } from './central/tools/toolAct'
+import { startConnectivity } from './connectivity/connectivity.runtime'
 import { registerCanvasBroadcast, registerCanvasTeardown } from './canvas/canvasPush.runtime'
 import { createCanvasTeardown } from './canvas/canvasTeardown'
 import { initEnvSettings } from './envSettings.runtime'
@@ -205,10 +207,13 @@ if (dev) {
 }
 
 const wss = new WebSocketServer({ noServer: true })
-registerCanvasBroadcast((msg) => {
+const broadcastToClients = (msg: ServerMsg): void => {
   const frame = JSON.stringify(msg)
   for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(frame)
-})
+}
+registerCanvasBroadcast(broadcastToClients)
+registerActBroadcast(broadcastToClients)
+if (process.env.NODE_ENV !== 'test') startConnectivity({ runtime: ledgerRuntime, broadcast: broadcastToClients }) // server -> Claude API detector (connectivity/)
 registerCanvasTeardown(createCanvasTeardown({ sessions, browser: activeBrowser, agentChats: activeAgentChatPool }))
 const browserWss = new WebSocketServer({ noServer: true }) // terpisah: handler 'connection' PTY tidak boleh melihat socket browser
 server.on('upgrade', (req, socket, head) => {

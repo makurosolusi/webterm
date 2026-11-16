@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import type { DockProps } from './Dock.types'
 import { codicon } from './dockCodicon'
 import { useShownBottomView } from './bottomPanelHost'
+import { useConnectivity } from './connectivity/useConnectivity'
+import { ConnectivityLive } from './connectivity/ConnectivityLive'
 import { useTabLayout } from './tabLayout.store'
 
 /** Preset zoom status bar, untuk bar status zoom. */
@@ -26,11 +28,15 @@ export function CanvasStatusBar(props: DockProps) {
   // Tab mode has no canvas viewport, so these controls would do nothing.
   const canvasMode = useTabLayout().mode !== 'tabs'
   const shown = useShownBottomView()
+  const net = useConnectivity()
 
   const left: VscodeStatusItem[] = []
   if (props.workspaceName) {
     left.push({ id: 'workspace', label: props.workspaceName, tooltip: 'Active workspace' })
   }
+
+  // Claude link trouble: one static item, only while degraded/offline/just recovered (see connectivity/).
+  if (net) left.push({ id: 'connectivity', label: net.label, icon: codicon(net.icon), tooltip: net.tooltip, tone: net.tone })
 
   const right: VscodeStatusItem[] = [
     ...(props.extraStatusItems ?? []).map((item) => (
@@ -88,6 +94,7 @@ export function CanvasStatusBar(props: DockProps) {
 
   return (
     <>
+      <ConnectivityLive text={net?.announce ?? ''} />
       <VscodeStatusBar
         className="app-statusbar"
         left={left}

@@ -7,6 +7,8 @@
 // active, like Claude Code Desktop scheduled tasks needing the machine awake.
 import type { BeginRunInput, GateResult } from '../cost/costOracle'
 import type { AppendEventInput } from '../events/eventModel'
+import { failureKindOfText, isTransientKind, type FailureKind } from '../central/work/workFailureKind'
+import type { ConnectivityPort } from '../connectivity/connectivity.port'
 import { createInboxItem } from '../inbox/inboxItemStore'
 import type { LedgerContext } from '../ledger/ledgerCore'
 import { createLogger } from '../logs'
@@ -14,7 +16,7 @@ import { pickModel } from '../models/modelPick'
 import { requestedModel } from '../models/modelRequest'
 import { redactSecrets } from '../redactSecrets'
 import type { AgentSpawnRequest, AgentSpawnResult } from '../spawn/agentSpawn'
-import { routineTier, untrustedMayFire, type Routine, type RoutineRun, type RunTrigger } from './routineModel'
+import { RETRYABLE_PREFIX, routineTier, untrustedMayFire, type Routine, type RoutineRun, type RunTrigger } from './routineModel'
 import { precheckPassed, precheckReason, type PrecheckResult } from './routinePrecheck'
 import type { RoutineStore } from './routineStore'
 
@@ -45,9 +47,11 @@ export interface RunnerDeps {
   prReview?(input: { repo: string; workspaceId: string | null; parent: string }): Promise<string>
   /** Fingerprint of `cwd` (HEAD + status); a change across the run = the agent produced a diff. null = not git. Never throws. */
   treeState?(cwd: string): Promise<string | null>
+  /** Claude API reachability (late-bound). Absent/null = a failure is final at once (old behaviour: no retry class). */
+  connectivity?: () => Pick<ConnectivityPort, 'isImpaired'> | null
 }
 
-export interface FireOptions { scheduledFor?: number | null; untrusted?: boolean }
+export interface FireOptions { scheduledFor?: number | null; untrusted?: boolean; /** The one retry of a transient failure: it never gets another. */ retry?: boolean }
 export interface FireResult { run: RoutineRun; done: Promise<void> }
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
@@ -55,6 +59,7 @@ const errText = (err: unknown): string => (err instanceof Error ? err.message : 
 export function createRoutineRunner(deps: RunnerDeps) {
   const { store } = deps
   const children = new Set<string>()
+  const retryRuns = new Set<string>()
 
   const event = (r: Routine, kind: string, payload: Record<string, unknown>): void => deps.record({
     kind, source: ROUTINE_SOURCE, actor: `routine:${r.id}`, subject: `routine:${r.id}`, workspaceId: r.workspaceId,
@@ -67,7 +72,22 @@ export function createRoutineRunner(deps: RunnerDeps) {
     return { run, done: Promise.resolve() }
   }
 
-  function settle(r: Routine, runId: string, trigger: RunTrigger, change: Parameters<RoutineStore['finishRun']>[1]): void {
+  /** Failure class when this failed run deserves its one retry (a port exists, the class is transient, it is not itself a retry), else null. */
+  function retryKind(runId: string, evidence: string): FailureKind | null {
+    const port = deps.connectivity?.()
+    if (!port || retryRuns.has(runId)) return null
+    const kind = failureKindOfText(evidence)
+    // Unclassifiable text while the link is down is the outage, not a fault in the routine.
+    const effective = kind === 'unknown' && port.isImpaired() ? 'network' : kind
+    return isTransientKind(effective) ? effective : null
+  }
+
+  function settle(r: Routine, runId: string, trigger: RunTrigger, change: Parameters<RoutineStore['finishRun']>[1], evidence?: string): void {
+    if (change.status === 'failed' && change.reason && !change.reason.startsWith(RETRYABLE_PREFIX)) {
+      const kind = retryKind(runId, evidence ?? change.reason)
+      if (kind) change = { ...change, reason: `${RETRYABLE_PREFIX}[${kind}]: ${change.reason}` }
+    }
+    if (change.status !== 'running') retryRuns.delete(runId)
     store.finishRun(runId, change)
     if (change.status === 'skipped') event(r, ROUTINE_EVENT.skip, { runId, trigger, reason: change.reason ?? null })
     else event(r, ROUTINE_EVENT.finish, { runId, trigger, status: change.status, reason: change.reason ?? null, costUsd: change.costUsd ?? null })
@@ -115,12 +135,14 @@ export function createRoutineRunner(deps: RunnerDeps) {
       const ok = !!outcome && outcome.exitCode === 0 && last?.['is_error'] !== true
       const reason = !outcome ? 'no process handle' : ok ? null : outcome.timedOut ? 'agent timed out' : outcome.error ? `agent could not start: ${outcome.error}` : `agent exited ${outcome.exitCode ?? 'by signal'}`
       const text = typeof last?.['result'] === 'string' ? last['result'] : outcome?.tail ?? ''
-      const item = createInboxItem(deps.ctx, {
+      // A transient failure is retried once; only its final outcome reaches the Inbox, so a retry that works never leaves a "failed" notice.
+      const kind = ok ? null : retryKind(runId, `${reason ?? ''} ${text}`)
+      const item = kind ? null : createInboxItem(deps.ctx, {
         kind: ok ? 'review' : 'notify', source: ROUTINE_SOURCE, workspaceId: r.workspaceId, nodeId: spawned.nodeId,
         title: ok ? `Routine "${r.name}" finished` : `Routine "${r.name}" failed`,
         body: redactSecrets(text).slice(-RESULT_MAX) || reason,
       })
-      settle(r, runId, trigger, { status: ok ? 'ran' : 'failed', reason, costUsd, inboxItemId: item.id })
+      settle(r, runId, trigger, { status: ok ? 'ran' : 'failed', reason: kind ? `${RETRYABLE_PREFIX}[${kind}]: ${reason}` : reason, costUsd, inboxItemId: item?.id ?? null })
       const after = before !== null && deps.treeState ? await deps.treeState(cwd) : null
       producedDiff = after !== null && after !== before
     } finally {
@@ -144,6 +166,7 @@ export function createRoutineRunner(deps: RunnerDeps) {
     if (!cwd) return skip(r, trigger, 'workspace not found', scheduledFor)
     // Inserted synchronously after the checks: a concurrent fire sees it as busy.
     const run = store.addRun({ routineId: r.id, trigger, status: 'running', scheduledFor })
+    if (opts.retry) retryRuns.add(run.id)
     deps.keepAwake.acquire()
     const done = execute(r, run.id, trigger, cwd)
       .catch((err: unknown) => settle(r, run.id, trigger, { status: 'failed', reason: `run error: ${errText(err)}` }))
