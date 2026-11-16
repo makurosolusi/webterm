@@ -28,6 +28,7 @@ import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
+import { openProjectBrowser } from './browser.projectOpen'
 import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
@@ -158,6 +159,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       open: openDeps,
     }),
     openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled'),
+    openProject: (workspaceId, nodeId) => openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId),
     async shutdown() {
       if (down) return
       down = true

@@ -5,6 +5,7 @@ import type { BrowserState, BrowserStatusResp } from '../../shared/browser.contr
 import type { BrowserApiResult } from '../browserApi'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
 import type { AgentOpened } from './browser.agentOpen'
+import type { ProjectOpened } from './browser.projectOpen'
 
 export interface BrowserRuntime {
   status(): BrowserStatusResp
@@ -18,6 +19,8 @@ export interface BrowserRuntime {
   api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
   /** Server-side `open` for a canvas agent: browser node `nodeId` beside `requesterId`, cabled to it, page started (Central playbooks). */
   openFor?(requesterId: string, nodeId: string): Promise<AgentOpened>
+  /** Adds a standalone browser node (no agent, no cable) to a workspace and starts its page; Central's `browser_read`. */
+  openProject?(workspaceId: string, nodeId: string): Promise<ProjectOpened>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
   /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */
