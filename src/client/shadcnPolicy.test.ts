@@ -47,6 +47,7 @@ const vscodeScreens = new Set([
   "src/client/inboxApprovalDialog.tsx",
   "src/client/inboxPanelSurface.tsx",
   "src/client/ChatPanel.tsx",
+  "src/client/chat/chatConversationList.tsx",
   // Secondary side bar: its title-bar toggle is a `titlebar__action` like the title bar's own (WorkspaceBar).
   "src/client/App.secondarySideBar.tsx",
   "src/client/chat/chatComposer.tsx",

@@ -12,13 +12,13 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { IconTooltip } from '@/components/ui/icon-button'
 import ChatConversationView, { type StreamFactory } from './chat/chatConversation'
-import { clearOpenRequest, loadMore, refresh, upsertConversation, useChatFeed, watchConversation } from './chat/chatFeed'
+import { clearOpenRequest, refresh, upsertConversation, useChatFeed, watchConversation } from './chat/chatFeed'
+import { ChatConversationList } from './chat/chatConversationList'
 import { NeedsYouStrip } from './chat/needsYouStrip'
-import type { ChatClient, ChatConversation } from './chat/chatTypes'
+import type { ChatClient } from './chat/chatTypes'
 import { conversationLabel } from './chat/chatTypes'
 import { chatApi, chatErrorMessage, openChatStream } from './chatApi'
 import { InboxPanelSurface } from './inboxPanelSurface'
-import { relativeTime } from './SessionHistory.model'
 import './chat/chat.css'
 
 const SELECTED_KEY = 'webterm.chatConversation'
@@ -202,51 +202,8 @@ export default function ChatPanel(props: ChatPanelProps) {
       </div>
       <NeedsYouStrip />
       <div className={cn('chat-body', compact && 'chat-body--compact')}>
-        {(!compact || history) && <nav className="chat-conversations" aria-label="Conversations" aria-busy={feed.refreshing || undefined}>
-          {conversations === null ? (
-            feed.loading && <p className="chat-list-status">Loading…</p>
-          ) : conversations.length === 0 ? (
-            <p className="chat-list-status">No conversations yet</p>
-          ) : (
-            <ul className="chat-list">
-              {conversations.map((conversation) => {
-                const isUnread = feed.unread.has(conversation.id)
-                const running = conversation.activeTurnId !== null
-                return (
-                <li key={conversation.id}>
-                  <button
-                    type="button"
-                    className={cn('chat-list-item', conversation.id === selected && 'is-active', isUnread && 'is-unread')}
-                    aria-current={conversation.id === selected ? 'true' : undefined}
-                    aria-label={isUnread ? `${conversationLabel(conversation)}, unread${running ? ', turn running' : ''}` : undefined}
-                    onClick={() => { select(conversation.id); setHistory(false) }}
-                  >
-                    <span className="chat-list-item__label">{conversationLabel(conversation)}</span>
-                    {isUnread && <span className="chat-list-item__unread" title="Unread" aria-hidden="true" />}
-                    {conversation.updatedAt > 0 && (
-                      <span className="chat-list-item__time">{relativeTime(conversation.updatedAt)}</span>
-                    )}
-                    {conversation.activeTurnId !== null && (
-                      <span className="chat-list-item__live" title="Turn running" aria-label="Turn running" />
-                    )}
-                  </button>
-                </li>
-                )
-              })}
-              {feed.nextOffset !== null && (
-                <li className="chat-list-more">
-                  {feed.more.error !== null && <p className="chat-list-status" role="alert">{feed.more.error}</p>}
-                  <button type="button" className="chat-list-item" disabled={feed.more.loading}
-                    aria-busy={feed.more.loading || undefined} onClick={loadMore}>
-                    <span className="chat-list-item__label">
-                      {feed.more.loading ? 'Loading…' : feed.more.error !== null ? 'Retry' : 'Show more'}
-                    </span>
-                  </button>
-                </li>
-              )}
-            </ul>
-          )}
-        </nav>}
+        {(!compact || history) && <ChatConversationList conversations={conversations} feed={feed} selected={selected}
+          onPick={(id) => { select(id); setHistory(false) }} />}
 
         {/* Hidden, not unmounted, behind History: the stream and the composer draft survive. */}
         <div className="chat-main" hidden={compact && history}>
