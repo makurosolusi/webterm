@@ -39,6 +39,7 @@ export const CENTRAL_FIELD_TEXT = {
   central: { label: 'Central Agent', hint: 'An assistant that knows all your projects and nodes, and that you can talk to.' },
   level: { label: 'What Central may do', hint: 'Chat only: Central answers but starts no workers. Propose work: it asks you before each worker. On its own: it starts workers without asking.' },
   checkin: { label: 'Let Central check in by itself', hint: 'Central starts a turn on its own when something needs a decision, such as a stalled task or a reminder that came due.' },
+  tidy: { label: 'Tidy up finished workers', hint: 'Central folds away workers it started once they finish and you have their result, then closes them after a couple of hours. It never touches your own nodes.' },
   costLimit: { label: 'Daily spending limit', hint: 'At 80% work moves to cheaper models; at 100% Central, routines, plans and bake-offs pause until the next day. Empty = no limit.' },
   spendWarning: { label: 'Warn when today\'s spend passes $10', hint: 'One notice per day. It never stops work. Turning it off also closes the open warnings.' },
   dailySpawns: { label: 'Workers per day', hint: 'How many workers Central may start per day. 0 = none.' },

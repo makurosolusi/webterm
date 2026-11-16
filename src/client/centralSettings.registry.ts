@@ -18,7 +18,7 @@ export type CentralSource =
   | { kind: 'env'; key: string; unit?: string; scale?: number }
   | { kind: 'checkin'; key: 'enabled' | 'dailyLimit' }
   /** A boolean key of the shared Settings row (saved through the section's `onChange`). */
-  | { kind: 'setting'; key: 'dailySpendWarning' }
+  | { kind: 'setting'; key: 'dailySpendWarning' | 'centralTidy' }
 
 /** `confirm`: asked in a dialog before this option is applied. */
 export interface CentralOption { value: string; label: string; confirm?: { title: string; body: string; action: string } }
@@ -58,6 +58,7 @@ export const CENTRAL_FIELDS: readonly CentralField[] = [
     ],
   }),
   f('checkin', { group: 'autonomy', control: 'switch', source: { kind: 'checkin', key: 'enabled' } }),
+  f('tidy', { group: 'autonomy', control: 'switch', source: { kind: 'setting', key: 'centralTidy' }, needs: 'workers' }),
 
   f('costLimit', { group: 'cost', control: 'combobox', source: env(COST_CAP_KEY, { unit: '$' }) }),
   // Spend from every source, not only Central's, so it works with Central off.
