@@ -1,6 +1,6 @@
 // Status channel of the shared socket: reason passthrough and the connect snapshot's unread rule.
 import { afterEach, describe, expect, it } from 'vitest'
-import { dispatchBroadcast, getStatus, getStatusReason, subscribeAct, subscribeStatus } from './ws.listeners'
+import { dispatchBroadcast, getStatus, getStatusReason, subscribeAct, subscribeNet, subscribeStatus } from './ws.listeners'
 import { clearUnread, unreadIds } from './unread'
 
 // test-only ids
@@ -53,5 +53,17 @@ describe('act channel', () => {
     off()
     expect(dispatchBroadcast(frame)).toBe(true)
     expect(seen).toEqual(['typed:n1:1'])
+  })
+})
+
+describe('net channel', () => {
+  const frame = { t: 'net', v: 1, state: 'offline', since: 1000, cause: 'dns', scope: 'network' } as const // test-only
+  it('hands a t:net frame to subscribers and stops after unsubscribe', () => {
+    const seen: string[] = []
+    const off = subscribeNet((m) => seen.push(`${m.state}:${m.since}:${m.cause}:${m.scope}`))
+    expect(dispatchBroadcast(frame)).toBe(true)
+    off()
+    expect(dispatchBroadcast(frame)).toBe(true)
+    expect(seen).toEqual(['offline:1000:dns:network'])
   })
 })

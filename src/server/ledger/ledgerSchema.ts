@@ -35,6 +35,7 @@ import { applyV33 } from './ledgerSchemaV33'
 import { applyV34 } from './ledgerSchemaV34'
 import { applyV35 } from './ledgerSchemaV35'
 import { applyV36 } from './ledgerSchemaV36'
+import { applyV37 } from './ledgerSchemaV37'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -112,4 +113,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 35, up: applyV35 },
   // v36: central_assignment.lease_until (stored owner deadline of an open task); nullable, open assignments backfilled from last signal + status window.
   { version: 36, up: applyV36 },
+  // v37: connectivity_episode (server -> Claude API outage history, resumed across restarts); additive, nothing to backfill.
+  { version: 37, up: applyV37 },
 ]
