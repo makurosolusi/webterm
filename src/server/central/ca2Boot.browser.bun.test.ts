@@ -140,3 +140,42 @@ describe('browser open port (browser_open)', () => {
     expect(await port(null)?.('c-a', 'b')).toEqual({ ok: false, code: 'disabled' })
   })
 })
+
+describe('browser_read wiring', () => {
+  it('registers with the browser group and fails closed with disabled when the runtime is not started', async () => {
+    const b = boot(ON, () => null)
+    expect(b.handle?.toolNames).toContain('browser_read')
+    expect(b.registry.get('browser_read')?.tier).toBe('R1')
+    expect(await execTool(b.ctx, 'browser_read', { projectId: 'p1', url: 'https://example.com/' })).toMatchObject({ ok: false, code: 'disabled' })
+  })
+
+  it('explicit agent off drops browser_read with browser_act', () => {
+    const b = boot({ ...BASE, WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, () => null)
+    expect(b.handle?.toolNames).not.toContain('browser_read')
+  })
+
+  it('the control port mints browser.read for snapshot and wait, browser.act for the rest, each revoked after the call', async () => {
+    const store = new CapabilityStore()
+    const minted: string[] = []
+    const real = store.mint.bind(store)
+    store.mint = (o) => { minted.push(o.verb); return real(o) }
+    const { createBrowserToolDeps } = require('./ca2Boot.browser') as typeof import('./ca2Boot.browser')
+    const verbs = new Proxy({} as AgentVerbs, { get: () => async () => ({ ok: true }) })
+    const runtime = {
+      control: (req: ControlRequest, capabilities: Parameters<typeof handleBrowserControl>[1]['capabilities']) => handleBrowserControl(req, { capabilities, verbs, agentAllowed: () => true, policy: () => null }),
+    } as unknown as BrowserRuntime
+    const deps = createBrowserToolDeps({ WEBTERM_BROWSER: 'on' }, { store, active: () => runtime })!
+    for (const verb of ['navigate', 'wait', 'snapshot', 'release'] as const) expect((await deps.control('b1', verb, {})).status).toBe(200)
+    expect(minted).toEqual(['browser.act', 'browser.read', 'browser.read', 'browser.act'])
+    expect(deps.reader).toBeDefined()
+  })
+
+  it('maps the runtime openProject outcome and fails closed without a runtime', async () => {
+    const { createBrowserToolDeps } = require('./ca2Boot.browser') as typeof import('./ca2Boot.browser')
+    const port = (rt: Partial<BrowserRuntime> | null) => createBrowserToolDeps({ WEBTERM_BROWSER: 'on' }, { store: new CapabilityStore(), active: () => rt as BrowserRuntime | null })!.openProject!
+    expect(await port({ openProject: async () => ({ ok: true, nodeId: 'n' }) })('w1', 'n')).toEqual({ ok: true, nodeId: 'n' })
+    expect(await port({ openProject: async () => ({ ok: false, code: 'browser_limit' }) })('w1', 'n')).toEqual({ ok: false, code: 'browser_limit' })
+    expect(await port({})('w1', 'n')).toEqual({ ok: false, code: 'disabled' })
+    expect(await port(null)('w1', 'n')).toEqual({ ok: false, code: 'disabled' })
+  })
+})

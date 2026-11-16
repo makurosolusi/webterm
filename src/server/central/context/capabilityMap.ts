@@ -13,6 +13,7 @@ export interface MapTool { name: string; access: Access }
 
 /** Goal -> the tools that serve it, in the order Central should reach for them. */
 const GOALS: ReadonlyArray<[string, readonly string[]]> = [
+  ['read one web page', ['browser_read']],
   ['research the web', ['playbook.web_research']],
   ['change code', ['playbook.code_change']],
   ['review', ['playbook.review']],

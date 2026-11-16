@@ -27,6 +27,9 @@ describe('browser tool registration', () => {
     createBrowserDefs(browser).reverse().forEach((d) => c.register(d))
     expect(toolsHash(c)).toBe(toolsHash(b))
     expect(toolsHash(a)).not.toBe(toolsHash(b))
+    // With the read ports (open a standalone node + the quarantined reader) the group also carries browser_read, last.
+    const withRead = { ...browser, openProject: async () => ({ ok: true as const }), reader: async () => ({ ok: false as const, code: 'reader_unavailable' as const }) }
+    expect(registerCa2Tools(createRegistry(), { browser: withRead }, ENV_ON)).toEqual(['browser_status', 'browser_act', 'browser_read'])
     expect(b.list().map((d) => [d.name, d.tier, d.summary.length <= 120])).toEqual([['browser_status', 'R0', true], ['browser_act', 'R2', true]])
   })
 })
