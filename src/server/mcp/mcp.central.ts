@@ -9,6 +9,7 @@ import type { Database } from 'bun:sqlite'
 import type { CapabilitySpec } from '../capability/capability.define'
 import { checkSchema } from '../capability/capability.schema'
 import { type SyncControlGuard, toToolGuard } from '../central/guard/controlGuard'
+import { TAINT_REASON, wasTaintedAsk } from '../central/guard/taintStore'
 import { brokerSecretValues } from '../central/runtime/runtimeEvents'
 import { toolCapability } from '../central/tools/toolCapability'
 import { execToolReceipt } from '../central/tools/toolExec'
@@ -23,7 +24,8 @@ import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
 /**
  * Tools whose handler runs its own approval (agent.spawn cards + resume sweep,
  * channel.bot.propose's typed-confirm approval). A second generic card would ask twice, so
- * for these the guard's `needs_approval` passes and the handler decides; denies still deny. Their receipts
+ * for these the guard's `needs_approval` passes and the handler decides; denies still deny. A tainted conversation (read web content)
+ * is therefore enforced inside agent.spawn (agentExecutor `isTaintedOwner`); channel.bot.propose always needs a human-approved ledger card. Their receipts
  * still carry the card's ledger `approvalStatus` (toolExec.ts), so an expired/rejected card is never reported as waiting.
  */
 const OWN_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['agent.spawn', 'channel.bot.propose'])
@@ -83,8 +85,9 @@ function approvalsOf(db: Database, base: string): ApprovalRow[] {
 }
 
 /** The card payload a human reads; the digest the ledger takes over it pins the exact call. */
-function approvalRequest(conversationId: string, tool: string, args: Record<string, unknown>): Record<string, unknown> {
-  return { tool, conversationId, input: redactValue(args), inputDigest: approvalDigest(args) }
+function approvalRequest(conversationId: string, tool: string, args: Record<string, unknown>, tainted = false): Record<string, unknown> {
+  // `title` leads so the inbox summary shows the reason first; it names no page, origin or summary (Rule 12).
+  return { ...(tainted ? { title: `Run ${tool}: ${TAINT_REASON}` } : {}), tool, conversationId, input: redactValue(args), inputDigest: approvalDigest(args) }
 }
 
 const pendingReceipt = (approvalId: string, expiresAt: number | null): McpReceipt => receipt('denied', 'approval_required', { approvalId, status: APPROVAL_PENDING, expiresAt },
@@ -120,9 +123,10 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
     if (latest.status === 'pending' && !c.guard.skipsApprovals(typeof args.projectId === 'string' ? args.projectId : null)) return pendingReceipt(latest.id, latest.expiresAt)
     if (latest.status === 'rejected') return receipt('denied', 'approval_rejected', { approvalId: latest.id }, 'the human rejected this exact call; do not retry it', { approvalId: latest.id, approvalStatus: 'rejected' })
     if (latest.status === 'approved' && latest.unused) {
-      const digest = approvalDigest(approvalRequest(conversationId, tool, args))
+      // The card was digested with or without the taint title, whichever it was raised under; a mismatch consumes nothing.
+      const consume = (tainted: boolean): boolean => consumeApproval({ db: c.db, now: () => now }, latest.id, { digest: approvalDigest(approvalRequest(conversationId, tool, args, tainted)) })
       // Single use: a concurrent poll that lost the race sees false and must not run the tool again.
-      if (!consumeApproval({ db: c.db, now: () => now }, latest.id, { digest })) return receipt('denied', 'approval_used', { approvalId: latest.id }, null, { approvalId: latest.id, approvalStatus: 'approved' })
+      if (!consume(false) && !consume(true)) return receipt('denied', 'approval_used', { approvalId: latest.id }, null, { approvalId: latest.id, approvalStatus: 'approved' })
       const ran = await exec(c, conversationId, tool, args, true)
       return { ...ran.receipt, evidence: { ...ran.receipt.evidence, approvalId: latest.id, approvalStatus: 'approved' } }
     }
@@ -132,6 +136,6 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   // The ledger keys every card to a project; a global tool that needs approval cannot get one here.
   if (!first.projectId) return receipt('denied', 'approval_needs_project', null, 'ask the human to run this from the webterm UI')
   const id = cards.length === 0 ? base : `${base}-${cards.length + 1}`
-  const challenge = requestApproval({ db: c.db, now: () => now }, { id, projectId: first.projectId, kind: tool, request: approvalRequest(conversationId, tool, args) })
+  const challenge = requestApproval({ db: c.db, now: () => now }, { id, projectId: first.projectId, kind: tool, request: approvalRequest(conversationId, tool, args, wasTaintedAsk(conversationId, tool, now)) })
   return pendingReceipt(challenge.id, challenge.expiresAt)
 }
