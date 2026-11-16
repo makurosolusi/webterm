@@ -9,7 +9,8 @@ import type { BrowserControlDeps } from '../../../browser/browserControl.handler
 import { handleBrowserControl } from '../../../browser/browserControl.handler'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
-import { BROWSER_TOOLS_FLAG, type BrowserToolDeps, browserNodesOf, createBrowserStatusDef } from './browser.status'
+import { BROWSER_TOOLS_FLAG, type BrowserToolDeps, browserNodesOf, createBrowserStatusDef, failCode } from './browser.status'
+import { type BrowserReadDeps, createBrowserReadDef } from './browser.read'
 import { createBrowserOpenDef } from './browser.open'
 import { obj, S } from '../../../capability/capability.schema'
 
@@ -28,7 +29,6 @@ const KEYS_BY_ACTION: Record<Action, readonly string[]> = {
   click: ['projectId', 'nodeId', 'action', 'ref', 'snapId'],
   type: ['projectId', 'nodeId', 'action', 'ref', 'snapId', 'text', 'submit'],
 }
-const ERROR_CODE_RE = /^[a-z_]{1,32}$/
 
 /** Builds the `control` port: a request to the real browser control handler carrying a freshly minted capability. */
 export function createControlCaller(control: BrowserControlDeps, mintToken: (nodeId: string) => string): BrowserToolDeps['control'] {
@@ -56,12 +56,6 @@ function bodyOf(input: ToolInput): Record<string, unknown> {
   if (input.action === 'navigate') return { url: (parseBrowserUrl(input.url) as { url: string }).url }
   if (input.action === 'click') return { ref: input.ref, snapId: input.snapId }
   return { ref: input.ref, snapId: input.snapId, text: input.text, ...(input.submit === undefined ? {} : { submit: input.submit }) }
-}
-
-/** Maps a non-200 control response to a short snake_case code (the control path's own error name, else the status). */
-function failCode(status: number, body: unknown): string {
-  const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined
-  return typeof error === 'string' && ERROR_CODE_RE.test(error) ? error : `browser_http_${status}`
 }
 
 /** Builds `browser_act`. */
@@ -92,7 +86,8 @@ export function createBrowserActDef(deps: BrowserToolDeps): ToolDef {
 
 /** The browser tools; status is R0, act and open additionally need `WEBTERM_BROWSER_AGENT` not `off` (open only when the runtime can open nodes). */
 export function createBrowserDefs(deps: BrowserToolDeps): ToolDef[] {
-  return [createBrowserStatusDef(deps), createBrowserActDef(deps), ...(deps.open ? [createBrowserOpenDef(deps.open)] : [])]
+  return [createBrowserStatusDef(deps), createBrowserActDef(deps), ...(deps.open ? [createBrowserOpenDef(deps.open)] : []),
+    ...(deps.openProject && deps.reader ? [createBrowserReadDef(deps as BrowserReadDeps)] : [])]
 }
 
 export { BROWSER_TOOLS_FLAG }

@@ -57,10 +57,11 @@ describe('announceCentralAct', () => {
     announceCentralAct(ctx, 'canvas.edit', undefined, { ok: true, data: { ids: ['m1'], wired: [] } }, s)
     announceCentralAct(ctx, 'browser_open', undefined, { ok: true, data: { nodeId: 'br-1', agentNode: 'c-a1' } }, s)
     announceCentralAct(ctx, 'browser_act', undefined, { ok: true, data: { nodeId: 'br-1', action: 'navigate', host: 'example.com' } }, s)
+    announceCentralAct(ctx, 'browser_read', undefined, { ok: true, data: { nodeId: 'br-2', host: 'example.com', answer: 'x', tainted: true } }, s)
     vi.advanceTimersByTime(ACT_COALESCE_MS)
     expect(frames.map((f) => [f.verb, f.nodeId, f.nodeId2, f.host])).toEqual([
       ['opened', 'e1', undefined, undefined], ['closed', 't9', undefined, undefined], ['wired', 'a1', 'b1', undefined],
-      ['opened', 'br-1', 'c-a1', undefined], ['drove', 'br-1', undefined, 'example.com'],
+      ['opened', 'br-1', 'c-a1', undefined], ['drove', 'br-1', undefined, 'example.com'], ['drove', 'br-2', undefined, undefined],
     ])
   })
 
@@ -81,7 +82,7 @@ describe('announceCentralAct', () => {
   })
 
   it('lists every tool of the spec with a verb', () => {
-    expect(Object.keys(ACT_TOOLS)).toEqual(expect.arrayContaining(['agent.spawn', 'agent.prompt', 'agent.relay', 'agent.close', 'canvas.open', 'canvas.type', 'canvas.close', 'canvas.edit', 'browser_open', 'browser_act', 'chat.send', 'permission.decide', 'task.assign']))
+    expect(Object.keys(ACT_TOOLS)).toEqual(expect.arrayContaining(['agent.spawn', 'agent.prompt', 'agent.relay', 'agent.close', 'canvas.open', 'canvas.type', 'canvas.close', 'canvas.edit', 'browser_open', 'browser_act', 'browser_read', 'chat.send', 'permission.decide', 'task.assign']))
     expect(ACT_TOOLS['canvas.show']).toBeUndefined()
   })
 })

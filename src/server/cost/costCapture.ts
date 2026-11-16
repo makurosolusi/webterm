@@ -138,7 +138,7 @@ export function syncCentralTurns(db: Database, now: () => number = Date.now): nu
 }
 
 /** Central's `claude -p` helpers (and the provider's Test connection request); each is its own `session_id` under source `helper`. */
-export type HelperKind = 'classifier' | 'checkpoint' | 'handoff' | 'brief' | 'consolidator' | 'health_analysis' | 'connection_test'
+export type HelperKind = 'classifier' | 'checkpoint' | 'handoff' | 'brief' | 'consolidator' | 'health_analysis' | 'connection_test' | 'page_reader'
 /** One helper answer's usage: tokens, the CLI's cost estimate (null = unknown) and the model that ran. */
 export interface HelperUsage { input: number; output: number; cacheRead: number; cacheWrite: number; costMicros: number | null; model: string | null }
 

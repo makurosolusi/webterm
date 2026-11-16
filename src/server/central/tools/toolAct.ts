@@ -22,7 +22,7 @@ const MAX_HOST = 253
 export const ACT_TOOLS: Readonly<Record<string, string>> = {
   'agent.spawn': 'spawned', 'agent.prompt': 'prompted', 'agent.relay': 'queued', 'agent.close': 'closed',
   'canvas.open': 'opened', 'canvas.type': 'typed', 'canvas.close': 'closed', 'canvas.edit': 'wired',
-  browser_open: 'opened', browser_act: 'drove', 'chat.send': 'sent', 'permission.decide': 'answered', 'task.assign': 'assigned',
+  browser_open: 'opened', browser_act: 'drove', browser_read: 'drove', 'chat.send': 'sent', 'permission.decide': 'answered', 'task.assign': 'assigned',
   'chat.config': 'configured', 'chat.mode': 'switched',
 }
 

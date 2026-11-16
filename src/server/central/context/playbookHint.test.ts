@@ -59,6 +59,12 @@ describe('renderCapabilityMap', () => {
       + 'reach a Claude session outside the canvas: task.create (auto), agent.spawn (asks) · project health: health.scan (off)')
   })
 
+  it('puts reading one page (browser_read) before research the web', () => {
+    const map = renderCapabilityMap([{ name: 'playbook.web_research', access: 'auto' }, { name: 'browser_read', access: 'auto' }, { name: 'task.create', access: 'auto' }, { name: 'agent.spawn', access: 'auto' }])
+    expect(map.indexOf('read one web page: browser_read (auto)')).toBeGreaterThan(-1)
+    expect(map.indexOf('read one web page')).toBeLessThan(map.indexOf('research the web'))
+  })
+
   it('names reminders for what is not delegated, and an optional step (browser_open) never turns a playbook off', () => {
     const map = renderCapabilityMap([{ name: 'playbook.web_research', access: 'auto' }, { name: 'task.create', access: 'auto' }, { name: 'agent.spawn', access: 'auto' }, { name: 'reminder.set', access: 'auto' }])
     expect(map).toContain('research the web: playbook.web_research (auto)')

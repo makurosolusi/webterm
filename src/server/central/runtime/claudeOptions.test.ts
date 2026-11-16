@@ -47,6 +47,13 @@ describe('centralQueryOptions', () => {
     expect(CENTRAL_STEWARD_PROMPT).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 
+  // One page or one search is Central's own job (browser_read); chains go to the playbook; no parallel workers for one task.
+  it('sends one page to browser_read and chained research to the playbook, and forbids duplicate workers', () => {
+    expect(CENTRAL_STEWARD_PROMPT).toContain('To read one page or answer one search, call browser_read yourself')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('use playbook.web_research')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('never start parallel workers for the same task')
+  })
+
   // Policy lock (root cause: Central proposed "shall I type /model?" even in Danger mode, where no card is shown).
   it('tells Central to act instead of proposing, and how to switch an agent model', () => {
     expect(CENTRAL_STEWARD_PROMPT).toContain('Act, do not propose')

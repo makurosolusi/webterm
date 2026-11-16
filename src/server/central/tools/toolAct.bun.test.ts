@@ -16,7 +16,7 @@ const env = new Proxy({} as Record<string, string>, { get: (_t, k: string) => (k
 test('policy: every registered tool above R0 is announced (ACT_TOOLS) or named in NO_ACT with a reason', () => {
   const registry = createRegistry()
   for (const def of CORE_DEFS) registry.register(def)
-  registerCa2Tools(registry, { executor: stub, deliver: stub, openKb: stub, skills: stub, userStore: stub, bots: stub, browser: { open: stub } as never }, env)
+  registerCa2Tools(registry, { executor: stub, deliver: stub, openKb: stub, skills: stub, userStore: stub, bots: stub, browser: { open: stub, openProject: stub, reader: stub } as never }, env)
   const names = registry.list().map((d) => d.name)
   const silent = registry.list().filter((d) => d.tier !== 'R0' && !(d.name in ACT_TOOLS) && !NO_ACT[d.name]).map((d) => d.name)
   expect(silent).toEqual([])
