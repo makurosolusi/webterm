@@ -17,6 +17,7 @@ import { createHealthStore } from '../health/healthStore'
 import { onAgentEnded } from '../agents/agentStore'
 import { agentNodeId } from '../agents/agentExecutor'
 import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
+import { setCheckinKick } from './workCheckin.kick'
 import { readAutoDone } from './workSettings'
 import { createWorkStore, onWorkMove } from './workStore'
 import { createWorkSupervisor, type WorkSupervisorPorts } from './workSupervisor'
@@ -138,8 +139,12 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
         const a = store.openAssignmentOfNode(agent.nodeId ?? agentNodeId(agent.id))
         if (a?.agentId === agent.id) queueMicrotask(() => { void supervisor.sessionEnded(a, `agent_${agent.state}`) })
       })
-      if (!noTimer) supervisor.start()
-      return () => { unwatch(); unAgents(); supervisor.stop() }
+      if (!noTimer) {
+        supervisor.start()
+        // A held permission prompt waits on Central: its reason runs the pass now, not on the next tick.
+        setCheckinKick(() => { checkin.tick().catch((err: unknown) => log.error('work.checkin_failed', 'immediate check-in for a permission prompt failed', { error: err instanceof Error ? err.message : String(err) })) })
+      }
+      return () => { unwatch(); unAgents(); supervisor.stop(); setCheckinKick(null) }
     },
   }
 }
