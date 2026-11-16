@@ -47,8 +47,8 @@ describe('retry watchdog on every spawn path', () => {
   test('PTY claude node gets it by default; explicit 0 is kept; plain terminal and non-claude agent get none', () => {
     expect(ptyEnvFor('claude')?.[RETRY_WATCHDOG_VAR]).toBe('1')
     expect(ptyEnvFor('claude', '0')?.[RETRY_WATCHDOG_VAR]).toBe('0')
-    expect(ptyEnvFor(undefined)?.[RETRY_WATCHDOG_VAR]).toBeUndefined()
-    expect(ptyEnvFor('codex')?.[RETRY_WATCHDOG_VAR]).toBeUndefined()
+    expect(ptyEnvFor(undefined)?.[RETRY_WATCHDOG_VAR] === undefined).toBe(true)
+    expect(ptyEnvFor('codex')?.[RETRY_WATCHDOG_VAR] === undefined).toBe(true)
   })
 
   test('headless exec: default on, explicit value kept, and an override still wins last', () => {

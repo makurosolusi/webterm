@@ -48,6 +48,10 @@ export interface AgentHost {
   initialPrompt(agent: AgentRecord): Promise<string>
   /** Opens the canvas session under the given deterministic node id. */
   openPty(agent: AgentRecord, cwd: string, nodeId: string): Promise<void>
+  /** Relaunches the PTY of a dead agent from its saved conversation (`--resume`), continuing a cut-off turn younger than `maxAgeMs`; throws on spawn refusal. */
+  resumePty?(agent: AgentRecord, cwd: string, nodeId: string, maxAgeMs: number): Promise<void>
+  /** Existing worktree path of the agent (never allocates); null = none. */
+  worktreeOf?(agent: AgentRecord): string | null
   /** Argv array of the headless form of `kind`, or null when it has none. */
   headlessArgv(kind: string, prompt: string): readonly string[] | null
   /** Tier a spawn of `kind` is judged at (builtin R2, custom R3), or null when the kind is unknown. */

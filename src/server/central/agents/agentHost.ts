@@ -12,6 +12,7 @@ import { spawnAgent } from '../../spawn/agentSpawn'
 import type { CanvasPush } from '../../canvas/canvasPush'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { joinArgv } from '../../../shared/claudeLaunch/shellQuote'
+import { resumeTurnPrefix } from '../../agentEnv'
 import { agentSessionId, ensureAgentNode } from './agentCanvas'
 
 const CONTROL_CHARS = /[\x00-\x08\x0b-\x1f\x7f]/g
@@ -55,10 +56,30 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
   }
   const place = (agent: AgentRecord, nodeId: string, cwd: string, cmd: string): void =>
     ensureAgentNode(deps.canvas, deps.repoOf(agent.projectId), { agent, nodeId, cwd, cmd, title: titleOf(agent) })
+  /** Opens the agent's PTY; `resumeMaxAgeMs` set = relaunch its saved conversation (`--resume`, same flags via `launchLine`) and continue the cut-off turn. */
+  const launchPty = async (agent: AgentRecord, cwd: string, nodeId: string, resumeMaxAgeMs?: number): Promise<void> => {
+    const entry = deps.catalog.resolve(agent.kind)
+    if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
+    // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
+    // A session id makes `launchLine` add the hook `--settings` (same as a canvas/control claude node).
+    const sessionId = agentSessionId(agent)
+    const resuming = resumeMaxAgeMs !== undefined
+    // A resumed claude takes no positional prompt: the CLI continues the cut-off turn itself.
+    // Otherwise builtin claude takes its task as the positional prompt; only the PTY gets it, the node keeps the plain line.
+    const cmd = resuming ? `${resumeTurnPrefix(resumeMaxAgeMs)} ${entry.launchLine}` : entry.builtin ? `${entry.launchLine} ${joinArgv([filterHandoffContext(initialPrompt(agent)).replace(/\s*\n\s*/g, ' ')])}` : entry.launchLine
+    const open = { nodeId, cwd, cmd, agentId: agent.kind, ...(sessionId ? { sessionId } : {}), ...(resuming ? { resume: true } : {}) }
+    const res = await (deps.spawn ?? spawnAgent)(
+      { door: 'central', mode: 'pty', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: titleOf(agent), pty: open },
+      { openPty: () => deps.sessions.open(open) }
+    )
+    if (!res.ok) throw new Error(`${res.code}: ${res.message}`)
+    place(agent, nodeId, cwd, entry.launchLine)
+  }
   return {
     runnerFor: (kind): AgentRunner => (deps.catalog.resolve(kind)?.headlessArgv ? 'exec' : 'pty'),
     spawnTier: (kind) => deps.catalog.resolve(kind)?.tier ?? null,
     defHashOf: (kind) => deps.catalog.resolve(kind)?.defHash,
+    worktreeOf: (agent) => deps.worktrees.get(agent.id)?.path ?? null,
     execEnv: (kind) => deps.catalog.resolve(kind)?.childEnv() ?? {},
     async worktree(agent) {
       const existing = deps.worktrees.get(agent.id)
@@ -69,22 +90,8 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       return allocation.path
     },
     initialPrompt: async (agent) => initialPrompt(agent),
-    async openPty(agent, cwd, nodeId) {
-      const entry = deps.catalog.resolve(agent.kind)
-      if (!entry) throw new Error(`${AGENT_KIND_UNKNOWN}: ${agent.kind}`)
-      // ponytail: PTY sessions take no env from the host (OpenMsg has no env field), so `CustomAgent.env` only reaches headless runs.
-      // A session id makes `launchLine` add the hook `--settings` (same as a canvas/control claude node).
-      const sessionId = agentSessionId(agent)
-      // Builtin claude takes its task as the positional prompt; only the PTY gets it, the node keeps the plain line.
-      const cmd = entry.builtin ? `${entry.launchLine} ${joinArgv([filterHandoffContext(initialPrompt(agent)).replace(/\s*\n\s*/g, ' ')])}` : entry.launchLine
-      const open = { nodeId, cwd, cmd, agentId: agent.kind, ...(sessionId ? { sessionId } : {}) }
-      const res = await (deps.spawn ?? spawnAgent)(
-        { door: 'central', mode: 'pty', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: titleOf(agent), pty: open },
-        { openPty: () => deps.sessions.open(open) }
-      )
-      if (!res.ok) throw new Error(`${res.code}: ${res.message}`)
-      place(agent, nodeId, cwd, entry.launchLine)
-    },
+    openPty: (agent, cwd, nodeId) => launchPty(agent, cwd, nodeId),
+    resumePty: (agent, cwd, nodeId, maxAgeMs) => launchPty(agent, cwd, nodeId, maxAgeMs),
     ensureNode(agent, nodeId) {
       const cwd = deps.worktrees.get(agent.id)?.path
       const entry = deps.catalog.resolve(agent.kind)

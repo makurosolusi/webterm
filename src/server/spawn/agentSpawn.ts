@@ -57,12 +57,12 @@ export interface AgentSpawnRequest {
   nodeId?: string
   door: SpawnDoor
   /** PTY launch, resolved by the door from server data (settings, catalog). */
-  pty?: { cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
+  pty?: { cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number }
   /** Headless launch; `argv` absent = Claude Code print mode with `prompt`, through `claudeProfileId` (absent = default profile). */
   headless?: { argv?: readonly string[]; claudeProfileId?: string; pick?: ModelPick | null; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
 }
 
-export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; cols?: number; rows?: number }
+export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number }
 
 /** What the caller's session layer offers; only PTY spawns need it. */
 export interface SpawnIo {
