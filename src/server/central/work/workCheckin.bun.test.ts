@@ -45,9 +45,10 @@ function task(r: Rig, projectId = 'p1', extra: { dueAt?: number } = {}) {
   seq += 1
   return r.store.createTask({ id: `t${seq}`, projectId, title: `title ${seq}`, objective: 'o', actor: CENTRAL, ...extra })
 }
-/** Default HUMAN: work nobody delegated keeps the 5-minute window; pass CENTRAL for delegated work. */
+/** Default HUMAN: a task with no attempt at all (nobody delegated it) keeps the 5-minute window; pass CENTRAL for an attempt, which wakes at once. */
 function started(r: Rig, projectId = 'p1', actor: typeof CENTRAL | typeof HUMAN = HUMAN, agentId?: string) {
   const t = task(r, projectId)
+  if (actor === HUMAN) { r.db.query("UPDATE central_task SET status = 'assigned' WHERE id = ?").run(t.id); return t }
   r.store.openAssignment({ taskId: t.id, nodeId: `n-${t.id}`, channel: agentId ? 'spawn' : 'terminal', instruction: 'go', actor, ...(agentId ? { agentId } : {}) })
   return t
 }

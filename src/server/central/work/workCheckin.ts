@@ -14,7 +14,7 @@ import { effectiveLevelOf } from '../guard/levelStore'
 import type { WorkMove, WorkStore } from './workModel'
 import { dueReminders, markReminderFired } from './workReminders'
 import { isDuty } from './workDuties'
-import { escalateDuties } from './workEscalation'
+import { escalateDuties, escalateLeases } from './workEscalation'
 import { WORK_LIVENESS_RULES } from './workSupervisor'
 import { groupByTarget, projectTarget } from './workCheckin.route'
 
@@ -26,12 +26,10 @@ const SCAN_LIMIT = 200
 /** `previewText` may add one ellipsis on top of this; a notice part holds 200 chars. */
 const NOTICE_MAX = 199
 const TITLE_CHARS = 80
-const TIMELINE_MAX = 500
 const REASON_CHARS = 700
 const ACTOR = 'system:checkin'
 // A failed send is in Central's own tool receipt first, so its wake waits `escalate.graceMs` for that turn to act.
 const DELEGATION_RULE = 'delegation'
-const ASSIGNMENT_OPEN_EVENT = 'work.assignment.open'
 const RETRY_CODES: readonly string[] = ['central_runtime_off', 'conversation_busy', 'budget_exhausted']
 /**
  * Rule of an agent's `webterm report --blocked` (workAgentReport.ts). The board's `blocked` status means waiting on
@@ -126,12 +124,8 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   const projectName = (id: string): string => String(getRow(db, 'SELECT name FROM project WHERE id = ?', id)?.name ?? id)
   const taskLabel = (title: string, projectId: string): string => `task "${previewText(title, TITLE_CHARS) ?? 'untitled'}" in project ${projectName(projectId)}`
 
-  /** The current attempt when Central started it (a delegated agent), else null. */
-  const centralAttempt = (move: WorkMove) => {
-    const attempt = store.assignmentsOfTask(move.task.id, 1)[0]
-    if (!attempt) return null
-    return store.timeline(move.task.id, { limit: TIMELINE_MAX }).some((e) => e.kind === ASSIGNMENT_OPEN_EVENT && e.assignmentId === attempt.id && e.actor === 'central') ? attempt : null
-  }
+  /** The current attempt of the task (every attempt is Central's to hear about, whoever opened it), else null. */
+  const currentAttempt = (move: WorkMove) => store.assignmentsOfTask(move.task.id, 1)[0] ?? null
 
   /** What happened to the delegated work and how Central reads its result. */
   const wakeText = (move: WorkMove, agentId: string | null, nodeId: string, kind: ReasonKind): string => {
@@ -249,7 +243,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
         return false
       }
       const kind = move.rule === AGENT_BLOCKED_RULE && move.to === 'waiting_input' ? 'task_blocked' : WAKE_KINDS[move.to]
-      const attempt = kind ? centralAttempt(move) : null
+      const attempt = kind ? currentAttempt(move) : null
       // Delegated work reports by itself: due at once (no window), keyed per move so a second report of the same attempt wakes again.
       if (kind && attempt) return enqueue(`wake:${move.seq}`, kind, task.projectId, task.id, wakeText(move, attempt.agentId, attempt.nodeId, kind), now(), attempt.conversationId ?? taskOrigin(task.id))
       if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
@@ -263,11 +257,14 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
       const { enabled, dailyLimit } = await settings.read()
       const wakeable = enabled && !halted(null) && budgetBlock(at, dailyLimit) === null
       const canWake = (projectId: string): boolean => wakeable && !halted(projectId)
-      escalateDuties({
+      const ladder = {
         db, canWake, projectName,
-        enqueue: (key, d, text) => enqueue(key, 'task_duty', d.projectId, d.taskId, text, undefined, taskOrigin(d.taskId)),
-        notice: (key, text, projectId) => notice(key, text, projectTarget(db, projectId)),
-      }, at)
+        enqueue: (key: string, d: { projectId: string; taskId: string }, text: string) => enqueue(key, 'task_duty', d.projectId, d.taskId, text, undefined, taskOrigin(d.taskId)),
+        enqueueLease: (key: string, t: { projectId: string; taskId: string }, text: string) => enqueue(key, 'task_report', t.projectId, t.taskId, text, undefined, taskOrigin(t.taskId)),
+        notice: (key: string, text: string, projectId: string) => notice(key, text, projectTarget(db, projectId)),
+      }
+      escalateDuties(ladder, at)
+      escalateLeases(ladder, at)
       if (enabled) await deliver(at, dailyLimit)
     },
   }
