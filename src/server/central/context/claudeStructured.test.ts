@@ -129,6 +129,20 @@ process.stdout.write(${JSON.stringify(JSON.stringify({ ...RESULT({ ok: true }), 
     expect(out).toEqual({ ok: true })
     expect(seen).toBe(1234)
   })
+  it('the child env carries the traffic switch and still no WEBTERM_/OPENAI_/OAuth secret from the server env', async () => {
+    const out = join(dir, 'env.json')
+    const bin = writeFakeClaude(dir, `readStdin()
+fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify(process.env))
+process.stdout.write(${JSON.stringify(JSON.stringify(RESULT({ ok: true })))})`)
+    const prev = { ...process.env }
+    Object.assign(process.env, { WEBTERM_TOKEN: 'root-test-only', OPENAI_API_KEY: 'sk-test-only', CLAUDE_CODE_OAUTH_TOKEN: 'oauth-test-only' }) // test-only
+    try { await createStructuredRunner('page_reader', { bin })({ prompt: 'x', schema: {} }, signal()) } finally {
+      for (const k of ['WEBTERM_TOKEN', 'OPENAI_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN']) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k] }
+    }
+    const env = JSON.parse(readFileSync(out, 'utf8')) as Record<string, string>
+    expect(env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']).toBe('1')
+    expect(Object.keys(env).filter((k) => /^(WEBTERM_|NODETERM_|OPENAI_|CLAUDE_CODE_OAUTH)/.test(k))).toEqual([])
+  })
   it('the helper argv always keeps every isolation flag (no tools, no MCP, no settings, no slash commands, no session)', () => {
     const argv = structuredArgv({ type: 'object' })
     const flag = (f: string): string | undefined => argv[argv.indexOf(f) + 1]

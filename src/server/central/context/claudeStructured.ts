@@ -21,6 +21,13 @@ export const HELPER_EFFORT: EffortLevel = 'low'
 export const SUMMARY_BUDGET_USD = 0.05
 export const SUMMARY_MAX_PER_HOUR = 60
 const MAX_TURNS = 3
+/**
+ * Set on every helper child: skips the CLI's non-essential network round trips (feature flags, telemetry, update and
+ * error reports) that a one-shot `-p` call waits on at boot. Measured on the page reader: median 4.5 s -> 3.3 s per call
+ * (wall minus API time 1.1 s -> 0.25 s), 100% valid answers, injection sample still flagged. It touches no model, auth,
+ * tool or isolation flag. A fixed value set by the server, never read from the parent environment.
+ */
+export const HELPER_ENV: Readonly<Record<string, string>> = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' }
 const STDOUT_MAX = 512 * 1024
 const HOUR_MS = 3_600_000
 const USD_TO_MICROS = 1e6
@@ -93,7 +100,7 @@ export function createStructuredRunner(kind: HelperKind, opts: StructuredOptions
     if (calls.length >= maxPerHour) { reject(new Error(`${kind}: hourly cap reached`)); return }
     if (signal.aborted) { reject(new Error(`${kind}: aborted before start`)); return }
     calls.push(at)
-    const env = claudeEnv(claudeChildEnv(process.env))
+    const env = { ...claudeEnv(claudeChildEnv(process.env)), ...HELPER_ENV }
     const request = modelRequest(model, env)
     const argv = structuredArgv(req.schema, { model: request.flag, ...(opts.effort ? { effort: opts.effort } : {}) })
     const [cmd, ...args] = opts.bin ? [opts.bin, ...argv] : [...centralClaudeLaunch().argv, ...argv]
