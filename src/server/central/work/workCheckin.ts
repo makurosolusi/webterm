@@ -2,7 +2,7 @@
 // delivers them as ONE turn per 5-minute window (a due reminder, duty or delegated-work report does not wait for it), and only when nobody is mid-turn,
 // Central is not halted and today's budget allows it. No model is asked whether to wake, and no clock alone ever starts a turn.
 import type { Database } from 'bun:sqlite'
-import { CHECKIN_DAILY_LIMITS, DEFAULT_CHECKIN_DAILY_LIMIT, type CheckinSettings } from '../../../shared/centralWork'
+import { CHECKIN_DAILY_LIMITS, DEFAULT_CHECKIN_DAILY_LIMIT, type AssignmentView, type CheckinSettings } from '../../../shared/centralWork'
 import { previewText } from '../../events/producers'
 import { allRows, execWrite, getRow, newId, tx, type Row } from '../../ledger/ledgerCore'
 import { appendEvent } from '../../ledger/ledgerEvent'
@@ -12,6 +12,7 @@ import { getConversation } from '../conversationStore'
 import { budgetExhausted, budgetLimits, readBudget, utcDay } from '../guard/budgetStore'
 import { effectiveLevelOf } from '../guard/levelStore'
 import type { WorkMove, WorkStore } from './workModel'
+import { resultNote } from './workWakeText'
 import { dueReminders, markReminderFired } from './workReminders'
 import { isDuty } from './workDuties'
 import { escalateDuties, escalateLeases } from './workEscalation'
@@ -127,12 +128,12 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   /** The current attempt of the task (every attempt is Central's to hear about, whoever opened it), else null. */
   const currentAttempt = (move: WorkMove) => store.assignmentsOfTask(move.task.id, 1)[0] ?? null
 
-  /** What happened to the delegated work and how Central reads its result. */
-  const wakeText = (move: WorkMove, agentId: string | null, nodeId: string, kind: ReasonKind): string => {
+  /** What happened to the delegated work and how Central reads its result (the captured one as framed data, else where to look). */
+  const wakeText = (move: WorkMove, attempt: AssignmentView, kind: ReasonKind): string => {
     const { task } = move
-    const read = agentId ? `agent.read ${agentId} (its output) and task.get ${task.id}` : `task.get ${task.id} and node.inspect ${nodeId}`
+    const read = attempt.agentId ? `agent.read ${attempt.agentId} (its output) and task.get ${task.id}` : `task.get ${task.id} and node.inspect ${attempt.nodeId}`
     const what = kind === 'task_blocked' ? WAKE_WHAT.blocked : WAKE_WHAT[move.to]
-    return `${taskLabel(task.title, task.projectId)} ${what ?? move.to}${move.reason ? ` (${move.reason})` : ''}; read the result with ${read}`
+    return `${taskLabel(task.title, task.projectId)} ${what ?? move.to}${move.reason ? ` (${move.reason})` : ''}; ${resultNote(attempt.result, task.id, read)}`
   }
 
   /** A send that did not happen: the new card fails, an existing one goes back to `todo` (not the reopen of a failed card). */
@@ -245,7 +246,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
       const kind = move.rule === AGENT_BLOCKED_RULE && move.to === 'waiting_input' ? 'task_blocked' : WAKE_KINDS[move.to]
       const attempt = kind ? currentAttempt(move) : null
       // Delegated work reports by itself: due at once (no window), keyed per move so a second report of the same attempt wakes again.
-      if (kind && attempt) return enqueue(`wake:${move.seq}`, kind, task.projectId, task.id, wakeText(move, attempt.agentId, attempt.nodeId, kind), now(), attempt.conversationId ?? taskOrigin(task.id))
+      if (kind && attempt) return enqueue(`wake:${move.seq}`, kind, task.projectId, task.id, wakeText(move, attempt, kind), now(), attempt.conversationId ?? taskOrigin(task.id))
       if ((move.to === 'stalled' || move.to === 'failed') && move.rule !== DELEGATION_RULE) {
         enqueue(`move:${move.seq}`, move.to === 'stalled' ? 'task_stalled' : 'task_failed', task.projectId, task.id, `${taskLabel(task.title, task.projectId)} ${move.to}${move.reason ? ` (${move.reason})` : ''}`, undefined, taskOrigin(task.id))
       }

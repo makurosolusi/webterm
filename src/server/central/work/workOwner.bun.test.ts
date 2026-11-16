@@ -1,7 +1,8 @@
 // Root-locking tests of the owner/lease invariant: every open status has exactly one derived owner and a stored lease,
 // whichever transition got it there, and a restart does not make old leases fire at once.
 import { expect, test } from 'bun:test'
-import { canWorkTransition, WORK_STATUSES, type WorkStatus } from '../../../shared/centralWork'
+import { canWorkTransition, WORK_STATUSES, type TaskView, type WorkStatus } from '../../../shared/centralWork'
+import { taskCards } from './workBoard'
 import { WORK_SIGNAL_MOVES } from './workWatcher'
 import { BOOT_GRACE_MS, LEASE_MS, leaseFor, OPEN_STATUSES, ownerOf } from './workOwner'
 import { createWorkSupervisor } from './workSupervisor'
@@ -75,4 +76,14 @@ test('restart: a signal during the grace renews the lease and the task is spared
   s.store.touchSignal(assignmentId, 'x', reboot + 1000)
   await fresh.tick(reboot + BOOT_GRACE_MS)
   expect(s.statusOf(taskId)).toBe('running')
+})
+
+test('the views carry owner and leaseUntil, and the board card inherits them', () => {
+  const s = rig()
+  const { taskId, assignmentId } = s.assigned('assigned')
+  expect(s.store.getTask(taskId)?.owner).toBe('agent')
+  expect(s.store.getAssignment(assignmentId)?.leaseUntil).toBe(T0 + LEASE_MS.agentStartup)
+  const [card] = taskCards(s.db, [s.store.getTask(taskId) as TaskView])
+  expect(card?.owner).toBe('agent')
+  expect(card?.assignment?.leaseUntil).toBe(T0 + LEASE_MS.agentStartup)
 })
