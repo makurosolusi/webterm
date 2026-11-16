@@ -1,7 +1,7 @@
 // Persistence of routines and their run history over the ledger (schema v15; `estimate_usd` v17).
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
 import { nextCronAfter } from './routineCron'
-import type { Routine, RoutineInput, RoutineRun, RunStatus, RunTrigger } from './routineModel'
+import { RETRIED_PREFIX, RETRYABLE_PREFIX, type Routine, type RoutineInput, type RoutineRun, type RunStatus, type RunTrigger } from './routineModel'
 
 /** Runs kept per routine; older rows are pruned on insert (Orca run retention). */
 export const RUN_HISTORY_MAX = 200
@@ -109,8 +109,29 @@ export function createRoutineStore(ctx: LedgerContext) {
       return { runs: Number(r?.['n'] ?? 0), costUsd: Number(r?.['c'] ?? 0) }
     },
 
-    /** A run left `running` by a crashed process can never finish; close it at boot. */
-    failOrphans: (): number => execWrite(db, "UPDATE routine_run SET status = 'failed', reason = 'interrupted', finished_at = ? WHERE status = 'running'", ctx.now()),
+    /**
+     * A run left `running` by a crashed process can never finish; close it at boot. A run that overlaps a connectivity
+     * episode (open, or ended after the run began) died of the outage, not of a fault: it becomes a retry candidate
+     * (`interrupted_network`) instead of a permanent failure. Without episodes this is the old behaviour exactly.
+     */
+    failOrphans(episodes: readonly { startedAt: number; endedAt: number | null }[] = []): number {
+      const now = ctx.now()
+      let n = 0
+      for (const r of allRows(db, "SELECT id, started_at FROM routine_run WHERE status = 'running'")) {
+        const started = Number(r['started_at'])
+        const outage = episodes.some((e) => e.startedAt <= now && (e.endedAt === null || e.endedAt >= started))
+        const reason = outage ? `${RETRYABLE_PREFIX}[network]: interrupted_network` : 'interrupted'
+        n += execWrite(db, "UPDATE routine_run SET status = 'failed', reason = ?, finished_at = ? WHERE id = ?", reason, now, String(r['id']))
+      }
+      return n
+    },
+
+    /** Failed runs waiting for their one retry, at least `delayMs` after they ended (the detector needs time to call an outage). */
+    retryCandidates: (delayMs: number): RoutineRun[] =>
+      allRows(db, "SELECT * FROM routine_run WHERE status = 'failed' AND reason LIKE ? AND finished_at <= ? ORDER BY finished_at LIMIT ?", `${RETRYABLE_PREFIX}[%`, ctx.now() - delayMs, RUN_LIST_MAX).map(toRun),
+
+    /** Spends a run's one retry (the prefix swap keeps the original reason readable). */
+    markRetried: (runId: string): void => { execWrite(db, 'UPDATE routine_run SET reason = ? || substr(reason, ?) WHERE id = ? AND reason LIKE ?', RETRIED_PREFIX, RETRYABLE_PREFIX.length + 1, runId, `${RETRYABLE_PREFIX}[%`) },
   }
 }
 
