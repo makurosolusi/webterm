@@ -2,6 +2,7 @@
 // `<details>` row ("Used 3 tools · 1 failed"), as in Claude.ai / ChatGPT / Cursor. The cards inside
 // are unchanged. Approval parts are never grouped: they need the user, so they stay visible.
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { showNodeOnCanvas } from '../centralAct.store'
 import '../centralAct.css'
 import type { ChatMessage, ChatPart } from './chatTypes'
@@ -51,9 +52,9 @@ const firstString = (v: unknown): string | null => (Array.isArray(v) && typeof v
 function ShowOnCanvas({ nodeId }: { nodeId: string }) {
   const [gone, setGone] = useState(false)
   return (
-    <button type="button" className="chat-tool__show" disabled={gone} onClick={() => setGone(!showNodeOnCanvas(nodeId))}>
+    <Button type="button" variant="ghost" size="xs" className="chat-tool__show" disabled={gone} onClick={() => setGone(!showNodeOnCanvas(nodeId))}>
       {gone ? 'Node not on this board' : 'Show on canvas'}
-    </button>
+    </Button>
   )
 }
 
