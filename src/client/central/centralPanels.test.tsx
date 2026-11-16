@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import AgentList from './AgentList'
 import LevelPanel from './LevelPanel'
 import MemoryView, { looksSecret } from './MemoryView'
-import SkillReview from './SkillReview'
+import SkillLibrary from './SkillLibrary'
 import { fakeClient } from './centralFixtures.testutil'
 import * as needsYou from '../chat/needsYouApi'
 import { DEFAULT_SETTINGS } from '../../shared/settings'
@@ -122,7 +122,7 @@ describe('AgentList', () => {
 describe('SkillReview', () => {
   it('shows lint and diff and approves only with the typed phrase', async () => {
     const client = fakeClient()
-    render(<SkillReview client={client} />)
+    render(<SkillLibrary client={client} />)
     expect(await screen.findByText('Lint passed')).toBeTruthy()
     expect(screen.getByLabelText('Diff').textContent).toContain('+added line')
     const approve = screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement
@@ -138,7 +138,7 @@ describe('SkillReview', () => {
       { ...base, lint: { ok: false, findings: ['secret found'] } },
       { ...base, record: { ...base.record, name: 'webterm-y', status: 'active' as const }, canRollback: true },
     ]) })
-    render(<SkillReview client={client} />)
+    render(<SkillLibrary client={client} />)
     expect(await screen.findByText('Lint failed')).toBeTruthy()
     fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: 'APPROVE' } })
     expect((screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement).disabled).toBe(true)

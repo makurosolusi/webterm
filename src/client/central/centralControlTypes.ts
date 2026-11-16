@@ -63,7 +63,13 @@ export interface SkillReviewRow {
   lint: { ok: boolean; findings: string[] }
   diff: string
   canRollback: boolean
+  /** One-line "when to use" and the SKILL.md instructions (empty when the draft failed to parse). */
+  description: string
+  body: string
 }
+
+/** A human-authored skill draft (`POST /api/central/skills`); `name` carries the full `webterm-` prefix. */
+export interface SkillDraftInput { name: string; description: string; body: string; caps: string[] }
 
 export interface MemoryRow {
   id: string
@@ -135,6 +141,8 @@ export interface CentralControlClient {
   approveSkill(name: string, version: string, phrase: string): Promise<void>
   rejectSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
+  /** Stores a human draft for review; rejects with `SkillCreateError` (lint issue codes) on a 400. */
+  createSkill(input: SkillDraftInput): Promise<void>
   listMemory(offset: number, signal?: AbortSignal, filter?: MemoryFilter): Promise<MemoryRow[]>
   confirmMemory(id: string): Promise<void>
   forgetMemory(id: string): Promise<void>

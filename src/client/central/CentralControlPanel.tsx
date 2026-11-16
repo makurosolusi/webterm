@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import AgentList from './AgentList'
 import LevelPanel from './LevelPanel'
 import AbilitiesView from './AbilitiesView'
-import SkillReview from './SkillReview'
+import SkillLibrary from './SkillLibrary'
 import MemoryTab from './MemoryTab'
 import { RoutinesPanel } from '../RoutinesPanel'
 import { CostPanel } from '../CostPanel'
@@ -91,7 +91,7 @@ export default function CentralControlPanel({ open, enabled: enabledProp, client
         <div key={`${shown}-${refreshKey}`} className="ccp-section-host">
           {shown === 'status' && <LevelPanel client={client} visible={visible} onStatus={setStatus} askHalt={askHalt} onHaltAsked={() => setAskHalt(false)} />}
           {shown === 'agents' && <AgentList client={client} visible={visible} />}
-          {shown === 'skills' && <SkillReview client={client} />}
+          {shown === 'skills' && <SkillLibrary client={client} />}
           {shown === 'abilities' && <AbilitiesView client={client} />}
           {shown === 'memory' && <MemoryTab client={client} central={enabled} />}
           {shown === 'automations' && <RoutinesPanel />}

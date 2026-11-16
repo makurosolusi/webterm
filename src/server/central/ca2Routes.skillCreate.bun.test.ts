@@ -50,7 +50,7 @@ describe('POST /api/central/skills', () => {
     expect(h.skills?.list('pending_approval')).toHaveLength(0)
   })
 
-  it.each([
+  const bad: Array<[string, unknown]> = [
     ['invalid_name', { ...NEW, name: 'demo' }],
     ['invalid_name', { ...NEW, name: 'webterm-Bad' }],
     ['invalid_description', { ...NEW, description: '' }],
@@ -60,8 +60,10 @@ describe('POST /api/central/skills', () => {
     ['invalid_body', { ...NEW, body: 'x'.repeat(4001) }],
     ['invalid_caps', { ...NEW, caps: 'portfolio.read' }],
     ['invalid_caps', { ...NEW, caps: [1] }],
-  ])('boundary: %s', async (code, body) => {
-    expect(await create(body)).toMatchObject({ status: 400, body: { error: code } })
+  ]
+  it('rejects bad input at the boundary with a field code', async () => {
+    for (const [code, body] of bad) expect(await create(body)).toMatchObject({ status: 400, body: { error: code } })
+    expect(h.skills?.list('proposed')).toHaveLength(0)
   })
 
   it('lint rejects a URL and a command with issue codes, never the content', async () => {
