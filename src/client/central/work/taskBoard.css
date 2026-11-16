@@ -20,7 +20,15 @@
 .task-card[data-status='failed'] { border-color: var(--vscode-inputValidation-errorBorder); }
 .task-card__title { justify-content: flex-start; height: auto; padding: 0; font-weight: 600; white-space: normal; text-align: left; overflow-wrap: anywhere; }
 .task-card__meta { color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
-.task-card__node, .task-card__badges, .task-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.task-card__owner { overflow-wrap: anywhere; }
+.task-card__owner .codicon, .task-card__lease .codicon, .task-card__result .codicon { margin-right: 4px; vertical-align: text-bottom; }
+.task-card__lease[data-overdue='true'] { color: var(--vscode-editorWarning-foreground); }
+.task-detail__facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 8px; margin: 4px 0; }
+.task-detail__facts dt { color: var(--vscode-descriptionForeground); }
+.task-detail__facts dd { margin: 0; }
+.task-detail__facts dd[data-overdue='true'] { color: var(--vscode-editorWarning-foreground); }
+.task-card__result { color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+.task-card__node,.task-card__badges, .task-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .task-card__actions { margin-top: 4px; }
 .task-card__note { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 

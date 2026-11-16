@@ -5,6 +5,7 @@ import type { AssignmentView, TaskCard as TaskCardData, WorkEventView } from '..
 import type { TaskBoardClient } from './taskBoardApi'
 import { TL } from './taskBoardLabels'
 import { actorWords, eventWords, outcomeText, ruleWords, verificationVerdict } from './taskBoardModel'
+import { ownerFacts, ownerLabel, type OwnerFacts as OwnerFactsData } from './taskOwnerModel'
 import { TaskHealth } from './taskHealth'
 import { useTaskDetail } from './useTaskDetail'
 
@@ -16,6 +17,18 @@ export interface TaskDetailProps {
 }
 
 const when = (at: number): string => new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+/** Who holds an open task, what comes next and when the holder must act, from the same facts as the card. */
+function OwnerFacts({ facts }: { facts: OwnerFactsData }): React.JSX.Element | null {
+  if (!facts.owner || !facts.step) return null
+  return (
+    <dl className="task-detail__facts" role="group" aria-label={facts.aria ?? undefined}>
+      <dt>{TL.ownerHeading}</dt><dd>{ownerLabel(facts.owner)}</dd>
+      <dt>{TL.nextHeading}</dt><dd>{facts.step}</dd>
+      {facts.lease && <><dt>{TL.leaseHeading}</dt><dd data-overdue={facts.overdue ? 'true' : undefined}>{facts.lease}</dd></>}
+    </dl>
+  )
+}
 
 function Attempt({ a, nodeName }: { a: AssignmentView; nodeName: string }): React.JSX.Element {
   const result = outcomeText(a.result)
@@ -51,6 +64,7 @@ export function TaskDetail({ client, taskId, refreshTick, onClose }: TaskDetailP
   const { page, error, loadingMore, loadMore, retry } = useTaskDetail(client, taskId, refreshTick)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const loaded = page !== null
+  const facts = page && ownerFacts(page.task, Date.now(), false)
   useEffect(() => { if (loaded) headingRef.current?.focus() }, [loaded])
   const onKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'Escape') return
@@ -70,6 +84,7 @@ export function TaskDetail({ client, taskId, refreshTick, onClose }: TaskDetailP
         {page && (
           <>
             <p className="task-card__meta">{TL.statuses[page.task.status]}</p>
+            <OwnerFacts facts={facts!} />
             <h4>{TL.objective}</h4>
             <p className="task-detail__text">{page.task.objective}</p>
             <h4>{TL.boundaries}</h4>

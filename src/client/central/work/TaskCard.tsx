@@ -8,6 +8,7 @@ import { focusCanvasNode } from '../../osNotify'
 import { relativeTime } from '../../SessionHistory.model'
 import { TL } from './taskBoardLabels'
 import { cardBadges, legalActions, type TaskAction } from './taskBoardModel'
+import { ownerFacts, ownerLabel } from './taskOwnerModel'
 
 export interface TaskCardProps {
   card: TaskCardData
@@ -22,6 +23,9 @@ const BUSY = { approve: 'Approving…', retry: 'Retrying…', cancel: 'Cancellin
 // The refusal's reason is the card's `refused` line; the result line adds the time and Retry.
 const outcome = (label: string) => ({ label, ok: (ok: boolean) => ok, success: (ok: boolean) => (ok ? 'Done' : `${label} failed`) })
 
+// Icon beside the owner so the owner reads without colour.
+const OWNER_ICON = { agent: 'hubot', central: 'server-process', verifier: 'verified', human: 'person' } as const
+
 function signalText(card: TaskCardData): string | null {
   if (!card.assignment) return null
   return card.assignment.lastSignalAt === null ? TL.noSignal : TL.active(relativeTime(card.assignment.lastSignalAt))
@@ -32,6 +36,7 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
   const [mode, setMode] = useState<'idle' | 'note' | 'cancel'>('idle')
   const [note, setNote] = useState('')
   const legal = legalActions(card.status)
+  const facts = ownerFacts(card, Date.now(), false)
   const signal = signalText(card)
   const named = (action: string): string => TL.actionOn(action, card.title)
 
@@ -58,7 +63,15 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
           {!card.nodeExists && <span className="task-card__meta">{TL.nodeGone}</span>}
         </div>
       )}
-      <p className="task-card__meta">{TL.created(relativeTime(card.createdAt))}{signal ? ` · ${signal}` : ''}</p>
+      {facts.owner && facts.step && (
+        <p className="task-card__owner" role="group" aria-label={facts.aria ?? undefined}>
+          <span className={`codicon codicon-${OWNER_ICON[facts.owner]}`} aria-hidden="true" />{ownerLabel(facts.owner)} · {facts.step}
+        </p>
+      )}
+      <p className="task-card__meta">
+        {TL.created(relativeTime(card.createdAt))}{signal ? ` · ${signal}` : ''}
+        {facts.lease && <span className="task-card__lease" data-overdue={facts.overdue ? 'true' : undefined}> · <span className={`codicon codicon-${facts.overdue ? 'warning' : 'clock'}`} aria-hidden="true" />{facts.lease}</span>}
+      </p>
       {cardBadges(card).length > 0 && (
         <div className="task-card__badges">
           {cardBadges(card).map((b) => <Badge key={b.text} className="task-badge" data-tone={b.tone}>{b.text}</Badge>)}
