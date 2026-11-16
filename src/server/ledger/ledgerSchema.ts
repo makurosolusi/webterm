@@ -36,6 +36,7 @@ import { applyV34 } from './ledgerSchemaV34'
 import { applyV35 } from './ledgerSchemaV35'
 import { applyV36 } from './ledgerSchemaV36'
 import { applyV37 } from './ledgerSchemaV37'
+import { applyV38 } from './ledgerSchemaV38'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -115,4 +116,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 36, up: applyV36 },
   // v37: connectivity_episode (server -> Claude API outage history, resumed across restarts); additive, nothing to backfill.
   { version: 37, up: applyV37 },
+  // v38: cost_usage.tier (ladder tier of a worker response); nullable, existing worker rows backfilled from their agent.
+  { version: 38, up: applyV38 },
 ]

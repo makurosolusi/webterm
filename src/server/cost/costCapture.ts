@@ -16,6 +16,7 @@ import { transcriptPathAllowed } from '../transcriptPath'
 import { costMicros } from './costPricing'
 import { parseTranscriptUsage } from './costTranscript'
 import { ensureCostSchema, insertCostUsage, type CostUsageRow } from './costStore'
+import { workerTier } from './costTier'
 
 /** Bytes read per file per capture; the rest is picked up by the next hook. */
 const READ_CAP = 8 * 1024 * 1024
@@ -88,6 +89,7 @@ export function captureTranscript(db: Database, t: NodeTranscript, now: () => nu
         sessionId: u.sessionId, model: u.model, input: u.input, output: u.output, cacheRead: u.cacheRead,
         write5m: u.write5m, write1h: u.write1h, costMicros: costMicros(u.model, u),
       }
+      row.tier = workerTier(db, t.nodeId, row.ts)
       if (!insertCostUsage(db, row)) continue
       added++
       mirror(db, ledgerProject(db, t.workspaceId, now), `cc:${u.sessionId ?? t.path}`, 'claude-code', row, now)
