@@ -1,10 +1,11 @@
 // The one notice for "Central just acted": the latest action (merged), a Show button and "N more".
-// It never moves the camera: Show / Open are user clicks. The polite live region is always mounted and
+// It never moves the camera itself: Show / Open are user clicks; Follow (centralFollow.ts) is switched here. The polite live region is always mounted and
 // speaks at most once per ANNOUNCE_GAP_MS, so a burst of actions is read as one sentence, never assertively.
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { ActEntry } from './centralAct.store'
+import type { FollowView } from './centralFollow'
 import './centralAct.css'
 
 /** Shortest gap between two screen-reader announcements. */
@@ -19,6 +20,8 @@ export interface CentralActTrayProps {
   nodeTitle(nodeId: string): string | undefined
   /** Name of a board, once known. */
   boardName(workspaceId: string): string | undefined
+  follow: FollowView
+  onToggleFollow(): void
   onShow(nodeId: string): void
   onOpenBoard(workspaceId: string): void
 }
@@ -33,8 +36,9 @@ function targetOf(e: ActEntry, p: CentralActTrayProps): Target {
 }
 
 /** What the notice says; also what the live region speaks. */
-export function actSentence(e: ActEntry, t: Target): string {
+export function actSentence(e: ActEntry, t: Target, held = false): string {
   if (t.kind === 'closed') return 'Node closed'
+  if (held && t.kind === 'here') return `Central acted on ${t.title}`
   const count = e.n > 1 ? ` (${e.n} actions)` : ''
   return t.kind === 'here' ? `Central ${e.verb} ${t.title}${count}` : `Central ${e.verb} a node in ${t.name}${count}`
 }
@@ -53,15 +57,39 @@ function useThrottledText(text: string, gapMs: number): string {
   return shown
 }
 
+/** Switch label; also the tooltip. The countdown is visual only (never spoken). */
+export function followLabel(f: FollowView): string {
+  if (f.status === 'off') return 'Follow off'
+  if (f.status === 'paused') return `Paused (you moved the canvas) · resumes in ${f.resumeInS}s`
+  return f.more > 0 ? `Following Central · ${f.more} more` : 'Following Central'
+}
+/** What the live region says about Follow: no countdown, so it changes only when the status does. */
+const followSpoken = (f: FollowView): string => (f.status === 'off' ? 'Follow off' : f.status === 'paused' ? 'Follow paused' : 'Following Central')
+
+function FollowSwitch({ follow, onToggle }: { follow: FollowView; onToggle(): void }): React.JSX.Element {
+  const tip = follow.on ? `${followLabel(follow)} — click to turn off` : 'Follow off — click to let the camera follow Central'
+  return (
+    <IconTooltip label={tip}>
+      <Button type="button" variant="ghost" size="xs" className="central-act-tray__btn central-act-tray__follow" aria-pressed={follow.on} data-follow={follow.status} onClick={onToggle}>
+        <span className={`codicon ${follow.on ? 'codicon-eye' : 'codicon-eye-closed'}`} aria-hidden="true" />
+        {followLabel(follow)}
+      </Button>
+    </IconTooltip>
+  )
+}
+
 export function CentralActTray(props: CentralActTrayProps): React.JSX.Element {
   const latest = props.entries[0]
   const target = latest ? targetOf(latest, props) : null
-  const sentence = latest && target ? actSentence(latest, target) : ''
+  const held = props.follow.status === 'held'
+  const sentence = latest && target ? actSentence(latest, target, held) : ''
   const more = Math.max(0, props.entries.length - 1) + props.dropped
   const spoken = useThrottledText(sentence, ANNOUNCE_GAP_MS)
+  const spokenFollow = useThrottledText(latest || !props.follow.on ? followSpoken(props.follow) : '', ANNOUNCE_GAP_MS)
   return (
-    <div className="central-act-tray" data-state={latest ? 'active' : 'idle'}>
+    <div className="central-act-tray" data-state={latest || !props.follow.on ? 'active' : 'idle'}>
       <span className="central-act-tray__live" role="status" aria-live="polite" aria-atomic="true">{spoken}</span>
+      <span className="central-act-tray__live central-act-tray__live--follow" aria-live="polite" aria-atomic="true">{spokenFollow}</span>
       {latest && target && (
         <div className="central-act-tray__row" data-target={target.kind}>
           <span className="codicon codicon-sparkle" aria-hidden="true" />
@@ -74,7 +102,11 @@ export function CentralActTray(props: CentralActTrayProps): React.JSX.Element {
             <IconTooltip label={`Switch to ${target.name}`}><Button type="button" variant="ghost" size="xs" className="central-act-tray__btn" onClick={() => props.onOpenBoard(target.workspaceId)}>Open</Button></IconTooltip>
           )}
           {target.kind === 'closed' && <Button type="button" variant="ghost" size="xs" className="central-act-tray__btn" disabled>Show</Button>}
+          <FollowSwitch follow={props.follow} onToggle={props.onToggleFollow} />
         </div>
+      )}
+      {!latest && !props.follow.on && (
+        <div className="central-act-tray__row"><FollowSwitch follow={props.follow} onToggle={props.onToggleFollow} /></div>
       )}
     </div>
   )

@@ -14,7 +14,7 @@ const layout = (mode: 'canvas' | 'tabs') => {
 }
 const rf = (types: Record<string, string>) => ({
   getViewport: () => ({ x: 5000, y: 5000, zoom: 1 }),
-  fitView: vi.fn(async () => true),
+  fitView: vi.fn(async (_o?: unknown) => true),
   getNode: (id: string) => (types[id] ? ({ id, type: types[id] } as never) : undefined),
 })
 
@@ -23,6 +23,39 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 afterEach(() => { vi.unstubAllGlobals(); connectTabLayout(undefined, null); exitNodeResize() })
+
+describe('revealNode zoomToReadable', () => {
+  const node = { id: 't2', type: 'terminal', position: { x: 0, y: 0 }, measured: { width: 100, height: 100 } }
+  const at = (zoom: number) => ({ getViewport: () => ({ x: 0, y: 0, zoom }), fitView: vi.fn(async (_o?: unknown) => true), getNode: () => node as never })
+  beforeEach(() => connectTabLayout(layout('canvas'), null))
+
+  it('a visible but tiny node (21%) is zoomed to a readable size', async () => {
+    const r = at(0.21)
+    await revealNode(r, 't2', rect, { focus: false, zoomToReadable: true })
+    expect(r.fitView).toHaveBeenCalledTimes(1)
+    expect(r.fitView.mock.calls[0]?.[0]).toMatchObject({ nodes: [{ id: 't2' }], maxZoom: 1 })
+  })
+  it('a visible node at the threshold does not move; without the option a visible node never zooms', async () => {
+    const ok = at(0.6)
+    await revealNode(ok, 't2', rect, { zoomToReadable: true })
+    const tiny = at(0.21)
+    await revealNode(tiny, 't2', rect)
+    expect(ok.fitView).not.toHaveBeenCalled()
+    expect(tiny.fitView).not.toHaveBeenCalled()
+  })
+  it('reduced motion animates for 0 ms', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+    const r = at(0.21)
+    await revealNode(r, 't2', rect, { zoomToReadable: true })
+    expect(r.fitView.mock.calls[0]?.[0]).toMatchObject({ duration: 0 })
+  })
+  it('focus:false leaves keyboard focus alone', async () => {
+    document.body.innerHTML = '<input id="mine"><div class="react-flow__node" data-id="t2" tabindex="0"></div>'
+    document.getElementById('mine')?.focus()
+    await revealNode(at(0.21), 't2', rect, { focus: false, zoomToReadable: true })
+    expect(document.activeElement?.id).toBe('mine')
+  })
+})
 
 describe('revealNode', () => {
   it('canvas mode: fits the view (node off-screen) and focuses the canvas wrapper', () => {

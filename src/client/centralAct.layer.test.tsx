@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { ReactFlowProvider, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ActMsg } from '../shared/protocol'
 import { resetSharedActStore } from './centralAct.store'
 import CentralActMount, { CABLE_ACTIVE_CLASS, markTouched, TOUCHED_CLASS } from './centralAct.layer'
@@ -23,19 +23,59 @@ function fakeRf() {
 }
 
 describe('Central act signal vs camera and selection', () => {
-  it('an act frame marks and announces, but moves nothing and selects nothing; only Show does', () => {
+  beforeEach(() => { try { localStorage.clear() } catch { /* jsdom always has it */ } })
+
+  it('Follow OFF: an act frame marks and announces but moves nothing and selects nothing; only Show does', () => {
+    localStorage.setItem('webterm.centralFollow', 'off')
     const { rf, ref } = fakeRf()
     render(<ReactFlowProvider><CentralActMount rf={ref} nodes={[far]} workspaceId="w1" /></ReactFlowProvider>)
     const before = document.activeElement
     act(() => { dispatchBroadcast(frame('far')) })
-    expect(screen.getByRole('status').textContent).toBe('Central typed Far away')
+    expect(screen.getAllByRole('status')[0]?.textContent).toBe('Central typed Far away')
     for (const fn of [rf.fitView, rf.setCenter, rf.setViewport, rf.zoomTo, rf.setNodes]) expect(fn).not.toHaveBeenCalled()
     expect(document.activeElement).toBe(before)
 
     fireEvent.click(screen.getByRole('button', { name: 'Show' }))
     expect(rf.fitView).toHaveBeenCalledTimes(1) // revealNode: the node was off screen
     expect(rf.fitView.mock.calls[0]?.[0]).toMatchObject({ nodes: [{ id: 'far' }] })
-    expect(rf.setNodes).toHaveBeenCalledTimes(1) // selectOnly
+    expect(rf.setNodes).toHaveBeenCalledTimes(1) // selectOnly (user click only)
+    expect(rf.setCenter).not.toHaveBeenCalled()
+  })
+
+  it('Follow ON (default): the frame moves the camera once via fitView, with no selection change and no focus steal', () => {
+    const { rf, ref } = fakeRf()
+    render(<ReactFlowProvider><CentralActMount rf={ref} nodes={[far]} workspaceId="w1" /></ReactFlowProvider>)
+    const before = document.activeElement
+    act(() => { dispatchBroadcast(frame('far')) })
+    expect(rf.fitView).toHaveBeenCalledTimes(1)
+    expect(rf.fitView.mock.calls[0]?.[0]).toMatchObject({ nodes: [{ id: 'far' }] })
+    for (const fn of [rf.setCenter, rf.setViewport, rf.zoomTo, rf.setNodes]) expect(fn).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(before)
+  })
+
+  it('a user gesture on the canvas (pointer, wheel, Esc) pauses Follow: the frame moves nothing', () => {
+    for (const gesture of [
+      (el: Element) => fireEvent.pointerDown(el), (el: Element) => fireEvent.wheel(el), () => fireEvent.keyDown(document.body, { key: 'Escape' }),
+    ]) {
+      const { rf, ref } = fakeRf()
+      const { unmount } = render(<div className="react-flow"><div id="pane" /><ReactFlowProvider><CentralActMount rf={ref} nodes={[far]} workspaceId="w1" /></ReactFlowProvider></div>)
+      act(() => { gesture(document.getElementById('pane')!) })
+      act(() => { dispatchBroadcast(frame('far')) })
+      expect(rf.fitView).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: /Paused/ })).toBeTruthy()
+      unmount(); cleanup(); resetSharedActStore()
+    }
+  })
+
+  it('the Follow switch turns it off and back on', () => {
+    const { rf, ref } = fakeRf()
+    render(<ReactFlowProvider><CentralActMount rf={ref} nodes={[far]} workspaceId="w1" /></ReactFlowProvider>)
+    act(() => { dispatchBroadcast(frame('far')) })
+    fireEvent.click(screen.getByRole('button', { name: /Following Central/ }))
+    expect(localStorage.getItem('webterm.centralFollow')).toBe('off')
+    expect(screen.getByRole('button', { name: 'Follow off' }).getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: 'Follow off' }))
+    expect(localStorage.getItem('webterm.centralFollow')).toBe('on')
     expect(rf.setCenter).not.toHaveBeenCalled()
   })
 })
