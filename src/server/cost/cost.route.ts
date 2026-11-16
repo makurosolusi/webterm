@@ -1,6 +1,7 @@
 // HTTP for the Cost panel. Root token / same-origin UI only (not in `isNodeTokenPath`):
 //   GET  /api/cost                        -> CostResponse (today + 7 days, caps, labels, pricing source)
 //   GET  /api/cost/estimate?kind=&ref=    -> Estimate (median of similar runs)
+//   GET  /api/cost/by-tier?sinceMs=       -> TierSpend[] (spend by source x ladder tier x model; default window 7 days)
 //   PUT  /api/cost/caps   {scope, limitMicros}
 //   POST /api/cost/resume {scope}
 import type { Database } from 'bun:sqlite'
@@ -8,7 +9,7 @@ import { LEDGER_OFF, type RouteResult } from '../apiShared.types'
 import { prefixStats, type PrefixStats } from '../central/context/promptPrefix'
 import { utcDayStart } from '../central/guard/budgetStore'
 import { PRICING_CHECKED_AT, PRICING_SOURCE_URL } from './costPricing'
-import { spendSummary, type SpendSummary } from './costStore'
+import { costByTier, spendSummary, type SpendSummary } from './costStore'
 import { estimateCost, listCaps, resumeCost, setCostCap, type CapRow, type CostScope } from './costOracle'
 
 export const COST_PATH = '/api/cost'
@@ -76,6 +77,12 @@ export async function costRoute(path: string, method: string, query: URLSearchPa
     const ref = query.get('ref') ?? ''
     if ((kind !== 'routine' && kind !== 'dag') || !SCOPE_RE.test(`${kind}:${ref}`)) return bad('invalid_kind_or_ref')
     return { status: 200, body: estimateCost(db, { kind, ref }) }
+  }
+  if (path === `${COST_PATH}/by-tier`) {
+    if (method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' } }
+    const sinceMs = Number(query.get('sinceMs') ?? utcDayStart(now) - (WEEK_DAYS - 1) * DAY_MS)
+    if (!Number.isFinite(sinceMs) || sinceMs < 0) return bad('invalid_since')
+    return { status: 200, body: costByTier(db, { sinceMs }) }
   }
   const write = path === `${COST_PATH}/caps` ? 'PUT' : path === `${COST_PATH}/resume` ? 'POST' : null
   if (!write) return { status: 404, body: { error: 'unknown_cost_route' } }
