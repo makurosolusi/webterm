@@ -3,14 +3,13 @@
 // ONE CanvasPush.update writes it all (or nothing) and open windows apply it live. Named `canvas.*`, not
 // `node.*`: the control API's node.read/prompt/close/spawn act on one session, this edits a board's layout.
 import { CANVAS_PATCH_KEYS } from '../../../../shared/protocol'
-import { withNodeNames } from '../../../../shared/nodeNames'
 import type { BridgeLink } from '../../../../shared/workspace'
 import type { CanvasNode, CanvasPush, NodePatch } from '../../../canvas/canvasPush'
 import { lookupWorkspace, projectWorkspace } from '../../workspaceLookup'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { obj, S } from '../../../capability/capability.schema'
 import { READ_TOOLS_FLAG } from './read.shared'
-import { applyOps, MAX_COORD, MAX_OPS, MAX_SIDE, MAX_TITLE, NODE_COLORS, opShape, refsOf, type Board, type Op } from './canvas.edit.ops'
+import { applyOps, nodeRefResolver, MAX_COORD, MAX_OPS, MAX_SIDE, MAX_TITLE, NODE_COLORS, opShape, refsOf, type Board, type Op } from './canvas.edit.ops'
 
 /** The one CanvasPush write this tool uses (tests pass a fake). */
 export type EditCanvas = Pick<CanvasPush, 'update'>
@@ -60,11 +59,7 @@ export function createCanvasEditDefs(deps: CanvasEditDeps): ToolDef[] {
       const stored = (found.nodes as CanvasNode[]).filter((n) => n && typeof n.id === 'string')
       const rawBridges = (lookupWorkspace(found.workspaceId) as { bridges?: unknown } | null)?.bridges
       const bridges = Array.isArray(rawBridges) ? rawBridges.filter(isBridge) : []
-      const named = withNodeNames(stored.map((n) => ({ id: n.id, name: typeof n.name === 'string' ? n.name : undefined })))
-      const nameOf = new Map(named.map((n) => [n.id, n.name]))
-      const idOfName = new Map(named.map((n) => [n.name.toLowerCase(), n.id]))
-      // An exact id wins over a name, as in canvas.close; every unknown ref refuses the whole call.
-      const resolve = (r: string): string | undefined => (nameOf.has(r) ? r : idOfName.get(r.toLowerCase()))
+      const { nameOf, resolve } = nodeRefResolver(stored)
       const ops = input.ops as Op[]
       const unknown = [...new Set(ops.flatMap(refsOf).filter((r) => resolve(r) === undefined))]
       if (unknown.length) return fail('node_not_found', { unknown })

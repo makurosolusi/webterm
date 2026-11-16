@@ -20,6 +20,7 @@ import { isInsideRoot } from '../../../orchestrator/safePath'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { containsForbidden } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
+import { canLink, nodeRefResolver } from './canvas.edit.ops'
 import { clip, isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
 /** The two CanvasPush writes these tools use (tests pass a fake). */
@@ -59,8 +60,10 @@ function closeShape(input: ToolInput): boolean {
 }
 
 function openShape(input: ToolInput): boolean {
-  const { kind, count, title, url, path } = input
-  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path'])) return false
+  const { kind, count, title, url, path, connectTo, direction } = input
+  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path', 'connectTo', 'direction'])) return false
+  if (connectTo !== undefined && !isNodeRef(connectTo)) return false
+  if (direction !== undefined && (connectTo === undefined || (direction !== 'from' && direction !== 'to'))) return false
   if (!KINDS.includes(kind as Kind)) return false
   const many = kind === 'terminal' || kind === 'claude' || kind === 'chat'
   if (count !== undefined && (!many || !Number.isSafeInteger(count) || (count as number) < 1 || (count as number) > MAX_OPEN)) return false
@@ -169,8 +172,11 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       + '"title":"<optional, <=80 chars>","url":"<optional http(s) URL; browser only>","path":"<files: optional folder, default the '
       + 'project directory; editor: required file>"}. path is relative to the project directory (absolute also works) and must stay inside it. '
       + 'chat is an Agent Chat node (Claude without a terminal). An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. Nodes open in free space in the '
-      + 'project directory. A browser url passes the same navigation guard as the user; a blocked one leaves the page blank.',
-    input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH) }, ['kind']),
+      + 'project directory. A browser url passes the same navigation guard as the user; a blocked one leaves the page blank. '
+      + 'Optional "connectTo":"<node id or name>" cables each opened node to that existing node in the same call (a cable as the user draws it, '
+      + 'placed beside it): "direction":"to" (default) runs the cable from connectTo to the new node, "from" the other way. Only kinds a cable may join '
+      + '(see canvas.edit link) work; otherwise nothing is opened (link_not_allowed), an unknown ref is node_not_found.',
+    input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH), connectTo: S.str(MAX_ID), direction: S.oneOf('from', 'to') }, ['kind']),
     output: S.keys('opened', 'count', 'kind', 'ids'),
     auditKeys: ['count', 'kind', 'ids'],
     // `path` is a forbidden key for other tools but is this tool's own field, confined to the project
@@ -196,10 +202,21 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
         path = hit.path
       }
       // One file = one editor (client `openEditorFor`, fileOpen.ts): an open one is reported, not doubled.
+      const board = found.nodes as CanvasNode[]
+      const target = typeof input.connectTo === 'string' ? board.find((n) => n.id === nodeRefResolver(board).resolve(input.connectTo as string)) : undefined
+      if (input.connectTo !== undefined && !target) return fail('node_not_found', { unknown: [input.connectTo] })
       const same = kind === 'editor' ? (found.nodes as CanvasNode[]).find((n) => n.kind === 'editor' && n.filePath === path) : undefined
+      const nodes = same ? [] : Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url, path))
+      // Validate the cable before touching the board, so a refused link leaves no orphan node.
+      const bad = target && (same ? [same] : nodes).find((n) => !canLink(n, target))
+      if (bad) return fail('link_not_allowed', { kind, hint: 'This kind takes no cable to that node: a cable joins two Claude nodes, or an agent node with a browser, diff or plan node.' })
       if (same) return { ok: true, data: { opened: [{ id: same.id, name: same.name ?? null, kind: 'editor' }], count: 1, kind, ids: [same.id], alreadyOpen: true } }
-      const nodes = Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url, path))
-      const res = (await deps.canvas()).add({ workspaceId: found.workspaceId, nodes })
+      const toNew = input.direction !== 'from'
+      const bridges = target ? nodes.map((n) => {
+        const [source, to] = toNew ? [target.id, n.id] : [n.id, target.id]
+        return { id: `bridge-${source}-${to}`, source, target: to, kind: 'context' as const }
+      }) : undefined
+      const res = (await deps.canvas()).add({ workspaceId: found.workspaceId, nodes, ...(target ? { anchorNodeId: target.id, bridges } : {}) })
       if (!res.ok) return fail(res.code)
       const opened = res.nodes.map((n) => ({ id: n.id, name: n.name ?? null, kind: n.kind }))
       return { ok: true, data: { opened, count: opened.length, kind, ids: opened.map((n) => n.id) } }
