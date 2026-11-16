@@ -42,6 +42,7 @@ Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodete
   store SQLite, ledger, API workspace, operasi fs), lewat `find` karena `bun test` tidak mengenal glob
   `**` (argumennya filter substring). Penemuan otomatis, bukan daftar nama: daftar nama basi tanpa
   pernah merah.
+- Saat pengembangan pakai `npm run test:related` / `test:changed`; suite penuh hanya sebelum push. Batas worker default ada di `vite.config.ts` (`maxWorkers`, 2-4; override `--maxWorkers`).
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas
   `sun_path`) → `EINVAL`. Jalankan dengan `TMPDIR=/tmp/st`.
 
