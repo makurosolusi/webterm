@@ -35,8 +35,15 @@ export function CanvasStatusBar(props: DockProps) {
     left.push({ id: 'workspace', label: props.workspaceName, tooltip: 'Active workspace' })
   }
 
-  // Claude link trouble: one static item, only while degraded/offline/just recovered (see connectivity/).
-  if (net) left.push({ id: 'connectivity', label: net.label, icon: codicon(net.icon), tooltip: net.tooltip, tone: net.tone })
+  // Claude link trouble: one item, only while degraded/offline/just recovered (see connectivity/). It is
+  // keyboard-focusable so the detailed tooltip opens without a mouse, and its long label ellipsizes on a narrow bar
+  // (the full sentence stays in the aria-label and the tooltip; the live region speaks `net.announce` separately).
+  if (net) {
+    left.push({
+      id: 'connectivity', label: net.label, icon: codicon(net.icon), tooltip: net.tooltip, tone: net.tone,
+      ariaLabel: net.label, focusable: true, truncate: true,
+    })
+  }
 
   const right: VscodeStatusItem[] = [
     ...(props.extraStatusItems ?? []).map((item) => (
