@@ -11,7 +11,9 @@ import { automaticAction, type AutomaticActionDeps } from '../automaticAction'
 import { execTool } from '../tools/toolExec'
 import { queueCheckinReason } from '../work/workCheckin'
 import type { ControlGuard, ExecResult, ToolCtx, ToolInput, ToolResult } from '../tools/toolTypes'
+import { REUSE_CLASS } from '../agents/agentReuse'
 import { type Params, type Playbook, type Saved, playbookById } from './playbook.defs'
+import { decideReuse, reuseBrowser, reuseInsteadOfSpawn, type ReusePortsSource } from './playbook.reuse'
 
 const log = createLogger('central')
 
@@ -31,6 +33,8 @@ export interface PlaybookDeps {
   activeWaitMs?: number
   /** Pause between agent.status polls; defaults to a real timer (tests pass an instant one). */
   sleep?: (ms: number) => Promise<void>
+  /** Ports of the worker-reuse policy (agents/agentReuse.ts); absent = every run spawns a new agent, as before. */
+  reuse?: ReusePortsSource
 }
 
 /** A finished run replays its receipt to an identical call within this window instead of running again. */
@@ -64,7 +68,8 @@ const receiptOf = (pb: Playbook, run: Run): PlaybookReceipt => ({
 const startedNote = (pb: Playbook, run: Run): string => {
   const agent = typeof run.saved.agent?.agentId === 'string' ? run.saved.agent.agentId : 'the agent'
   const browser = typeof run.saved.browser?.nodeId === 'string' ? ` with browser node ${run.saved.browser.nodeId} cabled to it` : ''
-  return `${pb.label} started: agent ${agent}${browser} has its brief and works on its own. Its RESULT, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.`
+  const reused = run.saved.agent?.reused === true ? ' (a finished agent reused for this task, not a new one)' : ''
+  return `${pb.label} started: agent ${agent}${reused}${browser} has its brief and works on its own. Its RESULT, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.`
 }
 
 const subjectOf = (pb: Playbook, run: Run): string => run.params[pb.subject] ?? ''
@@ -121,8 +126,18 @@ async function waitActive(ctx: ToolCtx, run: Run, exec: ExecFn, deps: PlaybookDe
 /** Runs the steps from the cursor until the chain ends, parks on a card, or a step fails. */
 async function advance(ctx: ToolCtx, pb: Playbook, run: Run, deps: PlaybookDeps): Promise<ToolResult> {
   const exec = deps.exec ?? ((c, name, args) => execTool(c, name, args))
+  // Once per run, before task.create: a finished agent may take the task (its brief then names the browser it will use).
+  if (run.stepIndex === 0 && run.saved.reuse === undefined && deps.reuse && REUSE_CLASS[pb.id] !== undefined) {
+    run.saved.reuse = await decideReuse(ctx, pb, run, deps.reuse)
+    save(ctx, run)
+  }
   while (run.stepIndex < pb.steps.length) {
     const step = pb.steps[run.stepIndex] as Playbook['steps'][number]
+    const handedOver = deps.reuse && (step.tool === 'agent.spawn'
+      ? await reuseInsteadOfSpawn(ctx, pb, run, exec)
+      : step.tool === 'browser_open' && await reuseBrowser(ctx, run, deps.reuse))
+    if (handedOver) { run.stepIndex += 1; save(ctx, run); continue }
+    if (run.saved.reuse?.failed) save(ctx, run) // the refusal is kept with the run, then the normal spawn goes on
     const inactive = step.needsAgent ? await waitActive(ctx, run, exec, deps) : null
     if (inactive) {
       run.status = 'failed'
@@ -151,7 +166,7 @@ async function advance(ctx: ToolCtx, pb: Playbook, run: Run, deps: PlaybookDeps)
   }
   run.status = 'done'
   save(ctx, run)
-  return { ok: true, data: { ...receiptOf(pb, run), agentId: run.saved.agent?.agentId ?? null, note: startedNote(pb, run) } }
+  return { ok: true, data: { ...receiptOf(pb, run), agentId: run.saved.agent?.agentId ?? null, reused: run.saved.agent?.reused === true, browserNodeId: run.saved.browser?.nodeId ?? null, note: startedNote(pb, run) } }
 }
 
 /** Starts the playbook, or resumes the parked run of this exact call. */
