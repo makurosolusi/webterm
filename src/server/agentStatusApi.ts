@@ -9,31 +9,23 @@
 // Gerbang identitas (token→node) tinggal di `agentStatusAuth` dan di-re-export dari sini supaya
 // pemanggil lama (`contextLinkApi`, test) tidak berubah.
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { AgentStatus, Workspace } from '../shared/workspace'
-import type { StatusReason } from '../shared/protocol'
 import { isSafeNodeId } from '../shared/workspace'
 import { hookStatus, hookStatusReason, type HookStatusBody } from './hookStatus'
 import { stateVerified } from './hooks'
-import { buildLinkDoc, findWorkspaceFor } from './contextLink'
+import { buildLinkDoc } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { linkedBrowsers, nextBrowserNotice, releaseCabledBrowsers } from './linkAwareness'
 import { nextAwareness } from './webtermAwareness'
-import { linkNoteTold, startLinkNotes } from './linkNoteDelivery'
+import { linkNoteTold } from './linkNoteDelivery'
 import { outboxHookContext } from './outbox/outboxRuntime'
 import { awarenessExtras } from './awareness/awarenessHook'
 import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
 import { produceHookEvent } from './events/producers'
-import { captureFromHook, stashStopResult } from './central/work/workResult'
-import { readTranscriptFile } from './contextLinkTranscript'
+import { stashHookStop } from './agentStatusStash'
 import { doomLoopBlock } from './permission/permission.loop'
-import { takeCheckpointSafe } from './checkpoint/checkpoint.service'
-import { activeBrowser } from './browser/browser.state'
-import type { PermissionOutput } from './permission/permission.model'
-import type { PermissionAsk } from './permission/permission.wait'
-import type { PreToolAsk } from './permission/permission.preTool'
-import type { ApprovalModeName } from '../shared/settings.projectApprovalLevels'
+import { checkpointBeforePrompt, defaultDeps, type AgentStatusOptions } from './agentStatusDeps'
 import {
   nodeTokenHeader,
   nodeTokenMismatch,
@@ -44,6 +36,7 @@ import {
 const log = createLogger('hooks')
 
 export { transcriptPathAllowed } from './transcriptPath'
+export type { AgentStatusDeps, AgentStatusOptions } from './agentStatusDeps'
 export { nodeTokenMismatch, requesterNodeId, STRICT_HOOK_AUTH } from './agentStatusAuth'
 
 /** `transcript_path` hanya DISIMPAN; satu-satunya pembacaan di sini adalah cadangan Stop tanpa `last_assistant_message` (claude lama). Batas panjangnya menjaga
@@ -55,66 +48,10 @@ export const TRANSCRIPT_PATH_MAX = 4096
  *  dari sembarang sesi agent yang memegang token nodenya. */
 export const MAX_HOOK_BODY_BYTES = 256 * 1024
 
-/** Sisi tulis route, di-inject supaya route bisa diuji tanpa `bun:sqlite`/PTY. */
-export interface AgentStatusDeps {
-  /** `reason` = why it needs you or failed (tool name, notification line), when the hook said. */
-  setStatus(nodeId: string, status: AgentStatus, reason?: StatusReason): void
-  setTranscript(nodeId: string, path: string): void
-  workspaceFor(nodeId: string): Workspace | null | undefined
-  /** Gives a browser node's lease back to the human; absent = browser runtime not wired (tests). */
-  releaseBrowser?(browserNodeId: string): void
-  /** Holds a `PermissionRequest` for a human decision (F3-b); absent = no decision, Claude prompts. */
-  answerPermission?(ask: PermissionAsk): Promise<PermissionOutput | null>
-  /** PreToolUse: deny by a user Deny rule in every mode (permission.preTool.ts); absent = not wired (tests). */
-  preToolRule?(ask: PreToolAsk): Record<string, unknown>
-  /** Ask/Auto/Danger the node runs under (launch level, else its workspace's level); absent = not recorded. */
-  modeOf?(nodeId: string, workspaceId: string | null): ApprovalModeName
-}
-
-/** Opsi test: override gerbang + dependency. Produksi memanggil route tanpa argumen keempat. */
-export interface AgentStatusOptions {
-  strictAuth?: boolean
-  deps?: AgentStatusDeps
-}
-
 function json(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(body))
-}
-
-/**
- * Dependency default. Diimpor DINAMIS: `db`/`sessions` menarik `bun:sqlite` dan PTY, jadi impor
- * statis akan membuat modul route ini tidak bisa dimuat test node-env (yang menguji gerbang auth
- * dengan dependency palsu).
- */
-async function defaultDeps(): Promise<AgentStatusDeps> {
-  const [{ db }, { sessions }, { answerPermissionLive, preToolRuleLive }, { sessionModeName }] = await Promise.all([import('./db'), import('./sessions'), import('./permission/permission.runtime'), import('./permission/permission.mode')])
-  // Satu-satunya titik start loop link-note: hook Claude Code pertama (SessionStart) menyalakannya,
-  // jadi tidak ada flag/konfigurasi — dan test dengan deps palsu tidak pernah memuatnya.
-  await startLinkNotes()
-  return {
-    setStatus: (nodeId, status, reason) => sessions.setStatus(nodeId, status, undefined, reason),
-    setTranscript: (nodeId, path) => sessions.setTranscript(nodeId, path),
-    workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
-    releaseBrowser: (id) => activeBrowser()?.releaseLease(id),
-    // Read per request: the Settings toggle applies to the very next prompt, no restart.
-    answerPermission: (ask) => {
-      const s = db.getSettings()
-      return answerPermissionLive(ask, s.hookReplyApprovals !== false, { routing: s.permissionRouting, checkins: s.centralCheckins })
-    },
-    preToolRule: preToolRuleLive,
-    modeOf: (nodeId, workspaceId) => sessionModeName(db.getSettings(), nodeId, workspaceId),
-  }
-}
-
-/**
- * F3-c: a new prompt is about to make the agent act, so its workspace is snapshotted first. Kept
- * above the route on purpose: the route body must not carry its own event list (hooks.test.ts).
- * `takeCheckpointSafe` never throws, so a broken checkpoint cannot fail the hook reply.
- */
-async function checkpointBeforePrompt(event: string | undefined, ws: Workspace | null | undefined, nodeId: string): Promise<void> {
-  if (event === 'UserPromptSubmit' && ws) await takeCheckpointSafe(ws, { reason: 'prompt', nodeId })
 }
 
 /**
@@ -204,13 +141,7 @@ export async function agentStatusRoute(
   const mode = deps.modeOf?.(node, ws?.id ?? null)
   // The worker's final message goes to the work layer through a side slot, not the ledger (events stay short). Parked BEFORE
   // the event so the watcher, which reacts synchronously to hook.Stop, finds it. SubagentStop is never parked: it is not the parent's result.
-  if (ws && (event === 'Stop' || event === 'StopFailure') && requesterNodeId(req) === node) {
-    stashStopResult(node, captureFromHook(body as Record<string, unknown>, Date.now(), transcript ?? undefined, (p) => {
-      const raw = readTranscriptFile(p)
-      if (raw === null) log.warn('hooks.result_transcript', 'Stop payload had no message and the transcript tail was unreadable', { ids: { nodeId: node } })
-      return raw
-    }))
-  }
+  if (ws) stashHookStop(node, event, body as Record<string, unknown>, transcript, requesterNodeId(req) === node)
   if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node, mode })
   await checkpointBeforePrompt(event, ws, node)
   if (ws && deps.releaseBrowser) releaseCabledBrowsers(event, ws, node, deps.releaseBrowser)
