@@ -19,7 +19,7 @@ test('full route order snapshot', () => {
   expect(names).toEqual([
     'logs', 'events', 'timeline',
     'workspaces', 'session-history',
-    'browser', 'agent-chat', 'claude-view',
+    'browser-latency', 'browser', 'agent-chat', 'claude-view',
     'env-settings', 'env-import', 'capabilities', 'agent-protection', 'custom-agents-preview', 'shells', 'settings', 'approval-sessions', 'canvas-background', 'canvas-shot',
     'fs-verbs', 'hygiene',
     'git-info', 'git-diff', 'checkpoint', 'git-scm',

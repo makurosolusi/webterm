@@ -4,6 +4,7 @@ import { json, routeCtx, type ApiRoute } from './routes/route.core'
 import { briefRoutes, logEventRoutes, outboxRoutes } from './routes/events.routes'
 import { workspaceRoutes } from './routes/workspaces.routes'
 import { browserRoutes } from './routes/browser.routes'
+import { browserLatencyRoutes } from './routes/browserLatency.routes'
 import { settingsRoutes } from './routes/settings.routes'
 import { canvasShotRoutes } from './routes/canvasShot.routes'
 import { fsRoutes } from './routes/fs.routes'
@@ -47,6 +48,7 @@ export { applyPtyOptions } from './routes/settings.routes'
 export const API_ROUTES: readonly ApiRoute[] = [
   ...logEventRoutes,
   ...workspaceRoutes,
+  ...browserLatencyRoutes,
   ...browserRoutes,
   ...agentChatRoutes,
   ...settingsRoutes,
