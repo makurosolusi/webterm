@@ -4,8 +4,16 @@ import { consumeApproval, getApproval, requestApproval } from '../../ledger/ledg
 import { execWrite, getRow } from '../../ledger/ledgerCore'
 import type { AgentRecord, AgentState, Tier } from '../contracts'
 import type { ToolResult } from '../tools/toolTypes'
+import { TAINT_REASON, taintedOrigins } from '../guard/taintStore'
 import type { AgentStore } from './agentStore'
 import type { AgentHost } from './agentExecutor.types'
+
+const CENTRAL_OWNER_PREFIX = 'central:'
+
+/** True when `owner` is a Central conversation that read untrusted web content: its spawn must ask a human even in `auto` mode. */
+export function isTaintedOwner(owner: string, now: number): boolean {
+  return owner.startsWith(CENTRAL_OWNER_PREFIX) && taintedOrigins(owner.slice(CENTRAL_OWNER_PREFIX.length), now) !== null
+}
 
 /** What the approval path borrows from the executor closure. */
 export interface ApprovalFlowCtx {
@@ -37,11 +45,14 @@ export function createApprovalFlow(ctx: ApprovalFlowCtx) {
 
   async function pendApproval(agent: AgentRecord): Promise<ToolResult> {
     const id = nextCardId(agent)
+    const tainted = isTaintedOwner(agent.owner, now())
     let challenge: { id: string }
     try {
       // `approval.task_id` references the ledger `task` table; a Central board task id (central_task) stays in the request only.
       const ledgerTask = agent.taskId && getRow(db, 'SELECT 1 AS one FROM task WHERE id = ?', agent.taskId) ? agent.taskId : null
-      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(ledgerTask ? { taskId: ledgerTask } : {}) })
+      // `title` leads the request so the inbox summary shows why before anything else (reason only, never page content).
+      const title = tainted ? { title: `Start a ${agent.kind} ${agent.role} agent: ${TAINT_REASON}` } : {}
+      challenge = requestApproval({ db, now }, { id, projectId: agent.projectId, kind: 'agent.spawn', request: { ...title, agentId: agent.id, kind: agent.kind, role: agent.role, runner: agent.runner, taskId: agent.taskId, defHash: host.defHashOf?.(agent.kind) ?? null }, ...(ledgerTask ? { taskId: ledgerTask } : {}) })
     } catch (err) {
       // Without a card the agent must not stay launchable: close the row and surface a code, not the message.
       tryMove(agent.id, 'cancelled', { reason: `approval_request_failed:${err instanceof Error ? err.name : 'unknown'}` })
@@ -57,7 +68,7 @@ export function createApprovalFlow(ctx: ApprovalFlowCtx) {
     } else {
       pending = store.transition(agent.id, 'approval_pending', { approvalId: challenge.id })
     }
-    audit(pending, 'spawn.approval', { approvalId: challenge.id })
+    audit(pending, 'spawn.approval', { approvalId: challenge.id, ...(tainted ? { code: 'tainted' } : {}) })
     return { ok: false, code: 'approval_required', data: { agentId: agent.id, approvalId: challenge.id, approvalStatus: 'pending' } }
   }
 
