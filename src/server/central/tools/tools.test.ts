@@ -85,7 +85,7 @@ describe('execTool tier matrix', () => {
     const denied = await execTool(ctxOf(f, reg, 'R1', guard), 'x.tool', { projectId: 'p1' })
     expect(denied).toMatchObject({ ok: false, code: 'budget_exceeded', tool: 'x.tool', projectId: 'p1' })
     expect(handled).toBe(0)
-    expect(seen).toEqual([{ tool: 'x.tool', tier: 'R1', projectId: 'p1', input: { projectId: 'p1' } }])
+    expect(seen).toEqual([{ tool: 'x.tool', tier: 'R1', projectId: 'p1', input: { projectId: 'p1' }, conversationId: 'global' }])
     const above = await execTool(ctxOf(f, reg, 'R0', guard), 'x.tool', { projectId: 'p1' })
     expect(above.code).toBe('tier_denied')
     expect(seen).toHaveLength(1)
