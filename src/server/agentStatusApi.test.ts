@@ -361,7 +361,7 @@ describe('ikatan token→node — tanpa syarat, juga saat strict MATI', () => {
 // Route ini bisa dijangkau token node mana pun, jadi body-nya harus berbatas: dulu body utuh
 // ditampung lebih dulu baru diparse, sehingga satu POST raksasa cukup untuk menekan server.
 describe('batas body hook', () => {
-  it('body chunked di atas cap tidak lagi 413: dijawab 200 truncated, tanpa field palsu dari sampah', async () => {
+  it('body chunked di atas cap tidak lagi 413: dijawab 204 tanpa body, ditandai header x-webterm-truncated', async () => {
     const res = mockRes()
     const d = deps()
     const half = 'x'.repeat(MAX_HOOK_BODY_BYTES / 2)
@@ -373,8 +373,9 @@ describe('batas body hook', () => {
       { strictAuth: false, deps: d }
     )
     expect(handled).toBe(true)
-    expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body)).toEqual({ truncated: true })
+    expect(res.statusCode).toBe(204)
+    expect(res.body).toBe('')
+    expect(res.headers['x-webterm-truncated']).toBe('1')
     expect(d.writes).toEqual({ status: [], transcript: [] })
   })
 
@@ -395,7 +396,7 @@ describe('batas body hook', () => {
     })
     const handled = await agentStatusRoute(req, res, URL_FOR(NODE), { strictAuth: false, deps: d })
     expect(handled).toBe(true)
-    expect(res.statusCode).toBe(200)
+    expect(res.statusCode).toBe(204)
     expect(listenersAtOverflow).toEqual([0])
     expect(d.writes).toEqual({ status: [], transcript: [] })
   })
