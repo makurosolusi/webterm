@@ -66,6 +66,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'skill.propose': { title: 'Suggest a skill', text: 'Writes a new skill for you to review. It is not used until you approve it.' },
   'channel.bot.propose': { title: 'Connect a Telegram bot', text: 'Adds a Telegram bot. Needs your approval and typed confirm.' },
   'approval.request': { title: 'Ask for approval', text: 'Asks you to approve something. Never decides by itself.' },
+  'permission.decide': { title: 'Answer a permission prompt', text: 'Answers a worker’s permission prompt once: allow it, deny it, or hand it to you.' },
   'health.summary': { title: 'Check project health', text: 'Shows how many problems a project scan found and when it last ran.' },
   'health.findings': { title: 'List health findings', text: 'Lists the problems found in a project, each with its file, line and evidence.' },
   'health.scan': { title: 'Scan project health', text: 'Checks a project’s code for problems such as oversized files or empty catches. Changes nothing.' },
