@@ -184,9 +184,11 @@ export default function ChatPanel(props: ChatPanelProps) {
         {moved !== null && (
           <div className="chat-notice chat-notice--info chat-live__line">
             <span className="chat-notice__text">{moved}</span>
-            <button type="button" className="chat-error__dismiss" aria-label="Dismiss notice" onClick={() => setMoved(null)}>
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </button>
+            <IconTooltip label="Dismiss notice">
+              <button type="button" className="chat-error__dismiss" aria-label="Dismiss notice" onClick={() => setMoved(null)}>
+                <span className="codicon codicon-close" aria-hidden="true" />
+              </button>
+            </IconTooltip>
           </div>
         )}
         {repliedRows.length > 0 && (
