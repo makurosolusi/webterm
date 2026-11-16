@@ -5,6 +5,8 @@ import { createRegistry } from '../toolRegistry'
 import type { ToolCtx } from '../toolTypes'
 import { READ_TOOLS_FLAG } from './read.shared'
 import { TASK_READ_DEFS } from './read.task'
+import { createWorkStore } from '../../work/workStore'
+import { buildResult } from '../../work/workResult'
 
 let f: Fixture
 beforeEach(() => { f = openFixture(); seedPortfolio(f.db) })
@@ -49,6 +51,18 @@ describe('run.result', () => {
     expect(byId.evidence.length).toBe(1500)
     expect(await execTool(ctx(), 'run.result', { projectId: 'p1', runId: 'r3' })).toMatchObject({ ok: false, code: 'run_not_found' })
     expect(await execTool(ctx(), 'run.result', { projectId: 'p1', taskId: 't-pending' })).toMatchObject({ ok: false, code: 'run_not_found' })
+  })
+
+  it('reads the captured result of a board (central_task) id, and explains which id it expects when none matches', async () => {
+    const store = createWorkStore(f.db, () => 5)
+    store.createTask({ id: 'ct1', projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+    const a = store.openAssignment({ taskId: 'ct1', nodeId: 'n1', channel: 'terminal', instruction: 'go', actor: { kind: 'central' } })
+    store.recordResult(a.id, buildResult('stop_hook', 'did it\nRESULT: fine', 5))
+    const ok = await execTool(ctx(), 'run.result', { projectId: 'p1', taskId: 'ct1' })
+    expect(ok.data).toMatchObject({ taskId: 'ct1', status: 'assigned', assignmentId: a.id, result: { source: 'stop_hook', resultLine: 'fine' } })
+    const miss = await execTool(ctx(), 'run.result', { projectId: 'p1', taskId: 'nope' })
+    expect(miss).toMatchObject({ ok: false, code: 'task_not_found' })
+    expect(JSON.stringify(miss.data)).toContain('central_task')
   })
 
   it('requires exactly one of taskId/runId and an existing task', async () => {

@@ -1,4 +1,5 @@
 import type { AssignmentChannel, AssignmentView, TaskView, WorkAcceptance, WorkEventView, WorkStatus } from '../../../shared/centralWork'
+import type { WorkResult } from './workResult'
 
 /** Who caused a change; only `human`, or `system` with `autoDone`, may mark a task done. */
 export type WorkActor =
@@ -93,6 +94,8 @@ export interface WorkStore {
   noteAssignment(id: string, kind: string, options?: NoteOptions): boolean
   /** Stores a task's verification verdict; false when the task is unknown. Writes no event. */
   setVerification(taskId: string, verification: unknown): boolean
+  /** Stores the worker result on an open assignment; false when it ended/is unknown or the same hash is already stored (resume re-send). */
+  recordResult(id: string, result: WorkResult): boolean
   endAssignment(id: string, reason: string, result?: unknown, options?: EndOptions): AssignmentView
   /** Events of a task, newest last; paginated (default 100, max 500). */
   timeline(taskId: string, page?: Page): WorkEventView[]

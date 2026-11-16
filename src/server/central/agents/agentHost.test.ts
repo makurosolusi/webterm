@@ -51,7 +51,7 @@ describe('boot prompt: the first message carries the whole task', () => {
     expect(text).toContain('You are a worker agent started by webterm Central (agent a1, canvas node c-a1, project p1).')
     expect(text).toContain('Task tk-9: web research: compare bun and node.')
     expect(text).toContain(objective)
-    expect(text).toContain('webterm reports it to Central automatically')
+    expect(text).toContain('webterm captures that message and reports it to Central automatically')
     expect(text).not.toContain('No task attached')
   })
 

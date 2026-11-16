@@ -6,6 +6,7 @@ import { allRows, getRow, type Row } from '../../../ledger/ledgerCore'
 import type { ToolDef, ToolResult } from '../toolTypes'
 import { clip, isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 import { obj, S } from '../../../capability/capability.schema'
+import { createWorkStore } from '../../work/workStore'
 
 const SPEC_PREVIEW = 200
 const EVIDENCE_PREVIEW = 1500
@@ -54,19 +55,29 @@ const taskStatus: ToolDef = {
 
 const runResult: ToolDef = {
   name: 'run.result',
-  summary: 'Outcome of a run: the latest run of a task, or one run by id.',
+  summary: 'What a worker reported for a task (its latest assignment result), or the outcome of one usage run by run id.',
   tier: 'R0',
   flag: READ_TOOLS_FLAG,
-  usage: '{"projectId":"<id>","taskId":"<task id>"} or {"projectId":"<id>","runId":"<run id>"}. Read-only; outcome, failure label and evidence head.',
+  usage: '{"projectId":"<id>","taskId":"<board task id, as in task.list/task.get>"} returns the latest assignment\'s captured result (source, text, resultLine); or {"projectId":"<id>","runId":"<usage run id>"} for a run outcome. Read-only.',
   input: obj({ taskId: S.str(MAX_ID), runId: S.str(MAX_ID) }),
-  output: S.keys('runId', 'taskId', 'outcome', 'failureLabel', 'provider', 'model', 'startedAt', 'endedAt', 'evidence'),
+  output: S.keys('runId', 'taskId', 'outcome', 'failureLabel', 'provider', 'model', 'startedAt', 'endedAt', 'evidence', 'status', 'assignmentId', 'attempt', 'result'),
   validate(input, ctx) {
     const { taskId, runId } = input
     if ((taskId === undefined) === (runId === undefined)) return 'invalid_shape'
     if (!isSafeId(taskId ?? runId)) return 'invalid_shape'
-    return taskId !== undefined && !taskExists(ctx.db, input.projectId, taskId) ? 'task_not_found' : null
+    return null
   },
   handler(ctx, input, projectId): ToolResult {
+    if (typeof input.taskId === 'string') {
+      const store = createWorkStore(ctx.db, ctx.now)
+      const task = store.getTask(input.taskId)
+      if (task && task.projectId === projectId) {
+        const a = store.assignmentsOfTask(task.id, 1)[0]
+        return { ok: true, data: { taskId: task.id, status: task.status, assignmentId: a?.id ?? null, attempt: a?.attempt ?? null, endedAt: a?.endedAt ?? null, result: a?.result ?? null } }
+      }
+      // Legacy `task` table kept for runs recorded against it; an id that is on neither board gets an explanation, not a bare code.
+      if (!taskExists(ctx.db, projectId, input.taskId)) return { ok: false, code: 'task_not_found', data: { expected: 'a board task id (central_task, as listed by task.list and shown by task.get)', got: input.taskId } }
+    }
     const row = typeof input.runId === 'string'
       ? getRow(ctx.db, 'SELECT * FROM run WHERE id = ? AND project_id = ?', input.runId, projectId)
       : getRow(ctx.db, 'SELECT * FROM run WHERE task_id = ? AND project_id = ? ORDER BY started_at DESC, id DESC LIMIT 1', input.taskId, projectId)

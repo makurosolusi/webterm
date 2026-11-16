@@ -49,7 +49,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
     if (!agent.taskId) return `${AGENT_ENVELOPE}\n${where} No task attached yet: reply only READY and wait; Central sends the task as your next message. ${rules}`
     const task = taskOf(agent)
     return [`${AGENT_ENVELOPE}`, where, `Task ${agent.taskId}${task ? `: ${task.title}` : ''}.`, ...(task?.objective ? [task.objective.replace(CONTROL_CHARS, '')] : []),
-      `When you finish, end with a line \`RESULT:\` and your result. webterm reports it to Central automatically, so do not wait for a reply. If you are blocked or need a decision, say so and stop; that reaches Central too.`,
+      `When you finish, end your final message with a line starting \`RESULT:\` followed by your result. webterm captures that message and reports it to Central automatically, so do not wait for a reply. If you are blocked or need a decision, say so and stop; that reaches Central too.`,
       'To report at any time (progress, blocked, a question, or done with your result), run `webterm report "<text>" --progress|--blocked|--question|--done`.',
       rules].join('\n')
   }
