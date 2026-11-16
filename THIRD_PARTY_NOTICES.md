@@ -41,9 +41,11 @@ SOFTWARE.
 
 ## Terminal colour schemes
 
-The palettes in `src/client/themes.ts` are the published colours of the following openly licensed
-schemes (colour values only; no scheme source code is included). Licences were checked at the
-repositories named below.
+The palettes in `src/client/themes.ts` refer to the published colours of the following openly
+licensed schemes. The colour values were rewritten for webterm and no scheme source code is
+included; a few values (for example the Tokyo Night bright colours and some Solarized bright colours)
+are not guaranteed to match the published ones exactly. Licences were checked at the repositories
+named below.
 
 | Scheme | Repository | Licence |
 | --- | --- | --- |
