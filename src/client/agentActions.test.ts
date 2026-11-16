@@ -1,113 +1,159 @@
 import { describe, expect, it } from 'vitest'
 import {
   CTRL_C_GAP_MS,
+  EXIT_SETTLE_MS,
   exitDurationMs,
   exitSequence,
   exitWrites,
   ineligibleHint,
   restartEligibility,
   sendExitSequence,
+  type IneligibleReason,
 } from './agentActions'
 import { BUILTIN_AGENT_IDS, setCustomAgentBaseResolver } from '../shared/workspace'
 
 const CTRL_C = '\x03'
-const SID = 'd3f0a1b2-0000-4000-8000-000000000000'
+const SESSION = '5b8e2c14-7a90-4f3d-9c61-0e2d4a7b13aa'
 
-describe('exitSequence', () => {
-  it('matches the expected table for claude', () => {
+/** Run `fn` with `custom:<name>` resolving to `base`, always restoring the resolver. */
+async function withCustomAgent<T>(name: string, base: 'claude' | undefined, fn: () => T | Promise<T>): Promise<T> {
+  setCustomAgentBaseResolver((id) => (id === `custom:${name}` ? base : undefined))
+  try {
+    return await fn()
+  } finally {
+    setCustomAgentBaseResolver(null)
+  }
+}
+
+describe('exit command per agent', () => {
+  it('uses the documented /exit for claude', () => {
     expect(exitSequence('claude')).toBe('/exit')
   })
-  it('has no sequence for a retired builtin (a plain terminal program now), an unknown agent or none', () => {
-    for (const id of ['codex', 'gemini', 'opencode', 'grok', 'copilot', 'cursor', 'antigravity']) expect(exitSequence(id)).toBeNull()
+
+  it.each(['codex', 'gemini', 'opencode', 'grok', 'copilot', 'cursor', 'antigravity'])(
+    'has none for the non-claude harness %s',
+    (id) => expect(exitSequence(id)).toBeNull(),
+  )
+
+  it('has none for an unknown or missing agent', () => {
     expect(exitSequence('custom')).toBeNull()
     expect(exitSequence(undefined)).toBeNull()
   })
-  it('resolves a custom agent through its base harness', () => {
-    setCustomAgentBaseResolver((id) => (id === 'custom:wrap' ? 'claude' : undefined))
-    try {
-      expect(exitSequence('custom:wrap')).toBe('/exit')
-    } finally {
-      setCustomAgentBaseResolver(null)
-    }
+
+  it('follows a custom agent to its base harness', async () => {
+    await withCustomAgent('wrapper', 'claude', () => expect(exitSequence('custom:wrapper')).toBe('/exit'))
+    await withCustomAgent('wrapper', undefined, () => expect(exitSequence('custom:wrapper')).toBeNull())
   })
 })
 
-describe('exitWrites', () => {
-  it('quits claude with three spaced Ctrl-Cs and no kill-line', () => {
-    const w = exitWrites('claude')!
-    expect(w.map((x) => x.data)).toEqual([CTRL_C, CTRL_C, CTRL_C])
-    expect(w.map((x) => x.gapAfterMs)).toEqual([CTRL_C_GAP_MS, CTRL_C_GAP_MS, 0])
+describe('exit writes', () => {
+  it('asks claude to quit with Ctrl+C presses: at least the documented two, plus a margin', () => {
+    const writes = exitWrites('claude')!
+    expect(writes.length).toBeGreaterThanOrEqual(2)
+    expect(writes.every((w) => w.data === CTRL_C)).toBe(true)
   })
-  it('never sends Escape, which a live agent reads as interrupt', () => {
+
+  it('separates presses by the gap and does not wait after the last one', () => {
+    const gaps = exitWrites('claude')!.map((w) => w.gapAfterMs)
+    expect(gaps.at(-1)).toBe(0)
+    expect(gaps.slice(0, -1).every((g) => g === CTRL_C_GAP_MS)).toBe(true)
+  })
+
+  it('keeps each press apart by more than a double-click burst', () => {
+    expect(CTRL_C_GAP_MS).toBeGreaterThanOrEqual(100)
+    expect(CTRL_C_GAP_MS).toBeLessThan(800) // inside Claude Code's documented Ctrl+D confirm window
+  })
+
+  it('sends no Escape, Enter or kill-line for any builtin', () => {
     for (const id of BUILTIN_AGENT_IDS) {
-      for (const w of exitWrites(id) ?? []) expect(w.data).not.toContain('\x1b')
+      for (const w of exitWrites(id) ?? []) {
+        expect(w.data).not.toMatch(/[\x1b\r\n\x15]/)
+      }
     }
   })
-  it('refuses an agent with no exit sequence', () => {
-    expect(exitWrites('codex')).toBeNull()
+
+  it('returns null for agents that cannot be asked to quit', () => {
+    expect(exitWrites('gemini')).toBeNull()
+    expect(exitWrites('custom')).toBeNull()
     expect(exitWrites(undefined)).toBeNull()
   })
-})
 
-describe('exitDurationMs', () => {
-  it('sums the gaps between writes', () => {
-    expect(exitDurationMs(exitWrites('claude')!)).toBe(2 * CTRL_C_GAP_MS)
-  })
-})
-
-describe('restartEligibility', () => {
-  it('accepts an idle resumable agent with a session id', () => {
-    expect(restartEligibility('claude', 'done', SID)).toEqual({ ok: true })
-    expect(restartEligibility('claude', 'waiting', SID)).toEqual({ ok: true })
-    expect(restartEligibility('claude', undefined, SID)).toEqual({ ok: true })
-  })
-  it('refuses a working session', () => {
-    expect(restartEligibility('claude', 'working', SID)).toEqual({ ok: false, reason: 'working' })
-  })
-  it('refuses a blocked session — its exit line would answer the permission dialog', () => {
-    expect(restartEligibility('claude', 'blocked', SID)).toEqual({ ok: false, reason: 'working' })
-  })
-  it('refuses when there is no session id, or an unsafe one', () => {
-    expect(restartEligibility('claude', 'done', undefined)).toEqual({ ok: false, reason: 'no-session' })
-    expect(restartEligibility('claude', 'done', '')).toEqual({ ok: false, reason: 'no-session' })
-    expect(restartEligibility('claude', 'done', '-x; rm -rf /')).toEqual({ ok: false, reason: 'no-session' })
-  })
-  it('reports not-resumable for a plain shell, a retired builtin or a baseless custom agent', () => {
-    expect(restartEligibility(undefined, 'done', SID)).toEqual({ ok: false, reason: 'not-resumable' })
-    expect(restartEligibility('codex', 'done', SID)).toEqual({ ok: false, reason: 'not-resumable' })
-    expect(restartEligibility('custom', 'done', SID)).toEqual({ ok: false, reason: 'not-resumable' })
-  })
-  it('lets not-resumable win over working and no-session', () => {
-    expect(restartEligibility('codex', 'working', undefined)).toEqual({
-      ok: false,
-      reason: 'not-resumable',
-    })
+  it('totals the gaps and leaves room in the settle window', () => {
+    const writes = exitWrites('claude')!
+    expect(exitDurationMs(writes)).toBe((writes.length - 1) * CTRL_C_GAP_MS)
+    expect(exitDurationMs([])).toBe(0)
+    expect(exitDurationMs(writes)).toBeLessThan(EXIT_SETTLE_MS)
   })
 })
 
-describe('ineligibleHint', () => {
-  it('says something non-empty and distinct for every reason', () => {
-    const hints = (['working', 'no-session', 'not-resumable'] as const).map(ineligibleHint)
-    for (const h of hints) expect(h.length).toBeGreaterThan(10)
-    expect(new Set(hints).size).toBe(3)
+describe('restart eligibility', () => {
+  it.each(['done', 'waiting', undefined] as const)('accepts an idle claude (%s) with a session id', (state) => {
+    expect(restartEligibility('claude', state, SESSION)).toEqual({ ok: true })
+  })
+
+  it.each(['working', 'blocked'] as const)('refuses a %s session as busy', (state) => {
+    // `blocked` is a dialog holding the prompt: the exit keys would answer it.
+    expect(restartEligibility('claude', state, SESSION)).toEqual({ ok: false, reason: 'working' })
+  })
+
+  it.each([undefined, '', '--flag', 'a b', '$(id)'])('refuses session id %j', (sessionId) => {
+    expect(restartEligibility('claude', 'done', sessionId)).toEqual({ ok: false, reason: 'no-session' })
+  })
+
+  it('reports not-resumable for a plain terminal, another harness and a baseless custom agent', () => {
+    for (const id of [undefined, 'gemini', 'custom']) {
+      expect(restartEligibility(id, 'done', SESSION)).toEqual({ ok: false, reason: 'not-resumable' })
+    }
+  })
+
+  it('ranks not-resumable above busy and missing-session', () => {
+    expect(restartEligibility('gemini', 'working', undefined)).toEqual({ ok: false, reason: 'not-resumable' })
+  })
+
+  it('lets a custom agent on claude restart', async () => {
+    await withCustomAgent('wrapper', 'claude', () =>
+      expect(restartEligibility('custom:wrapper', 'done', SESSION)).toEqual({ ok: true }),
+    )
+  })
+})
+
+describe('ineligible hints', () => {
+  it('gives each reason its own readable sentence', () => {
+    const reasons: IneligibleReason[] = ['working', 'no-session', 'not-resumable']
+    const hints = reasons.map(ineligibleHint)
+    expect(new Set(hints).size).toBe(reasons.length)
+    for (const hint of hints) expect(hint.length).toBeGreaterThan(10)
   })
 })
 
 describe('sendExitSequence', () => {
-  it('writes every byte in order and sleeps the declared gaps', async () => {
-    const log: string[] = []
-    await sendExitSequence('claude', (d) => log.push(JSON.stringify(d)), async (ms) => {
-      log.push(`sleep:${ms}`)
-    })
-    expect(log).toEqual([
-      JSON.stringify(CTRL_C),
-      `sleep:${CTRL_C_GAP_MS}`,
-      JSON.stringify(CTRL_C),
-      `sleep:${CTRL_C_GAP_MS}`,
-      JSON.stringify(CTRL_C),
-    ])
+  it('writes the presses in order, sleeping the declared gaps in between', async () => {
+    const events: string[] = []
+    await sendExitSequence(
+      'claude',
+      (d) => events.push(d === CTRL_C ? 'ctrl-c' : 'other'),
+      async (ms) => {
+        events.push(`wait:${ms}`)
+      },
+    )
+    const presses = exitWrites('claude')!.length
+    const expected = Array.from({ length: presses }, (_, i) =>
+      i < presses - 1 ? ['ctrl-c', `wait:${CTRL_C_GAP_MS}`] : ['ctrl-c'],
+    ).flat()
+    expect(events).toEqual(expected)
   })
-  it('throws with the agent named rather than silently writing nothing', async () => {
-    await expect(sendExitSequence('codex', () => {}, async () => {})).rejects.toThrow(/codex/)
+
+  it('uses the real timer by default and resolves', async () => {
+    const written: string[] = []
+    // A one-press agent does not exist, so just prove the default sleeper is callable end to end.
+    await sendExitSequence('claude', (d) => written.push(d))
+    expect(written).toHaveLength(exitWrites('claude')!.length)
+  })
+
+  it('throws naming the agent when it cannot be asked to quit, writing nothing', async () => {
+    const written: string[] = []
+    await expect(sendExitSequence('gemini', (d) => written.push(d), async () => {})).rejects.toThrow(/gemini/)
+    await expect(sendExitSequence(undefined, () => {}, async () => {})).rejects.toThrow(/\(none\)/)
+    expect(written).toEqual([])
   })
 })

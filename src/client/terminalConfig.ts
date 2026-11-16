@@ -1,29 +1,19 @@
 import type { FontWeight, ITheme } from '@xterm/xterm'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting, SETTING_RANGES } from '../shared/settings.ranges'
-import type {
-  Settings,
-  TerminalCursorStyle,
-} from '../shared/settings'
+import type { Settings, TerminalCursorStyle } from '../shared/settings'
 import { resolveTerminalTheme } from './themes'
 
 /**
- * Keputusan murni di balik instance xterm di `TerminalCore` — 
- * `src/renderer/terminal/terminal-config.ts`, dipersempit ke bagian APPEARANCE-nya.
+ * Pure decisions behind the xterm instance in `TerminalCore`: which `ITerminalOptions` a set of
+ * settings produces, and how to apply a settings change to a terminal that is already running.
+ * Kept free of DOM and xterm runtime imports so the node-env test runner can exercise it.
  *
- * Diekstrak ke modul sendiri supaya bisa dites tanpa harness xterm/DOM: vitest webterm jalan di
- * environment node, tidak ada jsdom. Yang TIDAK ada: seluruh mesin co-attach
- * (`reportedSize`, letterbox, `TermSize`), seeding tmux (`attachReplay`, `seedPaint`,
- * `repaintResync`, OSC 52), park/adopt, dan tema "glass" — webterm tidak punya tmux, tidak punya
- * satu-pty-N-subscriber, dan tidak punya latar translusen di balik terminal.
- *
- * Satu sumber untuk DUA jalur: opsi saat `new Terminal({...})` (`xtermOptionsFromSettings`) dan
- * perubahan ke terminal yang sudah hidup (`applyLiveOptions`), supaya opsi baru tidak bisa
- * mendarat di satu jalur saja.
+ * One source feeds both paths (`new Terminal({...})` and live updates) so an option cannot be
+ * wired into only one of them. Option semantics follow the xterm.js `ITerminalOptions` reference.
  */
 
-// Rentang hidup di `settings.ranges.ts` (satu sumber). Nama ekspor di bawah dipertahankan sebagai
-// alias tabel supaya pemakai lama (UI settings, tes) tidak menyalin angkanya.
+// The ranges live in `settings.ranges.ts`; these names stay as aliases for existing consumers.
 export const TERMINAL_LINE_HEIGHT_MIN = SETTING_RANGES.terminalLineHeight.min
 export const TERMINAL_LINE_HEIGHT_MAX = SETTING_RANGES.terminalLineHeight.max
 export const TERMINAL_LETTER_SPACING_MIN = SETTING_RANGES.terminalLetterSpacing.min
@@ -35,48 +25,46 @@ export const TERMINAL_MIN_CONTRAST_MAX = SETTING_RANGES.terminalMinContrast.max
 export const TERMINAL_SCROLLBACK_LINES_MIN = SETTING_RANGES.scrollbackLines.min
 export const TERMINAL_SCROLLBACK_LINES_MAX = SETTING_RANGES.scrollbackLines.max
 
-// Nilai settings bisa diedit tangan dan datang lewat HTTP: hilang/NaN/'' harus mendarat di default,
-// bukan di NaN — yang akan diterima xterm lalu dirender jadi grid bertinggi nol.
-export function terminalFontSize(value: number): number {
-  return clampSetting('fontSize', value, DEFAULT_SETTINGS.fontSize)
-}
+// Settings can be hand-edited or arrive over HTTP. A missing, NaN or '' value must land on the
+// default: xterm accepts NaN silently and renders a zero-height grid.
+export const terminalFontSize = (value: number): number =>
+  clampSetting('fontSize', value, DEFAULT_SETTINGS.fontSize)
 
-export function terminalLineHeight(value: number): number {
-  return clampSetting('terminalLineHeight', value, DEFAULT_SETTINGS.terminalLineHeight)
-}
+export const terminalLineHeight = (value: number): number =>
+  clampSetting('terminalLineHeight', value, DEFAULT_SETTINGS.terminalLineHeight)
 
-export function terminalLetterSpacing(value: number): number {
-  return clampSetting('terminalLetterSpacing', value, DEFAULT_SETTINGS.terminalLetterSpacing)
-}
+export const terminalLetterSpacing = (value: number): number =>
+  clampSetting('terminalLetterSpacing', value, DEFAULT_SETTINGS.terminalLetterSpacing)
 
-/** Bobot font; `fallback` beda untuk normal (400) dan bold (700), jadi dua kunci tabel dipakai. */
-export function terminalFontWeight(value: number, fallback: number, key: 'fontWeight' | 'fontWeightBold' = 'fontWeight'): number {
+/** Clamp a font weight; regular and bold have different fallbacks, hence the explicit `key`. */
+export function terminalFontWeight(
+  value: number,
+  fallback: number,
+  key: 'fontWeight' | 'fontWeightBold' = 'fontWeight',
+): number {
   return clampSetting(key, value, fallback)
 }
 
-export function terminalMinContrast(value: number): number {
-  return clampSetting('terminalMinContrast', value, DEFAULT_SETTINGS.terminalMinContrast)
-}
+export const terminalMinContrast = (value: number): number =>
+  clampSetting('terminalMinContrast', value, DEFAULT_SETTINGS.terminalMinContrast)
 
-export function terminalScrollbackLines(value: number): number {
-  return clampSetting('scrollbackLines', value, DEFAULT_SETTINGS.scrollbackLines)
-}
+export const terminalScrollbackLines = (value: number): number =>
+  clampSetting('scrollbackLines', value, DEFAULT_SETTINGS.scrollbackLines)
 
-/** Opsi turunan-appearance, sudah diresolve dan di-clamp. */
+/** The resolved, clamped options that decide how a terminal looks. */
 export interface XtermVisualOptions {
   fontFamily: string
   fontSize: number
   wordSeparator: string
-  // xterm melebarkan dua ini ke `FontWeight` ('normal' | 'bold' | '100'… | number). Kita hanya
-  // pernah MENULIS angka, tapi tipenya harus cocok dengan yang diekspos `term.options` atau target
-  // live tidak bisa dibandingkan dengan terminal sungguhan.
+  // xterm widens the weight options to `FontWeight`; only numbers are ever written, but the type
+  // must match what `term.options` exposes or a real terminal can't be used as a live target.
   fontWeight: FontWeight
   fontWeightBold: FontWeight
   drawBoldTextInBrightColors: boolean
   minimumContrastRatio: number
   cursorBlink: boolean
   cursorStyle: TerminalCursorStyle
-  /** Always `outline` (xterm's default): it shows at a glance which terminal on the canvas has focus. */
+  /** Always `outline` (xterm's default): it shows which terminal on the canvas has focus. */
   cursorInactiveStyle: TerminalCursorStyle | 'outline' | 'none'
   lineHeight: number
   letterSpacing: number
@@ -84,7 +72,7 @@ export interface XtermVisualOptions {
   theme: ITheme
 }
 
-/** Slice `Settings` yang menentukan bagaimana terminal TERLIHAT. */
+/** The slice of `Settings` that determines how a terminal looks. */
 export type XtermVisualSettings = Pick<
   Settings,
   | 'fontFamily'
@@ -99,21 +87,38 @@ export type XtermVisualSettings = Pick<
   | 'terminalWordSeparator'
   | 'cursorStyle'
   | 'cursorBlink'
-  // Bukan appearance, tapi satu-satunya kunci yang memberi xterm batas scrollback-nya (BARIS —
-  // bukan `scrollbackBytes`, yang milik ring buffer PTY di server).
+  // Not visual, but the only key that tells xterm its scrollback limit in LINES (not
+  // `scrollbackBytes`, which sizes the server-side PTY ring buffer).
   | 'scrollbackLines'
 >
 
+/** Option keys written when applying settings to a running terminal, in write order. */
+const LIVE_KEYS = [
+  'fontFamily',
+  'fontSize',
+  'wordSeparator',
+  'lineHeight',
+  'letterSpacing',
+  'fontWeight',
+  'fontWeightBold',
+  'drawBoldTextInBrightColors',
+  'minimumContrastRatio',
+  'cursorBlink',
+  'cursorStyle',
+  'scrollback',
+  'theme',
+] as const satisfies readonly (keyof XtermVisualOptions)[]
+
+/** Keys whose change alters the cell grid (font weight does not: see `applyLiveOptions`). */
+const GEOMETRY_KEYS = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing'] as const
+
 /**
- * Setiap opsi appearance untuk `new Terminal({...})`, dari settings.
+ * All options for `new Terminal({...})`, derived from settings.
  *
- * `fontSizeOverride` adalah ukuran font per-terminal dari ⌘+/⌘− (`terminalFontZoomKeys`): ia
- * dilapis DI SINI, satu tempat, supaya jalur mount dan jalur live-apply membaca satu nilai lewat
- * satu fungsi dan tidak bisa berbeda.
- *
- * `allowProposedApi` dan `macOptionClickForcesSelection` ikut di sini meski bukan appearance,
- * supaya call site cukup menyebar hasil fungsi ini dan tidak ada literal opsi per-site yang bisa
- * menyimpang. `allowProposedApi` wajib: tanpanya `term.unicode.register` (Unicode 11) ditolak.
+ * `fontSizeOverride` is the per-terminal size from the zoom shortcuts; it is layered in here so the
+ * mount path and the live path read one value through one function. `allowProposedApi` (needed for
+ * `term.unicode.register`) and `macOptionClickForcesSelection` (Option-drag selects even while an
+ * app has mouse tracking on) are not visual, but live here so call sites just spread the result.
  */
 export function xtermOptionsFromSettings(
   s: XtermVisualSettings,
@@ -135,45 +140,32 @@ export function xtermOptionsFromSettings(
     scrollback: terminalScrollbackLines(s.scrollbackLines),
     theme: resolveTerminalTheme(s.terminalTheme).theme,
     allowProposedApi: true,
-    // Di dalam app yang meminta mouse tracking (vim, htop) drag biasa diteruskan ke app;
-    // Option/Alt memaksa seleksi (Shift melakukan hal sama lewat bypass xterm sendiri).
     macOptionClickForcesSelection: true,
   }
 }
 
-/** Cukup sepotong instance xterm untuk me-re-option-nya — menjaga file ini bisa dites tanpa DOM. */
+/** The slice of an xterm instance needed to re-option it; keeps this file testable without a DOM. */
 export interface LiveOptionTarget {
   options: Partial<XtermVisualOptions>
 }
 
-/** Apa yang masih jadi utang caller setelah live re-option. */
+/** What the caller still owes after a live re-option. */
 export interface LiveOptionEffects {
-  /**
-   * GEOMETRI SEL berubah, jadi terminal ini sekarang memuat grid berbeda dan caller WAJIB
-   * refit — melewatkan jalur yang sama dengan resize container, supaya PTY diberi tahu ukuran
-   * barunya. Melewatkannya meninggalkan PTY berjalan di grid yang tidak dirender siapa pun, dan
-   * TUI yang memosisikan kursor secara absolut akan menggambar di kolom yang salah.
-   */
+  /** Cell geometry changed: the caller MUST refit so the PTY learns the new grid size. */
   metricsChanged: boolean
-  /**
-   * Palet berubah. xterm mengecat ulang sendiri, tapi caller memaksa satu refresh karena
-   * swap renderer (WebGL → DOM) bisa menelan repaint penuh, dan palet yang setengah tercat
-   * adalah kegagalan paling terlihat yang mungkin.
-   */
+  /** Palette changed: the caller should force one refresh, since a renderer swap can swallow the repaint. */
   themeChanged: boolean
 }
 
 /**
- * Terapkan settings appearance ke terminal yang HIDUP, melaporkan apa yang masih jadi utang caller.
+ * Apply settings to a RUNNING terminal and report what the caller still owes.
  *
- * Penugasan dilakukan per-opsi dan dijaga perbandingan, karena `options` xterm adalah proxy
- * setter: menulis nilai yang tidak berubah tetap memicu penanganan perubahannya (dan, untuk
- * `theme`, rebuild palet penuh). Terminal di-re-option pada setiap ketikan di settings, jadi guard
- * inilah yang menjaga tarikan slider tidak menggedor setiap terminal di canvas.
+ * Writes are per option and guarded by comparison: `term.options` is a setter proxy, so writing an
+ * unchanged value still triggers xterm's change handling (a full palette rebuild for `theme`), and
+ * settings sliders re-option every terminal on every tick.
  *
- * Bobot font SENGAJA tidak ikut dalam `metricsChanged`: xterm menurunkan ukuran selnya dari
- * `CharSizeService`, yang hanya mengukur ulang pada `fontFamily`/`fontSize` — perubahan bobot tidak
- * pernah menggeser grid, jadi refit karenanya hanya melaporkan resize ke PTY untuk sia-sia.
+ * Font weight is deliberately not geometry: xterm re-measures cells only on family/size changes, so
+ * refitting for a weight change would just send the PTY a pointless resize.
  */
 export function applyLiveOptions(
   term: LiveOptionTarget,
@@ -181,33 +173,13 @@ export function applyLiveOptions(
   fontSizeOverride?: number,
 ): LiveOptionEffects {
   const next = xtermOptionsFromSettings(s, fontSizeOverride)
-  const o = term.options
-  const metricsChanged =
-    o.fontFamily !== next.fontFamily ||
-    o.fontSize !== next.fontSize ||
-    o.lineHeight !== next.lineHeight ||
-    o.letterSpacing !== next.letterSpacing
-  // Identitas, bukan kesetaraan mendalam: tema adalah konstanta modul, jadi id yang sama selalu
-  // menghasilkan objek yang sama dan id yang berubah tidak pernah demikian.
-  const themeChanged = o.theme !== next.theme
-
-  if (o.fontFamily !== next.fontFamily) o.fontFamily = next.fontFamily
-  if (o.fontSize !== next.fontSize) o.fontSize = next.fontSize
-  if (o.wordSeparator !== next.wordSeparator) o.wordSeparator = next.wordSeparator
-  if (o.lineHeight !== next.lineHeight) o.lineHeight = next.lineHeight
-  if (o.letterSpacing !== next.letterSpacing) o.letterSpacing = next.letterSpacing
-  if (o.fontWeight !== next.fontWeight) o.fontWeight = next.fontWeight
-  if (o.fontWeightBold !== next.fontWeightBold) o.fontWeightBold = next.fontWeightBold
-  if (o.drawBoldTextInBrightColors !== next.drawBoldTextInBrightColors) {
-    o.drawBoldTextInBrightColors = next.drawBoldTextInBrightColors
+  const current = term.options as Record<string, unknown>
+  const wanted: Record<string, unknown> = { ...next }
+  const changed = new Set<string>(LIVE_KEYS.filter((k) => current[k] !== wanted[k]))
+  for (const key of LIVE_KEYS) if (changed.has(key)) current[key] = wanted[key]
+  return {
+    metricsChanged: GEOMETRY_KEYS.some((k) => changed.has(k)),
+    // Identity compare: a theme is a module constant, so one id always yields the same object.
+    themeChanged: changed.has('theme'),
   }
-  if (o.minimumContrastRatio !== next.minimumContrastRatio) {
-    o.minimumContrastRatio = next.minimumContrastRatio
-  }
-  if (o.cursorBlink !== next.cursorBlink) o.cursorBlink = next.cursorBlink
-  if (o.cursorStyle !== next.cursorStyle) o.cursorStyle = next.cursorStyle
-  if (o.scrollback !== next.scrollback) o.scrollback = next.scrollback
-  if (themeChanged) o.theme = next.theme
-
-  return { metricsChanged, themeChanged }
 }

@@ -1,76 +1,90 @@
-// Helper MURNI untuk aksi siklus-hidup sebuah node agent: meminta CLI keluar baik-baik, lalu
-// meluncurkannya ulang dengan `--resume` miliknya sendiri sehingga percakapannya kembali utuh.
-// Bebas DOM/transport supaya context menu, koreografi restart, dan test memakai SATU set aturan.
+// Pure helpers for an agent node's lifecycle actions: ask the CLI to quit cleanly, then relaunch it
+// with its own `--resume` so the conversation comes back. No DOM or transport, so the context menu,
+// the restart choreography and the tests all share one rule set.
 //
-// Logika restart agent. Yang TIDAK tercakup:
-// polling pane tmux (`performExitPhase`). webterm menjalankan agent sebagai `shell -l -c "<cmd>"`,
-// jadi saat CLI keluar shell-nya keluar juga dan PTY-nya habis — tidak ada pane shell untuk
-// diintip atau diketik. Lihat `AgentNode` untuk bagaimana fase relaunch-nya diisi.
+// webterm runs an agent as `shell -l -c "<cmd>"`: when the CLI exits, the shell exits and the PTY
+// ends. There is no idle shell to poll or type into, so the relaunch phase is time-based (see
+// `EXIT_SETTLE_MS`); `AgentNode` fills in that phase.
 
 import { canResume, capabilityAgentId, isSafeSessionId, type AgentId, type AgentStatus } from '../shared/workspace'
 
 /**
- * Perintah exit in-band per CLI agent. Hanya agent yang terdaftar di sini yang bisa di-restart
- * in-place — CLI tak dikenal (termasuk CLI non-Claude yang dijalankan di terminal) tidak punya cara
- * aman untuk diminta keluar. Nilainya `EXIT_SEQUENCES`.
+ * How Claude Code is asked to quit, from its documented keys
+ * (https://code.claude.com/docs/en/interactive-mode, "General controls"):
+ * - `Ctrl+C` interrupts a running operation; with nothing running, the first press clears the
+ *   prompt input and a second press exits.
+ * - `/exit` is the documented slash command, but typing it would land in a permission dialog or
+ *   a half-written draft, so the restart path uses Ctrl+C presses instead.
+ * - `Ctrl+D` also exits, but with text in the prompt it deletes a character, so it is not used.
+ * Behaviour checked against the CLI on this machine: 2.1.325.
  */
-const EXIT_SEQUENCES: Record<string, string> = { claude: '/exit' }
+const CLAUDE_EXIT_COMMAND = '/exit'
+/** Presses the docs describe: one to clear the draft, one to exit. */
+const CLAUDE_CTRL_C_DOCUMENTED = 2
+/** One extra press in case the first press only armed the "press again to exit" state. A press after the CLI is gone hits a dead PTY and is harmless. */
+const CLAUDE_CTRL_C_MARGIN = 1
+
+interface ExitProfile {
+  /** The CLI's own exit slash command; its presence also marks the CLI as safe to ask to quit. */
+  command: string
+  /** How many Ctrl+C presses reliably quit it, with or without a draft in the prompt. */
+  ctrlCPresses: number
+}
 
 /**
- * Berapa Ctrl-C yang mengeluarkan agent. Diukur terhadap binary terpasang: satu Ctrl-C
- * membersihkan composer, berikutnya mempersenjatai "press again to exit", yang ketiga keluar —
- * dengan composer kosong yang kedua sudah keluar. Jumlah tetap ini keluar dengan ATAU tanpa draft.
+ * Per-harness exit behaviour. Only harnesses listed here can be restarted in place; unknown CLIs
+ * (including non-Claude CLIs run in a terminal) have no safe way to be asked to quit.
  */
-const CTRL_C_QUITS: Record<string, number> = { claude: 3 }
+const EXIT_PROFILES: Record<string, ExitProfile> = {
+  claude: { command: CLAUDE_EXIT_COMMAND, ctrlCPresses: CLAUDE_CTRL_C_DOCUMENTED + CLAUDE_CTRL_C_MARGIN },
+}
 
 const CTRL_C = '\x03'
 
-/** Jeda antar Ctrl-C berurutan: window "press again to quit" perlu melihat tekan yang terpisah. */
+/** Pause between consecutive Ctrl+C presses so the CLI sees separate presses, not one burst. */
 export const CTRL_C_GAP_MS = 150
 
+function profileFor(agentId: AgentId | undefined): ExitProfile | null {
+  if (!agentId) return null
+  return EXIT_PROFILES[capabilityAgentId(agentId)] ?? null
+}
+
 /**
- * Perintah exit sebuah agent, atau null bila tidak ada cara aman meminta CLI-nya keluar.
- * Di-resolve lewat BASE harness supaya agent custom yang mewarisi claude keluar dengan `/exit`
- * claude — grammar CLI-nya memang grammar claude.
+ * The exit command of an agent, or null when its CLI cannot be asked to quit. Resolved through the
+ * base harness, so a custom agent built on claude quits like claude.
  */
 export function exitSequence(agentId: AgentId | undefined): string | null {
-  if (!agentId) return null
-  return EXIT_SEQUENCES[capabilityAgentId(agentId)] ?? null
+  return profileFor(agentId)?.command ?? null
 }
 
 export type IneligibleReason = 'working' | 'no-session' | 'not-resumable'
 
 /**
- * State yang panenya harus dibiarkan. `blocked` ada di sini dengan alasan yang lebih tajam
- * daripada kesopanan: ia berarti dialog permission/pertanyaan sedang MEMEGANG prompt, jadi menulis
- * baris exit berarti mengetikkannya SEBAGAI JAWABAN dialog itu alih-alih menutup CLI. Keduanya melaporkan alasan `'working'`: bagi
- * pengguna keduanya sama-sama "sedang sibuk, coba lagi sebentar".
+ * Statuses that must be left alone. `blocked` means a permission or question dialog owns the
+ * prompt, so quitting would answer that dialog instead of closing the CLI. Both are reported as
+ * `'working'`: to the user both mean "busy, try again shortly".
  */
 const BUSY_STATES: readonly AgentStatus[] = ['working', 'blocked']
 
 /**
- * Gerbang tunggal yang dipakai context menu dan koreografi restart itu sendiri.
+ * The single gate shared by the context menu and the restart choreography.
  *
- * `not-resumable` menang atas dua lainnya: CLI yang tidak bisa kita minta keluar atau tidak bisa
- * di-resume tidak akan pernah bisa di-restart, jadi tak ada yang bisa diperbaiki pengguna dengan
- * menunggu.
+ * `not-resumable` outranks the other reasons: a CLI that cannot be asked to quit or resumed will
+ * never restart, so waiting cannot fix it.
  */
 export function restartEligibility(
   agentId: AgentId | undefined,
   state: AgentStatus | undefined,
   sessionId: string | undefined
 ): { ok: true } | { ok: false; reason: IneligibleReason } {
-  if (!agentId || !canResume(agentId) || !exitSequence(agentId))
-    return { ok: false, reason: 'not-resumable' }
-  // Keluar di tengah turn akan menelantarkan pekerjaan yang sedang berjalan; keluar dari sesi
-  // blocked akan menjawab dialognya dengan perintah exit (lihat BUSY_STATES).
-  if (BUSY_STATES.includes(state as AgentStatus)) return { ok: false, reason: 'working' }
-  // Tanpa session id provider tidak ada apa pun untuk di-resume.
+  if (!agentId || !canResume(agentId) || !exitSequence(agentId)) return { ok: false, reason: 'not-resumable' }
+  if (state !== undefined && BUSY_STATES.includes(state)) return { ok: false, reason: 'working' }
+  // Without a provider session id there is nothing to resume.
   if (!sessionId || !isSafeSessionId(sessionId)) return { ok: false, reason: 'no-session' }
   return { ok: true }
 }
 
-/** Kalimat yang bisa ditampilkan untuk sebuah penolakan — apa yang harus ditunggu pengguna. */
+/** User-facing sentence for a refusal: what to wait for or why it cannot work. */
 export function ineligibleHint(reason: IneligibleReason): string {
   switch (reason) {
     case 'working':
@@ -82,52 +96,49 @@ export function ineligibleHint(reason: IneligibleReason): string {
   }
 }
 
-/** Satu write dalam urutan exit. `gapAfterMs` adalah jeda SETELAH write ini, sebelum yang berikut. */
+/** One write of the exit sequence; `gapAfterMs` is the pause AFTER it, before the next write. */
 export interface ExitWrite {
   data: string
   gapAfterMs: number
 }
 
 /**
- * Urutan write yang meminta sebuah agent keluar, atau null bila agent-nya tidak bisa diminta keluar.
- * Ctrl-C berulang. TIDAK ada Ctrl-U di depan: Ctrl-C sudah membersihkan
- * seluruh composer, dan tidak ada CR yang dikirim sehingga draft tidak pernah ikut terkirim.
+ * The writes that ask an agent to quit, or null when it cannot be asked. Repeated Ctrl+C only: no
+ * Escape (a live agent reads it as interrupt), no Ctrl+U or Enter (Ctrl+C already clears the
+ * prompt, and no Enter means a draft is never submitted).
  */
 export function exitWrites(agentId: AgentId | undefined): ExitWrite[] | null {
-  const exit = exitSequence(agentId)
-  if (!exit || !agentId) return null
-  const ctrlCs = CTRL_C_QUITS[capabilityAgentId(agentId)] ?? 0
-  if (ctrlCs === 0) return null
-  return Array.from({ length: ctrlCs }, (_, i) => ({
+  const profile = profileFor(agentId)
+  if (!profile || profile.ctrlCPresses <= 0) return null
+  const last = profile.ctrlCPresses - 1
+  return Array.from({ length: profile.ctrlCPresses }, (_, i) => ({
     data: CTRL_C,
-    gapAfterMs: i === ctrlCs - 1 ? 0 : CTRL_C_GAP_MS,
+    gapAfterMs: i === last ? 0 : CTRL_C_GAP_MS,
   }))
 }
 
 /**
- * Berapa lama menunggu CLI melepaskan PTY setelah urutan exit dikirim, sebelum relaunch dipaksakan.
+ * How long to wait for the CLI to release the PTY after the exit sequence before forcing relaunch.
  *
- * ponytail: jendela tetap, bukan verifikasi. alternatifnya meng-poll `pane_current_command` tmux sampai
- * pane-nya kembali jadi shell; webterm tidak punya pane untuk ditanya (agent-nya ADALAH proses
- * PTY-nya, lihat header modul). Plafonnya: CLI yang keluar lebih lambat dari ini akan di-kill
- * sebelum sempat keluar sendiri, dan `--resume` lalu memulihkan percakapan dari transcript di disk
- * — kehilangan paling banyak pesan terakhir. Upgrade: begitu jalur PTY melaporkan perintah
- * foreground (atau meluncurkan agent DI DALAM shell interaktif, bukan `-c`), ganti dengan poll.
+ * ponytail: fixed window, not verification. The alternative is polling the foreground command
+ * until the shell returns, but the agent IS the PTY's process (see the header), so there is no
+ * shell to ask. Ceiling: a CLI slower than this is killed mid-exit, and `--resume` restores the
+ * conversation from its on-disk transcript, losing at most the last message. Upgrade: once the PTY
+ * path reports the foreground command (or agents launch inside an interactive shell), poll instead.
  */
 export const EXIT_SETTLE_MS = 2500
 
-/** Total durasi urutan exit, dipakai koreografi untuk menjadwalkan fase relaunch-nya. */
+/** Total duration of an exit sequence, used to schedule the relaunch phase. */
 export function exitDurationMs(writes: ExitWrite[]): number {
   return writes.reduce((sum, w) => sum + w.gapAfterMs, 0)
 }
 
 /**
- * Kirim urutan exit sebuah agent lewat `write`, menghormati jeda antar write. Resolve setelah write
- * terakhir — pemanggil yang menunggu CLI benar-benar melepaskan PTY (lihat EXIT_SETTLE_MS).
+ * Send an agent's exit sequence through `write`, honouring the gaps. Resolves after the last write;
+ * the caller then waits for the CLI to release the PTY (see `EXIT_SETTLE_MS`).
  *
- * Melempar bila agent-nya tidak bisa diminta keluar, bukan diam-diam tidak melakukan apa pun:
- * pemanggil menggerbangi lewat `restartEligibility` lebih dulu, jadi sampai di sini artinya ada
- * bug penyambungan, bukan pilihan pengguna.
+ * Throws for an agent that cannot be asked to quit rather than silently doing nothing: callers gate
+ * on `restartEligibility` first, so reaching this means a wiring bug, not a user choice.
  */
 export async function sendExitSequence(
   agentId: AgentId | undefined,

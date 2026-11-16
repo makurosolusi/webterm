@@ -3,7 +3,7 @@
 // Neither touches the user's selection from Follow; an act frame itself (store, chips, tray) never moves anything.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ViewportPortal, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
+import { ViewportPortal, useReactFlow, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
 import type { RefObject } from 'react'
 import { useInRouterContext } from 'react-router'
 import { fetchWorkspaces } from './api'
@@ -34,18 +34,38 @@ const titleOf = (n: Node): string => {
   return d?.title || d?.name || n.id
 }
 
+/**
+ * Canvas-space position of a node. React Flow keeps `position` relative to the parent for nodes
+ * inside a group, so prefer the store's resolved `positionAbsolute`; when the store has not measured
+ * the node yet, sum `position` up the `parentId` chain (bounded, so a malformed cycle cannot hang).
+ */
+export function absoluteNodePosition(node: Node, byId: ReadonlyMap<string, Node>, resolved?: { x: number; y: number }): { x: number; y: number } {
+  if (resolved) return resolved
+  let { x, y } = node.position
+  let parentId = node.parentId
+  for (let depth = 0; parentId && depth < byId.size; depth++) {
+    const parent = byId.get(parentId)
+    if (!parent) break
+    x += parent.position.x
+    y += parent.position.y
+    parentId = parent.parentId
+  }
+  return { x, y }
+}
+
 /** "Central · just now" above each touched node; "New" for one Central just created. Decoration only (the tray speaks). */
 function ActChips({ nodes, entries }: { nodes: readonly Node[]; entries: readonly ActEntry[] }): React.JSX.Element {
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
+  const { getInternalNode } = useReactFlow()
   return (
     <ViewportPortal>
       {entries.flatMap((e) => {
         const n = byId.get(e.nodeId)
-        // ponytail: node.position is relative to its parent; nodes inside a group chip at the wrong spot. Use positionAbsolute if grouping nests nodes.
         if (!n || e.verb === 'closed') return []
         const fresh = isNewVerb(e.verb)
+        const at = absoluteNodePosition(n, byId, getInternalNode(n.id)?.internals.positionAbsolute)
         return [(
-          <div key={e.nodeId} className="central-act-chip" data-new={fresh} aria-hidden="true" style={{ left: n.position.x, top: n.position.y }}>
+          <div key={e.nodeId} className="central-act-chip" data-new={fresh} aria-hidden="true" style={{ left: at.x, top: at.y }}>
             {fresh ? 'New' : 'Central · just now'}
           </div>
         )]

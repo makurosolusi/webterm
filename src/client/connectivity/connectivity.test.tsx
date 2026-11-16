@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 // Root-locking tests for the Claude-link status item: shown only when the SERVER says so, spoken once, never accusing.
-import { act, cleanup, render } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CanvasStatusBar } from '../Dock.statusBar'
 import type { DockProps } from '../Dock.types'
@@ -133,5 +134,46 @@ describe('Claude link status item', () => {
     expect(item(container)?.textContent).toMatch(/^Claude API unreachable since /)
     await frame({ state: 'online', since: SINCE })
     expect(item(container)?.textContent).toBe('Back online')
+  })
+})
+
+describe('Claude link status item: keyboard access', () => {
+  const focusViaKeyboard = (el: HTMLElement) => {
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => { el.focus() })
+  }
+  const connectivityItem = (c: HTMLElement) => c.querySelector('[data-slot="vscode-status-bar-left"] [data-slot="vscode-status-bar-item"]') as HTMLElement
+  const tooltip = () => document.querySelector('[data-slot="tooltip-content"]')
+
+  it('is reachable with Tab and opens its detailed tooltip on keyboard focus, described by it', async () => {
+    const { container } = await mount(reply(200, { state: 'offline', since: SINCE, scope: 'api', cause: 'dns' }))
+    const el = connectivityItem(container)
+    expect(el.tabIndex).toBe(0)
+    expect(el.getAttribute('aria-describedby')).toBeNull()
+    focusViaKeyboard(el)
+    await flush()
+    expect(tooltip()?.textContent).toMatch(/name lookup failed/)
+    expect(el.getAttribute('aria-describedby')).toBeTruthy()
+  })
+
+  it('does not open the tooltip for focus that did not come from the keyboard', async () => {
+    const { container } = await mount(reply(200, { state: 'offline', since: SINCE, scope: 'api', cause: 'dns' }))
+    const el = connectivityItem(container)
+    fireEvent.pointerDown(el)
+    act(() => { el.focus() })
+    await flush()
+    expect(tooltip()).toBeNull()
+  })
+
+  it('cuts a long label visually but keeps the full sentence in the aria-label and the live region whole', async () => {
+    const { container } = await mount(reply(200, { state: 'offline', since: SINCE, scope: 'api' }))
+    const el = connectivityItem(container)
+    expect(el.getAttribute('data-truncate')).toBe('true')
+    const full = el.querySelector('.vscode-status-bar__label')!.textContent!
+    expect(full).toMatch(/^Can't reach the Claude API or its proxy since .+ · work is paused, not failed$/)
+    expect(el.getAttribute('aria-label')).toBe(full)
+    expect(live(container).textContent).toBe("Can't reach the Claude API or its proxy. Work is paused, not failed.")
+    const css = readFileSync('src/client/components/vscode/vscode-shell.css', 'utf8') // vitest runs from the repo root
+    expect(css).toMatch(/\[data-truncate='true'\] \.vscode-status-bar__label \{[^}]*text-overflow: ellipsis/)
   })
 })

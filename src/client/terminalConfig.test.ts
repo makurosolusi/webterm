@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, type Settings } from '../shared/settings'
+import { DEFAULT_SETTINGS } from '../shared/settings'
 import {
   TERMINAL_LETTER_SPACING_MAX,
   TERMINAL_LETTER_SPACING_MIN,
@@ -21,109 +21,121 @@ import {
 } from './terminalConfig'
 import { resolveTerminalTheme } from './themes'
 
-const base: XtermVisualSettings = DEFAULT_SETTINGS
+const defaults: XtermVisualSettings = DEFAULT_SETTINGS
 
-describe('clamps', () => {
-  it('keeps in-range values untouched', () => {
-    expect(terminalLineHeight(1.4)).toBe(1.4)
-    expect(terminalLetterSpacing(-1)).toBe(-1)
-    expect(terminalFontWeight(500, 400)).toBe(500)
-    expect(terminalMinContrast(4.5)).toBe(4.5)
+describe('value clamps', () => {
+  it('passes in-range values through unchanged', () => {
+    expect(terminalLineHeight(1.25)).toBe(1.25)
+    expect(terminalLetterSpacing(2)).toBe(2)
+    expect(terminalFontWeight(600, 400)).toBe(600)
+    expect(terminalMinContrast(7)).toBe(7)
   })
 
-  it('clamps out-of-range values to the bounds', () => {
-    expect(terminalLineHeight(0)).toBe(TERMINAL_LINE_HEIGHT_MIN)
-    expect(terminalLineHeight(99)).toBe(TERMINAL_LINE_HEIGHT_MAX)
-    expect(terminalLetterSpacing(-50)).toBe(TERMINAL_LETTER_SPACING_MIN)
-    expect(terminalLetterSpacing(50)).toBe(TERMINAL_LETTER_SPACING_MAX)
-    expect(terminalFontWeight(0, 400)).toBe(100)
-    expect(terminalFontWeight(5000, 400)).toBe(900)
-    expect(terminalMinContrast(0)).toBe(1)
-    expect(terminalMinContrast(100)).toBe(21)
+  it('pins out-of-range values to the nearest bound', () => {
+    expect(terminalLineHeight(-3)).toBe(TERMINAL_LINE_HEIGHT_MIN)
+    expect(terminalLineHeight(1000)).toBe(TERMINAL_LINE_HEIGHT_MAX)
+    expect(terminalLetterSpacing(-400)).toBe(TERMINAL_LETTER_SPACING_MIN)
+    expect(terminalLetterSpacing(400)).toBe(TERMINAL_LETTER_SPACING_MAX)
+    expect(terminalFontWeight(1, 400)).toBe(100)
+    expect(terminalFontWeight(12_000, 400)).toBe(900)
+    expect(terminalMinContrast(-1)).toBe(1)
+    expect(terminalMinContrast(500)).toBe(21)
   })
 
-  it('sends NaN and non-numbers to the fallback, never through to xterm', () => {
-    // Settings bisa diedit tangan dan datang lewat HTTP. xterm menerima NaN dengan senang hati
-    // lalu merender grid bertinggi nol — tidak ada error, cuma terminal kosong.
-    expect(terminalLineHeight(NaN)).toBe(1)
-    expect(terminalLetterSpacing(NaN)).toBe(0)
-    expect(terminalMinContrast(Infinity)).toBe(1)
-    expect(terminalFontWeight(NaN, 700)).toBe(700)
-    expect(terminalLineHeight('1.5' as unknown as number)).toBe(1)
+  it('replaces NaN, Infinity and strings with the fallback so xterm never sees them', () => {
+    expect(terminalLineHeight(Number.NaN)).toBe(DEFAULT_SETTINGS.terminalLineHeight)
+    expect(terminalLetterSpacing(Number.NaN)).toBe(DEFAULT_SETTINGS.terminalLetterSpacing)
+    expect(terminalMinContrast(Number.POSITIVE_INFINITY)).toBe(DEFAULT_SETTINGS.terminalMinContrast)
+    expect(terminalFontWeight(Number.NaN, 700)).toBe(700)
+    expect(terminalLineHeight('2' as unknown as number)).toBe(DEFAULT_SETTINGS.terminalLineHeight)
   })
-})
 
-describe('fontSize', () => {
-  it('menjepit ke tabel dan menolak NaN/kosong', () => {
-    expect(terminalFontSize(6)).toBe(8)
-    expect(terminalFontSize(99)).toBe(32)
-    expect(terminalFontSize(NaN)).toBe(DEFAULT_SETTINGS.fontSize)
+  it('clamps the font size and rejects blank input', () => {
+    expect(terminalFontSize(3)).toBe(8)
+    expect(terminalFontSize(200)).toBe(32)
+    expect(terminalFontSize(Number.NaN)).toBe(DEFAULT_SETTINGS.fontSize)
     expect(terminalFontSize('' as unknown as number)).toBe(DEFAULT_SETTINGS.fontSize)
-    expect(xtermOptionsFromSettings({ ...base, fontSize: NaN }).fontSize).toBe(DEFAULT_SETTINGS.fontSize)
-    expect(xtermOptionsFromSettings(base, 99).fontSize).toBe(32)
   })
 })
 
 describe('xtermOptionsFromSettings', () => {
-  it('maps every appearance key from settings', () => {
-    const o = xtermOptionsFromSettings(base)
-    expect(o.fontFamily).toBe(base.fontFamily)
-    expect(o.fontSize).toBe(base.fontSize)
-    expect(o.wordSeparator).toBe(base.terminalWordSeparator)
-    expect(o.fontWeight).toBe(400)
-    expect(o.fontWeightBold).toBe(700)
-    expect(o.drawBoldTextInBrightColors).toBe(true)
-    expect(o.minimumContrastRatio).toBe(1)
-    expect(o.cursorBlink).toBe(true)
-    expect(o.cursorStyle).toBe('block')
-    expect(o.cursorInactiveStyle).toBe('outline')
-    expect(o.lineHeight).toBe(1)
-    expect(o.letterSpacing).toBe(0)
-    expect(o.theme).toBe(resolveTerminalTheme(base.terminalTheme).theme)
+  it('maps each visual setting to its xterm option', () => {
+    const custom: XtermVisualSettings = {
+      ...defaults,
+      fontFamily: 'Fira Code, monospace',
+      fontSize: 15,
+      fontWeight: 300,
+      fontWeightBold: 800,
+      drawBoldTextInBrightColors: false,
+      terminalMinContrast: 4.5,
+      terminalWordSeparator: ' /',
+      cursorStyle: 'underline',
+      cursorBlink: false,
+      terminalLineHeight: 1.2,
+      terminalLetterSpacing: 1,
+      terminalTheme: 'dracula',
+    }
+    expect(xtermOptionsFromSettings(custom)).toMatchObject({
+      fontFamily: 'Fira Code, monospace',
+      fontSize: 15,
+      fontWeight: 300,
+      fontWeightBold: 800,
+      drawBoldTextInBrightColors: false,
+      minimumContrastRatio: 4.5,
+      wordSeparator: ' /',
+      cursorStyle: 'underline',
+      cursorBlink: false,
+      lineHeight: 1.2,
+      letterSpacing: 1,
+      theme: resolveTerminalTheme('dracula').theme,
+    })
   })
 
-  it('always asks for the proposed API, which Unicode 11 registration needs', () => {
-    expect(xtermOptionsFromSettings(base).allowProposedApi).toBe(true)
-    expect(xtermOptionsFromSettings(base).macOptionClickForcesSelection).toBe(true)
+  it('always shows an outlined cursor in unfocused terminals', () => {
+    expect(xtermOptionsFromSettings(defaults).cursorInactiveStyle).toBe('outline')
   })
 
-  it('sets scrollback from scrollbackLines, never from scrollbackBytes', () => {
-    // `settings.scrollbackBytes` membatasi ring buffer BYTE di server. Memakainya di sini akan
-    // memberi xterm 262.144 BARIS buffer per node.
-    expect(xtermOptionsFromSettings(base).scrollback).toBe(DEFAULT_SETTINGS.scrollbackLines)
+  it('always enables the proposed API (Unicode registration) and Option-drag selection', () => {
+    const o = xtermOptionsFromSettings(defaults)
+    expect(o.allowProposedApi).toBe(true)
+    expect(o.macOptionClickForcesSelection).toBe(true)
+  })
+
+  it('takes scrollback from the line-count setting and ignores the server byte budget', () => {
     expect(DEFAULT_SETTINGS.scrollbackLines).not.toBe(DEFAULT_SETTINGS.scrollbackBytes)
-    // Nilai non-default ikut terbawa, dan mengubah kunci BYTE tidak menggeser scrollback xterm.
-    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 4_000 }).scrollback).toBe(4_000)
-    const tinyServerBuffer: Settings = { ...DEFAULT_SETTINGS, scrollbackBytes: 1024 }
-    expect(xtermOptionsFromSettings(tinyServerBuffer).scrollback).toBe(
-      DEFAULT_SETTINGS.scrollbackLines,
-    )
+    expect(xtermOptionsFromSettings({ ...defaults, scrollbackLines: 2500 }).scrollback).toBe(2500)
+    const tinyBuffer = { ...DEFAULT_SETTINGS, scrollbackBytes: 512 }
+    expect(xtermOptionsFromSettings(tinyBuffer).scrollback).toBe(DEFAULT_SETTINGS.scrollbackLines)
   })
 
-  it('clamps a hand-edited scrollbackLines instead of handing xterm a useless buffer', () => {
-    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 1 }).scrollback).toBe(
+  it('clamps scrollback to the allowed range and repairs NaN', () => {
+    expect(xtermOptionsFromSettings({ ...defaults, scrollbackLines: 0 }).scrollback).toBe(
       TERMINAL_SCROLLBACK_LINES_MIN,
     )
-    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: 10_000_000 }).scrollback).toBe(
+    expect(xtermOptionsFromSettings({ ...defaults, scrollbackLines: 5e9 }).scrollback).toBe(
       TERMINAL_SCROLLBACK_LINES_MAX,
     )
-    expect(xtermOptionsFromSettings({ ...base, scrollbackLines: NaN }).scrollback).toBe(
+    expect(xtermOptionsFromSettings({ ...defaults, scrollbackLines: Number.NaN }).scrollback).toBe(
       DEFAULT_SETTINGS.scrollbackLines,
     )
   })
 
-  it('layers the per-terminal font size override over the global size', () => {
-    expect(xtermOptionsFromSettings(base, 20).fontSize).toBe(20)
-    expect(xtermOptionsFromSettings(base, undefined).fontSize).toBe(base.fontSize)
+  it('layers the per-terminal font size over the global one, and clamps it', () => {
+    expect(xtermOptionsFromSettings(defaults, 22).fontSize).toBe(22)
+    expect(xtermOptionsFromSettings(defaults).fontSize).toBe(defaults.fontSize)
+    expect(xtermOptionsFromSettings(defaults, 500).fontSize).toBe(32)
+    expect(xtermOptionsFromSettings({ ...defaults, fontSize: Number.NaN }).fontSize).toBe(
+      DEFAULT_SETTINGS.fontSize,
+    )
   })
 
-  it('clamps hand-edited settings on the way in', () => {
+  it('clamps several hand-edited values in one pass', () => {
     const o = xtermOptionsFromSettings({
-      ...base,
-      terminalLineHeight: 9,
-      terminalLetterSpacing: -9,
-      fontWeight: 9999,
-      terminalMinContrast: 0,
+      ...defaults,
+      terminalLineHeight: 50,
+      terminalLetterSpacing: -50,
+      fontWeight: 70_000,
+      terminalMinContrast: -5,
     })
     expect(o.lineHeight).toBe(TERMINAL_LINE_HEIGHT_MAX)
     expect(o.letterSpacing).toBe(TERMINAL_LETTER_SPACING_MIN)
@@ -131,111 +143,100 @@ describe('xtermOptionsFromSettings', () => {
     expect(o.minimumContrastRatio).toBe(1)
   })
 
-  it('falls back to the default theme for an unknown id', () => {
-    expect(xtermOptionsFromSettings({ ...base, terminalTheme: 'nope' }).theme).toBe(
-      resolveTerminalTheme(undefined).theme,
-    )
+  it('uses the default theme when the stored id is unknown', () => {
+    const o = xtermOptionsFromSettings({ ...defaults, terminalTheme: 'gone' })
+    expect(o.theme).toBe(resolveTerminalTheme(undefined).theme)
   })
 })
 
-/** Terminal tiruan yang mencatat setiap PENULISAN, supaya guard perbandingan bisa diperiksa. */
-function fakeTerm(s: XtermVisualSettings, fontSizeOverride?: number) {
-  const written: string[] = []
-  const values = { ...xtermOptionsFromSettings(s, fontSizeOverride) } as Record<string, unknown>
+/** A stand-in terminal whose `options` records every write, so comparison guards are observable. */
+function recordingTerminal(s: XtermVisualSettings, fontSizeOverride?: number) {
+  const writes: string[] = []
+  const state = { ...xtermOptionsFromSettings(s, fontSizeOverride) } as Record<string, unknown>
   const options = new Proxy(
     {},
     {
-      get: (_t, k: string) => values[k],
-      set: (_t, k: string, v) => {
-        written.push(k)
-        values[k] = v
+      get: (_t, key: string) => state[key],
+      set: (_t, key: string, value) => {
+        writes.push(key)
+        state[key] = value
         return true
       },
     },
   )
-  return { term: { options } as LiveOptionTarget, written }
+  return { term: { options } as LiveOptionTarget, writes }
 }
 
 describe('applyLiveOptions', () => {
-  it('writes nothing when settings are unchanged', () => {
-    // `options` xterm adalah proxy setter: menulis nilai yang tidak berubah tetap memicu
-    // penanganan perubahan, dan setiap ketikan di settings me-re-option SETIAP terminal.
-    const { term, written } = fakeTerm(base)
-    expect(applyLiveOptions(term, base)).toEqual({ metricsChanged: false, themeChanged: false })
-    expect(written).toEqual([])
+  it('writes nothing and reports nothing when settings did not change', () => {
+    const { term, writes } = recordingTerminal(defaults)
+    expect(applyLiveOptions(term, defaults)).toEqual({ metricsChanged: false, themeChanged: false })
+    expect(writes).toEqual([])
   })
 
-  it('writes only the options that actually changed', () => {
-    const { term, written } = fakeTerm(base)
-    applyLiveOptions(term, { ...base, cursorStyle: 'bar' })
-    expect(written).toEqual(['cursorStyle'])
+  it('writes only the options that differ', () => {
+    const { term, writes } = recordingTerminal(defaults)
+    applyLiveOptions(term, { ...defaults, cursorBlink: !defaults.cursorBlink })
+    expect(writes).toEqual(['cursorBlink'])
   })
 
-  it('reports metricsChanged for cell geometry only', () => {
-    for (const patch of [
-      { fontSize: 18 },
-      { fontFamily: 'monospace' },
-      { terminalLineHeight: 1.5 },
-      { terminalLetterSpacing: 1 },
-    ] as Partial<XtermVisualSettings>[]) {
-      const { term } = fakeTerm(base)
-      expect(applyLiveOptions(term, { ...base, ...patch }).metricsChanged, String(patch)).toBe(true)
-    }
+  it.each([
+    ['font size', { fontSize: 19 }],
+    ['font family', { fontFamily: 'Menlo, monospace' }],
+    ['line height', { terminalLineHeight: 1.6 }],
+    ['letter spacing', { terminalLetterSpacing: 2 }],
+  ] as [string, Partial<XtermVisualSettings>][])('flags a %s change as a geometry change', (_name, patch) => {
+    const { term } = recordingTerminal(defaults)
+    expect(applyLiveOptions(term, { ...defaults, ...patch }).metricsChanged).toBe(true)
   })
 
-  it('does not treat font weights as a geometry change', () => {
-    // Ukuran sel xterm datang dari CharSizeService, yang hanya mengukur ulang pada
-    // fontFamily/fontSize — refit karena bobot hanya melaporkan resize sia-sia ke PTY.
-    const { term, written } = fakeTerm(base)
-    const effects = applyLiveOptions(term, { ...base, fontWeight: 300, fontWeightBold: 600 })
+  it('does not count a font-weight change as geometry', () => {
+    const { term, writes } = recordingTerminal(defaults)
+    const effects = applyLiveOptions(term, { ...defaults, fontWeight: 200, fontWeightBold: 900 })
     expect(effects.metricsChanged).toBe(false)
-    expect(written).toEqual(['fontWeight', 'fontWeightBold'])
+    expect(writes).toEqual(['fontWeight', 'fontWeightBold'])
   })
 
-  it('treats a font size override change as a geometry change', () => {
-    // ⌘+ harus memicu refit yang sama dengan mengubah fontSize global.
-    const { term } = fakeTerm(base)
-    expect(applyLiveOptions(term, base, 20).metricsChanged).toBe(true)
+  it('treats a per-terminal zoom change as geometry', () => {
+    const { term } = recordingTerminal(defaults)
+    expect(applyLiveOptions(term, defaults, 24).metricsChanged).toBe(true)
   })
 
-  it('reports and writes the theme only when the id changes', () => {
-    const { term, written } = fakeTerm(base)
-    const effects = applyLiveOptions(term, { ...base, terminalTheme: 'nord' })
+  it('swaps the theme only when the id changes', () => {
+    const changed = recordingTerminal(defaults)
+    const effects = applyLiveOptions(changed.term, { ...defaults, terminalTheme: 'one-dark' })
     expect(effects.themeChanged).toBe(true)
-    expect(written).toEqual(['theme'])
+    expect(changed.writes).toEqual(['theme'])
 
-    const same = fakeTerm(base)
-    expect(applyLiveOptions(same.term, { ...base, terminalTheme: base.terminalTheme }).themeChanged)
-      .toBe(false)
+    const same = recordingTerminal(defaults)
+    expect(applyLiveOptions(same.term, { ...defaults }).themeChanged).toBe(false)
+    expect(same.writes).toEqual([])
   })
 })
 
-// Fungsi di atas benar tapi pernah MATI: `TerminalCore` menerima settings sebagai prop, dan tak
-// satu pun dari kedua call site-nya (`TerminalNode`, `AgentNode`) mengirimnya — jadi tiap kontrol
-// di panel Settings tidak berpengaruh ke terminal yang hidup. Regresi sunyi: tak ada yang pecah.
-// Vitest di sini node-env tanpa DOM, komponen tak bisa dirender, jadi jalurnya dijaga sebagai
-// teks. Yang dijaga adalah SIFATNYA, bukan ejaan barisnya: siapa sumber settings, dan effect mana
-// yang boleh bereaksi padanya.
-const src = (f: string) => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
-const core = src('TerminalCore.tsx')
-/** Deps array yang menutup `}, [...])`. */
-const deps = (s: string): string[] => [...s.matchAll(/\}, (\[[^\]]*\])\)/g)].map((m) => m[1])
+// Source-level guards on the settings -> terminal wiring. `TerminalCore` once received its settings
+// as an optional prop that no call site passed, so every Settings control silently did nothing.
+// Components can't be rendered in the node-env runner, so the property is checked on the source:
+// where settings come from, and which effect may react to them.
+const readSrc = (file: string) =>
+  readFileSync(fileURLToPath(new URL(`./${file}`, import.meta.url)), 'utf8')
+const core = readSrc('TerminalCore.tsx')
+/** Dependency arrays that close an effect: `}, [...])`. */
+const dependencyLists = (code: string): string[] =>
+  [...code.matchAll(/\}, (\[[^\]]*\])\)/g)].map((m) => m[1])
 
-describe('jalur settings → xterm', () => {
-  it('mengambil settings dari context, bukan dari prop atau data node', () => {
+describe('settings to terminal wiring', () => {
+  it('reads settings from the live-settings context, never from a prop or node data', () => {
     expect(core).toContain('useLiveSettings()')
-    // Prop opsional yang tak pernah dikirim = default senyap. Itu bug-nya; jangan kembali.
     expect(core).not.toMatch(/settings\?: Settings/)
-    // Dan App tidak lagi menyuntikkannya ke `data` setiap node (identitas data baru tiap drag).
-    expect(src('App.tsx')).not.toMatch(/\.\.\.n\.data, settings/)
+    expect(readSrc('App.tsx')).not.toMatch(/\.\.\.n\.data, settings/)
   })
 
-  it('bereaksi ke settings TANPA membuat ulang terminal', () => {
-    // Effect pembuatan ber-deps `[id]` SAJA: menambahkan settings ke sana membuang scrollback
-    // setiap kali slider digeser. Deps terakhir sebelum `applyLiveOptions` adalah milik effect itu.
+  it('reacts to settings without recreating the terminal', () => {
+    // The creation effect depends on `[id]` only; adding settings would drop scrollback on every
+    // slider tick. The effect after it is the one that must react to settings.
     const creation = core.slice(core.indexOf('new Terminal('), core.indexOf('applyLiveOptions(term'))
-    expect(deps(creation).at(-1)).toBe('[id]')
-    // Sebaliknya effect penerap HARUS bereaksi — di sinilah settings menyentuh terminal hidup.
-    expect(deps(core.slice(core.indexOf('applyLiveOptions(term')))[0]).toContain('settings')
+    expect(dependencyLists(creation).at(-1)).toBe('[id]')
+    expect(dependencyLists(core.slice(core.indexOf('applyLiveOptions(term')))[0]).toContain('settings')
   })
 })
