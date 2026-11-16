@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import type { WorkStore } from './workModel'
 import { finishTask } from './workLifecycle'
 import { createWorkSupervisor, VANISHED_NO_RESPAWN, WORK_LIVENESS_RULES as R } from './workSupervisor'
-import { rig, T0 } from './workRig.testutil'
+import { putTaskInStatus, rig, T0 } from './workRig.testutil'
 
 const at = (ms: number) => T0 + ms
 
@@ -196,9 +196,9 @@ test('restart limit: a third respawn of a task within the hour fails it, later i
   const reassign = () => {
     const open = s.store.openAssignmentOfTask(taskId)
     if (open) s.store.endAssignment(open.id, 'test')
-    s.db.query("UPDATE central_task SET status = 'todo' WHERE id = ?").run(taskId)
+    putTaskInStatus(s.store, taskId, 'todo')
     s.store.openAssignment({ taskId, nodeId: 'node-1', channel: 'chat', instruction: 'again', actor: { kind: 'central' } })
-    s.db.query("UPDATE central_task SET status = 'running' WHERE id = ?").run(taskId)
+    putTaskInStatus(s.store, taskId, 'running')
   }
   await s.supervisor.tick(T0)
   reassign()
