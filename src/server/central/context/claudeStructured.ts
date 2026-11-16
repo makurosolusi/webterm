@@ -28,9 +28,10 @@ const USD_TO_MICROS = 1e6
 const log = createLogger('central')
 
 /** The model port: prompt + schema in, the validated-by-the-CLI JSON value out. Tests inject a fake. */
-export type StructuredCall = (req: { prompt: string; schema: object }, signal: AbortSignal) => Promise<unknown>
+export type StructuredCall = (req: { prompt: string; schema: object; onApiMs?: (ms: number) => void }, signal: AbortSignal) => Promise<unknown>
 /** Structured output plus the usage it cost. */
-export interface StructuredAnswer { output: unknown; usage: HelperUsage }
+/** `apiMs` = the CLI's own `duration_api_ms` (time inside the model API, without CLI boot), when it reports one. */
+export interface StructuredAnswer { output: unknown; usage: HelperUsage; apiMs?: number }
 /** The raw runner: like StructuredCall, but returns usage too (the consolidator books it itself). */
 export type StructuredRun = (req: { prompt: string; schema: object }, signal: AbortSignal) => Promise<StructuredAnswer>
 
@@ -62,12 +63,13 @@ export function parseUsage(o: { total_cost_usd?: unknown; usage?: Record<string,
 export function parseStructuredAnswer(stdout: string, requestedModel: string = SUMMARY_MODEL): StructuredAnswer {
   const o = JSON.parse(stdout) as {
     subtype?: string; is_error?: boolean; structured_output?: unknown; total_cost_usd?: unknown
-    usage?: Record<string, unknown>; modelUsage?: unknown
+    usage?: Record<string, unknown>; modelUsage?: unknown; duration_api_ms?: unknown
   }
   if (o.subtype !== 'success' || o.is_error || o.structured_output === undefined || o.structured_output === null) {
     throw new Error(`no structured output (${o.subtype ?? 'unknown'})`)
   }
-  return { output: o.structured_output, usage: parseUsage(o, requestedModel) }
+  const apiMs = typeof o.duration_api_ms === 'number' && Number.isFinite(o.duration_api_ms) && o.duration_api_ms >= 0 ? o.duration_api_ms : undefined
+  return { output: o.structured_output, usage: parseUsage(o, requestedModel), ...(apiMs !== undefined ? { apiMs } : {}) }
 }
 
 /** `model: null` passes no `--model` (the provider's own model applies); `schema: null` = plain text answer. */
@@ -129,6 +131,7 @@ export function createClaudeStructured(kind: HelperKind, opts: StructuredOptions
   const book = opts.book ?? bookInLedger
   return async (req, signal) => {
     const answer = await run(req, signal)
+    if (answer.apiMs !== undefined) req.onApiMs?.(answer.apiMs)
     // Booking never fails the helper: the answer is already paid for and useful.
     await Promise.resolve().then(() => book(kind, answer.usage)).catch((err: unknown) =>
       log.warn('central.helper.usage_book_failed', 'helper usage could not be booked', { kind, error: err instanceof Error ? err.message : String(err) }))

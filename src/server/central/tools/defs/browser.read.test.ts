@@ -266,6 +266,19 @@ describe('browser_read: latency phases', () => {
       expect(JSON.stringify(rec.records())).not.toMatch(/RAW-PAGE-TEXT|secret question/)
     } finally { setActiveLatency(before) }
   })
+  it('hands the reader\'s apiMs to the reader phase record only, and the tool result does not carry it', async () => {
+    const before = activeLatency()
+    const rec = createLatencyRecorder()
+    try {
+      setActiveLatency(rec)
+      const plain = await rig().run()
+      const r = await rig({ reader: async () => ({ ok: true, answer: 'A', sources: [], truncated: false, injectionSuspected: false, apiMs: 2842 }) }).run()
+      expect(JSON.stringify(r)).not.toMatch(/apiMs|2842/)
+      expect(r).toMatchObject({ ok: plain.ok })
+      const phases = rec.records().filter((x) => x.verb.startsWith('browser_read.'))
+      expect(phases.filter((x) => x.apiMs !== undefined).map((x) => [x.verb, x.apiMs])).toEqual([['browser_read.reader', 2842]])
+    } finally { setActiveLatency(before) }
+  })
   it('a failing reader is recorded ok:false with its code', async () => {
     const before = activeLatency()
     const rec = createLatencyRecorder()

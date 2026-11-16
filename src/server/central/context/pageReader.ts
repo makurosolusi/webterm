@@ -39,7 +39,8 @@ export const READER_SCHEMA = {
 
 export interface PageSource { url: string; title: string }
 export interface PageSummary { answer: string; sources: PageSource[]; truncated: boolean; injectionSuspected: boolean }
-export type PageRead = ({ ok: true } & PageSummary) | { ok: false; code: 'reader_unavailable' | 'connection_impaired' }
+/** `apiMs`: model-API time of the reader call (latency telemetry only; never part of the tool result). */
+export type PageRead = ({ ok: true } & PageSummary & { apiMs?: number }) | { ok: false; code: 'reader_unavailable' | 'connection_impaired'; apiMs?: number }
 export interface PageReadInput {
   /** The snapshot text (already wrapped as untrusted); never returned, logged or audited. */
   text: string
@@ -118,14 +119,16 @@ export function createPageReader(opts: PageReaderOptions = {}): PageReader {
     const cut = input.text.length > READER_TEXT_MAX_CHARS
     const text = cut ? input.text.slice(0, READER_TEXT_MAX_CHARS) : input.text
     let raw: unknown
+    let apiMs: number | undefined
     try {
-      raw = await withTimeout((signal) => call({ prompt: readerPrompt(input, text), schema: READER_SCHEMA }, signal), opts.timeoutMs ?? READER_TIMEOUT_MS, 'page reader')
+      raw = await withTimeout((signal) => call({ prompt: readerPrompt(input, text), schema: READER_SCHEMA, onApiMs: (ms) => { apiMs = ms } }, signal), opts.timeoutMs ?? READER_TIMEOUT_MS, 'page reader')
     } catch (err) {
       // The cause can quote the prompt (page text), so only the error name is logged and nothing is returned.
       log.warn('central.page_reader.failed', 'page reader call failed', { error: err instanceof Error ? err.name : 'unknown' })
       return { ok: false, code: 'reader_unavailable' }
     }
     const summary = validateReaderOutput(raw, text, input.url)
-    return summary ? { ok: true, ...summary, truncated: summary.truncated || cut || input.truncated === true } : { ok: false, code: 'reader_unavailable' }
+    const timing = apiMs === undefined ? {} : { apiMs }
+    return summary ? { ok: true, ...summary, truncated: summary.truncated || cut || input.truncated === true, ...timing } : { ok: false, code: 'reader_unavailable', ...timing }
   }
 }
