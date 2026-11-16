@@ -1,12 +1,11 @@
-// Clicks on links inside RENDERED MARKDOWN must never navigate webterm's own tab.
+// Links inside RENDERED MARKDOWN must never navigate webterm's own tab.
 //
-// Markdown link handling (decideMarkdownLinkClick + the click /
-// middle-click guard). `renderMarkdown` keeps an anchor's href as written, and agents write relative
-// links constantly (`[pty.ts](src/server/pty.ts:41)`). A plain click resolved it against the app URL
-// and the whole canvas was gone; a middle click opened a stray 404 tab. Notes:
-// webterm knows the folder of the file being previewed, so local links open the file in an editor
-// node instead of a "can't open" toast; `#anchor` scrolls inside the preview; `mailto:`/`tel:` keep
-// the browser's default (it hands them to the OS without leaving the page).
+// `renderMarkdown` keeps an anchor's href exactly as written, and agents write relative links all
+// the time (`[pty.ts](src/server/pty.ts:41)`). Left alone, a plain click resolves that against the
+// app URL and the whole canvas is gone; a middle click opens a stray 404 tab. Because the folder of
+// the previewed file is known, a local link opens the file in an editor node instead; `#anchor`
+// scrolls inside the preview; `mailto:` and `tel:` keep the browser default, which hands them to
+// the OS without leaving the page.
 
 export type MarkdownLinkDecision =
   | { action: 'external'; url: string }
@@ -15,53 +14,75 @@ export type MarkdownLinkDecision =
   | { action: 'native' }
   | { action: 'ignore' }
 
-const WEB = new Set(['http:', 'https:'])
-const NATIVE = new Set(['mailto:', 'tel:'])
+const WEB_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:'])
+const OS_HANDLED_SCHEMES: ReadonlySet<string> = new Set(['mailto:', 'tel:'])
 
-const decode = (s: string): string => {
-  try { return decodeURIComponent(s) } catch { return s }
+/** Percent-decode, leaving the text untouched when it is not valid percent-encoding. */
+function decodeLoose(text: string): string {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return text
+  }
 }
 
-/** `rel` against folder `dir`, `.`/`..` folded; absolute `rel` (leading `/`) wins. */
+/** Join `rel` onto folder `dir` and fold `.` and `..`; a leading `/` in `rel` ignores `dir`. Never climbs above `/`. */
 export function resolvePath(dir: string, rel: string): string {
-  const parts = (rel.startsWith('/') ? rel : `${dir}/${rel}`).split('/')
-  const out: string[] = []
-  for (const p of parts) {
-    if (p === '' || p === '.') continue
-    if (p === '..') out.pop()
-    else out.push(p)
+  const joined = rel.startsWith('/') ? rel : `${dir}/${rel}`
+  const folded: string[] = []
+  for (const part of joined.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') folded.pop()
+    else folded.push(part)
   }
-  return `/${out.join('/')}`
+  return `/${folded.join('/')}`
+}
+
+/** Parse an absolute URL; null for relative or protocol-relative hrefs (which `new URL` rejects without a base). */
+function parseAbsolute(href: string): URL | null {
+  try {
+    return new URL(href)
+  } catch {
+    return null
+  }
+}
+
+/** Split a trailing `:line` or `:line:column` (the form agents write) off a decoded path. */
+function splitLineSuffix(path: string): { path: string; line?: number; column?: number } {
+  const match = /^(.*?):(\d+)(?::(\d+))?$/.exec(path)
+  if (!match) return { path }
+  return { path: match[1], line: Number(match[2]), column: match[3] ? Number(match[3]) : undefined }
 }
 
 /**
- * What to do with a click on an anchor whose RAW `href` attribute is `rawHref`. Decided on the raw
- * attribute, never on the resolved `a.href`: resolution against the app document is exactly what
- * turns a harmless relative path into a navigation. `baseDir` = folder the markdown lives in; '' =
- * unknown (chat), where only absolute paths can be opened.
+ * What a click on an anchor with RAW `href` attribute `rawHref` should do. It decides on the raw
+ * attribute, never on the resolved `a.href`: resolving against the app document is exactly what
+ * turns a harmless relative path into a navigation. `baseDir` is the folder the Markdown lives in;
+ * '' means unknown (chat), where only absolute paths can be opened.
  */
 export function decideMarkdownLinkClick(rawHref: string, baseDir = ''): MarkdownLinkDecision {
   const href = rawHref.trim()
   if (href === '') return { action: 'ignore' }
-  if (href.startsWith('#')) return href.length > 1 ? { action: 'anchor', id: decode(href.slice(1)) } : { action: 'ignore' }
-  let parsed: URL | null = null
-  try {
-    // No base: only an ABSOLUTE URL parses. Relative and protocol-relative hrefs throw → local.
-    parsed = new URL(href)
-  } catch { /* relative: handled below */ }
-  if (parsed) {
-    if (WEB.has(parsed.protocol)) return { action: 'external', url: parsed.href }
-    if (NATIVE.has(parsed.protocol)) return { action: 'native' }
-    if (parsed.protocol !== 'file:') return { action: 'ignore' }
+  if (href.startsWith('#')) {
+    return href.length > 1 ? { action: 'anchor', id: decodeLoose(href.slice(1)) } : { action: 'ignore' }
   }
-  const raw = parsed ? parsed.pathname : href.replace(/[?#].*$/, '')
-  if (!raw || raw.startsWith('//')) return { action: 'ignore' }
-  // `file.ts:12` / `file.ts:12:3`: the line form agents write.
-  const m = /^(.*?):(\d+)(?::(\d+))?$/.exec(decode(raw))
-  const rel = m ? m[1]! : decode(raw)
-  if (!rel.startsWith('/') && !baseDir) return { action: 'ignore' }
-  const path = resolvePath(baseDir, rel)
-  return m ? { action: 'local', path, line: Number(m[2]), column: m[3] ? Number(m[3]) : undefined } : { action: 'local', path }
+
+  const absolute = parseAbsolute(href)
+  if (absolute) {
+    if (WEB_SCHEMES.has(absolute.protocol)) return { action: 'external', url: absolute.href }
+    if (OS_HANDLED_SCHEMES.has(absolute.protocol)) return { action: 'native' }
+    if (absolute.protocol !== 'file:') return { action: 'ignore' }
+  }
+
+  const rawPath = absolute ? absolute.pathname : href.replace(/[?#].*$/, '')
+  if (!rawPath || rawPath.startsWith('//')) return { action: 'ignore' }
+  const target = splitLineSuffix(decodeLoose(rawPath))
+  if (!target.path.startsWith('/') && !baseDir) return { action: 'ignore' }
+
+  const path = resolvePath(baseDir, target.path)
+  return target.line === undefined
+    ? { action: 'local', path }
+    : { action: 'local', path, line: target.line, column: target.column }
 }
 
 export interface MarkdownLinkDeps {
@@ -70,29 +91,43 @@ export interface MarkdownLinkDeps {
   scrollToAnchor?(id: string): void
 }
 
-interface LinkEvent { target: EventTarget | null; button: number; defaultPrevented: boolean; preventDefault(): void }
+interface LinkEvent {
+  target: EventTarget | null
+  button: number
+  defaultPrevented: boolean
+  preventDefault(): void
+}
 
 /**
- * `onClick` + `onAuxClick` handler for a rendered-markdown container. Primary and middle button only
- * (a middle click never fires `click`; its `auxclick` default opens a new tab). Modifier clicks are
- * handled the same way: letting the default run would open the unresolvable relative URL anyway.
+ * Handler for `onClick` and `onAuxClick` on a rendered-Markdown container. Primary and middle
+ * buttons only: a middle click never fires `click`, and its `auxclick` default opens a new tab.
+ * Modifier clicks are routed the same way, since the default would open the unresolvable relative
+ * URL anyway.
  */
 export function handleMarkdownLinkEvent(e: LinkEvent, baseDir: string, deps: MarkdownLinkDeps): void {
   if (e.defaultPrevented || (e.button !== 0 && e.button !== 1)) return
   const anchor = e.target instanceof Element ? e.target.closest('a[href]') : null
   if (!anchor) return
-  const d = decideMarkdownLinkClick(anchor.getAttribute('href') ?? '', baseDir)
-  if (d.action === 'native') return
+  const decision = decideMarkdownLinkClick(anchor.getAttribute('href') ?? '', baseDir)
+  if (decision.action === 'native') return
   e.preventDefault()
-  if (d.action === 'external') deps.openUrl(d.url)
-  else if (d.action === 'local') deps.openFile(d.path, d.line, d.column)
-  else if (d.action === 'anchor') deps.scrollToAnchor?.(d.id)
+  switch (decision.action) {
+    case 'external':
+      deps.openUrl(decision.url)
+      break
+    case 'local':
+      deps.openFile(decision.path, decision.line, decision.column)
+      break
+    case 'anchor':
+      deps.scrollToAnchor?.(decision.id)
+      break
+  }
 }
 
 type OpenBrowser = (req: { url: string; anchorNodeId?: string }) => { status: string }
 
-/** Web link → a browser node on the canvas; a new browser tab when the browser node is off/refuses it. */
+/** Open a web link in a browser node on the canvas, or in a new browser tab when that node is off or refuses the URL. */
 export function openWebLink(openBrowserAt: OpenBrowser | undefined, url: string, anchorNodeId?: string): void {
-  const r = openBrowserAt?.({ url, anchorNodeId })
-  if (!r || r.status === 'invalid') window.open(url, '_blank', 'noopener,noreferrer')
+  const result = openBrowserAt?.({ url, anchorNodeId })
+  if (!result || result.status === 'invalid') window.open(url, '_blank', 'noopener,noreferrer')
 }
