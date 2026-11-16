@@ -58,7 +58,7 @@ function noticeAllowed(at: number): boolean {
 export interface CentralDecideDeps { db: Database; now: () => number; record?: (e: AppendEventInput) => void }
 export interface CentralDecideInput { approvalId: string; decision: CentralDecision; reason?: string; conversationId: string }
 export type CentralOutcome =
-  | { ok: true; status: 'approved' | 'rejected' | 'escalated' }
+  | { ok: true; status: 'approved' | 'rejected' | 'escalated'; /** Node whose prompt was decided (not set when escalated). */ nodeId?: string }
   | { ok: false; code: 'not_found' | 'not_permission' | 'not_pending' | 'not_held_for_central' | 'escalated' | 'needs_human'; detail?: string }
 
 const clean = (s: string | undefined): string => previewText(s ?? '', REASON_MAX) ?? ''
@@ -108,5 +108,5 @@ export function decideByCentral(deps: CentralDecideDeps, input: CentralDecideInp
     name: 'central_permission', actor: CENTRAL_ACTOR, subject: `approval:${a.id}`, nodeId: view.nodeId, projectId: a.projectId, noNotice: !noticeAllowed(at),
     text: `Central ${verb} ${view.node} running ${view.label}${reason ? `: ${reason}` : ''}. Settings > Claude > Permissions switches this off.`,
   })
-  return { ok: true, status: input.decision === 'allow' ? 'approved' : 'rejected' }
+  return { ok: true, status: input.decision === 'allow' ? 'approved' : 'rejected', nodeId: view.nodeId }
 }
