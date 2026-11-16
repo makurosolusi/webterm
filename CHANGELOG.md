@@ -362,7 +362,6 @@ Operator notes:
 ### Fixed
 - Central's reply now comes back to the conversation you asked in. Playbook results, agent progress reports and permission check-ins used to land in another project's chat, where they were hidden; a check-in that failed on the network is queued again.
 - `webterm report --done` now stores its text as the task's result, and Central's `run.result` takes the board task id (as shown by `task.list`) and returns the worker's captured result.
-- A flaky Central test no longer marks tasks stalled: its fixtures now start tasks through the normal status path, so the lease matches.
 - A tab shows the node's custom title when you set one.
 - Switching an agent node between Terminal and Chat no longer makes the node vanish in tab layout, and picking the view that is already shown does nothing.
 - Nodes no longer show permanent blue resize corners.
