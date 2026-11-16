@@ -1,10 +1,10 @@
 // Isi menu konteks canvas sebagai DATA murni: siapa saja barisnya, dalam urutan apa, dan mana yang
 // nonaktif beserta alasannya. Dipisah dari komponen render (`CanvasContextMenu.tsx`) karena vitest
 // repo ini jalan di environment node TANPA DOM — memisahkan model dari React adalah satu-satunya
-// cara aturan isi menu bisa diuji sama sekali. Pola ini ditiru dari nodeterm
+// cara aturan isi menu bisa diuji sama sekali. Pola ini
 // `src/renderer/lib/addMenuSpec.tsx`, yang memisahkan spec item dari shell yang merendernya.
 //
-// PENTING soal cakupan. Menu ini SENGAJA lebih pendek dari menu canvas nodeterm. Item nodeterm yang
+// PENTING soal cakupan. Menu ini SENGAJA lebih pendek dari menu canvas lengkap. Item yang
 // kemampuannya belum ada di webterm — sesi remote, view browser/web/sticky/whiteboard, orkestrasi
 // (spawn team, worktree), tidy/arrange layout, dan restart massal agent idle — TIDAK diikutkan:
 // bukan sebagai baris redup, bukan sebagai stub `TODO`, melainkan hilang sepenuhnya. Baris yang
@@ -137,7 +137,7 @@ export function buildCanvasMenuRows(
   }
 
   // Satu-satunya jalan masuk webterm ke filesystem dari canvas; menggantikan submenu `Files ▸`
-  // nodeterm, yang isinya (open file…/new file…) butuh dialog file yang webterm belum punya.
+  // menu lengkap, yang isinya (open file…/new file…) butuh dialog file yang webterm belum punya.
   rows.push({ key: 'files', label: MENU_LABELS.files, icon: 'files', onClick: handlers.addFiles })
   if (handlers.addBrowser) rows.push({ key: 'browser', label: MENU_LABELS.browser, icon: 'browser', onClick: handlers.addBrowser })
   if (handlers.addDiff) rows.push({ key: 'diff', label: MENU_LABELS.diff, icon: 'diff', onClick: handlers.addDiff })

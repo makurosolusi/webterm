@@ -1,7 +1,7 @@
 // The composer's `/` and `@` menu: a listbox above the textarea plus the hook that drives it. The
 // trigger is DERIVED from the draft and the caret snapshot taken with that exact draft, so any change
 // that did not come through the textarea (send, attach) closes the menu instead of completing a text
-// it never saw. Keys while open: ↑/↓ move, Enter/Tab accept, Escape closes. Ported from nodeterm's
+// it never saw. Keys while open: ↑/↓ move, Enter/Tab accept, Escape closes. 
 // ChatComposer; the pure rules live in composerCompletion.ts.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import {

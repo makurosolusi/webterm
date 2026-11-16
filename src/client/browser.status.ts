@@ -48,7 +48,7 @@ export function browserNotice(i: { state?: BrowserState; error?: BrowserErr; con
   return null
 }
 
-/** A failed main-frame navigation in words a user can act on (nodeterm `webviewError.ts`, keyed by name). */
+/** A failed main-frame navigation in words a user can act on (keyed by name). */
 export interface NetErrorText { title: string; hint: string; retryable: boolean }
 
 const UNREACHABLE = "This site can't be reached"

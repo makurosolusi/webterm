@@ -2,7 +2,7 @@
    Bentuknya mengikuti editor group + tab VS Code (Dark/Light Modern): header 35px, border 1px
    netral `editorGroup-border` (warna node hanya aksen 2px di tepi kiri header, BUKAN border), `focusBorder`
    saat dipilih, tanpa bayangan pada frame (shadow hanya untuk widget melayang).
-   Nama selector datar (`node-*`); nama ANIMASI dipertahankan (`nt-*`) supaya cocok dengan nodeterm.
+   Nama selector datar (`node-*`); nama ANIMASI dipertahankan (`nt-*`) supaya stabil.
 
    Token lokal berprefix `--nc-` (usulan token global ada di laporan worker). Variabel `--vscode-tab-*`
    belum dijembatani `vscode-theme.css`, jadi tiap pemakaian membawa fallback ke token webterm. */

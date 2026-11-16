@@ -152,7 +152,7 @@ export function useBoardActions({
 
   const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
 
-  // webterm tidak punya drawer Explorer seperti nodeterm; tombol Explorer cluster kontrol
+  // webterm tidak punya drawer Explorer; tombol Explorer cluster kontrol
   // menumbuhkan node file-manager di cwd workspace, satu-satunya jalan masuk ke filesystem.
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
   // Diff node on the workspace folder; a wired agent's cwd (its worktree) takes over (DiffNode `root`).

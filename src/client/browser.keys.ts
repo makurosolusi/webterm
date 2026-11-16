@@ -1,6 +1,6 @@
 // Browser-level shortcuts for the Browser node. Chromium ignores these when they arrive over CDP
 // (they belong to the browser UI, not the page), so the node handles them itself and never forwards
-// them. Zoom matching is ported from nodeterm `shared/webview-zoom.ts` `webviewZoomShortcut`.
+// them. Zoom matching lives in `webviewZoomShortcut`.
 
 export type BrowserChord =
   | 'focusUrl' | 'reload' | 'hardReload' | 'back' | 'forward' | 'zoomIn' | 'zoomOut' | 'zoomReset' | 'stop'

@@ -1,6 +1,6 @@
 // Settings sisi client: baca sekali saat mount, tulis di-coalesce.
 //
-// Pola persis dari nodeterm `src/renderer/state/settings.ts`: state in-memory sinkron (UI dan
+// State in-memory sinkron (UI dan
 // xterm bereaksi seketika), persistensi membuntut dengan paling banyak satu request per jendela
 // 300 ms, selalu membawa snapshot TERBARU. Alasannya sama di sini: kontrol settings memanggil
 // update per gerakan slider / per ketukan, dan setiap tulis adalah satu request HTTP.
@@ -29,7 +29,7 @@ export interface Coalescer<T> {
  *
  * `merge` wajib disetel bila payload-nya PATCH: defaultnya last-wins, dan last-wins pada patch
  * akan MENJATUHKAN kunci yang disetel lebih awal di jendela yang sama (geser fontSize lalu
- * toggle kursor dalam 300 ms ⇒ fontSize hilang). Beda dari nodeterm, yang mengirim snapshot
+ * toggle kursor dalam 300 ms ⇒ fontSize hilang). Tidak mengirim snapshot
  * penuh dan karena itu tidak butuh penggabung — tapi snapshot penuh membuat dua tab saling
  * menimpa kunci yang tidak mereka sentuh.
  *

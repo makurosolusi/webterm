@@ -24,7 +24,7 @@ describe('termNodeClass', () => {
     expect(termNodeClass({ selected: true, collapsed: true }))
       .toBe('term-node term-node--selected term-node--collapsed')
   })
-  it('working/attention TANPA prefiks — selector glow :has() nodeterm mencocokkan kelas polos', () => {
+  it('working/attention TANPA prefiks — selector glow :has() mencocokkan kelas polos', () => {
     expect(termNodeClass({ status: 'working' })).toBe('term-node working')
     expect(termNodeClass({ status: 'blocked' })).toBe('term-node attention')
   })
@@ -34,7 +34,7 @@ describe('termNodeClass', () => {
   it('done tidak menyalakan glow apa pun', () => {
     expect(termNodeClass({ status: 'done' })).toBe('term-node')
   })
-  it('judul kosong jatuh ke fallback nodeterm', () => {
+  it('judul kosong jatuh ke fallback Untitled', () => {
     expect(UNTITLED).toBe('Untitled')
   })
 })

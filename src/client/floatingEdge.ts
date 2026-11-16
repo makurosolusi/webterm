@@ -53,7 +53,7 @@ export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
 /** Kabel boleh terbentuk antara dua node berbeda yang context-capable, ATAU antara node browser dan
  *  node agent (semua sesi agent memegang token node yang dipakai `resolveLinkedBrowser` server).
  *  Browser↔browser dan browser↔terminal biasa ditolak: tak ada pihak yang bisa memakai kabelnya —
- *  pola nodeterm `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
+ *  pola `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
 export function canLink(a: LinkEnd, b: LinkEnd): boolean {
   if (a.id === b.id) return false
   // Plan node (F4-f): its cables are DAG edges to the workers it dispatched (a Diff node on the worker's

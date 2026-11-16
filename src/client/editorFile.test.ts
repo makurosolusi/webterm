@@ -47,7 +47,7 @@ describe('editorFileKind', () => {
     expect(editorFileKind('/x/README')).toBe('text')
   })
 
-  it('kesembilan ekstensi gambar nodeterm ikut terpetakan', () => {
+  it('kesembilan ekstensi gambar ikut terpetakan', () => {
     for (const ext of ['avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'webp'])
       expect(editorFileKind(`/x/a.${ext}`)).toBe('image')
   })
@@ -61,7 +61,7 @@ describe('opensInPreview', () => {
     expect(opensInPreview('ts', true)).toBe(false)
   })
 
-  it('varian markdown nodeterm dikenali', () => {
+  it('varian markdown dikenali', () => {
     for (const ext of ['md', 'markdown', 'mdown', 'mkd']) expect(isMarkdownExt(ext)).toBe(true)
     expect(isMarkdownExt('mdx')).toBe(false)
   })
@@ -89,7 +89,7 @@ describe('loadRefusal (gerbang kehilangan data)', () => {
   })
 
   it('isi file yang kebetulan mirip teks sentinel TIDAK ikut ditolak (prefiks NUL)', () => {
-    expect(loadRefusal('nodeterm:too-large:999', 'File', true)).toBeNull()
+    expect(loadRefusal('webterm:too-large:999', 'File', true)).toBeNull()
   })
 })
 

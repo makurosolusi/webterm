@@ -1,6 +1,6 @@
 // How the agent chat resolves attached files: an image type Claude takes becomes a pending image
 // (sent as an image block); any other file is staged on the server and its path goes into the draft,
-// as nodeterm's composer does. One failure never drops the other files.
+// One failure never drops the other files.
 import { isClaudeImage, prepareImage, uploadNameFor, type ComposerImage } from '../chat/chatAttach'
 import type { AttachFiles } from '../chat/chatComposerAttach'
 import type { AgentChatTransport } from './agentChatTransport'

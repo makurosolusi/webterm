@@ -1,6 +1,6 @@
 // Pure tree model of the Files node: flatten {root listing, loaded children, expanded set} into the
 // visible rows, keyed by the path RELATIVE to the node's cwd ("src/a.ts"). No DOM, no fetching
-// (that is `useFilesTree`). Ported from nodeterm's ExplorerPanel `TreeEntry` recursion.
+// (that is `useFilesTree`). Recursive tree-entry rendering.
 import type { FileMeta } from '../shared/fsContract'
 
 /** One visible row. `entry.name` is `rel` (slots see relative paths); the row renders `leafName(rel)`. */

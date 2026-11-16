@@ -193,7 +193,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     term.loadAddon(search)
     let disposed = false
     void loadOsc52Clipboard(term, (text) => copyText(live.current.id, text), () => !disposed, p.id)
-    // nodeterm sengaja TIDAK memakai addon ini (TerminalNode.tsx:3283): addon-nya tidak bisa
+    // addon ini sengaja TIDAK dipakai: addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
     term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri), {

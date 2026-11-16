@@ -8,11 +8,11 @@ import type {
 import { resolveTerminalTheme } from './themes'
 
 /**
- * Keputusan murni di balik instance xterm di `TerminalCore` — port dari nodeterm
+ * Keputusan murni di balik instance xterm di `TerminalCore` — 
  * `src/renderer/terminal/terminal-config.ts`, dipersempit ke bagian APPEARANCE-nya.
  *
  * Diekstrak ke modul sendiri supaya bisa dites tanpa harness xterm/DOM: vitest webterm jalan di
- * environment node, tidak ada jsdom. Yang TIDAK diport dari nodeterm: seluruh mesin co-attach
+ * environment node, tidak ada jsdom. Yang TIDAK ada: seluruh mesin co-attach
  * (`reportedSize`, letterbox, `TermSize`), seeding tmux (`attachReplay`, `seedPaint`,
  * `repaintResync`, OSC 52), park/adopt, dan tema "glass" — webterm tidak punya tmux, tidak punya
  * satu-pty-N-subscriber, dan tidak punya latar translusen di balik terminal.

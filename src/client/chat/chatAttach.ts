@@ -1,5 +1,5 @@
 // Files a chat composer receives by paste, drop or picker: the clipboard / drop readers copied from
-// nodeterm's terminal/file-drop.ts (`pastedFiles`, `pasteHasText`, `clipboardImages`, `uploadNameFor`),
+// the terminal file-drop helpers (`pastedFiles`, `pasteHasText`, `clipboardImages`, `uploadNameFor`),
 // plus `prepareImage`, which turns an image into base64 Claude accepts (downscaled on a canvas when it
 // is over the edge or byte limit, as Claude Code does for a pasted image, instead of refusing it).
 import { AGENT_CHAT_IMAGE_MAX_B64, AGENT_CHAT_IMAGE_MAX_EDGE, AGENT_CHAT_IMAGE_TYPES } from '../../shared/agentChat.wire'
@@ -47,7 +47,7 @@ export async function clipboardImages(): Promise<File[]> {
   try {
     items = await navigator.clipboard.read()
   } catch (err) {
-    // Declined permission / insecure context: the paste stays the no-op it was (nodeterm's contract).
+    // Declined permission / insecure context: the paste stays the no-op it was.
     if (err instanceof DOMException) return []
     throw err
   }

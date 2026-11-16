@@ -1,13 +1,13 @@
 // Riwayat "Recently closed" untuk sidebar sesi: menutup sebuah sesi meninggalkan jejak yang bisa
-// dibuka kembali, bukan lenyap tanpa bekas. Porting INTI dari nodeterm v0.4.5
+// dibuka kembali, bukan lenyap tanpa bekas. Inti riwayat tutup
 // `state/reopenHistory.ts` + `components/ClosedHistorySection.tsx`.
 //
 // DIPERSIST ke SQLite (`/api/closed-history`, tabel `closed_history`, I1-c): dulu in-memory seperti
-// nodeterm, tetapi webterm adalah board yang hidup berhari-hari dan reload/restart server yang
+// versi sederhana, tetapi webterm adalah board yang hidup berhari-hari dan reload/restart server yang
 // menghapus semua jejak "baru ditutup" membuat fitur ini nyaris tak pernah berguna. Klien tetap
 // pemilik daftarnya (cap, dedup, urutan); server menyimpan salinan utuh tiap kali daftar berubah.
 //
-// Yang DIBUANG dari nodeterm `lib/closedHistory.ts` (253 baris), bukan kelalaian: tab project yang
+// Yang SENGAJA tidak ada, bukan kelalaian: tab project yang
 // ditutup (webterm menghapus workspace langsung, tidak punya keadaan "closed"), transcript agent,
 // frame group, dan stack ⇧⌘T. Sisanya satu entry per NODE SESI yang ditutup — satu-satunya bentuk
 // yang punya arti di model webterm.
@@ -21,7 +21,7 @@ import { fetchClosedHistory, saveClosedHistory } from './SessionHistory.api'
 import { isSession } from './sessionList'
 import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
 
-/** Sedalam apa riwayatnya. Angka nodeterm (`HISTORY_CAP`), dan batasnya memang harus ada: tanpa
+/** Sedalam apa riwayatnya. Angka `HISTORY_CAP`, dan batasnya memang harus ada: tanpa
  *  itu sesi yang ditutup sepanjang hari menumpuk jadi daftar yang tak lagi berarti "baru saja". */
 export const CLOSED_HISTORY_CAP = 10
 
@@ -92,7 +92,7 @@ export function bridgesToRestore(
 }
 
 /**
- * Menaruh `add` di DEPAN lalu memotong yang terlama. Urutannya kebalikan nodeterm (yang append +
+ * Menaruh `add` di DEPAN lalu memotong yang terlama. Urutannya (bukan append +
  * `slice(-cap)`) karena daftar webterm dirender apa adanya dan terbaru harus di atas.
  *
  * Dedup per `node.id` dengan yang DEPAN menang: menutup id yang sama dua kali (mis. ditutup, di-undo,

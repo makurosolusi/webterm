@@ -104,7 +104,7 @@ export function SessionTreeItem({ row, mode, groupCwd, now, onCloseSession, onRe
   const closeRef = useRef(onCloseSession)
   closeRef.current = onCloseSession
 
-  // Klik tengah menutup sesi: kebiasaan tab browser, dan nodeterm memakainya juga. Dipasang natif
+  // Klik tengah menutup sesi: kebiasaan tab browser. Dipasang natif
   // di host (bukan `onAuxClick` React) karena satu file ini sudah hidup di dua sisi shadow boundary
   // yang berbeda; listener host pasti menerima bubble dari isi yang di-slotted.
   const registerRow = (el: HTMLElement | null) => {

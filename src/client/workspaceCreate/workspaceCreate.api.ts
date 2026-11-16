@@ -4,7 +4,7 @@ import type { Preflight } from '../../server/workspaceCreate/preflight'
 
 export type { Preflight }
 const PREFIX = '/api/workspace-create'
-/** nodeterm remembers the last clone parent under `nodeterm.cloneParent`; ours is the same idea. */
+/** Remembers the last clone parent directory. */
 export const PARENT_KEY = 'webterm.cloneParent'
 /** Last parent used by New project, kept apart from the clone one. */
 export const PROJECT_PARENT_KEY = 'webterm.projectParent'
