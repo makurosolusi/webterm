@@ -11,6 +11,8 @@ export const HASH_FILE = 'SKILL.sha256'
 export const SKILL_FILE = 'SKILL.md'
 export const MAX_ACTIVE_SKILLS = 20
 export const MAX_PROPOSALS_PER_DAY = 3
+/** Daily cap of drafts proposed by agent sessions; a separate counter from Central's so one cannot starve the other. */
+export const MAX_AGENT_PROPOSALS_PER_DAY = 3
 export const DAY_MS = 86_400_000
 export const DEFAULT_LIST_LIMIT = 50
 /** OpenCode `permission.skill` for the central child: hide every skill except webterm-* (RND/25 4.4). */
@@ -53,32 +55,52 @@ export function hashFolder(dir: string): string {
   return hash.digest('hex')
 }
 
+/** Current table shape. `enabled` is a switch independent of status; `reject_reason` says why a draft was refused. */
 export const DDL_SKILL = `
 CREATE TABLE IF NOT EXISTS central_skill (
   name TEXT NOT NULL, version TEXT NOT NULL, sha256 TEXT,
   status TEXT NOT NULL CHECK (status IN ('proposed','rejected','evaluated','pending_approval','active','disabled','archived')),
-  origin TEXT NOT NULL CHECK (origin IN ('builtin','human','central')),
+  origin TEXT NOT NULL CHECK (origin IN ('builtin','human','central','agent')),
   description TEXT NOT NULL DEFAULT '', caps TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(caps)),
   created_at INTEGER NOT NULL, proposed_by TEXT, approved_by TEXT, approved_at INTEGER, eval_score REAL,
+  reject_reason TEXT, enabled INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (name, version)
 );
 CREATE INDEX IF NOT EXISTS idx_central_skill_status ON central_skill (status, created_at);
 `
 
-interface Row { name: string; version: string; sha256: string | null; status: SkillStatus; origin: SkillOrigin; description: string; caps: string; created_at: number; proposed_by: string | null; approved_by: string | null; approved_at: number | null; eval_score: number | null; reject_reason?: string | null }
-const toRecord = (r: Row): StoredSkill => ({ name: r.name, version: r.version, sha256: r.sha256, status: r.status, origin: r.origin, caps: JSON.parse(r.caps) as string[], createdAt: r.created_at, proposedBy: r.proposed_by, approvedBy: r.approved_by, approvedAt: r.approved_at, evalScore: r.eval_score, ...(r.reject_reason ? { rejectReason: r.reject_reason } : {}) })
+interface Row { name: string; version: string; sha256: string | null; status: SkillStatus; origin: SkillOrigin; description: string; caps: string; created_at: number; proposed_by: string | null; approved_by: string | null; approved_at: number | null; eval_score: number | null; reject_reason?: string | null; enabled?: number }
+const toRecord = (r: Row): StoredSkill => ({ name: r.name, version: r.version, sha256: r.sha256, status: r.status, origin: r.origin, caps: JSON.parse(r.caps) as string[], createdAt: r.created_at, proposedBy: r.proposed_by, approvedBy: r.approved_by, approvedAt: r.approved_at, evalScore: r.eval_score, enabled: r.enabled !== 0, ...(r.reject_reason ? { rejectReason: r.reject_reason } : {}) })
 
-/** Creates the index table when missing and adds columns older tables lack (idempotent). */
+/**
+ * Creates the index table when missing and migrates older ones (idempotent, safe to run on every boot).
+ * Why: `enabled` (default 1 backfills every existing skill as on) and `reject_reason` are plain added columns; the
+ * `agent` origin needs a wider CHECK, which SQLite cannot alter, so a table whose CHECK lacks it is rebuilt once.
+ */
 export function ensureSkillTable(db: Database): void {
   db.exec(DDL_SKILL)
-  const columns = db.query('PRAGMA table_info(central_skill)').all() as Array<{ name: string }>
-  if (!columns.some((c) => c.name === 'reject_reason')) db.exec('ALTER TABLE central_skill ADD COLUMN reject_reason TEXT')
+  const has = (col: string) => (db.query('PRAGMA table_info(central_skill)').all() as Array<{ name: string }>).some((c) => c.name === col)
+  if (!has('reject_reason')) db.exec('ALTER TABLE central_skill ADD COLUMN reject_reason TEXT')
+  if (!has('enabled')) db.exec('ALTER TABLE central_skill ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1')
+  const sql = (db.query("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'central_skill'").get() as { sql: string }).sql
+  if (sql.includes("'agent'")) return
+  const cols = 'name, version, sha256, status, origin, description, caps, created_at, proposed_by, approved_by, approved_at, eval_score, reject_reason, enabled'
+  db.exec('BEGIN')
+  try {
+    db.exec('DROP INDEX IF EXISTS idx_central_skill_status; ALTER TABLE central_skill RENAME TO central_skill_old')
+    db.exec(DDL_SKILL)
+    db.exec(`INSERT INTO central_skill (${cols}) SELECT ${cols} FROM central_skill_old; DROP TABLE central_skill_old`)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw new Error(`central_skill migration failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 /** Inserts or replaces one record. */
 export function putRecord(db: Database, rec: SkillRecord, description: string): void {
-  db.query('INSERT OR REPLACE INTO central_skill (name, version, sha256, status, origin, description, caps, created_at, proposed_by, approved_by, approved_at, eval_score) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(rec.name, rec.version, rec.sha256, rec.status, rec.origin, description, JSON.stringify(rec.caps), rec.createdAt, rec.proposedBy, rec.approvedBy, rec.approvedAt, rec.evalScore)
+  db.query('INSERT OR REPLACE INTO central_skill (name, version, sha256, status, origin, description, caps, created_at, proposed_by, approved_by, approved_at, eval_score, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(rec.name, rec.version, rec.sha256, rec.status, rec.origin, description, JSON.stringify(rec.caps), rec.createdAt, rec.proposedBy, rec.approvedBy, rec.approvedAt, rec.evalScore, rec.enabled === false ? 0 : 1)
 }
 
 /** Patches status and optional columns of one version. */
@@ -119,7 +141,12 @@ export function countCreatedSince(db: Database, origin: SkillOrigin, since: numb
 /** Number of active skills. */
 export function countActive(db: Database): number { return (db.query("SELECT COUNT(*) AS n FROM central_skill WHERE status = 'active'").get() as { n: number }).n }
 
-/** Name + description of active skills, name order, capped by `limit`. */
+/** Name + description of enabled active skills, name order, capped by `limit`. */
 export function activeDescriptions(db: Database, limit: number): Array<{ name: string; description: string }> {
-  return db.query("SELECT name, description FROM central_skill WHERE status = 'active' ORDER BY name LIMIT ?").all(limit) as Array<{ name: string; description: string }>
+  return db.query("SELECT name, description FROM central_skill WHERE status = 'active' AND enabled = 1 ORDER BY name LIMIT ?").all(limit) as Array<{ name: string; description: string }>
+}
+
+/** Flips the on/off switch of every version of `name`; false when the name has no record. */
+export function setEnabled(db: Database, name: string, enabled: boolean): boolean {
+  return db.query('UPDATE central_skill SET enabled = ? WHERE name = ?').run(enabled ? 1 : 0, name).changes > 0
 }

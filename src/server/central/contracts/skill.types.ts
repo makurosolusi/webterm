@@ -6,7 +6,7 @@ export type SkillStatus =
   | 'proposed' | 'rejected' | 'evaluated' | 'pending_approval' | 'active' | 'disabled' | 'archived'
 
 /** Where a skill came from. */
-export type SkillOrigin = 'builtin' | 'human' | 'central'
+export type SkillOrigin = 'builtin' | 'human' | 'central' | 'agent'
 
 /** One row of the skill index (`central_skill`). */
 export interface SkillRecord {
@@ -23,6 +23,8 @@ export interface SkillRecord {
   approvedBy: string | null
   approvedAt: number | null
   evalScore: number | null
+  /** On/off switch independent of `status`; absent means on. A disabled skill is neither indexed nor loadable. */
+  enabled?: boolean
 }
 
 /** Cheap line for the stable prompt prefix (index <= 500 tokens). */
