@@ -1,75 +1,68 @@
-// Terminal (xterm) slice of `Settings`: visual, interaction, shell & buffer keys. Merged into
-// `Settings` in `settings.ts`; defaults live in `DEFAULT_SETTINGS` there.
+// Terminal slice of the app settings (xterm look, interaction, shell, buffers). `settings.ts`
+// composes it into the full `Settings` type and owns the default values.
 
 export type TerminalCursorStyle = 'block' | 'bar' | 'underline'
 export type TerminalShortcutPolicy = 'app-first' | 'terminal-first'
-/** `auto` = System: follows the OS light/dark mode (`prefers-color-scheme`). */
+/** `auto` follows the OS light/dark preference (`prefers-color-scheme`). */
 export type AppTheme = 'auto' | 'dark' | 'light'
 
 export interface TerminalSettings {
-  // --- Visual xterm (live-apply: perubahan langsung diterapkan ke terminal yang terbuka) -------
+  // --- Appearance: applied live to every open terminal ---
   fontSize: number
   fontFamily: string
-  /** Bobot teks normal. Default xterm sendiri `normal` (400). */
+  /** Weight of regular text; xterm's own default is `normal` (400). */
   fontWeight: number
-  /** Bobot teks BOLD. Default xterm sendiri `bold` (700). Menurunkannya adalah cara menjaga bold
-   *  tetap terbaca pada font tipis yang merender 700 jadi gumpalan. */
+  /** Weight of bold text; xterm's own default is `bold` (700). Lowering it keeps bold legible on
+   *  thin fonts whose 700 cut turns into a smear. */
   fontWeightBold: number
-  /** Render teks bold dengan warna BRIGHT dari palet (default xterm, dan konvensi terminal
-   *  historis). Off membuat bold murni soal bobot, sehingga warna tetap berarti apa yang program
-   *  maksudkan. */
+  /** Draw bold text with the bright palette variant (xterm default, historical convention).
+   *  When off, bold only changes weight and colours keep the meaning the program gave them. */
   drawBoldTextInBrightColors: boolean
-  /** Tinggi baris sebagai kelipatan ukuran font (1 = default xterm, tanpa leading tambahan). */
+  /** Row height as a multiple of the font size (1 = xterm default, no extra leading). */
   terminalLineHeight: number
-  /** Spasi horizontal ekstra antar sel, dalam piksel CSS (0 = default xterm). */
+  /** Extra horizontal gap between cells in CSS pixels (0 = xterm default). */
   terminalLetterSpacing: number
-  /** Skema warna terminal — id dari tabel tema client. Resolusi harus toleran (nilai bisa
-   *  diedit tangan): id tak dikenal jatuh ke tema default. */
+  /** Colour scheme id from the client's theme table. Hand-edited values are possible, so lookup
+   *  must tolerate unknown ids by falling back to the default theme. */
   terminalTheme: string
-  /** Rasio kontras minimum foreground/background, 1–21. 1 (default xterm) mematikan penyesuaian
-   *  sepenuhnya; 4.5 = WCAG AA, 7 = AAA, 21 memaksa hitam atau putih. Ada biaya kerja per sel di
-   *  renderer, jadi tetap mati kecuali diminta. */
+  /** Minimum foreground/background contrast ratio, 1 to 21. 1 (xterm default) disables the
+   *  adjustment; 4.5 is WCAG AA, 7 is AAA, 21 forces black or white. The renderer pays a per-cell
+   *  cost for it, so leave it off unless asked. */
   terminalMinContrast: number
   cursorStyle: TerminalCursorStyle
   cursorBlink: boolean
 
-  // --- Interaksi -------------------------------------------------------------------------------
-  /** Karakter yang mengakhiri kata saat seleksi double-click xterm. */
+  // --- Interaction ---
+  /** Characters that end a word when xterm expands a double-click selection. */
   terminalWordSeparator: string
-  /** Salin seleksi MOUSE yang selesai ke clipboard sistem. OFF secara default: mengganti isi
-   *  clipboard tanpa diminta adalah kejutan yang layak dipilih sendiri. */
+  /** Copy a finished MOUSE selection to the system clipboard. Off by default: overwriting the
+   *  clipboard unasked is a surprise the user should opt into. */
   copyOnSelect: boolean
-  /** ⌘+ / ⌘− / ⌘0 mengubah ukuran font terminal yang FOKUS. ON secara default. Di luar macOS
-   *  chord-nya Ctrl+= / Ctrl+− / Ctrl+0 — Ctrl+− biasanya undo readline, jadi matikan bila bentrok. */
+  /** Cmd +/-/0 resize the FOCUSED terminal's font (Ctrl +/-/0 outside macOS). On by default.
+   *  Ctrl+- is often readline undo, so turn this off if it collides. */
   terminalFontZoomKeys: boolean
-  /** Siapa yang menang selagi terminal memegang fokus keyboard: `app-first` (default) membiarkan
-   *  perintah app menyala di atas xterm; `terminal-first` menyimpan setiap chord selain milik
-   *  terminal sendiri (find, copy) untuk shell/TUI. */
+  /** Who wins a shortcut while the terminal has keyboard focus. `app-first` (default) lets app
+   *  commands fire over xterm; `terminal-first` hands every chord except the terminal's own
+   *  (find, copy) to the shell or TUI. */
   terminalShortcutPolicy: TerminalShortcutPolicy
 
-  // --- Shell & buffer --------------------------------------------------------------------------
-  /** String kosong = pakai shell default sistem. */
+  // --- Shell and buffers ---
+  /** Empty string means the system's default shell. */
   defaultShell: string
   /**
-   * Scrollback dalam BYTE, bukan baris.
+   * Server-side scrollback, measured in BYTES (not lines).
    *
-   * Pilihan satuan ini disengaja dan perlu dicatat: menyimpan dalam BARIS cocok untuk history tmux, tapi
-   * di sini yang membatasi adalah ring buffer byte mentah PTY di `src/server/sessions.ts`
-   * (`SCROLLBACK_BYTES`), satu-satunya konsumen nyata. Satuannya karena itu byte, dan defaultnya
-   * 256 KiB = nilai konstanta yang berjalan hari ini, jadi mengangkatnya ke settings tidak
-   * mengubah perilaku apa pun.
-   *
-   * Batas sisi client punya kunci TERPISAH, `scrollbackLines`. Jangan diam-diam mengubah arti
-   * kunci ini menjadi baris.
+   * There is no tmux layer here, so what bounds history is the raw PTY ring buffer in
+   * `src/server/sessions.ts` (`SCROLLBACK_BYTES`), its only real consumer. The default of 256 KiB
+   * equals that constant, so exposing it as a setting changes nothing by itself. The client-side
+   * limit is the separate key `scrollbackLines`; do not repurpose this one as a line count.
    */
   scrollbackBytes: number
   /**
-   * Scrollback xterm sisi CLIENT dalam BARIS — kunci terpisah dari `scrollbackBytes` karena
-   * satuan dan konsumennya berbeda: yang ini mendarat di opsi `scrollback` xterm (xterm menghitung
-   * baris grid), sedangkan `scrollbackBytes` membatasi ring buffer byte mentah PTY di server.
-   * Satu nilai tidak bisa melayani keduanya — byte yang dipakai sebagai baris memberi xterm
-   * ratusan ribu baris buffer per node, dan biayanya per node (`cols × 12 B` per baris) sementara
-   * satu canvas memuat banyak node.
+   * Client-side xterm scrollback, measured in LINES. It feeds xterm's `scrollback` option, which
+   * counts grid rows, so it cannot share a key with the byte-based server limit: reusing a byte
+   * figure as a line count would hand xterm hundreds of thousands of rows per node, and the
+   * memory cost (`cols x 12 B` per row) multiplies by the number of nodes on a canvas.
    */
   scrollbackLines: number
 }
