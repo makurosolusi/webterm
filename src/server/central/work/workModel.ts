@@ -86,6 +86,8 @@ export interface WorkStore {
   openAssignments(limit?: number): AssignmentView[]
   /** Records a liveness signal; false when the assignment is unknown or ended. Writes no event. */
   touchSignal(id: string, signal: string, at: number): boolean
+  /** Raises every open lease that ends before `until` to `until` (restart grace); returns how many were raised. */
+  holdLeases(until: number): number
   /** False when the assignment is unknown or ended. */
   markNudged(id: string, at?: number): boolean
   /** False when the assignment is unknown or ended. */

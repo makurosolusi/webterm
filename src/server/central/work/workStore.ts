@@ -3,6 +3,7 @@ import { canWorkTransition, type AssignmentChannel, type AssignmentView, type Ta
 import { allRows, execWrite, getRow, inTransaction, jsonOf, newId, parseJson, requireText, tx, type LedgerContext, type Row } from '../../ledger/ledgerCore'
 import { appendEvent, clampLimit, clampOffset } from '../../ledger/ledgerEvent'
 import { createLogger } from '../../logs'
+import { LEASE_MS, leaseFor, ownerOf } from './workOwner'
 import { WorkError, type MoveOptions, type WorkActor, type WorkMove, type WorkStore } from './workModel'
 
 const log = createLogger('central.work')
@@ -25,7 +26,7 @@ function toTask(r: Row): TaskView {
     id: String(r.id), projectId: String(r.project_id), title: String(r.title), objective: String(r.objective), status: r.status as WorkStatus,
     boundaries: parseJson(r.boundaries_json) as string[] | null, acceptance: r.acceptance as WorkAcceptance, dueAt: num(r.due_at),
     createdBy: String(r.created_by), conversationId: str(r.conversation_id), turnId: str(r.turn_id), verification: parseJson(r.verification_json),
-    blockedBy: (parseJson(r.blocked_by_json) as string[]).sort(), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
+    blockedBy: (parseJson(r.blocked_by_json) as string[]).sort(), owner: ownerOf(r.status as WorkStatus), createdAt: Number(r.created_at), updatedAt: Number(r.updated_at),
   }
 }
 
@@ -34,7 +35,7 @@ export function toAssignment(r: Row): AssignmentView {
   return {
     id: String(r.id), taskId: String(r.task_id), projectId: String(r.project_id), nodeId: String(r.node_id), agentId: str(r.agent_id),
     channel: r.channel as AssignmentChannel, instruction: String(r.instruction), attempt: Number(r.attempt), startedAt: Number(r.started_at),
-    lastSignal: str(r.last_signal), lastSignalAt: num(r.last_signal_at), nudgedAt: num(r.nudged_at), restarts: Number(r.restarts),
+    lastSignal: str(r.last_signal), lastSignalAt: num(r.last_signal_at), nudgedAt: num(r.nudged_at), leaseUntil: num(r.lease_until), restarts: Number(r.restarts),
     endedAt: num(r.ended_at), endReason: str(r.end_reason), result: parseJson(r.result_json), conversationId: str(r.conversation_id), turnId: str(r.turn_id),
   }
 }
@@ -150,6 +151,8 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     if (execWrite(db, 'UPDATE central_task SET status = ?, updated_at = ? WHERE id = ? AND status = ?', to, now(), cur.id, cur.status) !== 1) {
       throw new WorkError('concurrent_update', 'moveTask', cur.id, edge)
     }
+    // Every move hands the task to the owner of its new status with a fresh lease (workOwner.ts).
+    if (assignment) execWrite(db, 'UPDATE central_assignment SET lease_until = ? WHERE id = ?', leaseFor(to, now()), assignment.id)
     const seq = record({ kind: `work.task.${to}`, actor: options.actor, task: cur, assignment, from: cur.status, to, reason: options.reason, rule: options.rule })
     const moved = requireTask(cur.id, 'moveTask')
     batch.push({ task: moved, from: cur.status, to, rule: options.rule ?? null, reason: options.reason ?? null, channel: assignment?.channel ?? null, seq })
@@ -253,7 +256,10 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     assignmentsOfTask: (taskId, limit = OPEN_ASSIGNMENTS_MAX) => allRows(db, 'SELECT * FROM central_assignment WHERE task_id = ? ORDER BY attempt DESC LIMIT ?', taskId, limit).map(toAssignment),
     openAssignmentOfTask: openOfTask,
     openAssignments: (limit = OPEN_ASSIGNMENTS_MAX) => allRows(db, 'SELECT * FROM central_assignment WHERE ended_at IS NULL ORDER BY started_at, id LIMIT ?', limit).map(toAssignment),
-    touchSignal: (id, signal, at) => live('last_signal = ?, last_signal_at = ? WHERE id = ?', signal, at, id),
+    // Only an agent-owned task (assigned/running) renews its lease from a signal; a reviewed or Central-owned one keeps its own clock.
+    touchSignal: (id, signal, at) => live(`last_signal = ?, last_signal_at = ?,
+      lease_until = CASE WHEN (SELECT status FROM central_task WHERE id = task_id) IN ('assigned', 'running') THEN ? ELSE lease_until END WHERE id = ?`, signal, at, at + LEASE_MS.agentActive, id),
+    holdLeases: (until) => execWrite(db, 'UPDATE central_assignment SET lease_until = ? WHERE ended_at IS NULL AND (lease_until IS NULL OR lease_until < ?)', until, until),
     markNudged: (id, at = now()) => live('nudged_at = ? WHERE id = ?', at, id),
     incrementRestarts: (id) => live('restarts = restarts + 1 WHERE id = ?', id),
     noteAssignment(id, kind, { actor, rule, reason } = {}) {
