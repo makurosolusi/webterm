@@ -150,6 +150,7 @@ export const DEFAULT_SETTINGS: Settings = {
   permissionRouting: DEFAULT_PERMISSION_ROUTING,
   centralCheckins: true,
   centralCheckinDailyLimit: 10,
+  centralTidy: true,
   projectModels: {},
   projectApprovalLevels: {},
   gridSize: 24,

@@ -26,6 +26,10 @@ import { createAgentExecutor, type AgentExecutor, type AgentHost } from './agent
 import { type AgentCatalog, createAgentCatalog, DEFAULT_DENY_ROOTS } from './agents/agentCatalog'
 import { createAgentHost } from './agents/agentHost'
 import { startAgentPtyWatcher } from './agents/agentPtyWatcher'
+import { type AgentTidy, TIDY_SWEEP_MS, createAgentTidy } from './agents/agentTidy'
+import { presence } from '../channels/channelPresence'
+import { activeConnectivity } from '../connectivity/connectivity.runtime'
+import { activeBrowser } from '../browser/browser.state'
 import { createWorkTracking } from './work/workTracking'
 import { resumeApprovedAgents } from './agents/agentResume'
 import { createMailDeliver } from './agents/mailDeliver'
@@ -88,6 +92,8 @@ export interface Ca2Handle {
   now: () => number
   guard: SyncControlGuard
   executor: AgentExecutor | null
+  /** Canvas tidy of finished Central workers; null while agents are off. */
+  tidy: AgentTidy | null
   skills: SkillAdminStore | null
   /** Folder root of the skill store (the review route reads proposed drafts from it). */
   skillsRoot: string
@@ -147,6 +153,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   const sessions = createSessionsPort(opts.sessions)
   let kb: Database | null = null
   let timer: ReturnType<typeof setInterval> | null = null
+  let tidyTimer: ReturnType<typeof setInterval> | null = null
   let unwatchPty: (() => void) | null = null
   let stopWork: (() => void) | null = null
   let unwatchPlaybooks: (() => void) | null = null
@@ -161,7 +168,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let turnsReconciled = false
   const registry = opts.registry ?? defaultRegistry()
   const handle: Ca2Handle = {
-    db, env, now, guard, executor: null, skills: null, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, registry, toolNames: [], toolsHash: toolsHash(registry),
+    db, env, now, guard, executor: null, tidy: null, skills: null, skillsRoot: join(dir, SKILLS_SUBDIR), memory: createMemoryBlockProvider(db, { now }) as SyncMemoryBlockProvider, registry, toolNames: [], toolsHash: toolsHash(registry),
     ready: Promise.resolve(),
     agentAlive: (a) => (a.runner === 'exec' ? false : !!a.nodeId && sessions.isLive(a.nodeId)),
     sweep: () => (handle.executor ? resumeApprovedAgents(db, handle.executor, now) : Promise.resolve(0)),
@@ -215,6 +222,15 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     if (executor && !opts.noTimer) {
       timer = setInterval(() => { handle.sweep().catch((err) => log.error('ca2.sweep_failed', 'approved-agent sweep failed', { error: err instanceof Error ? err.message : String(err) })) }, SWEEP_INTERVAL_MS)
       timer.unref()
+      // Settings `centralTidy` is read at every sweep (default on), so the switch applies live.
+      handle.tidy ??= createAgentTidy({
+        db, now, executor: () => handle.executor, canvas: getCanvasPush, focused: () => presence.focusedNode(),
+        enabled: () => (opts.settings?.() ?? DEFAULT_SETTINGS).centralTidy !== false, impaired: () => activeConnectivity()?.isImpaired() === true,
+        browserLease: (id) => activeBrowser()?.state(id)?.lease,
+      })
+      const tidy = handle.tidy
+      tidyTimer = setInterval(() => { void tidy.sweep() }, TIDY_SWEEP_MS)
+      tidyTimer.unref()
     }
     setActiveCa2(handle)
     log.info('ca2.start', 'Central Agent v2 armed', { tools: handle.toolNames.length, agents: executor !== null, skills: skills !== null, toolsHash: handle.toolsHash.slice(0, 12) })
@@ -225,6 +241,8 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     armed = false
     if (timer) clearInterval(timer)
     timer = null
+    if (tidyTimer) clearInterval(tidyTimer)
+    tidyTimer = null
     unwatchPty?.()
     unwatchPty = null
     stopWork?.()
@@ -236,7 +254,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     if (activeCa2() === handle) setActiveCa2(null)
   }
   const unhook = onCapabilityChange('central', { start, stop: pause })
-  handle.stop = () => { pause(); unhook() }
+  handle.stop = () => { pause(); handle.tidy?.stop(); unhook() }
   if (ca2Active(env)) start()
   return handle
 }

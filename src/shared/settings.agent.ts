@@ -43,6 +43,8 @@ export interface AgentSettings {
   centralCheckins: boolean
   /** Self-started Central turns per local day: 5, 10, 20 or 50. */
   centralCheckinDailyLimit: number
+  /** Central parks, then closes, the finished workers it started (server/central/agents/agentTidy.ts). */
+  centralTidy: boolean
   /** Per-workspace model/effort override of the model ladder, by workspace id; absent = ladder. */
   projectModels: Record<string, ProjectModelOverride>
   /** Per-workspace approval level, by workspace id; absent = `agentApprovalLevel` (settings.projectApprovalLevels.ts). */
