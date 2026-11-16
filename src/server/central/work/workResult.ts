@@ -26,6 +26,13 @@ export interface WorkResult {
   failure?: { error: string; details?: string }
 }
 
+const RANK: Record<ResultSource, number> = { none: 0, exec_tail: 1, agent_report: 2, transcript: 3, stop_hook: 3 }
+
+/** Whether `incoming` may replace `existing`: never with a poorer source (a Stop capture beats a `--done` text beats an exec tail beats nothing); equals replace. */
+export function mayReplaceResult(existing: Pick<WorkResult, 'source'> | null, incoming: Pick<WorkResult, 'source'>): boolean {
+  return existing === null || RANK[incoming.source] >= RANK[existing.source]
+}
+
 const sha = (s: string): string => createHash('sha256').update(s).digest('hex')
 
 function capBytes(text: string): { text: string; truncated: boolean } {

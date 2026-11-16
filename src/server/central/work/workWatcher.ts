@@ -71,6 +71,12 @@ export function startWorkWatcher({ store, now, bus = eventBus, onReported, onSes
       return
     }
     const move = WORK_SIGNAL_MOVES[signal]
+    // A Stop that lands after `webterm report --done` already moved the task: its richer capture still replaces the report text.
+    if (signal === 'stop' && REVIEWABLE.includes(task.status)) {
+      const late = takeStopResult(nodeId)
+      if (late) store.recordResult(assignment.id, late)
+      return
+    }
     if (!move.from.includes(task.status)) return
     const options = { actor: SYSTEM, rule: move.rule, reason: event.kind, assignmentId: assignment.id }
     if (signal === 'input' && task.status === 'assigned') store.moveTask(task.id, 'running', options)

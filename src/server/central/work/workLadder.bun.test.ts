@@ -121,7 +121,7 @@ describe('end_reason is never empty', () => {
     await r.supervisor.tick(T0 + 4000)
     expect(r.store.assignmentsOfTask(c.id, 5)[0]?.endReason).toBeTruthy()
     const ended = r.db.query('SELECT task_id AS t, end_reason AS why FROM central_assignment WHERE ended_at IS NOT NULL').all() as { t: string; why: string | null }[]
-    expect(ended.length).toBeGreaterThanOrEqual(2)
+    expect(ended.length).toBeGreaterThan(1)
     for (const row of ended) expect(row.why).toBeTruthy()
     expect(ended.find((x) => x.t === 'lt1')?.why).toBe(VANISHED_NO_RESPAWN)
   })

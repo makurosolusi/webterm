@@ -3,6 +3,7 @@ import { canWorkTransition, type AssignmentChannel, type AssignmentView, type Ta
 import { allRows, execWrite, getRow, inTransaction, jsonOf, newId, parseJson, requireText, tx, type LedgerContext, type Row } from '../../ledger/ledgerCore'
 import { appendEvent, clampLimit, clampOffset } from '../../ledger/ledgerEvent'
 import { createLogger } from '../../logs'
+import { mayReplaceResult, type WorkResult } from './workResult'
 import { LEASE_MS, leaseFor, ownerOf } from './workOwner'
 import { WorkError, type MoveOptions, type WorkActor, type WorkMove, type WorkStore } from './workModel'
 
@@ -274,7 +275,8 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
     recordResult(id, result) {
       const cur = getRow(db, 'SELECT result_json FROM central_assignment WHERE id = ? AND ended_at IS NULL', id)
       if (!cur) return false
-      if ((parseJson(cur.result_json) as { hash?: unknown } | null)?.hash === result.hash) return false
+      const have = parseJson(cur.result_json) as WorkResult | null
+      if (have?.hash === result.hash || !mayReplaceResult(have, result)) return false
       return live('result_json = ? WHERE id = ?', jsonOf(result, 'assignment.result'), id)
     },
     endAssignment(id, reason, result, options = {}) {
