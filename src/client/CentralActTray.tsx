@@ -2,6 +2,7 @@
 // It never moves the camera: Show / Open are user clicks. The polite live region is always mounted and
 // speaks at most once per ANNOUNCE_GAP_MS, so a burst of actions is read as one sentence, never assertively.
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import type { ActEntry } from './centralAct.store'
 import './centralAct.css'
@@ -67,12 +68,12 @@ export function CentralActTray(props: CentralActTrayProps): React.JSX.Element {
           <span className="central-act-tray__text" aria-hidden="true">{sentence}</span>
           {more > 0 && <span className="central-act-tray__more" aria-hidden="true">{`${more} more`}</span>}
           {target.kind === 'here' && (
-            <IconTooltip label="Bring this node into view"><button type="button" className="central-act-tray__btn" onClick={() => props.onShow(latest.nodeId)}>Show</button></IconTooltip>
+            <IconTooltip label="Bring this node into view"><Button type="button" variant="ghost" size="xs" className="central-act-tray__btn" onClick={() => props.onShow(latest.nodeId)}>Show</Button></IconTooltip>
           )}
           {target.kind === 'board' && (
-            <IconTooltip label={`Switch to ${target.name}`}><button type="button" className="central-act-tray__btn" onClick={() => props.onOpenBoard(target.workspaceId)}>Open</button></IconTooltip>
+            <IconTooltip label={`Switch to ${target.name}`}><Button type="button" variant="ghost" size="xs" className="central-act-tray__btn" onClick={() => props.onOpenBoard(target.workspaceId)}>Open</Button></IconTooltip>
           )}
-          {target.kind === 'closed' && <button type="button" className="central-act-tray__btn" disabled>Show</button>}
+          {target.kind === 'closed' && <Button type="button" variant="ghost" size="xs" className="central-act-tray__btn" disabled>Show</Button>}
         </div>
       )}
     </div>
