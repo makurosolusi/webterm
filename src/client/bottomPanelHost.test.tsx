@@ -179,7 +179,7 @@ describe('BottomPanelHost', () => {
     expect(composer.closest('.chat-conversation')).toBe(log.closest('.chat-conversation'))
   })
 
-  it('"Jump to bottom" renders inside the scroll wrapper and is not absolutely positioned', async () => {
+  it('"Jump to latest" renders inside the scroll wrapper and is not absolutely positioned', async () => {
     const dims = { scrollHeight: 1000, clientHeight: 100 }
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(dims.scrollHeight)
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(dims.clientHeight)
@@ -187,7 +187,7 @@ describe('BottomPanelHost', () => {
     await screen.findByLabelText('Message the central agent')
     const log = document.querySelector('.chat-thread')!
     await act(async () => { log.scrollTop = 0; fireEvent.scroll(log) })
-    const jump = screen.getByRole('button', { name: /Jump to bottom/ })
+    const jump = screen.getByRole('button', { name: /Jump to latest/ })
     expect(jump.closest('.chat-thread-wrap')).not.toBeNull()
     expect(jump.closest('.chat-thread')).toBeNull()
     const css = readFileSync('src/client/chat/chat.css', 'utf8')

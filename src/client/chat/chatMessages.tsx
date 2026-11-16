@@ -4,8 +4,12 @@
 //
 // `role="log"` announces completed messages, not every token; deltas are visual only. Markdown
 // goes through the shared sanitizer (`../markdown`), never raw HTML. Auto-scroll only sticks when
-// the reader is already near the bottom (<80px), otherwise a "Jump to bottom" button appears.
-import { useRef, useState, type ReactNode } from 'react'
+// the reader is already near the bottom (<80px); a reader who scrolled up keeps their place and gets a
+// "Jump to latest" pill (labelled "New messages" once something arrived meanwhile).
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { ChatInlineStatus } from './chatInlineStatus'
+import type { TurnPhaseInfo } from './chatTurnPhase'
 import { ChatApprovalCard } from './chatApprovalCard'
 import { CopyButton, MessageActionRow } from './chatMessageActions'
 import { ChatNotice } from './chatNotice'
@@ -22,6 +26,7 @@ import { EditBox, EditButton, RegenerateButton, rerunTargets } from './chatRerun
 import './chatBubbles.css'
 
 const NEAR_BOTTOM_PX = 80
+const IDLE: TurnPhaseInfo = { phase: 'idle' }
 
 /** A failure reason is a sentence, not a log: anything longer is cut. */
 const MAX_REASON = 500
@@ -214,11 +219,14 @@ export interface ChatMessagesProps {
   onRegenerate?: (replyId: string) => void
   /** Replaces the last human message's text and re-runs it; offered on that message while no turn runs. */
   onEdit?: (messageId: string, text: string) => void
+  /** What the running turn is doing; shown as the last row of the thread. */
+  status?: TurnPhaseInfo
 }
 
 export default function ChatMessages(props: ChatMessagesProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [atBottom, setAtBottom] = useState(true)
+  const [unseen, setUnseen] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const targets = props.streaming ? null : rerunTargets(props.messages)
   const { onRegenerate, onEdit } = props
@@ -243,6 +251,9 @@ export default function ChatMessages(props: ChatMessagesProps) {
   }
 
   useStickToBottom(scrollRef, atBottom, props.messages)
+  // Content that lands while the reader is above the bottom is "new"; reaching the bottom clears it.
+  useEffect(() => { setUnseen(!atBottom) }, [props.messages]) // eslint-disable-line react-hooks/exhaustive-deps -- only new content, not the scroll position, marks messages unseen
+  useEffect(() => { if (atBottom) setUnseen(false) }, [atBottom])
 
   const jump = (): void => {
     const el = scrollRef.current
@@ -272,12 +283,13 @@ export default function ChatMessages(props: ChatMessagesProps) {
             return <MessageRow key={message.id} message={message} segments={segments} onRetry={again && retry ? () => retry(again.text, again.attached) : undefined} imageUrl={props.imageUrl} rerun={rerunOf(message)} />
           })
         )}
+        <ChatInlineStatus info={props.status ?? IDLE} />
       </div>
       {!atBottom && (
-        <button type="button" className="chat-jump" onClick={jump}>
+        <Button variant="secondary" size="xs" className="chat-jump" onClick={jump}>
           <span className="codicon codicon-arrow-down" aria-hidden="true" />
-          Jump to bottom
-        </button>
+          {unseen ? 'New messages' : 'Jump to latest'}
+        </Button>
       )}
     </div>
   )

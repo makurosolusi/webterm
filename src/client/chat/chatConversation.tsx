@@ -1,14 +1,15 @@
-// One conversation: history load, SSE subscription, send/cancel, status line + composer. The model picker,
+// One conversation: history load, SSE subscription, send/cancel; the turn status sits inline in the thread. The model picker,
 // context meter and permission mode live in the composer's control row (chatComposer), not in a header.
 // Split from `../ChatPanel` so both stay small. The stream is opened once per conversation with
 // the server's `lastEventSeq` as the cursor; deltas are flushed per animation frame so a burst of
 // tokens causes one render, not one per token.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { IconTooltip } from '@/components/ui/icon-button'
+import { ChatErrorDock, TurnLiveRegion } from './chatInlineStatus'
+import { turnPhase } from './chatTurnPhase'
 import ChatComposer from './chatComposer'
 import ChatMessages from './chatMessages'
 import type {
-  ChatClient, ChatConversation, ChatEvent, ChatStream, ChatStreamOptions, ChatTurnStatus,
+  ChatClient, ChatConversation, ChatEvent, ChatStream, ChatStreamOptions,
 } from './chatTypes'
 import { isActiveTurnStatus, newClientMessageId } from './chatTypes'
 import {
@@ -46,28 +47,6 @@ function unschedule(id: number): void {
   else clearTimeout(id)
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  queued: 'Queued',
-  running: 'Streaming',
-  awaiting_approval: 'Waiting for approval',
-  succeeded: 'Done',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-}
-
-function statusText(
-  stream: string,
-  turnStatus: ChatTurnStatus | null,
-  active: boolean
-): { label: string; live: boolean } {
-  if (stream === 'reconnecting') return { label: 'Reconnecting…', live: true }
-  if (stream === 'connecting') return { label: 'Connecting…', live: true }
-  if (turnStatus && STATUS_LABEL[turnStatus]) {
-    return { label: STATUS_LABEL[turnStatus], live: active || isActiveTurnStatus(turnStatus) }
-  }
-  return { label: active ? 'Working…' : 'Ready', live: active }
-}
-
 export default function ChatConversationView(props: ChatConversationViewProps) {
   const { conversation } = props
   // The list summary already knows a live turn; seed it so Stop is usable before history settles.
@@ -76,6 +55,8 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
     activeTurnId: row.activeTurnId,
   }))
   const [historyError, setHistoryError] = useState<string | null>(null)
+  // Bumped by the error dock's Retry to load the history again.
+  const [historyTry, setHistoryTry] = useState(0)
   const section = useRef<HTMLElement | null>(null)
 
   // Refs, not effect deps: an inline client/stream factory must not restart the stream.
@@ -136,10 +117,10 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
       queue.current.frame = null
       queue.current.events = []
     }
-  }, [conversation.id, conversation.lastEventSeq, conversation.activeTurnId, enqueue])
+  }, [conversation.id, conversation.lastEventSeq, conversation.activeTurnId, enqueue, historyTry])
 
   const busy = state.activeTurnId !== null || isActiveTurnStatus(state.turnStatus)
-  const status = statusText(state.stream, state.turnStatus, busy)
+  const turn = turnPhase({ stream: state.stream, busy, messages: state.messages })
 
   /** Sends text plus attachments (image/file parts: fresh bytes, or stored refs on a Retry). */
   const send = (text: string, attached: ChatPart[] = []): void => {
@@ -212,35 +193,22 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
   const modelSet = (): void => setModelKey((k) => k + 1)
   const cmd = useCentralChatCommands(props.commands, sendComposed, (error) => dispatch({ type: 'error', error }), conversation.id, modelSet)
   const error = state.error ?? historyError
+  const failed = error !== null
   const workspaceId = useActiveWorkspaceId()
   const settledKey = modelKey + (busy ? 0 : state.lastEventSeq)
 
   return (
     <section ref={section} className="chat-conversation" aria-label="Conversation">
-      <header className="chat-conversation__head">
-        {status.live
-          ? <span className="chat-progress" aria-hidden="true" />
-          : <span className="chat-status-dot" aria-hidden="true" />}
-        <span className="chat-conversation__status" aria-live="polite">{status.label}</span>
-      </header>
-
-      {error !== null && (
-        <div className="chat-error" role="alert">
-          <span className="codicon codicon-error" aria-hidden="true" />
-          <span>{error}</span>
-          <IconTooltip label="Dismiss error">
-            <button type="button" className="chat-error__dismiss" aria-label="Dismiss error"
-              onClick={() => dispatch({ type: 'error', error: null })}>
-              <span className="codicon codicon-close" aria-hidden="true" />
-            </button>
-          </IconTooltip>
-        </div>
-      )}
-
-      <ChatMessages messages={orderedMessages(state)} streaming={busy || rerunning || state.stream === 'reconnecting'} onRetry={send}
+      <TurnLiveRegion info={turn} failed={failed} />
+      <ChatMessages messages={orderedMessages(state)} streaming={busy || rerunning || state.stream === 'reconnecting'} status={turn} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)}
         {...(props.client.regenerate ? { onRegenerate: (replyId: string) => rerun('regenerate', replyId) } : {})}
         {...(props.client.editMessage ? { onEdit: (messageId: string, text: string) => rerun('edit', messageId, text) } : {})} />
+      {error !== null && (
+        <ChatErrorDock message={error}
+          onRetry={historyError !== null && state.error === null ? () => setHistoryTry((n) => n + 1) : undefined}
+          onDismiss={() => { dispatch({ type: 'error', error: null }); setHistoryError(null) }} />
+      )}
       <ChatComposer busy={busy} onSend={cmd.onSend} onStop={stop} autoFocus={props.focusComposer}
         completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
         toolbar={props.commands && (
