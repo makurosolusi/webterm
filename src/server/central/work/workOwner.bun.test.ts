@@ -6,7 +6,7 @@ import { taskCards } from './workBoard'
 import { WORK_SIGNAL_MOVES } from './workWatcher'
 import { BOOT_GRACE_MS, LEASE_MS, leaseFor, OPEN_STATUSES, ownerOf } from './workOwner'
 import { createWorkSupervisor } from './workSupervisor'
-import { rig, T0 } from './workRig.testutil'
+import { putTaskInStatus, rig, T0 } from './workRig.testutil'
 
 const HOUR_MS = 3_600_000
 
@@ -35,6 +35,16 @@ test('property: every legal move into an open status leaves the task with its ow
     const moved = s.store.moveTask(taskId, to, { actor: { kind: 'system' }, assignmentId })
     expect(moved.owner).toBe(ownerOf(to))
     expect(s.store.getAssignment(assignmentId)?.leaseUntil).toBe(leaseFor(to, T0 + 5000))
+  }
+})
+
+test('fixture contract: putTaskInStatus gives every open status the lease its owner would get in production', () => {
+  const s = rig()
+  for (const status of OPEN_STATUSES) {
+    const { taskId, assignmentId } = s.assigned('assigned')
+    putTaskInStatus(s.store, taskId, status)
+    expect(s.statusOf(taskId)).toBe(status)
+    expect(s.store.getAssignment(assignmentId)?.leaseUntil).toBe(leaseFor(status, T0))
   }
 })
 
