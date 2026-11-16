@@ -35,7 +35,8 @@ let seq = 0
 function stalled(r: Rig, origin: string | null, projectId = 'p1') {
   seq += 1
   const t = r.store.createTask({ id: `rt${seq}`, projectId, title: `route ${seq}`, objective: 'o', actor: CENTRAL, conversationId: origin })
-  r.store.openAssignment({ taskId: t.id, nodeId: `n-${t.id}`, channel: 'terminal', instruction: 'go', actor: { kind: 'human' }, conversationId: origin })
+  // No attempt at all: the stall rides the 5-minute window instead of waking at once (an attempt always wakes at once).
+  r.db.query("UPDATE central_task SET status = 'assigned' WHERE id = ?").run(t.id)
   r.store.moveTask(t.id, 'running', { actor: SYSTEM })
   r.store.moveTask(t.id, 'stalled', { actor: SYSTEM, rule: 'stalled', reason: 'quiet' })
   return t

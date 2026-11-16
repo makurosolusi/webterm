@@ -5,6 +5,7 @@ import { createLogger } from '../../logs'
 import { AGENT_TERMINAL_STATES, type AgentState } from '../contracts'
 import { finishTask } from './workLifecycle'
 import type { WorkActor, WorkStore } from './workModel'
+import { BOOT_GRACE_MS, LEASE_MS, leaseWindowOf } from './workOwner'
 
 const log = createLogger('central.work')
 const SYSTEM: WorkActor = { kind: 'system' }
@@ -23,13 +24,13 @@ const SESSION_GONE_STATUSES: readonly WorkStatus[] = ['assigned', 'running', 'st
  * Any hook (tool use, prompt, notification) counts as a signal, so a working agent never reaches these.
  */
 export const WORK_LIVENESS_RULES = {
-  startup: { name: 'startup', afterMs: MINUTE_MS },
+  startup: { name: 'startup', afterMs: LEASE_MS.agentStartup },
   heartbeat: { name: 'heartbeat', afterMs: 3 * MINUTE_MS },
-  stalled: { name: 'stalled', afterMs: 6 * MINUTE_MS },
+  stalled: { name: 'stalled', afterMs: LEASE_MS.agentActive },
   vanished: { name: 'vanished', maxRespawnsPerAssignment: 1 },
   restartLimit: { name: 'restart_limit', maxPerTask: 2, windowMs: 60 * MINUTE_MS },
   /** Open duties (workEscalation.ts): Central gets `graceMs` to fix a failed send in the turn that saw it; after `afterMs` the user is told. */
-  escalate: { name: 'escalate', graceMs: MINUTE_MS, afterMs: 15 * MINUTE_MS },
+  escalate: { name: 'escalate', graceMs: MINUTE_MS, afterMs: LEASE_MS.human },
 } as const
 
 /** End reason when a session died and the server has no way to relaunch it. */
@@ -77,6 +78,8 @@ const terminalAgent = (state: AgentState): boolean => (AGENT_TERMINAL_STATES as 
 export function createWorkSupervisor({ store, ports, now, afterTick, announce }: WorkSupervisorDeps): WorkSupervisor {
   let timer: ReturnType<typeof setInterval> | null = null
   let ticking = false
+  let held = false
+  const bootAt = now()
 
   const agentOf = (a: AssignmentView) => (a.agentId ? ports.agentOf(a.agentId) : null)
   const titleOf = (task: TaskView): string => previewText(task.title, TITLE_CHARS) ?? task.id
@@ -139,12 +142,15 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
     if (SESSION_GONE_STATUSES.includes(task.status) && sessionGone(a)) return vanish(a, task, 'session gone', at)
     if (a.channel === 'chat' && ports.chatBusy(a.nodeId)) return
     const { startup, heartbeat, stalled } = WORK_LIVENESS_RULES
-    // A spawn parked on its card starts its clock when it launched, not when the card was raised.
-    const since = Math.max(a.lastSignalAt ?? a.startedAt, (a.channel === 'spawn' ? agentOf(a)?.lastEventAt : null) ?? 0)
+    // The stored lease is the one clock (renewed by every signal and move); a spawn parked on its card starts it when it launched.
+    const window = leaseWindowOf(task.status) ?? 0
+    const floor = a.channel === 'spawn' ? agentOf(a)?.lastEventAt : null
+    const deadline = Math.max(a.leaseUntil ?? (a.lastSignalAt ?? a.startedAt) + window, floor ? floor + window : 0)
+    const since = deadline - window
     const quiet = at - since
-    if (task.status === 'assigned' && a.lastSignalAt === null && quiet >= startup.afterMs) {
+    if (task.status === 'assigned' && at >= deadline) {
       store.moveTask(task.id, 'stalled', { actor: SYSTEM, rule: startup.name, reason: 'no signal since started', assignmentId: a.id })
-    } else if (task.status === 'running' && quiet >= stalled.afterMs) {
+    } else if (task.status === 'running' && at >= deadline) {
       store.moveTask(task.id, 'stalled', { actor: SYSTEM, rule: stalled.name, reason: `no signal for ${Math.floor(quiet / MINUTE_MS)} minutes`, assignmentId: a.id })
     } else if (task.status === 'running' && quiet >= heartbeat.afterMs && (a.nudgedAt === null || a.nudgedAt < since)) {
       await nudge(a, task, quiet, at)
@@ -156,6 +162,8 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
       if (ticking) return
       ticking = true
       try {
+        // First tick after a boot: leases outlive the process, so stale ones get one cycle of grace instead of firing together.
+        if (!held) { held = true; store.holdLeases(bootAt + BOOT_GRACE_MS) }
         for (const a of store.openAssignments(TICK_LIMIT)) {
           try { await evaluate(a, at) } catch (err) {
             log.error('work.tick_row_failed', `liveness rules failed for assignment ${a.id}`, { assignmentId: a.id, taskId: a.taskId, nodeId: a.nodeId, error: errorText(err) })

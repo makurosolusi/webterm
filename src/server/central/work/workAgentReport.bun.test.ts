@@ -22,6 +22,7 @@ import { openWork } from '../context/contextHeaderWork'
 import { recordAgentReport, resetReportRateForTest } from './workAgentReport'
 import { createWorkCheckin } from './workCheckin'
 import { event, rig } from './workRig.testutil'
+import { buildResult, stashStopResult, type WorkResult } from './workResult'
 import { startWorkWatcher } from './workWatcher'
 import { onWorkMove } from './workStore'
 
@@ -159,4 +160,42 @@ test('an agent spawned with no task has no card (agent.defs), so its boot turn (
   stop()
   expect(s.store.listTasks({ projectId: 'p1' })).toEqual([])
   expect(s.wakes()).toEqual([])
+})
+
+const resultOf = (s: ReturnType<typeof setup>, id: string) => s.store.getAssignment(id)?.result as WorkResult | null
+
+test('report --done stores its text as the attempt result (source agent_report) before the task is reported', async () => {
+  const s = setup()
+  const { taskId, assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  const seen: unknown[] = []
+  onWorkMove(s.db, (m) => { if (m.to === 'reported') seen.push(resultOf(s, assignmentId)?.source) })
+  await report(s.deps, { kind: 'done', text: 'RESULT: shipped the fix' })
+  expect(s.statusOf(taskId)).toBe('reported')
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'agent_report', text: 'RESULT: shipped the fix', resultLine: 'shipped the fix' })
+  expect(seen).toEqual(['agent_report'])
+  // blocked / question / progress are not results.
+  const t = setup()
+  const b = t.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  await report(t.deps, { kind: 'question', text: 'which db?' })
+  expect(resultOf(t, b.assignmentId)).toBeNull()
+})
+
+test('report --done does not overwrite the richer result a Stop already captured', async () => {
+  const s = setup()
+  const { assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  s.store.recordResult(assignmentId, buildResult('stop_hook', 'long final message from the Stop hook', s.now()))
+  await report(s.deps, { kind: 'done', text: 'short done' })
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'stop_hook', text: 'long final message from the Stop hook' })
+})
+
+test('a Stop that arrives after report --done replaces the report text with its richer capture', async () => {
+  const s = setup()
+  const { taskId, assignmentId } = s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  const off = startWorkWatcher({ store: s.store, now: s.now, bus: s.bus, onReported: () => {}, onSessionEnded: () => {} })
+  await report(s.deps, { kind: 'done', text: 'short done' })
+  stashStopResult(NODE, buildResult('stop_hook', 'the full last message', s.now()))
+  s.bus.publish(event('hook.Stop', {}, NODE))
+  off()
+  expect(s.statusOf(taskId)).toBe('reported')
+  expect(resultOf(s, assignmentId)).toMatchObject({ source: 'stop_hook', text: 'the full last message' })
 })

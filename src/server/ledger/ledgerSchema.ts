@@ -34,6 +34,7 @@ import { applyV32 } from './ledgerSchemaV32'
 import { applyV33 } from './ledgerSchemaV33'
 import { applyV34 } from './ledgerSchemaV34'
 import { applyV35 } from './ledgerSchemaV35'
+import { applyV36 } from './ledgerSchemaV36'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -109,4 +110,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 34, up: applyV34 },
   // v35: central_checkin_reason.conversation_id (check-ins return to the conversation that asked); nullable, unsent reasons backfilled from their task.
   { version: 35, up: applyV35 },
+  // v36: central_assignment.lease_until (stored owner deadline of an open task); nullable, open assignments backfilled from last signal + status window.
+  { version: 36, up: applyV36 },
 ]

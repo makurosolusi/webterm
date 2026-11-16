@@ -73,14 +73,15 @@ describe('open duties', () => {
     expect((r.db.query("SELECT COUNT(*) AS n FROM central_checkin_reason WHERE kind = 'task_duty'").get() as { n: number }).n).toBe(1)
   })
 
-  it('a task the user cancelled, or one a human started, is not a duty', () => {
+  it('a task the user cancelled is not a duty, but one a human started is', () => {
     const r = rig()
     const id = failedSend(r)
     r.store.moveTask(id, 'cancelled', { actor: { kind: 'human' } })
     const mine = r.store.createTask({ projectId: 'p1', title: 'mine', objective: 'o', actor: { kind: 'human' } })
     r.store.openAssignment({ taskId: mine.id, nodeId: 'n2', channel: 'terminal', instruction: 'x', actor: { kind: 'human' } })
     r.store.moveTask(mine.id, 'failed', { actor: SYSTEM, rule: 'vanished' })
-    expect(listDuties(r.db, 5)).toEqual([])
+    // Central owns every failed task (workOwner.ts), whoever opened its attempt.
+    expect(listDuties(r.db, 5).map((d) => d.taskId)).toEqual([mine.id])
   })
 
   it('wakes Central only after the grace period, once', async () => {

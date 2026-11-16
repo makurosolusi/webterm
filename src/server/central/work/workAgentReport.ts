@@ -14,6 +14,7 @@ import { createMailStore } from '../agents/mailStore'
 import { AGENT_BLOCKED_RULE, queueCheckinReason } from './workCheckin'
 import { AGENT_REPORT_EVENT, AGENT_REPORT_RULE, moveOpenTask } from './workLifecycle'
 import type { WorkActor } from './workModel'
+import { buildResult } from './workResult'
 import { createWorkStore } from './workStore'
 
 const REASON_CHARS = 300
@@ -71,6 +72,8 @@ export function recordAgentReport(db: Database, now: () => number, nodeId: strin
     }
   }
   if (assignment) store.noteAssignment(assignment.id, AGENT_REPORT_EVENT, { actor, rule: AGENT_REPORT_RULE, reason })
+  // The report text is the result of a finished attempt: stored (redacted, capped, hashed like a Stop capture) BEFORE the task moves to `reported`.
+  if (assignment && kind === 'done') store.recordResult(assignment.id, buildResult('agent_report', text, now()))
   const to = TARGET[kind]
   const moved = to ? moveOpenTask(store, nodeId, to, { actor, rule: kind === 'blocked' ? AGENT_BLOCKED_RULE : AGENT_REPORT_RULE, reason }) : null
   appendCentralNotice(db, { key: `agent-report:${reportId}`, text: `Agent ${agent ? String(agent.id) : nodeId} reported ${kind}: ${text}`, conversationId, now })
