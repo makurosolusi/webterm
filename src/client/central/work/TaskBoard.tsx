@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch'
 import { ActionResult, useAction } from '@/components/ui/action'
 import { isAbortError } from '../../inboxApi'
 import { CapabilityOffer } from '../../CapabilityOffer'
+import { useConnectivity } from '../../connectivity/useConnectivity'
 import { centralErrorMessage, useLoad } from '../centralLoad'
 import { GoalsStrip } from './GoalsStrip'
 import { TaskColumn } from './TaskColumn'
@@ -85,6 +86,8 @@ export default function TaskBoard({ client = taskBoardApi, visible = true }: Tas
   const value = project === ALL_PROJECTS || (!projects.loading && !known) ? ALL_PROJECTS : project
   const projectId = value === ALL_PROJECTS ? undefined : value
   const board = useTaskBoard(client, projectId, visible)
+  const link = useConnectivity()
+  const linkDown = link?.kind === 'offline' || link?.kind === 'degraded'
   const { busy, refused, act } = useTaskActions(client, board.refresh)
 
   const wasVisible = useRef(visible)
@@ -138,11 +141,11 @@ export default function TaskBoard({ client = taskBoardApi, visible = true }: Tas
                 collapsed={column === 'done' && !doneOpen}
                 onToggle={column === 'done' ? () => setDoneOpen((o) => !o) : undefined}
                 loadingMore={board.loadingMore.has(column)} onLoadMore={board.loadMore}
-                busy={busy} refused={refused} selectedId={selected} onAct={act} onOpen={open}
+                busy={busy} refused={refused} selectedId={selected} onAct={act} onOpen={open} linkDown={linkDown}
               />
             ))}
           </div>
-          {selected && <TaskDetail key={selected} client={client} taskId={selected} refreshTick={board.refreshTick} onClose={close} />}
+          {selected && <TaskDetail key={selected} client={client} taskId={selected} refreshTick={board.refreshTick} onClose={close} linkDown={linkDown} />}
         </div>
       )}
     </div>

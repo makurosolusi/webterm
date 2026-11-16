@@ -21,6 +21,10 @@ export interface VscodeStatusItem {
   disabledReason?: string
   /** Pressed look for an item whose panel view is showing (`aria-pressed`, `data-active`). */
   active?: boolean
+  /** Static item that keyboard users can Tab to, so its tooltip opens on focus (ignored for buttons). */
+  focusable?: boolean
+  /** Cut a long label with an ellipsis; the full text stays in `ariaLabel` and the tooltip. */
+  truncate?: boolean
 }
 
 export interface VscodeStatusBarProps {
@@ -63,7 +67,14 @@ function StatusItem({ item }: { item: VscodeStatusItem }) {
       {content}
     </button>
   ) : (
-    <span data-slot="vscode-status-bar-item" data-tone={item.tone ?? 'default'} className={className}>
+    <span
+      data-slot="vscode-status-bar-item"
+      data-tone={item.tone ?? 'default'}
+      data-truncate={item.truncate ? 'true' : undefined}
+      className={className}
+      // A bare span has no role, so its aria-label would be ignored: give a focusable one a group role.
+      {...(item.focusable ? { tabIndex: 0, role: 'group', 'aria-label': item.ariaLabel ?? item.label } : {})}
+    >
       {content}
     </span>
   )

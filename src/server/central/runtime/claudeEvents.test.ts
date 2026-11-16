@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RuntimeEvent } from './centralRuntime'
-import { applyClaudeEvent, mcpNotStartedReason, parseClaudeMessage } from './claudeEvents'
+import { applyClaudeEvent, mcpNotStartedReason } from './claudeEvents'
+import { parseClaudeMessage } from './claudeEvents.parse'
 import { lastCentralMcpStatus } from '../../mcp/mcp.health'
 import { newTurnState } from './claudeSession'
 import { createTurnEmitter } from './runtimeEvents'

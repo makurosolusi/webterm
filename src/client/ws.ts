@@ -7,52 +7,18 @@
 // Offline resilience: full-jitter backoff, wake triggers + app-level heartbeat (ws.liveness.ts),
 // the server `hello` (restart / new build) and an auth probe that stops a refused credential looping.
 import { HEALTH_PATH, WS_PATH } from '../shared/protocol'
-import type { ClientMsg, ExitMsg, HelloMsg, ServerMsg } from '../shared/protocol'
-import { replayOpen } from './ws.replayOpen'
+import type { ClientMsg, HelloMsg, ServerMsg } from '../shared/protocol'
+import { addSub, dispatchTerminalFrame, hasSubs, isExited, noteCloseRequested, noteOpenSent, noteResize, removeSub, replayMessages, resetTerminalsForTests, type ExitReason } from './ws.terminals'
 import { type ConnectionPhase, getConnection, reconnectDelay, setConnection, setRetryHandler } from './ws.connection'
 import { dispatchBroadcast, notifyReconnect } from './ws.listeners'
 import { browserOffline, createHeartbeat, installWakeTriggers } from './ws.liveness'
-import { noteClientMsg, noteServerMsg } from './nodeActivity.store'
+import { noteClientMsg } from './nodeActivity.store'
 import { addStream, dispatchStreamFrame, streamsSocketClosed, streamsSocketOpened, __resetStreamsForTests, type WsEventSource } from './ws.streams'
 
 export { replayOpen } from './ws.replayOpen'
+export type { ExitReason } from './ws.terminals'
 export { STREAM_CLOSED, STREAM_CONNECTING, STREAM_OPEN, type WsEventSource } from './ws.streams'
 export { getStatus, onReconnect, subscribeAct, subscribeCanvas, subscribeNet, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaces } from './ws.listeners'
-
-interface Sub {
-  onOutput: (data: string) => void
-  onExit: (code: number, reason?: ExitReason) => void
-  onReset?: () => void
-  open?: ClientMsg & { t: 'open' } // last open sent for this id; replayed on reconnect
-  /** PTY sudah berhenti: jangan putar ulang `open` (itu men-spawn PTY baru) atau antre input. */
-  exited?: boolean
-  /** Session log this xterm is drawing (from the server's `reset`) and the last seq it drew. */
-  epoch?: string
-  seq: number
-}
-
-/**
- * Kenapa PTY berhenti, dari sudut pandang client ini. `self`/`closed` berasal dari server
- * (`ExitMsg['reason']`): `closed` berarti ADA yang meminta close, bukan prosesnya yang keluar.
- * Karena itu client menambahkan `peer-closed` untuk close yang diminta client LAIN — tanpa itu,
- * menutup satu node di satu tab membuat terminal itu senyap di semua tab.
- */
-export type ExitReason = NonNullable<ExitMsg['reason']> | 'peer-closed'
-
-const subs = new Map<string, Sub>()
-
-// Close yang KITA minta. Server hanya tahu "ada yang menutup", jadi hanya client ini yang bisa
-// membedakan close-nya sendiri (tidak perlu dikabarkan) dari close client lain (perlu notice).
-const closedByUs = new Set<string>()
-
-/**
- * Terjemahkan intent server ke sudut pandang client. `closed` yang tidak kita minta menjadi
- * `peer-closed`; intent masuk dikonsumsi supaya close berikutnya tidak ikut tersenyapkan.
- */
-function exitReasonFor(id: string, reason: ExitMsg['reason']): ExitReason | undefined {
-  if (reason !== 'closed') return reason
-  return closedByUs.delete(id) ? 'closed' : 'peer-closed'
-}
 
 let ws: WebSocket | null = null
 let everConnected = false
@@ -115,7 +81,7 @@ setRetryHandler(reconnectNow)
 function wake(): void {
   if (authStopped) return
   if (isOpen()) heartbeat.probe()
-  else if (!ws && (eager || subs.size > 0 || everConnected)) { clearTimer(); connect() }
+  else if (!ws && (eager || hasSubs() || everConnected)) { clearTimer(); connect() }
 }
 
 function wentOffline(): void {
@@ -189,9 +155,7 @@ function connect() {
     attempts = 0
     heartbeat.start()
     setConnection({ phase: 'connected', attempt: 0 })
-    for (const sub of subs.values()) {
-      if (sub.open && !sub.exited) ws!.send(JSON.stringify(sub.epoch ? { ...sub.open, since: { epoch: sub.epoch, seq: sub.seq } } : sub.open))
-    }
+    for (const m of replayMessages()) ws!.send(JSON.stringify(m))
     const pending = [...queue.values()]
     queue.clear()
     for (const m of pending) ws!.send(JSON.stringify(m))
@@ -209,26 +173,7 @@ function connect() {
     if (msg.t === 'pong') { heartbeat.pong(msg.id); return }
     if (msg.t === 'hello') { noteHello(msg); return }
     if (dispatchBroadcast(msg) || dispatchStreamFrame(msg)) return
-    const sub = subs.get(msg.id)
-    if (!sub) return
-    if (msg.t === 'reset') {
-      sub.epoch = msg.epoch
-      sub.seq = 0
-      sub.onReset?.()
-    } else if (msg.t === 'output') {
-      // seq at or below the last drawn = a chunk this xterm already shows (overlapping replay).
-      if (msg.seq !== undefined) {
-        if (msg.seq <= sub.seq) return
-        sub.seq = msg.seq
-      }
-      noteServerMsg(msg)
-      sub.onOutput(msg.data)
-    } else if (msg.t === 'exit') {
-      sub.exited = true
-      const reason = exitReasonFor(msg.id, msg.reason)
-      noteServerMsg(msg, reason)
-      sub.onExit(msg.code, reason)
-    }
+    dispatchTerminalFrame(msg)
   }
   ws.onclose = socketClosed
   ws.onerror = () => ws?.close()
@@ -251,7 +196,7 @@ export function __resetWsForTests(): void {
   heartbeat.stop()
   uninstallTriggers?.(); uninstallTriggers = null
   if (ws) { ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null; ws.close(); ws = null }
-  subs.clear(); queue.clear(); closedByUs.clear(); __resetStreamsForTests()
+  queue.clear(); resetTerminalsForTests(); __resetStreamsForTests()
   everConnected = opened = authStopped = probing = eager = false; attempts = 0; pageBuild = undefined
   setConnection({ phase: 'connecting', attempt: 0, bootId: undefined, build: undefined, serverRestartedAt: undefined, buildChanged: false })
 }
@@ -269,20 +214,14 @@ export function openEventStream(url: string): WsEventSource {
 export function send(msg: ClientMsg) {
   noteClientMsg(msg)
   if (msg.t === 'open') {
-    const sub = subs.get(msg.id)
-    if (sub) {
-      // `open` eksplisit = sesi baru untuk id ini, jadi status keluar yang lama dilepas.
-      sub.exited = false
-      sub.open = replayOpen(msg) // remembered; onopen replays it on every (re)connect
-    }
+    noteOpenSent(msg) // remembered; onopen replays it on every (re)connect
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
     return // never queue 'open' — the reconnect/onopen replay covers the not-open case
   }
   if (msg.t === 'close') {
-    // Dicatat SEBELUM dikirim: `exit` bisa tiba sebelum jawaban apa pun.
-    closedByUs.add(msg.id)
+    noteCloseRequested(msg.id)
   }
-  if (msg.t === 'input' && (subs.get(msg.id)?.exited || !isOpen())) {
+  if (msg.t === 'input' && (isExited(msg.id) || !isOpen())) {
     // Dead session, or no socket: input is dropped, never queued. Queued keys would land in the
     // next PTY with this id, or in the shell long after the user stopped typing (the banner in
     // TerminalCore.offline.tsx says typing is paused).
@@ -290,16 +229,7 @@ export function send(msg: ClientMsg) {
   }
   // Detach only matters to a live socket: a socket that closed already dropped every subscription.
   if (msg.t === 'detach' && !isOpen()) return
-  if (msg.t === 'resize') {
-    // `open` yang diingat ikut dibarui, kalau tidak ia membawa ukuran SAAT NODE LAHIR selamanya.
-    // Selama PTY-nya hidup ukuran basi itu tak berakibat (re-attach mengabaikan `cols`/`rows`), tapi
-    // sesudah RESTART SERVER registri sesinya kosong dan replay yang sama benar-benar MELUNCURKAN —
-    // `spawnPty` memakai `cols`/`rows` pesan itu, jadi PTY duduk di ukuran lahir sementara xterm di
-    // browser sudah di ukuran sekarang. Di sinilah satu-satunya tempat yang semua resize lewati.
-    const sub = subs.get(msg.id)
-    // Disalin, bukan dimutasi: `replayOpen` bisa mengembalikan objek pemanggil apa adanya.
-    if (sub?.open && !sub.exited) sub.open = { ...sub.open, cols: msg.cols, rows: msg.rows }
-  }
+  if (msg.t === 'resize') noteResize(msg)
   if (isOpen()) ws!.send(JSON.stringify(msg))
   else if (msg.t !== 'input' && msg.t !== 'detach') {
     const key = 'dir' in msg ? `fs:${msg.dir}` : `${msg.t}:${msg.id}`
@@ -314,16 +244,11 @@ export function subscribe(
   onExit: (code: number, reason?: ExitReason) => void,
   onReset?: () => void
 ): () => void {
-  // Remount = id ini hidup lagi dari sudut client: lepaskan memori close lama supaya `exit`
-  // yang tertinggal tidak tersenyapkan, dan mulai tanpa `open` (mount baru mengirim miliknya).
-  closedByUs.delete(id)
-  const sub: Sub = { onOutput, onExit, onReset, seq: 0 }
-  subs.set(id, sub)
+  const sub = addSub(id, onOutput, onExit, onReset)
   // A pending reconnect timer will connect; connecting now as well would leave two sockets.
   if (!ws && !reconnectTimer && !authStopped) connect()
   return () => {
-    if (subs.get(id) !== sub) return // a newer mount owns this id now
-    subs.delete(id)
+    if (!removeSub(id, sub)) return // a newer mount owns this id now
     // Unmounted view: the server stops streaming this terminal to us; the session keeps running
     // and a remount re-opens and replays (pty-207-8).
     if (!sub.exited) send({ t: 'detach', id })

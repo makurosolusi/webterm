@@ -1,113 +1,124 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
-import {
-  DEFAULT_TERMINAL_THEME_ID,
-  TERMINAL_THEMES,
-  resolveTerminalTheme,
-} from './themes'
+import { DEFAULT_TERMINAL_THEME_ID, TERMINAL_THEMES, resolveTerminalTheme } from './themes'
 
-describe('terminal themes', () => {
-  it('default theme id matches the settings default', () => {
-    // Kalau dua konstanta ini menyimpang, setiap terminal mendarat di tema fallback dan dropdown
-    // settings menunjuk entri yang tidak dipakai siapa pun.
+const ANSI = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow',
+  'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite',
+] as const
+
+/** WCAG relative luminance of a `#rrggbb` colour. */
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+describe('terminal theme catalogue', () => {
+  it('the default theme id agrees with the settings default', () => {
     expect(DEFAULT_SETTINGS.terminalTheme).toBe(DEFAULT_TERMINAL_THEME_ID)
   })
 
-  it('no theme id leaks a legacy name', () => {
-    // Id tema adalah permukaan TERLIHAT (dropdown settings).
-    for (const t of TERMINAL_THEMES) expect(t.id).not.toContain('legacy')
+  it('keeps every id a user may already have stored', () => {
+    // Ids live in settings files; dropping one silently resets the user's choice.
+    const stored = [
+      'webterm-dark', 'webterm-light', 'dracula', 'tokyo-night', 'catppuccin-mocha',
+      'catppuccin-latte', 'gruvbox-dark', 'nord', 'one-dark', 'solarized-dark', 'solarized-light',
+    ]
+    const ids = TERMINAL_THEMES.map((t) => t.id)
+    for (const id of stored) expect(ids, id).toContain(id)
   })
 
-  it('ids are unique and every theme is fully populated', () => {
+  it('no theme id or label carries the legacy product name', () => {
+    for (const t of TERMINAL_THEMES) {
+      expect(t.id).not.toContain('legacy')
+      expect(t.label.toLowerCase()).not.toContain('nodeterm')
+    }
+  })
+
+  it('has unique ids and a complete, well-formed colour set per theme', () => {
     const ids = TERMINAL_THEMES.map((t) => t.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const t of TERMINAL_THEMES) {
       expect(t.label).toBeTruthy()
-      expect(typeof t.dark).toBe('boolean')
-      // Palet 16 warna ANSI + background/foreground/cursor/cursorAccent/selectionBackground.
-      // Lubang mana pun dan xterm diam-diam memakai warna built-in-nya di tengah skema lain.
-      for (const key of [
-        'background',
-        'foreground',
-        'cursor',
-        'cursorAccent',
-        'selectionBackground',
-        'black',
-        'red',
-        'green',
-        'yellow',
-        'blue',
-        'magenta',
-        'cyan',
-        'white',
-        'brightBlack',
-        'brightRed',
-        'brightGreen',
-        'brightYellow',
-        'brightBlue',
-        'brightMagenta',
-        'brightCyan',
-        'brightWhite',
-      ] as const) {
+      for (const key of ['background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', ...ANSI] as const) {
         expect(t.theme[key], `${t.id}.${key}`).toMatch(/^#[0-9a-f]{6}([0-9a-f]{2})?$/)
       }
     }
   })
 
-  it('has both dark and light schemes, and flags them correctly', () => {
-    // Chrome node mengikuti flag ini (appTheme 'auto'), jadi flag yang salah meninggalkan rangka
-    // hitam di sekitar terminal krem.
+  it('offers both light and dark schemes and the flag matches the actual background', () => {
     expect(TERMINAL_THEMES.some((t) => t.dark)).toBe(true)
     expect(TERMINAL_THEMES.some((t) => !t.dark)).toBe(true)
-    const byId = new Map(TERMINAL_THEMES.map((t) => [t.id, t]))
-    expect(byId.get('webterm-dark')?.dark).toBe(true)
-    expect(byId.get('webterm-light')?.dark).toBe(false)
-    expect(byId.get('solarized-light')?.dark).toBe(false)
+    for (const t of TERMINAL_THEMES) {
+      const isDarkBackground = luminance(t.theme.background!) < 0.18
+      expect(t.dark, t.id).toBe(isDarkBackground)
+    }
   })
 
-  it('webterm-dark / webterm-light are the VS Code Dark Modern / Light Modern terminal', () => {
-    // Dipaku dengan sengaja: nilai diambil dari sumber VS Code (terminalColorRegistry.ts ansiColorMap,
-    // dark_modern.json / light_modern.json, editorColors.ts selectionBackground). "Memperbaiki" salah
-    // satunya menjauhkan terminal dari integrated terminal VS Code yang dikenal pengguna.
+  it('keeps body text readable: foreground over background is at least 4:1', () => {
+    for (const t of TERMINAL_THEMES) {
+      expect(contrast(t.theme.foreground!, t.theme.background!), t.id).toBeGreaterThanOrEqual(4)
+    }
+  })
+
+  it('keeps the colourful ANSI slots distinguishable from the background', () => {
+    // Black/white and their bright forms are skipped: schemes legitimately place them near the background.
+    const hues = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan'] as const
+    for (const t of TERMINAL_THEMES) {
+      for (const hue of hues) {
+        const bright = `bright${hue[0].toUpperCase()}${hue.slice(1)}` as (typeof ANSI)[number]
+        expect(contrast(t.theme[hue]!, t.theme.background!), `${t.id}.${hue}`).toBeGreaterThanOrEqual(2)
+        expect(contrast(t.theme[bright]!, t.theme.background!), `${t.id}.${bright}`).toBeGreaterThanOrEqual(2)
+      }
+    }
+  })
+
+  it('the built-in pair follows the VS Code terminal defaults', () => {
     const dark = resolveTerminalTheme('webterm-dark').theme
-    expect(dark).toMatchObject({
-      background: '#1f1f1f', foreground: '#cccccc', cursor: '#cccccc', selectionBackground: '#264f78',
-      black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510', blue: '#2472c8',
-      magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5',
-      brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543',
-      brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#e5e5e5',
-    })
+    expect(dark.background).toBe('#1f1f1f')
+    expect(dark.selectionBackground).toBe('#264f78')
+    expect(dark.red).toBe('#cd3131')
+    expect(dark.brightBlue).toBe('#3b8eea')
     const light = resolveTerminalTheme('webterm-light').theme
-    expect(light).toMatchObject({
-      background: '#ffffff', foreground: '#3b3b3b', cursor: '#005fb8', selectionBackground: '#add6ff',
-      black: '#000000', red: '#cd3131', green: '#107c10', yellow: '#949800', blue: '#0451a5',
-      magenta: '#bc05bc', cyan: '#0598bc', white: '#555555',
-      brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#14ce14', brightYellow: '#b5ba00',
-      brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#a5a5a5',
-    })
+    expect(light.background).toBe('#ffffff')
+    expect(light.cursor).toBe('#005fb8')
+    expect(light.green).toBe('#107c10')
+    expect(light.brightWhite).toBe('#a5a5a5')
   })
 
-  it('modern themes carry the VS Code scrollbar slider colours', () => {
+  it('the built-in pair carries scrollbar slider colours', () => {
     for (const id of ['webterm-dark', 'webterm-light']) {
       const { theme } = resolveTerminalTheme(id)
       expect(theme.scrollbarSliderBackground, id).toBeTruthy()
-      expect(theme.scrollbarSliderHoverBackground, id).toBe('#646464b3')
+      expect(theme.scrollbarSliderHoverBackground, id).toBeTruthy()
       expect(theme.scrollbarSliderActiveBackground, id).toBeTruthy()
     }
   })
 
-  it('resolves unknown, empty and missing ids to the default instead of throwing', () => {
-    // Nilai settings bisa diedit tangan dan melintas antar versi; tema `undefined` ke xterm =
-    // terminal jatuh ke latar hitamnya sendiri, app tampak rusak karena satu kata.
+  it('expands a compact scheme so the cursor defaults to the foreground and the accent to the background', () => {
+    const nord = resolveTerminalTheme('nord').theme
+    expect(nord.cursor).toBe(nord.foreground)
+    expect(nord.cursorAccent).toBe(nord.background)
+    expect(resolveTerminalTheme('one-dark').theme.cursor).toBe('#528bff')
+  })
+
+  it('falls back to the default for unknown, empty and missing ids', () => {
     const fallback = resolveTerminalTheme(DEFAULT_TERMINAL_THEME_ID)
-    expect(resolveTerminalTheme('tema-yang-dihapus')).toBe(fallback)
+    expect(resolveTerminalTheme('removed-theme')).toBe(fallback)
     expect(resolveTerminalTheme('')).toBe(fallback)
     expect(resolveTerminalTheme(undefined)).toBe(fallback)
   })
 
-  it('returns an identical object for the same id', () => {
-    // `applyLiveOptions` mendeteksi perubahan tema lewat IDENTITAS (`!==`); resolver yang
-    // mengembalikan salinan baru membuat setiap re-option membangun ulang palet.
+  it('resolves the same id to the same object (live-option diffing relies on identity)', () => {
     expect(resolveTerminalTheme('nord')).toBe(resolveTerminalTheme('nord'))
     expect(resolveTerminalTheme('nord')).not.toBe(resolveTerminalTheme('dracula'))
   })

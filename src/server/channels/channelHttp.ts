@@ -60,3 +60,45 @@ export function readCappedBody(req: IncomingMessage, maxBytes: number): Promise<
     req.on('error', onError)
   })
 }
+
+export interface BodyHeadResult {
+  /** Whole body when under the cap; else only its first `headBytes` bytes. Empty after a stream error. */
+  text: string
+  /** True when the body passed `maxBytes` (the rest is drained unread). */
+  truncated: boolean
+  /** Bytes seen so far (a lower bound when `truncated`). */
+  bytes: number
+}
+
+/** Read at most `maxBytes`; past it, stop listening, drain, and keep only the first `headBytes` instead of failing. */
+export function readBodyHead(req: IncomingMessage, opts: { maxBytes: number; headBytes: number }): Promise<BodyHeadResult> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = []
+    let kept = 0
+    let total = 0
+    let done = false
+    const finish = (truncated: boolean): void => {
+      if (done) return
+      done = true
+      req.off('data', onData)
+      req.off('end', onEnd)
+      req.off('error', onError)
+      const raw = Buffer.concat(chunks)
+      resolve({ text: (truncated ? raw.subarray(0, opts.headBytes) : raw).toString('utf8'), truncated, bytes: total })
+    }
+    const onData = (chunk: Buffer): void => {
+      total += chunk.length
+      const room = opts.maxBytes - kept
+      if (chunk.length <= room) { chunks.push(chunk); kept += chunk.length; return }
+      chunks.push(chunk.subarray(0, room))
+      req.resume()
+      finish(true)
+    }
+    const onEnd = (): void => finish(false)
+    // A broken stream yields an empty body, so nothing is parsed from it.
+    const onError = (): void => { chunks.length = 0; finish(false) }
+    req.on('data', onData)
+    req.on('end', onEnd)
+    req.on('error', onError)
+  })
+}

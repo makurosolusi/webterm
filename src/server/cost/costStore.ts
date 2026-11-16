@@ -33,6 +33,8 @@ export interface CostUsageRow {
   write5m: number
   write1h: number
   costMicros: number | null
+  /** Ladder tier of the worker that produced it ('unknown' = agent without a pick); omitted/null = not a Central worker. */
+  tier?: string | null
 }
 
 /** True when the row is new. A re-read of a still-streaming response keeps the larger output count. */
@@ -44,9 +46,9 @@ export function insertCostUsage(db: Database, r: CostUsageRow): boolean {
     return false
   }
   execWrite(db, `INSERT INTO cost_usage (key, ts, source, workspace_id, node_id, session_id, model, input, output, cache_read,
-    cache_write_5m, cache_write_1h, cost_micros, price_known) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    cache_write_5m, cache_write_1h, cost_micros, price_known, tier) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   r.key, r.ts, r.source, r.workspaceId, r.nodeId, r.sessionId, r.model, r.input, r.output, r.cacheRead,
-  r.write5m, r.write1h, r.costMicros, r.costMicros === null ? 0 : 1)
+  r.write5m, r.write1h, r.costMicros, r.costMicros === null ? 0 : 1, r.tier ?? null)
   return true
 }
 
@@ -120,4 +122,17 @@ export function spendSummary(db: Database, since: number): SpendSummary {
     byModel: groupBy(db, 'model', since),
     byRoutine,
   }
+}
+
+export interface TierSpend { kind: string; tier: string | null; model: string | null; runs: number; costMicros: number }
+
+/**
+ * Spend since `sinceMs` grouped by source (`kind`), ladder tier and model, for tuning the model ladder.
+ * `runs` = distinct sessions (a response with no session counts alone). Reads aggregates only, never content.
+ */
+export function costByTier(db: Database, q: { sinceMs: number }): TierSpend[] {
+  ensureCostSchema(db)
+  return allRows(db, `SELECT source AS kind, tier, model, COUNT(DISTINCT COALESCE(session_id, key)) AS runs, COALESCE(SUM(cost_micros), 0) AS c
+    FROM cost_usage WHERE ts >= ? GROUP BY source, tier, model ORDER BY c DESC, kind, tier, model`, q.sinceMs)
+    .map((r) => ({ kind: String(r['kind']), tier: r['tier'] == null ? null : String(r['tier']), model: r['model'] == null ? null : String(r['model']), runs: Number(r['runs']), costMicros: Number(r['c']) }))
 }

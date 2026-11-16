@@ -5,7 +5,7 @@
 import { expect, test } from 'bun:test'
 import { createControlGuard } from '../../guard/controlGuard'
 import { freshDb, rows } from '../../guard/controlGuard.testutil'
-import { parseClaudeMessage } from '../../runtime/claudeEvents'
+import { parseClaudeMessage } from '../../runtime/claudeEvents.parse'
 import { createRegistry } from '../toolRegistry'
 import { createEventLog } from '../../../events/eventLog'
 import { handleRpc } from '../../../mcp/mcp.protocol'

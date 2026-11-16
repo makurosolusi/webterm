@@ -5,7 +5,7 @@ import { withNodeNames } from '../../../shared/nodeNames'
 import { allRows, type Row } from '../../ledger/ledgerCore'
 import { PERSIST_LIMITS, redactSecrets, redactValue } from '../../redactSecrets'
 import { listWorkspaces } from '../workspaceLookup'
-import { toAssignment } from './workStore'
+import { toAssignment } from './workStore.rows'
 
 const IN_LIST = 'IN (SELECT value FROM json_each(?))'
 const orNull = (value: unknown): number | null => (value === null || value === undefined ? null : Number(value))

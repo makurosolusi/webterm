@@ -1,110 +1,89 @@
+// What each harness can do, and how a custom agent borrows those abilities.
+// Facts about the Claude Code CLI (`--resume`, `--session-id`, `--permission-mode`, `--model`,
+// `--settings`) come from https://code.claude.com/docs/en/cli-reference.
 import { agentConfig, type AgentId, type BuiltinAgentId } from './workspace.agents'
 
 // ---------------------------------------------------------------------------------------------
-// Pewarisan harness untuk agent custom.
+// Inheritance: a custom agent may declare `baseAgent` (a builtin) to reuse that harness's
+// abilities, e.g. a claude wrapper that points at its own inference proxy but should keep
+// resume, context link and hook integration. Without a base a custom agent has no abilities.
 //
-// Agent custom boleh mendeklarasikan `baseAgent` (salah satu builtin) untuk MEWARISI kapabilitas
-// harness itu — resume, context link, permission mode, minting session id. Kasus pakainya: CLI
-// yang kompatibel harness (mis. wrapper claude yang menunjuk proxy inferensi sendiri) di mana
-// integrasi webterm ingin dipertahankan sementara panggilannya dialihkan. Tanpa ini, agent custom
-// tidak punya kapabilitas APA PUN.
-//
-// Predikat kapabilitas di bawah hanya menerima `AgentId`. Modul ini tidak boleh mengimpor
-// `settings.ts` (settings mengimpor AgentId dari sini → siklus), jadi lookup custom-id → baseAgent
-// DIINJEKSIKAN: tiap runtime (client & server) mendaftarkan resolver sekali saat init yang membaca
-// store settings-nya sendiri.
+// This module cannot import `settings.ts` (settings imports AgentId from here), so the
+// custom-id -> base lookup is injected: client and server each register a resolver at init.
 type BaseResolver = (id: AgentId) => BuiltinAgentId | undefined
-let customBaseResolver: BaseResolver | null = null
+let resolveCustomBase: BaseResolver | null = null
 
-/** Daftarkan resolver custom-id → baseAgent. Dipanggil sekali saat init oleh client dan server.
- *  Kirim `null` untuk membersihkan (dipakai test). */
+/** Register the custom-id -> baseAgent lookup (once per runtime); pass `null` to clear it (tests). */
 export function setCustomAgentBaseResolver(fn: BaseResolver | null): void {
-  customBaseResolver = fn
+  resolveCustomBase = fn
 }
 
-/** Harness builtin yang diwarisi sebuah agent custom, atau `undefined` untuk builtin dan untuk
- *  agent custom tanpa `baseAgent`. Builtin tidak pernah lewat registry — mereka MEMANG harness-nya
- *  — sehingga agent custom yang id-nya kebetulan bertabrakan dengan nama builtin tetap resolve
- *  sebagai builtin itu, bukan sebagai dirinya. */
+/**
+ * The builtin harness a custom agent inherits, or undefined for builtins and for custom agents
+ * without a base. Builtins never go through the registry (they ARE the harness), so a custom id
+ * that collides with a builtin name still resolves as that builtin.
+ */
 export function baseAgentOf(id: AgentId): BuiltinAgentId | undefined {
-  if (!customBaseResolver) return undefined
-  if (agentConfig(id)) return undefined
-  return customBaseResolver(id)
+  if (!resolveCustomBase || agentConfig(id)) return undefined
+  return resolveCustomBase(id)
 }
 
-/** Id yang kapabilitasnya berlaku untuk `id`: base harness bila agent custom mewarisi, selain itu
- *  `id` sendiri. Semua predikat kapabilitas resolve lewat ini, jadi pewarisan otomatis berlaku di
- *  mana pun predikat dipanggil — tanpa plumbing per call-site. */
+/** The id whose abilities apply to `id`: its base harness when inherited, otherwise itself. */
 export function capabilityAgentId(id: AgentId): AgentId {
   return baseAgentOf(id) ?? id
 }
 
-const includes = (list: readonly string[], id: AgentId): boolean =>
-  list.includes(capabilityAgentId(id))
-
 // ---------------------------------------------------------------------------------------------
-// Kapabilitas = daftar keanggotaan builtin. Satu daftar per kapabilitas, bukan objek kapabilitas:
-// CLI berikutnya yang menumbuhkan kemampuan bergabung dengan ditambahkan ke daftar, tidak ada
-// yang lain berubah.
+// One membership list per ability. Claude Code is the only first-class harness, so each list is
+// `['claude']`; a CLI that gains an ability later is added to that ability's list only.
+// Inheritance (above) applies to every predicate through `capabilityAgentId`.
 
-// Claude-first: only Claude Code is a first-class harness, so every list holds `claude` alone. A
-// custom agent with `baseAgent: 'claude'` inherits all of them through `capabilityAgentId`.
+/** Can continue a conversation from a session id (`--resume`). */
+export const RESUMABLE_AGENTS: readonly BuiltinAgentId[] = ['claude']
 
-/** Agent yang bisa melanjutkan percakapan lewat session id. */
-export const RESUMABLE_AGENTS = ['claude'] as const
+/** The session id is minted by us at launch (`--session-id <uuid>`) instead of learned from hook events,
+ *  so a node always holds a resumable id: worst case drops from "conversation lost" to "history since last /clear lost". */
+export const SESSION_ID_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang session id-nya KITA cetak saat peluncuran (`--session-id <uuid>`) alih-alih hanya
-// dipelajari dari event hook. Minting menjamin sebuah node selalu punya SEBUAH id yang bisa
-// di-resume, sehingga kasus terburuk turun dari "percakapan hilang" menjadi "kontinuitas sejak
-// /clear terakhir hilang".
-export const SESSION_ID_CAPABLE = ['claude'] as const
+/** Can read linked nodes through the `get-linked-context` skill. */
+export const CONTEXT_LINK_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang bisa membaca konteks node tertaut (skill `get-linked-context` di ~/.claude/skills).
-export const CONTEXT_LINK_CAPABLE = ['claude'] as const
+/** Per-node context meter can be filled; needs both tokens used and a trustworthy window size. */
+export const USAGE_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang meter konteks per-node-nya bisa kita isi. Tiap anggota butuh DUA angka: jumlah
-// terpakai dan window yang bisa dipercaya.
-export const USAGE_CAPABLE = ['claude'] as const
+/** Accepts a permission mode at launch (`--permission-mode`). */
+export const PERMISSION_MODE_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang harness-nya menerima mode permission saat peluncuran.
-export const PERMISSION_MODE_CAPABLE = ['claude'] as const
+/** Accepts a per-launch model override (`--model`). */
+export const MODEL_SWITCH_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang harness-nya menerima override model per-peluncuran.
-export const MODEL_SWITCH_CAPABLE = ['claude'] as const
+/** Takes webterm hook config inline through Claude Code's `--settings` flag (see `claudeHooksSettings`
+ *  in src/server/hooks.ts). Another CLI may join only if it really understands that flag and JSON shape. */
+export const CLAUDE_HOOK_SETTINGS_CAPABLE: readonly BuiltinAgentId[] = ['claude']
 
-// Agent yang menerima konfigurasi hook webterm INLINE di baris peluncuran, lewat flag `--settings`
-// milik Claude Code (lihat `claudeHooksSettings` di src/server/hooks.ts). Itu grammar claude: tidak
-// ada harness lain yang mengerti flag maupun bentuk JSON-nya.
-//
-// Agent baru boleh masuk hanya bila harness-nya benar-benar menerima `--settings` claude; CLI lain
-// yang diluncurkan dengan flag itu mati di peluncuran.
-export const CLAUDE_HOOK_SETTINGS_CAPABLE = ['claude'] as const
+const listed = (list: readonly string[], id: AgentId): boolean => list.includes(capabilityAgentId(id))
 
-export const canResume = (id: AgentId): boolean => includes(RESUMABLE_AGENTS, id)
-export const mintsSessionId = (id: AgentId): boolean => includes(SESSION_ID_CAPABLE, id)
-export const canContextLink = (id: AgentId): boolean => includes(CONTEXT_LINK_CAPABLE, id)
-export const hasUsage = (id: AgentId): boolean => includes(USAGE_CAPABLE, id)
-export const hasPermissionMode = (id: AgentId): boolean => includes(PERMISSION_MODE_CAPABLE, id)
-export const canSwitchModel = (id: AgentId): boolean => includes(MODEL_SWITCH_CAPABLE, id)
-/** Apakah baris peluncuran `id` membawa konfigurasi hook lewat `--settings` claude? Sadar-pewarisan,
- *  jadi agent custom ber-`baseAgent: 'claude'` ikut mendapat hook. */
-export const hasClaudeHookSettings = (id: AgentId): boolean =>
-  includes(CLAUDE_HOOK_SETTINGS_CAPABLE, id)
+export const canResume = (id: AgentId): boolean => listed(RESUMABLE_AGENTS, id)
+export const mintsSessionId = (id: AgentId): boolean => listed(SESSION_ID_CAPABLE, id)
+export const canContextLink = (id: AgentId): boolean => listed(CONTEXT_LINK_CAPABLE, id)
+export const hasUsage = (id: AgentId): boolean => listed(USAGE_CAPABLE, id)
+export const hasPermissionMode = (id: AgentId): boolean => listed(PERMISSION_MODE_CAPABLE, id)
+export const canSwitchModel = (id: AgentId): boolean => listed(MODEL_SWITCH_CAPABLE, id)
+/** Does `id`'s launch line carry hook config via `--settings`? Inheritance-aware. */
+export const hasClaudeHookSettings = (id: AgentId): boolean => listed(CLAUDE_HOOK_SETTINGS_CAPABLE, id)
 
-/** Mode permission yang dipakai sesi agent saat START. Pengguna masih bisa memutar mode saat
- *  runtime dengan Shift+Tab — ini hanya menentukan keadaan awal, persis seperti flag
- *  `--permission-mode`. `manual` dikirim sebagai `--permission-mode default`. */
+/** Permission mode a session starts in; the user can still cycle it at runtime (Shift+Tab).
+ *  `manual` is sent as `--permission-mode default`. */
 export type AgentPermissionMode = 'manual' | 'auto' | 'acceptEdits' | 'plan' | 'bypassPermissions'
 
-const PERMISSION_MODES: readonly AgentPermissionMode[] = [
+const PERMISSION_MODES: ReadonlySet<string> = new Set<AgentPermissionMode>([
   'manual',
   'auto',
   'acceptEdits',
   'plan',
   'bypassPermissions',
-]
+])
 
-/** Validasi ulang di titik pemakaian: nilainya mendarat di baris perintah shell, dan tipe hanya
- *  janji compile-time. Settings bisa diedit tangan / datang lewat HTTP. */
+/** Re-validate at the point of use: the value lands on a shell command line, and settings can be hand-edited or arrive over HTTP. */
 export const isPermissionMode = (v: unknown): v is AgentPermissionMode =>
-  typeof v === 'string' && (PERMISSION_MODES as readonly string[]).includes(v)
+  typeof v === 'string' && PERMISSION_MODES.has(v)

@@ -17,6 +17,7 @@ export interface TaskColumnProps {
   selectedId: string | null
   onAct: TaskCardProps['onAct']
   onOpen: TaskCardProps['onOpen']
+  linkDown?: boolean
 }
 
 /** One board column with its count, its cards and its own Load more. */
@@ -36,7 +37,7 @@ export function TaskColumn(p: TaskColumnProps): React.JSX.Element {
       {!p.collapsed && (
         <div className="task-column__body">
           {p.state.items.map((card) => (
-            <TaskCard key={card.id} card={card} busy={p.busy.has(card.id)} refused={p.refused[card.id]} selected={p.selectedId === card.id} onAct={p.onAct} onOpen={p.onOpen} />
+            <TaskCard key={card.id} card={card} busy={p.busy.has(card.id)} refused={p.refused[card.id]} selected={p.selectedId === card.id} onAct={p.onAct} onOpen={p.onOpen} linkDown={p.linkDown} />
           ))}
           {p.state.hasMore && (
             <Button type="button" size="xs" variant="secondary" disabled={p.loadingMore} aria-label={`${TL.loadMore}: ${name}`} onClick={() => p.onLoadMore(p.column)}>

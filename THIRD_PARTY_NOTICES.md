@@ -38,3 +38,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Terminal colour schemes
+
+The palettes in `src/client/themes.ts` refer to the published colours of the following openly
+licensed schemes. The colour values were rewritten for webterm and no scheme source code is
+included; a few values (for example the Tokyo Night bright colours and some Solarized bright colours)
+are not guaranteed to match the published ones exactly. Licences were checked at the repositories
+named below.
+
+| Scheme | Repository | Licence |
+| --- | --- | --- |
+| VS Code terminal defaults, Dark/Light Modern | https://github.com/microsoft/vscode | MIT, Copyright (c) 2015 - present Microsoft Corporation |
+| Dracula | https://github.com/dracula/dracula-theme | MIT, Copyright (c) 2023 Dracula Theme |
+| Nord | https://github.com/nordtheme/nord | MIT, Copyright (c) 2016-present Sven Greb |
+| Solarized | https://github.com/altercation/solarized | MIT, Copyright (c) 2011 Ethan Schoonover |
+| Catppuccin (Mocha, Latte) | https://github.com/catppuccin/catppuccin | MIT, Copyright (c) 2021 Catppuccin |
+| Gruvbox | https://github.com/morhetz/gruvbox | MIT/X11 (as stated in its README) |
+| Tokyo Night | https://github.com/folke/tokyonight.nvim | Apache License 2.0 |
+| One Dark | https://github.com/atom/atom (one-dark-syntax) | MIT, Copyright (c) 2016 GitHub Inc. |
