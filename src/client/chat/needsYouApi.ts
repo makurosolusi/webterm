@@ -21,6 +21,8 @@ export interface UnifiedItem {
   kind: UnifiedKind
   source: string
   approvalKind: string | null
+  /** The agent node the item is about, when it has one. */
+  nodeId?: string | null
   title: string
   body: string | null
   impact: Impact | null
@@ -28,7 +30,11 @@ export interface UnifiedItem {
   count: number
   actions: ActionType[]
 }
-export type Action = { type: ActionType; args?: unknown; text?: string; until?: number }
+/** `scope` only on approving a `model.fable` card: 'target' (this conversation/node) or 'project'. */
+export type Action = { type: ActionType; args?: unknown; text?: string; until?: number; scope?: 'target' | 'project' }
+
+/** Ledger approval kind of a Fable grant request (server models/fableGrant.ts). */
+export const FABLE_KIND = 'model.fable'
 
 /** A PR review draft (src/server/prreview) is approved by posting it, so its button says what happens. */
 export const approveLabel = (item: Pick<UnifiedItem, 'kind' | 'source'>): string =>
@@ -51,7 +57,7 @@ export function snoozeUntil(choice: '1h' | 'tomorrow', now: number): number {
 
 /** Ledger approvals other than Claude prompts keep the APPROVE-phrase dialog (projection row). */
 const shownAsCard = (i: UnifiedItem): boolean =>
-  !(i.kind === 'gate' && i.source === 'approval' && i.approvalKind !== PERMISSION_KIND)
+  !(i.kind === 'gate' && i.source === 'approval' && i.approvalKind !== PERMISSION_KIND && i.approvalKind !== FABLE_KIND)
 
 export interface NeedsYouSnapshot {
   /** Every open unified item (cards look up any approvalId here, not just the strip's). */

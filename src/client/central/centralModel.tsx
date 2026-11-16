@@ -13,6 +13,8 @@ export interface CentralModelState {
   pending: boolean
   /** The conversation's own `/model` choice; null = Auto (no override, the setting or the ladder decides). */
   override: { model: string; effort?: string } | null
+  /** Fable was picked without a person's grant: the chat runs on Opus until the grant card is approved. */
+  fableBlocked?: boolean
 }
 
 const path = (conversationId: string): string => `${CHAT_PATH}/conversations/${encodeURIComponent(conversationId)}/model`
