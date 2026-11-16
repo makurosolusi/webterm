@@ -22,6 +22,7 @@ import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import type { Policy } from '../policy/policy.decide'
 import type { Decision, Grant, Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
+import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from '../capability/skill.capabilities'
 import { isSecretCapability } from '../secrets/secret.capabilities'
 import { runSecretCapability } from '../secrets/secret.broker'
 import type { SeenStore } from './cli.seen'
@@ -126,6 +127,7 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   if (problem) return { receipt: receipt('error', 'invalid_shape', { problem }, 'webterm agent-context --json shows the exact input schema') }
   if (isSecretCapability(cap.name)) return runSecretCapability(deps, cap.name, input, principal) // secret broker decides per secret (secret.broker.ts)
   if (cap.name === AGENT_REPORT_CAPABILITY) return runReport(deps, cap, input, principal)
+  if (SKILL_CAPABILITY_NAMES.includes(cap.name)) return runSkill(deps, cap, input, principal)
   const route = cap.route as NonNullable<CapabilitySpec['route']>
   const browser = route.path.startsWith(BROWSER_CONTROL_PREFIX)
   const nodeId = nodeOf(principal)
@@ -184,4 +186,21 @@ async function runReport(deps: ToolsDeps, cap: CapabilitySpec, input: Args, prin
   const { recordAgentReport } = await import('../central/work/workAgentReport') // lazy: bun:sqlite stays out of vitest imports
   const r = recordAgentReport(ledger.db, Date.now, nodeId, input.kind as AgentReportKind, String(input.text))
   return r.ok ? { receipt: receipt('ok', 'ok', { moved: r.data.moved }), data: r.data } : { receipt: receipt('error', r.code, {}, r.next) }
+}
+
+/** `skills.list` / `skills.propose`: only a proven agent node, only Central's skill store (propose = draft, a human approves). */
+async function runSkill(deps: ToolsDeps, cap: CapabilitySpec, input: Args, principal: Principal): Promise<{ receipt: Receipt; data?: unknown }> {
+  const nodeId = nodeOf(principal)
+  if (!nodeId) return { receipt: receipt('denied', 'not_an_agent', {}, 'Only an agent session started in webterm uses this.') }
+  const d = judge(deps, principal, cap, undefined, skillsByDefault(principal))
+  if (d.effect !== 'allow') return { receipt: receipt('denied', d.effect === 'ask' ? 'approval_required' : 'policy_denied', { reason: d.reason }, DENY_NEXT) }
+  const [{ activeCa2 }, { agentSkillList, agentSkillPropose }] = await Promise.all([import('../central/ca2Active'), import('../central/ca2Routes.agentSkill')]) // lazy: bun:sqlite stays out of vitest imports
+  const h = activeCa2()
+  if (!h) return { receipt: receipt('error', 'skills_off', { status: 503 }, 'Central skills are off; only the user can turn them on'), data: { error: 'skills_off' } }
+  const out = cap.name === SKILL_LIST_CAPABILITY
+    ? agentSkillList(h, nodeId, typeof input.name === 'string' ? input.name : undefined)
+    : await agentSkillPropose(h, input, nodeId)
+  if (out.status < 400) return { receipt: receipt('ok', 'ok', { status: out.status }), data: out.body }
+  const code = (out.body as { error?: unknown } | null)?.error
+  return { receipt: receipt('error', typeof code === 'string' && DETAIL_RE.test(code) ? code : `http_${out.status}`, { status: out.status }), data: out.body }
 }
