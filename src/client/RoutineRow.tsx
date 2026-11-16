@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import type { RoutineDef } from './RoutinesForm'
 import { SettingsCheckbox } from './SettingsControls'
+import { describeRunReason } from './routineRunReason'
 import { eventText, scheduleText } from './routineSchedule.presets'
 
 export interface RoutineRun { id: string; trigger: string; status: 'running' | 'ran' | 'skipped' | 'failed'; reason: string | null; startedAt: number; costUsd: number | null
@@ -16,7 +17,6 @@ export const ROUTINE_ROW_TEXT = {
   runNow: 'Run now', starting: 'Starting…', started: 'Started', edit: 'Edit', delete: 'Delete', history: 'History', hideHistory: 'Hide history',
   enabled: 'Enabled', never: 'Never ran', next: (at: number) => `next ${new Date(at).toLocaleString()}`, historyEmpty: 'No runs yet.',
   deleteAsk: (name: string) => `Delete “${name}”? Its history goes too.`, cancel: 'Cancel',
-  status: { running: 'Running', ran: 'Ran', skipped: 'Skipped', failed: 'Failed' } as Record<RoutineRun['status'], string>,
   /** Server `RunTrigger` (routineModel.ts) in words. */
   trigger: { schedule: 'on schedule', catch_up: 'made up for a missed run', event: 'after an event', api: 'from a script', manual: 'by hand' } as Record<string, string>,
 } as const
@@ -26,9 +26,11 @@ const money = (usd: number): string => `$${usd.toFixed(2)}`
 /** ` · $spent · est. $estimate`, each part only when known. */
 export const costText = (run: Pick<RoutineRun, 'costUsd' | 'estimateUsd'>): string =>
   [run.costUsd != null ? money(run.costUsd) : '', run.estimateUsd != null ? `est. ${money(run.estimateUsd)}` : ''].filter(Boolean).map((s) => ` · ${s}`).join('')
-/** "Skipped, made up for a missed run — check failed · $0.12": status and trigger in words, never raw codes. */
-export const runText = (run: RoutineRun): string =>
-  `${T.status[run.status] ?? run.status}, ${T.trigger[run.trigger] ?? run.trigger}${run.reason ? ` — ${run.reason}` : ''}${costText(run)}`
+/** "Skipped, made up for a missed run — check failed · $0.12": status and trigger in words, never raw codes or `retryable[…]` prefixes. */
+export const runText = (run: RoutineRun): string => {
+  const { label, reason } = describeRunReason(run.status, run.reason)
+  return `${label}, ${T.trigger[run.trigger] ?? run.trigger}${reason ? ` — ${reason}` : ''}${costText(run)}`
+}
 export const triggerText = (r: RoutineDef): string =>
   r.trigger.type === 'schedule' ? scheduleText(r.trigger.cron) : r.trigger.type === 'event' ? `When: ${eventText(r.trigger.pattern)}` : 'By hand or from a script'
 export const toDef = ({ name, enabled, workspaceId, trigger, precheck, action, budget }: RoutineDef): RoutineDef => ({ name, enabled, workspaceId, trigger, precheck, action, budget })
@@ -75,7 +77,7 @@ export function RoutineRow({ r, history, run, setEnabled, edit, toggleHistory, r
       ) : null}
       {history ? (
         <ul aria-label={`${T.history}: ${r.name}`} className="m-0 flex min-w-0 list-none flex-col gap-0.5 border-l pl-2 break-words opacity-80">
-          {history.length === 0 ? <li>{T.historyEmpty}</li> : history.map((x) => <li key={x.id} data-status={x.status}>{`${new Date(x.startedAt).toLocaleString()} · ${runText(x)}`}</li>)}
+          {history.length === 0 ? <li>{T.historyEmpty}</li> : history.map((x) => <li key={x.id} data-status={describeRunReason(x.status, x.reason).status}>{`${new Date(x.startedAt).toLocaleString()} · ${runText(x)}`}</li>)}
         </ul>
       ) : null}
     </li>
