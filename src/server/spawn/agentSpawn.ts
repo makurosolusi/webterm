@@ -10,6 +10,8 @@
 // per spawning node rather than per coordinator. Root principals (human-ui, central, routine, telegram)
 // are depth 0 and not capped here: Central keeps its own per-project caps (controlGuard.ts).
 import { randomUUID } from 'node:crypto'
+import { basename } from 'node:path'
+import { shq } from '../hooksQuote'
 import { SPAWN_READY_WAIT_MS, type SubmitOptions, type SubmitResult } from '../agentSubmit'
 import { uniqueTitle } from '../../shared/nodeTitle'
 import { checkSchema } from '../capability/capability.schema'
@@ -57,12 +59,12 @@ export interface AgentSpawnRequest {
   nodeId?: string
   door: SpawnDoor
   /** PTY launch, resolved by the door from server data (settings, catalog). */
-  pty?: { cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number }
+  pty?: { cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number; pick?: ModelPick | null }
   /** Headless launch; `argv` absent = Claude Code print mode with `prompt`, through `claudeProfileId` (absent = default profile). */
   headless?: { argv?: readonly string[]; claudeProfileId?: string; pick?: ModelPick | null; env?: NodeJS.ProcessEnv; overrides?: Record<string, string>; timeoutMs?: number }
 }
 
-export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number }
+export interface PtyOpenInput { nodeId: string; cwd?: string; cmd?: string; agentId?: string; sessionId?: string; resume?: boolean; cols?: number; rows?: number; pick?: ModelPick | null }
 
 /** What the caller's session layer offers; only PTY spawns need it. */
 export interface SpawnIo {
@@ -104,6 +106,17 @@ export function modelFlags(profileFlags: readonly string[], pick?: ModelPick | n
     ...(flag ? ['--model', flag] : []),
     ...(pick.effort && (forced || !hasFlag(profileFlags, '--effort')) ? ['--effort', pick.effort] : []),
   ]
+}
+
+/**
+ * A Claude shell launch line on the ladder's model: `--model`/`--effort` appended unless the line sets them
+ * (same rule as `modelFlags`). A line that does not run `claude` is returned untouched.
+ */
+export function claudeLineWithModel(line: string, pick?: ModelPick | null, env?: () => ModelEnv): string {
+  const words = line.split(/\s+/)
+  const at = words.findIndex((w) => basename(w.replace(/^['"]|['"]$/g, '')) === 'claude')
+  const flags = at < 0 ? [] : modelFlags(words.slice(at + 1), pick, env)
+  return flags.length ? `${line} ${flags.map((f) => (/^[\w.:@\/-]+$/.test(f) ? f : shq(f))).join(' ')}` : line
 }
 
 /** Claude Code non-interactive form via the launch profile (absent = default), on the ladder's model; JSON result so `execRunner` keeps the final event. */
@@ -194,8 +207,9 @@ export function createAgentSpawner(opts: AgentSpawnerOptions = {}) {
     }
     // K3: from now on the child's decisions are capped by its spawner's (lineage persists).
     register(req.parent, childId)
+    const pick = req.mode === 'pty' ? req.pty?.pick : req.headless?.pick
     // Rule 12: ids, kind and shape only; never the prompt, cwd or argv.
-    record({ kind: 'agent.spawn', source: 'spawn', actor: req.parent, subject: childId, nodeId, workspaceId: req.workspaceId ?? null, trust: 'trusted', payload: { kind, mode: req.mode, door: req.door, depth, name } })
+    record({ kind: 'agent.spawn', source: 'spawn', actor: req.parent, subject: childId, nodeId, workspaceId: req.workspaceId ?? null, trust: 'trusted', payload: { kind, mode: req.mode, door: req.door, depth, name, ...(pick ? { model: pick.model, tier: pick.tier } : {}) } })
     void handle?.done.then((o) => exited(childId, o.exitCode, o.timedOut ? 'timeout' : 'exit')).catch((err: unknown) => {
       // A rejected `done` (or a failing exit record) must not become an unhandled rejection, which exits
       // the server; the child is freed so it stops counting against its parent's cap.

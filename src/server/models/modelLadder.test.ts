@@ -22,7 +22,7 @@ describe('defaultTier', () => {
   it.each<[CallKind, 'simple' | 'moderate' | 'complex' | undefined, Tier]>([
     ['helper', undefined, 'T1'], ['explore', undefined, 'T1'], ['central', undefined, 'T2'], ['dag-planner', undefined, 'T3'],
     ['dag-worker', 'simple', 'T2'], ['dag-worker', 'moderate', 'T2'], ['dag-worker', 'complex', 'T3'], ['dag-worker', undefined, 'T2'],
-    ['routine', undefined, 'T2'], ['prreview', undefined, 'T2'], ['bakeoff', undefined, 'T2'], ['agent-spawn', undefined, 'T2'],
+    ['routine', undefined, 'T2'], ['prreview', undefined, 'T2'], ['bakeoff', undefined, 'T2'], ['agent-spawn', undefined, 'T2'], ['agent-spawn', 'simple', 'T1'], ['agent-spawn', 'moderate', 'T2'], ['agent-spawn', 'complex', 'T3'],
     ['helper', 'complex', 'T1'],
   ])('%s/%s -> %s', (kind, complexity, tier) => {
     expect(defaultTier(kind, complexity)).toBe(tier)

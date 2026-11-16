@@ -1,6 +1,7 @@
 // Port sesi runtime worker P3: bentuk sempit yang dibutuhkan `createWorkerRuntime` plus
 // adapter dari `Sessions` asli. Modul ini sengaja tanpa import runtime supaya test bebas PTY.
 import type { OpenMsg, ServerMsg } from '../../shared/protocol'
+import type { ModelPick } from '../models/modelLadder'
 import type { AgentStatus } from '../../shared/workspace'
 import { submitToNode, type SubmitOptions, type SubmitResult, type SubmitSessions } from '../agentSubmit'
 
@@ -17,6 +18,8 @@ export interface WorkerSessionPort {
     resume?: boolean
     cols?: number
     rows?: number
+    /** The ladder's model pick; already applied to `cmd` by the host, carried for the session record. */
+    pick?: ModelPick | null
   }): void | Promise<void>
   input(nodeId: string, text: string): void
   /** Types and submits a prompt, confirmed on screen for Claude (`agentSubmit.ts`). */

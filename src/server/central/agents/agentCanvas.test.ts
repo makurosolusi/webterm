@@ -77,11 +77,11 @@ describe('Central pty agent on the canvas', () => {
     const id = String(res.data?.agentId)
     const sid = agentSessionId({ id, kind: 'claude' })
     expect(sid).toMatch(UUID)
-    expect(adds).toEqual([{ workspaceId: 'w1', nodes: [{ id: agentNodeId(id), kind: 'agent', x: 0, y: 0, cmd: 'claude', agentId: 'claude', cwd: `/wt/${id}`, title: 'worker claude', color: expect.any(String), sessionId: sid }] }])
-    // Same identity as a canvas node: agentId + session id (hooks/--settings) on the PTY open; the task rides as the positional prompt.
+    expect(adds).toEqual([{ workspaceId: 'w1', nodes: [{ id: agentNodeId(id), kind: 'agent', x: 0, y: 0, cmd: 'claude --model sonnet --effort medium', agentId: 'claude', cwd: `/wt/${id}`, title: 'worker claude', color: expect.any(String), sessionId: sid }] }])
+    // Same identity as a canvas node: agentId + session id (hooks/--settings) on the PTY open; the ladder's model rides the line (node included) and the task is the positional prompt.
     expect(opens).toHaveLength(1)
     expect(opens[0]).toMatchObject({ nodeId: agentNodeId(id), cwd: `/wt/${id}`, agentId: 'claude', sessionId: sid })
-    expect(opens[0]?.cmd).toBe(`claude '${AGENT_ENVELOPE} You are a worker agent started by webterm Central (agent ${id}, canvas node ${agentNodeId(id)}, project p1). No task attached yet: reply only READY and wait; Central sends the task as your next message. Work only inside this worktree; do not merge or push.'`)
+    expect(opens[0]?.cmd).toBe(`claude --model sonnet --effort medium '${AGENT_ENVELOPE} You are a worker agent started by webterm Central (agent ${id}, canvas node ${agentNodeId(id)}, project p1). No task attached yet: reply only READY and wait; Central sends the task as your next message. Work only inside this worktree; do not merge or push.'`)
   })
 
   it('no board for the repo: the spawn still works and a warn names the agent only', async () => {
