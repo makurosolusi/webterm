@@ -265,13 +265,19 @@ export function createWorkStore(db: Database, now: () => number): WorkStore {
       })
     },
     setVerification: (taskId, verification) => execWrite(db, 'UPDATE central_task SET verification_json = ?, updated_at = ? WHERE id = ?', jsonOf(verification, 'task.verification'), now(), taskId) === 1,
+    recordResult(id, result) {
+      const cur = getRow(db, 'SELECT result_json FROM central_assignment WHERE id = ? AND ended_at IS NULL', id)
+      if (!cur) return false
+      if ((parseJson(cur.result_json) as { hash?: unknown } | null)?.hash === result.hash) return false
+      return live('result_json = ? WHERE id = ?', jsonOf(result, 'assignment.result'), id)
+    },
     endAssignment(id, reason, result, options = {}) {
       const actor: WorkActor = options.actor ?? { kind: 'system' }
       const rule = options.rule ?? END_RULE
       return tx(ctx, () => {
         const open = getAssignment(id)
         if (!open) throw new WorkError('assignment_not_found', 'endAssignment', id)
-        const ended = execWrite(db, 'UPDATE central_assignment SET ended_at = ?, end_reason = ?, result_json = ? WHERE id = ? AND ended_at IS NULL', now(), reason, jsonOf(result, 'assignment.result'), id)
+        const ended = execWrite(db, 'UPDATE central_assignment SET ended_at = ?, end_reason = ?, result_json = COALESCE(?, result_json) WHERE id = ? AND ended_at IS NULL', now(), reason, jsonOf(result, 'assignment.result'), id)
         if (ended !== 1) throw new WorkError('assignment_ended', 'endAssignment', id)
         record({ kind: 'work.assignment.end', actor, task: requireTask(open.taskId, 'endAssignment'), assignment: open, reason, rule })
         return getAssignment(id) as AssignmentView

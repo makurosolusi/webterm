@@ -165,7 +165,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     // A headless run sends no hooks, so its exit is its report: the board task moves now (reported or failed), which wakes
     // Central, instead of stalling on the liveness rules. Same tick as the agent move, before the end observer's sweep.
     if (moved) {
-      try { settleExecTask(db, now, agent.nodeId ?? agentNodeId(agent.id), { ok: to === 'candidate_done', reason }) } catch (err) {
+      try { settleExecTask(db, now, agent.nodeId ?? agentNodeId(agent.id), { ok: to === 'candidate_done', reason, tail: outcome.tail }) } catch (err) {
         audit(moved, 'exec.task_error', { error: err instanceof Error ? err.message.slice(0, 200) : 'unknown' })
       }
     }

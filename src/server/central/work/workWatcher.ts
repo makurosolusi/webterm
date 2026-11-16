@@ -3,6 +3,7 @@ import { type EventBus, eventBus } from '../../events/eventBus'
 import type { SenseEvent } from '../../events/eventModel'
 import { createLogger } from '../../logs'
 import type { WorkActor, WorkStore } from './workModel'
+import { noResult, takeStopResult } from './workResult'
 
 const log = createLogger('central.work')
 const SYSTEM: WorkActor = { kind: 'system' }
@@ -73,6 +74,12 @@ export function startWorkWatcher({ store, now, bus = eventBus, onReported, onSes
     if (!move.from.includes(task.status)) return
     const options = { actor: SYSTEM, rule: move.rule, reason: event.kind, assignmentId: assignment.id }
     if (signal === 'input' && task.status === 'assigned') store.moveTask(task.id, 'running', options)
+    // The result is written BEFORE the move: a `reported` task never exists without one (text, or `none` + reason).
+    // Only Stop/StopFailure park a capture; another channel (chat turn end) leaves none, which is recorded as such.
+    if (signal === 'stop' || signal === 'failure') {
+      const captured = event.kind.startsWith('hook.') ? takeStopResult(nodeId) : undefined
+      store.recordResult(assignment.id, captured ?? noResult(`no_hook_payload:${event.kind}`, now()))
+    }
     store.moveTask(task.id, move.to, options)
     if (move.to === 'reported') onReported(task.id)
   }

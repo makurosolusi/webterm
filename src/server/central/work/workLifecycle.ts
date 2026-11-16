@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite'
 import { canWorkTransition, type TaskView, type WorkStatus } from '../../../shared/centralWork'
 import { WorkError, type WorkActor, type WorkStore } from './workModel'
+import { buildResult, noResult } from './workResult'
 import { createWorkStore } from './workStore'
 
 /** Rule of the move made when a headless (exec) run exits. */
@@ -47,8 +48,11 @@ export function moveOpenTask(store: WorkStore, nodeId: string, to: WorkStatus, o
 }
 
 /** A headless run exited: exit 0 reports the task (the verifier then checks it), anything else fails it. */
-export function settleExecTask(db: Database, now: () => number, nodeId: string, outcome: { ok: boolean; reason: string }): WorkStatus | null {
+export function settleExecTask(db: Database, now: () => number, nodeId: string, outcome: { ok: boolean; reason: string; tail?: string }): WorkStatus | null {
   const store = createWorkStore(db, now)
+  // The run's output tail is its only report; keep it on the assignment before the task moves (it used to live in memory only).
+  const open = store.openAssignmentOfNode(nodeId)
+  if (open) store.recordResult(open.id, outcome.tail === undefined ? noResult('exec_no_tail', now()) : buildResult('exec_tail', outcome.tail, now()))
   if (outcome.ok) return moveOpenTask(store, nodeId, 'reported', { actor: SYSTEM, rule: EXEC_EXIT_RULE, reason: outcome.reason })
   const a = store.openAssignmentOfNode(nodeId)
   const task = a ? store.getTask(a.taskId) : null

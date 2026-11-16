@@ -25,6 +25,8 @@ import { transcriptPathAllowed } from './transcriptPath'
 import { readCappedBody } from './channels/channelHttp'
 import { createLogger } from './logs'
 import { produceHookEvent } from './events/producers'
+import { captureFromHook, stashStopResult } from './central/work/workResult'
+import { readTranscriptFile } from './contextLinkTranscript'
 import { doomLoopBlock } from './permission/permission.loop'
 import { takeCheckpointSafe } from './checkpoint/checkpoint.service'
 import { activeBrowser } from './browser/browser.state'
@@ -44,7 +46,7 @@ const log = createLogger('hooks')
 export { transcriptPathAllowed } from './transcriptPath'
 export { nodeTokenMismatch, requesterNodeId, STRICT_HOOK_AUTH } from './agentStatusAuth'
 
-/** `transcript_path` hanya DISIMPAN, tidak pernah dibaca di sini. Batas panjangnya menjaga
+/** `transcript_path` hanya DISIMPAN; satu-satunya pembacaan di sini adalah cadangan Stop tanpa `last_assistant_message` (claude lama). Batas panjangnya menjaga
  *  registry dari nilai raksasa yang di-post berulang; 4096 cukup untuk path absolut terpanjang
  *  di mesin nyata (PATH_MAX 1024 di Linux, 1024 di macOS). */
 export const TRANSCRIPT_PATH_MAX = 4096
@@ -200,6 +202,15 @@ export async function agentStatusRoute(
   // board gets no ledger row (data-209-1): the event table is append-only, so a row per stray POST
   // is permanent growth (temporary mitigation; retention/GC is a later wave).
   const mode = deps.modeOf?.(node, ws?.id ?? null)
+  // The worker's final message goes to the work layer through a side slot, not the ledger (events stay short). Parked BEFORE
+  // the event so the watcher, which reacts synchronously to hook.Stop, finds it. SubagentStop is never parked: it is not the parent's result.
+  if (ws && (event === 'Stop' || event === 'StopFailure') && requesterNodeId(req) === node) {
+    stashStopResult(node, captureFromHook(body as Record<string, unknown>, Date.now(), transcript ?? undefined, (p) => {
+      const raw = readTranscriptFile(p)
+      if (raw === null) log.warn('hooks.result_transcript', 'Stop payload had no message and the transcript tail was unreadable', { ids: { nodeId: node } })
+      return raw
+    }))
+  }
   if (ws) produceHookEvent({ nodeId: node, workspaceId: ws.id, body: body as Record<string, unknown>, status, verified: requesterNodeId(req) === node, mode })
   await checkpointBeforePrompt(event, ws, node)
   if (ws && deps.releaseBrowser) releaseCabledBrowsers(event, ws, node, deps.releaseBrowser)
