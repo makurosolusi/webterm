@@ -10,6 +10,8 @@ import { assignment, card, makeClient, page } from './taskBoardFixtures.testutil
 import { RESULT_SUMMARY_MAX, leaseLabel, nextStep, ownerFacts, ownerLabel, resultSummary } from './taskOwnerModel'
 
 vi.mock('../../osNotify', () => ({ focusCanvasNode: vi.fn() }))
+const useConnectivityMock = vi.hoisted(() => vi.fn(() => null as { kind: string } | null))
+vi.mock('../../connectivity/useConnectivity', () => ({ useConnectivity: useConnectivityMock }))
 afterEach(cleanup)
 
 const NOW = 1_800_000_000_000
@@ -105,6 +107,52 @@ describe('result on the card', () => {
   it('shows nothing without a result', () => {
     show(null)
     expect(document.querySelector('.task-card__result')).toBeNull()
+  })
+})
+
+describe('paused while the link is down', () => {
+  const agentCard = () => card('r', 'running', { owner: 'agent', assignment: assignment({ leaseUntil: Date.now() - 5 * MIN, lastSignalAt: null }) })
+  const show = (c: ReturnType<typeof agentCard>, linkDown: boolean) => render(<TaskCard card={c} busy={false} refused={undefined} selected={false} onAct={vi.fn()} onOpen={vi.fn()} linkDown={linkDown} />)
+
+  it('replaces "no signal" and "overdue" with the paused line for an agent-owned task', () => {
+    show(agentCard(), true)
+    expect(screen.getByText(TL.paused)).toBeTruthy()
+    expect(screen.queryByText(/Overdue/)).toBeNull()
+    expect(screen.queryByText(new RegExp(TL.noSignal))).toBeNull()
+    expect(screen.getByRole('group', { name: /Owner Agent/ })).toBeTruthy()
+  })
+
+  it('leaves the card as it is while the link is up', () => {
+    show(agentCard(), false)
+    expect(screen.queryByText(TL.paused)).toBeNull()
+    expect(screen.getByText(/Overdue 5m/)).toBeTruthy()
+    expect(screen.getByText(new RegExp(TL.noSignal))).toBeTruthy()
+  })
+
+  it('does not pause a task another owner holds', () => {
+    show(card('v', 'verifying', { owner: 'verifier', assignment: assignment({ leaseUntil: Date.now() - 5 * MIN }) }), true)
+    expect(screen.queryByText(TL.paused)).toBeNull()
+    expect(screen.getByText(/Overdue 5m/)).toBeTruthy()
+  })
+})
+
+describe('board reads the connectivity hook once', () => {
+  const board = (view: { kind: string } | null) => {
+    useConnectivityMock.mockReturnValue(view)
+    const c = card('r', 'running', { owner: 'agent', assignment: assignment({ leaseUntil: Date.now() - 5 * MIN }) })
+    render(<TaskBoard client={makeClient({ in_progress: page(c) })} />)
+  }
+
+  it.each(['offline', 'degraded'])('shows paused when %s', async (kind) => {
+    board({ kind })
+    expect(await screen.findByText(TL.paused)).toBeTruthy()
+  })
+
+  it.each([null, { kind: 'recovered' }])('changes nothing for %j', async (view) => {
+    board(view)
+    await screen.findByText('Task r')
+    expect(screen.queryByText(TL.paused)).toBeNull()
+    expect(screen.getByText(/Overdue 5m/)).toBeTruthy()
   })
 })
 

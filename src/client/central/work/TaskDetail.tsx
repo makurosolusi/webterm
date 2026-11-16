@@ -14,6 +14,8 @@ export interface TaskDetailProps {
   taskId: string
   refreshTick: number
   onClose: () => void
+  /** The link to Claude is down: an agent-owned task shows "paused" instead of a lease. */
+  linkDown?: boolean
 }
 
 /** Longest worker result line the detail shows; the stored text can be several KB. */
@@ -28,6 +30,7 @@ function OwnerFacts({ facts }: { facts: OwnerFactsData }): React.JSX.Element | n
     <dl className="task-detail__facts" role="group" aria-label={facts.aria ?? undefined}>
       <dt>{TL.ownerHeading}</dt><dd>{ownerLabel(facts.owner)}</dd>
       <dt>{TL.nextHeading}</dt><dd>{facts.step}</dd>
+      {facts.paused && <><dt>{TL.leaseHeading}</dt><dd><span className="codicon codicon-debug-pause" aria-hidden="true" /> {TL.paused}</dd></>}
       {facts.lease && <><dt>{TL.leaseHeading}</dt><dd data-overdue={facts.overdue ? 'true' : undefined}>{facts.lease}</dd></>}
     </dl>
   )
@@ -63,11 +66,11 @@ function HistoryRow({ ev }: { ev: WorkEventView }): React.JSX.Element {
 }
 
 /** Side panel with a task's contract, attempts, verification, review checks and full history. */
-export function TaskDetail({ client, taskId, refreshTick, onClose }: TaskDetailProps): React.JSX.Element {
+export function TaskDetail({ client, taskId, refreshTick, onClose, linkDown = false }: TaskDetailProps): React.JSX.Element {
   const { page, error, loadingMore, loadMore, retry } = useTaskDetail(client, taskId, refreshTick)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const loaded = page !== null
-  const facts = page && ownerFacts(page.task, Date.now(), false)
+  const facts = page && ownerFacts(page.task, Date.now(), linkDown)
   useEffect(() => { if (loaded) headingRef.current?.focus() }, [loaded])
   const onKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'Escape') return

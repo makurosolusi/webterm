@@ -18,6 +18,8 @@ export interface TaskCardProps {
   selected: boolean
   onAct: (id: string, action: TaskAction, body?: Record<string, string>) => Promise<boolean>
   onOpen: (id: string) => void
+  /** The link to Claude is down (offline or degraded): agent-owned work is paused, not late. */
+  linkDown?: boolean
 }
 
 const BUSY = { approve: 'Approving…', retry: 'Retrying…', cancel: 'Cancelling…' } as const
@@ -35,12 +37,13 @@ function signalText(card: TaskCardData): string | null {
 }
 
 /** One task on the board with its badges and the actions legal for its status. */
-export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskCardProps): React.JSX.Element {
+export function TaskCard({ card, busy, refused, selected, onAct, onOpen, linkDown = false }: TaskCardProps): React.JSX.Element {
   const [mode, setMode] = useState<'idle' | 'note' | 'cancel'>('idle')
   const [note, setNote] = useState('')
   const legal = legalActions(card.status)
-  const facts = ownerFacts(card, Date.now(), false)
-  const signal = signalText(card)
+  const facts = ownerFacts(card, Date.now(), linkDown)
+  // While paused the server holds the lease, so an old signal or an overdue lease would only mislead.
+  const signal = facts.paused ? null : signalText(card)
   const summary = resultSummary(card.assignment?.result)
   const fullResult = resultSummary(card.assignment?.result, RESULT_TOOLTIP_MAX)
   const clipped = summary !== fullResult
@@ -81,6 +84,7 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
       )}
       <p className="task-card__meta">
         {TL.created(relativeTime(card.createdAt))}{signal ? ` · ${signal}` : ''}
+        {facts.paused && <> · <span className="task-card__paused"><span className="codicon codicon-debug-pause" aria-hidden="true" />{TL.paused}</span></>}
         {facts.lease && <span className="task-card__lease" data-overdue={facts.overdue ? 'true' : undefined}> · <span className={`codicon codicon-${facts.overdue ? 'warning' : 'clock'}`} aria-hidden="true" />{facts.lease}</span>}
       </p>
       {resultLine && (clipped ? <IconTooltip label={fullResult!}>{resultLine}</IconTooltip> : resultLine)}
