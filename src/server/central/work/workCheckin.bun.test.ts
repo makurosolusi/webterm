@@ -247,7 +247,7 @@ describe('delivery', () => {
     expect(r.turns.length).toBe(1)
   })
 
-  it('goes to the project chat only when every reason is in one project that has one', async () => {
+  it('without a known origin a reason goes to its project chat when it has one, else global; mixed projects get one turn each', async () => {
     const r = rig()
     stall(r, running(r, 'p1').id)
     await settle(r)
@@ -256,9 +256,11 @@ describe('delivery', () => {
     stall(r, running(r, 'p1').id)
     await settle(r)
     expect(r.turns[1]?.conversationId).toBe('central:project:p1')
+    // Routing rule changed on purpose (was: mixed projects -> everything in global): each reason keeps its own destination.
     stall(r, running(r, 'p1').id); stall(r, running(r, 'p2').id)
     await settle(r)
-    expect(r.turns[2]?.conversationId).toBe('central:global')
+    expect(r.turns.slice(2).map((t) => t.conversationId).sort()).toEqual(['central:global', 'central:project:p1'])
+    expect(queued(r)).toBe(0)
   })
 
   it('writes one central.checkin event per linked task with conversation and turn', async () => {

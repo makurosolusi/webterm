@@ -209,8 +209,10 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   }
 
   /** One turn for the reasons of one destination; false = the whole pass must stop (runtime off / budget). */
-  const deliverGroup = (g: { conversationId: string; reasons: Reason[]; orphans: Reason[] }, limit: number): boolean => {
+  const deliverGroup = (g: { conversationId: string; reasons: Reason[]; orphans: Reason[] }, at: number, limit: number): boolean => {
     const { conversationId, reasons } = g
+    const blocked = budgetBlock(at, limit)
+    if (blocked !== null) { notice(`checkin-paused:${localDayStart(at)}`, `Central check-ins are paused until tomorrow: ${blocked}.`, GLOBAL_CONVERSATION_ID); return false }
     if (getConversation(db, conversationId)?.activeTurnId) return true
     // Their origin is gone: say so where they land, once per reason (no reason text, so nothing private leaks).
     for (const o of g.orphans) notice(`checkin-orphan:${o.id}`, 'A check-in is shown here because it replies to a conversation that no longer exists.', conversationId)
@@ -234,9 +236,7 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
     if (halted(null)) return
     // One turn per destination, in order; a busy destination keeps its own reasons queued and does not hold the others.
     for (const g of groupByTarget(db, batch)) {
-      const blocked = budgetBlock(at, limit)
-      if (blocked !== null) { notice(`checkin-paused:${localDayStart(at)}`, `Central check-ins are paused until tomorrow: ${blocked}.`, GLOBAL_CONVERSATION_ID); return }
-      if (!deliverGroup(g, limit)) return
+      if (!deliverGroup(g, at, limit)) return
     }
   }
 
