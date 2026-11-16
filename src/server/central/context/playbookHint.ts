@@ -26,12 +26,17 @@ export function urlOf(text: string): string | null {
   return bare ? `https://${bare.replace(/[.,;:!?]+$/, '')}` : null
 }
 
+/** A research ask this short with one link is usually a single page or search, which `browser_read` covers. */
+const SHORT_ASK = 200
+const BROWSER_READ = 'browser_read'
+const PAGE_NOTE = 'For ONE page or ONE search, browser_read fits better than a worker.'
+
 const goalOf = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, MAX_GOAL)
 
-/** First playbook whose words match (priority = PLAYBOOKS order); a URL alone suggests web research. */
+/** First playbook whose words match (priority = PLAYBOOKS order); a bare URL matches none (see `playbookHintLine`). */
 export function matchPlaybook(text: string): PlaybookMatch | null {
   const url = urlOf(text)
-  const hit = PLAYBOOKS.find((pb) => pb.match.some((re) => re.test(text))) ?? (url ? PLAYBOOKS.find((pb) => pb.id === 'web_research') : undefined)
+  const hit = PLAYBOOKS.find((pb) => pb.match.some((re) => re.test(text)))
   if (!hit) return null
   const goal = goalOf(text)
   const args: Record<string, string> = hit.subject === 'target' ? { target: url ?? goal } : { goal }
@@ -48,8 +53,15 @@ export const WORKERS_SETTING = 'Settings › Central › What Central may do'
  */
 export function playbookHintLine(text: string, usable: (tool: string) => boolean): string {
   const m = matchPlaybook(text)
-  if (!m) return ''
-  if (usable(m.tool)) return `Suggested playbook: ${m.tool} ${JSON.stringify(m.args)}`
+  if (!m) {
+    // A lone link needs no worker: read the page directly, and say nothing when that tool is unavailable.
+    const url = urlOf(text)
+    return url && usable(BROWSER_READ) ? `Suggested tool: ${BROWSER_READ} ${JSON.stringify({ url })}` : ''
+  }
+  if (usable(m.tool)) {
+    const note = m.id === 'web_research' && m.args.url && text.length <= SHORT_ASK && usable(BROWSER_READ) ? ` ${PAGE_NOTE}` : ''
+    return `Suggested playbook: ${m.tool} ${JSON.stringify(m.args)}${note}`
+  }
   const label = PLAYBOOKS.find((pb) => pb.id === m.id)?.label ?? m.id
   return `This looks like ${m.id === 'web_research' ? label : `a ${label}`}, but workers are off (${WORKERS_SETTING})`
 }

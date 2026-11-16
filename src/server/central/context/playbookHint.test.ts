@@ -15,7 +15,7 @@ describe('matchPlaybook', () => {
     ['riset harga VPS murah di Indonesia', 'web_research'],
     ['bandingkan bun dan deno untuk server', 'web_research'],
     ['compare react flow and xyflow licensing', 'web_research'],
-    ['look at https://example.com/pricing', 'web_research'],
+    ['research https://example.com/pricing', 'web_research'],
     ['perbaiki bug login redirect', 'code_change'],
     ['implement dark mode toggle', 'code_change'],
     ['tolong tambahkan test untuk parser', 'code_change'],
@@ -33,7 +33,31 @@ describe('matchPlaybook', () => {
 
   it('review targets the URL when one is named, and the hint line carries JSON args', () => {
     expect(matchPlaybook('review https://github.com/a/b/pull/7')?.args).toEqual({ target: 'https://github.com/a/b/pull/7' })
-    expect(playbookHintLine('research https://bun.sh.', () => true)).toBe('Suggested playbook: playbook.web_research {"goal":"research https://bun.sh.","url":"https://bun.sh"}')
+    expect(playbookHintLine('research https://bun.sh.', () => true)).toBe('Suggested playbook: playbook.web_research {"goal":"research https://bun.sh.","url":"https://bun.sh"} For ONE page or ONE search, browser_read fits better than a worker.')
+  })
+})
+
+describe('playbookHintLine for a lone link', () => {
+  const noRead = (tool: string) => tool !== 'browser_read'
+  it('suggests browser_read, not a playbook', () => {
+    expect(matchPlaybook('look at https://example.com/pricing')).toBeNull()
+    const line = playbookHintLine('look at https://example.com/pricing', () => true)
+    expect(line).toBe('Suggested tool: browser_read {"url":"https://example.com/pricing"}')
+    expect(line).not.toContain('playbook')
+  })
+  it('keeps the playbook for research words and adds the browser_read note only when that tool is usable', () => {
+    const line = playbookHintLine('bandingkan https://a.dev dan https://b.dev', () => true)
+    expect(line).toContain('Suggested playbook: playbook.web_research')
+    expect(line).toContain('browser_read fits better')
+    expect(playbookHintLine('research https://bun.sh', noRead)).not.toContain('browser_read')
+  })
+  it('stays silent without a link or keyword, and never suggests browser_read when it is unavailable', () => {
+    expect(playbookHintLine('tolong rapikan catatan ini', () => true)).toBe('')
+    expect(playbookHintLine('look at https://example.com', noRead)).toBe('')
+  })
+  it('leaves code_change and review matching untouched', () => {
+    expect(playbookHintLine('review https://github.com/a/b/pull/7', () => true)).toBe('Suggested playbook: playbook.review {"target":"https://github.com/a/b/pull/7"}')
+    expect(matchPlaybook('fix bug at https://x.dev/y')?.id).toBe('code_change')
   })
 })
 
