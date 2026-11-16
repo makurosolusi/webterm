@@ -1,6 +1,6 @@
 // Status channel of the shared socket: reason passthrough and the connect snapshot's unread rule.
 import { afterEach, describe, expect, it } from 'vitest'
-import { dispatchBroadcast, getStatus, getStatusReason, subscribeStatus } from './ws.listeners'
+import { dispatchBroadcast, getStatus, getStatusReason, subscribeAct, subscribeStatus } from './ws.listeners'
 import { clearUnread, unreadIds } from './unread'
 
 // test-only ids
@@ -41,5 +41,17 @@ describe('connect snapshot', () => {
     dispatchBroadcast({ t: 'status', id: 'snap-changed', status: 'working' })
     dispatchBroadcast({ t: 'status', id: 'snap-changed', status: 'waiting', snapshot: true })
     expect(unreadIds().has('snap-changed')).toBe(true)
+  })
+})
+
+describe('act channel', () => {
+  const frame = { t: 'act', v: 1, tool: 'canvas.type', verb: 'typed', nodeId: 'n1', n: 1 } as const // test-only
+  it('hands a t:act frame to subscribers and stops after unsubscribe', () => {
+    const seen: string[] = []
+    const off = subscribeAct((m) => seen.push(`${m.verb}:${m.nodeId}:${m.n}`))
+    expect(dispatchBroadcast(frame)).toBe(true)
+    off()
+    expect(dispatchBroadcast(frame)).toBe(true)
+    expect(seen).toEqual(['typed:n1:1'])
   })
 })

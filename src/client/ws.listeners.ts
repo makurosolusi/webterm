@@ -1,7 +1,7 @@
 // Broadcast frames of the shared terminal socket (ws.ts) that are not tied to one terminal
 // subscriber: agent status, fs dirty hints, canvas pushes, view/shot requests, workspace list.
 import { emitFsEvent } from './fsEvents'
-import type { CanvasMsg, ServerMsg, ShotMsg, StatusReason, ViewMsg, WorkspacesMsg } from '../shared/protocol'
+import type { ActMsg, CanvasMsg, ServerMsg, ShotMsg, StatusReason, ViewMsg, WorkspacesMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
 
@@ -53,8 +53,15 @@ export function subscribeShot(cb: (msg: ShotMsg) => void): () => void {
   return () => { shotListeners.delete(cb) }
 }
 
+const actListeners = new Set<(msg: ActMsg) => void>()
+/** Central acted on a node through a tool: `t:'act'`. */
+export function subscribeAct(cb: (msg: ActMsg) => void): () => void {
+  actListeners.add(cb)
+  return () => { actListeners.delete(cb) }
+}
+
 /** Frames that go to every listener of a kind, not to one terminal subscriber. */
-type BroadcastMsg = Extract<ServerMsg, { t: 'status' | 'fsdirty' | 'canvas' | 'view' | 'workspaces' | 'shot' }>
+type BroadcastMsg = Extract<ServerMsg, { t: 'status' | 'fsdirty' | 'canvas' | 'view' | 'workspaces' | 'shot' | 'act' }>
 
 /** Deliver a broadcast frame to its listeners; false = not a broadcast (a per-terminal frame). */
 export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
@@ -83,6 +90,7 @@ export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
   if (msg.t === 'canvas') { for (const l of [...canvasListeners]) l(msg); return true }
   if (msg.t === 'view') { for (const l of [...viewListeners]) l(msg); return true }
   if (msg.t === 'workspaces') { for (const l of [...workspacesListeners]) l(msg); return true }
+  if (msg.t === 'act') { for (const l of [...actListeners]) l(msg); return true }
   if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return true }
   return false
 }
