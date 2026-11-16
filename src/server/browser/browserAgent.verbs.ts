@@ -5,12 +5,27 @@ import { stateOf } from './browserAgent.verbs.ctx'
 import { actVerbs } from './browserAgent.verbs.act'
 import { readVerbs } from './browserAgent.verbs.read'
 import { consoleVerbs } from './browserAgent.verbs.console'
+import { timed } from './browserAgent.latency'
 
 export type { AgentCtx, AgentVerbs, ApprovalRequest } from './browserAgent.verbs.ctx'
 
+const urlOf = (body: unknown): string | undefined => {
+  const u = (body as { url?: unknown } | null | undefined)?.url
+  return typeof u === 'string' ? u : undefined
+}
+
+/** Single timing point: every verb runs through `timed` (latency buffer; host only, never the body). */
+function timedVerbs(verbs: AgentVerbs): AgentVerbs {
+  const out: Record<string, unknown> = {}
+  for (const [name, fn] of Object.entries(verbs) as [string, (nodeId: string, body: unknown) => Promise<unknown>][]) {
+    out[name] = (nodeId: string, body: unknown) => timed(name, () => fn(nodeId, body), { url: urlOf(body) })
+  }
+  return out as AgentVerbs
+}
+
 /** Rakit seluruh verb: read + act + handoff/release (lease). */
 export function createAgentVerbs(ctx: AgentCtx): AgentVerbs {
-  return {
+  return timedVerbs({
     ...readVerbs(ctx),
     ...consoleVerbs(ctx),
     ...actVerbs(ctx),
@@ -22,5 +37,5 @@ export function createAgentVerbs(ctx: AgentCtx): AgentVerbs {
       ctx.leases.release(nodeId)
       return { lease: 'human' }
     },
-  }
+  })
 }
