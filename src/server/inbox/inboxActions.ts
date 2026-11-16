@@ -6,6 +6,7 @@ import type { AppendEventInput } from '../events/eventModel'
 import { decideApproval } from '../ledger/ledgerApproval'
 import { getRow, tx, type LedgerContext } from '../ledger/ledgerCore'
 import { LedgerError } from '../ledger/ledgerModel'
+import { FABLE_KIND, FABLE_SCOPES, stampFableScope, type FableScope } from '../models/fableGrant'
 import type { EnqueueInput } from '../outbox/outboxStore'
 import { decidePermission } from '../permission/permission.human'
 import { PERMISSION_KIND } from '../permission/permission.model'
@@ -78,9 +79,15 @@ export async function actOnItem(deps: InboxActDeps, id: string, action: InboxAct
       if (item.kind === 'gate') {
         // One transaction: the edited args land together with the approval, never after it
         // (permission.wait polls the approval and returns the args as Claude `updatedInput`).
+        const fable = item.approvalKind === FABLE_KIND
+        const scope = action.type === 'approve' ? action.scope : undefined
+        if (fable && approve && scope !== undefined && !FABLE_SCOPES.includes(scope as FableScope)) return fail(400, 'invalid_scope', `scope: ${FABLE_SCOPES.join(' | ')}`)
+        if (fable && action.type === 'edit') return fail(400, 'action_not_allowed', 'a Fable grant cannot be edited')
         const refused = tx(deps.ctx, () => {
           if (action.type === 'edit') setItemArgs(deps.ctx, id, action.args)
-          return decideGate(deps, item, approve)
+          const r = decideGate(deps, item, approve)
+          if (!r && fable && approve) stampFableScope(deps.ctx, item.approvalId!, deps.actor, scope as FableScope | undefined)
+          return r
         })
         if (refused) return refused
         deps.record(gateDecisionEvent({ approvalId: item.approvalId!, approve, actor: deps.actor, edited: action.type === 'edit' }))

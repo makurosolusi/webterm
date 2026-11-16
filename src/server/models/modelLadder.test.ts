@@ -1,6 +1,6 @@
 // Model ladder: tier defaults per call kind, escalation per failure type, step/tier ceilings, override, budget.
 import { describe, expect, it } from 'vitest'
-import { defaultTier, effortLadder, LADDER_LIMITS, MODEL_IDS, nextStep, resolveModel, TIER_TABLE, type CallKind, type Effort, type Tier } from './modelLadder'
+import { FABLE_NEEDS_APPROVAL, defaultTier, effortLadder, LADDER_LIMITS, MODEL_IDS, nextStep, resolveModel, TIER_TABLE, type CallKind, type Effort, type Tier } from './modelLadder'
 
 describe('TIER_TABLE / MODEL_IDS / effortLadder', () => {
   it('maps every tier to its model and default effort', () => {
@@ -75,10 +75,20 @@ describe('resolveModel', () => {
   })
   it('an override wins, skips escalation and budget', () => {
     const base = { kind: 'helper' as const, attempt: 2, lastFailure: 'verify_failed' as const, spentMicros: 200, capMicros: 100 }
-    expect(resolveModel({ ...base, override: { model: 'fable' } })).toEqual({ model: 'fable', effort: 'xhigh', tier: 'T4', reason: 'user override' })
+    expect(resolveModel({ ...base, override: { model: 'fable' }, fableGranted: true })).toEqual({ model: 'fable', effort: 'xhigh', tier: 'T4', reason: 'user override', fableGranted: true })
     expect(resolveModel({ ...base, override: { model: 'claude-opus-5-5', effort: 'max' } })).toEqual({ model: 'opus', effort: 'max', tier: 'T3', reason: 'user override' })
     expect(resolveModel({ ...base, override: { effort: 'high' } })).toEqual({ model: 'haiku', effort: 'high', tier: 'T1', reason: 'user override' })
     expect(resolveModel({ ...base, override: {} })).toMatchObject({ tier: 'T1', reason: expect.stringContaining('budget') })
+  })
+  it('Fable without a grant resolves to Opus, on every path that names it', () => {
+    const blocked = { model: 'opus', tier: 'T3', reason: FABLE_NEEDS_APPROVAL, fableBlocked: true }
+    expect(resolveModel({ kind: 'central', override: { model: 'fable' } })).toMatchObject({ ...blocked, effort: 'high' })
+    expect(resolveModel({ kind: 'central', override: { model: 'claude-fable-5-1', effort: 'max' } })).toMatchObject({ ...blocked, effort: 'max' })
+    expect(resolveModel({ kind: 'dag-worker', tier: 'T4' })).toMatchObject(blocked)
+    expect(resolveModel({ kind: 'central', override: { model: 'fable' }, fableGranted: false })).toMatchObject(blocked)
+  })
+  it('the ladder never reaches Fable on its own, grant or not', () => {
+    expect(resolveModel({ kind: 'central', attempt: 5, lastFailure: 'verify_failed', fableGranted: true }).model).not.toBe('fable')
   })
   it('budget >= 80% caps at T2, >= 100% caps at T1, helpers stay T1', () => {
     expect(resolveModel({ kind: 'dag-planner', spentMicros: 79, capMicros: 100 })).toMatchObject({ tier: 'T3' })

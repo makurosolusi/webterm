@@ -7,6 +7,7 @@ import type { Database } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
 import { getRow } from '../../ledger/ledgerCore'
 import { type Effort, type LadderModel, type Tier, MODEL_IDS, resolveModel } from '../../models/modelLadder'
+import { type FableTarget, isFableGranted, requestFableGrant } from '../../models/fableGrant'
 import { appendMessage, sessionRefFor } from '../conversationStore'
 import { claudeModelArg } from '../runtime/claudeOptions'
 import { CENTRAL_MODEL_FLAG } from '../runtime/runtimeShared'
@@ -24,7 +25,7 @@ const NO_EFFORT = 'default'
 export interface ModelChoice { model: LadderModel; effort?: Effort }
 
 /** What a Central turn runs on: `model` is what the CLI gets (alias or a full `claude-*` id). */
-export interface CentralTurnModel { model: string | null; alias: LadderModel | null; effort: Effort | null; tier: Tier; reason: string }
+export interface CentralTurnModel { model: string | null; alias: LadderModel | null; effort: Effort | null; tier: Tier; reason: string; /** Fable was asked for without a person's grant: it runs on Opus and a grant card is open. */ fableBlocked?: boolean }
 
 /** Validates `/model <model> [effort]`; `auto` = clear the override (null). Throws a 400 otherwise. */
 export function parseModelChoice(model: unknown, effort: unknown): ModelChoice | null {
@@ -74,13 +75,21 @@ function sessionModel(db: Database, conversationId: string, sessionRef: string):
 }
 
 /** The model a fresh session would start on for `choice` (null = no conversation override). */
-function freshModel(choice: ModelChoice | null, env: NodeJS.ProcessEnv): CentralTurnModel {
+function freshModel(choice: ModelChoice | null, env: NodeJS.ProcessEnv, fableGranted: boolean): CentralTurnModel {
   const setting = claudeModelArg(env[CENTRAL_MODEL_FLAG]).arg
-  const pick = resolveModel({ kind: 'central', override: choice ?? (setting ? { model: setting } : null) })
+  const pick = resolveModel({ kind: 'central', override: choice ?? (setting ? { model: setting } : null), fableGranted })
   // A full id or proxy name from the setting goes through as typed; the ladder only names it. The ladder's
   // own default never overrides a model the user chose for their provider.
-  const model = choice ? pick.model : setting ?? (pick.model && modelRequest(pick.model, claudeEnv(env)).flag)
-  return { model, alias: pick.model, effort: pick.effort, tier: pick.tier, reason: choice ? 'conversation /model' : setting ? 'Central model setting' : pick.reason }
+  const model = pick.fableBlocked ? modelRequest('opus', claudeEnv(env)).flag ?? 'opus'
+    : choice ? pick.model : setting ?? (pick.model && modelRequest(pick.model, claudeEnv(env)).flag)
+  const reason = pick.fableBlocked ? pick.reason : choice ? 'conversation /model' : setting ? 'Central model setting' : pick.reason
+  return { model, alias: pick.model, effort: pick.effort, tier: pick.tier, reason, ...(pick.fableBlocked ? { fableBlocked: true } : {}) }
+}
+
+/** The grant scope of a conversation: itself, or its project. */
+function fableTarget(db: Database, conversationId: string): FableTarget {
+  const projectId = getRow(db, 'SELECT project_id FROM central_conversation WHERE id = ?', conversationId)?.['project_id']
+  return { kind: 'conversation', id: conversationId, projectId: typeof projectId === 'string' ? projectId : null }
 }
 
 /**
@@ -89,10 +98,15 @@ function freshModel(choice: ModelChoice | null, env: NodeJS.ProcessEnv): Central
  * being continued) the model that session ran on is kept, so a change waits for a fresh session.
  */
 export function centralTurnModel(db: Database, conversationId: string, env: NodeJS.ProcessEnv, resume: string | null): CentralTurnModel {
-  const fresh = freshModel(latestChoice(db, conversationId)?.choice ?? null, env)
+  const target = fableTarget(db, conversationId)
+  const granted = isFableGranted(db, target)
+  const fresh = freshModel(latestChoice(db, conversationId)?.choice ?? null, env, granted)
+  // Say so once (the card is the notice): a blocked Fable pick opens the grant card, deduped per conversation.
+  if (fresh.fableBlocked) requestFableGrant({ db, now: Date.now }, target)
   const pinned = resume ? sessionModel(db, conversationId, resume) : null
   if (!pinned) return fresh
-  const kept = resolveModel({ kind: 'central', override: { model: pinned, ...(fresh.effort ? { effort: fresh.effort } : {}) } })
+  const kept = resolveModel({ kind: 'central', override: { model: pinned, ...(fresh.effort ? { effort: fresh.effort } : {}) }, fableGranted: granted })
+  if (kept.fableBlocked) return fresh // a Fable session whose grant was revoked ends here: the next turn starts fresh on Opus
   return { model: pinned, alias: kept.model, effort: kept.effort, tier: kept.tier, reason: 'session model kept until a fresh session' }
 }
 
@@ -106,6 +120,7 @@ export function conversationModelState(db: Database, conversationId: string, env
 }
 
 function noticeText(choice: ModelChoice | null, next: CentralTurnModel): string {
+  if (next.fableBlocked) return 'Fable needs approval; running on Opus. Approve the request in Needs you (this conversation or the whole project), then pick Fable again to start a fresh session on it.'
   const what = choice ? choice.model : `auto (${next.alias ?? 'default'})`
   const effort = next.effort ? `, ${next.effort} effort` : ''
   const id = next.alias ? ` [${MODEL_IDS[next.alias]}]` : ''
@@ -118,7 +133,7 @@ export function setConversationModel(
 ): ConversationModelState {
   const conversation = resolveOrCreateConversation(db, conversationId)
   const { message } = appendMessage(db, {
-    conversationId: conversation.id, role: 'system', parts: [{ type: 'notice', text: noticeText(choice, freshModel(choice, env)) }],
+    conversationId: conversation.id, role: 'system', parts: [{ type: 'notice', text: noticeText(choice, freshModel(choice, env, isFableGranted(db, fableTarget(db, conversation.id)))) }],
     clientMessageId: `${PREFIX}${choice?.model ?? 'auto'}:${choice?.effort ?? NO_EFFORT}:${randomUUID()}`, now: now(),
   })
   recordEvent(db, stream, conversation.id, 'message.created', {
