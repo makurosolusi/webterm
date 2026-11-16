@@ -1,5 +1,26 @@
 # 91 — Audit kode salinan dari referensi eksternal
 
+## Status (diperbarui)
+
+Jujur: webterm **bukan clean-room murni**. Bagian berikut sudah ditulis ulang dari perilaku
+(bukan dari teks sumber), tetapi penulisnya mengenal referensi:
+
+- `linkNoteComposer`
+- `browser.discard`
+- `tsWorkerReaper`
+- `terminalKeys.mouse` (copy-on-select)
+- `fileBrowse`
+- `daReplyGate`
+- `settings.terminal`
+
+**Belum ditulis ulang**, delapan adaptasi dekat: `fsLimits`, `themes`, `contextLinkTranscript`,
+`terminalConfig`, `shellQuote`, `workspace.capabilities`, `contextLinkRender`, `workspace.agents`.
+
+Rename protokol `nodeterm` -> `webterm` tidak mengubah status ini; nama lama hanya diterima
+sementara sebagai fallback (batas 0.10.0), tanpa migrasi data dir.
+
+---
+
 Status: audit baca-saja, 2026-11-16. Tidak ada kode yang diubah. Referensi = repo terminal manager berlisensi BUSL-1.1 yang dipakai sebagai bahan studi (disebut "referensi eksternal"). Tidak ada kode referensi yang ditempel di dokumen ini.
 
 ## Metode

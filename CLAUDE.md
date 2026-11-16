@@ -15,12 +15,18 @@ nol sebagai project baru, hanya terinspirasi terminal manager mapan; bukan fork 
 Identitas = `webterm` sepenuhnya. Nama protokol (agent <-> server):
 
 - env sesi agent `WEBTERM_NODE_ID`, `WEBTERM_PORT`, `WEBTERM_NODE_TOKEN`; header `x-webterm-node-token`
-- nama event/channel `webterm:*`
+- sentinel/nama event/channel `webterm:*` (mis. `webterm:too-large:`)
 - data dir: `WEBTERM_DATA_DIR` (default `~/.webterm-server`)
 
-Transisi: server masih MENERIMA nama lama (env/header) selama masa transisi, tetapi hanya MENERBITKAN
-nama baru. Data dir warisan hanya dibaca sebagai fallback migrasi satu arah ke data dir webterm.
-Jangan memperkenalkan lagi nama lama di kode atau dokumen baru.
+Nama lama `nodeterm` hanya tersisa sebagai **fallback penerimaan sementara** (header token, env di
+shell `webterm browser/context`, prefiks too-large, prefiks catatan `[nodeterm]`, prefiks env yang
+di-scrub), tiap titik ditandai komentar `legacy:` dengan batas "remove after 0.10.0". Server hanya
+MENERBITKAN nama baru; sesi yang sudah berjalan memakai env lamanya sampai selesai. Jangan hapus
+fallback itu sebelum 0.10.0 tanpa perintah eksplisit, dan jangan memperkenalkan lagi nama lama di
+kode atau dokumen baru.
+
+Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodeterm-server`; hanya
+`WEBTERM_DATA_DIR` yang dipakai.
 
 ## Menjalankan
 
