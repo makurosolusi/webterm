@@ -15,7 +15,8 @@ import { type AgentStore, createAgentStore } from './agentStore'
 import { type ExecHandle, type ExecOutcome } from './execRunner'
 import type { Principal } from '../../policy/policy.model'
 import { modelFlags, spawnAgent } from '../../spawn/agentSpawn'
-import { pickModel } from '../../models/modelPick'
+import type { ModelPick } from '../../models/modelLadder'
+import { type Complexity, ladderJson, pickForAgent } from './agentLadder'
 import { filterHandoffContext } from '../../verifier/handoff.filter'
 import { settleCandidate, verifyAgentWorktree, type VerifyAgentCompletion } from './agentVerify'
 import { settleExecTask } from '../work/workLifecycle'
@@ -47,7 +48,7 @@ export interface AgentHost {
   /** Server-built task prompt for a headless run (never free model text). */
   initialPrompt(agent: AgentRecord): Promise<string>
   /** Opens the canvas session under the given deterministic node id. */
-  openPty(agent: AgentRecord, cwd: string, nodeId: string): Promise<void>
+  openPty(agent: AgentRecord, cwd: string, nodeId: string, pick?: ModelPick | null): Promise<void>
   /** Relaunches the PTY of a dead agent from its saved conversation (`--resume`), continuing a cut-off turn younger than `maxAgeMs`; throws on spawn refusal. */
   resumePty?(agent: AgentRecord, cwd: string, nodeId: string, maxAgeMs: number): Promise<void>
   /** Existing worktree path of the agent (never allocates); null = none. */
@@ -94,6 +95,8 @@ export interface SpawnInput {
   owner: AgentRecord['owner']
   /** Mode `propose`: even an allowed spawn waits for a human approval card. */
   requireApproval: boolean
+  /** How hard the task is (agent.spawn); picks the ladder's start tier. Absent = the routine default. */
+  complexity?: Complexity
 }
 
 export interface ReconcileReport { adopted: number; failed: number; orphaned: number; closed: number }
@@ -178,14 +181,16 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
   }
   const settleDeps = { verify: deps.verifyCompletion ?? verifyAgentWorktree, worktree: (a: AgentRecord) => host.worktree(a), move: tryMove, audit, ledger: () => ({ db, now }) }
 
-  async function startRunner(agent: AgentRecord, cwd: string, nodeId: string): Promise<string | null> {
-    if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId); return nodeId }
+  async function startRunner(agent: AgentRecord, cwd: string, nodeId: string): Promise<{ nodeId: string | null; pick: ModelPick }> {
+    // One ladder decision for both runners (stored on the row, so a resume keeps it).
+    const pick = pickForAgent(db, agent, now)
+    if (agent.runner === 'pty') { await host.openPty(agent, cwd, nodeId, pick); return { nodeId, pick } }
     const own = host.headlessArgv(agent.kind, filterHandoffContext(await host.initialPrompt(agent)))
     if (!own) throw new Error(`no headless form for kind ${agent.kind}`)
-    const argv = withLadderModel(own, pickModel(db, { kind: 'agent-spawn', projectId: agent.projectId, runRef: `agent:${agent.id}` }, now))
+    const argv = withLadderModel(own, pick)
     const res = await (deps.spawn ?? spawnAgent)({
       door: 'central', mode: 'headless', kind: agent.kind, parent: spawnParentOf(agent), nodeId, cwd, title: `${agent.role} ${agent.kind}`,
-      headless: { argv, env: deps.env, overrides: host.execEnv?.(agent.kind), timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS },
+      headless: { argv, pick, env: deps.env, overrides: host.execEnv?.(agent.kind), timeoutMs: deps.execTimeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS },
     })
     if (!res.ok || !res.handle) throw new Error(res.ok ? 'headless spawn returned no handle' : `${res.code}: ${res.message}`)
     const handle = res.handle
@@ -193,7 +198,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     // onExit writes the ledger (a vanished row or a failed write throws); unheard, that rejection ends the server.
     void handle.done.then((outcome) => onExit(agent, outcome)).catch((err: unknown) =>
       log.error('agent.exit_settle_failed', `exit of agent ${agent.id} could not be settled`, { agentId: agent.id, projectId: agent.projectId, error: err instanceof Error ? err.message : String(err) }))
-    return null
+    return { nodeId: null, pick }
   }
 
   /** requested|approval_pending -> provisioning (the atomic claim) -> starting -> working, with intent/done audit. */
@@ -208,10 +213,11 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
       const cwd = await host.worktree(claimed)
       store.transition(agent.id, 'starting')
       stage = 'runner'
-      const nodeId = await startRunner(claimed, cwd, agentNodeId(agent.id))
-      const working = store.transition(agent.id, 'working', nodeId ? { nodeId } : {})
-      audit(working, 'spawn.done', { nodeId })
-      return snapshot(working)
+      const started = await startRunner(claimed, cwd, agentNodeId(agent.id))
+      const working = store.transition(agent.id, 'working', started.nodeId ? { nodeId: started.nodeId } : {})
+      const used = { tier: started.pick.tier, model: started.pick.model, effort: started.pick.effort }
+      audit(working, 'spawn.done', { nodeId: started.nodeId, ...used })
+      return snapshot(working, used)
     } catch (err) {
       // Only the stage and error class are recorded: messages may carry paths or argv.
       const reason = `spawn_failed:${stage}`
@@ -323,7 +329,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     const created = await exclusive(async () => {
       const verdict = await gate(input.projectId, 'agent.spawn', tier)
       if (verdict && verdict.code !== 'approval_required') return { verdict }
-      return { verdict, agent: store.create({ id: `ag-${input.reqId.slice(0, 20)}`, projectId: input.projectId, kind: input.kind, role: input.role, runner: host.runnerFor(input.kind), owner: input.owner, reqId: input.reqId, taskId: input.taskId }) }
+      return { verdict, agent: store.create({ id: `ag-${input.reqId.slice(0, 20)}`, projectId: input.projectId, kind: input.kind, role: input.role, runner: host.runnerFor(input.kind), owner: input.owner, reqId: input.reqId, taskId: input.taskId, budgetJson: ladderJson(input.complexity) }) }
     })
     if (!created.agent) return created.verdict as ToolResult
     audit(created.agent, 'spawn.requested', { kind: input.kind, role: input.role })
