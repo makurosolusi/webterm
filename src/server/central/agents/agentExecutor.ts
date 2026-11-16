@@ -16,7 +16,7 @@ import { settleExecTask } from '../work/workLifecycle'
 import { createLogger } from '../../logs'
 import { slotRefusal } from '../guard/controlGuard'
 import { AGENT_ENVELOPE, DEFAULT_EXEC_TIMEOUT_MS, agentNodeId, agentView, spawnParentOf, withLadderModel } from './agentExecutor.model'
-import { createApprovalFlow } from './agentExecutor.approval'
+import { createApprovalFlow, isTaintedOwner } from './agentExecutor.approval'
 import type { AgentDeps, AgentExecutor, ReconcileReport, SpawnInput } from './agentExecutor.types'
 
 // Re-exported: the executor's public surface is imported from here by 20+ modules.
@@ -162,7 +162,7 @@ export function createAgentExecutor(deps: AgentDeps): AgentExecutor {
     return proceed(created.agent, created.verdict, input.requireApproval)
   }
 
-  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || (requireApproval && !skip(agent.projectId)) ? pendApproval(agent) : launch(agent))
+  const proceed = (agent: AgentRecord, blocked: ToolResult | null, requireApproval: boolean): Promise<ToolResult> => (blocked || ((requireApproval || isTaintedOwner(agent.owner, now())) && !skip(agent.projectId)) ? pendApproval(agent) : launch(agent))
 
   const live = (a: AgentRecord): boolean => (a.runner === 'exec' ? handles.has(a.id) : !!a.nodeId && host.hasSession(a.nodeId))
 

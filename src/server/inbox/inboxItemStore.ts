@@ -140,7 +140,8 @@ function mirrorOf(r: Row): { title: string; impact: Impact; nodeId: string | nul
     return { title: clip(typeof req.title === 'string' ? req.title : 'Allow Fable?', TITLE_MAX), impact: { what: 'Fable is the highest-cost model. Without approval this runs on Opus', tier: 'R1', rewindable: true }, nodeId: req.target && (req.target as { kind?: string }).kind === 'node' ? String((req.target as { id?: unknown }).id) : null, args: null, editable: false }
   }
   const tier = typeof req.tier === 'string' && TIERS.has(req.tier) ? (req.tier as Impact['tier']) : 'R2'
-  return { title: clip(`Approval: ${kind}`, TITLE_MAX), impact: { what: `Allows the pending ${kind} action`, tier, rewindable: false }, nodeId: null, args: null, editable: false }
+  // A card that states its own title (e.g. the taint reason on a Central ask) shows it instead of the bare kind.
+  return { title: clip(typeof req.title === 'string' && req.title ? req.title : `Approval: ${kind}`, TITLE_MAX), impact: { what: `Allows the pending ${kind} action`, tier, rewindable: false }, nodeId: null, args: null, editable: false }
 }
 
 /**
