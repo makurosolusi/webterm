@@ -83,6 +83,12 @@ describe('registry', () => {
     expect(records).toEqual(['auto.playbook_started "Central started web research: analyse GitHub trending today"'])
   })
 
+  test('every playbook states an honest complexity on its spawn; web_research is moderate (sonnet), never the strongest tier', async () => {
+    expect(PLAYBOOKS.map((p) => [p.id, p.complexity])).toEqual([['review', 'moderate'], ['code_change', 'moderate'], ['web_research', 'moderate']])
+    await runPlaybook(ctx, pb('web_research'), { goal: 'read this repo and judge if it runs on an 8 GB Mac' }, 'p1', deps)
+    expect(calls.find((c) => c.tool === 'agent.spawn')?.args).toMatchObject({ complexity: 'moderate' })
+  })
+
   test('web_research without a url searches for the goal', async () => {
     await runPlaybook(ctx, pb('web_research'), { goal: 'best sqlite orm' }, 'p1', deps)
     expect(objective()).toContain('https://duckduckgo.com/?q=best%20sqlite%20orm')

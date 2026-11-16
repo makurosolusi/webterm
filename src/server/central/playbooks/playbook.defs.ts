@@ -4,6 +4,7 @@
 // The instruction text reuses the DAG `Brief` fields (objective, outputFormat, boundaries).
 import { type JsonSchema, obj, S } from '../../capability/capability.schema'
 import type { Brief } from '../../dag/dag.model'
+import type { Complexity } from '../agents/agentLadder'
 import type { Tier, ToolInput } from '../tools/toolTypes'
 import { CODE_CHANGE_WORDS, REVIEW_WORDS, WEB_RESEARCH_WORDS } from './playbook.intentWords'
 
@@ -37,6 +38,8 @@ export interface Playbook {
   label: string
   /** The param the notice and task title name. */
   subject: string
+  /** How hard the spawned agent's task honestly is; sets its model (agent.spawn `complexity`). */
+  complexity: Complexity
   steps: PlaybookStep[]
   /** `runId` names what the run sets up for the agent (its browser node). */
   brief(p: Params, runId: string): PlaybookBrief
@@ -71,7 +74,7 @@ function delegate(pb: Omit<Playbook, 'steps'>, role: 'worker' | 'reviewer', extr
     ...pb,
     steps: [
       { tool: 'task.create', saveAs: 'task', args: (p, _prev, runId) => ({ projectId: p.projectId, title: named(p), objective: renderBrief(pb.brief(p, runId)).slice(0, MAX_OBJECTIVE), acceptance: 'review' }) },
-      { tool: 'agent.spawn', saveAs: 'agent', args: (p, prev, runId) => ({ projectId: p.projectId, requestId: `pb-${runId}`, kind: p.kind ?? DEFAULT_AGENT_KIND, role, title: named(p), taskId: prev.task?.taskId }) },
+      { tool: 'agent.spawn', saveAs: 'agent', args: (p, prev, runId) => ({ projectId: p.projectId, requestId: `pb-${runId}`, kind: p.kind ?? DEFAULT_AGENT_KIND, role, title: named(p), taskId: prev.task?.taskId, complexity: pb.complexity }) },
       ...extra,
     ],
   }
@@ -81,6 +84,8 @@ const RESULT_LINE = 'End with a line `RESULT:` followed by'
 
 const webResearch = delegate({
   id: 'web_research', label: 'web research', subject: 'goal', tier: 'R1',
+  // Reading a repo or pages and judging them needs reasoning, not the strongest model.
+  complexity: 'moderate',
   summary: 'Research the web: a task, an agent with its own cabled browser, a fixed brief; reports RESULT with sources.',
   match: [WEB_RESEARCH_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), url: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
@@ -97,6 +102,8 @@ const webResearch = delegate({
 
 const codeChange = delegate({
   id: 'code_change', label: 'code change', subject: 'goal', tier: 'R1',
+  // The scope is unknown up front; Central passes `complex` itself via agent.spawn for multi-file work.
+  complexity: 'moderate',
   summary: 'Change code: a task, a worker agent in its own worktree, a fixed brief; reports RESULT with files and checks.',
   match: [CODE_CHANGE_WORDS],
   params: obj({ goal: S.str(MAX_GOAL), kind: S.str(100) }, ['goal']), required: ['goal'],
@@ -110,6 +117,7 @@ const codeChange = delegate({
 
 const review = delegate({
   id: 'review', label: 'review', subject: 'target', tier: 'R1',
+  complexity: 'moderate',
   summary: 'Review a PR, branch, diff or path: a task, a reviewer agent, a fixed brief; reports RESULT findings.',
   match: [REVIEW_WORDS],
   params: obj({ target: S.str(MAX_GOAL), kind: S.str(100) }, ['target']), required: ['target'],

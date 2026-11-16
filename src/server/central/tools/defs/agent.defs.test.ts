@@ -84,6 +84,12 @@ describe('agent tools', () => {
     expect((await setup().spawn({ requestId: 'has space' })).code).toBe('invalid_shape')
     expect((await setup().spawn({ taskId: 'nope' })).code).toBe('task_not_found')
   })
+  it('complexity is a closed enum; a raw model or tier is not a field of agent.spawn, and the result says what ran', async () => {
+    for (const bad of [{ complexity: 'huge' }, { complexity: 'fable' }, { model: 'opus' }, { tier: 'T4' }, { effort: 'max' }]) expect(['forbidden_key', 'invalid_shape']).toContain((await setup().spawn(bad)).code)
+    for (const complexity of ['simple', 'moderate', 'complex']) expect((await setup().spawn({ complexity })).ok).toBe(true)
+    const spawned = await setup().spawn({ complexity: 'complex' })
+    expect(spawned.data).toMatchObject({ tier: 'T3', model: 'opus' })
+  })
   it('central-owned agents are promptable and closable at R1', async () => {
     const s = setup()
     const id = String((await s.spawn()).data?.agentId)
