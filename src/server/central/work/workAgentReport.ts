@@ -67,7 +67,7 @@ export function recordAgentReport(db: Database, now: () => number, nodeId: strin
     const ask = kind === 'progress' ? getRow(db, "SELECT id FROM agent_mail WHERE to_ref = ? AND kind = 'ask' AND from_ref LIKE 'central:%' AND acked_at IS NULL AND expires_at > ? ORDER BY rowid LIMIT 1", ref, now()) : null
     if (ask) {
       execWrite(db, 'UPDATE agent_mail SET acked_at = ? WHERE id = ?', now(), String(ask.id))
-      answeredAsk = queueCheckinReason(db, { kind: 'task_report', dedupeKey: `report:${reportId}`, projectId, taskId: assignment?.taskId ?? null, text: `agent ${String(agent.id)} sent the progress you asked for: ${reason}`, now: now(), notBefore: now() })
+      answeredAsk = queueCheckinReason(db, { kind: 'task_report', dedupeKey: `report:${reportId}`, projectId, taskId: assignment?.taskId ?? null, text: `agent ${String(agent.id)} sent the progress you asked for: ${reason}`, now: now(), notBefore: now(), conversationId })
     }
   }
   if (assignment) store.noteAssignment(assignment.id, AGENT_REPORT_EVENT, { actor, rule: AGENT_REPORT_RULE, reason })
