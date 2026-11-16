@@ -70,6 +70,16 @@ describe('create and list', () => {
     expect(listed.json['nextOffset']).toBe(null)
   })
 
+  it('titles a project chat with the project name, or its id when the project row is gone', () => {
+    const { db } = setup()
+    db.exec("INSERT INTO project (id, workspace_id, name, path, created_at, updated_at) VALUES ('p1','w1','Billing API','/tmp/p1',1,1)")
+    getOrCreateConversation(db, 'project:p1', 5)
+    getOrCreateConversation(db, 'project:gone', 6)
+    const titles = Object.fromEntries(listConversationSummaries(db).items.map((r) => [r.id, r.title]))
+    expect(titles['central:project:p1']).toBe('Billing API')
+    expect(titles['central:project:gone']).toBe('gone')
+  })
+
   it('paginates with limit/offset and rejects bad params', async () => {
     const { db, deps } = setup()
     for (let i = 1; i <= 5; i += 1) createChatConversation(db, 1_000 + i)
