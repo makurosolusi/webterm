@@ -11,6 +11,7 @@ import { randomId } from './randomId'
 import { spawnSpot } from './canvasMenu.geometry'
 import { paneSessionIds } from './paneTree'
 import { send } from './ws'
+import type { HandleSpawners } from './handleMenu.model'
 import { useBrowserAdd } from './useBrowserAdd'
 import { useAgentChatAdd } from './agentChat.add'
 import { useBrowserOpen } from './useBrowserOpen'
@@ -204,7 +205,18 @@ export function useBoardActions({
     scheduleSave()
   }, [scheduleSave])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId }), [onSession, onToggleHideLinks, openBrowserAt, activeId])
+  // Spawners for the canvas handle menu; same add-handlers as the pane menu, plus the user-cable entry.
+  const spawn = useMemo<HandleSpawners>(() => ({
+    addTerminal: onAddTerminal,
+    addFiles: onAddFiles,
+    addAgent: (cmd, id, at) => onAddAgent(cmd, id, undefined, at),
+    addBrowser: onAddBrowser,
+    addDiff: onAddDiff,
+    addAgentChat: onAddAgentChat,
+    link: onConnect,
+  }), [onAddTerminal, onAddFiles, onAddAgent, onAddBrowser, onAddDiff, onAddAgentChat, onConnect])
+
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn])
 
   return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, nodeActions }
 }
