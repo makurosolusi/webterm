@@ -25,8 +25,8 @@ const MAX_DIGEST = 64
 const MAX_TOOL = 64
 const GUARD_AUDIT_KIND = 'central.guard'
 const SPAWN_TOOLS: readonly string[] = ['agent.spawn']
-/** Agent states that no longer hold a worker slot (`approval_pending` has not started yet). */
-const SLOT_FREE_STATES = ['approval_pending', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
+/** Agent states that no longer hold a worker slot (`approval_pending` has not started yet; `candidate_done` is idle, it takes a slot again when it works). */
+const SLOT_FREE_STATES = ['approval_pending', 'candidate_done', 'closed', 'failed', 'timed_out', 'lease_expired', 'session_exited', 'cancelled', 'killed', 'orphaned']
 /** Central acts as this principal in the policy (PLAN S2). */
 const CENTRAL_PRINCIPAL = 'central'
 
@@ -84,6 +84,12 @@ function activeAgents(db: Database, projectId: string | null): number {
   const where = projectId ? ' AND project_id = ?' : ''
   const row = getRow(db, `SELECT count(*) AS c FROM central_agents WHERE ended_at IS NULL AND state NOT IN (${marks})${where}`, ...SLOT_FREE_STATES, ...(projectId ? [projectId] : []))
   return Number(row?.c ?? 0)
+}
+
+/** Cap code that refuses one more working agent in `projectId` (a finished agent being woken takes a slot again), else null. */
+export function slotRefusal(db: Database, projectId: string): 'cap_project' | 'cap_global' | null {
+  if (activeAgents(db, projectId) >= MAX_WORKERS_PER_PROJECT) return 'cap_project'
+  return activeAgents(db, null) >= MAX_WORKERS_GLOBAL ? 'cap_global' : null
 }
 
 /** Builds the guard; flag wiring and mounting belong to the integrator. */
