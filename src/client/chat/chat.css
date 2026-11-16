@@ -477,3 +477,36 @@
 .chat-tool-group__summary:focus-visible { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: 2px; }
 .chat-tool-group__failed { color: var(--vscode-errorForeground, #f48771); }
 .chat-tool-group__body { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+
+/* ---- unread + cross-conversation notice -------------------------------------------------- */
+.chat-list-item.is-unread .chat-list-item__label { font-weight: 600; }
+.chat-list-item__unread {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vscode-activityBarBadge-background, var(--vscode-badge-background, #007acc));
+}
+.chat-history-button { position: relative; }
+.chat-history-button__badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: var(--vscode-activityBarBadge-background, var(--vscode-badge-background, #007acc));
+  color: var(--vscode-activityBarBadge-foreground, var(--vscode-badge-foreground, #fff));
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+.chat-live:empty { display: none; }
+.chat-live__line { justify-content: space-between; gap: 8px; }
+.chat-live__line > button { flex: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .chat-list-item__unread { animation: chat-unread-pop 0.25s ease-out; }
+}
+@keyframes chat-unread-pop { from { transform: scale(0.4); } to { transform: scale(1); } }

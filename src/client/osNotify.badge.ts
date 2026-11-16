@@ -17,9 +17,25 @@ export function faviconSvg(count: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="1" y="3" width="28" height="26" rx="5" fill="#1e1e1e"/><path d="M7 12l5 4-5 4" stroke="#4fc1ff" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M14 21h8" stroke="#ccc" stroke-width="2.5" stroke-linecap="round"/>${badge}</svg>`
 }
 
-/** Show `count` unread on the tab title and icon; 0 restores the static `/favicon.svg`. */
+// One number on the tab: agent-session unread (`./unread`) plus unread Central conversations (`./chat/chatFeed`).
+let sessionCount = 0
+let chatCount = 0
+
+/** Agent-session unread on the tab title and icon; with no chat unread, 0 restores the static `/favicon.svg`. */
 export function setBadgeCount(count: number): void {
+  sessionCount = count
+  applyBadge()
+}
+
+/** Unread Central conversations, added to the session count in the same badge. */
+export function setChatBadgeCount(count: number): void {
+  chatCount = count
+  applyBadge()
+}
+
+function applyBadge(): void {
   if (typeof window === 'undefined') return // no tab to badge (node-env tests)
+  const count = sessionCount + chatCount
   document.title = count > 0 ? `(${count}) ${BASE_TITLE}` : BASE_TITLE
   // index.html ships the one icon link; it is created only on a page without one, so never a second link.
   let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
