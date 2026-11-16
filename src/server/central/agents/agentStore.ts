@@ -4,7 +4,7 @@ import { allRows, execWrite, getRow, type Row } from '../../ledger/ledgerCore'
 import type { AgentKind, AgentOwner, AgentRecord, AgentRole, AgentRunner, AgentState } from '../contracts'
 import { AGENT_TERMINAL_STATES } from '../contracts'
 import { createLogger } from '../../logs'
-import { AgentTransitionError, assertTransition, isTerminalState } from './agentStateMachine'
+import { AgentTransitionError, assertResumeFrom, assertTransition, isTerminalState } from './agentStateMachine'
 
 const log = createLogger('central.agents')
 
@@ -53,6 +53,8 @@ export interface AgentStore {
   countActive(projectId?: string): number
   /** Atomic compare-and-set move along a legal edge; throws `AgentTransitionError` otherwise. */
   transition(id: string, to: AgentState, patch?: TransitionPatch): AgentRecord
+  /** Typed resume path only: `orphaned|session_exited -> working` after its PTY was relaunched with `--resume`; any other source state throws `illegal_transition`. */
+  revive(id: string): AgentRecord
 }
 
 const endObservers = new WeakMap<Database, Set<(agent: AgentRecord) => void>>()
@@ -120,6 +122,14 @@ export function createAgentStore(db: Database, now: () => number): AgentStore {
       const moved = store.get(id) as AgentRecord
       if (ended) publishEnded(db, moved)
       return moved
+    },
+    revive(id) {
+      const cur = store.get(id)
+      if (!cur) throw new AgentTransitionError('agent_not_found', id, null, 'working')
+      assertResumeFrom(id, cur.state)
+      const changes = execWrite(db, "UPDATE central_agents SET state = 'working', last_event_at = ?, ended_at = NULL, end_reason = NULL WHERE id = ? AND state = ?", now(), id, cur.state)
+      if (changes !== 1) throw new AgentTransitionError('concurrent_update', id, cur.state, 'working')
+      return store.get(id) as AgentRecord
     },
   }
   return store
