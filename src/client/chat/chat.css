@@ -103,21 +103,6 @@
   flex-direction: column;
   overflow: hidden;
 }
-/* Status row: a fixed, opaque band above the thread. It never shrinks and only `.chat-thread`
-   scrolls, so no message line can render behind or under it. */
-.chat-conversation__head {
-  flex: none;
-  position: relative;
-  z-index: 1;
-  background: var(--vscode-sideBar-background, var(--vscode-panel-background, var(--bg, #1e1e1e)));
-  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.2)));
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 20px;
-  color: var(--vscode-descriptionForeground, var(--muted, #9d9d9d));
-  font-size: 12px;
-}
 .chat-status-dot {
   width: 6px;
   height: 6px;
@@ -138,7 +123,6 @@
   animation: chat-progress-spin 0.9s linear infinite;
 }
 @keyframes chat-progress-spin { to { transform: rotate(360deg); } }
-.chat-conversation__status { font-variant-numeric: tabular-nums; }
 
 .chat-error {
   display: flex;

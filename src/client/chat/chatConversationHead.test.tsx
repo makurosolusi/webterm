@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-// The Central chat layout: a status-only line above the thread (outside its scroll area), and the model
-// picker, context meter and permission mode inside the composer box's control row, not in a header.
+// The Central chat layout: no status header at all (the status is inline, see chatInlineStatus.test), and the
+// model picker, context meter and permission mode inside the composer box's control row.
 import { readFileSync } from 'node:fs'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -44,17 +44,14 @@ function mount(commands = true) {
 }
 
 describe('Central chat layout', () => {
-  it('renders the status line outside the scroll container, before it', async () => {
+  it('has no header: the turn status is not a band above the thread', async () => {
     const { container, client } = mount(false)
     await waitFor(() => expect(client.listMessages).toHaveBeenCalled())
-    const head = container.querySelector('.chat-conversation__head')!
-    const thread = container.querySelector('.chat-thread')!
-    expect(thread.contains(head)).toBe(false)
-    expect(head.contains(thread)).toBe(false)
-    expect(head.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('.chat-conversation__head')).toBeNull()
+    expect(container.querySelector('header')).toBeNull()
   })
 
-  it('puts model, context meter and mode inside the composer box; the header has only the status', async () => {
+  it('puts model, context meter and mode inside the composer box', async () => {
     const { container } = mount()
     const box = container.querySelector('.chat-composer__box') as HTMLElement
     const row = within(box).getByRole('toolbar', { name: 'Composer controls' })
@@ -62,17 +59,12 @@ describe('Central chat layout', () => {
     expect(await within(row).findByRole('button', { name: /^Context 51%/ })).toBeTruthy()
     expect(within(row).getByRole('button', { name: /^Permission mode/ })).toBeTruthy()
     expect(within(row).getByRole('button', { name: 'Send message' })).toBeTruthy()
-    const head = container.querySelector('.chat-conversation__head') as HTMLElement
-    expect(within(head).queryAllByRole('button')).toHaveLength(0) // no model, meter, mode or refresh up here
-    expect(head.textContent).toBe('Ready')
     expect(screen.queryByRole('button', { name: /refresh/i })).toBeNull()
   })
 
-  it('keeps the status line a fixed opaque band and only the thread scrolling', () => {
+  it('keeps only the thread scrolling', () => {
     const css = readFileSync('src/client/chat/chat.css', 'utf8')
-    const head = rule(css, '.chat-conversation__head')
-    expect(head).toMatch(/flex:\s*none/)
-    expect(head).toMatch(/background:\s*var\(/)
+    expect(css).not.toContain('.chat-conversation__head')
     expect(rule(css, '.chat-conversation')).toMatch(/overflow:\s*hidden/)
     const thread = rule(css, '.chat-thread')
     expect(thread).toMatch(/flex:\s*1/)
