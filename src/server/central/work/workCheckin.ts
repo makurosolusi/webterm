@@ -19,6 +19,7 @@ import { escalateDuties, escalateLeases } from './workEscalation'
 import { WORK_LIVENESS_RULES } from './workSupervisor'
 import type { WorkHold } from './workHold'
 import { groupByTarget, projectTarget } from './workCheckin.route'
+import { RECOVER_RULE } from './workRecover.model'
 
 /** Reasons this close together become one turn; the oldest waits this long before anything is sent, unless a reminder is due. */
 export const CHECKIN_WINDOW_MS = 5 * 60_000
@@ -241,6 +242,8 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
   return {
     onMove(move) {
       const { task } = move
+      // The recovery sweep's own status hop is not news: Central would only race the recovery it is part of.
+      if (move.rule === RECOVER_RULE) return false
       if (move.rule === DELEGATION_RULE && sendFailed(move)) {
         const reason = move.reason ? ` (${move.reason})` : ''
         enqueue(`duty:${move.seq}`, 'task_duty', task.projectId, task.id, `the prompt for ${taskLabel(task.title, task.projectId)} was not submitted${reason}; it is listed under Open duties`, now() + WORK_LIVENESS_RULES.escalate.graceMs, taskOrigin(task.id))

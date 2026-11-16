@@ -19,7 +19,9 @@ import { createHealthStore } from '../health/healthStore'
 import { onAgentEnded } from '../agents/agentStore'
 import { agentNodeId } from '../agents/agentExecutor'
 import { type ConnectivityView, createWorkHold, HOLD_EVENT } from './workHold'
-import { rateLimitResetAt } from './workRateLimit'
+import { processRateLimit, rateLimitResetAt } from './workRateLimit'
+import { createWorkRecover } from './workRecover'
+import { createRecoverPorts, type RecoverRuntime } from './workRecover.ports'
 import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
 import { setCheckinKick } from './workCheckin.kick'
 import { readAutoDone } from './workSettings'
@@ -44,6 +46,8 @@ export interface WorkTrackingDeps {
   check?: WorkVerifierDeps['check']
   /** Test seam: who is looking (default: the process-wide tracker). */
   presence?: PresenceTracker
+  /** The CA2 services the recovery sweep acts through; absent = no recovery (old behaviour). */
+  recover?: { runtime(): RecoverRuntime | null }
 }
 
 function productionPorts(db: Database, sessions: WorkerSessionPort): WorkSupervisorPorts {
@@ -94,7 +98,7 @@ const lateConnectivity: ConnectivityView = {
 }
 
 /** One per process: the verifier outlives a pause, so a bounce can tell a running verification from an orphaned one. */
-export function createWorkTracking({ db, sessions, now, noTimer, check, presence }: WorkTrackingDeps): { start(): () => void } {
+export function createWorkTracking({ db, sessions, now, noTimer, check, presence, recover: recoverWiring }: WorkTrackingDeps): { start(): () => void } {
   const store = createWorkStore(db, now)
   const autoDone = (projectId: string): boolean => readAutoDone(db, projectId) === true
   const verifier = createWorkVerifier({ store, now, cwdOf: (projectId) => projectRepo(db, projectId), autoDone, ...(check ? { check } : {}) })
@@ -131,7 +135,15 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
   const cwdOf = (projectId: string): string | null => projectRepo(db, projectId)
   onWorkMove(db, createHealthReview({ db, store: createHealthStore(db, now), now, cwdOf }).onMove)
   const health = healthServiceFor(db, now)
+  const base = productionPorts(db, sessions)
+  // Back-online sweep: acts only once the detector exists (it starts after this wiring, so every tick looks again) and never while impaired.
+  const recover = recoverWiring ? createWorkRecover({
+    db, store, now, ports: createRecoverPorts({ db, now, base, sessions, runtime: recoverWiring.runtime }),
+    connectivity: () => activeConnectivity(), rateLimit: processRateLimit,
+    announce: (key, text) => { automaticAction({ db, now }, { name: 'connection_recovery', text, noticeKey: key, actor: 'system:work.recover' }) },
+  }) : null
   const afterTick = async (at: number): Promise<void> => {
+    recover?.attach()
     // Beside the check-in pass, not before it: a scan takes seconds and must not hold the liveness tick; it never throws.
     void health.autoScanDue(at)
     try {
@@ -142,12 +154,13 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     await checkin.tick(at)
   }
   const supervisor = createWorkSupervisor({
-    store, ports: productionPorts(db, sessions), now, hold, afterTick,
+    store, ports: base, now, hold, afterTick,
     announce: ({ name, text, key, task, nodeId }) => { automaticAction({ db, now }, { name, text, noticeKey: key, actor: 'system:work', subject: `task:${task.id}`, projectId: task.projectId, nodeId }) },
   })
   return {
     start() {
       verifier.recoverInterrupted()
+      recover?.attach()
       const unwatch = startWorkWatcher({ store, now, onReported: verifier.run, onSessionEnded: supervisor.sessionEnded })
       // An agent that exited, failed to spawn or was cancelled settles its task now (failed + wake), not on the next tick.
       const unAgents = onAgentEnded(db, (agent) => {
@@ -159,7 +172,7 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
         // A held permission prompt waits on Central: its reason runs the pass now, not on the next tick.
         setCheckinKick(() => { checkin.tick().catch((err: unknown) => log.error('work.checkin_failed', 'immediate check-in for a permission prompt failed', { error: err instanceof Error ? err.message : String(err) })) })
       }
-      return () => { unwatch(); unAgents(); supervisor.stop(); setCheckinKick(null) }
+      return () => { unwatch(); unAgents(); supervisor.stop(); recover?.stop(); setCheckinKick(null) }
     },
   }
 }

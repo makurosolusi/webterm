@@ -1,5 +1,8 @@
 // The API's "limit resets at" instant, remembered so nobody is punished for waiting it out. Memory only: a restart
 // forgets it and the first rejected turn after it records it again.
+import { createLogger } from '../../logs'
+
+const log = createLogger('central.work')
 
 /** `resetsAt` below this is epoch seconds (the CLI passes the API's header through; sdk.d.ts types it only as `number`, the chat mapper and its tests use seconds). */
 const EPOCH_MS_MIN = 1e12
@@ -15,16 +18,25 @@ export interface RateLimitHold {
   note(info: { status: string; resetsAt?: number }): void
   /** The reset instant while it is still ahead of `now`, else null. */
   resetAt(now: number): number | null
+  /** Calls `fn` with the reset instant (epoch ms) each time a rejection records one; returns the unsubscribe. A throw is isolated. */
+  onSet(fn: (resetAt: number) => void): () => void
 }
 
 /** One hold per process; tests build their own. */
 export function createRateLimitHold(): RateLimitHold {
   let until: number | null = null
+  const listeners = new Set<(resetAt: number) => void>()
   return {
     note({ status, resetsAt }) {
-      if (status === 'rejected' && typeof resetsAt === 'number' && Number.isFinite(resetsAt)) until = normalizeResetsAt(resetsAt)
+      if (status !== 'rejected' || typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) return
+      until = normalizeResetsAt(resetsAt)
+      // A listener must not break the chat runtime that reported the limit: a failing one is skipped, the rest still hear it.
+      for (const fn of [...listeners]) {
+        try { fn(until) } catch (err) { log.warn('work.rate_limit_listener_failed', 'rate-limit listener failed', { error: err instanceof Error ? err.message : String(err) }) }
+      }
     },
     resetAt: (now) => (until !== null && until > now ? until : null),
+    onSet: (fn) => { listeners.add(fn); return () => { listeners.delete(fn) } },
   }
 }
 

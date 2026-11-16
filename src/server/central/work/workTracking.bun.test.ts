@@ -95,3 +95,12 @@ test('a PTY agent that finishes its turn reaches reported, then needs_review, an
   expect(s.statusOf(taskId)).toBe('needs_review')
   expect(agents.get('ag-1')?.state).toBe('candidate_done')
 })
+
+test('recovery wiring is inert without a detector: start and stop change nothing', () => {
+  const r = rig()
+  const tracking = createWorkTracking({ db: r.db, sessions, now: r.now, noTimer: true, recover: { runtime: () => null } })
+  const { taskId } = r.assigned('running')
+  tracking.start()()
+  expect(r.statusOf(taskId)).toBe('running')
+  expect(r.db.query("SELECT COUNT(*) AS n FROM event WHERE kind LIKE 'work.recover%' OR kind = 'connectivity.recovery'").get()).toEqual({ n: 0 })
+})
