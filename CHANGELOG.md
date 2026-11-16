@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 Operator notes:
+- Ledger schema v38 adds a nullable `tier` column to `cost_usage` and fills it for existing worker rows from their agent; it is idempotent, runs by itself at start and needs nothing by hand.
 - Ledger schema v35 to v37 add a nullable `conversation_id` column to check-in reasons, a `lease_until` column to assignments and the `connectivity_episode` table; each step is idempotent, runs by itself at start and needs nothing by hand.
 - Agent sessions (terminal, headless and Agent Chat) are started with `CLAUDE_CODE_RETRY_WATCHDOG=1` so the Claude CLI keeps retrying through an outage; a value you set yourself, `0` included, is kept. No new setting or environment variable is required.
 - BREAKING: protocol names were renamed from `nodeterm` to `webterm`: agent session env `WEBTERM_NODE_ID`, `WEBTERM_PORT`, `WEBTERM_NODE_TOKEN`, header `x-webterm-node-token`, and `webterm:*` sentinels/events (e.g. `webterm:too-large:`). The server only emits the new names but still accepts the old ones until 0.10.0 (marked `legacy:` in the code). Sessions already running keep their old env until they end, so nothing needs restarting. The data dir is unchanged (`WEBTERM_DATA_DIR`, default `~/.webterm-server`); nothing is migrated from `~/.nodeterm*`. Update any custom script or hook that sets or reads the old names.
@@ -35,6 +36,10 @@ Operator notes:
 - Default-on switches are written into the server's environment at start while nothing sets them (as `WEBTERM_CENTRAL=on` and so on), so readers and Settings agree; a value in `.env`, the shell or Settings still wins. Existing projects keep their auto-done value; only new projects start with it on.
 
 ### Added
+- Task cards and the task detail show the owner, the next step, the lease time and a one-line summary of the worker's result, and read "Paused" instead of an overdue lease while Claude is unreachable.
+- `GET /api/cost/by-tier` returns spend by source, model-ladder tier and model (default window 7 days); worker cost rows now record the tier they ran on.
+- The connection status item at the top of the window can be reached and pressed from the keyboard.
+- A routine run that is waiting for a retry now reads "Retrying after a connection problem" instead of Failed.
 - Worker results are captured by the server when the agent stops: the last answer is saved on the task (secrets redacted, capped at 8 KiB) and Central's wake-up carries a short, clearly marked excerpt, so Central no longer has to read the terminal to learn what a worker did. When nothing could be captured the task says why.
 - Every open task has one owner and a renewable lease, and the same escalation ladder (wake Central, then a notice) now covers reported, verifying and needs-review tasks, not only those Central opened itself.
 - Central chat shows where replies land: each conversation has its own unread count, the tab and Dock badges add them up, a notice reads "Central replied in <conversation>" (plus an OS banner when the window is not focused), and project chats are titled with the project name.
@@ -204,6 +209,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Terminal colour schemes were rebuilt from openly licensed palettes. A few colours (notably the Solarized bright colours) now differ slightly; theme ids and your saved choice are unchanged.
 - Central's terminal workers follow the model ladder like its headless ones (Sonnet at medium effort by default) instead of the model your own Claude CLI defaults to, and `agent.spawn` takes `complexity` (simple, moderate or complex) to pick the tier. Central changes a worker's model only when you ask for it.
 - Agent Chat and Central chat show the turn status (Thinking, Responding, Running a tool, Waiting for approval, Reconnecting) inline at the end of the conversation instead of in the header; errors sit above the message box with Retry or Dismiss, and a "Jump to latest" pill keeps your place while a reply streams.
 - Claude failures are told apart (network, rate limit, overload, server, auth). A rate limit waits for the reset time Claude reports, and billing, spend-cap and auth failures are never retried.
@@ -360,6 +366,9 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- A hook whose body is larger than 256 KiB no longer loses the task's status; the reply is flagged with the `x-webterm-truncated: 1` header.
+- The "went quiet" notice no longer fires for the recovery sweep's own internal step.
+- The "Central · just now" chip is now placed correctly on nodes inside a group.
 - Central's reply now comes back to the conversation you asked in. Playbook results, agent progress reports and permission check-ins used to land in another project's chat, where they were hidden; a check-in that failed on the network is queued again.
 - `webterm report --done` now stores its text as the task's result, and Central's `run.result` takes the board task id (as shown by `task.list`) and returns the worker's captured result.
 - A tab shows the node's custom title when you set one.
