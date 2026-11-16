@@ -181,7 +181,7 @@ export async function runPlaybook(ctx: ToolCtx, pb: Playbook, input: ToolInput, 
 function queueResumed(ctx: ToolCtx, pb: Playbook, run: Run, r: ToolResult): void {
   const what = r.ok ? startedNote(pb, run) : `${pb.label} stopped after the approval at ${receiptOf(pb, run).step} (${r.code ?? 'error'}${typeof r.data?.message === 'string' ? `: ${r.data.message}` : ''})`
   queueCheckinReason(ctx.db, {
-    kind: 'playbook_result', dedupeKey: `playbook:${run.id}:${run.status}`, projectId: run.projectId, taskId: receiptOf(pb, run).taskId,
+    kind: 'playbook_result', dedupeKey: `playbook:${run.id}:${run.status}`, projectId: run.projectId, taskId: receiptOf(pb, run).taskId, conversationId: run.conversationId,
     text: `${what}; subject: ${subjectOf(pb, run)}`, now: ctx.now(), ...(r.ok ? {} : { notBefore: ctx.now() }),
   })
 }

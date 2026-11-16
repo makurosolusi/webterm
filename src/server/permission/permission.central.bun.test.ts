@@ -15,6 +15,8 @@ import { CENTRAL_ACTOR, NOTICE_PER_HOUR, centralHoldReason, decideByCentral } fr
 import { decidePermission, listPendingPermissions } from './permission.human'
 import { PERMISSION_KIND, VIA_CENTRAL } from './permission.model'
 import { centralRoute } from './permission.runtime'
+import { getOrCreateConversation } from '../central/conversationStore'
+import { createWorkStore } from '../central/work/workStore'
 import { setCheckinKick } from '../central/work/workCheckin.kick'
 import { answerPermission, type CentralRoute, type PermissionWaitDeps } from './permission.wait'
 
@@ -193,6 +195,23 @@ test('transparency is bounded: every decision is a record, only NOTICE_PER_HOUR 
   expect(notices <= NOTICE_PER_HOUR).toBe(true)
   expect(notices).toBeGreaterThan(0)
   expect(approvalDigest({})).toBeTruthy()
+})
+
+test('wiring: a worker with an open assignment wakes Central in the chat that asked for its work; an unassigned one routes by project', () => {
+  const s = setup()
+  const origin = getOrCreateConversation(s.db, `chat:${crypto.randomUUID()}`).id
+  const work = createWorkStore(s.db, s.now)
+  work.createTask({ id: 'tk1', projectId: 'p1', title: 't', objective: 'o', actor: { kind: 'central' } })
+  work.openAssignment({ taskId: 'tk1', nodeId: 'n-assigned', channel: 'terminal', instruction: 'go', actor: { kind: 'central' }, conversationId: origin })
+  const route = centralRoute(s.db, s.policy, true)
+  setCheckinKick(() => {})
+  try {
+    for (const [id, nodeId] of [['perm_a', 'n-assigned'], ['perm_b', 'n-free']] as const) {
+      requestApproval({ db: s.db, now: s.now }, { id, projectId: 'p1', kind: PERMISSION_KIND, request: { nodeId } })
+      route.wake({ approvalId: id, projectId: 'p1', node: 'brisk-otter', label: 'Bash(ls)' })
+    }
+  } finally { setCheckinKick(null) }
+  expect(rows(s.db, "SELECT dedupe_key, conversation_id FROM central_checkin_reason ORDER BY dedupe_key")).toEqual([{ dedupe_key: 'perm:perm_a', conversation_id: origin }, { dedupe_key: 'perm:perm_b', conversation_id: null }])
 })
 
 test('wiring: waking Central queues one durable check-in reason and kicks the pass; no engine = an error (so the card goes to the human)', () => {

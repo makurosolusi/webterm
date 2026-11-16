@@ -3,6 +3,7 @@
 import { syncWorkspaceProjects } from '../central/workspaceLookup'
 import { recordEvent } from '../events/producers'
 import { PERM_WAIT_SECS_INTERACTIVE } from '../hooksSettings'
+import { getApproval } from '../ledger/ledgerApproval'
 import { getRow } from '../ledger/ledgerCore'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import { activePolicy } from '../policy/policy.runtime'
@@ -12,6 +13,7 @@ import { isEnabled } from '../featureCapabilities.runtime'
 import { effectiveLevelOf, levelRank } from '../central/guard/levelStore'
 import type { Policy } from '../policy/policy.decide'
 import { queueCheckinReason } from '../central/work/workCheckin'
+import { createWorkStore } from '../central/work/workStore'
 import { kickCheckin } from '../central/work/workCheckin.kick'
 import type { Database } from 'bun:sqlite'
 import type { PermissionRouting } from '../../shared/settings.permissionRouting'
@@ -33,8 +35,11 @@ export function centralRoute(db: Database, policy: Pick<Policy, 'store'>, checki
     },
     wake({ approvalId, projectId, node, label }) {
       const now = Date.now()
+      // The worker's open assignment knows which chat asked for its work; no assignment (a hand-started session) = route by project.
+      const nodeId = (getApproval({ db, now: () => now }, approvalId)?.request as { nodeId?: string } | undefined)?.nodeId
+      const origin = nodeId ? createWorkStore(db, () => now).openAssignmentOfNode(nodeId)?.conversationId ?? null : null
       queueCheckinReason(db, {
-        kind: 'permission_request', dedupeKey: `perm:${approvalId}`, projectId, taskId: null, now, notBefore: now,
+        kind: 'permission_request', dedupeKey: `perm:${approvalId}`, projectId, taskId: null, now, notBefore: now, conversationId: origin,
         text: `worker ${node} waits for a permission decision (approval ${approvalId}) to run ${label}; decide with permission.decide, or escalate when unsure`,
       })
       if (!kickCheckin()) throw new Error('the check-in engine is not running')

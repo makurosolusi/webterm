@@ -15,6 +15,7 @@ import { allRows } from '../../ledger/ledgerCore'
 import type { LedgerRuntime } from '../../ledger/ledgerRuntime'
 import { resetActiveLedgerRuntimeForTest, setActiveLedgerRuntime } from '../../ledger/ledgerRuntimeState'
 import { resetActivePolicyForTest } from '../../policy/policy.runtime'
+import { getOrCreateConversation } from '../conversationStore'
 import { createAgentStore } from '../agents/agentStore'
 import { createMailStore, MAIL_TTL_MS } from '../agents/mailStore'
 import { openWork } from '../context/contextHeaderWork'
@@ -88,6 +89,16 @@ test('done, blocked and question each move the task and wake Central with their 
   expect(s.wakes()).toEqual([])
   // Recorded and shown in the State header's open work instead.
   expect(openWork(s.db, s.now()).projects[0]?.open[0]?.report).toBe('progress: half way')
+})
+
+test('the progress wake carries the conversation the agent was started from, not the project chat', async () => {
+  const s = setup()
+  const origin = getOrCreateConversation(s.db, `chat:${crypto.randomUUID()}`).id // a chat that is neither global nor the project chat
+  s.db.query('UPDATE central_agents SET owner = ? WHERE id = ?').run(`central:${origin}`, AGENT)
+  s.assigned('running', { channel: 'spawn', agentId: AGENT, nodeId: NODE })
+  createMailStore(s.db, s.now).send(`central:${origin}`, { projectId: 'p1', threadId: '', toRef: `agent:${AGENT}`, kind: 'ask', body: 'how far?', reqId: 'ask2' })
+  await report(s.deps, { kind: 'progress', text: 'tests left' })
+  expect(allRows(s.db, "SELECT conversation_id FROM central_checkin_reason WHERE kind = 'task_report'")).toEqual([{ conversation_id: origin }])
 })
 
 test('progress wakes Central once when it asked (an open ask from Central), and answers that ask', async () => {
