@@ -1,35 +1,37 @@
-// Transcript reading + claude JSONL parsing for the read-only context-link backend.
-// Split out of `contextLink.ts` to keep each module under the file-health budget.
+// Reads a Claude Code session transcript (~/.claude/projects/<project>/<session-id>.jsonl) and
+// flattens it to display lines for the read-only context-link backend.
+// Entry shape used here: one JSON object per line, `{ type: 'user' | 'assistant', message: { content } }`
+// where `content` is a plain string or an array of blocks (`text`, `tool_use`, `tool_result`).
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs'
 import { transcriptPathAllowed } from './transcriptPath'
 
-const TOOL_ARG_MAX = 200
-const TOOL_RESULT_MAX = 500
-/** Transcript bisa tumbuh tanpa batas; context-link hanya perlu ekor percakapan terbaru. */
-const TRANSCRIPT_READ_MAX = 4 * 1024 * 1024
+const TOOL_INPUT_PREVIEW_CHARS = 200
+const TOOL_OUTPUT_PREVIEW_CHARS = 500
+const TOOL_OUTPUT_PREVIEW_LINES = 3
+/** A transcript grows without bound; a reader only needs the newest tail of the conversation. */
+const TAIL_BYTES = 4 * 1024 * 1024
 
 /**
- * Baca transcript dengan pertahanan terhadap swap symlink: path divalidasi saat hook menulis,
- * tapi file itu dimiliki agent yang sama dan bisa diganti sebelum kita membacanya. Karena itu
- * `lstat` menolak symlink/FIFO/device, `realpath` memastikan target masih di dalam root yang
- * diizinkan, dan `O_NOFOLLOW` menutup celah antara dua syscall itu. Ukuran dibatasi supaya
- * `/dev/zero` atau file raksasa tidak memblokir event loop.
+ * Return the last `TAIL_BYTES` of a transcript as text, or null when it must not be read.
+ * The file is agent-owned and can be swapped after its path was validated, so: lstat rejects
+ * symlinks/FIFOs/devices, realpath must stay inside the allowed roots, and O_NOFOLLOW closes the
+ * gap between those two syscalls. The size cap keeps a huge file from stalling the event loop.
  */
 export function readTranscriptFile(path: string): string | null {
   try {
     if (!lstatSync(path).isFile()) return null
-    const real = realpathSync(path)
-    if (!transcriptPathAllowed(real)) return null
-    const fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW)
+    const resolved = realpathSync(path)
+    if (!transcriptPathAllowed(resolved)) return null
+    const fd = openSync(resolved, constants.O_RDONLY | constants.O_NOFOLLOW)
     try {
-      const stat = fstatSync(fd)
-      if (!stat.isFile()) return null
-      const start = Math.max(0, stat.size - TRANSCRIPT_READ_MAX)
-      const length = stat.size - start
-      if (length <= 0) return ''
-      const buf = Buffer.alloc(length)
-      readSync(fd, buf, 0, length, start)
-      return buf.toString('utf8')
+      const st = fstatSync(fd)
+      if (!st.isFile()) return null
+      const offset = Math.max(0, st.size - TAIL_BYTES)
+      const want = st.size - offset
+      if (want <= 0) return ''
+      const chunk = Buffer.alloc(want)
+      readSync(fd, chunk, 0, want, offset)
+      return chunk.toString('utf8')
     } finally {
       closeSync(fd)
     }
@@ -38,66 +40,73 @@ export function readTranscriptFile(path: string): string | null {
   }
 }
 
-// --- claude transcript parser  ---
+type Block = { type?: string; text?: string; name?: string; input?: unknown; content?: unknown }
 
-function parseJson(raw: string): unknown {
+/** Safe JSON.parse for one line; a truncated or corrupt line yields undefined. */
+function tryParse(line: string): unknown {
   try {
-    return JSON.parse(raw)
+    return JSON.parse(line)
   } catch {
     return undefined
   }
 }
 
-/** Claude tool_result content: a string, or content parts carrying `.text`. */
-function textOf(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) {
-    return content
-      .map((c) => {
-        const part = c as { type?: string; text?: string }
-        return part && part.type === 'text' ? part.text ?? '' : ''
-      })
-      .filter(Boolean)
-      .join('\n')
+/** A tool_result payload is either a string or an array of parts; join the text parts. */
+function flattenResult(payload: unknown): string {
+  if (typeof payload === 'string') return payload
+  if (!Array.isArray(payload)) return ''
+  const texts: string[] = []
+  for (const part of payload as Block[]) {
+    if (part?.type === 'text' && part.text) texts.push(part.text)
+  }
+  return texts.join('\n')
+}
+
+/** The most telling single argument of a tool call, as a short ` <arg>` suffix ('' when none). */
+function describeToolInput(input: unknown): string {
+  if (!input || typeof input !== 'object') return ''
+  const o = input as Record<string, unknown>
+  for (const key of ['command', 'file_path', 'path', 'pattern', 'description', 'prompt']) {
+    const v = o[key]
+    if (v !== undefined && v !== null) {
+      return typeof v === 'string' ? ` ${v.slice(0, TOOL_INPUT_PREVIEW_CHARS)}` : ''
+    }
   }
   return ''
 }
 
-function toolArg(input: unknown): string {
-  const i = input as Record<string, unknown> | undefined
-  if (!i) return ''
-  const a = i.command ?? i.file_path ?? i.path ?? i.pattern ?? i.description ?? i.prompt
-  return typeof a === 'string' ? ` ${a.slice(0, TOOL_ARG_MAX)}` : ''
-}
-
-/** One claude transcript JSONL line -> 0..n display strings. */
+/** One transcript JSONL line -> zero or more display strings. */
 export function linesFromClaude(raw: string): string[] {
-  const o = parseJson(raw) as { type?: string; message?: { content?: unknown } } | undefined
-  if (!o) return []
-  const content = o.message?.content
-  const res: string[] = []
-  if (o.type === 'assistant' && Array.isArray(content)) {
-    for (const c of content as { type?: string; text?: string; name?: string; input?: unknown }[]) {
-      if (c.type === 'text' && c.text) res.push(`assistant: ${c.text}`)
-      else if (c.type === 'tool_use') res.push(`  $ ${c.name || 'tool'}${toolArg(c.input)}`)
-    }
-  } else if (o.type === 'user' && Array.isArray(content)) {
-    for (const c of content as { type?: string; text?: string; content?: unknown }[]) {
-      if (c.type === 'text' && c.text) res.push(`user: ${c.text}`)
-      else if (c.type === 'tool_result') {
-        const s = textOf(c.content).split('\n').slice(0, 3).join(' ').slice(0, TOOL_RESULT_MAX)
-        if (s) res.push(`  = ${s}`)
+  const entry = tryParse(raw) as { type?: string; message?: { content?: unknown } } | undefined
+  if (!entry) return []
+  const content = entry.message?.content
+  if (entry.type === 'user' && typeof content === 'string') return [`user: ${content}`]
+  if (!Array.isArray(content)) return []
+
+  const out: string[] = []
+  for (const block of content as Block[]) {
+    if (entry.type === 'assistant') {
+      if (block.type === 'text' && block.text) out.push(`assistant: ${block.text}`)
+      else if (block.type === 'tool_use') out.push(`  $ ${block.name || 'tool'}${describeToolInput(block.input)}`)
+    } else if (entry.type === 'user') {
+      if (block.type === 'text' && block.text) out.push(`user: ${block.text}`)
+      else if (block.type === 'tool_result') {
+        const preview = flattenResult(block.content)
+          .split('\n')
+          .slice(0, TOOL_OUTPUT_PREVIEW_LINES)
+          .join(' ')
+          .slice(0, TOOL_OUTPUT_PREVIEW_CHARS)
+        if (preview) out.push(`  = ${preview}`)
       }
     }
-  } else if (o.type === 'user' && typeof content === 'string') {
-    res.push(`user: ${content}`)
   }
-  return res
+  return out
 }
 
-// webterm transcripts are claude jsonl only — no per-agent dispatch needed.
+/** A whole transcript buffer -> display lines (blank and unparseable lines contribute nothing). */
 export function renderTranscriptLines(buf: string): string[] {
-  const lines: string[] = []
-  for (const raw of buf.split('\n')) if (raw.trim()) lines.push(...linesFromClaude(raw))
-  return lines
+  return buf
+    .split('\n')
+    .filter((l) => l.trim())
+    .flatMap(linesFromClaude)
 }
