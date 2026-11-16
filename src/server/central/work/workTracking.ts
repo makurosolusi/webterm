@@ -11,11 +11,15 @@ import { resolveChatService } from '../../centralChatHandlers'
 import { appendCentralNotice } from '../chat/conversationNotice'
 import { centralRuntimeKind } from '../runtime/runtimeFlag'
 import { createLogger } from '../../logs'
+import { activeConnectivity } from '../../connectivity/connectivity.runtime'
+import { appendEvent } from '../../ledger/ledgerEvent'
 import { createHealthReview } from '../health/healthReview'
 import { healthServiceFor } from '../health/healthService'
 import { createHealthStore } from '../health/healthStore'
 import { onAgentEnded } from '../agents/agentStore'
 import { agentNodeId } from '../agents/agentExecutor'
+import { type ConnectivityView, createWorkHold, HOLD_EVENT } from './workHold'
+import { rateLimitResetAt } from './workRateLimit'
 import { createWorkCheckin, productionCheckinSettings, type CheckinTurn } from './workCheckin'
 import { setCheckinKick } from './workCheckin.kick'
 import { readAutoDone } from './workSettings'
@@ -83,6 +87,12 @@ export function announceAutoDoneMove(db: Database, move: WorkMove, now: () => nu
   })
 }
 
+/** The detector may start after this wiring, so it is looked up on every use; no ledger = no detector = never impaired. */
+const lateConnectivity: ConnectivityView = {
+  isImpaired: () => activeConnectivity()?.isImpaired() === true,
+  state: () => (activeConnectivity() as NonNullable<ReturnType<typeof activeConnectivity>>).state(),
+}
+
 /** One per process: the verifier outlives a pause, so a bounce can tell a running verification from an orphaned one. */
 export function createWorkTracking({ db, sessions, now, noTimer, check, presence }: WorkTrackingDeps): { start(): () => void } {
   const store = createWorkStore(db, now)
@@ -99,8 +109,13 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     if (move.to === 'reported' && (move.rule === AGENT_REPORT_RULE || move.rule === EXEC_EXIT_RULE)) queueMicrotask(() => { void verifier.run(move.task.id) })
   })
   registerWorkMemory(db, now)
+  // One gate for the supervisor and the check-in pass: no penalty and no Central turn while the API is unreachable or rate-limited.
+  const hold = createWorkHold({
+    store, rateLimitResetAt, connectivity: lateConnectivity,
+    onHold: ({ episodeStart, reason }) => { appendEvent({ db, now }, { kind: HOLD_EVENT, actor: 'system:work', payload: { episodeStart, reason } }) },
+  })
   const checkin = createWorkCheckin({
-    db, store, now, settings: productionCheckinSettings, submit: startCheckinTurn(db),
+    db, store, now, hold, settings: productionCheckinSettings, submit: startCheckinTurn(db),
     notice: (key, text, conversationId) => appendCentralNotice(db, { key, text, conversationId, now }),
   })
   // A reason due now (delegated work reported, failed, needs input) runs the check-in pass at once instead of on the next 30 s tick
@@ -127,7 +142,7 @@ export function createWorkTracking({ db, sessions, now, noTimer, check, presence
     await checkin.tick(at)
   }
   const supervisor = createWorkSupervisor({
-    store, ports: productionPorts(db, sessions), now, afterTick,
+    store, ports: productionPorts(db, sessions), now, hold, afterTick,
     announce: ({ name, text, key, task, nodeId }) => { automaticAction({ db, now }, { name, text, noticeKey: key, actor: 'system:work', subject: `task:${task.id}`, projectId: task.projectId, nodeId }) },
   })
   return {

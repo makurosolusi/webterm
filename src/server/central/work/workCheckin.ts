@@ -17,6 +17,7 @@ import { dueReminders, markReminderFired } from './workReminders'
 import { isDuty } from './workDuties'
 import { escalateDuties, escalateLeases } from './workEscalation'
 import { WORK_LIVENESS_RULES } from './workSupervisor'
+import type { WorkHold } from './workHold'
 import { groupByTarget, projectTarget } from './workCheckin.route'
 
 /** Reasons this close together become one turn; the oldest waits this long before anything is sent, unless a reminder is due. */
@@ -81,6 +82,8 @@ export interface WorkCheckinDeps {
   /** Idempotent by `key`; returns whether the notice was new. */
   notice(key: string, text: string, conversationId: string): boolean
   env?: Record<string, string | undefined>
+  /** While it holds, no turn is sent (Central cannot think) and no rung is climbed; reasons stay queued. Absent = never. */
+  hold?: WorkHold
 }
 
 export interface WorkCheckin {
@@ -116,7 +119,7 @@ export function checkinPrompt(reasons: readonly { kind: string; projectId: strin
 }
 
 /** Builds the engine; wired once per process by workTracking. */
-export function createWorkCheckin({ db, store, now, settings, submit, notice, env }: WorkCheckinDeps): WorkCheckin {
+export function createWorkCheckin({ db, store, now, settings, submit, notice, env, hold }: WorkCheckinDeps): WorkCheckin {
   const ctx = { db, now }
 
   const enqueue = (dedupeKey: string, kind: ReasonKind, projectId: string | null, taskId: string | null, text: string, notBefore?: number, conversationId: string | null = null): boolean =>
@@ -264,9 +267,13 @@ export function createWorkCheckin({ db, store, now, settings, submit, notice, en
         enqueueLease: (key: string, t: { projectId: string; taskId: string }, text: string) => enqueue(key, 'task_report', t.projectId, t.taskId, text, undefined, taskOrigin(t.taskId)),
         notice: (key: string, text: string, projectId: string) => notice(key, text, projectTarget(db, projectId)),
       }
-      escalateDuties(ladder, at)
-      escalateLeases(ladder, at)
-      if (enabled) await deliver(at, dailyLimit)
+      // Impaired or rate-limited: reasons stay `sent_at IS NULL` and the ladder waits; the first pass after the grace sends and climbs.
+      const verdict = hold?.check(at) ?? { held: false, penalize: true }
+      if (verdict.penalize) {
+        escalateDuties(ladder, at)
+        escalateLeases(ladder, at)
+      }
+      if (enabled && !verdict.held) await deliver(at, dailyLimit)
     },
   }
 }

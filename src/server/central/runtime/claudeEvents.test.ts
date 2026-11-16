@@ -57,6 +57,12 @@ describe('parseClaudeMessage', () => {
     expect(parse({ type: 'system', subtype: 'api_retry' })).toEqual({ type: 'retry' })
   })
 
+  it('maps rate_limit_event to a rateLimit event and drops frames without a status', () => {
+    expect(parse({ type: 'rate_limit_event', rate_limit_info: { status: 'rejected', resetsAt: 1_800_000_000 } })).toEqual({ type: 'rateLimit', status: 'rejected', resetsAt: 1_800_000_000 })
+    expect(parse({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed' } })).toEqual({ type: 'rateLimit', status: 'allowed' })
+    expect(parse({ type: 'rate_limit_event' })).toBeNull()
+  })
+
   it('returns null for non-objects and unknown types', () => {
     for (const message of ['text', 42, null, [], { type: 'mystery' }, { type: 'rate_limit_event' }]) {
       expect(parse(message)).toBeNull()

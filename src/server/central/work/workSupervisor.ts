@@ -5,6 +5,7 @@ import { createLogger } from '../../logs'
 import { AGENT_TERMINAL_STATES, type AgentState } from '../contracts'
 import { finishTask } from './workLifecycle'
 import type { WorkActor, WorkStore } from './workModel'
+import type { HoldVerdict, WorkHold } from './workHold'
 import { BOOT_GRACE_MS, LEASE_MS, leaseWindowOf } from './workOwner'
 
 const log = createLogger('central.work')
@@ -57,6 +58,8 @@ export interface WorkSupervisorDeps {
   store: WorkStore
   ports: WorkSupervisorPorts
   now(): number
+  /** Pauses every penalty while the connection is impaired or a rate limit is pending (workHold.ts); absent = never. */
+  hold?: WorkHold
   /** Runs at the end of every tick; the check-in engine lives on this one timer. */
   afterTick?(at: number): Promise<void>
   /** Tells the user about a nudge or respawn it sent (automaticAction); `key` is unique per action. */
@@ -75,7 +78,7 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 const terminalAgent = (state: AgentState): boolean => (AGENT_TERMINAL_STATES as readonly AgentState[]).includes(state)
 
 /** Applies the liveness rules to open assignments; deterministic, no model is called. */
-export function createWorkSupervisor({ store, ports, now, afterTick, announce }: WorkSupervisorDeps): WorkSupervisor {
+export function createWorkSupervisor({ store, ports, now, hold, afterTick, announce }: WorkSupervisorDeps): WorkSupervisor {
   let timer: ReturnType<typeof setInterval> | null = null
   let ticking = false
   let held = false
@@ -135,11 +138,13 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
     announce?.({ name: 'work_nudge', key: `auto:work_nudge:${a.id}:${at}`, task, nodeId: a.nodeId, text: `Nudged the agent on "${titleOf(task)}" automatically: it had been quiet for ${minutes} minutes.` })
   }
 
-  const evaluate = async (a: AssignmentView, at: number): Promise<void> => {
+  const evaluate = async (a: AssignmentView, at: number, verdict: HoldVerdict): Promise<void> => {
     const task = store.getTask(a.taskId)
     if (!task) return
     if (a.channel === 'spawn' && agentOf(a)?.state === 'approval_pending') return
-    if (SESSION_GONE_STATUSES.includes(task.status) && sessionGone(a)) return vanish(a, task, 'session gone', at)
+    // A dead process stays a fault under a hold; only the chat respawn waits, because it needs the API and would burn its restart.
+    if (SESSION_GONE_STATUSES.includes(task.status) && sessionGone(a)) return verdict.held && a.channel === 'chat' ? undefined : vanish(a, task, 'session gone', at)
+    if (!verdict.penalize) return
     if (a.channel === 'chat' && ports.chatBusy(a.nodeId)) return
     const { startup, heartbeat, stalled } = WORK_LIVENESS_RULES
     // The stored lease is the one clock (renewed by every signal and move); a spawn parked on its card starts it when it launched.
@@ -164,8 +169,9 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
       try {
         // First tick after a boot: leases outlive the process, so stale ones get one cycle of grace instead of firing together.
         if (!held) { held = true; store.holdLeases(bootAt + BOOT_GRACE_MS) }
+        const verdict = hold?.check(at) ?? { held: false, penalize: true }
         for (const a of store.openAssignments(TICK_LIMIT)) {
-          try { await evaluate(a, at) } catch (err) {
+          try { await evaluate(a, at, verdict) } catch (err) {
             log.error('work.tick_row_failed', `liveness rules failed for assignment ${a.id}`, { assignmentId: a.id, taskId: a.taskId, nodeId: a.nodeId, error: errorText(err) })
           }
         }
@@ -184,7 +190,7 @@ export function createWorkSupervisor({ store, ports, now, afterTick, announce }:
       try {
         const task = store.getTask(a.taskId)
         // SessionEnd fires before the PTY is gone (and on /clear, where it stays): the exit event or the tick decides.
-        if (task && SESSION_GONE_STATUSES.includes(task.status) && (a.channel === 'chat' || sessionGone(a))) await vanish(a, task, cause, now())
+        if (task && SESSION_GONE_STATUSES.includes(task.status) && (a.channel === 'chat' || sessionGone(a)) && !(a.channel === 'chat' && hold?.check(now()).held)) await vanish(a, task, cause, now())
       } catch (err) {
         log.error('work.vanish_failed', `session end of assignment ${a.id} could not be handled`, { assignmentId: a.id, taskId: a.taskId, nodeId: a.nodeId, error: errorText(err) })
       }

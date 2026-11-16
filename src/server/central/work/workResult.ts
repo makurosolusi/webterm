@@ -3,6 +3,7 @@
 // hook route to the work watcher without widening the (append-only) event ledger with long text.
 import { createHash } from 'node:crypto'
 import { redactSecrets } from '../../redactSecrets'
+import { type FailureKind, failureKindOfStop } from './workFailureKind'
 
 /** Longest result text kept per assignment (bytes, after redaction); the rest is cut and flagged `truncated`. */
 export const RESULT_MAX_BYTES = 8 * 1024
@@ -23,7 +24,8 @@ export interface WorkResult {
   hash: string
   /** Why there is no text (`source: 'none'`), or why the turn failed. */
   reason?: string
-  failure?: { error: string; details?: string }
+  /** `kind` lets a later sweep pick the fix (wait out a network drop, ask a human for a login). */
+  failure?: { error: string; details?: string; kind?: FailureKind }
 }
 
 const RANK: Record<ResultSource, number> = { none: 0, exec_tail: 1, agent_report: 2, transcript: 3, stop_hook: 3 }
@@ -80,7 +82,7 @@ export function captureFromHook(body: Record<string, unknown>, at: number, trans
   if (body.hook_event_name === 'StopFailure') {
     const error = typeof body.error === 'string' ? body.error : 'unknown'
     const d = typeof body.error_details === 'string' ? redactSecrets(body.error_details).slice(0, FAILURE_DETAIL_MAX_CHARS) : undefined
-    return noResult('stop_failure', at, { error: redactSecrets(error).slice(0, FAILURE_DETAIL_MAX_CHARS), ...(d ? { details: d } : {}) })
+    return noResult('stop_failure', at, { error: redactSecrets(error).slice(0, FAILURE_DETAIL_MAX_CHARS), ...(d ? { details: d } : {}), kind: failureKindOfStop(error, d) })
   }
   if (typeof body.last_assistant_message === 'string') return buildResult('stop_hook', body.last_assistant_message, at)
   if (!transcriptPath) return noResult('no_message_in_payload', at)
