@@ -1,6 +1,6 @@
 # 34 — Browser sungguhan di canvas webterm: opsi streaming & arsitektur
 
-Topik 4 R&D "browser di canvas". Konteks: webterm = server Bun + klien React Flow v12, dibuka lewat browser biasa (sering jarak jauh). Tak ada `<webview>` seperti nodeterm (Electron), jadi tampilan browser harus datang dari proses di sisi server (atau mesin lain) lewat jaringan. Label: **fakta** (sumber di tabel/kutipan), `[opini]` (penilaian), `[BT]` (belum terverifikasi).
+Topik 4 R&D "browser di canvas". Konteks: webterm = server Bun + klien React Flow v12, dibuka lewat browser biasa (sering jarak jauh). Tak ada `<webview>` seperti referensi eksternal (Electron), jadi tampilan browser harus datang dari proses di sisi server (atau mesin lain) lewat jaringan. Label: **fakta** (sumber di tabel/kutipan), `[opini]` (penilaian), `[BT]` (belum terverifikasi).
 
 ## 1. Fakta repo webterm yang menentukan desain
 
@@ -15,7 +15,7 @@ Topik 4 R&D "browser di canvas". Konteks: webterm = server Bun + klien React Flo
 | Pola React Flow untuk konten interaktif: `nodrag nowheel` (+ `nokey` agar Backspace/ketik tak menghapus/pan node) | `TerminalCore.tsx:342`, `EditorNode.tsx:274-280` | Wajib di permukaan browser |
 | `minZoom 0.01`, `maxZoom 2`; `onlyRenderVisibleElements` tidak dipakai | `App.tsx:379-380`; grep kosong | Node di luar viewport tetap ter-mount → perlu deteksi visibilitas sendiri |
 | Server default loopback; off-loopback wajib token; ada `WEBTERM_TRUST_PROXY` | `auth.ts:29-50`, `envRegistry.platform.ts` | Remote lazim di belakang TLS proxy → `wss://`, secure-context untuk Clipboard API terpenuhi |
-| nodeterm sudah punya predikat pure discard (`BROWSER_DISCARD_MS=5 menit`; jangan discard bila loading/audible/`driven`) | `nodeterm-web/src/renderer/nodes/browser-discard-policy.ts` | Salin logika murni ini; `driven` = lease agent |
+| referensi eksternal sudah punya predikat pure discard (`BROWSER_DISCARD_MS=5 menit`; jangan discard bila loading/audible/`driven`) | `referensi-eksternal/src/renderer/nodes/browser-discard-policy.ts` | Salin logika murni ini; `driven` = lease agent |
 
 ## 2. Opsi A — Chromium server-side + CDP screencast (rekomendasi)
 
@@ -76,7 +76,7 @@ Tidak butuh nilai `z` sama sekali; xterm memakai prinsip serupa `[opini, belum d
 | Latensi | RTT WS + encode JPEG + compositor; lokal ≈ 1 frame (16-50 ms) `[opini]`; remote bergantung RTT, input tak menunggu frame (optimistik-tak-ada, cursor lag terasa >150 ms) |
 | Bandwidth | JPEG q≈60, 1280x800 ≈ 60-150 KB/frame, 10-20 fps → ~1-3 MB/s per node aktif `[opini, perlu ukur]`; frame hanya dikirim saat layar berubah (halaman diam ≈ 0) `[BT]` |
 | Video/WebGL/Canvas | Fidelity penuh: render oleh Chromium asli. Headless tanpa GPU memakai SwiftShader (WebGL lambat) `[BT]`; FPS video terbatas JPEG+ack (~15-30) |
-| **Suara** | **Tidak ada** di screencast. Celah nyata vs nodeterm (webview bersuara). Opsi: terima tanpa suara, atau B (WebRTC) bila audio penting |
+| **Suara** | **Tidak ada** di screencast. Celah nyata vs referensi eksternal (webview bersuara). Opsi: terima tanpa suara, atau B (WebRTC) bila audio penting |
 | Teks/seleksi/aksesibilitas | Hanya piksel di klien; pencarian-halaman, seleksi native, terjemahan browser tak jalan. Agent tetap punya DOM/AX tree lewat CDP |
 | File upload/download | Butuh jalur: `Page.setInterceptFileChooserDialog` → dialog unggah webterm; `Browser.setDownloadBehavior` ke folder terkurung + notifikasi `[BT: nama command persis]` |
 | Popup/new tab | `Target.setAutoAttach`/`Page.windowOpen` → buka sebagai node/tab baru atau navigasi di tempat; dialog JS → modal webterm (jangan dibiarkan hang) |
@@ -85,7 +85,7 @@ Tidak butuh nilai `z` sama sekali; xterm memakai prinsip serupa `[opini, belum d
 
 - **Satu proses Chromium, banyak page**; isolasi cookie per node/workspace lewat `Target.createBrowserContext` (konteks seperti incognito) atau **profil persisten** `--user-data-dir=<dataDir>/browser/<profileId>` agar login bertahan (lihat dokumen 33 untuk impor cookie). Satu profil persisten = satu proses Chromium (kunci `SingletonLock`) `[BT: nama file]`.
 - Memori: tiap site/renderer ~100-300 MB `[opini/BT]`; wajib **batas** node hidup (env baru mis. `WEBTERM_BROWSER_MAX_LIVE`, default kecil) + antrean "bekukan yang terlama tersembunyi".
-- Tiga tingkat: **live** (screencast jalan) → **paused** (terlihat 0, `stopScreencast`, page tetap hidup bila `driven`) → **discarded** (`Target.closeTarget`; simpan `url` saja; cookie selamat di profil, history/scroll/form-state hilang — trade-off sama dengan nodeterm). Predikat discard = salin `shouldDiscard` nodeterm (tidak loading, tidak `driven`, `hiddenMs > 5 menit`, dibaca ulang saat timer menyala).
+- Tiga tingkat: **live** (screencast jalan) → **paused** (terlihat 0, `stopScreencast`, page tetap hidup bila `driven`) → **discarded** (`Target.closeTarget`; simpan `url` saja; cookie selamat di profil, history/scroll/form-state hilang — trade-off sama dengan referensi eksternal). Predikat discard = salin `shouldDiscard` referensi eksternal (tidak loading, tidak `driven`, `hiddenMs > 5 menit`, dibaca ulang saat timer menyala).
 - Visibilitas di React Flow: `useStore` pada `transform` + bounding node, atau `IntersectionObserver` pada `<canvas>`; ambang zoom → paused. `[opini]` jangan aktifkan `onlyRenderVisibleElements` global (akan unmount terminal & hilang scrollback).
 
 ### 2.5 Sesi bersama manusia + agent
@@ -96,7 +96,7 @@ Chromium mengizinkan banyak klien CDP ke satu browser (tiap klien `Target.attach
 |---|---|
 | Manusia | Node canvas ↔ `/ws/browser` (screencast + input) |
 | Agent | **Bukan** port CDP mentah (siapa pun di host/PTY bisa menyambung & lolos token). Lewat `/api/control/browser/:id/*` (capability `wcap_*`, `auth.ts:136-171`) berupa verb tipis (navigate, snapshot AX, click, type, screenshot), **atau** endpoint proxy WS CDP terautentikasi untuk klien yang bicara CDP (Playwright `connectOverCDP`, ego-browser/agent-browser — lihat dokumen 32) |
-| Arbitrasi | *Control lease* per node: `human` / `agent(leaseId, ttl)`. Saat agent memegang lease, input manusia diblokir/ditimpa-dengan-badge ("agent sedang mengemudi"), mengikuti `BrowserDrivingChip` nodeterm; lease = `driven` di predikat discard. Manusia bisa "ambil alih" (CAPTCHA/2FA) |
+| Arbitrasi | *Control lease* per node: `human` / `agent(leaseId, ttl)`. Saat agent memegang lease, input manusia diblokir/ditimpa-dengan-badge ("agent sedang mengemudi"), mengikuti `BrowserDrivingChip` referensi eksternal; lease = `driven` di predikat discard. Manusia bisa "ambil alih" (CAPTCHA/2FA) |
 | Tampilan agent ke manusia | Screencast sama; overlay highlight elemen bisa via `Overlay.highlightNode` `[BT]` |
 
 

@@ -150,8 +150,8 @@ Everything else (`WEBTERM_*` stripping, `BUN_INSTALL`, `fish -l`, `~/x`, shell q
 | # | Mutation that survives | Why | Assertion to add |
 |---|---|---|---|
 | T2 | `close()` no longer calls `forgetNodeToken(id)` | No session test asserts that closing forgets the node token or deletes its settings/header files; `hooks.test.ts` tests `forgetNodeToken` directly, not through `Sessions.close`. | After `sessions.close(id)`: `stateVerified(id, nodeTokenBeforeClose)` is `false`, and the `.headers`/settings files are gone. |
-| T8 | `isContextCapable(agentId)` gate removed (all agents get `NODETERM_NODE_ID/PORT`) | Every agent spawn in this file is `claude`, which is context-capable. | Spawn `agentId: 'copilot'` (builtin, **not** in `CONTEXT_LINK_CAPABLE`): assert `NODETERM_NODE_ID`/`NODETERM_PORT` absent, `WEBTERM_TOKEN` (node token) still present. |
-| T12 | `hasClaudeHookSettings(agentId)` gate removed (all agents get `hookEnv`) | Same reason: only `claude` is exercised, and only `claude` is hook-capable (`CLAUDE_HOOK_SETTINGS_CAPABLE = ['claude']`). | Same `copilot` spawn: assert `NODE_TOKEN_ENV` (`NODETERM_NODE_TOKEN`) absent. |
+| T8 | `isContextCapable(agentId)` gate removed (all agents get `WEBTERM_NODE_ID/PORT`) | Every agent spawn in this file is `claude`, which is context-capable. | Spawn `agentId: 'copilot'` (builtin, **not** in `CONTEXT_LINK_CAPABLE`): assert `WEBTERM_NODE_ID`/`WEBTERM_PORT` absent, `WEBTERM_TOKEN` (node token) still present. |
+| T12 | `hasClaudeHookSettings(agentId)` gate removed (all agents get `hookEnv`) | Same reason: only `claude` is exercised, and only `claude` is hook-capable (`CLAUDE_HOOK_SETTINGS_CAPABLE = ['claude']`). | Same `copilot` spawn: assert `NODE_TOKEN_ENV` (`WEBTERM_NODE_TOKEN`) absent. |
 
 Note: `T3` ("close always emits exit" on the subscriber line) survived in round 1 because the
 mutated line is dead when the session is already out of `map`; the corrected mutation
@@ -261,7 +261,7 @@ H6   settings json 0644 ......................... SURVIVED
 U3   Origin:null branch removed ................. SURVIVED
 P3   LC_CTYPE ignored ........................... SURVIVED
 T2   close forgets no token ..................... SURVIVED
-T8   NODETERM identity for every agent .......... SURVIVED
+T8   WEBTERM identity for every agent .......... SURVIVED
 T12  hookEnv for every agent .................... SURVIVED
 W1   control dispatch dead (grep intact) ........ SURVIVED
 W2   index allowed() always true (grep intact) .. SURVIVED
@@ -286,7 +286,7 @@ W3   agent-status dispatch dead (grep intact) ... SURVIVED
    cols/rows 500/501, transcript-path max exactly / +1, duplicate header arrays, `LC_CTYPE`.
 6. **P2 — route-level security cases**: unauthenticated+invalid body → 401 (or documented 400),
    revoked/expired-at-boundary tokens at the API, `/nodes` with workspace/project grants,
-   non-context agent (`copilot`) receiving no NODETERM identity/hook token, `close()` forgetting
+   non-context agent (`copilot`) receiving no WEBTERM identity/hook token, `close()` forgetting
    the node token and files.
 7. **P3 — body limit**: add a request-size cap (or record the decision); today a 2 MiB JSON body
    is parsed and accepted.

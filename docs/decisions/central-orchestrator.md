@@ -41,7 +41,7 @@ Kebutuhan seperti ingat siapa disuruh apa, cek hang/error/hilang, dan board todo
 3. **Aturan otomatis selalu terlihat.** Setiap aturan punya nama dan ambang yang tertulis, misalnya `liveness.heartbeat 10m`. Saat aturan menyala, ia menulis event yang tampil di timeline, misalnya "stalled karena tak ada hook 20 menit". Tidak ada sapuan diam-diam. Saat ini sapuan basi 20 menit menghapus status tanpa jejak.
 4. **"Done" tidak pernah dilaporkan sendiri.** Agent hanya bisa *melapor*. Status `done` datang dari verifikasi (perintah acceptance lulus) dan/atau review user.
 5. **Tiru yang terbukti.** Rujukan desainnya:
-   - nodeterm-web: `board-log.jsonl`, outcome report, hand-over, durable-state
+   - referensi-eksternal: `board-log.jsonl`, outcome report, hand-over, durable-state
    - Claude Code: hook, `PreCompact`, subagent yang mengembalikan ringkasan
    - supervisor OTP: batas restart
    - OTel GenAI: bentuk span

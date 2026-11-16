@@ -29,7 +29,7 @@ scroll, handoff, release) tetap dipisah di kontrak (`BROWSER_VERB_CAP`). Ada dua
 1. **Sesi agent PTY: token node + kabel, dibaca per panggilan.** Sesi agent tidak lagi diberi capability browser
    di env saat spawn (model lama `WEBTERM_BROWSER_READ_CAP`/`WEBTERM_BROWSER_ACT_CAP` dihapus bersama
    `browser.sessionCaps.ts`). Shim `webterm-browser` (`browserAgentShim.ts`, dipasang sekali saat runtime start)
-   hanya membawa token node sesi itu sendiri (`WEBTERM_TOKEN`, cadangan `NODETERM_NODE_TOKEN`) lewat `curl -K -`,
+   hanya membawa token node sesi itu sendiri (`WEBTERM_TOKEN`, cadangan `WEBTERM_NODE_TOKEN`) lewat `curl -K -`,
    jadi tidak ada nilai di argv. Server memetakan token ke node agent (`requesterOf`), lalu
    `resolveLinkedBrowser` (`browser.linkedTarget.ts`) membaca board TERSIMPAN saat panggilan itu: hanya node
    browser yang terhubung kabel (edge, arah mana pun, `linkedPeerIds` dari `contextLinkRoute.ts`) yang boleh
@@ -51,11 +51,11 @@ tetap diterima untuk sesi lama, tapi tidak lagi diiklankan.
 Kenapa per panggilan, bukan env saat spawn: model env membuat izin beku sejak sesi lahir (browser yang dibuat
 belakangan tak terjangkau sampai respawn) dan, dengan satu browser di board, agent tanpa kabel ikut bisa
 mengemudikannya. Pola ini meniru Orca (`browser-command-targets.ts`: halaman dipilih per panggilan dari
-konteks pemanggil, error jelas bila tak ada) dan nodeterm (`browser-drive.ts`: gerbang dibaca LIVE saat drive,
+konteks pemanggil, error jelas bila tak ada) dan referensi eksternal (`browser-drive.ts`: gerbang dibaca LIVE saat drive,
 identitas pemanggil terverifikasi), sama dengan pola context-link yang sudah ada di repo ini.
 
 ## Agent membuka browser sendiri
-Verb `open [url]` (hanya jalur token node; jalur capability = `400 agent_node_only`) meniru nodeterm
+Verb `open [url]` (hanya jalur token node; jalur capability = `400 agent_node_only`) meniru referensi eksternal
 `open-browser --url`: `browser.agentOpen.ts` menambah node browser baru (id acak, 640x400) di samping node pemanggil
 plus kabel `bridge-<caller>-<id>` jenis `context` yang sama dengan kabel manusia, lewat `canvasPush.add` (board
 tersimpan + siaran `t:'canvas'` ke UI). Lalu halaman dimulai lewat `lifecycle.attach` (gerbang `MAX_LIVE`), dan

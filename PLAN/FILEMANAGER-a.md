@@ -16,7 +16,7 @@ Basis: worktree `rnd-files` (HEAD `fdaf2b4`), R&D `RND/35..38`. Semua klaim kode
 | T5 | Sinkronisasi: editor/listing tahu perubahan eksternal & rename | tes watcher + bus event |
 | T6 | Rapi terhadap aturan global: file ≤ batas Rule 8, tanpa hardcode (Rule 15), flag fitur default OFF, nol dependensi baru | gate §7 |
 
-**Non-tujuan (v1)**: tree view penuh (P-2), zip/unzip, chmod UI, compare/diff 2 file, tag Finder, preview kolom, rename massal, hapus `nodeterm`→`webterm` pada protokol, perbaikan DNS-rebinding transport (P-6, hanya ditandai), Windows, penyuntingan encoding non-UTF-8 (P-4: read-only), terminal-drop yang menyentuh `TerminalNode` (di luar kepemilikan; lihat R-09).
+**Non-tujuan (v1)**: tree view penuh (P-2), zip/unzip, chmod UI, compare/diff 2 file, tag Finder, preview kolom, rename massal, rename protokol ke `webterm` (ditangani terpisah), perbaikan DNS-rebinding transport (P-6, hanya ditandai), Windows, penyuntingan encoding non-UTF-8 (P-4: read-only), terminal-drop yang menyentuh `TerminalNode` (di luar kepemilikan; lihat R-09).
 
 ## 2. Rekomendasi arsitektur (satu, tegas)
 
@@ -27,7 +27,7 @@ Pilar teknis (semua reuse, nol dependensi baru):
 | Pilar | Keputusan | Reuse |
 |---|---|---|
 | Create | `open(path,'wx')` → `EEXIST` 409 (kernel yang memutuskan; benar di APFS case-insensitive) | `fs.promises.open` |
-| Save | `expectedVersion` (opaque dari `stat` bigint `mtimeNs`+`size`), atomic temp+rename dgn fallback in-place (nlink>1, symlink-lintas-volume, dir tak writable) | pola `nodeterm fs-atomic.ts` (rujukan, tulis ulang ringkas) |
+| Save | `expectedVersion` (opaque dari `stat` bigint `mtimeNs`+`size`), atomic temp+rename dgn fallback in-place (nlink>1, symlink-lintas-volume, dir tak writable) | pola `referensi eksternal fs-atomic.ts` (rujukan, tulis ulang ringkas) |
 | Body | `readCappedBody` (Buffer[] + cap, sudah ada di `channels/channelHttp.ts`) menggantikan `readBody` untuk rute `/api/fs/*` saja; `readBody` lain (git/control) TIDAK diubah | `readCappedBody` |
 | Error | `{ok:false, code, error[, current]}` + status HTTP bermakna; verb lama mempertahankan `ok` | `READ_FAILURES` pola `fsOps.ts:162-168` |
 | Jenis file | satu `shared/fileKind.ts` dipakai server (sniff) + klien (viewer, ikon) | `editorFile.ts:39-45` (diserap) |

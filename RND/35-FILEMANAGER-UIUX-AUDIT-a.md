@@ -4,7 +4,7 @@ Tanggal 2026-11-03. Worktree `rnd-files` (dari `main` @ fdaf2b4). Metode: baca k
 
 ## 1. Ringkasan eksekutif
 
-Node `files` hari ini adalah **daftar satu direktori (flat list) read-mostly**, bukan tree: satu `cwd`, navigasi masuk/naik mengganti isi, bukan expand in-place. Port ramping dari nodeterm; yang hilang dibanding nodeterm: download & reveal (`FilesNode.tsx:12-13` header komentar; nodeterm `FilesNode.tsx:351-372`). Yang tidak pernah ada di kedua sisi: rename, delete, move, copy, multi-select, drag-drop.
+Node `files` hari ini adalah **daftar satu direktori (flat list) read-mostly**, bukan tree: satu `cwd`, navigasi masuk/naik mengganti isi, bukan expand in-place. Port ramping dari referensi eksternal; yang hilang dibanding referensi eksternal: download & reveal (`FilesNode.tsx:12-13` header komentar; referensi eksternal `FilesNode.tsx:351-372`). Yang tidak pernah ada di kedua sisi: rename, delete, move, copy, multi-select, drag-drop.
 
 Tiga temuan terpenting:
 1. **P0 kehilangan data**: "New File…" memanggil `write(target, '')` tanpa cek eksistensi (`FilesNode.tsx:204`; `fsOps.ts:211` `writeFile` default flag `w` = truncate). Memberi nama file yang sudah ada menimpanya dengan nol byte, tanpa konfirmasi.

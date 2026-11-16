@@ -36,7 +36,7 @@ boundary, i.e. a spawned agent.
 `hooks.ts:176-181` builds
 
 ```
-curl -s '<url>' -H "x-nodeterm-node-token: $NODETERM_NODE_TOKEN" -H "x-webterm-token: $WEBTERM_TOKEN" --data-binary @-
+curl -s '<url>' -H "x-webterm-node-token: $WEBTERM_NODE_TOKEN" -H "x-webterm-token: $WEBTERM_TOKEN" --data-binary @-
 ```
 
 and the doc block above it (`hooks.ts:140-155`) states the value "tidak boleh mendarat di baris
@@ -48,7 +48,7 @@ Evidence (`probe5.ts`, stub `curl` that sleeps 3 s, `ps -axo pid,args` during th
 
 ```
 27459 /bin/sh .../curl -s http://127.0.0.1:8700/api/agent-status?node=n1 \
-  -H x-nodeterm-node-token: NODE-TOKEN-abc \
+  -H x-webterm-node-token: NODE-TOKEN-abc \
   -H x-webterm-token: SUPER-SECRET-TRANSPORT-TOKEN-123456 --data-binary @-
 ```
 
@@ -124,7 +124,7 @@ Two separate small gaps in the same contract, both `workspace.ts:275-279`:
    sibling validator and was not carried over.
 
 No exploit is reachable today: the node id never becomes an argv element (the claude settings path
-is `sha256(id).slice(0,16)`, `hooks.ts:195-199`; the id only reaches `NODETERM_NODE_ID`, map keys,
+is `sha256(id).slice(0,16)`, `hooks.ts:195-199`; the id only reaches `WEBTERM_NODE_ID`, map keys,
 and a percent-encoded query value). It stays Low until something turns an id into a flag or a
 filename. Suggest tightening to `/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/` and adding `-x`, `--help`,
 `--` to the test matrix in `workspace.test.ts:281-300`.

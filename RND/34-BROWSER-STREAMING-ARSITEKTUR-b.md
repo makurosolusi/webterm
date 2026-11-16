@@ -49,11 +49,11 @@ Ekstensi MV3 memakai `chrome.debugger` (CDP ke tab user) atau `tabCapture`, mere
 
 `[opini]` Fase 3: "Attach tab lokal" sebagai sumber alternatif untuk `BrowserHost`, memakai kontrak frame/input yang sama dengan opsi A (ekstensi menggantikan Chromium terkelola).
 
-## 6. Opsi E — Shell Electron/Tauri (paritas nodeterm)
+## 6. Opsi E — Shell Electron/Tauri (paritas referensi eksternal)
 
 | Aspek | Penilaian |
 |---|---|
-| Electron `<webview>` | Paritas terdekat (nodeterm: `BrowserSurface.tsx`, partition, discard) — fakta repo referensi |
+| Electron `<webview>` | Paritas terdekat (referensi eksternal: `BrowserSurface.tsx`, partition, discard) — fakta repo referensi |
 | Masalah | webterm sengaja **web channel** (server Bun + browser biasa, bisa jarak jauh). Shell Electron memaksa instalasi desktop dan memutus model "buka dari mana saja"; binary jadi ganda (`build:binary` sekarang `bun --compile`) |
 | Tauri | Webview anak bersifat native overlay, tidak ikut `scale()` DOM React Flow → pemetaan zoom/pan tak bisa dengan CSS `[BT]`; fitur multi-webview berlabel unstable `[BT]` |
 | Verdict | Di luar jalur utama. Bila kelak ada shell desktop, `BrowserHost` lokal (opsi A tanpa jaringan) tetap lebih sederhana daripada `<webview>` |

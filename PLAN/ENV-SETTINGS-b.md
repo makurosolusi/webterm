@@ -85,7 +85,7 @@ Runner: `TMPDIR=/tmp/st npm test` (vitest; DOM per-file dengan pragma `/** @vite
 - **Rule 15:** teks UI di `envLabels.ts`/registry (bukan inline); tidak ada URL/ambang hardcode. **Rule 16:** ENV-07 memperbarui README bagian Settings + `docs/decisions/env-registry-v2.md` + CHANGELOG. **Rule 17:** tak ada TODO tanpa konteks; `ponytail:`/workaround wajib alasan.
 - **Rule 8:** komponen ≤200 baris, hook/util ≤200, service ≤300, tes ≤400; `EnvSection.tsx` (76) dan `settings-env.css` (94) tidak boleh melebihi batas — pecah seperti tabel §a-5. Tes lama `EnvSection.test.tsx` (222) dipecah per komponen.
 - **Rule 2/3:** semua di branch `feature/env-settings`; tunggu "merge sekarang" user; tes nyata per WS.
-- **Identitas:** nama terlihat `webterm`; `NODETERM_*`, header `x-nodeterm-node-token`, `nodeterm:` tidak disentuh.
+- **Identitas:** nama terlihat `webterm`; `WEBTERM_*`, header `x-webterm-node-token`, `webterm:` adalah nama protokol baku.
 
 ## 10. Rollout bertahap
 

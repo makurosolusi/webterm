@@ -27,7 +27,7 @@ Route HTTP tidak pernah memanggil CLI langsung.
 | Area | Fakta | Konsekuensi |
 |---|---|---|
 | PTY | `Bun.spawn({ terminal })` POSIX; satu slot per sesi (`src/server/pty.ts`, `sessionsCore.ts`) | Central memakai subprocess biasa, bukan slot PTY manusia |
-| Env anak | `ptyEnv` membuang `WEBTERM_*`, `NODETERM_*`, `PORT`, `HOST`, `BUN_*` | Jalur OpenCode wajib allowlist serupa (`agentEnv.ts`) |
+| Env anak | `ptyEnv` membuang `WEBTERM_*, `PORT`, `HOST`, `BUN_*` | Jalur OpenCode wajib allowlist serupa (`agentEnv.ts`) |
 | Status `done` | Dari hook `Stop`/`StopFailure` (`hookStatus.ts`) | Tidak berlaku untuk OpenCode; status turn dari event runtime + exit code |
 | Worker | Prompt satu baris cap 8 KiB, output 64 KiB, poll 250 ms, timeout 300 s (`workerRuntime.ts`) | Cukup leaf worker, tidak cukup central multi-turn |
 | Central | Proyeksi + pause/resume/priority + scheduler 1 item/tick (`central/*`, `centralAutonomy.ts`) | Central belum punya "otak" |
@@ -150,7 +150,7 @@ webterm). **Jangan** menulis `opencode.json` ke worktree pengguna.
 **7.1 Root token dan capability.** `agentEnv` dibangun dari allowlist: `PATH`, `HOME` (atau
 `XDG_DATA_HOME`/`XDG_CONFIG_HOME` ke dir ter-scope), `SHELL`, `LANG`, `TERM`, `TMPDIR`,
 `OPENCODE_CONFIG`, plus kredensial provider yang memang milik OpenCode. Buang `WEBTERM_*`
-(kecuali yang eksplisit), `NODETERM_*`, `PORT`, `HOST`, `BUN_*`. Token node tidak diberikan:
+(kecuali yang eksplisit), `WEBTERM_*`, `PORT`, `HOST`, `BUN_*`. Token node tidak diberikan:
 token itu membuka `/api/control/*`. Central memakai capability sendiri (`wcap_*`, TTL pendek,
 resource-bound): `central.read`, `project.read`, `task.assign`, `run.request`, `memory.claim`;
 **tidak** `approval.decide`, `memory.promote`, `node.prompt` lintas node, `run.finish`.
@@ -203,7 +203,7 @@ POST /api/central/turn
 | `central/runtime/opencodeRuntime.ts` | spawn, parser JSONL, exit/error, cancel, resume, budget |
 | `central/runtime/opencodeOptions.ts` | argv (`run --format json --model --session`), scrub env, policy tool |
 | `central/runtime/opencodeEvents.ts` | murni: JSONL → event internal + usage delta |
-| `central/runtime/agentEnv.ts` | allowlist env; buang `WEBTERM_*`/`NODETERM_*`/`PORT`/`HOST` |
+| `central/runtime/agentEnv.ts` | allowlist env; buang `WEBTERM_*/`PORT`/`HOST` |
 | `central/runtime/runtimeEvents.ts` | normalisasi event + urutan |
 | `central/runtime/centralSession.ts` | peta `(projectId, threadId) → sessionRef`, persist di ledger |
 | `central/mcp/centralMcpServer.ts` | server stdio; validasi capability per call; audit |
@@ -250,7 +250,7 @@ Tanpa ledger hidup, runtime menolak boot.
 2. Satu tool MCP stdio dipanggil; capability salah ditolak; tidak ada token di env agent.
 3. Cancel menutup proses <2 s dan event final terkirim tepat sekali.
 4. Resume `--session` setelah restart menghasilkan konteks lanjut (butuh verifikasi, §3).
-5. `agentEnv` tanpa `WEBTERM_TOKEN`/`NODETERM_*` (assertion test).
+5. `agentEnv` tanpa `WEBTERM_TOKEN`/`WEBTERM_*` (assertion test).
 6. Budget/turn limit membunuh proses dan menulis `budget_exhausted`, bukan retry.
 7. `provider.quota`/401 dieskalasi ke manusia, bukan retry.
 8. `bash`/`edit`/`write` benar-benar nonaktif dan gagal saat dipanggil (bukan hanya absen dari

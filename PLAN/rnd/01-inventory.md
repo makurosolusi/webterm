@@ -27,8 +27,8 @@ Prinsip yang dipegang (memory `feedback-perkaya-fitur`): kompatibilitas dengan k
 ### 1b. Env yang disuntikkan ke sesi agent
 `sessions.ts:73-87`:
 - `WEBTERM_TOKEN` = token **node** (bukan root).
-- `NODETERM_NODE_ID` dan `NODETERM_PORT` untuk agent yang context-capable (`CONTEXT_LINK_CAPABLE`: claude/codex/gemini/opencode…, `workspace.capabilities.ts:76`).
-- `hookEnv` (`NODETERM_NODE_TOKEN`, dan `NODETERM_PERM_WAIT_SECS` bila `hookReplyApprovals` aktif) (`hooks.ts:37-43`).
+- `WEBTERM_NODE_ID` dan `WEBTERM_PORT` untuk agent yang context-capable (`CONTEXT_LINK_CAPABLE`: claude/codex/gemini/opencode…, `workspace.capabilities.ts:76`).
+- `hookEnv` (`WEBTERM_NODE_TOKEN`, dan `WEBTERM_PERM_WAIT_SECS` bila `hookReplyApprovals` aktif) (`hooks.ts:37-43`).
 
 ### 1c. Shim + skill yang dipasang untuk agent (ditulis ulang tiap boot)
 | Skill | Shim (sh + curl) | Endpoint | Dipasang di |
@@ -55,7 +55,7 @@ Catatan: skill hanya ditulis ke `~/.claude/skills`. OpenCode juga memuat folder 
 
 ### 2a. Runtime
 - Abstraksinya ada di `central/runtime/centralRuntime.ts`. Ada tiga implementasi: claude (`claudeRuntime.ts`, `claudeSession.ts`), opencode (`opencodeRuntime.ts`), dan mock. Deteksinya di `runtimeDetect.ts` (codex sengaja tidak ada).
-- Claude dijalankan **tanpa tool dan tanpa MCP**: `-p --output-format stream-json --tools <none> --strict-mcp-config --permission-mode dontAsk --safe-mode` (`claudeOptions.ts:86-101`). Env anak disaring: tanpa `WEBTERM_`/`NODETERM_`/kunci provider/`wcap_` (`:60-75`).
+- Claude dijalankan **tanpa tool dan tanpa MCP**: `-p --output-format stream-json --tools <none> --strict-mcp-config --permission-mode dontAsk --safe-mode` (`claudeOptions.ts:86-101`). Env anak disaring: tanpa `WEBTERM_`/`WEBTERM_`/kunci provider/`wcap_` (`:60-75`).
 - OpenCode: tool yang memutasi ditolak kecuali `WEBTERM_OPENCODE_ALLOW_TOOLS=on` (`opencodeOptions.ts:12,65-67`).
 - Preflight `claude auth status` di-cache (`claudePreflight.ts`).
 
@@ -156,7 +156,7 @@ Banyak timer poll yang terpisah: linkNote 1 dtk, sweep waker 60 dtk, tick otonom
 |---|---|---|---|
 | D1 | Registry "apa yang boleh dilakukan" | (a) `CAPABILITY_VERBS` control (12), (b) `ToolDef` Central (~35), (c) `BROWSER_VERB_CAP` (11, `shared/browser.contract.ts:177`), (d) case verb di shim sh, (e) verb context-link (list/transcript/summary/terminal), (f) route orchestrator root-only, (g) `DEFAULT_CENTRAL_TOOLS` lama | Tujuh daftar dan tiga model otorisasi (capability, tier+level, token root). |
 | D2 | Spawn agent | `POST /api/control/spawn` (PTY, `controlApiSessions.ts:25`), `/api/orchestrator/spawn` + `workerRuntime`, `agent.spawn` (`agentHost`/`execRunner`), `task.run` → `runTaskInProcess` → route HTTP | Empat pintu dan dua runner (PTY vs headless). |
-| D3 | Approval | `/api/control/approval/*` (capability), `/api/approvals*` (manusia), `ledger.approval`, Telegram `channelApprovals`, `orchestratorRunApproval`, kartu proposal Central, handoff browser, hook `PermissionRequest` | Ledger memang satu, tetapi ada lima atau lebih adapter. `PermissionRequest` hanya menjadi badge `blocked`; **tidak ada jalur balasan allow/deny** walaupun `NODETERM_PERM_WAIT_SECS` disuntikkan (`hooks.ts:37-43`). Knob itu praktis mati [inferensi: tidak ada pembaca `permissionDecision`]. |
+| D3 | Approval | `/api/control/approval/*` (capability), `/api/approvals*` (manusia), `ledger.approval`, Telegram `channelApprovals`, `orchestratorRunApproval`, kartu proposal Central, handoff browser, hook `PermissionRequest` | Ledger memang satu, tetapi ada lima atau lebih adapter. `PermissionRequest` hanya menjadi badge `blocked`; **tidak ada jalur balasan allow/deny** walaupun `WEBTERM_PERM_WAIT_SECS` disuntikkan (`hooks.ts:37-43`). Knob itu praktis mati [inferensi: tidak ada pembaca `permissionDecision`]. |
 | D4 | Browser | Shim (11 verb) dan `browser_act` (3 verb) sama-sama lewat `handleBrowserControl`. Bagian ini sudah relatif bersatu (`browser.act.ts:1-4`) | Central **tidak punya snapshot**, padahal click/type butuh `snapId` (`browser.act.ts:22`, `browser.status.ts:49`). |
 | D5 | Membaca node | `agent.read` (agent Central), `node.list` (tanpa isi), context-link `terminal`/`transcript` (agent terminal saja), `/api/control/nodes` | Central tidak bisa membaca transcript atau scrollback node milik user. |
 | D6 | Penemuan skill | `~/.claude/skills` ditulis tiap boot (2 skill) vs `central_skill` + builtin (4) | Dua sistem skill tanpa jembatan. |

@@ -85,7 +85,7 @@ Locks: `src/server/routes/auth.account.routes.bun.test.ts`, `src/server/routes/a
   (`use_redirect_file`), then a cookie.
 - VS Code server (`--connection-token`, cookie `vscode-tkn`) and code-server (HttpOnly session cookie
   after login): a secret delivered out of band is traded once for a cookie, and URLs stay clean.
-- nodeterm revocable sessions: only a hash of the session is stored.
+- referensi eksternal revocable sessions: only a hash of the session is stored.
 
 ## Accepted risks and known limits
 

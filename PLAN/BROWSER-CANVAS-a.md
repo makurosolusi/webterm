@@ -36,14 +36,14 @@ Sumber: `RND/31..34-b`. Label: fakta = diverifikasi di kode worktree; `[BT]` = b
 | P-3 | Cookie/login MVP | Login manual di node + profil persisten per workspace. Import file (`storageState`/`cookies.txt`) = fase terpisah di flag `WEBTERM_BROWSER_COOKIE_IMPORT` default OFF. DILARANG: baca store browser harian, attach ke Chrome harian | risiko terendah; ikut dok 33 |
 | P-4 | Kendali agent | Default OFF per node (`agentControl`), toggle manual di node + env global `WEBTERM_BROWSER_AGENT` default OFF; lease dengan chip "agent mengemudi" + Stop/ambil alih | agent mengemudi browser berlogin = risiko tinggi |
 | P-5 | Akses localhost/LAN (dev server user) | Blok semua privat/loopback/link-local/metadata. Pengecualian HANYA lewat `WEBTERM_BROWSER_ALLOW_HOSTS` (daftar `host:port`, default kosong). Port webterm sendiri (`PORT`) TIDAK PERNAH boleh masuk allowlist (hard-deny) | SSRF ke webterm = kendali PTY |
-| P-6 | Batas resource | `WEBTERM_BROWSER_MAX_LIVE`=3; discard tersembunyi >5 menit (`WEBTERM_BROWSER_DISCARD_MS`=300000) | ikut nodeterm; memori per renderer 100-300 MB `[BT]` |
+| P-6 | Batas resource | `WEBTERM_BROWSER_MAX_LIVE`=3; discard tersembunyi >5 menit (`WEBTERM_BROWSER_DISCARD_MS`=300000) | ikut referensi eksternal; memori per renderer 100-300 MB `[BT]` |
 | P-7 | Isolasi profil | Satu profil persisten per workspace (`dataDir()/browser/profiles/<workspaceId>`), satu proses Chromium per profil. Mode ephemeral per node DITUNDA | kunci `SingletonLock`; sederhana |
 | P-8 | Popup / `window.open` | Navigasi di tempat (node yang sama). Node baru ditunda | tak ada hang |
 | P-9 | Download & file chooser | Ditolak (`Browser.setDownloadBehavior` deny; chooser tidak dicegat) di MVP; pesan jelas | permukaan serangan kecil dulu |
 | P-10 | Konsekuensial oleh agent (kirim form lintas-domain, bayar, kirim pesan) | Verb `click`/`type` pada elemen `submit` lintas-origin butuh persetujuan manusia lewat gerbang `approval*` yang ada, bila central/approval aktif; bila tidak ada, ditolak default | prompt injection |
 | P-11 | TTL cookie vault | 7 hari (`WEBTERM_BROWSER_COOKIE_TTL_DAYS`), scope workspace | ikut dok 33 |
 | P-12 | Tool central agent | Ditunda sampai `ca2` mendarat di main (WS-10, W5). R0 = status/daftar domain terautentikasi; R2 = aksi | bergantung registry yang belum di main |
-| P-13 | Siapa boleh mengendalikan | Hanya token root (manusia) dan capability `wcap_*` verb `browser.*`. Token node (`x-nodeterm-node-token`) TIDAK membuka `/api/browser/*` maupun `/ws/browser` | default-deny allowlist `isNodeTokenPath` |
+| P-13 | Siapa boleh mengendalikan | Hanya token root (manusia) dan capability `wcap_*` verb `browser.*`. Token node (`x-webterm-node-token`) TIDAK membuka `/api/browser/*` maupun `/ws/browser` | default-deny allowlist `isNodeTokenPath` |
 
 ## 3. Workstream
 

@@ -41,7 +41,7 @@ Sumber lengkap: `PLAN/ENV-MINIMAL-a.md` (keputusan, peta workstream), `-b.md` (k
 
 - Proses lokal dengan uid yang sama bisa memanggil API sebelum `enable` dan membaca berkas sesudahnya. Tidak dilindungi; setara risiko hari ini, bukan eskalasi baru.
 - WebSocket yang sudah terbuka sebelum `enable` atau `rotate` tetap hidup sampai ditutup (gerbang dicek saat upgrade).
-- Token per-node (`NODETERM_NODE_TOKEN`) tidak terpengaruh `enable`/`rotate`.
+- Token per-node (`WEBTERM_NODE_TOKEN`) tidak terpengaruh `enable`/`rotate`.
 - Tidak ada `disable` (disengaja). Kembali ke loopback terbuka: hentikan server, hapus `<data dir>/secrets/WEBTERM_TOKEN`, nyalakan lagi. Atau set `WEBTERM_TOKEN` di env (menang atas berkas).
 - Kode klaim sekali pakai (P+, usulan b §3.3) TIDAK diimplementasikan; `enable` belum meminta kode.
 

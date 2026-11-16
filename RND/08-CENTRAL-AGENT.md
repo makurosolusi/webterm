@@ -21,7 +21,7 @@ Dokumen ini mengikat; `09`-`12` adalah bukti/detail. Eksekusi: `13-CENTRAL-AGENT
 - **I1 State otoritatif di server.** Task row, plan/goal version, approval row, event ledger =
   kebenaran; transcript/prompt/snapshot hanya konteks. **I14** Satu turn aktif per conversation,
   lock di server; kirim saat sibuk = 409.
-- **I2 Tidak ada root token di env agent.** Env anak dari allowlist; `WEBTERM_*`, `NODETERM_*`,
+- **I2 Tidak ada root token di env agent.** Env anak dari allowlist; `WEBTERM_*,
   `PORT`, `HOST` tidak diwariskan. **I13** Tanpa secret/PII di log, prompt, event, outbox.
 - **I3 Central tidak dapat menyetujui aksinya sendiri.** Tidak memegang `approval.decide`;
   approval hanya lewat transport manusia `/api/approvals/*`.

@@ -8,20 +8,19 @@ Panduan singkat bekerja di repo **webterm**. Sengaja ramping.
 xterm drag-able di canvas pan/zoom (React Flow v12). Tiap workspace (nama + cwd + layout)
 dipersist server-side di SQLite (`bun:sqlite`), jadi board bertahan lintas restart. Berbasis
 **Bun** (`src/client` + `src/server` + `src/shared`, TANPA `src/core`). webterm dibuat dari
-nol sebagai project baru: BUKAN fork dan BUKAN turunan repo nodeterm, hanya terinspirasi
-nodeterm. nodeterm (lisensi **BUSL-1.1**) adalah repo referensi.
+nol sebagai project baru, hanya terinspirasi terminal manager mapan; bukan fork dan bukan turunan.
 
-## Identitas vs protokol (PENTING)
+## Identitas & nama protokol
 
-webterm entitas berbeda dari nodeterm (nodeterm disempurnakan untuk kebutuhan web channel).
-Permukaan **terlihat** pakai nama `webterm`. Yang **tetap `nodeterm`** demi wire-protocol &
-kompat protokol dengan nodeterm — JANGAN rename tanpa perintah eksplisit:
+Identitas = `webterm` sepenuhnya. Nama protokol (agent <-> server):
 
-- env var sesi agent `NODETERM_NODE_ID`, `NODETERM_PORT`; header `x-nodeterm-node-token`
-- nama event/channel `nodeterm:`
-- path data warisan `~/.nodeterm` / `~/.nodeterm-server` bila dirujuk protokol
+- env sesi agent `WEBTERM_NODE_ID`, `WEBTERM_PORT`, `WEBTERM_NODE_TOKEN`; header `x-webterm-node-token`
+- nama event/channel `webterm:*`
+- data dir: `WEBTERM_DATA_DIR` (default `~/.webterm-server`)
 
-Data dir webterm SENDIRI: `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
+Transisi: server masih MENERIMA nama lama (env/header) selama masa transisi, tetapi hanya MENERBITKAN
+nama baru. Data dir warisan hanya dibaca sebagai fallback migrasi satu arah ke data dir webterm.
+Jangan memperkenalkan lagi nama lama di kode atau dokumen baru.
 
 ## Menjalankan
 
@@ -52,5 +51,5 @@ Data dir webterm SENDIRI: `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
 - JANGAN push/deploy/merge tanpa perintah eksplisit di pesan yang sama.
 - Fitur baru → branch sendiri (`feature/`/`fix/`/`chore/<nama>`) + test nyata; tunggu konfirmasi sebelum merge.
 - Verifikasi (typecheck + test) sebelum klaim "selesai".
-- Ambigu desain/perilaku → tiru nodeterm (repo referensi), jangan invent.
+- Ambigu desain/perilaku → tiru pola yang terbukti jalan, jangan invent.
 - Aturan global berlaku dari `~/.claude/CLAUDE.md`.

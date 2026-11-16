@@ -112,7 +112,7 @@ Gate B2 (gagal salah satu = **STOP** tool tulis):
 1. Satu turn OpenCode nyata (model ber-kredensial) → teks + `sessionRef` + usage tercatat.
 2. Satu tool MCP stdio dipanggil; tool di luar allowlist ditolak; nama tool nyata dicatat.
 3. Cancel membunuh proses <2 s; event final tepat sekali; teks parsial tersimpan.
-4. `agentEnv(process.env)` tanpa `WEBTERM_TOKEN`/`NODETERM_*` (assertion).
+4. `agentEnv(process.env)` tanpa `WEBTERM_TOKEN`/`WEBTERM_*` (assertion).
 5. Resume `--session` memakai `sessionRef` yang sama (verifikasi lintas proses).
 6. `bash`/`edit`/`write` gagal saat dipanggil (bukan hanya tidak disebut di docs); `--auto` tidak dipakai.
 7. Kuota/auth error (`provider.quota` 429, 401) → `provider_quota`/`auth_failed`, bukan retry.

@@ -51,7 +51,7 @@ Urutan nyata (baris dari `index.ts`, `serverConfig.ts`, `auth.ts`):
 | T2 | Gerbang Origin membandingkan `Origin.host` dengan `Host` request → **DNS rebinding lolos** (kedua header = `evil.example:P`) | Halaman web berbahaya, setelah rebinding, memegang shell lewat `/ws` pada mesin pengguna yang membuka halaman itu | Tinggi `[opini: terbesar]` | U9; `auth.ts:95-107`. Tidak ada allowlist Host (`grep allowedHosts` nol di `src/server`). Pagar Host milik Vite (dev) tidak menjangkau `/api` & `/ws` karena ditangani sebelum `vite.middlewares` (`index.ts:157-161`) `[BT]` |
 | T3 | Kunci `dangerous` (14) + `/api/approvals/*` + mint capability butuh `WEBTERM_TOKEN`; tanpa env tidak ada token → terkunci permanen | Pengguna zero-config tak bisa menyalakan orkestrator/central/approval dari UI; satu-satunya jalan = tulis env (menggagalkan tujuan) | Fungsional | U6b; `approvalAuth.ts:13`, `envSettings.runtime.ts:37`, `control/mount.ts:64` |
 | T4 | Data dir 0755 dan `webterm.db`/log 0644 (umask); hanya `secrets/` 0700 dan `context-links/` | Workspace, riwayat, log terbaca pengguna lokal lain; backup data dir ikut membawa semuanya | Sedang | U1 `ls -la`; `config.ts:7` `mkdirSync` tanpa `mode` |
-| T5 | `.env` di cwd (dev & binary) masuk `process.env`; kunci tak berawalan `WEBTERM_/NODETERM_/PORT/HOST/VITE_/BUN_` mengalir ke **semua PTY** | `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN` (nama legacy diterima `telegram.ts:5`) bocor ke setiap shell/agent | Tinggi bila `.env` dipakai | U7; `ptyShell.ts:74` |
+| T5 | `.env` di cwd (dev & binary) masuk `process.env`; kunci tak berawalan `WEBTERM_/WEBTERM_/PORT/HOST/VITE_/BUN_` mengalir ke **semua PTY** | `OPENAI_API_KEY`, `TELEGRAM_BOT_TOKEN` (nama legacy diterima `telegram.ts:5`) bocor ke setiap shell/agent | Tinggi bila `.env` dipakai | U7; `ptyShell.ts:74` |
 | T6 | Binary memuat `bunfig.toml` dari cwd (default true) | `preload` di bunfig = kode arbitrer di server bila dijalankan dari direktori tak tepercaya `[BT: preload pada binary tak diuji]` | Sedang | U8 |
 | T7 | Efek samping DB/dir sebelum validasi token (U3) | Server yang menolak start tetap meninggalkan state | Rendah | U3 |
 | T8 | `PORT` invalid/0 → 8700 senyap; EADDRINUSE mentah | Salah konfigurasi tak terlihat; port acak mustahil | Rendah | U4, U5; `serverConfig.ts:10` |
@@ -73,7 +73,7 @@ Urutan nyata (baris dari `index.ts`, `serverConfig.ts`, `auth.ts`):
 | Opsi | Perilaku | Untung | Rugi |
 |---|---|---|---|
 | A. Status quo | Loopback terbuka, non-loopback crash. | Nol perubahan, kompat penuh. | T1, T2, T3 tetap. |
-| B. Token selalu aktif | Bangkitkan + persist; tampil di terminal; semua akses (termasuk loopback) pakai token. | Menutup T1-T3. | Memutus `curl localhost`, skrip/CI/tes yang mengandalkan loopback terbuka, bookmark lama; `sessionStorage` per-tab (`transportToken.ts:7`) → tab baru minta login. Menyimpang dari nodeterm. |
+| B. Token selalu aktif | Bangkitkan + persist; tampil di terminal; semua akses (termasuk loopback) pakai token. | Menutup T1-T3. | Memutus `curl localhost`, skrip/CI/tes yang mengandalkan loopback terbuka, bookmark lama; `sessionStorage` per-tab (`transportToken.ts:7`) → tab baru minta login. Menyimpang dari referensi eksternal. |
 | **D. Bertingkat (rekomendasi)** | (1) Non-loopback tanpa token: **bangkitkan+persist** alih-alih crash. (2) Loopback: tetap terbuka SEBELUM pengguna meminta token; tombol "Aktifkan token akses" di UI/CLI membuat berkasnya (opt-in B). (3) **Host allowlist** menutup T2 pada semua mode. | Zero-config tetap mulus, jalur aman terbuka, T2 tertutup tanpa memutus siapa pun. | Loopback default tetap T1 (mitigasi: data dir 0700). |
 
 Prioritas sumber token (D): `WEBTERM_TOKEN` env (menang, kompat) > `<dataDir>/secrets/WEBTERM_TOKEN` > bangkitkan hanya jika non-loopback > tanpa token. Ada berkas = token ditegakkan, juga di loopback (itu mekanisme opt-in).
@@ -164,4 +164,4 @@ Catatan `Bun.secrets` terverifikasi dari dokumen resmi (bun.com/docs/runtime/sec
 | W6 `ui-token-optin` | Tombol "Aktifkan/Putar token" di Pengaturan + (fase 2) cookie sesi | `src/server/settingsApi.ts`, klien Pengaturan | M |
 | W7 `docs-envmin` | README, `.env.example` (kecil), CHANGELOG, docs keamanan/TLS — satu worker di akhir | `README.md`, `.env.example`, `CHANGELOG.md` | S |
 
-Urutan: W1, W3, W5 paralel → W2 → W4 → W6 → W7. Stop-gate: typecheck, `npm test`, `bun test src/server/*.bun.test.ts`, tes boot-tanpa-env hijau. Nama `WEBTERM_TOKEN`, `x-nodeterm-node-token`, `NODETERM_*` tidak diubah.
+Urutan: W1, W3, W5 paralel → W2 → W4 → W6 → W7. Stop-gate: typecheck, `npm test`, `bun test src/server/*.bun.test.ts`, tes boot-tanpa-env hijau. Nama `WEBTERM_TOKEN`, `x-webterm-node-token`, `WEBTERM_*` dipakai apa adanya.
