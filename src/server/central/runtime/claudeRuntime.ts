@@ -12,7 +12,8 @@ import {
   type RuntimeResult, createCancelToken,
 } from './centralRuntime'
 import { createTurnEmitter } from './runtimeEvents'
-import { applyClaudeEvent, parseClaudeMessage } from './claudeEvents'
+import { applyClaudeEvent } from './claudeEvents'
+import { parseClaudeMessage } from './claudeEvents.parse'
 import {
   type ClaudeRuntimeOptions, type ClaudeTurnInput, DEFAULT_MAX_TURNS, DEFAULT_WALL_MS, MICROS_PER_USD, centralQueryOptions, claudeChildEnv, claudeModelArg,
 } from './claudeOptions'
