@@ -16,7 +16,7 @@ const CTRL_C = '\x03'
 const SESSION = '5b8e2c14-7a90-4f3d-9c61-0e2d4a7b13aa'
 
 /** Run `fn` with `custom:<name>` resolving to `base`, always restoring the resolver. */
-async function withCustomAgent<T>(name: string, base: string, fn: () => T | Promise<T>): Promise<T> {
+async function withCustomAgent<T>(name: string, base: 'claude' | undefined, fn: () => T | Promise<T>): Promise<T> {
   setCustomAgentBaseResolver((id) => (id === `custom:${name}` ? base : undefined))
   try {
     return await fn()
@@ -42,7 +42,7 @@ describe('exit command per agent', () => {
 
   it('follows a custom agent to its base harness', async () => {
     await withCustomAgent('wrapper', 'claude', () => expect(exitSequence('custom:wrapper')).toBe('/exit'))
-    await withCustomAgent('wrapper', 'codex', () => expect(exitSequence('custom:wrapper')).toBeNull())
+    await withCustomAgent('wrapper', undefined, () => expect(exitSequence('custom:wrapper')).toBeNull())
   })
 })
 
