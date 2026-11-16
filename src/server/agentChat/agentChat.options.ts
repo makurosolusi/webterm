@@ -9,7 +9,7 @@ import { query, type CanUseTool, type Options, type PermissionMode, type Query, 
 import type { AgentChatConfig } from '../../shared/agentChat.wire'
 import type { AgentPermissionMode } from '../../shared/workspace'
 import { AGENT_CHAT_DEFAULT_CONFIG, configOptions } from './agentChat.controls'
-import { agentChatLadderPick, withLadderDefault } from './agentChat.ladder'
+import { agentChatFableTarget, agentChatLadderPick, withLadderDefault } from './agentChat.ladder'
 import { missingProfileNotice, nodeClaudeLaunch } from '../claudeLauncher/claudeLauncher'
 import { claudeSdkSpawn, type SpawnImpl } from '../claudeLauncher/claudeSdkSpawn'
 import { writeClaudeSettings, writeHouseRules } from '../hooksSettings'
@@ -67,7 +67,7 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     settingSources: AGENT_CHAT_SETTING_SOURCES,
     includePartialMessages: true,
     ...(i.resume ? { resume: i.resume } : {}),
-    ...configOptions(withLadderDefault(i.config ?? AGENT_CHAT_DEFAULT_CONFIG, agentChatLadderPick(i.workspaceId))),
+    ...configOptions(withLadderDefault(i.config ?? AGENT_CHAT_DEFAULT_CONFIG, agentChatLadderPick(i.workspaceId, i.nodeId), agentChatFableTarget(i.nodeId, i.workspaceId))),
     canUseTool: i.canUseTool,
     abortController: i.abort,
     settings: writeClaudeSettings(i.nodeId, i.port),

@@ -29,6 +29,21 @@ function setup(state: CentralModelState, setModel = vi.fn(async () => state)) {
   return { load, setModel, onModelSet, rerender }
 }
 
+describe('CentralModelPicker Fable', () => {
+  it('marks Fable as needing approval and highest cost, and picking it only asks the server (never shows it as running)', async () => {
+    const blocked: CentralModelState = { alias: 'opus', effort: 'high', tier: 'T3', pending: true, override: { model: 'fable', effort: 'high' }, fableBlocked: true }
+    const { setModel } = setup(AUTO, vi.fn(async () => blocked))
+    await screen.findByText('sonnet · medium · T2')
+    open()
+    const fable = await screen.findByRole('menuitemradio', { name: /^Fable/ })
+    expect(fable.textContent).toContain('Needs approval · highest cost')
+    fireEvent.click(fable)
+    await waitFor(() => expect(setModel).toHaveBeenCalledWith(CONV, 'fable', undefined))
+    expect(await screen.findByText(/opus · high · T3 · Fable awaiting approval/)).toBeTruthy()
+    expect(trigger().textContent).not.toMatch(/^fable/)
+  })
+})
+
 describe('CentralModelPicker', () => {
   it('shows the badge text on the trigger, loading first', async () => {
     setup(OPUS)

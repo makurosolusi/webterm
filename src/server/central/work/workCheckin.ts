@@ -46,8 +46,8 @@ const WAKE_WHAT: Partial<Record<WorkMove['to'], string>> = {
   waiting_input: 'is waiting for input (a question or a permission prompt)', blocked: 'is blocked',
 }
 
-/** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts, `playbook_result` by playbooks/playbook.run.ts. */
-export type ReasonKind = 'task_stalled' | 'task_failed' | 'task_duty' | 'reminder_due' | 'task_overdue' | 'task_report' | 'task_input' | 'task_blocked' | 'playbook_result' | 'health_finding' | 'health_changed'
+/** Why Central is woken; the `health_*` kinds are queued by health/healthNotify.ts, `playbook_result` by playbooks/playbook.run.ts, `permission_request` by permission/permission.runtime.ts. */
+export type ReasonKind = 'task_stalled' | 'task_failed' | 'task_duty' | 'reminder_due' | 'task_overdue' | 'task_report' | 'task_input' | 'task_blocked' | 'playbook_result' | 'permission_request' | 'health_finding' | 'health_changed'
 interface Reason { id: string; kind: ReasonKind; projectId: string | null; taskId: string | null; text: string; createdAt: number; notBefore: number | null }
 type Enabled = Omit<CheckinSettings, 'usedToday'>
 

@@ -55,7 +55,8 @@ describe('renderCapabilityMap', () => {
       { name: 'health.scan', access: 'off' },
     ])
     expect(map).toBe('Capabilities: research the web: playbook.web_research (asks) · review: playbook.review (asks) · '
-      + 'delegate by hand: task.create (auto), agent.spawn (asks), agent.prompt (auto) · project health: health.scan (off)')
+      + 'delegate by hand: task.create (auto), agent.spawn (asks), agent.prompt (auto) · '
+      + 'reach a Claude session outside the canvas: task.create (auto), agent.spawn (asks) · project health: health.scan (off)')
   })
 
   it('names reminders for what is not delegated, and an optional step (browser_open) never turns a playbook off', () => {
@@ -63,6 +64,12 @@ describe('renderCapabilityMap', () => {
     expect(map).toContain('research the web: playbook.web_research (auto)')
     expect(map).toContain('follow up later (not delegated work): reminder.set (auto)')
     expect(map).not.toContain('check later')
+  })
+
+  it('lists reaching an outside Claude session via spawn, and drops it when both tools are unregistered', () => {
+    const on = renderCapabilityMap([{ name: 'task.create', access: 'auto' }, { name: 'agent.spawn', access: 'asks' }])
+    expect(on).toContain('reach a Claude session outside the canvas: task.create (auto), agent.spawn (asks)')
+    expect(renderCapabilityMap([{ name: 'health.scan', access: 'auto' }])).not.toContain('outside the canvas')
   })
 
   it('is empty without tools', () => {

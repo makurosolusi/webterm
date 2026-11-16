@@ -11,6 +11,7 @@ import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
 import { CLAUDE_TEXT } from './ClaudeSettingsSection'
 import { APPROVAL_TEXT } from './ApprovalModeControl'
+import { ROUTING_TEXT } from './PermissionRoutingField'
 import { APPROVAL_LEVEL_TEXT } from '../shared/settings.approvalLevel'
 import { HEALTH_TEXT } from './controlPanelLabels'
 import { MODELS_TEXT } from './SettingsModels'
@@ -96,6 +97,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
   e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
   e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Danger.', `permission permissions mode approval approvals skip yolo ask auto danger dangerous bypass hook ${APPROVAL_HINTS}`),
+  e('claude', 'permissionRouting', ROUTING_TEXT.label, ROUTING_TEXT.hint, 'permission approval central agent human escalate prompt who decides'),
   e('claude', 'projectApprovalLevels', APPROVAL_TEXT.projectLabel, APPROVAL_TEXT.projectHint, `permission mode project override ask auto danger ${APPROVAL_HINTS}`),
   e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),
   e('claude', 'centralClaudeProfileId', PROFILES_TEXT.centralUses, PROFILES_TEXT.centralUsesHint, 'central profile launch'),

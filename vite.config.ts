@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import type { Plugin } from 'vite'
+import os from 'node:os'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -88,6 +89,9 @@ export default defineConfig({
     setupFiles: [path.resolve(process.cwd(), 'src/testDom.setup.ts')],
     // Threads (still isolated per file) instead of the default forks: ~40% faster on this suite.
     pool: 'threads',
+    // Half the cores, 2..4: a full run on an 8-core/8 GB box otherwise saturates the CPU and causes false timeouts.
+    // The CLI `--maxWorkers` still overrides this.
+    maxWorkers: Math.max(2, Math.min(4, Math.floor(os.availableParallelism() / 2))),
     include: ['**/*.test.{ts,tsx}', '../shared/**/*.test.{ts,tsx}', '../server/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.bun.test.ts', '../**/*.bun.test.ts'],
   }

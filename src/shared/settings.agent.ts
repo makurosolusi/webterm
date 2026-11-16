@@ -6,6 +6,7 @@ import type { AgentId, AgentPermissionMode, BuiltinAgentId } from './workspace'
 import type { ClaudeLaunchProfile } from './claudeLaunch/claudeLaunch.profiles'
 import type { ProjectModelOverride } from './settings.projectModels'
 import type { ApprovalLevel } from './settings.approvalLevel'
+import type { PermissionRouting } from './settings.permissionRouting'
 
 export interface AgentSettings {
   // --- Agent -----------------------------------------------------------------------------------
@@ -36,6 +37,8 @@ export interface AgentSettings {
   /** The three keys above as one choice (`settings.approvalLevel.ts`). Derived from them on every read; a
    *  patch carrying it is written as those keys, so it is never the source of truth itself. */
   agentApprovalLevel: ApprovalLevel
+  /** Who answers a worker's held permission prompt first: Central (default, escalates to you) or you directly (settings.permissionRouting.ts). */
+  permissionRouting: PermissionRouting
   /** Central may start a turn by itself when the supervisor finds something that needs a decision. */
   centralCheckins: boolean
   /** Self-started Central turns per local day: 5, 10, 20 or 50. */

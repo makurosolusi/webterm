@@ -18,6 +18,15 @@ export const PERMISSION_KIND = 'agent.permission'
 export const PERMISSION_ID_PREFIX = 'perm_'
 /** Capability namespace of a tool grant: `claude.tool:<ToolName>`; scope = resource pattern. */
 export const TOOL_CAPABILITY_PREFIX = 'claude.tool:'
+/** `request.via` of a card the Central agent decides first (docs/decisions/central-approver.md); fixed at creation, so the ledger digest never moves. */
+export const VIA_CENTRAL = 'central'
+/**
+ * SQL (alias `a` = approval row): the card is held for Central and no human surface may show it yet. A card
+ * leaves this state when an `inbox_item` row exists for it (escalation, `escalateToHuman`).
+ * CASE keeps `json_extract` away from rows of other kinds.
+ */
+export const HELD_FOR_CENTRAL_SQL = `(COALESCE(CASE WHEN a.kind = '${PERMISSION_KIND}' THEN json_extract(a.request_json, '$.via') END, '') = '${VIA_CENTRAL}'
+  AND NOT EXISTS (SELECT 1 FROM inbox_item hi WHERE hi.approval_id = a.id))`
 /** Identical consecutive PreToolUse calls that count as a loop (OpenCode doom_loop). */
 export const DOOM_LOOP_REPEATS = 3
 /** Calls further apart than this never count as the same loop. */

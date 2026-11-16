@@ -18,7 +18,8 @@ function parseAction(raw: unknown): InboxAction | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const a = raw as Record<string, unknown>
   switch (a.type) {
-    case 'approve': case 'ignore': case 'always': return { type: a.type }
+    case 'approve': return { type: 'approve', ...(typeof a.scope === 'string' ? { scope: a.scope } : {}) }
+    case 'ignore': case 'always': return { type: a.type }
     case 'deny': return { type: 'deny', ...(typeof a.reason === 'string' ? { reason: a.reason } : {}) }
     case 'edit': return 'args' in a ? { type: 'edit', args: a.args } : null
     case 'reply': return typeof a.text === 'string' ? { type: 'reply', text: a.text } : null

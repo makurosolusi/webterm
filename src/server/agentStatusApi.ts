@@ -97,7 +97,10 @@ async function defaultDeps(): Promise<AgentStatusDeps> {
     workspaceFor: (nodeId) => findWorkspaceFor(db.list(), nodeId),
     releaseBrowser: (id) => activeBrowser()?.releaseLease(id),
     // Read per request: the Settings toggle applies to the very next prompt, no restart.
-    answerPermission: (ask) => answerPermissionLive(ask, db.getSettings().hookReplyApprovals !== false),
+    answerPermission: (ask) => {
+      const s = db.getSettings()
+      return answerPermissionLive(ask, s.hookReplyApprovals !== false, { routing: s.permissionRouting, checkins: s.centralCheckins })
+    },
     preToolRule: preToolRuleLive,
     modeOf: (nodeId, workspaceId) => sessionModeName(db.getSettings(), nodeId, workspaceId),
   }

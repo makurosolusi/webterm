@@ -3,6 +3,8 @@ import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.
 import { getOrCreateConversation, getTurn, listConversationEvents } from '../conversationStore'
 import type { CentralRuntime, RuntimeEmit, TurnInput } from '../runtime/centralRuntime'
 import { zeroUsage } from '../runtime/centralRuntime'
+import { decideApproval } from '../../ledger/ledgerApproval'
+import { revokeFableGrant, stampFableScope } from '../../models/fableGrant'
 import { StreamHub } from './streamHub'
 import { TurnService, listMessages } from './turnService'
 import { centralTurnModel, conversationModelState, parseModelChoice, setConversationModel } from './conversationModelChoice'
@@ -61,6 +63,29 @@ describe('model precedence (conversation > setting > ladder)', () => {
     expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'claude-opus-5-5' }, null)).toMatchObject({ model: 'claude-opus-5-5', tier: 'T3' })
     expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'my-proxy/glm-4.6' }, null)).toMatchObject({ model: 'my-proxy/glm-4.6', reason: 'Central model setting' })
     expect(centralTurnModel(fixture.db, CONV, { ANTHROPIC_MODEL: 'my-proxy/glm-4.6' }, null)).toMatchObject({ model: null, alias: 'sonnet', tier: 'T2' })
+  })
+
+  it('Fable without a grant runs on Opus, says so in the chat and opens one grant card; a person granting it switches it on', () => {
+    const state = choose('fable', 'high')
+    expect(state).toMatchObject({ alias: 'opus', model: 'opus', fableBlocked: true, reason: 'Fable needs approval; running on Opus', override: { model: 'fable', effort: 'high' } })
+    const items = listMessages(fixture.db, CONV).items
+    expect(JSON.stringify(items.map((m) => m.parts))).toMatch(/Fable needs approval; running on Opus/)
+    expect(JSON.stringify(items.at(-1)!.parts)).toMatch(/"type":"approval"/) // the grant card sits in the chat
+    expect(centralTurnModel(fixture.db, CONV, {}, null)).toMatchObject({ model: 'opus', fableBlocked: true }) // asked again: no second card
+    const cards = fixture.db.query(`SELECT id FROM approval WHERE kind = 'model.fable' AND status = 'pending'`).all() as { id: string }[]
+    expect(cards).toHaveLength(1)
+    const ctx = { db: fixture.db, now: () => Date.now() }
+    const row = fixture.db.query('SELECT d.action_digest AS digest, d.nonce FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?').get(cards[0]!.id) as { digest: string; nonce: string }
+    decideApproval(ctx, cards[0]!.id, { actor: 'human:loopback', approve: true, digest: row.digest, nonce: row.nonce })
+    stampFableScope(ctx, cards[0]!.id, 'human:loopback', 'target')
+    expect(centralTurnModel(fixture.db, CONV, {}, null)).toMatchObject({ model: 'fable', alias: 'fable', tier: 'T4' })
+    revokeFableGrant(ctx, cards[0]!.id, 'human:loopback')
+    expect(centralTurnModel(fixture.db, CONV, {}, null)).toMatchObject({ model: 'opus', fableBlocked: true })
+  })
+
+  it('a Fable setting (alias or full id) is held to the same grant', () => {
+    expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'fable' }, null)).toMatchObject({ model: 'opus', fableBlocked: true })
+    expect(centralTurnModel(fixture.db, CONV, { WEBTERM_CENTRAL_MODEL: 'claude-fable-5-1' }, null)).toMatchObject({ model: 'opus', fableBlocked: true })
   })
 
   it('rejects unknown models and efforts', () => {

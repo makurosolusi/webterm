@@ -41,7 +41,7 @@ export async function controlVerb(c: Ctx, deps: ControlDeps, nodeId: string, ver
   if (verb === 'catalog' || verb === 'models') {
     const r = verb === 'catalog'
       ? await deps.pool.control(nodeId, async (q) => ({ commands: (await q.supportedCommands()).map(toCommand) }))
-      : await deps.pool.control(nodeId, async (q) => ({ models: withLadderEntry((await q.supportedModels()).map(toModel), agentChatLadderPick(deps.pool.target(nodeId)?.ws.id)) }))
+      : await deps.pool.control(nodeId, async (q) => ({ models: withLadderEntry((await q.supportedModels()).map(toModel), agentChatLadderPick(deps.pool.target(nodeId)?.ws.id, nodeId)) }))
     if (r?.ok) { json(c.res, 200, r.value); return true }
     const reason = r?.reason ?? 'No agent chat node with this id.'
     if (r) log.warn('agent_chat.control_refused', 'agent chat control request refused', { ids: { nodeId }, operation: verb, status: r.status })

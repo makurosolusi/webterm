@@ -8,6 +8,7 @@ import { scopeSpent } from '../cost/costOracle'
 import { ensureCostSchema } from '../cost/costStore'
 import { budgetLimits } from '../central/guard/budgetStore'
 import { createLogger } from '../logs'
+import { isFableGranted, requestFableGrant, type FableTarget } from './fableGrant'
 import { TIER_TABLE, defaultTier, resolveModel, type ModelPick, type ResolveInput } from './modelLadder'
 import { projectModelOverride } from './modelOverride'
 
@@ -38,7 +39,11 @@ export function dailyBudget(db: Database, now: number, env: Record<string, strin
 export function pickModel(db: Database | null, input: PickInput, now: () => number = Date.now): ModelPick {
   const override = projectModelOverride(input.scopeId ?? input.projectId ?? input.workspaceId)
   const budget = db ? dailyBudget(db, now()) : {}
-  const pick = resolveModel({ kind: input.kind, complexity: input.complexity, attempt: input.attempt, lastFailure: input.lastFailure, override, ...budget })
+  const scope = input.scopeId ?? input.projectId ?? input.workspaceId
+  const target: FableTarget | null = scope ? { kind: 'project', id: scope, projectId: input.projectId ?? scope } : null
+  const pick = resolveModel({ kind: input.kind, complexity: input.complexity, attempt: input.attempt, lastFailure: input.lastFailure, override, ...budget, fableGranted: isFableGranted(db, target) })
+  // A saved Fable override with no grant runs on Opus; the grant card in Needs you is the one-time notice (and the way out).
+  if (db && target && pick.fableBlocked) requestFableGrant({ db, now }, target)
   const base = defaultTier(input.kind, input.complexity)
   if (db && pick.reason.startsWith('budget:') && HIGH_TIERS.has(base)) {
     try {

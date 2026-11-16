@@ -99,7 +99,7 @@ export class AgentChatPool {
       nodeId,
       open: (resume, canUseTool, abort, input) => this.deps.opener(this.deps.lookup(nodeId) ?? t)(resume, canUseTool, abort, input),
       gate: this.gate,
-      ladder: () => agentChatLadderPick((this.deps.lookup(nodeId) ?? t).ws.id),
+      ladder: () => agentChatLadderPick((this.deps.lookup(nodeId) ?? t).ws.id, nodeId),
       onSessionId: (id) => {
         // A fresh id cannot clash; a resumed one was claimed in send(). Old ids of this node are dropped.
         this.lock.release(nodeId)
