@@ -8,8 +8,9 @@ import { hostOnly, parseBrowserUrl } from '../../../../shared/browser.url'
 import { isSafeNodeId } from '../../../../shared/workspace'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import { obj, S } from '../../../capability/capability.schema'
-import { QUESTION_MAX_CHARS, type PageReader } from '../../context/pageReader'
+import { QUESTION_MAX_CHARS, type PageRead, type PageReader } from '../../context/pageReader'
 import { createLogger } from '../../../logs'
+import { timed } from '../../../browser/browserAgent.latency'
 import { classifyBrowserNode } from '../../../browser/browser.idle'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { type BrowserToolDeps, browserNodesOf, failCode, idlePortsOf } from './browser.status'
@@ -40,15 +41,18 @@ function idleNode(deps: BrowserToolDeps, db: ToolCtx['db'], workspaceId: string,
   return nodeIds.find((id) => classifyBrowserNode(ports, workspaceId, id).idle)
 }
 
+/** Timing verdict of a control reply: status 200 = ok, else the failure code. */
+const judgeControl = (r: { status: number; body?: unknown }): { ok: boolean; code?: string } => (r.status === 200 ? { ok: true } : { ok: false, code: failCode(r.status, r.body) })
+
 type Read = { ok: true; text: string; url: string; truncated: boolean } | { ok: false; code: string }
 
 /** Navigate, wait for load, snapshot (`browser.read`), then hand the lease back so the node counts as idle again. */
 async function readNode(deps: BrowserToolDeps, nodeId: string, url: string): Promise<Read> {
   try {
-    const nav = await deps.control(nodeId, 'navigate', { url })
+    const nav = await timed('browser_read.navigate', () => deps.control(nodeId, 'navigate', { url }), { url, judge: judgeControl })
     if (nav.status !== 200) return { ok: false, code: failCode(nav.status, nav.body) }
-    await deps.control(nodeId, 'wait', { loaded: true, ms: WAIT_LOADED_MS }) // a timeout is still `ok`; the snapshot shows what loaded
-    const snap = await deps.control(nodeId, 'snapshot', {})
+    await timed('browser_read.waitLoaded', () => deps.control(nodeId, 'wait', { loaded: true, ms: WAIT_LOADED_MS }), { judge: judgeControl }) // a timeout is still `ok`; the snapshot shows what loaded
+    const snap = await timed('browser_read.snapshot', () => deps.control(nodeId, 'snapshot', {}), { judge: judgeControl })
     if (snap.status !== 200) return { ok: false, code: failCode(snap.status, snap.body) }
     const data = (snap.body as { data?: { content?: unknown; truncated?: unknown; url?: unknown } } | undefined)?.data
     if (typeof data?.content !== 'string') return { ok: false, code: 'snapshot_failed' }
@@ -95,16 +99,17 @@ export function createBrowserReadDef(deps: BrowserReadDeps): ToolDef {
         if ('code' in made) return fail(made.code)
         nodeId = made.nodeId
       }
-      let read = await readNode(deps, nodeId, url)
+      let attempt = await readNode(deps, nodeId, url)
       // The user was using the reused browser: take a fresh one instead of waiting on them (an explicit nodeId is never swapped).
-      if (!read.ok && read.code === 'human_active' && reused && asked === undefined) {
+      if (!attempt.ok && attempt.code === 'human_active' && reused && asked === undefined) {
         const made = await openNew()
         if ('code' in made) return fail(made.code, nodeId)
         nodeId = made.nodeId
-        read = await readNode(deps, nodeId, url)
+        attempt = await readNode(deps, nodeId, url)
       }
-      if (!read.ok) return fail(read.code, nodeId)
-      const summary = await reader({ text: read.text, url, ...(typeof input.question === 'string' ? { question: input.question } : {}), truncated: read.truncated })
+      if (!attempt.ok) return fail(attempt.code, nodeId)
+      const read = attempt // const keeps the narrowing inside the timing closure
+      const summary = await timed('browser_read.reader', () => reader({ text: read.text, url, ...(typeof input.question === 'string' ? { question: input.question } : {}), truncated: read.truncated }), { judge: (r: PageRead) => (r.ok ? { ok: true } : { ok: false, code: r.code }) })
       if (!summary.ok) return fail(summary.code, nodeId)
       const { answer, sources, truncated, injectionSuspected } = summary
       return { ok: true, data: { nodeId, host, answer, sources, truncated, injectionSuspected, provenance: 'untrusted-web', tainted: true } }
