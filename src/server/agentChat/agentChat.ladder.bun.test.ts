@@ -5,6 +5,11 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
+import { freshDb } from '../central/guard/controlGuard.testutil'
+import { decideApproval } from '../ledger/ledgerApproval'
+import type { LedgerRuntime } from '../ledger/ledgerRuntime'
+import { setActiveLedgerRuntime } from '../ledger/ledgerRuntimeState'
+import { requestFableGrant, stampFableScope } from '../models/fableGrant'
 import { registerModelSettings } from '../models/modelOverride'
 import { parseConfigPatch } from './agentChat.controls'
 import { agentChatLadderLabel, agentChatLadderPick, withLadderDefault, withLadderEntry } from './agentChat.ladder'
@@ -41,6 +46,25 @@ describe('agent chat on the model ladder', () => {
     expect(o.model).toBe('haiku')
     expect(o.effort).toBe(undefined) // an explicit model keeps the CLI's own effort for it
     expect(build({ config: { effort: 'low', thinking: false } })).toMatchObject({ model: 'opus', effort: 'low', thinking: { type: 'disabled' } })
+  })
+
+  test('Fable (per node, or from the workspace override) runs on Opus until a person grants it for the node or workspace', () => {
+    expect(build({ config: { model: 'fable', thinking: true } }).model).toBe('opus')
+    expect(build({ config: { model: 'claude-fable-5-1', thinking: true } }).model).toBe('opus')
+    overrides({ w1: { model: 'fable' } })
+    expect(build().model).toBe('opus')
+    const db = freshDb()
+    setActiveLedgerRuntime({ db } as unknown as LedgerRuntime)
+    try {
+      const id = requestFableGrant({ db, now: Date.now }, { kind: 'node', id: 'n-l', projectId: 'w1' })!
+      const c = db.query('SELECT d.action_digest AS digest, d.nonce FROM approval a JOIN decision d ON d.id = a.decision_id WHERE a.id = ?').get(id) as { digest: string; nonce: string }
+      decideApproval({ db, now: Date.now }, id, { actor: 'human:loopback', approve: true, ...c })
+      stampFableScope({ db, now: Date.now }, id, 'human:loopback', 'target')
+      expect(build({ config: { model: 'fable', thinking: true } }).model).toBe('fable')
+      expect(build({ nodeId: 'other', config: { model: 'fable', thinking: true } }).model).toBe('opus') // the grant was for n-l only
+    } finally {
+      setActiveLedgerRuntime(null)
+    }
   })
 
   test('picking Auto in the picker clears the explicit model', () => {

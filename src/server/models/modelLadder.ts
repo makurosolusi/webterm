@@ -8,7 +8,13 @@ export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 export type CallKind = 'helper' | 'explore' | 'central' | 'dag-planner' | 'dag-worker' | 'routine' | 'prreview' | 'bakeoff' | 'agent-spawn'
 
 /** `model`/`effort` null = leave it to the CLI default (T0). `reason` is a short English string for logs/UI. */
-export interface ModelPick { model: LadderModel | null; effort: Effort | null; tier: Tier; reason: string }
+export interface ModelPick {
+  model: LadderModel | null; effort: Effort | null; tier: Tier; reason: string
+  /** True when Fable was asked for without a human grant and the pick fell back to Opus. */
+  fableBlocked?: boolean
+  /** Whether the caller's scope holds a Fable grant (agent chat re-checks an explicit per-node model against it). */
+  fableGranted?: boolean
+}
 
 export interface ResolveInput {
   kind: CallKind
@@ -21,6 +27,8 @@ export interface ResolveInput {
   override?: { model?: string; effort?: Effort } | null
   spentMicros?: number
   capMicros?: number
+  /** A human granted Fable for this scope (see fableGrant.ts). Absent = no grant: Fable resolves to Opus. */
+  fableGranted?: boolean
 }
 
 export const TIER_TABLE: Readonly<Record<Tier, { model: LadderModel | null; effort: Effort | null }>> = Object.freeze({
@@ -86,7 +94,22 @@ function aliasOf(model: string): LadderModel | null {
   return (Object.keys(MODEL_IDS) as LadderModel[]).find((a) => m === a || m.includes(a)) ?? null
 }
 
+/** Reason shown to the user when Fable is requested without a grant. */
+export const FABLE_NEEDS_APPROVAL = 'Fable needs approval; running on Opus'
+
+/** True when `model` (alias or full id) names the Fable family. */
+export const isFableModel = (model: string | null | undefined): boolean => !!model && aliasOf(model) === 'fable'
+
+/** Every path that ends on Fable (override, /model, projectModels, ladder T4) passes here: no grant = Opus. */
 export function resolveModel(input: ResolveInput): ModelPick {
+  const pick = resolveUngated(input)
+  if (input.fableGranted) return { ...pick, fableGranted: true }
+  if (pick.model !== 'fable') return pick
+  const effort = input.override?.effort ?? TIER_TABLE.T3.effort
+  return { model: 'opus', effort, tier: 'T3', reason: FABLE_NEEDS_APPROVAL, fableBlocked: true }
+}
+
+function resolveUngated(input: ResolveInput): ModelPick {
   const base = input.tier ?? defaultTier(input.kind, input.complexity)
   const o = input.override
   if (o && (o.model || o.effort)) {

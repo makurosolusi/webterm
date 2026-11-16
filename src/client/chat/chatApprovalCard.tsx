@@ -12,7 +12,7 @@ import { InboxApiError, inboxErrorMessage } from '../inboxApi'
 import { CONFIRM_PHRASE } from '../inboxApprovalDialog'
 import type { ChatToolState } from './chatTypes'
 import {
-  actOnItem, approveLabel, impactText, refreshNeedsYou, snoozeUntil, useNeedsYou,
+  FABLE_KIND, actOnItem, approveLabel, impactText, refreshNeedsYou, snoozeUntil, useNeedsYou,
   type Action, type ActionType, type UnifiedItem,
 } from './needsYouApi'
 import './needsYou.css'
@@ -115,6 +115,14 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
             value={phrase} onChange={(e) => setPhrase(e.target.value)} />
         </label>
       )}
+      {item.approvalKind === FABLE_KIND ? (
+        // A Fable grant: the person picks the reach with a button, no typing. Only this window can answer it.
+        <div className="needs-card__actions" role="group" aria-label="Fable approval">
+          <Button size="sm" disabled={busy} onClick={() => send({ type: 'approve', scope: 'target' })}>{item.nodeId ? 'Allow for this node' : 'Allow for this conversation'}</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => send({ type: 'approve', scope: 'project' })}>Allow for this project</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => send({ type: 'deny' })}>Deny</Button>
+        </div>
+      ) : (
       <div className="needs-card__actions">
         {can('approve') && <Button size="sm" disabled={busy || !confirmed} onClick={() => send({ type: 'approve' })}>{approveLabel(item)}</Button>}
         {can('deny') && <Button size="sm" variant="secondary" disabled={busy} onClick={() => send({ type: 'deny' })}>Deny</Button>}
@@ -129,6 +137,7 @@ export function ChatApprovalCard(props: ChatApprovalCardProps): React.JSX.Elemen
         {can('snooze') && <Button size="sm" variant="ghost" disabled={busy} aria-label={`Snooze ${item.title} until tomorrow`} onClick={() => send({ type: 'snooze', until: snoozeUntil('tomorrow', now()) })}>Tomorrow</Button>}
         {can('ignore') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => send({ type: 'ignore' })}>{item.kind === 'notify' ? 'Dismiss' : 'Ignore'}</Button>}
       </div>
+      )}
       {busy && <span role="status" className="needs-card__status">Sending…</span>}
       {error && (
         <span role="alert" className="needs-card__error">

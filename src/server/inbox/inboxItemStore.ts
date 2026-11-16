@@ -8,6 +8,7 @@ import type { Database } from 'bun:sqlite'
 import { randomBytes } from 'node:crypto'
 import { requestApproval } from '../ledger/ledgerApproval'
 import { allRows, execWrite, getRow, newId, type LedgerContext, type Row } from '../ledger/ledgerCore'
+import { FABLE_KIND } from '../models/fableGrant'
 import { PERMISSION_KIND } from '../permission/permission.model'
 import { INBOX_KIND_RANK, decodeInboxCursor, encodeInboxCursor, kindRank } from './inboxCursor'
 import { allowedActions, toolImpact, type Impact, type InboxEntry, type InboxItemKind, type InboxItemStatus } from './inboxItemModel'
@@ -134,6 +135,9 @@ function mirrorOf(r: Row): { title: string; impact: Impact; nodeId: string | nul
     // `input` = the tool input Claude asked with (permission.wait); editing it becomes `updatedInput`.
     const editable = req.input !== undefined && req.input !== null
     return { title: clip(`${String(req.node ?? 'agent')} wants to run: ${req.label}`, TITLE_MAX), impact: toolImpact(tool, req.label), nodeId: typeof req.nodeId === 'string' ? req.nodeId : null, args: editable ? req.input : null, editable }
+  }
+  if (kind === FABLE_KIND) {
+    return { title: clip(typeof req.title === 'string' ? req.title : 'Allow Fable?', TITLE_MAX), impact: { what: 'Fable is the highest-cost model. Without approval this runs on Opus', tier: 'R1', rewindable: true }, nodeId: req.target && (req.target as { kind?: string }).kind === 'node' ? String((req.target as { id?: unknown }).id) : null, args: null, editable: false }
   }
   const tier = typeof req.tier === 'string' && TIERS.has(req.tier) ? (req.tier as Impact['tier']) : 'R2'
   return { title: clip(`Approval: ${kind}`, TITLE_MAX), impact: { what: `Allows the pending ${kind} action`, tier, rewindable: false }, nodeId: null, args: null, editable: false }

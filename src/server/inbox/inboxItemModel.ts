@@ -49,7 +49,8 @@ export interface InboxEntry {
 }
 
 export type InboxAction =
-  | { type: 'approve' }
+  /** `scope` only for a `model.fable` gate: what the grant covers (default: just that target). */
+  | { type: 'approve'; scope?: string }
   | { type: 'deny'; reason?: string }
   | { type: 'edit'; args: unknown }
   | { type: 'reply'; text: string }

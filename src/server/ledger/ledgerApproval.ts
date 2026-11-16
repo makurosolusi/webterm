@@ -79,6 +79,12 @@ function notify(ctx: LedgerContext, approval: Approval): void {
   }
 }
 
+/** Kinds only a person may decide: an agent (Central, a worker, the classifier) can request them, never answer. */
+export const HUMAN_ONLY_KINDS: ReadonlySet<string> = new Set(['model.fable'])
+
+/** `human`, `human:*` (web page, root, loopback) or `telegram:*` (the allowlisted owner's button press). */
+export const isHumanActor = (actor: string): boolean => actor === 'human' || actor.startsWith('human:') || actor.startsWith('telegram:')
+
 const DEFAULT_TTL_MS = 15 * 60_000
 const MAX_TTL_MS = 24 * 60 * 60_000
 
@@ -218,6 +224,9 @@ export function decideApproval(ctx: LedgerContext, id: string, input: DecideAppr
       id
     )
     if (!row) throw new LedgerNotFoundError('approval', id)
+    if (HUMAN_ONLY_KINDS.has(String(row['kind'])) && !isHumanActor(actor)) {
+      throw new LedgerError(`approval ${id} (${String(row['kind'])}) can only be decided by a person, not by actor ${actor}`)
+    }
     if (String(row['status']) !== 'pending') {
       throw new LedgerError(`approval ${id} is already ${String(row['status'])}`)
     }

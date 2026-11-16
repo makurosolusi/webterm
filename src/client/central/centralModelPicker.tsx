@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { DropdownMenu } from 'radix-ui'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { portalContainer } from '@/components/vscode/portalContainer'
-import { AUTO_MODEL_LABEL, ChangeError, usePendingChange } from '../agentChat/modelPicker'
+import { AUTO_MODEL_LABEL, ChangeError, FABLE_NOTE, usePendingChange } from '../agentChat/modelPicker'
 import { effortLabel } from '../agentChat/effortPicker'
 import { errorText } from '../agentChat/toolCards'
 import { EFFORT_ARGS, MODEL_ARGS, type EffortArg, type ModelArg } from './centralCommands'
@@ -69,9 +69,9 @@ function Picker({ conversationId, refreshKey, openRequest, onModelSet, load = fe
   const shown = pending?.value ?? current
   const loading = !state && !loadError
   const text = state
-    ? `${[state.alias ?? 'default', state.effort, state.tier].filter(Boolean).join(' · ')}${state.pending ? ' · next session' : ''}`
+    ? `${[state.alias ?? 'default', state.effort, state.tier].filter(Boolean).join(' · ')}${state.fableBlocked ? ' · Fable awaiting approval' : ''}${state.pending ? ' · next session' : ''}`
     : loading ? 'Model…' : 'Model'
-  const title = state?.pending ? 'New model starts with a fresh session on your next message'
+  const title = state?.fableBlocked ? 'Fable needs approval; running on Opus. Answer the request in Needs you.' : state?.pending ? 'New model starts with a fresh session on your next message'
     : loadError ? `Could not load the model: ${loadError}` : 'Model for this chat (/model to change)'
   const pick = (c: Choice): void => { if (current && choiceLabel(c) !== choiceLabel(current)) void run(c) }
 
@@ -102,7 +102,7 @@ function Picker({ conversationId, refreshKey, openRequest, onModelSet, load = fe
                 <DropdownMenu.Label className="act-menu__note">Model</DropdownMenu.Label>
                 <DropdownMenu.RadioGroup value={shown.model}
                   onValueChange={(v) => pick(v === 'auto' ? { model: 'auto' } : { model: v as ModelArg, ...(shown.effort ? { effort: shown.effort } : {}) })}>
-                  {MODEL_ARGS.map((m) => <Radio key={m} value={m} label={m === 'auto' ? AUTO_MODEL_LABEL : effortLabel(m)} />)}
+                  {MODEL_ARGS.map((m) => <Radio key={m} value={m} label={m === 'auto' ? AUTO_MODEL_LABEL : effortLabel(m)} note={m === 'fable' ? FABLE_NOTE : undefined} />)}
                 </DropdownMenu.RadioGroup>
                 <DropdownMenu.Separator className="act-menu__separator" />
                 <DropdownMenu.Label className="act-menu__note">{shown.model === 'auto' ? 'Effort (Auto picks it)' : 'Effort'}</DropdownMenu.Label>
@@ -121,11 +121,11 @@ function Picker({ conversationId, refreshKey, openRequest, onModelSet, load = fe
   )
 }
 
-function Radio({ value, label, disabled }: { value: string; label: string; disabled?: boolean }) {
+function Radio({ value, label, disabled, note }: { value: string; label: string; disabled?: boolean; note?: string }) {
   return (
     <DropdownMenu.RadioItem value={value} disabled={disabled} className="act-menu__item act-menu__item--radio">
       <DropdownMenu.ItemIndicator className="act-menu__check"><span className="codicon codicon-check" aria-hidden="true" /></DropdownMenu.ItemIndicator>
-      {label}
+      {note ? <span className="act-menu__text"><span>{label}</span><span className="act-menu__desc">{note}</span></span> : label}
     </DropdownMenu.RadioItem>
   )
 }

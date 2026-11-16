@@ -2,6 +2,7 @@
 // the root `x-webterm-token`: that header is a human credential and is deliberately unread here.
 // The handler is pure: no `Bun`, no fs, no HTTP objects. Production passes `deps.ledger.approval`.
 import {
+  HUMAN_ONLY_KINDS,
   approvalDigest,
   type Approval,
   type ApprovalChallenge,
@@ -195,6 +196,8 @@ function decideRoute(req: ControlRequest, deps: ApprovalDeps, acks: ApprovalAcks
   if (replay) return replay
 
   const approval = auth.approval
+  // The actor here is caller-supplied text behind an agent credential, so it proves nothing: person-only kinds never pass.
+  if (HUMAN_ONLY_KINDS.has(approval.kind)) return { status: 403, body: { error: 'human_only' } }
   if (approval.expiresAt !== null && approval.expiresAt <= now) {
     return { status: 409, body: { error: 'approval_expired' } }
   }

@@ -3,15 +3,21 @@
 // effort always wins. Pure ladder + settings override, no ledger: the pool stays free of bun:sqlite.
 // ponytail: no budget pressure here (no db at hand); pass dailyBudget through when the chat must obey the cap.
 import type { AgentChatConfig, AgentChatModel } from '../../shared/agentChat.wire'
-import { resolveModel, type ModelPick } from '../models/modelLadder'
+import { FABLE_NEEDS_APPROVAL, isFableModel, resolveModel, type ModelPick } from '../models/modelLadder'
+import { type FableTarget, isFableGrantedActive, requestFableGrantActive } from '../models/fableGrant'
 import { projectModelOverride } from '../models/modelOverride'
 
 /** Value Claude Code lists for "use the default model" (mirrors the client's DEFAULT_MODEL). */
 export const AGENT_CHAT_DEFAULT_MODEL = 'default'
+/** Shown where the node's Fable choice was swapped for Opus. */
+export const AGENT_CHAT_FABLE_NOTICE = FABLE_NEEDS_APPROVAL
 
 // Kind 'central': Agent Chat is interactive like Central, so it shares Central's T2 (Sonnet · medium) default.
-export function agentChatLadderPick(workspaceId?: string): ModelPick {
-  return resolveModel({ kind: 'central', override: projectModelOverride(workspaceId) })
+export const agentChatFableTarget = (nodeId: string, workspaceId?: string): FableTarget => ({ kind: 'node', id: nodeId, projectId: workspaceId ?? null })
+
+export function agentChatLadderPick(workspaceId?: string, nodeId?: string): ModelPick {
+  const fableGranted = nodeId ? isFableGrantedActive(agentChatFableTarget(nodeId, workspaceId)) : workspaceId ? isFableGrantedActive({ kind: 'project', id: workspaceId, projectId: workspaceId }) : false
+  return resolveModel({ kind: 'central', override: projectModelOverride(workspaceId), fableGranted })
 }
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
@@ -26,7 +32,12 @@ export function agentChatLadderLabel(p: ModelPick): string {
  * The config the CLI actually runs: a missing model comes from the ladder, and so does a missing effort
  * when the model did too (an explicit model keeps the CLI's own effort for it).
  */
-export function withLadderDefault(c: AgentChatConfig, p: ModelPick): AgentChatConfig {
+export function withLadderDefault(c: AgentChatConfig, p: ModelPick, fableTarget?: FableTarget): AgentChatConfig {
+  // An explicit per-node Fable needs a person's grant too: without one the node runs on Opus and a grant card opens.
+  if (c.model && isFableModel(c.model) && !p.fableGranted) {
+    if (fableTarget) requestFableGrantActive(fableTarget)
+    return { ...c, model: 'opus' }
+  }
   if (c.model && c.model !== AGENT_CHAT_DEFAULT_MODEL) return c // `default` (the Auto entry, or a config stored before the ladder) = no choice
   const effort = c.effort ?? p.effort ?? undefined
   const { model: _picked, ...rest } = c

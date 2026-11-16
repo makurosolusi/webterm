@@ -32,6 +32,10 @@ export function ChangeError({ message, onRetry, onDismiss, disabled }: { message
   )
 }
 
+/** Shown on every Fable entry (picker menus): it needs a person's grant and costs the most. */
+export const FABLE_NOTE = 'Needs approval · highest cost'
+export const isFableValue = (value: string): boolean => value.toLowerCase().includes('fable')
+
 /** Value Claude Code lists for "use the default model"; an unset model maps to it. */
 export const DEFAULT_MODEL = 'default'
 
@@ -106,7 +110,8 @@ export function ModelPicker({ loadModels, models: known, value, onChange, disabl
                     <DropdownMenu.ItemIndicator className="act-menu__check"><span className="codicon codicon-check" aria-hidden="true" /></DropdownMenu.ItemIndicator>
                     <span className="act-menu__text">
                       <span>{m.displayName}</span>
-                      {m.description && <span className="act-menu__desc">{m.description}</span>}
+                      {isFableValue(m.value) ? <span className="act-menu__desc">{[m.description, FABLE_NOTE].filter(Boolean).join(' · ')}</span>
+                        : m.description && <span className="act-menu__desc">{m.description}</span>}
                     </span>
                   </DropdownMenu.RadioItem>
                 ))}
