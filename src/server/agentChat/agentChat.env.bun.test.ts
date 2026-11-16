@@ -11,7 +11,7 @@ const NO_PROVIDER = { set: {}, unset: [] }
 const AUTH = { ANTHROPIC_API_KEY: 'sk-test-only-key', ANTHROPIC_BASE_URL: 'https://gw.example.test', ANTHROPIC_AUTH_TOKEN: 'test-only-token', ANTHROPIC_MODEL: 'claude-test', CLAUDE_CODE_USE_BEDROCK: '1' }
 const parentEnv = {
   PATH: '/usr/bin:/bin', HOME: '/home/test', CLAUDE_CONFIG_DIR: '/tmp/cfg-test', ...AUTH,
-  CLAUDECODE: '1', TMUX: '/tmp/tmux-1/default,1,0', WEBTERM_TOKEN: 'root-test-only', NODETERM_NODE_ID: 'parent-node', CAP: 'wcap_test-only',
+  CLAUDECODE: '1', TMUX: '/tmp/tmux-1/default,1,0', WEBTERM_TOKEN: 'root-test-only', WEBTERM_NODE_ID: 'parent-node', CAP: 'wcap_test-only',
 }
 
 describe('agentChatEnv', () => {
@@ -24,7 +24,7 @@ describe('agentChatEnv', () => {
   test('never passes CLAUDECODE, TMUX, root tokens or capability tokens', () => {
     const env = agentChatEnv({ nodeId: 'n', port: 1, parentEnv, provider: NO_PROVIDER, profileEnv: { CLAUDECODE: '1' } })
     for (const k of ['CLAUDECODE', 'TMUX', 'WEBTERM_TOKEN', 'CAP']) expect(k in env).toBe(false)
-    expect(env.NODETERM_NODE_ID).toBe('n')
+    expect(env.WEBTERM_NODE_ID).toBe('n')
   })
 
   test('the active provider is applied like the terminal launch file (set + unset)', () => {
@@ -37,7 +37,7 @@ describe('agentChatEnv', () => {
 
   test('carries the same node identity a terminal agent gets', () => {
     const env = agentChatEnv({ nodeId: 'node-7', port: 8701, parentEnv, provider: NO_PROVIDER })
-    expect(env.NODETERM_PORT).toBe('8701')
+    expect(env.WEBTERM_PORT).toBe('8701')
     expect(env[NODE_HEADERS_ENV]).toBe(claudeHeadersPath('node-7'))
     expect(env.PATH?.endsWith('/usr/bin:/bin')).toBe(true)
   })
@@ -52,10 +52,10 @@ describe('agentChatEnv', () => {
       s.close('parity-1')
       // What spawnPty hands the agent command: filtered process env + the session overlay.
       const terminal = { ...ptyEnv(process.env, { interactive: false }), ...spawns[0]?.env }
-      const chat = agentChatEnv({ nodeId: 'parity-1', port: Number(terminal.NODETERM_PORT), provider: NO_PROVIDER })
+      const chat = agentChatEnv({ nodeId: 'parity-1', port: Number(terminal.WEBTERM_PORT), provider: NO_PROVIDER })
       const dropped = new Set<string>([...AGENT_CHAT_DROPPED_ENV, ...Object.keys(terminal).filter((k) => terminal[k]?.startsWith('wcap_'))])
       expect(Object.keys(chat).sort()).toEqual(Object.keys(terminal).filter((k) => !dropped.has(k)).sort())
-      for (const k of [NODE_HEADERS_ENV, 'NODETERM_NODE_ID', 'NODETERM_PORT', 'PATH', ...Object.keys(AUTH)]) expect(chat[k] === terminal[k]).toBe(true)
+      for (const k of [NODE_HEADERS_ENV, 'WEBTERM_NODE_ID', 'WEBTERM_PORT', 'PATH', ...Object.keys(AUTH)]) expect(chat[k] === terminal[k]).toBe(true)
     } finally {
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) delete process.env[k]

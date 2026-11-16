@@ -1,6 +1,6 @@
 /**
- * One Device Attributes answer per question. Ported verbatim from nodeterm
- * (`nodeterm-web/src/core/da-reply-gate.ts`, issue #1172); only this header and the gate's
+ * One Device Attributes answer per question.
+ * (the gate's
  * location differ: here it sits in `Sessions.input`, where every viewer's input converges. Replayed
  * scrollback reaches the client from the log, never from the pty, so its old queries open no slot
  * and the client's re-answers to them are dropped.

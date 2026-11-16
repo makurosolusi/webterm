@@ -1,15 +1,14 @@
 // Target browser untuk agent PTY, diselesaikan SAAT PANGGILAN dari kabel (edge) node agent itu sendiri — pola
 // context-link (`contextLinkRoute.ts`): identitas = token node, izin = edge di board yang tersimpan. Menyambung kabel
-// setelah agent jalan langsung berlaku; melepasnya langsung mencabut. Meniru Orca (`browser-command-targets.ts`:
-// halaman dipilih per panggilan dari worktree pemanggil, error jelas bila tak ada) dan nodeterm (`browser-drive.ts`:
-// gerbang dibaca LIVE saat drive, identitas pemanggil terverifikasi).
+// setelah agent jalan langsung berlaku; melepasnya langsung mencabut. Halaman dipilih per panggilan dari worktree pemanggil (error jelas bila tak ada);
+// gerbang dibaca LIVE saat drive dan identitas pemanggil diverifikasi.
 import { BROWSER_KIND } from '../../shared/browser.contract'
 import type { Workspace } from '../../shared/workspace'
 import { TOKEN_HEADER } from '../auth'
 import { findWorkspaceFor } from '../contextLinkRoute'
 import { cableGrants } from '../policy/policy.cable'
 import type { Grant } from '../policy/policy.model'
-import { NODE_TOKEN_HEADER, nodeIdForToken } from '../hooksTokens'
+import { nodeIdForToken, nodeTokenFrom } from '../hooksTokens'
 import { firstHeader } from '../httpHeaders'
 import type { ControlHeaders, ControlResult } from '../control/controlTypes'
 
@@ -17,9 +16,9 @@ export interface BrowserRef { id: string; name?: string; title: string }
 /** `cable` = the live cable grants the target was resolved from, for `policy.decide` (same board, same instant). */
 export type LinkedTarget = { ok: true; nodeId: string; cable?: Grant[] } | { ok: false; result: NonNullable<ControlResult> }
 
-/** Node agent yang DIBUKTIKAN token node request ini (header transport dulu, header protokol nodeterm cadangan). */
+/** Node agent yang DIBUKTIKAN token node request ini (header transport dulu, header node cadangan). */
 export function requesterOf(headers: ControlHeaders | undefined): string | undefined {
-  const token = firstHeader(headers?.[TOKEN_HEADER] ?? headers?.[NODE_TOKEN_HEADER])
+  const token = firstHeader(headers?.[TOKEN_HEADER] ?? nodeTokenFrom((n) => headers?.[n]))
   return token ? nodeIdForToken(token) : undefined
 }
 

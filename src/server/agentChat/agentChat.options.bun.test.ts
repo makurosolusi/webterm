@@ -81,7 +81,7 @@ describe('buildAgentChatOptions', () => {
   test('child env is the allowlisted parent plus node identity, with a temp CLAUDE_CONFIG_DIR', () => {
     const env = build({ parentEnv: { ...parentEnv, CLAUDECODE: '1' } }).options.env ?? {}
     expect(env.CLAUDE_CONFIG_DIR).toBe(configDir)
-    expect(env.NODETERM_NODE_ID).toBe('n-1')
+    expect(env.WEBTERM_NODE_ID).toBe('n-1')
     expect(env.CLAUDECODE).toBe(undefined)
   })
 

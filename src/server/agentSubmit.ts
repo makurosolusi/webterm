@@ -2,10 +2,9 @@
 //
 // Why: Claude Code's TUI reads text and its Enter arriving in ONE write as a paste, so the `\r` does not
 // submit and the prompt sits unsent in the input box (user report: Central "started" work that was
-// never submitted). Imitated from nodeterm `core/typed-input.ts` `typeThenSubmitWhenSettled`: type the
+// never submitted). Approach: type the
 // text, wait until the screen SHOWS it, then send Enter as a SEPARATE write. webterm reads its rebuilt
-// screen (`readClaudeComposer`) instead of a tmux capture, and adds two checks nodeterm leaves to the
-// caller: the composer must be empty before typing (a booting Claude has none yet), and the agent must
+// screen (`readClaudeComposer`) instead of a tmux capture, and adds two checks on top: the composer must be empty before typing (a booting Claude has none yet), and the agent must
 // visibly START after the Enter (composer empty again, or status `working`), else Enter once more.
 //
 // A plain shell gets `text\r` in one write (it executes either way); a non-Claude agent has no
@@ -15,7 +14,7 @@ import { hasClaudeHookSettings } from '../shared/workspace'
 import { readClaudeComposer, type ClaudeComposer } from './linkNoteComposer'
 import { renderStyledScreen } from './linkNoteScreen'
 
-/** Poll cadence and count for "text on screen" (outbox measurement, from nodeterm typed-input). */
+/** Poll cadence and count for "text on screen" (outbox measurement). */
 export const SUBMIT_POLL_MS = 100
 export const SUBMIT_POLLS = 20
 /** Non-Claude agents have no readable composer: Enter after this fixed gap. */

@@ -2,7 +2,7 @@
 // about its cables; `outbox/` decides WHEN and HOW it is delivered (idle + proven-empty composer,
 // queued while busy, delivered at the end of the turn, exactly-once per operationId).
 //
-// Unlike nodeterm (`src/renderer/lib/noteLink.ts:205-226`), a refused note is QUEUED, not dropped
+// A refused note is QUEUED, not dropped
 // (the user asked to see every wire/unwire). Coalescing is kept by superseding: each pass diffs what
 // the node is wired to now against what it was last TOLD, and the queued note for that node is
 // replaced by the current net change (or cancelled when the net change is nothing), so a

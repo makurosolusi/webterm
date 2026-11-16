@@ -31,7 +31,7 @@ describe('isStaleWorking', () => {
   })
 
   it('tidak pernah menyapu state selain working, sejauh apa pun melewati jendela', () => {
-    // Aturan nodeterm yang sama (live-work.test.ts:85-89 pada 10 * WORKING_STALE_MS): ketiganya
+    // Aturan yang sama pada 10 * WORKING_STALE_MS: ketiganya
     // menyatakan sesuatu yang sudah SELESAI terjadi, dan fakta itu tidak kedaluwarsa.
     const far = t0 + 10 * WORKING_STALE_MS
     for (const status of ['waiting', 'blocked', 'done']) {

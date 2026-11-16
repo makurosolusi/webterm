@@ -50,7 +50,8 @@ ${ESC_FN}
 session() {
   hdr="\${${NODE_HEADERS_ENV}:-}"
   if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then die "Not a webterm agent session (no node credentials)."; fi
-  API="http://127.0.0.1:\${NODETERM_PORT:-8700}$API_PATH"
+  # legacy: NODETERM_PORT fallback for sessions started before the rename; remove after 0.10.0.
+  API="http://127.0.0.1:\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}$API_PATH"
 }
 # Prints the response body; exit 0 on 2xx, 1 otherwise (the body says why).
 send() {

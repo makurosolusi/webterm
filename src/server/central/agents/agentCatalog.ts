@@ -19,6 +19,7 @@ export const AGENT_KIND_UNKNOWN = 'agent_kind_unknown'
 const PROMPT_PLACEHOLDER = '{prompt}'
 const SESSION_PLACEHOLDER = '{sessionId}'
 const ENV_REF = /^\$\{env:([A-Z][A-Z0-9_]{0,63})\}$/
+// legacy: NODETERM_ = pre-rename prefix, still reserved; remove after 0.10.0.
 const RESERVED_ENV = /^(WEBTERM_|NODETERM_)/
 const DEF_HASH_HEX_CHARS = 12
 const LABEL_MAX = 40

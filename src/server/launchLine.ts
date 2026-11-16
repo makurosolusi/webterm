@@ -30,10 +30,8 @@ export const wrapperMissingNotice = (bin: string): string =>
  * `resumeCommandWith`). Agent tanpa kapabilitas (CLI lain yang dijalankan sebagai program terminal
  * biasa, termasuk node warisan `agentId: 'codex'`) mendapat `cmd` apa adanya, tanpa flag tambahan.
  *
- * CATATAN RISIKO (beda dari nodeterm, sengaja): nodeterm menggerbangi minting session id di balik
- * probe versi CLI per agent (`supportsSessionIdFlag`, yang menyelidiki `claude --version` dan
- * `grok --help` terpisah — diverifikasi di source v0.4.5). webterm tidak memprobe sama sekali dan
- * memakai `SESSION_ID_CAPABLE` apa adanya. Risikonya terbatas: CLI lama menolak flag di peluncuran
+ * CATATAN RISIKO (sengaja): tidak ada probe versi CLI per agent sebelum minting session id;
+ * dipakai `SESSION_ID_CAPABLE` apa adanya. Risikonya terbatas: CLI lama menolak flag di peluncuran
  * PERTAMA, bukan merusak state. Kalau muncul di lapangan, tambahkan probe-nya — jangan diam-diam
  * mengecilkan daftar kapabilitas.
  */

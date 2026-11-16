@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { CAPABILITY_HEADER, TOKEN_HEADER } from '../auth'
 import { headerValue, type ControlHeaders, type ControlResult } from '../control/controlTypes'
 import { readControlBody, parseControlBody, isParseFailure, writeControlJson } from '../control/controlHttpIo'
-import { NODE_TOKEN_HEADER, nodeIdForToken } from '../hooksTokens'
+import { nodeIdForToken, nodeTokenFrom } from '../hooksTokens'
 import { MCP_CALL_PATH, MCP_PREFIX, MCP_TOOLS_PATH } from './mcp.paths'
 import { callCentralTool, centralConversationOf, listCentralTools } from './mcp.central'
 import { callTool, listTools, type McpDeps, type McpReceipt } from './mcp.tools'
@@ -19,7 +19,7 @@ export async function mcpRoute(req: McpRequest, deps: McpDeps): Promise<ControlR
   if (req.path !== MCP_TOOLS_PATH && req.path !== MCP_CALL_PATH) return null
   const capability = headerValue(req.headers, CAPABILITY_HEADER)
   if (capability) return centralRoute(req, deps, capability)
-  const token = headerValue(req.headers, TOKEN_HEADER) ?? headerValue(req.headers, NODE_TOKEN_HEADER)
+  const token = headerValue(req.headers, TOKEN_HEADER) ?? nodeTokenFrom((n) => headerValue(req.headers, n))
   const nodeId = token ? nodeIdForToken(token) : undefined
   if (!token || !nodeId) return { status: 401, body: { error: 'unauthorized' } }
   if (req.path === MCP_TOOLS_PATH) {

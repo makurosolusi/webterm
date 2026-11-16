@@ -558,8 +558,8 @@ describe('P0: env anak tidak mewarisi token root', () => {
   const INHERITED = {
     WEBTERM_TOKEN: ROOT,
     WEBTERM_ALLOW_TOKEN_MINT: '1',
-    NODETERM_NODE_ID: 'inherited-node',
-    NODETERM_PORT: '1234',
+    WEBTERM_NODE_ID: 'inherited-node',
+    WEBTERM_PORT: '1234',
   }
 
   /** Pasang env warisan server, jalankan test, lalu kembalikan persis seperti semula. */
@@ -591,8 +591,8 @@ describe('P0: env anak tidak mewarisi token root', () => {
       expect(NODE_TOKEN_ENV in env).toBe(false)
       expect(Object.values(env)).not.toContain(nodeToken('agent-1'))
       expect(Object.values(env)).not.toContain(ROOT)
-      expect(env.NODETERM_NODE_ID).toBe('agent-1')
-      expect(env.NODETERM_PORT).toBe(String(PORT))
+      expect(env.WEBTERM_NODE_ID).toBe('agent-1')
+      expect(env.WEBTERM_PORT).toBe(String(PORT))
       // `webterm` resolves by name: its bin dir leads PATH, the inherited PATH follows untouched.
       expect(env.PATH.split(delimiter)[0]).toBe(dirname(cliPath()))
       expect(env.PATH).toBe(agentPath(process.env.PATH))
@@ -600,21 +600,21 @@ describe('P0: env anak tidak mewarisi token root', () => {
     })
   })
 
-  test('plain terminal gets no WEBTERM token and no NODETERM identity', () => {
+  test('plain terminal gets no WEBTERM token and no node identity', () => {
     withInheritedEnv(() => {
       const { sessions, spawns } = harness()
       sessions.open(open('shell-1'), recorder().send)
 
       const { opts, env } = spawns[0]
       expect('WEBTERM_TOKEN' in env).toBe(false)
-      expect(Object.keys(env).filter((k) => k.startsWith('NODETERM_'))).toEqual([])
+      expect(Object.keys(env).filter((k) => k.startsWith('WEBTERM_NODE_'))).toEqual([])
       // Tidak ada injeksi sama sekali untuk terminal biasa (PATH ikut: tanpa bin dir webterm).
       expect(opts.env).toBeUndefined()
       expect(env.PATH?.split(delimiter)[0]).not.toBe(dirname(cliPath()))
     })
   })
 
-  test('inherited WEBTERM_*/NODETERM_* are stripped before injection', () => {
+  test('inherited WEBTERM_* are stripped before injection', () => {
     withInheritedEnv(() => {
       const { sessions, spawns } = harness()
       sessions.open({ ...open('agent-2'), agentId: 'claude' }, recorder().send)
@@ -625,8 +625,8 @@ describe('P0: env anak tidak mewarisi token root', () => {
         expect('WEBTERM_ALLOW_TOKEN_MINT' in env).toBe(false)
         // Nilai warisan tidak boleh bertahan: yang ada hanya injeksi milik node ini.
         expect(env.WEBTERM_TOKEN).not.toBe(ROOT)
-        expect(env.NODETERM_NODE_ID).not.toBe('inherited-node')
-        expect(env.NODETERM_PORT).not.toBe('1234')
+        expect(env.WEBTERM_NODE_ID).not.toBe('inherited-node')
+        expect(env.WEBTERM_PORT).not.toBe('1234')
       }
     })
   })

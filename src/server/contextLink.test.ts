@@ -194,7 +194,7 @@ describe('buildContextShim', () => {
     expect(shim).toContain('-H "@$hdr"')
     expect(shim).toContain('WEBTERM_NODE_HEADERS')
     expect(shim).not.toContain(`${TOKEN_HEADER}:`)
-    expect(shim).not.toMatch(/WEBTERM_TOKEN|NODETERM_NODE_TOKEN/)
+    expect(shim).not.toMatch(/WEBTERM_TOKEN|WEBTERM_NODE_TOKEN/)
   })
   it('keeps the request shape the route parses', () => {
     for (const p of ['node=', 'verb=', 'want=', 'n=']) expect(CONTEXT_COMMAND).toContain(`--data-urlencode "${p}`)
@@ -223,7 +223,7 @@ function curlArgvOfShim(shim: string, env: Record<string, string>): string[] {
     writeFileSync(script, shim, { mode: 0o755 })
     // The context shim is an alias of `webterm context`: run that command of the CLI itself.
     execFileSync('/bin/sh', ['-c', `${script} context </dev/null`], {
-      env: { PATH: dir, ARGV_OUT: out, NODETERM_NODE_ID: 'n-shipped', ...env },
+      env: { PATH: dir, ARGV_OUT: out, WEBTERM_NODE_ID: 'n-shipped', ...env },
     })
     return readFileSync(out, 'utf8').split('\n').slice(0, -1)
   } finally {
@@ -250,7 +250,7 @@ describe('the header curl actually receives', () => {
     }
   })
   it('ignores a token in env and does not call curl without a readable header file', () => {
-    for (const env of <Record<string, string>[]>[{ WEBTERM_TOKEN: FAKE_NODE_TOKEN, NODETERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN }, { WEBTERM_NODE_HEADERS: '/nonexistent/h' }]) {
+    for (const env of <Record<string, string>[]>[{ WEBTERM_TOKEN: FAKE_NODE_TOKEN, WEBTERM_NODE_TOKEN: FAKE_FALLBACK_TOKEN }, { WEBTERM_NODE_HEADERS: '/nonexistent/h' }]) {
       expect(() => curlArgvOfShim(buildWebtermCli(), env)).toThrow() // argv file never written
     }
   })
@@ -333,7 +333,7 @@ describe('buildContextLinkSkillBody', () => {
   it('documents every verb the route serves', () => {
     for (const v of CONTEXT_LINK_VERBS) expect(body).toContain(`\`${v}`)
   })
-  // Anti-drift: these are the nodeterm paragraphs that must NOT be pasted back in. webterm has
+  // Anti-drift: these are the reference-client paragraphs that must NOT be pasted back in. webterm has
   // no sticky nodes, and is single-user loopback — no tunnel, no remote host, no sandbox.
   it('promises nothing webterm does not have', () => {
     for (const wrong of [/sticky/i, /\(note\)/, /tunnel/i, /\bssh\b/i, /sandbox/i, /unreachable/i]) {

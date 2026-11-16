@@ -116,7 +116,7 @@ export class Sessions extends SessionsAdopt {
     //    Nilai token sengaja TIDAK masuk env: di macOS env proses ber-uid sama terbaca proses lain
     //    (`KERN_PROCARGS2`, terverifikasi bahkan dari dalam sandbox claude), jadi token di env
     //    = token yang bisa dicuri agent tetangga. File-nya dibuka sandbox claude hanya untuk node ini.
-    //  - `NODETERM_NODE_ID`/`NODETERM_PORT` dibaca skill konteks-tertaut di dalam sesi agent.
+    //  - `WEBTERM_NODE_ID`/`WEBTERM_PORT` dibaca skill konteks-tertaut di dalam sesi agent.
     //  - `hookEnv` membawa batas tahan hook permission (claude saja).
     // Terminal biasa (tanpa `agentId`) tidak mendapat satu pun: ia tidak butuh kunci apa pun.
     // File ditulis hanya untuk spawn NYATA: spawn ter-inject (test) tidak menjalankan proses apa pun
@@ -125,7 +125,7 @@ export class Sessions extends SessionsAdopt {
     const env: Record<string, string> = {
       ...(msg.agentId ? { [NODE_HEADERS_ENV]: claudeHeadersPath(msg.id) } : {}),
       ...(isContextCapable(msg.agentId)
-        ? { NODETERM_NODE_ID: msg.id, NODETERM_PORT: String(PORT) }
+        ? { WEBTERM_NODE_ID: msg.id, WEBTERM_PORT: String(PORT) }
         : {}),
       ...(msg.agentId && hasClaudeHookSettings(msg.agentId)
         ? hookEnv(msg.id, { hookReplyApprovals: this.options.hookReplyApprovals })

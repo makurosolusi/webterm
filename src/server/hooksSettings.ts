@@ -39,8 +39,7 @@ export const PERMISSION_REQUEST_HOOK_TIMEOUT_SECS = 600
 export const PERM_WAIT_SECS_INTERACTIVE = 590
 
 /**
- * Event hook Claude Code yang kita langgani. Sebelas, sama dengan `CLAUDE_HOOK_EVENTS` nodeterm
- * (`src/shared/agents/hook-events.ts`) — diverifikasi terhadap v0.4.5.
+ * Event hook Claude Code yang kita langgani. Sebelas event.
  *
  * Yang dulu hilang di webterm dan kenapa penting:
  *  - `StopFailure` menyala MENGGANTIKAN `Stop` saat sebuah turn berakhir karena error API/model.
@@ -77,12 +76,12 @@ export const CLAUDE_HOOK_EVENTS: readonly HookSubscription[] = [
  * Token TIDAK PERNAH muncul di baris perintah, tidak sebagai nilai dan tidak sebagai ekspansi.
  * `curl` menerima `-H @<file>`: header (dan nilainya) dibaca dari sebuah file 0600 milik pengguna
  * (`claudeHeadersPath`), yang ditulis `writeClaudeSettings` tepat sebelum sesi diluncurkan. Dulu
- * baris ini berbunyi `-H "x-nodeterm-node-token: $NODETERM_NODE_TOKEN"`; shell meng-expand kedua
+ * baris ini memasang token node lewat `-H "<header>: $<ENV_VAR>"`; shell meng-expand kedua
  * variabel SEBELUM `exec`, jadi token aslinya tetap mendarat di argv curl dan terbaca semua proses
  * pengguna lewat `ps`. Referensi env var hanya menyembunyikan nilainya dari teks settings, bukan
  * dari argv proses yang benar-benar berjalan.
  *
- * DUA header, bukan satu. `x-nodeterm-node-token` adalah identitas per-node (dibaca
+ * DUA header, bukan satu. `x-webterm-node-token` adalah identitas per-node (dibaca
  * `stateVerified`); `x-webterm-token` adalah token TRANSPORT yang menggerbangi seluruh `/api/`
  * (`authorizeRequest` di auth.ts) — tanpanya setiap POST hook dibalas 403 begitu token diset,
  * yang mematikan badge status DAN registrasi transcript (sumber data context-link).

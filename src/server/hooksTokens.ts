@@ -9,14 +9,30 @@ import { activePolicy } from './policy/policy.runtime'
 const log = createLogger('hooks')
 const NODE_PRINCIPAL = 'node:'
 
-/**
- * Header yang membawa token node sebuah hook. JANGAN di-rename: ia wire-protocol yang kompatibel
- * dengan nodeterm upstream.
- */
-export const NODE_TOKEN_HEADER = 'x-nodeterm-node-token'
+/** Header yang membawa token node sebuah hook; satu-satunya nama yang kita TERBITKAN. */
+export const NODE_TOKEN_HEADER = 'x-webterm-node-token'
 
-/** Nama env var tempat sesi agent menemukan token node-nya. Juga wire-protocol — jangan di-rename. */
-export const NODE_TOKEN_ENV = 'NODETERM_NODE_TOKEN'
+/**
+ * legacy: nama header sebelum rename. Hanya DITERIMA (sesi agent lama di tmux, file header lama);
+ * tidak pernah diterbitkan. Boleh dihapus bersama `NODE_TOKEN_HEADERS` setelah rilis 0.10.0 — saat
+ * tak ada lagi sesi tmux dari versi sebelum rename yang masih hidup.
+ */
+export const LEGACY_NODE_TOKEN_HEADER = 'x-nodeterm-node-token'
+
+/** Nama header token node yang diterima: nama baru dulu, lalu nama lama. */
+export const NODE_TOKEN_HEADERS = [NODE_TOKEN_HEADER, LEGACY_NODE_TOKEN_HEADER] as const
+
+/** Token node dari request: coba tiap nama header yang diterima, nama baru lebih dulu. */
+export function nodeTokenFrom<T>(get: (name: string) => T | undefined): T | undefined {
+  for (const name of NODE_TOKEN_HEADERS) {
+    const v = get(name)
+    if (v !== undefined && v !== '') return v
+  }
+  return undefined
+}
+
+/** Nama env var tempat sesi agent menemukan token node-nya (tidak diisi: token hidup di file header). */
+export const NODE_TOKEN_ENV = 'WEBTERM_NODE_TOKEN'
 
 /** Re-export: the constant lives in `hooksPaths` (dependency-free, so the shims import it without a cycle). */
 export { NODE_HEADERS_ENV } from './hooksPaths'
@@ -54,9 +70,10 @@ function persistedToken(nodeId: string): string | undefined {
     if (code !== 'ENOENT') log.warn('hooks.token.header_unreadable', 'Node header file unreadable; minting a new node token', { ids: { nodeId }, code })
     return undefined
   }
-  const prefix = `${NODE_TOKEN_HEADER}: `
-  const line = text.split('\n').find((l) => l.startsWith(prefix))
-  const token = line?.slice(prefix.length).trim()
+  // legacy: file header tulisan versi lama memakai nama header lama; dibaca agar token tetap sama
+  // lintas upgrade, lalu file ditulis ulang dengan nama baru oleh `writeNodeHeaders`.
+  const line = text.split('\n').find((l) => NODE_TOKEN_HEADERS.some((h) => l.startsWith(`${h}: `)))
+  const token = line?.slice(line.indexOf(': ') + 2).trim()
   return token && policy.store.verifyToken(token) === `${NODE_PRINCIPAL}${nodeId}` ? token : undefined
 }
 

@@ -53,6 +53,7 @@ const FORBIDDEN_PROGRAMS = new Set(['sh', 'bash', 'zsh', 'dash', 'fish', 'env', 
 const PROGRAM_NAME_RE = /^[A-Za-z0-9._][A-Za-z0-9._-]{0,63}$/
 const ICON_RE = /^[a-z0-9-]{1,32}$/
 const ENV_KEY_RE = /^[A-Z][A-Z0-9_]{0,63}$/
+// legacy: NODETERM_ = pre-rename prefix, still reserved; remove after 0.10.0.
 const ENV_RESERVED_RE = /^(WEBTERM_|NODETERM_|wcap_)/i
 const ENV_SECRET_KEY_RE = /KEY|TOKEN|SECRET|PASSWORD|AUTH/
 const ENV_REF_RE = /^\$\{env:[A-Z][A-Z0-9_]{0,63}\}$/

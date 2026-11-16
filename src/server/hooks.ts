@@ -25,10 +25,12 @@ export {
   NODE_HEADERS_ENV,
   NODE_TOKEN_ENV,
   NODE_TOKEN_HEADER,
+  NODE_TOKEN_HEADERS,
   forgetNodeToken,
   isValidNodeToken,
   nodeIdForToken,
   nodeToken,
+  nodeTokenFrom,
   stateVerified,
 } from './hooksTokens'
 
@@ -39,7 +41,7 @@ export {
  *
  * Hook-reply approvals do NOT travel through env: the managed PermissionRequest hook holds for
  * `PERM_WAIT_SECS_INTERACTIVE` (hooksSettings.ts) and the server answers it
- * (permission/permission.runtime.ts). The old `NODETERM_PERM_WAIT_SECS` injection was read by nothing.
+ * (permission/permission.runtime.ts).
  */
 // `_opts` is ignored. Kept only so sessions.ts:105 (still passing `{ hookReplyApprovals }`) compiles;
 // drop it together with that argument and `SessionsOptions.hookReplyApprovals` (api.ts:86).

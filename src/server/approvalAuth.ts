@@ -27,8 +27,7 @@ export const hasUiSession = (headers: IncomingMessage['headers'] | undefined): b
  *    (agent PTYs get WEBTERM_TOKEN = their node token, sessions.ts), names the caller as an agent
  *    session. Same idea as Orca's rpc-caller-scope: the caller's credential kind decides the scope,
  *    and an agent scope never reaches a human gate.
- * 2. Browser origin required: `Sec-Fetch-Site: same-origin` AND `sameOrigin()` (nodeterm origin.ts
- *    mirror). Jupyter's XSRF/Origin check rests on the same fact: a page cannot forge fetch metadata
+ * 2. Browser origin required: `Sec-Fetch-Site: same-origin` AND `sameOrigin()`. Jupyter's XSRF/Origin check rests on the same fact: a page cannot forge fetch metadata
  *    and a plain curl does not send it.
  *
  * 3. Signed in: a live `wt_ui` session cookie. Fetch metadata alone is forgeable by any same-uid

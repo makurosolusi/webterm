@@ -22,7 +22,7 @@ describe('buildLinkNote', () => {
     expect(buildLinkNote([web('Browser')], [web('makuro-browser')])).toContain('is now titled "makuro-browser"')
   })
 
-  it('agent↔agent links get nodeterm\'s "You are now linked to" wording', () => {
+  it('agent↔agent links get the "You are now linked to" wording', () => {
     expect(buildLinkNote([], [peer('Builder')])).toContain('You are now linked to "Builder" (id p1); use the webterm-linked-context skill')
     expect(buildLinkNote([peer('Builder')], [])).toContain('You are no longer linked to "Builder"')
   })

@@ -38,10 +38,10 @@ const TOK = 'node-token-uuid' // test-only
 /** The node's own header file, as `writeNodeHeaders` lays it out; created per test (root is per test). */
 function headers(): string {
   const f = join(root, 'node.headers')
-  writeFileSync(f, `x-nodeterm-node-token: ${TOK}\nx-webterm-token: ${TOK}\n`, { mode: 0o600 })
+  writeFileSync(f, `x-webterm-node-token: ${TOK}\nx-webterm-token: ${TOK}\n`, { mode: 0o600 })
   return f
 }
-const sess = () => ({ NODETERM_NODE_ID: 'n1', NODETERM_PORT: '8701', WEBTERM_NODE_HEADERS: headers() })
+const sess = () => ({ WEBTERM_NODE_ID: 'n1', WEBTERM_PORT: '8701', WEBTERM_NODE_HEADERS: headers() })
 const lines = (r: { argv: string }) => r.argv.split('\n')
 const bodyOf = (r: { argv: string }) => JSON.parse(lines(r)[lines(r).indexOf('--data-binary') + 1])
 
@@ -54,8 +54,8 @@ describe('artifacts', () => {
     const sh = buildWebtermCli()
     expect(sh).toContain('WEBTERM_NODE_HEADERS')
     expect(sh).not.toContain('WEBTERM_TOKEN')
-    expect(sh).not.toContain('NODETERM_NODE_TOKEN')
-    expect(sh).toContain('NODETERM_PORT')
+    expect(sh).not.toContain('WEBTERM_NODE_TOKEN')
+    expect(sh).toContain('WEBTERM_PORT')
     expect(sh).toContain('/api/control/browser/')
     expect(sh).not.toMatch(/wcap_/)
     expect(sh).not.toContain('WEBTERM_BROWSER_READ_CAP')
@@ -122,7 +122,7 @@ describe('WEBTERM_SKIP_HOME_INSTALLS (dev:fresh shares the real HOME)', () => {
 
 describe('shim behaviour (fake curl)', () => {
   it('refuses outside an agent session (no or unreadable header file) and never calls curl', () => {
-    for (const env of <Record<string, string>[]>[{ NODETERM_NODE_ID: 'n1' }, { NODETERM_NODE_ID: 'n1', WEBTERM_NODE_HEADERS: join(root, 'missing') }, { WEBTERM_TOKEN: TOK }]) {
+    for (const env of <Record<string, string>[]>[{ WEBTERM_NODE_ID: 'n1' }, { WEBTERM_NODE_ID: 'n1', WEBTERM_NODE_HEADERS: join(root, 'missing') }, { WEBTERM_TOKEN: TOK }]) {
       const r = runShim(['status'], env)
       expect(r.status).toBe(2)
       expect(r.argv).toBe('')

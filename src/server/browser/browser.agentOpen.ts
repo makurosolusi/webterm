@@ -1,4 +1,4 @@
-// `open` for a canvas agent (nodeterm `open-browser --url`): a new browser node beside the caller on its own
+// `open` for a canvas agent: a new browser node beside the caller on its own
 // board, cabled to it, so every later verb reaches it through the same cable rules as one the human wired.
 import { randomUUID } from 'node:crypto'
 import { BROWSER_KIND } from '../../shared/browser.contract'

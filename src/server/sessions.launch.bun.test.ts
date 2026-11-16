@@ -52,7 +52,7 @@ test('launchLine mints the session id with the claude grammar', () => {
 test('no builtin launch command carries a wrapper webterm invented', () => {
   // Regresi dari bug nyata: `assembleCmd` dulu memancarkan `envman -e <profil> -- <agent>`, dan di
   // mesin tanpa envman SETIAP node agent mati dengan `load envman: no such file or directory`.
-  // nodeterm tidak membungkus perintah agent sama sekali, jadi webterm juga tidak boleh.
+  // Perintah agent tidak boleh dibungkus sama sekali.
   for (const id of BUILTIN_AGENT_IDS) {
     const cmd = assembleCmd(id)
     expect(cmd).not.toContain('envman')
@@ -63,7 +63,7 @@ test('no builtin launch command carries a wrapper webterm invented', () => {
   }
 
   // Override peluncuran milik pengguna menggantikan bagian program secara utuh — ini mekanisme
-  // pemilihan akun/profil yang sebenarnya (`settings.agentLaunchCommands`), seperti di nodeterm.
+  // pemilihan akun/profil yang sebenarnya (`settings.agentLaunchCommands`).
   expect(assembleCmd('claude', 'claude-via-work-account')).toBe('claude-via-work-account')
   expect(assembleCmd('claude', '   ')).toBe('claude')
 })

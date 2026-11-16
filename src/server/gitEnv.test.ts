@@ -12,7 +12,7 @@ import { collectGitInfo } from './gitInfo'
 import { createProject } from './workspaceCreate/workspaceCreate'
 
 const ROOT = 'ROOTSENTINEL_git_0123456789' // test-only fixture
-const SECRET_KEYS = ['WEBTERM_TOKEN', 'NODETERM_NODE_TOKEN', 'TELEGRAM_BOT_TOKEN'] as const
+const SECRET_KEYS = ['WEBTERM_TOKEN', 'WEBTERM_NODE_TOKEN', 'TELEGRAM_BOT_TOKEN'] as const
 const ENV_KEYS = [...SECRET_KEYS, 'GIT_CONFIG_GLOBAL', 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'] as const
 const dir = mkdtempSync(join(tmpdir(), 'webterm-gitenv-'))
 const repo = join(dir, 'repo')

@@ -1,5 +1,5 @@
 // Bun-only: tmux client di dalam PTY Bun nyata. Socket test SENDIRI (`webterm-test-<pid>`), jadi
-// sesi `-L webterm` (pengguna) dan `-L node-terminal` (nodeterm) tidak pernah tersentuh.
+// sesi `-L webterm` (pengguna) dan `-L node-terminal` (tmux pihak lain) tidak pernah tersentuh.
 import { test, expect, afterAll } from 'bun:test'
 import { reapChildren } from './processReap.testutil'
 // No PTY child may outlive this file: bun's own dangling-process kill can deadlock on one (processReap.testutil.ts).
@@ -48,7 +48,7 @@ const supervised = () => new Sessions({ shell: '/bin/sh' }, sup)
 test('nama sesi bisa dibalik, termasuk id pane split ber-`:`', () => {
   for (const id of ['n1', 'a:p1', 'a_p1']) expect(nodeIdOf(supervisedName(id))).toBe(id)
   expect(supervisedName('a:p1')).not.toBe(supervisedName('a_p1'))
-  expect(nodeIdOf('nt-term-abc')).toBeNull() // sesi nodeterm bukan milik kita
+  expect(nodeIdOf('nt-term-abc')).toBeNull() // sesi pihak lain bukan milik kita
 })
 
 test('`;` di akhir argumen di-escape supaya tmux tidak memotongnya', () => {
