@@ -102,3 +102,11 @@ export function useCentralAct(): ActSnapshot {
   }, [])
   return useSyncExternalStore(store.subscribe, store.getSnapshot)
 }
+
+// "Show on canvas" for surfaces far from the canvas (the chat's tool cards): the mounted board registers how
+// to bring a node into view, they just ask. Always a user click; false = this board has no such node.
+let showHandler: ((nodeId: string) => boolean) | null = null
+/** The mounted canvas registers its reveal here (null on unmount). */
+export function setShowNodeHandler(fn: ((nodeId: string) => boolean) | null): void { showHandler = fn }
+/** Bring `nodeId` into view (user gesture). False when no canvas is mounted or the node is not on it. */
+export const showNodeOnCanvas = (nodeId: string): boolean => showHandler?.(nodeId) ?? false

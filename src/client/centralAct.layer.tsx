@@ -1,6 +1,6 @@
 // Glue between the act record and the board: marks touched nodes/cables, draws their chips, and hosts the tray.
 // Nothing here moves the camera or changes selection by itself; only the user's click on Show does (nodeReveal.ts).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ViewportPortal, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
 import type { RefObject } from 'react'
@@ -8,7 +8,7 @@ import { useInRouterContext } from 'react-router'
 import { fetchWorkspaces } from './api'
 import { useAppRoute } from './appRoute'
 import { CentralActTray } from './CentralActTray'
-import { isCableVerb, isNewVerb, useCentralAct, type ActEntry } from './centralAct.store'
+import { isCableVerb, isNewVerb, setShowNodeHandler, useCentralAct, type ActEntry } from './centralAct.store'
 import { rectOfNode, revealNode, selectOnly } from './nodeReveal'
 import './centralAct.css'
 
@@ -84,19 +84,23 @@ export function CentralActLayer({ rf, nodes, workspaceId, onOpenBoard }: LayerPr
   // Over .app-main (it stays visible in tab mode, unlike the hidden canvas); body in isolated renders.
   const [host, setHost] = useState<Element | null>(null)
   useEffect(() => setHost(document.querySelector('.app-main') ?? document.body), [])
-  const show = (id: string): void => {
+  const show = (id: string): boolean => {
     const n = rf.current?.getNode(id)
-    if (!n) return
+    if (!n || !rf.current) return false
     revealNode(rf.current, id, rectOfNode(n), { focus: true })
-    if (rf.current) selectOnly(rf.current, id)
+    selectOnly(rf.current, id)
+    return true
   }
+  const showRef = useRef(show)
+  showRef.current = show
+  useEffect(() => { setShowNodeHandler((id) => showRef.current(id)); return () => setShowNodeHandler(null) }, [])
   return (
     <>
       <ActChips nodes={nodes} entries={entries} />
       {host && createPortal(
         <CentralActTray
           entries={entries} dropped={dropped} activeWorkspaceId={workspaceId} nodeTitle={(id) => here.get(id)} boardName={boardName}
-          onShow={show} onOpenBoard={(id) => onOpenBoard?.(id)}
+          onShow={(id) => { show(id) }} onOpenBoard={(id) => onOpenBoard?.(id)}
         />, host,
       )}
     </>
