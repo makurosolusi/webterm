@@ -43,7 +43,7 @@ export function createNavigationGuard({ allow, webtermPort, allowLoopback = fals
     const block = (reason: BlockReason): GuardResult => ({ ok: false, reason, hostname: host })
     if (portNum === webtermPort && isLocalName(host)) return block('not_allowed_port')
     if (isAllowed(allowNow(allow), host, portNum)) return { ok: true, url: parsed.url }
-    // Meniru nodeterm browserUrl.ts (localhost = dev server): di mesin sendiri tak ada batas jaringan yang dilanggar.
+    // localhost = dev server: di mesin sendiri tak ada batas jaringan yang dilanggar.
     if (allowLoopback && isLocalName(host)) return { ok: true, url: parsed.url }
     if (isLocalName(host) || (isIP(host) !== 0 && classifyIp(host) === 'private')) return block('private_host')
     return { ok: true, url: parsed.url }

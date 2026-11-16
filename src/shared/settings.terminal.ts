@@ -53,9 +53,8 @@ export interface TerminalSettings {
   /**
    * Scrollback dalam BYTE, bukan baris.
    *
-   * Pilihan satuan ini disengaja dan perlu dicatat: nodeterm menyimpan `tmuxScrollback: 50000`
-   * dalam BARIS karena yang membatasi di sana adalah history tmux. webterm tidak punya tmux —
-   * yang membatasi adalah ring buffer byte mentah PTY di `src/server/sessions.ts`
+   * Pilihan satuan ini disengaja dan perlu dicatat: menyimpan dalam BARIS cocok untuk history tmux, tapi
+   * di sini yang membatasi adalah ring buffer byte mentah PTY di `src/server/sessions.ts`
    * (`SCROLLBACK_BYTES`), satu-satunya konsumen nyata. Satuannya karena itu byte, dan defaultnya
    * 256 KiB = nilai konstanta yang berjalan hari ini, jadi mengangkatnya ke settings tidak
    * mengubah perilaku apa pun.

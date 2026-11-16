@@ -7,7 +7,7 @@
 // - refusal parks, never drops (`mailbox-pointer-delivery.ts:64-68`: "refusal parks for recheck
 //   instead of dropping mail"): a busy agent or a draft leaves the row `queued` for the next edge.
 // - settled-input gate (`mailbox-pointer-delivery-contract.ts:24-26` `isAgentSettledForDelivery`):
-//   here the gate of `linkNoteDelivery` (nodeterm `noteLink.ts:205-226`): never into `working`
+//   here the gate of `linkNoteDelivery`: never into `working`
 //   (lands mid-turn) or `blocked` (the Enter would answer the permission prompt), and for Claude
 //   Code only when the composer is PROVEN empty on the rebuilt screen.
 // - one bounded batch per delivery (`mailbox-pointer-eligibility.ts:61-91`).

@@ -15,7 +15,7 @@ const warnedMissing = new Set<string>()
  *  LIMIT: this reads the SERVER PROCESS PATH. At boot the login shell's PATH is merged into it
  *  (`mergeLoginShellPath`, run from index.ts), so nvm/asdf/Homebrew entries set by rc files are
  *  included; what can still differ is a PATH change made after boot or by a shell other than
- *  `$SHELL` (nodeterm notes the same trap in `pty-manager.ts`). So a negative result is only used
+ *  `$SHELL`. So a negative result is only used
  *  to DROP a wrapper (see `unwrapMissingWrapper`), never to refuse a launch: the worst wrong guess
  *  ignores one wrapper and says so, it does not kill the node. */
 export function binaryExists(bin: string, pathEnv = process.env.PATH ?? ''): boolean {
@@ -82,11 +82,11 @@ export function resolveCwd(
 /** Variabel proses server tanpa konsumen di dalam PTY. `BUN_INSTALL` dikecualikan: rc user sering
  *  merujuknya untuk PATH.
  *
- *  `WEBTERM_*` dan `NODETERM_*` ikut DIBUANG, bukan diteruskan apa adanya: `WEBTERM_TOKEN` di proses
+ *  `WEBTERM_*` dan `NODETERM_*` (legacy: prefiks sebelum rename, boleh dihapus setelah 0.10.0) ikut DIBUANG, bukan diteruskan apa adanya: `WEBTERM_TOKEN` di proses
  *  server adalah token ROOT (satu-satunya pembuka API manusia), dan mewariskannya ke shell/agent mana
  *  pun membuat setiap anak memegang kunci penuh. Nilai yang memang dibutuhkan sebuah node di-inject
  *  eksplisit oleh pemanggil sesudah filter ini (lihat env `open` di `sessions.ts`): token node untuk
- *  agent, `NODETERM_NODE_ID`/`NODETERM_PORT` untuk sesi context-capable.
+ *  agent, `WEBTERM_NODE_ID`/`WEBTERM_PORT` untuk sesi context-capable.
  *
  *  `TELEGRAM_BOT_TOKEN` disapu tanpa syarat: bot token tak punya konsumen di shell/agent. */
 const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*|TELEGRAM_BOT_TOKEN)$/

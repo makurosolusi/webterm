@@ -5,6 +5,9 @@
 import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP } from '../../shared/browser.contract'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 
+// legacy: the `${NODETERM_PORT}` / `${NODETERM_NODE_ID}` fallbacks below serve tmux sessions started by a
+// pre-rename server (their env is fixed for the session's life). Remove after 0.10.0.
+
 const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
   Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
 
@@ -19,7 +22,7 @@ export const BROWSER_COMMAND = `cmd_browser() {
 usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>]" >&2; exit 2; }
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
-PORT="\${NODETERM_PORT:-8700}"
+PORT="\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}"
 [ "$#" -gt 0 ] || usage
 verb="$1"; shift
 node=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
@@ -72,8 +75,9 @@ echo
 
 /** `webterm context [list|summary|transcript|terminal] [--node X] [-n N]`; the server reads and renders. */
 export const CONTEXT_COMMAND = `cmd_context() {
-if [ -z "$NODETERM_NODE_ID" ]; then
-  echo "Not a webterm session (NODETERM_NODE_ID unset) — nothing to read."
+NODE_ID="\${WEBTERM_NODE_ID:-\${NODETERM_NODE_ID:-}}"
+if [ -z "$NODE_ID" ]; then
+  echo "Not a webterm session (WEBTERM_NODE_ID unset) — nothing to read."
   exit 0
 fi
 hdr="\${${NODE_HEADERS_ENV}:-}"
@@ -81,7 +85,7 @@ if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then
   echo "Not a webterm agent node (no node credentials) — nothing to read."
   exit 0
 fi
-PORT="\${NODETERM_PORT:-8700}"
+PORT="\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}"
 verb="\${1:-list}"; [ "$#" -gt 0 ] && shift
 want=""; n=""
 while [ "$#" -gt 0 ]; do
@@ -93,7 +97,7 @@ while [ "$#" -gt 0 ]; do
 done
 curl -s --get \\
   -H "@$hdr" \\
-  --data-urlencode "node=\${NODETERM_NODE_ID}" \\
+  --data-urlencode "node=\${NODE_ID}" \\
   --data-urlencode "verb=\${verb}" \\
   --data-urlencode "want=\${want}" \\
   --data-urlencode "n=\${n}" \\

@@ -1,13 +1,22 @@
-// Predikat discard node browser tersembunyi (§4.7). Murni.
-// Diadaptasi dari nodeterm `src/renderer/nodes/browser-discard-policy.ts` (fork BUSL-1.1, atribusi
-// ke nodeterm upstream). Beda: tanpa `enabled`/`audible` (audio non-tujuan MVP; saklar = flag
-// `WEBTERM_BROWSER`), ambang `discardMs` diinjeksi dari env, dan `>=` bukan `>`.
+// Pure rule for discarding a hidden browser node's page to free memory.
+
+export interface DiscardInput {
+  /** The page is mid-load (discarding would replay a half-finished navigation). */
+  loading: boolean
+  /** An agent holds a control lease: the page is in use even while hidden. */
+  driven: boolean
+  /** How long the node has been hidden. */
+  hiddenMs: number
+  /** Minimum hidden time before a discard is allowed. */
+  discardMs: number
+}
 
 /**
- * Discard hanya bila tidak sedang memuat (replay navigasi setengah jadi), tidak dikemudikan agent
- * (lease aktif = dipakai walau tersembunyi), dan sudah tersembunyi >= `discardMs`. Pemanggil membaca
- * ulang kondisi saat timer MENYALA, bukan saat dipasang.
+ * True when the page may be dropped: idle, not driven by an agent, and hidden for at least
+ * `discardMs`. Callers re-read the inputs when their timer fires, not when it was armed.
+ * A non-finite duration compares false, so a bad number never triggers a discard.
  */
-export function shouldDiscard(i: { loading: boolean; driven: boolean; hiddenMs: number; discardMs: number }): boolean {
-  return !i.loading && !i.driven && i.hiddenMs >= i.discardMs
+export function shouldDiscard({ loading, driven, hiddenMs, discardMs }: DiscardInput): boolean {
+  if (loading || driven) return false
+  return hiddenMs >= discardMs
 }

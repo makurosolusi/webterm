@@ -1,7 +1,6 @@
 // The VISIBLE link note: the one-line `[webterm] …` prompt typed into a Claude Code node's input box
-// when a cable to it is drawn, removed, or the node at its other end is renamed. Ported from nodeterm
-// `src/renderer/lib/noteLink.ts:176-192` (`buildContextLinkNote`, "[nodeterm] You are now linked to
-// …. No action needed now — just acknowledge briefly."). The hidden `additionalContext` of
+// when a cable to it is drawn, removed, or the node at its other end is renamed. Wording: "[webterm] You are now linked to
+// …. No action needed now — just acknowledge briefly.". The hidden `additionalContext` of
 // `hookContext`/`linkAwareness` stays as the fallback; `linkNoteDelivery` marks both delivered so the
 // same change is never announced twice.
 //
@@ -26,7 +25,7 @@ const TITLE_MAX_CHARS = 120
 
 /**
  * SECURITY: a title is user/agent-settable text quoted into a line that gets SUBMITTED in an agent
- * session, so it must stay ONE line of plain text — the same guarantee nodeterm's `oneLine` gives.
+ * session, so it must stay ONE line of plain text.
  * Every control, format and line/paragraph separator (CR, LF, ESC, U+2028, …) becomes a space.
  */
 export function oneLine(s: string): string {
@@ -52,7 +51,7 @@ function sentence(kind: 'added' | 'removed' | 'renamed', e: LinkEntry): string {
 /**
  * The note for the NET change `prev` → `now`, or null when nothing changed. Diffing against what was
  * last told (not against each edit) is what coalesces: wire + unwire before delivery = no note.
- * Self-defusing like nodeterm's: it is submitted as a prompt, so it says "No action needed now".
+ * Self-defusing: it is submitted as a prompt, so it says "No action needed now".
  */
 export function buildLinkNote(prev: readonly LinkEntry[], now: readonly LinkEntry[]): string | null {
   const before = new Map(prev.map((e) => [e.id, e]))

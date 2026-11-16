@@ -20,7 +20,7 @@ const DIRECT_GIT = [
   /\b(exec|execSync|spawnSync)\(\s*['"`]git\s/,
 ]
 const DUMMY = 'dummy-test-value-not-a-secret' // test-only
-const SECRET_KEYS = ['WEBTERM_TOKEN', 'NODETERM_NODE_TOKEN', 'TELEGRAM_BOT_TOKEN'] as const
+const SECRET_KEYS = ['WEBTERM_TOKEN', 'WEBTERM_NODE_TOKEN', 'TELEGRAM_BOT_TOKEN'] as const
 const saved = Object.fromEntries(SECRET_KEYS.map((k) => [k, process.env[k]]))
 const tmp = mkdtempSync(join(tmpdir(), 'webterm-gitexec-'))
 const GIT_ENV = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' } // test-only isolation
@@ -76,7 +76,7 @@ describe('gitExec policy', () => {
   })
 
   test('env drops root/node/bot tokens and inherited repo redirects', () => {
-    const env = gitEnv({}, { PATH: '/bin', WEBTERM_TOKEN: DUMMY, NODETERM_NODE_TOKEN: DUMMY, TELEGRAM_BOT_TOKEN: DUMMY, GIT_DIR: '/x', GIT_WORK_TREE: '/y' })
+    const env = gitEnv({}, { PATH: '/bin', WEBTERM_TOKEN: DUMMY, WEBTERM_NODE_TOKEN: DUMMY, TELEGRAM_BOT_TOKEN: DUMMY, GIT_DIR: '/x', GIT_WORK_TREE: '/y' })
     expect(Object.values(env)).not.toContain(DUMMY)
     expect('GIT_DIR' in env).toBe(false)
     expect('GIT_WORK_TREE' in env).toBe(false)

@@ -35,7 +35,7 @@ import { nextHookContext } from './hookContext'
 import { claudeHeadersPath } from './hooksPaths'
 
 /** Baris curl yang dibangun untuk satu node, diambil dari event `Stop` (semua event memakai baris
- *  yang sama persis — lihat test "subscribes the 11 nodeterm events"). */
+ *  yang sama persis — lihat test "subscribes the 11 hook events"). */
 function commandFor(nodeId: string): string {
   const hooks = claudeHooksSettings(nodeId, 8700).hooks as Record<string, unknown[]>
   return (hooks['Stop'][0] as { hooks: { command: string }[] }).hooks[0].command
@@ -49,7 +49,7 @@ function headersPathOf(cmd: string): string {
 }
 
 describe('claudeHooksSettings', () => {
-  it('subscribes the 11 nodeterm events, each with a node-keyed command', () => {
+  it('subscribes the 11 hook events, each with a node-keyed command', () => {
     const hooks = claudeHooksSettings('n1', 8700).hooks as Record<string, unknown[]>
     expect(Object.keys(hooks)).toHaveLength(11)
     expect(Object.keys(hooks)).toEqual(CLAUDE_HOOK_EVENTS.map(hookEventName))

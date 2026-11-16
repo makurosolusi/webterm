@@ -1,7 +1,7 @@
 // Where new projects go, and the "wrong place" checks run before a clone or a new project.
 //
 // Default projects folder = `~/webterm/projects`: visible, not a dot-dir, modelled on Orca's
-// `~/orca/projects` (replaces nodeterm's `~/projects`-else-home). Nothing here creates it; the
+// `~/orca/projects`. Nothing here creates it; the
 // clone/new-project `mkdir -p` of the parent does, on first real use. It may never sit inside the
 // webterm data dir: that folder holds the DB and tokens, and a project there would be wiped with it.
 import { spawn as nodeSpawn } from 'node:child_process'

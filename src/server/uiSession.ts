@@ -1,5 +1,5 @@
 // Server-side store of webterm UI sessions (cookie `wt_ui`, auth.ts UI_SESSION_COOKIE). Mirrors
-// nodeterm's revocable sessions: only sha256(cookie value) is stored, so a copied webterm.db holds no
+// revocable sessions: only sha256(cookie value) is stored, so a copied webterm.db holds no
 // usable credential; a session dies after SESSION_IDLE_MS without a request, or SESSION_ABSOLUTE_MS after
 // sign-in whatever its use. A session may name its account (`user_id`, ui_user in uiUser.ts); token-era
 // rows have none and stay valid. Threat model: sec-208-1 /
@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { acceptUiSessions } from './approvalAuth'
 import { openDb } from './db'
 
-/** Idle expiry, as nodeterm: a session unused for 30 days is gone. */
+/** Idle expiry: a session unused for 30 days is gone. */
 export const SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000
 /**
  * Absolute lifetime: a stolen cookie that is kept busy would otherwise live forever on the idle clock

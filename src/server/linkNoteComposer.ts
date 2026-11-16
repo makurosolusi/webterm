@@ -1,132 +1,106 @@
-// Is Claude Code's input box EMPTY right now? Read from the agent's SCREEN (rendered server-side by
-// `linkNoteScreen.ts`), because nothing else proves it: an idle hook only says the turn ended, not
-// that the user is not halfway through typing the next prompt. A link note typed into a draft would
-// be submitted together with the user's half-typed text.
+// Decide from the rendered terminal screen whether Claude Code's input box is empty, so a link note is
+// never typed on top of a half-written prompt. The screen is the only trustworthy source: an idle hook
+// says the turn ended, not that the user has stopped typing. The verdict fails CLOSED: anything that
+// cannot be proven empty is not reported as `empty`.
 //
-// PORTED from nodeterm `src/shared/agents/claude-screen.ts:34-188` (readClaudeScreen +
-// readClaudeComposer, measured on Claude Code 2.1.283/2.1.301; same licensor, BUSL-1.1). Logic kept
-// as-is; only the export surface was narrowed to the one reader webterm uses.
-//
-// Measured screen: a `────` rule, a line starting `❯ ` (or `!` in shell mode), another rule, then
-// status lines. An empty composer shows a DIM placeholder (`❯ Try "…"` in SGR 2); typed text is not
-// dim. Dialogs replace or sit above the box and end in a key-hint footer ("Enter to confirm",
-// "Esc to cancel"). The reader fails CLOSED: what it cannot prove empty is never `empty`.
+// Screen anatomy this reader relies on (observed on Claude Code 2.1.x): a horizontal rule, the prompt
+// row (`❯ ...`, or `! ...` in shell mode), another rule, then a few status rows. An empty box shows a
+// placeholder drawn with SGR dim (`ESC[2m`); real input is not dim. A dialog hides or overlays the box
+// and ends with a key-hint footer ("Enter to confirm", "Esc to cancel").
 
-/** `empty` = live input box holding only dim placeholder; `draft` = anything typed; `no-prompt` =
- *  dialog or no box on screen; `unknown` = nothing readable. */
+/** `empty`: box holds only the dim placeholder. `draft`: something was typed. `no-prompt`: a dialog
+ *  owns the screen or there is no box. `unknown`: nothing to read. */
 export type ClaudeComposer = 'empty' | 'draft' | 'no-prompt' | 'unknown'
 
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+/** Rows (non-blank) examined under the box, above it for an overlaid dialog, and for a boxless dialog. */
+const STATUS_ROWS_BELOW = 8
+const DIALOG_ROWS_ABOVE_BOX = 4
+const DIALOG_ROWS_NO_BOX = 3
+/** Furthest the top rule may sit above the bottom rule. */
+const MAX_BOX_HEIGHT = 40
 
-/** A full-width rule of the input box (`─`, U+2500). */
-const isRule = (line: string): boolean => /^─{20,}/.test(line.trim())
-/** A key-hint footer. Capitalized on purpose: the working spinner says "esc to interrupt". */
-const isFooter = (line: string): boolean => {
-  const t = line.trim()
-  return /^Enter to confirm\b/.test(t) || /(?:^|\s·\s)Esc to (?:cancel|exit|go back)$/.test(t)
+// Escape sequences with no visible width: CSI (`ESC [ ... final`) and OSC (`ESC ] ... BEL|ST`).
+// eslint-disable-next-line no-control-regex
+const ESCAPES = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+const stripEscapes = (s: string): string => s.replace(ESCAPES, '')
+const plainRows = (screen: string): string[] => screen.split(/\r?\n/).map((r) => stripEscapes(r).trimEnd())
+
+const isRule = (row: string): boolean => /^─{20,}/.test(row.trim())
+const isPromptRow = (row: string | undefined): row is string => row !== undefined && (row.startsWith('❯') || /^!(\s|$)/.test(row))
+// Capitalised on purpose: the busy spinner's hint is lowercase "esc to interrupt".
+const isDialogFooter = (row: string): boolean => /^Enter to confirm\b/.test(row.trim()) || /(?:^|\s·\s)Esc to (?:cancel|exit|go back)$/.test(row.trim())
+
+/** Indexes of non-blank rows, last row first. */
+function filledRowsBottomUp(rows: readonly string[]): number[] {
+  const out: number[] = []
+  for (let i = rows.length - 1; i >= 0; i--) if (rows[i].trim() !== '') out.push(i)
+  return out
 }
 
-/** Non-blank lines allowed under the box's bottom rule (status lines). */
-const BOX_TAIL_LINES = 8
-/** A footer with no box: a dialog's key hints are its last line. */
-const FOOTER_TAIL_LINES = 3
-/** A footer above a live box: a dialog drawn right on top of the input box. */
-const FOOTER_ABOVE_BOX_LINES = 4
-
-/** The input box's first line: `❯`, or `!` in shell mode (followed by U+00A0, which `\s` covers). */
-const isPromptLine = (line: string | undefined): boolean =>
-  line !== undefined && (line.startsWith('❯') || /^!(\s|$)/.test(line))
-
-/** Indexes of the non-blank lines, bottom first. */
-const nonBlankFromBottom = (lines: readonly string[]): number[] =>
-  lines.flatMap((l, i) => (l.trim() === '' ? [] : [i])).reverse()
-
-/** The live input box: `[top rule, bottom rule]` line indexes, or null. */
-function inputBox(lines: readonly string[]): [number, number] | null {
-  const tail = nonBlankFromBottom(lines).slice(0, BOX_TAIL_LINES + 1)
-  for (const bottom of tail) {
-    if (bottom === 0 || !isRule(lines[bottom])) continue
-    for (let top = bottom - 1; top >= 0 && bottom - top <= 40; top--) {
-      if (!isRule(lines[top])) continue
-      return isPromptLine(lines[top + 1]) && top + 1 < bottom ? [top, bottom] : null
-    }
-    return null
+/** Row indexes `[topRule, bottomRule]` of the live input box, or null when the screen has none. */
+function findBox(rows: readonly string[]): [number, number] | null {
+  const bottom = filledRowsBottomUp(rows).slice(0, STATUS_ROWS_BELOW + 1).find((i) => i > 0 && isRule(rows[i]))
+  if (bottom === undefined) return null
+  for (let top = bottom - 1; top >= 0 && bottom - top <= MAX_BOX_HEIGHT; top--) {
+    if (isRule(rows[top])) return top + 1 < bottom && isPromptRow(rows[top + 1]) ? [top, bottom] : null
   }
   return null
 }
 
-/** Does the screen show the input box with no dialog footer owning the keyboard? */
-function showsPrompt(lines: readonly string[]): boolean {
-  const box = inputBox(lines)
-  const bottom = nonBlankFromBottom(lines)
-  const candidates = box
-    ? [...bottom.filter((i) => i > box[1]), ...bottom.filter((i) => i < box[0]).slice(0, FOOTER_ABOVE_BOX_LINES)]
-    : bottom.slice(0, FOOTER_TAIL_LINES)
-  if (candidates.some((i) => isFooter(lines[i]))) return false
-  return box !== null
+/** True when a dialog footer sits where a dialog would be drawn relative to the box (or the screen end). */
+function dialogOwnsKeyboard(rows: readonly string[], box: [number, number]): boolean {
+  const filled = filledRowsBottomUp(rows)
+  const watched = [...filled.filter((i) => i > box[1]), ...filled.filter((i) => i < box[0]).slice(0, DIALOG_ROWS_ABOVE_BOX)]
+  return watched.some((i) => isDialogFooter(rows[i]))
 }
 
-/** The dim flag after one SGR sequence's parameters; extended colours consume their arguments. */
-function applySgrDim(params: string, dim: boolean): boolean {
-  const ps = params === '' ? ['0'] : params.split(/[;:]/)
-  for (let k = 0; k < ps.length; k++) {
-    const p = ps[k] === '' ? 0 : Number(ps[k])
-    if (p === 38 || p === 48 || p === 58) {
-      const mode = Number(ps[k + 1])
-      k += mode === 5 ? 2 : mode === 2 ? 4 : 1
-    } else if (p === 0 || p === 22) dim = false
-    else if (p === 2) dim = true
+/** Dim state after one SGR parameter list; 38/48/58 swallow their colour arguments. */
+function nextDim(params: string, dim: boolean): boolean {
+  const codes = (params === '' ? '0' : params).split(/[;:]/)
+  for (let k = 0; k < codes.length; k++) {
+    const code = codes[k] === '' ? 0 : Number(codes[k])
+    if (code === 38 || code === 48 || code === 58) k += Number(codes[k + 1]) === 5 ? 2 : Number(codes[k + 1]) === 2 ? 4 : 1
+    else if (code === 0 || code === 22) dim = false
+    else if (code === 2) dim = true
   }
   return dim
 }
 
-/** Does any visible, non-blank character of this styled line (from plain-text column `from`) sit
- *  outside SGR dim? */
-function hasUndimmedText(styled: string, from: number): boolean {
+/** Does this raw (SGR-bearing) row have a visible, non-blank glyph after its first one that is NOT dim? */
+function hasBrightTextAfterPrompt(row: string): boolean {
   let dim = false
-  let col = 0
-  let i = 0
-  while (i < styled.length) {
-    if (styled[i] === '\x1b') {
-      const csi = /^\x1b\[([0-?]*)([ -/]*)([@-~])/.exec(styled.slice(i))
-      if (csi) {
-        if (csi[3] === 'm') dim = applySgrDim(csi[1], dim)
-        i += csi[0].length
-        continue
-      }
-      // eslint-disable-next-line no-control-regex
-      const osc = /^\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/.exec(styled.slice(i))
-      i += osc ? osc[0].length : 1
+  let seen = 0
+  // Tokens: a CSI (groups 1-2), an OSC or lone ESC (skipped), or a run of visible text (group 3).
+  const token = /\x1b\[([0-?]*)[ -/]*([@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b|([^\x1b]+)/gy // eslint-disable-line no-control-regex
+  for (let m = token.exec(row); m !== null; m = token.exec(row)) {
+    if (m[3] === undefined) {
+      if (m[2] === 'm') dim = nextDim(m[1], dim)
       continue
     }
-    const ch = String.fromCodePoint(styled.codePointAt(i)!)
-    if (col >= from && ch.trim() !== '' && !dim) return true
-    col += ch.length
-    i += ch.length
+    for (const glyph of m[3]) {
+      if (seen++ > 0 && !dim && glyph.trim() !== '') return true
+    }
   }
   return false
 }
 
-/** Read a STYLED screen (lines joined by `\n`, SGR kept) and say whether the composer is empty. */
+/** Classify a STYLED screen (rows joined by `\n`, SGR kept). */
 export function readClaudeComposer(styledScreen: string): ClaudeComposer {
-  const styled = styledScreen.split(/\r?\n/)
-  const lines = styled.map((l) => l.replace(ANSI, '').trimEnd())
-  if (lines.every((l) => l === '')) return 'unknown'
-  if (!showsPrompt(lines)) return 'no-prompt'
-  const box = inputBox(lines)
+  const raw = styledScreen.split(/\r?\n/)
+  const rows = plainRows(styledScreen)
+  if (rows.every((r) => r === '')) return 'unknown'
+  const box = findBox(rows)
   if (!box) return 'no-prompt'
+  if (dialogOwnsKeyboard(rows, box)) return 'no-prompt'
   const promptAt = box[0] + 1
-  const prompt = lines[promptAt]
-  if (!prompt.startsWith('❯')) return 'draft'
-  for (let i = promptAt + 1; i < box[1]; i++) if (lines[i].trim() !== '') return 'draft'
-  return hasUndimmedText(styled[promptAt], 1) ? 'draft' : 'empty'
+  if (!rows[promptAt].startsWith('❯')) return 'draft' // shell mode: `!` means the user is typing a command
+  for (let i = promptAt + 1; i < box[1]; i++) if (rows[i].trim() !== '') return 'draft' // wrapped / multi-line input
+  return hasBrightTextAfterPrompt(raw[promptAt]) ? 'draft' : 'empty'
 }
 
-/** The plain text of the composer's prompt line (after `❯`), or null when no box is on screen. Used
- *  to see that a typed note actually landed before its Enter is sent. */
+/** Text after the prompt glyph on the box's prompt row, or null without a box; confirms a typed note landed. */
 export function composerText(styledScreen: string): string | null {
-  const lines = styledScreen.split(/\r?\n/).map((l) => l.replace(ANSI, '').trimEnd())
-  const box = inputBox(lines)
-  return box ? lines[box[0] + 1].replace(/^[❯!]\s?/, '') : null
+  const rows = plainRows(styledScreen)
+  const box = findBox(rows)
+  return box ? rows[box[0] + 1].replace(/^[❯!]\s?/, '') : null
 }

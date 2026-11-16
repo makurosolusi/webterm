@@ -19,8 +19,7 @@
  * mati, CLI mencetak baris di atas lalu keluar — dan tidak ada yang menyadarinya: node tetap
  * memakai badge agent-nya, terminalnya terlihat idle, satu-satunya bukti satu baris scrollback.
  *
- * Diporting dari nodeterm `src/renderer/terminal/cold-resume-session.ts` (repo referensi), yang
- * memecahkan ini dengan bukti lapangan terukur: pada host pelapor, 20 pane duduk di shell kosong
+ * Bukti lapangan terukur: pada host pelapor, 20 pane duduk di shell kosong
  * dengan persis baris itu, dan tidak satu pun dari 20 session id tadi punya `<id>.jsonl` di mana
  * pun di bawah root transcript.
  *
@@ -50,17 +49,16 @@
  *
  * Slug direktori claude (`~/.claude/projects/<slug-cwd>`) adalah detail internal yang bisa berubah,
  * dan cwd sebuah sesi bisa berbeda dari cwd node-nya (pengguna `cd`, atau node dibuat di tempat
- * lain). nodeterm memakai glob lintas project dir untuk alasan yang sama — lihat
- * `src/core/remote-transcript-locate.ts` di sana.
+ * lain). Karena itu pencarian memakai glob lintas project dir.
  *
- * ## SATU PENYIMPANGAN DISENGAJA dari nodeterm
+ * ## Keputusan disengaja: launch dengan id baru saat `absent`
  *
- * Saat `absent`, nodeterm meluncurkan agent POLOS (tanpa flag id sama sekali). webterm TIDAK: ia
+ * Saat `absent`, alternatifnya meluncurkan agent POLOS (tanpa flag id sama sekali). Kita TIDAK: kita
  * meluncurkan dengan `--session-id <sid>`, yaitu cukup membalik `resume` menjadi `false` dan
  * memakai jalur yang sudah ada. Kenapa boleh dan kenapa lebih baik:
  *
- * - Di nodeterm, id-nya bisa berasal dari hook sesi yang bukan nodeterm yang meluncurkan, jadi
- *   memakai ulang id itu berarti mengarang. Di webterm `sessionId` SELALU dicetak webterm sendiri
+ * - Bila id-nya bisa berasal dari sesi yang bukan kita yang meluncurkan, memakai ulang id itu
+ *   berarti mengarang. Di sini `sessionId` SELALU dicetak webterm sendiri
  *   (`src/client/AgentNode.tsx` mencetak dan mem-persist-nya), jadi id itu milik kita.
  * - Registry claude praktis adalah berkas `<id>.jsonl` itu sendiri. Di cabang ini probe baru saja
  *   membuktikan tidak ada satu pun di seluruh root, jadi `--session-id <sid>` tidak akan kena

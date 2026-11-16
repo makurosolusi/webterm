@@ -25,7 +25,7 @@ afterEach(() => {
 const home = () => join(root, 'home')
 function headers(): string {
   const f = join(root, 'node.headers')
-  writeFileSync(f, `x-nodeterm-node-token: ${TOK}\n`, { mode: 0o600 })
+  writeFileSync(f, `x-webterm-node-token: ${TOK}\n`, { mode: 0o600 })
   return f
 }
 
@@ -73,7 +73,7 @@ describe('install', () => {
 
   it('carries no token value and no token env name', () => {
     const sh = buildWebtermCli()
-    expect(sh).not.toMatch(/WEBTERM_TOKEN|NODETERM_NODE_TOKEN|wcap_/)
+    expect(sh).not.toMatch(/WEBTERM_TOKEN|WEBTERM_NODE_TOKEN|wcap_/)
     expect(sh).toContain('-H "@$hdr"')
   })
 })
@@ -107,12 +107,21 @@ describe('capability calls and discovery (fake curl)', () => {
   it('POSTs the JSON to /api/tools/<name> with the header FILE; the token never reaches argv', () => {
     installWebtermCli(home())
     const hdr = headers()
-    const r = run(['git.diff', '--json', '{"root":"/repo"}', '--operation-id', 'op-1'], { WEBTERM_NODE_HEADERS: hdr, NODETERM_PORT: '8701' })
+    const r = run(['git.diff', '--json', '{"root":"/repo"}', '--operation-id', 'op-1'], { WEBTERM_NODE_HEADERS: hdr, WEBTERM_PORT: '8701' })
     expect(r.status).toBe(0)
     expect(r.argv).toContain(`@${hdr}`)
     expect(r.argv).toContain('http://127.0.0.1:8701/api/tools/git.diff?operationId=op-1')
     expect(r.argv[r.argv.indexOf('--data-binary') + 1]).toBe('{"root":"/repo"}')
     expect(r.argv.join('\n')).not.toContain(TOK)
+  })
+
+  it('legacy: a pre-rename session (only NODETERM_PORT set) still reaches the right port', () => {
+    installWebtermCli(home())
+    const r = run(['git.diff', '--json', '{"root":"/repo"}'], { WEBTERM_NODE_HEADERS: headers(), NODETERM_PORT: '8702' })
+    expect(r.status).toBe(0)
+    expect(r.argv.some((a) => a.startsWith('http://127.0.0.1:8702/api/tools/git.diff'))).toBe(true)
+    const fresh = run(['git.diff', '--json', '{"root":"/repo"}'], { WEBTERM_NODE_HEADERS: headers(), WEBTERM_PORT: '8703', NODETERM_PORT: '8702' })
+    expect(fresh.argv.some((a) => a.startsWith('http://127.0.0.1:8703/'))).toBe(true) // new name wins
     expect(r.stdout).toBe('{"receipt":{"outcome":"x"}}\n')
   })
 
@@ -156,7 +165,7 @@ describe('old shims are aliases that still work', () => {
     installWebtermCli(home())
     const shim = join(root, 'context.sh')
     writeFileSync(shim, buildContextShim(), { mode: 0o700 })
-    const r = run(['summary', '--node', 'peer', '-n', '5'], { WEBTERM_NODE_HEADERS: headers(), NODETERM_NODE_ID: 'n1' }, { script: shim })
+    const r = run(['summary', '--node', 'peer', '-n', '5'], { WEBTERM_NODE_HEADERS: headers(), WEBTERM_NODE_ID: 'n1' }, { script: shim })
     expect(r.argv).toContain('http://127.0.0.1:8700/api/context-link')
     expect(r.argv).toEqual(expect.arrayContaining(['verb=summary', 'want=peer', 'n=5', 'node=n1']))
   })

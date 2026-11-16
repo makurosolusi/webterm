@@ -1,4 +1,4 @@
-// Pure helpers for the clone flow, copied from nodeterm src/shared/clone-url.ts (expand, validate,
+// Pure helpers for the clone flow (expand, validate,
 // derive name, parse progress) and narrowed to the schemes webterm allows. No node imports: the
 // client dialog reuses them for its live preview, the server re-checks authoritatively.
 
@@ -7,7 +7,7 @@ export interface CloneProgress {
   percent: number
 }
 
-/** `owner/repo` GitHub shorthand -> HTTPS clone URL. Anything else passes through trimmed (nodeterm). */
+/** `owner/repo` GitHub shorthand -> HTTPS clone URL. Anything else passes through trimmed. */
 export function expandCloneUrl(input: string): string {
   const s = input.trim()
   const m = s.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/)
@@ -29,7 +29,7 @@ export function isValidCloneUrl(url: string): boolean {
 
 /**
  * The folder name `git clone` would create, or null when it would be empty, `.`/`..`, or contain a
- * separator: a crafted URL must never be able to write outside the parent (nodeterm deriveRepoDirName).
+ * separator: a crafted URL must never be able to write outside the parent.
  */
 export function deriveRepoDirName(url: string): string | null {
   const trimmed = url.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
@@ -42,7 +42,7 @@ export function isSafeFolderName(name: string): boolean {
   return name !== '' && name !== '.' && name !== '..' && !/[\\/\x00-\x1f]/.test(name) && name.length <= 255
 }
 
-/** Last `<phase>:  NN%` line in a stderr chunk (git overwrites lines with \r). nodeterm verbatim. */
+/** Last `<phase>:  NN%` line in a stderr chunk (git overwrites lines with \r). */
 export function parseCloneProgress(chunk: string): CloneProgress | null {
   let out: CloneProgress | null = null
   for (const line of chunk.split(/[\r\n]+/)) {
@@ -74,7 +74,7 @@ export const AUTH_HINT = 'Authentication required: run `gh auth login` (or set u
 const AUTH_FAILURE = /authentication failed|could not read (username|password)|terminal prompts disabled|permission denied \(publickey|repository not found|returned error: 40[13]/i
 
 /**
- * Readable one-liner from git's stderr tail: the last `fatal:`/`error:` line (nodeterm), ANSI
+ * Readable one-liner from git's stderr tail: the last `fatal:`/`error:` line, ANSI
  * stripped, credentials redacted, plus the `gh auth login` hint when it reads as an auth failure.
  */
 export function cloneErrorMessage(stderrTail: string): string {

@@ -1,8 +1,6 @@
-// Skema settings webterm. Porting ramping dari nodeterm `src/shared/types.ts` (interface Settings,
-// ±90 kunci) — HANYA kunci yang punya konsumen nyata di webterm, dengan nilai default persis dari
-// nodeterm supaya pengguna yang pindah tidak melihat tampilan berubah.
+// Skema settings webterm. HANYA kunci yang punya konsumen nyata di webterm.
 //
-// SENGAJA TIDAK DIPORT:
+// SENGAJA TIDAK ADA:
 //  - Famili tmux/zellij (`tmuxEnabled`, `sessionBackend`, `tmuxLeadPaneWidth`, …): webterm tidak
 //    punya multiplexer, jadi UI-nya akan jadi saklar mati.
 //  - Kunci khusus Electron (`notch*`, `uiScale`, `tabBarHeight`, `runInBackgroundOnClose`,
@@ -10,8 +8,7 @@
 //    `license`): tidak ada permukaan yang mewujudkannya di browser.
 //  - `modelGateway` / `claudeAccounts`.
 //
-// KEAMANAN. Di nodeterm `settings.json` memuat kredensial dan ditulis mode 0600. Di webterm
-// settings melintas HTTP tanpa redaksi (`GET /api/settings`), jadi TIDAK ADA kunci yang boleh
+// KEAMANAN. Settings melintas HTTP tanpa redaksi (`GET /api/settings`), jadi TIDAK ADA kunci yang boleh
 // memuat rahasia: tidak ada API key, token, atau baseUrl bergantung-kredensial. Satu-satunya
 // kunci bernilai env adalah `CustomAgent.env`, dan ia hanya boleh berisi literal NON-secret atau
 // rujukan `${env:NAME}` (nilai asli dibaca server dari env proses, tak pernah ikut GET). Kunci
@@ -119,8 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
   drawBoldTextInBrightColors: true,
   terminalLineHeight: 1,
   terminalLetterSpacing: 0,
-  // Id tema adalah permukaan TERLIHAT (muncul di dropdown settings), bukan wire-protocol, jadi ia
-  // memakai nama webterm — beda dari `nodeterm:too-large:` di fsLimits.ts yang memang protokol.
+  // Id tema adalah permukaan TERLIHAT (muncul di dropdown settings), jadi ia
+  // memakai nama webterm.
   terminalTheme: 'webterm-dark',
   terminalMinContrast: 1,
   cursorStyle: 'block',
@@ -134,7 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultShell: '',
   // 256 KiB — persis `SCROLLBACK_BYTES` yang berjalan di server hari ini. Lihat doc kuncinya.
   scrollbackBytes: 256 * 1024,
-  // 10.000 baris — angka yang dipakai xterm hari ini (dan clamp nodeterm), jadi mengangkatnya ke
+  // 10.000 baris — angka yang dipakai xterm hari ini, jadi mengangkatnya ke
   // settings tidak mengubah perilaku. Lihat doc kuncinya.
   scrollbackLines: 10_000,
   agentLaunchCommands: {},
@@ -187,8 +184,7 @@ const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]
  *
  * Shallow merge sudah cukup DI SINI, dan itu bukan kebetulan: satu-satunya kunci bernilai objek
  * (`agentLaunchCommands`) defaultnya `{}`, sehingga objek parsial yang tersimpan tidak bisa
- * menjatuhkan apa pun. nodeterm butuh deep-merge satu level justru karena objek bersarangnya
- * (`speech`, `modelGateway`) punya default BERISI — sebuah objek parsial dari file lama akan
+ * menjatuhkan apa pun. deep-merge satu level baru perlu bila objek bersarang punya default BERISI — sebuah objek parsial dari file lama akan
  * menimpanya satu-untuk-satu dan "silently drop the new key". Aturannya: begitu ada kunci objek
  * dengan default tidak kosong ditambahkan ke skema ini, ia WAJIB di-merge satu level di sini.
  *

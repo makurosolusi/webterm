@@ -2,7 +2,7 @@
 // yang dibawanya milik node yang dituju. Dipisah dari `agentStatusApi` supaya file route tetap di
 // bawah budget route-nya; modul ini tidak menyentuh registry maupun body request.
 import type { IncomingMessage } from 'node:http'
-import { nodeIdForToken, NODE_TOKEN_HEADER } from './hooks'
+import { nodeIdForToken, nodeTokenFrom } from './hooks'
 import { TOKEN_HEADER } from './auth'
 import { firstHeader } from './httpHeaders'
 
@@ -18,18 +18,18 @@ export const STRICT_HOOK_AUTH = process.env.WEBTERM_STRICT_HOOK_AUTH !== '0'
 
 /** Header token node, apa adanya dari request (Node menurunkan nama header ke lowercase). */
 export const nodeTokenHeader = (req: IncomingMessage): string | string[] | undefined =>
-  req.headers['x-nodeterm-node-token']
+  nodeTokenFrom((name) => req.headers[name])
 
 /**
  * Node yang DIBUKTIKAN oleh token transport request ini, atau `undefined` bila tokennya bukan token
  * node (root token, tanpa token, atau token asing).
  *
  * `x-webterm-token` dulu: itu header transport yang membawa token node di baris hook, dan jalur
- * `authorizeRequest` sudah menerimanya. `x-nodeterm-node-token` tetap dibaca sebagai cadangan —
- * sesi agent lama hanya mengirim header protokol itu.
+ * `authorizeRequest` sudah menerimanya. nama header node lama (legacy) tetap dibaca sebagai cadangan —
+ * sesi agent dari versi sebelum rename hanya mengirim header itu.
  */
 export function requesterNodeId(req: IncomingMessage): string | undefined {
-  const raw = req.headers[TOKEN_HEADER] ?? req.headers[NODE_TOKEN_HEADER]
+  const raw = req.headers[TOKEN_HEADER] ?? nodeTokenFrom((name) => req.headers[name])
   const token = firstHeader(raw)
   return typeof token === 'string' ? nodeIdForToken(token) : undefined
 }

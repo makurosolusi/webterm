@@ -15,7 +15,7 @@ import { checkSchema } from '../capability/capability.schema'
 import { AGENT_REPORT_CAPABILITY, reportByDefault, type AgentReportKind } from '../capability/report.capabilities'
 import { CAPABILITY_VERBS, type CapabilityStore, type CapabilityVerb } from '../control/capabilities'
 import { capabilityStore } from '../control/mount'
-import { NODE_TOKEN_HEADER } from '../hooksTokens'
+import { NODE_TOKEN_HEADERS } from '../hooksTokens'
 import { firstHeader } from '../httpHeaders'
 import { cableGrants } from '../policy/policy.cable'
 import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
@@ -154,7 +154,7 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   let minted: string | undefined
   if (browser && nodeId) {
     // The browser route proves the node itself and resolves its cables: forward the caller's own token.
-    for (const h of [TOKEN_HEADER, NODE_TOKEN_HEADER]) { const v = firstHeader(headers[h]); if (v) fwd[h] = v }
+    for (const h of [TOKEN_HEADER, ...NODE_TOKEN_HEADERS]) { const v = firstHeader(headers[h]); if (v) fwd[h] = v }
   } else if (CAPABILITY_VERBS.includes(cap.name as CapabilityVerb)) {
     const scope = resource ?? (cap.name === 'node.read' ? '*' : undefined)
     if (!scope) return { receipt: receipt('error', 'invalid_shape', { problem: 'a resource id (nodeId/projectId) is required' }) }

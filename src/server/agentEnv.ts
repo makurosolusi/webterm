@@ -1,5 +1,5 @@
 // Allowlisted environment for headless agent children: base OS keys plus provider
-// credentials, never `WEBTERM_*`/`NODETERM_*` values. Pure, no I/O.
+// credentials, never `WEBTERM_*` (or legacy `NODETERM_*`) values. Pure, no I/O.
 
 /** Exact strings kept in the child environment; everything else is dropped. */
 export const BASE_ENV_ALLOWLIST: readonly string[] = [
@@ -36,9 +36,10 @@ export const envProxyAuth = (env: NodeJS.ProcessEnv): boolean =>
   !!env.ANTHROPIC_BASE_URL && (!!env.ANTHROPIC_AUTH_TOKEN || !!env.ANTHROPIC_API_KEY)
 
 /** Prefixes that must never reach the child, even if allowlisted by mistake. */
+// legacy: `NODETERM_` = pre-rename names, still scrubbed (inherited from an old parent env); remove after 0.10.0.
 const FORBIDDEN_PREFIXES = ['WEBTERM_', 'NODETERM_']
 
-/** Keep only allowlisted variables; drop WEBTERM and NODETERM prefixed values and root tokens. */
+/** Keep only allowlisted variables; drop WEBTERM_ (and legacy NODETERM_) prefixed values and root tokens. */
 export function scrubAgentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = providerEnvFrom(env)
   for (const name of BASE_ENV_ALLOWLIST) {

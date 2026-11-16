@@ -70,7 +70,7 @@ export function canResumeWith(id: AgentId, sessionId: string): boolean {
  * Perintah ini nantinya dijalankan via login shell, jadi string biasa sudah benar — JANGAN
  * dipecah jadi argv lebih dulu.
  *
- * TIDAK ADA pembungkus yang dihasilkan di sini. nodeterm tidak pernah membungkus perintah agent
+ * TIDAK ADA pembungkus yang dihasilkan di sini. Perintah agent tidak pernah dibungkus
  * (nol kemunculan wrapper semacam itu di source v0.4.5); pemilihan akun/profil adalah urusan
  * override di atas, yang dikarang pengguna sendiri sehingga binary-nya pasti ada di mesinnya.
  */

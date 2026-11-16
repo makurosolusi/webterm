@@ -13,7 +13,7 @@ const log = createLogger('pty')
  * restart yang mati hanya client itu — shell/agent di dalam sesi tetap jalan, dan boot berikutnya
  * menempel lagi (`Sessions.adoptSupervised`).
  *
- * Ditiru dari nodeterm (`~/Documents/spawn/nodeterm-web/src/core`): satu sesi tmux per node, nama
+ * Satu sesi tmux per node, nama
  * stabil dari node id (`tmux-naming.ts:10`), socket sendiri (`tmux-naming.ts:7`), target exact
  * `=name` karena target polos jatuh ke PREFIX match (`tmux-naming.ts:29-55`), opsi server
  * `status off` / `destroy-unattached off` (`pty-manager.ts:481-490`), env per sesi lewat `-e`
@@ -21,7 +21,7 @@ const log = createLogger('pty')
  * `kill-session`. Orca memakai daemon PTY buatan sendiri (`src/main/daemon`, ~630 file; AGENTS.md-nya
  * mencatat puluhan cacat kepemilikan socket) — tmux memberi hal yang sama tanpa kode itu.
  *
- * Socket SENGAJA bukan `node-terminal`: itu milik nodeterm yang mungkin sedang jalan di mesin yang
+ * Socket SENGAJA bukan `node-terminal`: itu milik tmux pihak lain yang mungkin sedang jalan di mesin yang
  * sama, dan sesi `nt-*` di sana bukan urusan webterm.
  */
 
@@ -56,7 +56,7 @@ export function tmuxArg(arg: string): string {
 
 /** Opsi server, dipasang ulang pada setiap create (idempoten). BUKAN lewat `-f`: file itu hanya
  *  dibaca saat server mulai, jadi server yang berumur panjang tak pernah melihat perubahannya —
- *  jebakan yang nodeterm catat sebagai MIGRATION (`pty-manager.ts:497-503`).
+ *  jebakan migrasi yang diketahui.
  *
  *  `smcup@:rmcup@`: tmux digambar di layar NORMAL xterm.js, bukan alternate screen, supaya baris
  *  yang bergulir masuk scrollback xterm.js dan wheel/seleksi bawaan tetap jalan.
@@ -187,7 +187,7 @@ export class TmuxSupervisor {
   }
 
   /** Buat sesi bila belum ada, lalu tempelkan client baru. `cmd`/`env` hanya berlaku saat create —
-   *  sesi yang sudah hidup (restart) dilanjutkan apa adanya, persis `new-session -A` nodeterm. */
+   *  sesi yang sudah hidup (restart) dilanjutkan apa adanya, persis `new-session -A`. */
   open(id: string, opts: SupervisedOpen): Pty {
     if (!this.has(id)) {
       try {
@@ -280,7 +280,7 @@ export class TmuxSupervisor {
 
   /** Close a node = end its session. SYNCHRONOUS (~5 ms, the cost of `has`): with an async kill an
    *  open right after close still saw the dying session, attached to it and exited (pty-207-2).
-   *  nodeterm orders it the same way: kill-session before any create. */
+   *  kill-session before any create. */
   kill(id: string): void {
     try {
       this.run(['kill-session', '-t', `=${supervisedName(id)}`])

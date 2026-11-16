@@ -42,7 +42,7 @@ describe('expandHomePath', () => {
     expect(expandHomePath('~/src/a.ts', '/h/me')).toBe('/h/me/src/a.ts')
   })
 
-  // `~user` adalah nama user lain, bukan path home-relative — sama seperti nodeterm.
+  // `~user` adalah nama user lain, bukan path home-relative.
   it('leaves ~user and absolute paths alone', () => {
     expect(expandHomePath('~bob/x', '/h/me')).toBe('~bob/x')
     expect(expandHomePath('/etc/hosts', '/h/me')).toBe('/etc/hosts')

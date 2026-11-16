@@ -84,7 +84,7 @@ describe('splitLaunch', () => {
   })
 })
 
-describe('shellSplit (copied from nodeterm)', () => {
+describe('shellSplit ', () => {
   it('quotes, escapes, no expansion', () => {
     expect(shellSplit("--msg 'hello world'")).toEqual(['--msg', 'hello world'])
     expect(shellSplit('a\\ b "c d"')).toEqual(['a b', 'c d'])

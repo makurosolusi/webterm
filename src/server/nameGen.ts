@@ -25,8 +25,9 @@ export function buildTaskNamePrompt(firstPrompt: string): string {
 }
 
 // Text that reaches the transcript as a "user" turn but is not the user's task: tool results are
-// filtered by shape; webterm/nodeterm notes and Claude's own `<command-…>`/`<local-command-…>`
+// filtered by shape; webterm notes and Claude's own `<command-…>`/`<local-command-…>`
 // wrappers are filtered by prefix.
+// legacy: `[nodeterm]` = link-note prefix typed by pre-rename servers; still skipped. Remove after 0.10.0.
 const NOT_A_TASK = /^(\[webterm\]|\[nodeterm\]|<)/
 
 /** First real user prompt in a claude transcript JSONL, or '' when none yet. */

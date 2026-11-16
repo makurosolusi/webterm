@@ -1,5 +1,5 @@
 // The agent's VISIBLE SCREEN, rebuilt server-side from the raw PTY output. webterm has no tmux to
-// `capture-pane -e` (what nodeterm's `sendToEmptyPrompt` reads), but it keeps every session's output
+// `capture-pane -e` (the usual tmux capture), but it keeps every session's output
 // log, so replaying that log through the same terminal emulator the client uses (`@xterm/xterm`,
 // already a dependency, runs headless in Bun/Node as long as `open()` is never called) gives the same
 // screen the user is looking at. The result is in the shape `readClaudeComposer` reads: one line per

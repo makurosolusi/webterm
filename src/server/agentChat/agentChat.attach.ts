@@ -1,7 +1,6 @@
 // Attachments of an agent chat user turn: images sent to Claude as base64 image blocks (the shape of
 // `Base64ImageSource` in @anthropic-ai/sdk, carried by `SDKUserMessage.message: MessageParam`), and
-// other files staged under the webterm data dir so their path can go into the prompt (nodeterm's
-// uploads staging area). Validation lives here so the route stays a thin boundary.
+// other files staged under the webterm data dir so their path can go into the prompt. Validation lives here so the route stays a thin boundary.
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'

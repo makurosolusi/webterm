@@ -2,12 +2,12 @@
 // sementara `db.ts` yang mengimpor `bun:sqlite` tetap Bun-only. `Db.getSettings()` /
 // `Db.saveSettings()` adalah pembungkus tipis di atas fungsi di sini.
 //
-// SENGAJA TIDAK DIPORT dari nodeterm `src/core/settings-store.ts`:
+// SENGAJA TIDAK ADA (dibanding store settings yang lebih berat):
 //  - Rantai tulis atomik (`writeFileAtomic` temp+rename, mode 0600) dan `saveChain` FIFO. Keduanya
 //    menjawab masalah yang tidak ada di sini: satu `INSERT … ON CONFLICT` SQLite sudah satu
 //    transaksi (tak ada state setengah-tertulis), dan `bun:sqlite` sinkron — jadi siklus
 //    baca→merge→tulis di `saveSettings` berjalan utuh dalam satu turn event-loop dan tidak bisa
-//    diselang request lain. Yang dicegah `saveChain` nodeterm (rename terakhir vs call terakhir
+//    diselang request lain. Yang dicegah `saveChain` (rename terakhir vs call terakhir
 //    saling tidak sepakat) secara struktural tidak bisa terjadi.
 //  - 7 migrasi load-time (seed dictation, flip `openMarkdownPreview`, `terminalGpuRendering`
 //    boolean→enum, `agentLaunchMode`, `newProjectStorage`, `runInBackgroundOnClose`,

@@ -6,6 +6,7 @@ import { scrubAgentEnv } from '../../agentEnv'
 /** Default cap on retained stdout (bytes of text); older output is dropped. */
 export const EXEC_TAIL_BYTES = 64 * 1024
 const MAX_LINE_CHARS = 1024 * 1024
+// legacy: `NODETERM_` = pre-rename names, still scrubbed (inherited from an old parent env); remove after 0.10.0.
 const FORBIDDEN_NAME = /^(WEBTERM_|NODETERM_)/
 const CAPABILITY_VALUE = /wcap_/
 
@@ -16,7 +17,7 @@ export interface ExecSpec {
   cwd: string
   /** Source env to scrub; defaults to `process.env`. */
   env?: NodeJS.ProcessEnv
-  /** Extra vars (e.g. sandbox HOME) applied after the scrub; `WEBTERM_`/`NODETERM_` names are dropped. */
+  /** Extra vars (e.g. sandbox HOME) applied after the scrub; `WEBTERM_` (and legacy `NODETERM_`) names are dropped. */
   overrides?: Record<string, string>
   timeoutMs: number
   tailBytes?: number
@@ -42,7 +43,7 @@ export interface ExecHandle {
   kill(): void
 }
 
-/** Allowlisted env for a child: no `WEBTERM_*`/`NODETERM_*`, no value that looks like a `wcap_` capability. */
+/** Allowlisted env for a child: no `WEBTERM_*` (or legacy `NODETERM_*`), no value that looks like a `wcap_` capability. */
 export function scrubExecEnv(source: NodeJS.ProcessEnv = process.env, overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}
   const keep = (name: string, value: string | undefined): void => {

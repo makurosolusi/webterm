@@ -85,7 +85,7 @@ export function unwrapMissingWrapper(
   return missing ? { cmd: rest, missing } : null
 }
 
-/** Jeda SIGTERM → SIGKILL saat node ditutup. Meniru grace nodeterm (`pty-manager.ts:7099-7110`,
+/** Jeda SIGTERM → SIGKILL saat node ditutup. Grace standar (
  *  30 × 50 ms): beri harness agent jendela untuk menulis transcript/resume id sebelum dipaksa. */
 const KILL_GRACE_MS = 1500
 /** Extra wait before the PTY's session leader itself is SIGKILLed (its descendants go first). */

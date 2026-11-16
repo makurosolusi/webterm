@@ -29,6 +29,7 @@ const PORT_PROBE_SPAN = 100
 const STOP_GRACE_MS = 5000
 const REPO_ROOT = resolve(import.meta.dirname, '..')
 /** Prefixes/keys that would point the child at the real webterm instance (or mark it as running inside one). */
+// legacy: NODETERM_ = pre-rename prefix, still stripped; remove after 0.10.0.
 const STRIP_PREFIXES = ['WEBTERM_', 'NODETERM_']
 const STRIP_KEYS = ['TMUX', 'TMUX_PANE', 'NODE_ENV', 'HOST', 'PORT', 'CLAUDECODE', 'CLAUDE_SECURESTORAGE_CONFIG_DIR']
 /** `--empty-home` only: a brand-new OS user has no provider env, XDG dirs or zsh dotdir. */
