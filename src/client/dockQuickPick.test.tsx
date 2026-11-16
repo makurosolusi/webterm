@@ -51,8 +51,11 @@ describe('baris Browser saat kemampuan browser mati', () => {
   }))
 
   it('tetap tampil; memilihnya memunculkan tawaran Nyalakan, lalu node lahir setelah menyala', async () => {
+    // The status bar's own /api/connectivity read must not consume the ordered capability replies.
     const f = vi.fn().mockResolvedValueOnce(caps('off')).mockResolvedValue(caps('on'))
-    vi.stubGlobal('fetch', f)
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => (
+      url === '/api/connectivity' ? Promise.resolve(new Response('{}', { status: 503 })) : f(url, init)
+    ))
     const { rerender } = render(<Dock {...baseProps} />)
     press(screen.getByRole('button', { name: 'Add node' }))
     fireEvent.click(screen.getByRole('option', { name: /Browser/ }))
