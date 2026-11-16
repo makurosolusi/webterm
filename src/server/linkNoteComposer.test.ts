@@ -1,6 +1,6 @@
-// The empty-input proof, end to end on REAL Claude Code screens (nodeterm fixture, Claude Code
+// The empty-input proof, end to end on REAL Claude Code screens (captured with Claude Code
 // 2.1.301): the capture is replayed as PTY output through `renderStyledScreen` (the server-side
-// xterm), then read by the ported `readClaudeComposer`.
+// xterm), then read by `readClaudeComposer`.
 import { describe, expect, it } from 'vitest'
 import capture from './__fixtures__/claude-composer-capture.json'
 import { composerText, readClaudeComposer } from './linkNoteComposer'
