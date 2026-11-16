@@ -25,7 +25,7 @@ Topik 3 R&D file manager. Basis: worktree `rnd-files` (HEAD `fdaf2b4`). Bukti = 
 | git per-file (M/A/U) | **tidak**; hanya flag `ignored` dan info repo per-cwd | `fsOps.ts:92-117`, `shared/gitInfo.ts`; klien tidak memanggil `/api/git/info` dari FilesNode |
 | menu konteks | Open, Open in Terminal, New File, New Folder, Copy Path | `FilesNode.tsx:259-279` |
 
-Paritas nodeterm: `nodeterm-web/src/core/fs-handlers.ts` juga hanya 6 method — jadi menambah mutasi adalah **fitur baru webterm**, bukan regresi. Yang bisa ditiru dari nodeterm: `fs-atomic.ts` (`writeFileAtomic` :373, `tempNameFor` :354, `renameAtomic` retry :81, `sweepStaleTempFiles` :178) dan pola re-arm watcher di `workspace-watcher.ts:59-95`.
+Paritas referensi eksternal: `referensi-eksternal/src/core/fs-handlers.ts` juga hanya 6 method — jadi menambah mutasi adalah **fitur baru webterm**, bukan regresi. Yang bisa ditiru dari referensi eksternal: `fs-atomic.ts` (`writeFileAtomic` :373, `tempNameFor` :354, `renameAtomic` retry :81, `sweepStaleTempFiles` :178) dan pola re-arm watcher di `workspace-watcher.ts:59-95`.
 
 ## 2. Tabel celah (severity + bukti)
 
@@ -53,7 +53,7 @@ P0 = kehilangan/korupsi data tanpa peringatan pada alur normal; P1 = fitur mutas
 
 ### 3.1 Versi & konflik (`expectedVersion`)
 
-Rancangan: `read` mengembalikan `{content, version}` dan `write` menerima `expectedVersion?`. `version` = opaque string dari `stat` bigint: `mtimeNs` + `size` (+ `ino` bila perlu) — **jangan** `mtimeMs` float (kehilangan presisi). Tulis: `stat` → bandingkan → bila beda `409 {code:'EVERSION', current}`; sukses → balas `version` baru. Kompatibel mundur: field tambahan, `expectedVersion` opsional (nodeterm-style klien lama tetap jalan).
+Rancangan: `read` mengembalikan `{content, version}` dan `write` menerima `expectedVersion?`. `version` = opaque string dari `stat` bigint: `mtimeNs` + `size` (+ `ino` bila perlu) — **jangan** `mtimeMs` float (kehilangan presisi). Tulis: `stat` → bandingkan → bila beda `409 {code:'EVERSION', current}`; sukses → balas `version` baru. Kompatibel mundur: field tambahan, `expectedVersion` opsional (referensi eksternal-style klien lama tetap jalan).
 
 Referensi VS Code (diverifikasi dari sumber): `etag = mtime.toString(29)+size.toString(31)` (`src/vs/platform/files/common/files.ts:1575`); `FileService.writeFile` melempar `FILE_MODIFIED_SINCE` bila mtime+etag berubah dan hanya sekali membandingkan isi buffer sebelum menyerah (`fileService.ts:503-536`).
 
@@ -63,12 +63,12 @@ Batas jujur: cek-lalu-tulis **tidak atomik** (jendela TOCTOU ms) — cukup untuk
 
 | Aspek | Keputusan |
 |---|---|
-| Pola | Tulis ke `.<nama>.webterm-<rand>.tmp` di **direktori yang sama** → `fsync` → `chmod` ke mode asli → `rename`. Tiru `nodeterm fs-atomic.ts:373` (`writeFileAtomic`) + `sweepStaleTempFiles` untuk sisa tmp |
+| Pola | Tulis ke `.<nama>.webterm-<rand>.tmp` di **direktori yang sama** → `fsync` → `chmod` ke mode asli → `rename`. Tiru `referensi eksternal fs-atomic.ts:373` (`writeFileAtomic`) + `sweepStaleTempFiles` untuk sisa tmp |
 | Symlink | **Resolve `realpath` dulu, tulis di sebelah target** — atau jatuh ke in-place bila target lintas-volume. VS Code menolak atomic untuk symlink (`diskFileSystemProvider.ts:272-286`) |
 | Hard link, owner, ACL, xattr (Finder tags/quarantine) | `rename` mengganti inode → hilang/berubah. `[BT]` xattr macOS. Fallback in-place bila `nlink>1` atau `uid` beda |
 | Direktori tak writable tapi file writable | Pembuatan tmp gagal `EACCES` → fallback in-place (sama seperti VS Code `canWriteFileAtomic`) |
 | Watcher/git | tmp akan terlihat sebentar (Bun mengirim `rename:*.tmp`, §7) → filter pola `.webterm-*.tmp` di watcher; git melihat untracked sesaat |
-| Windows | `EPERM` retry sudah ada di `renameAtomic` nodeterm :81 (webterm hanya macOS/Linux dev — rendah) |
+| Windows | `EPERM` retry sudah ada di `renameAtomic` referensi eksternal :81 (webterm hanya macOS/Linux dev — rendah) |
 
 Rekomendasi: atomic **default untuk file reguler non-symlink dengan nlink=1**, in-place fallback otomatis. `[opini]` ini lebih aman daripada VS Code (opt-in) karena webterm dipakai dengan agent yang membaca file bersamaan.
 

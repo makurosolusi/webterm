@@ -12,7 +12,7 @@ import { TOKEN_HEADER } from '../auth'
 import { BodyReadError } from '../cappedRequestBody'
 import { headerValue } from '../control/controlTypes'
 import type { McpDeps } from '../mcp/mcp.tools'
-import { NODE_TOKEN_HEADER } from '../hooksTokens'
+import { nodeTokenFrom } from '../hooksTokens'
 import { callAppTool } from './mcpApp.call'
 import { buildAppCsp, withCspMeta } from './mcpApp.csp'
 import { publishApp } from './mcpApp.publish'
@@ -59,7 +59,7 @@ export async function mcpAppsRoute(req: IncomingMessage, url: URL, read: () => P
 
   if (path === MCP_APPS_PUBLISH_PATH) {
     if (method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } }
-    const token = headerValue(req.headers, TOKEN_HEADER) ?? headerValue(req.headers, NODE_TOKEN_HEADER)
+    const token = headerValue(req.headers, TOKEN_HEADER) ?? nodeTokenFrom((n) => headerValue(req.headers, n))
     const owner = token ? deps.nodeIdForToken(token) : undefined
     if (!owner) return { status: 401, body: { error: 'unauthorized' } }
     const b = await body(read)

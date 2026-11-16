@@ -1,7 +1,7 @@
 import type { ITheme } from '@xterm/xterm'
 
 /**
- * Skema warna terminal. Port dari nodeterm `src/renderer/terminal/themes.ts`.
+ * Skema warna terminal. 
  *
  * Data murni + satu resolver, SENGAJA tanpa import runtime xterm (`ITheme` type-only), supaya
  * modul ini ikut termuat di test node-env. Segala yang mengubah tema jadi opsi xterm ada di
@@ -15,9 +15,8 @@ import type { ITheme } from '@xterm/xterm'
  * `miscColors.ts` (`scrollbarSlider.*`). Background = `editor.background` karena terminal node
  * hidup di area editor, bukan di panel (panel Dark Modern #181818). `themes.test.ts` memakukan nilainya.
  *
- * Id tema nodeterm yang mengandung `nodeterm` di-rename jadi `webterm` (`nodeterm-dark` →
- * `webterm-dark`, `nodeterm-light` → `webterm-light`): id tema muncul di dropdown settings, jadi
- * ia permukaan TERLIHAT, bukan wire-protocol. Id tema pihak ketiga (dracula, nord, …) tidak
+ * Id tema bawaan: `webterm-dark` dan `webterm-light`. Id tema muncul di dropdown settings, jadi
+ * ia permukaan TERLIHAT. Id tema pihak ketiga (dracula, nord, …) tidak
  * disentuh — itu nama skema warna milik orang lain.
  */
 

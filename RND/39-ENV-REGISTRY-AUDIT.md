@@ -124,7 +124,7 @@ Dampak: banner "Perlu restart server untuk: ..." (`EnvSection.tsx:58-60`) memuat
 | `TELEGRAM_BOT_TOKEN` (alias lama) | `channels/telegramSend.ts:19-24` | alias E05, tampil "Kosong" bila hanya ini terisi | FIX di E05 (tampilkan "terisi via alias") |
 | `WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE` | `channels/channelSecret.ts:11` | alternatif E06 | dokumentasi saja (HIDE) |
 | `WEBTERM_RETRIES` | hanya `client/EnvSection.test.tsx` | fixture tes, bukan var produk | abaikan |
-| `NODETERM_PERM_WAIT_SECS`, `NODETERM_NODE_ID/TOKEN/PORT` | `hooks.ts:40`, `shared/settings.ts:155` | protokol agent, diatur lewat tab Agent (`SettingsAgents.tsx:91`) | JANGAN masuk registry (CLAUDE.md: tetap `nodeterm`) |
+| `WEBTERM_PERM_WAIT_SECS`, `WEBTERM_NODE_ID/TOKEN/PORT` | `hooks.ts:40`, `shared/settings.ts:155` | protokol agent, diatur lewat tab Agent (`SettingsAgents.tsx:91`) | JANGAN masuk registry (CLAUDE.md: nama protokol `webterm`) |
 
 ## 6. Bootstrap (B01-B10, `envRegistry.ts:17-28`) dan pratinjau ca2-int
 

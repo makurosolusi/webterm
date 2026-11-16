@@ -1,4 +1,4 @@
-// POSIX tokenizer + quoter, copied from nodeterm `src/shared/shell-quote.ts` (shellSingleQuote,
+// POSIX tokenizer + quoter, (shellSingleQuote,
 // shellQuoteIfNeeded, shellSplit; `argvHasFlag` left out until something here needs it).
 
 /** Single-quote a string for safe use as one shell argument (POSIX). */

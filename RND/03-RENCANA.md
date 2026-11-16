@@ -14,7 +14,7 @@ Peta kode, gap, dan gate aktual: `07-IMPLEMENTASI-P3-P5.md`. Dokumen ini rencana
 3. **Test nyata sebelum klaim selesai.** Gate: typecheck, vitest, bun test, test baru.
 4. **Feature flag default off**, kecuali perbaikan yang tidak mengubah perilaku lama.
 5. **Tidak menambah kode ke file over-limit.** Pecah dulu, baru tambah.
-6. **Jangan mengubah nama protokol `nodeterm`.** Env/header baru berawalan `webterm`.
+6. **Nama protokol (env, header, event) berawalan `webterm`.**
 7. **State otoritatif di server, bukan di prompt.** Event log = audit; task row = state.
 8. **Verifikasi independen.** "Turn selesai" bukan "task selesai".
 
@@ -27,7 +27,7 @@ Peta kode, gap, dan gate aktual: `07-IMPLEMENTASI-P3-P5.md`. Dokumen ini rencana
 | PTY | Satu slot per sesi; `open` menimpa; `close` menghapus map sebelum kill | P0 wajib sebelum API |
 | Auth | Satu token proses; loopback token-free; `tokensMatch(undefined,x)=true` | Perlu principal + opt-in eksplisit |
 | Approval manusia | `/api/approvals/*` tanpa capability; default harus menolak loopback tanpa token | Root token atau `WEBTERM_ALLOW_LOOPBACK_APPROVAL=1` |
-| Env | `ptyShell` membuang `WEBTERM_*`/`NODETERM_*`; token node di-inject per sesi | Root token tidak diwarisi PTY |
+| Env | `ptyShell` membuang `WEBTERM_*; token node di-inject per sesi | Root token tidak diwarisi PTY |
 | Env lokal | `.env` mode `600`, hanya `HOST`/`PORT`; `WEBTERM_TOKEN` tidak disimpan | Bun auto-load `.env`; token harus eksplisit |
 | Ledger | SQLite v1 stabil; v2 plan WIP; v3 kanal belum | Migrasi append-only, backup sebelum upgrade |
 | Channels | Hanya `WEBTERM_TELEGRAM=on`; `WEBTERM_CHANNELS` belum ada di kode | P5 belum control plane |

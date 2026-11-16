@@ -38,7 +38,7 @@ export function readTranscriptFile(path: string): string | null {
   }
 }
 
-// --- claude transcript parser (ported verbatim from nodeterm-web) ---
+// --- claude transcript parser  ---
 
 function parseJson(raw: string): unknown {
   try {

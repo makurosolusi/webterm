@@ -1,13 +1,12 @@
-// Tanda "belum dibaca" per node: turn yang BERAKHIR selagi kamu tidak menontonnya. Porting dari
-// nodeterm v0.4.5 — `markUnread`/`clearUnread` di `src/renderer/state/agentStatus.ts`, gerbang
-// `watching` di `canvas/Canvas.tsx`, dan aturan clear-on-select di `nodes/TerminalNode.tsx`.
+// Tanda "belum dibaca" per node: turn yang BERAKHIR selagi kamu tidak menontonnya. Memakai
+// `markUnread`/`clearUnread`, gerbang `watching`, dan aturan clear-on-select.
 //
 // Kanal tersendiri, bentuknya sama dengan kanal status di `./ws` dan untuk alasan yang sama: sesi
 // di workspace NON-AKTIF tidak punya terminal yang ter-mount, tapi statusnya tetap datang lewat
 // socket — dan justru itu kasus yang membuat section "Unread" ada. Menggantungkan tanda ini pada
 // komponen node berarti kehilangan tepat sesi yang paling butuh ditandai.
 //
-// TIDAK DIPERSIST, beda dari nodeterm yang menyimpannya ke localStorage. Alasannya: `statuses`
+// TIDAK DIPERSIST, tidak disimpan ke localStorage. Alasannya: `statuses`
 // webterm juga tidak dipersist — ia dibangun ulang dari hook begitu socket tersambung. Tanda unread
 // yang hidup lebih lama dari status yang membenarkannya akan membuat sidebar, sesudah reload,
 // menaruh sesi di "Unread" sementara statusnya sendiri terbaca "Unknown": klaim tanpa bukti di
@@ -20,7 +19,7 @@ import { setBadgeCount } from './osNotify.badge'
 const unread = new Set<string>()
 const listeners = new Set<(ids: ReadonlySet<string>) => void>()
 
-/** Node yang sedang ditempati pengguna. nodeterm memakai `activeId` (terminal yang ber-fokus
+/** Node yang sedang ditempati pengguna: `activeId` (terminal yang ber-fokus
  *  keyboard); di webterm seleksi canvas adalah sinyal setara yang memang ada. */
 let watchingId: string | null = null
 
@@ -51,7 +50,7 @@ export function markUnread(id: string): void {
   emit()
 }
 
-/** No-op untuk node yang tak pernah ditandai, sama seperti nodeterm. */
+/** No-op untuk node yang tak pernah ditandai. */
 export function clearUnread(id: string): void {
   if (!unread.delete(id)) return
   emit()
@@ -73,7 +72,7 @@ export function unwatchNode(id: string): void {
 function isWatching(id: string): boolean {
   if (watchingId !== id) return false
   // Jendela tak fokus = tidak menonton, walau node-nya terpilih — gerbang `document.hasFocus()`
-  // nodeterm. Di luar browser (vitest node-env) tidak ada jendela untuk ditanyai, jadi di sana
+  // Di luar browser (vitest node-env) tidak ada jendela untuk ditanyai, jadi di sana
   // seleksi sendiri yang menentukan.
   return typeof document === 'undefined' || document.hasFocus()
 }
@@ -86,7 +85,7 @@ function isWatching(id: string): boolean {
  */
 export function noteStatus(id: string, status: AgentStatus, opts: { quiet?: boolean } = {}): void {
   // OS notification has its own, stricter gate (transition-only, in-view, mute) — see `./osNotify`.
-  // `quiet` (nodeterm completionAlert.ts): no banner or chime, the unread mark still lands.
+  // `quiet` (completionAlert): no banner or chime, the unread mark still lands.
   if (!opts.quiet) noteAttention(id, status, isWatching(id))
   if (status === 'working') return
   if (!isWatching(id)) markUnread(id)

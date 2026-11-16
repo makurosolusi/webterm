@@ -12,7 +12,7 @@ Stop, cost dan context. Hanya SDK yang mendokumentasikan izin interaktif (`canUs
 `interrupt()`, `setPermissionMode()`, antrean prioritas, dan `getSessionMessages()`; menulis ulang
 protokol `control_request` CLI sendiri ditolak (D2).
 
-nodeterm pernah membuang node chat SDK karena binary native ratusan MB per installer Electron
+referensi eksternal pernah membuang node chat SDK karena binary native ratusan MB per installer Electron
 dan permission mode yang diabaikan (D3). webterm server Bun memakai CLI terpasang lewat
 `spawnClaudeCodeProcess` (launch profile dan wrapper seperti envman tetap dihormati), dan mode awal =
 `settings.claudePermissionMode` seperti terminal (`manual` dipetakan ke `default`).

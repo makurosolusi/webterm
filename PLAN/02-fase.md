@@ -52,7 +52,7 @@ Aturan dispatch untuk setiap paket kerja (WP):
 | F1-d `wkr-evt-04` | Produsen: hook Claude disimpan, PTY exit, fsWatch, edge berubah. linkNote poll 1 dtk diganti subscriber, dan `wake` mendapat produsen baru | `src/server/linkNoteDelivery.ts`, `src/server/agentStatusApi.ts`, `src/server/fsWatch.ts`, `src/server/central/wake.ts` | `wake.ts` yang ada |
 | F1-e `wkr-tl-05` | Activity timeline v1 di panel bawah: dikelompokkan per tugas, bisa difilter, klik untuk loncat ke node. Badge level per workspace | client baru `src/client/Timeline.tsx` | Devin Progress, VS Code sessions view |
 | F1-f `wkr-ctl-06` | Panel Control **tulis**: semua env perilaku menjadi sakelar live di `settingsStore`, Doctor v1 (cek dan perbaiki hook/skill/`claude auth`/bot), dan world view `ATTACH` + satu modul hitungan | `src/server/settingsStore.ts`, `src/server/envSettings.*`, `src/client/ControlPanel.tsx`, baru `src/server/worldView.ts` | user-flow P0-1 |
-| F1-g `wkr-pty-07` | Supervisor PTY: sesi tetap hidup saat proses HTTP di-reload (nol restart untuk developer yang mengedit server) | `src/server/pty.ts`, `src/server/sessions*.ts` | nodeterm tmux socket `-L node-terminal` (`~/Documents/spawn/nodeterm-web`) |
+| F1-g `wkr-pty-07` | Supervisor PTY: sesi tetap hidup saat proses HTTP di-reload (nol restart untuk developer yang mengedit server) | `src/server/pty.ts`, `src/server/sessions*.ts` | referensi eksternal tmux socket `-L node-terminal` (`~/Documents/spawn/referensi-eksternal`) |
 
 **Track IDE I1 (paralel dengan F1, hanya bergantung pada F1-a untuk versi baca agent)**
 
@@ -61,7 +61,7 @@ Aturan dispatch untuk setiap paket kerja (WP):
 | I1-a `wkr-srch-01` | Global search `rg --json` dengan limit + paginasi, Cmd+P global berskor recency, ⌘K omnibox (node/file/URL/agent/perintah) dari registry perintah, keybinding kustom, HelpOverlay digenerate | `src/server/fsSearch.ts`, `src/client/App.tsx`, `src/client/HelpOverlay.tsx`, baru `src/client/commandRegistry.ts` | VS Code Search; Orca Quick Open/Jump |
 | I1-b `wkr-diff-02` | Diff node Monaco `createDiffEditor`, `GET /api/git/diff`, anotasi per baris → kirim batch ke agent, Keep/Undo per hunk (`git apply -R`), kabel agent→diff dengan auto-refresh saat `done` | baru `src/client/DiffNode.tsx`, baru `src/server/gitDiff.ts`; `src/server/gitInfo.ts` hanya dibaca | Orca `diff-comments/`, `ChangesModeView.tsx`; VS Code working set |
 | I1-c `wkr-hist-03` | Riwayat sesi agent (indeks transcript `~/.claude/projects/*/*.jsonl` + Resume), `closedHistory` dipersist ke SQLite | `src/client/closedHistory.ts`, baru `src/server/sessionHistory.ts` | Orca `agents/session-history.mdx` |
-| I1-d `wkr-lat-04` | Chip anggaran latensi browser node (input→frame). Perbaikan mengikuti referensi, bukan tambalan | client browser node | Orca/nodeterm screencast |
+| I1-d `wkr-lat-04` | Chip anggaran latensi browser node (input→frame). Perbaikan mengikuti referensi, bukan tambalan | client browser node | Orca/referensi eksternal screencast |
 
 **Kriteria keluar F1**
 - Test drift hijau: setiap capability ada di semua proyeksi yang sudah tersedia.

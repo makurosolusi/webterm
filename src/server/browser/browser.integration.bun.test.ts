@@ -202,7 +202,7 @@ describe('gerbang auth: token node ditolak di /ws/browser dan /api/browser/*', (
   test('token node tidak membuka permukaan browser; token root membukanya', () => {
     for (const p of ['/ws/browser', '/api/browser/status', '/api/browser/w1/cookies/domains', '/api/browser/w1/cookies/a.com', '/api/browser/b1/lease', '/api/browser/b1/agent-control']) {
       expect(check(p, { [TOKEN_HEADER]: NODE })).toBe(false)
-      expect(check(p, { 'x-nodeterm-node-token': NODE })).toBe(false)
+      expect(check(p, { 'x-webterm-node-token': NODE })).toBe(false)
       expect(check(p, { [TOKEN_HEADER]: 'root-token' })).toBe(true)
     }
   })

@@ -2,7 +2,7 @@
 
 Topik 2 dari R&D "browser sungguhan di canvas webterm". Tanggal verifikasi: **2026-11-03**.
 Label: fakta = ada sumber/URL; `[opini]` = penilaian saya; `[BT]` = belum terverifikasi dari sumber primer.
-Dokumen saudara: 31 (nodeterm), 33 (cookie), 34 (streaming). Di sini fokus: **siapa mengendalikan browser, lewat protokol apa, dan apakah manusia + agent bisa berbagi satu browser**.
+Dokumen saudara: 31 (referensi eksternal), 33 (cookie), 34 (streaming). Di sini fokus: **siapa mengendalikan browser, lewat protokol apa, dan apakah manusia + agent bisa berbagi satu browser**.
 
 ## 0. Ringkasan (5 baris)
 
@@ -117,7 +117,7 @@ Browser Use menjalankan 100 dari 200 tugas BU Bench V2.1 (README browser-harness
 **Rekomendasi tegas**
 1. **Satu protokol kontrol: CDP di atas WebSocket.** Semua alat agent yang relevan (Playwright MCP `--cdp-endpoint`, agent-browser `--cdp`, Chrome DevTools MCP `--wsEndpoint`, browser-use/Browser Harness via CDP URL, Stagehand) bisa attach. Ini membuat webterm *agent-agnostic*; tak perlu SDK.
 2. **Webterm = browser host, bukan agent.** Server Bun: spawn Chromium (profil terkelola `--user-data-dir` di bawah `WEBTERM_DATA_DIR`, bukan profil asli user - wajib sejak Chrome 136), simpan CDP port loopback, dan buka proxy WS terautentikasi per node. Dua klien: (a) UI node: `Page.startScreencast` (+`screencastFrameAck`) -> WS -> `<canvas>`/`<img>`, input via `Input.dispatchMouseEvent/KeyEvent/insertText` (pola Steel + agent-browser; `dispatchMouseEvent`/`dispatchKeyEvent` non-eksperimental, tetapi `startScreencast`, `screencastFrameAck`, `insertText`, `imeSetComposition` berstatus *experimental* di browser_protocol.json - risiko drift); (b) agent eksternal lewat proxy CDP.
-3. **Auth endpoint CDP memakai skema token node yang sudah ada** (`x-nodeterm-node-token` / `NODETERM_NODE_ID`, dipertahankan karena kompat protokol), sehingga agent di terminal node (Claude Code, Codex) otomatis dapat URL CDP node-nya lewat env. Nama env baru = keputusan desain `[opini]`.
+3. **Auth endpoint CDP memakai skema token node yang sudah ada** (`x-webterm-node-token` / `WEBTERM_NODE_ID`, nama protokol baku), sehingga agent di terminal node (Claude Code, Codex) otomatis dapat URL CDP node-nya lewat env. Nama env baru = keputusan desain `[opini]`.
 4. **Lease kendali** (tiru ego `handOff/waitForControl`): state per node `controller: human|agent|none`; UI menampilkan siapa yang pegang; saat manusia mengetik/klik, agent diberi sinyal berhenti atau input agent ditunda; kursor/label agent di overlay (ego: label 3-6 kata).
 5. **Dependency (Rule 10):** CDP itu JSON-RPC ~ <200 baris di Bun (WebSocket native); host tidak butuh `puppeteer-core` (25.16.0, dep `ws`, `chromium-bidi`, ...) maupun `playwright-core`. Biarkan agent membawa Playwright/Puppeteer sendiri. Pertimbangkan `chrome-remote-interface` 0.34.0 hanya bila malas menulis klien (rilis terakhir 2026-02-09).
 6. **Jangan** embed ego/Skyvern/Lightpanda: ego closed + macOS, dua lainnya AGPL. Boleh didokumentasikan sebagai klien opsional.
@@ -125,7 +125,7 @@ Browser Use menjalankan 100 dari 200 tugas BU Bench V2.1 (README browser-harness
 
 **Risiko**
 - Banyak klien CDP pada satu target: dua `Emulation.setDeviceMetricsOverride` atau dua screencast saling menimpa viewport/fokus; satu pemilik viewport (node) `[opini]`.
-- Memori Chromium per node (angka: doc 34); butuh discard/hibernate seperti nodeterm.
+- Memori Chromium per node (angka: doc 34); butuh discard/hibernate seperti referensi eksternal.
 - Playwright MCP `--allowed-origins` bukan batas keamanan; allowlist harus di proxy webterm.
 - Pergeseran tool: Playwright MCP sendiri menyarankan CLI+SKILLS untuk coding agent; versi MCP masih `0.0.x` (belum stabil).
 

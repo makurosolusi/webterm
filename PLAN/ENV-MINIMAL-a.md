@@ -10,7 +10,7 @@ Label: `[V]` = diverifikasi di worktree · `[RND]` = dari RND, belum diverifikas
 
 **Tujuan:** `.env` OPSIONAL TOTAL (bukan dihapus). Tanpa env var, app naik, aman secara default, fitur dinyalakan dari Settings. Env tetap override sah.
 
-**Bukan-tujuan:** hapus dukungan `.env`; rename `NODETERM_*`/`x-nodeterm-node-token`/`nodeterm:`/`WEBTERM_TOKEN`; skema DB/dependency baru; `Bun.secrets`; UI (PLAN CHENV, §10).
+**Bukan-tujuan:** hapus dukungan `.env`; rename nama protokol `WEBTERM_*`/`x-webterm-node-token`/`webterm:` (sudah baku) dan `WEBTERM_TOKEN`; skema DB/dependency baru; `Bun.secrets`; UI (PLAN CHENV, §10).
 
 ## 2. Fakta dasar (diverifikasi)
 

@@ -3,10 +3,10 @@
 // so the chat node authenticates exactly like a terminal agent in the same workspace:
 //  - base = `ptyEnv(parent, {interactive:false})` (what `spawnPty`/the tmux supervisor give an agent
 //    command): the parent env incl. ANTHROPIC_* / CLAUDE_CODE_* auth+model vars, minus server-only
-//    vars (WEBTERM_* root token, NODETERM_*, PORT, ...).
+//    vars (WEBTERM_* root token, legacy NODETERM_*, PORT, ...).
 //  - the active Claude provider (`applyProviderEnv`, what the terminal's one-shot launch file does).
 //  - the node identity `sessions.ts open` injects: header file path (never the token value),
-//    NODETERM_NODE_ID/PORT (wire-protocol names), webterm bin on PATH.
+//    WEBTERM_NODE_ID/PORT, webterm bin on PATH.
 // Differences from the terminal, on purpose: TMUX/TMUX_PANE dropped (the tmux supervisor drops them
 // too), CLAUDECODE dropped (nested-session guard), capability-token values (`wcap_`) dropped.
 import { applyProviderEnv, type ProviderEnv } from '../claudeProvider/claudeProvider.model'
@@ -32,8 +32,8 @@ export function agentChatEnv(i: {
     ...applyProviderEnv(base, i.provider ?? activeProviderEnv()),
     ...i.profileEnv,
     [NODE_HEADERS_ENV]: claudeHeadersPath(i.nodeId),
-    NODETERM_NODE_ID: i.nodeId,
-    NODETERM_PORT: String(i.port),
+    WEBTERM_NODE_ID: i.nodeId,
+    WEBTERM_PORT: String(i.port),
     PATH: agentPath(parent.PATH ?? ''),
   }
   delete env.CLAUDECODE

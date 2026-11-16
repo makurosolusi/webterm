@@ -1,5 +1,5 @@
 // Operasi filesystem sisi server untuk node files (dan pembaca file mana pun yang lewat
-// `/api/fs/*`). Diadaptasi dari nodeterm `src/core/fs-ops.ts` + `expandHomePath` dari
+// `/api/fs/*`). Operasi fs server + `expandHomePath` dari
 // `fs-handlers.ts`; TIDAK diport: quick-open, sshFs, relay, tiket download.
 //
 // DUA KONTRAK YANG SENGAJA BERBEDA — JANGAN DISERAGAMKAN.
@@ -16,7 +16,7 @@
 //
 // Tiap catch mengembalikan nilai yang didokumentasikan atau melempar dengan konteks, bukan `catch {}` kosong.
 //
-// KEAMANAN PATH — sengaja TIDAK ada jail (sama seperti nodeterm `relay/access-policy.ts`): siapa pun
+// KEAMANAN PATH — sengaja TIDAK ada jail: siapa pun
 // yang bisa menjangkau endpoint ini sudah bisa men-spawn PTY lewat `/ws`. Yang NYATA menjaga ada di
 // transport (loopback + Origin + token, `src/server/auth.ts`). Modul ini: `path.resolve` tiap input,
 // batas ukuran `fsLimits.ts`, dan `checkFsPath` untuk verb v2. Isi file TIDAK PERNAH di-log.
@@ -41,7 +41,7 @@ export interface DirEntry {
   ignored: boolean
 }
 
-/** Kembangkan `~` / `~/` terhadap home MESIN INI (client tak tahu home server). `~user` tetap literal, seperti nodeterm. */
+/** Kembangkan `~` / `~/` terhadap home MESIN INI (client tak tahu home server). `~user` tetap literal. */
 export function expandHomePath(p: string, home: string = homedir()): string {
   return p === '~' || p.startsWith('~/') ? npath.join(home, p.slice(1)) : p
 }
@@ -101,7 +101,7 @@ export async function listDir(dirPath: string): Promise<DirEntry[]> {
   }
   const entries: DirEntry[] = dirents
     .filter((e) => e.name !== '.git')
-    // Symlink ke direktori melaporkan `isDirectory() === false`; itu diwarisi dari nodeterm dan
+    // Symlink ke direktori melaporkan `isDirectory() === false`; itu perilaku bawaan dan
     // `classifyEmptyListing` memang mencocokkan per NAMA, bukan per `dir`, demi kasus ini.
     .map((e) => ({ name: e.name, dir: e.isDirectory(), ignored: false }))
     .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1))

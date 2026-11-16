@@ -169,10 +169,10 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
    * dengan `--resume` sehingga percakapannya kembali. Keluar baik-baik itu intinya — ia yang
    * membuat transcript ditulis tuntas ke disk, yang kemudian dibaca `--resume`.
    *
-   * CATATAN BEDA DARI NODETERM: nodeterm mengetikkan baris resume ke shell pane tmux yang SAMA.
+   * CATATAN: webterm TIDAK mengetikkan baris resume ke shell pane yang sama.
    * webterm meluncurkan agent sebagai `shell -l -c "<cmd>"`, jadi keluarnya CLI mengakhiri shell
    * dan PTY-nya — tidak ada shell yang tersisa untuk diketiki. Jadi fase relaunch di sini adalah
-   * spawn baru dengan `--resume`, setara dengan "Restart agent and shell" nodeterm.
+   * spawn baru dengan `--resume`, setara dengan "Restart agent and shell".
    */
   const restartAgent = async () => {
     if (restarting) return // satu restart per node: dua urutan exit akan saling tumpang tindih
@@ -267,7 +267,7 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
   const onToggleHideLinksProp = isContextCapable(agentId) ? () => onToggleHideLinks(id) : undefined
 
   // onBroadcast stays via `ext` (undefined → hidden): webterm deliberately has no live-link,
-  // mirroring nodeterm Server Edition where loopback single-user has no viewer/relay — a
+  // as in a loopback single-user setup, where there is no viewer/relay — a
   // faithful mirror, not a TODO. onAiName is now local (above).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- passthrough of not-yet-wired handlers
   const ext = data as any

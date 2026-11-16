@@ -3,7 +3,7 @@
 //
 // `allowed()` already demanded a credential. An operator script holding the root token header passes
 // as is. Anything else got in on the `wt_ui` cookie, which only the web UI holds: that caller must
-// also send a same-origin `Origin`, as nodeterm (`ws.ts` `upgradeAllowed`: session cookie +
+// also send a same-origin `Origin`, (session cookie +
 // `sameOriginRequest`) does. Browsers always send Origin on a WebSocket handshake (RFC 6455 §4.1).
 import { TOKEN_HEADER, sameOrigin, tokensMatch } from './auth'
 import { type HeaderBag, firstHeader } from './httpHeaders'

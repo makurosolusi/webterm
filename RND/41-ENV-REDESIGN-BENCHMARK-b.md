@@ -99,7 +99,7 @@ Konflik: `envRegistry.ts`, `envRegistry.test.ts` sudah dimodifikasi di `ca2-int`
 | ENV-06 tab Agent/Central | pindah entri central/orchestrator/memori ke tab Agent (atau "Central") | `SettingsAgents.tsx`, `SettingsPanel.tsx`, test | 02, 05 | M |
 | ENV-07 docs | `.env.example`/README bagian env, CHANGELOG (satu worker, di akhir, Rule 23) | `README.md` (bagian env), `CHANGELOG.md`, `.env.example` | semua | S |
 
-Gelombang: W0 = ENV-00; W1 = ENV-01 ∥ (ENV-02 mulai setelah kontrak tipe API disepakati lewat 00); W2 = ENV-03; W3 (setelah merge ca2) = ENV-04 → 05 ∥ 06; W4 = ENV-07. Tiap WS: branch sendiri `feature/env-ws0N-…`, test nyata (Rule 3), tanpa rename `NODETERM_*`.
+Gelombang: W0 = ENV-00; W1 = ENV-01 ∥ (ENV-02 mulai setelah kontrak tipe API disepakati lewat 00); W2 = ENV-03; W3 (setelah merge ca2) = ENV-04 → 05 ∥ 06; W4 = ENV-07. Tiap WS: branch sendiri `feature/env-ws0N-…`, test nyata (Rule 3), tanpa rename `WEBTERM_*`.
 Flag baru dari workstream lain (browser `WEBTERM_BROWSER*`, file manager `WEBTERM_FILES_*`) setelah ENV-00: cukup file `envRegistry.<domain>.ts` baru + satu impor; test invarian menolak entri tanpa meta/pembaca.
 
 ## 9. Implikasi untuk webterm

@@ -23,7 +23,7 @@ User-facing changes of the ENVSIMPLE program: Settings no longer exposes environ
 - **Telegram has no separate channel switch.** The channel runtime exists exactly while the Telegram capability is on. `WEBTERM_CHANNELS` and `WEBTERM_CENTRAL_TELEGRAM` are no longer read as switches: they are derived keys written by the capability (Agent Pusat also for the central bridge), and a legacy value set while its capability is off is ignored with one warning. `WEBTERM_TELEGRAM` is the capability switch itself. Polling is used by default; the webhook is used only with `WEBTERM_TELEGRAM_MODE=webhook`, and its secret is generated automatically.
 - **One flag dialect.** Flags accept `on|1|true` and `off|0|false`, so a value such as `X=1` that used to stay silently off is now on. The two security keys (`WEBTERM_ALLOW_TOKEN_MINT`, `WEBTERM_STRICT_HOOK_AUTH`) still accept only `1`.
 - **Turning a capability off stops new work, not running work.** Workers and terminals already running are not killed; the browser waits up to 5 seconds for active pages before closing.
-- **Unchanged protocol names.** `NODETERM_NODE_ID`, `NODETERM_PORT`, the `x-nodeterm-node-token` header and `nodeterm:` events keep their names. The data directory is still `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
+- **Unchanged protocol names.** `WEBTERM_NODE_ID`, `WEBTERM_PORT`, the `x-webterm-node-token` header and `webterm:` events keep their names. The data directory is still `WEBTERM_DATA_DIR` (default `~/.webterm-server`).
 
 ## Removed
 

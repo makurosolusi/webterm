@@ -1,7 +1,7 @@
 // The escalation ladder for Central's open duties (workDuties.ts). Rung 1 is the worker nudge (workSupervisor),
 // rung 2 wakes Central (the stall/fail move, then once more after a check-in turn left it unresolved), rung 3 tells
 // the user. Every rung fires once per attempt (dedupe key / notice key) and leaves a timeline event on the task.
-// Bounded like nodeterm's launchDelivery: retries end in a visible notice, never in silence.
+// Bounded: retries end in a visible notice, never in silence.
 import type { Database } from 'bun:sqlite'
 import { previewText } from '../../events/producers'
 import { getRow } from '../../ledger/ledgerCore'

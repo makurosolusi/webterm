@@ -88,7 +88,7 @@ Satu hari kerja kamu dengan webterm sebagai satu-satunya alat. Setiap langkah di
 | Langkah | Hari ini | Target | Fitur | Fase | Aturan |
 |---|---|---|---|---|---|
 | `bun run dev` | Ketik URL sendiri | Chip `localhost:5173` di node terminal, sekali klik membuka Browser node | F4-g | F4 | A5 |
-| Browser terasa lambat | Tidak terukur | Chip latensi input→frame, perbaikan ditiru dari Orca/nodeterm | I1-d | F1 | A3 |
+| Browser terasa lambat | Tidak terukur | Chip latensi input→frame, perbaikan ditiru dari Orca/referensi eksternal | I1-d | F1 | A3 |
 | "Perbaiki tombol ini" | Jelaskan dengan kata-kata | Design Mode: klik elemen, HTML+CSS+crop dikirim ke agent | G11 | F6 | — |
 
 ## 18:00 — Pulang, lanjut besok

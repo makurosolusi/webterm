@@ -46,7 +46,7 @@ export interface SessionsOptions {
   claudePermissionMode?: AgentPermissionMode
   /** Per-node launch: the mode for the node's workspace (its approval level). Absent = `claudePermissionMode`. */
   launchFor?: (nodeId: string) => { mode: AgentPermissionMode; workspaceId: string | null; level: ApprovalLevel }
-  /** Unused since the dead `NODETERM_PERM_WAIT_SECS` injection was removed (the hold is
+  /** Unused since the env-based permission-wait injection was removed (the hold is
    *  `PERM_WAIT_SECS_INTERACTIVE` in hooksSettings.ts). Remove with api.ts:86 and sessions.ts:105. */
   hookReplyApprovals?: boolean
   /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */

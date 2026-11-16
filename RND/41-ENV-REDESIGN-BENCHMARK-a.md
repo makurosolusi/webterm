@@ -7,7 +7,7 @@ Label: `[BT]` = belum terverifikasi, `[opini]` = penilaian saya. **WebSearch/Web
 
 | # | Fakta | Bukti |
 |---|---|---|
-| F1 | Registry = 29 entri (6 channels, 11 central, 12 platform) + 10 kunci bootstrap read-only; di `ca2-int` +17 entri (`envRegistry.ca2.ts`) → 46 + 10. Pembaca env nyata di `src/` lebih banyak lagi (mis. `WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE`, `NODETERM_PERM_WAIT_SECS`) tak terdaftar. | `envRegistry.{channels,central,platform}.ts`; `ca2-int/.../envRegistry.ts:8` |
+| F1 | Registry = 29 entri (6 channels, 11 central, 12 platform) + 10 kunci bootstrap read-only; di `ca2-int` +17 entri (`envRegistry.ca2.ts`) → 46 + 10. Pembaca env nyata di `src/` lebih banyak lagi (mis. `WEBTERM_TELEGRAM_WEBHOOK_SECRET_FILE`, `WEBTERM_PERM_WAIT_SECS`) tak terdaftar. | `envRegistry.{channels,central,platform}.ts`; `ca2-int/.../envRegistry.ts:8` |
 | F2 | Satu-satunya metadata: `group`, `kind`, `restartRequired`, `dangerous`. Tak ada `audience`, `requires`, `owner`, `since`, `experimental`. | `envRegistry.types.ts:7-28` |
 | F3 | `EnvGroup` adalah union tertutup di file tipe; tiap domain baru wajib mengedit `envRegistry.types.ts` DAN `ENV_GROUP_ORDER`/`ENV_GROUP_LABEL` di klien (dua sumber yang harus sinkron; grup tak dikenal tampil sebagai kunci mentah). | `types.ts:5`; `envLabels.ts:39-51`; `EnvSection.tsx:63` |
 | F4 | Dependensi hanya ada di teks deskripsi ("butuh ledger hidup", "butuh Central aktif", "butuh tools=write"); tak ada di data → UI tak bisa menonaktifkan/menjelaskan. | `channels.ts:18`; `central.ts:8,15`; `ca2.ts:14,29` |

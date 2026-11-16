@@ -34,7 +34,7 @@ import { openSetup } from './setup/setup.open'
 import { AccountMenu } from './AccountMenu'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
-/** Jarak menu dari tepi bawah tombol `+`, seperti nodeterm (`openMenu`: `r.bottom + 4`). */
+/** Jarak menu dari tepi bawah tombol `+` (`r.bottom + 4`). */
 const MENU_GAP = 4
 
 export interface WorkspaceBarProps {
@@ -240,7 +240,7 @@ export default function WorkspaceBar({
                 className="app-tabs__action"
                 aria-label="New workspace"
                 onClick={(e) => {
-                  // Three ways in, as nodeterm's Welcome cards: open a folder, clone, or start a new project.
+                  // Three ways in, as welcome cards: open a folder, clone, or start a new project.
                   const r = e.currentTarget.getBoundingClientRect()
                   setAddMenu({ x: r.left, y: r.bottom + MENU_GAP })
                 }}

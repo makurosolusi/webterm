@@ -1,12 +1,12 @@
-# 31 — Browser sungguhan di canvas: bagaimana nodeterm melakukannya, dan celah webterm
+# 31 — Browser sungguhan di canvas: bagaimana referensi eksternal melakukannya, dan celah webterm
 
-Status: R&D baca-saja. Referensi: `nodeterm-web` (HEAD `6637f61`, 2026-10-27, `package.json` v0.4.5, Electron `^42.11.12` di `package.json:227`). Path nodeterm di bawah relatif ke `nodeterm-web/`; path webterm relatif ke worktree `rnd-browser`. `[BT]` = tak terverifikasi; `[opini]` = penilaian.
+Status: R&D baca-saja. Referensi: `referensi-eksternal` (HEAD `6637f61`, 2026-10-27, `package.json` v0.4.5, Electron `^42.11.12` di `package.json:227`). Path referensi eksternal di bawah relatif ke `referensi-eksternal/`; path webterm relatif ke worktree `rnd-browser`. `[BT]` = tak terverifikasi; `[opini]` = penilaian.
 
 ## 1. Jawaban singkat
 
-nodeterm bisa menampilkan browser sungguhan karena **bukan HTML biasa**: ia memakai tag Electron `<webview>`, yaitu proses Chromium *terpisah* (satu guest `webContents` per node) yang ditempel ke DOM renderer oleh proses main. Fitur lanjutan (login bertahan, popup jadi node, kontrol agent, hibernasi) bertumpu pada dua kemampuan Electron: (a) **partition/session** per guest, (b) **`webContents.debugger` (CDP) di proses main**. Di Server Edition (web) nodeterm sendiri **tidak punya** browser node yang berfungsi — itu dinyatakan permanen (lihat 3.3).
+referensi eksternal bisa menampilkan browser sungguhan karena **bukan HTML biasa**: ia memakai tag Electron `<webview>`, yaitu proses Chromium *terpisah* (satu guest `webContents` per node) yang ditempel ke DOM renderer oleh proses main. Fitur lanjutan (login bertahan, popup jadi node, kontrol agent, hibernasi) bertumpu pada dua kemampuan Electron: (a) **partition/session** per guest, (b) **`webContents.debugger` (CDP) di proses main**. Di Server Edition (web) referensi eksternal sendiri **tidak punya** browser node yang berfungsi — itu dinyatakan permanen (lihat 3.3).
 
-## 2. Bagaimana tepatnya nodeterm menampilkan browser
+## 2. Bagaimana tepatnya referensi eksternal menampilkan browser
 
 ### 2.1 Rantai render
 
@@ -20,7 +20,7 @@ nodeterm bisa menampilkan browser sungguhan karena **bukan HTML biasa**: ia mema
 | Event guest | `did-start-loading`, `did-stop-loading`, `did-navigate`, `did-navigate-in-page`, `page-title-updated`, `did-fail-load` | `BrowserSurface.tsx:174-179` |
 | Persist | hanya `data.url` + `data.title` ke node; riwayat di store `useBrowserHistory` | `BrowserNode.tsx:84-89` |
 
-Dokumentasi Electron *"We currently recommend to not use the webview tag and to consider alternatives, like iframe, a WebContentsView, or an architecture that avoids embedded content altogether"* (https://www.electronjs.org/docs/latest/api/webview-tag, dibaca 2026-11). Fondasi nodeterm sendiri berstatus "tidak direkomendasikan".
+Dokumentasi Electron *"We currently recommend to not use the webview tag and to consider alternatives, like iframe, a WebContentsView, or an architecture that avoids embedded content altogether"* (https://www.electronjs.org/docs/latest/api/webview-tag, dibaca 2026-11). Fondasi referensi eksternal sendiri berstatus "tidak direkomendasikan".
 
 ### 2.2 Partition / session (kunci "login saya tidak hilang")
 
@@ -102,14 +102,14 @@ Tes: `test/acceptance/control-verb-disposition.test.ts` hanya disposisi verb; se
 | Partition per-project + gerbang load | `browser-partition.ts` | konsep portabel (profil dir) |
 | Trace-sebelum-baca cookie | `browser-cookies.ts` | portabel (sink audit: SQLite) |
 
-Lisensi: nodeterm **BUSL-1.1** (`LICENSE`); Additional Use Grant melarang menawarkan ke pihak ketiga sebagai hosted/embedded — webterm bukan fork nodeterm (dibuat dari nol, hanya terinspirasi; CLAUDE.md webterm); nodeterm adalah repo referensi berlisensi BUSL-1.1, jadi kode yang disalin-adaptasi darinya tetap terikat syarat itu.
+Lisensi: referensi eksternal berlisensi **BUSL-1.1** (`LICENSE`); Additional Use Grant melarang menawarkan ke pihak ketiga sebagai hosted/embedded. webterm dibuat dari nol dan hanya terinspirasi, jadi tidak ada kode yang disalin; ide yang mirip ditulis ulang (lihat `RND/91-AUDIT-KODE-SALINAN.md`).
 
-### 3.3 Server Edition nodeterm sengaja menyerah
+### 3.3 Server Edition referensi eksternal sengaja menyerah
 
 - `BROWSER_UNSUPPORTED_CLAUSE`: *"a browser node here renders in your own browser tab, which this server has no debugger for"* (`src/server/control-unsupported.ts:32-41`). Verb `browser` dijawab penolakan permanen bernama `control-unsupported-on-this-edition` agar model tidak retry.
 - Bridge web membuat `browser.*` jadi `noop` ("no `<webview>`, no CDP") `src/renderer/bridge/stubs.ts:235-246, 681-683`; dev-ports ditolak karena "halaman akan dimuat di mesin viewer, tempat port server tak ada" (`stubs.ts:312-319`).
 - `src/renderer/electron-webview.d.ts` hanya mendeklarasikan `webview` ke JSX; tidak ada fallback iframe di `BrowserSurface`. Satu-satunya `<iframe>` di renderer: viewer PDF di `EditorNode` dan `LocalFilePreviewModal`.
-- **Kesimpulan**: nodeterm **tidak menyelesaikan** masalah webterm; menyalin `BrowserSurface` menghasilkan kotak kosong. Nilainya: referensi desain keamanan dan UX.
+- **Kesimpulan**: referensi eksternal **tidak menyelesaikan** masalah webterm; menyalin `BrowserSurface` menghasilkan kotak kosong. Nilainya: referensi desain keamanan dan UX.
 
 ## 4. Keadaan webterm sekarang
 
@@ -144,19 +144,19 @@ Lisensi: nodeterm **BUSL-1.1** (`LICENSE`); Additional Use Grant melarang menawa
 
 1. **Jangan** meniru `<webview>` dan **jangan** jadikan iframe jalan utama. Pola setara untuk web adalah: *Chromium terkelola di server* (satu BrowserContext/profil per node atau per workspace) yang ditampilkan ke node lewat stream (CDP screencast/WebRTC; detail di topik 4) dan **dikendalikan lewat CDP dari server**. Satu protokol (CDP) melayani manusia *dan* agent, sehingga "berbagi satu sesi" gratis. `[opini]`
 2. Tambah `kind: 'browser'` di `WsNodeKind` dengan field `url`, `title`, `profileId` (nama konteks) — nol migration. Node baru didaftarkan di `nodeTypes.tsx` (konstanta modul; jangan bentuk di render).
-3. **Bawa pola keamanan nodeterm, bukan kodenya mentah**: allowlist CDP default-deny dengan wrapper tunggal + tes struktural; reader-only NT_SCRIPTS; ref basi ditolak; switch per-project default OFF; ledger kepemilikan (agent hanya menyetir node yang ia buka); trace-sebelum-baca cookie; screenshot dijail; chip "driving" + Stop. Tambah yang nodeterm *tidak punya* karena server kita menghadap jaringan: **guard SSRF** (blok `localhost`, RFC1918, link-local, `file:`, metadata cloud) pada `Page.navigate` dan pada redirect, serta penolakan eksplisit kamera/mic/geolokasi/notifikasi guest (celah di 2.3).
+3. **Bawa pola keamanan referensi eksternal, bukan kodenya mentah**: allowlist CDP default-deny dengan wrapper tunggal + tes struktural; reader-only NT_SCRIPTS; ref basi ditolak; switch per-project default OFF; ledger kepemilikan (agent hanya menyetir node yang ia buka); trace-sebelum-baca cookie; screenshot dijail; chip "driving" + Stop. Tambah yang referensi eksternal *tidak punya* karena server kita menghadap jaringan: **guard SSRF** (blok `localhost`, RFC1918, link-local, `file:`, metadata cloud) pada `Page.navigate` dan pada redirect, serta penolakan eksplisit kamera/mic/geolokasi/notifikasi guest (celah di 2.3).
 4. **Pakai ulang murni**: `webviewError.ts` + plate, `browserUrl.ts`, `browser-discard-policy.ts` + `useDiscardWhenHidden.ts` (ambang 5 menit, "tidak mid-load, tidak bersuara, tidak sedang disetir"), pola `browser-refs`/`browser-verb`. Ambil lewat salin-dan-adaptasi dengan atribusi (BUSL), bukan impor lintas repo.
 5. Discard di webterm berarti **menutup Chromium target/context server-side**, bukan unmount elemen; restore dari `url` (profil persisten menjaga cookie). Wajib karena RAM Chromium per node mahal dan canvas webterm tak membatasi jumlah node.
 6. Dokumen 32 dan 34 menentukan stack, 33 model profil. Jangan kode sebelum satu keputusan stack (raw CDP via WebSocket vs `puppeteer-core`/`playwright-core`, Rule 10).
 
 **Risiko**
 - Chromium di server = permukaan serangan baru (RCE lewat bug renderer, SSRF, eksfiltrasi lewat halaman). Wajib: jalankan tanpa root, `--user-data-dir` terpisah dari profil user asli, sandbox Chromium nyala (jangan `--no-sandbox` di host biasa), batas RAM/CPU per konteks, jaringan egress dibatasi.
-- Prompt injection dari halaman saat agent menyetir sesi ber-login: pola nodeterm mengurangi, tak menghilangkan (trace "bukan anti-tamper", `browser-cookies.ts:14-27`).
+- Prompt injection dari halaman saat agent menyetir sesi ber-login: pola referensi eksternal mengurangi, tak menghilangkan (trace "bukan anti-tamper", `browser-cookies.ts:14-27`).
 - Latensi stream dan hit-test canvas ber-zoom: topik 34.
 
 **Belum terverifikasi `[BT]`**
 - Perilaku default izin guest Electron tanpa permission handler (tidak diuji, hanya grep absen).
 - Apakah `<webview>` di Chrome biasa murni elemen tak dikenal (kesimpulan dari komentar `stubs.ts` + dokumentasi Electron; tidak diuji, dilarang menjalankan browser).
 - Status cookie pihak ketiga Chrome per 2026-11 dan perilaku Safari/Firefox saat ini.
-- Apakah ada tes acceptance nodeterm yang menggerakkan browser sungguhan; hanya sebagian kecil `test/` dibaca.
+- Apakah ada tes acceptance referensi eksternal yang menggerakkan browser sungguhan; hanya sebagian kecil `test/` dibaca.
 - Cakupan Additional Use Grant BUSL-1.1 terhadap webterm; lifecycle discard PTY webterm.

@@ -245,7 +245,7 @@ Semua butir = **rekomendasi** dari catatan protokol; fakta pendukung ada di bagi
 | 8 | Hindari dulu: Roots/Sampling/Logging (deprecated), DCR, HTTP+SSE, MCP Registry publik, AGNTCY SLIM/Identity, ketergantungan pada Tasks sebelum stabil. | Deprecated atau belum stabil |
 | 9 | Semua teks dari agent lain (Agent Card, tool description, hasil worker) = data tak tepercaya; human-in-the-loop sebelum aksi destruktif. | Agent Card poisoning, tool poisoning |
 
-Catatan identitas webterm: protokol warisan tetap `nodeterm` (`NODETERM_NODE_ID`, `NODETERM_PORT`, header `x-nodeterm-node-token`, event `nodeterm:`) dan **tidak boleh di-rename** tanpa perintah eksplisit. Header/token baru memakai awalan `webterm` (bagian 10).
+Catatan identitas webterm: nama protokol berawalan `webterm` (`WEBTERM_NODE_ID`, `WEBTERM_PORT`, header `x-webterm-node-token`, event `webterm:`). Header/token baru memakai awalan `webterm` (bagian 10).
 
 ---
 
@@ -383,7 +383,7 @@ Sumber: analisis kode lokal (catatan 1b, wkr-rsch-local-01). **Nama file dan ang
 2. `WEBTERM_*` diwarisi semua child PTY -> perlu token berskop agar agent tidak mewarisi otoritas penuh.
 3. Autosave workspace last-write-wins (debounce 400 ms, tanpa ETag).
 4. Over-limit Rule 8 global (angka dari catatan): `shared/workspace.ts` 444 baris, `api.ts` 154, `sessions.ts` 300, `SessionsPanel.tsx` 456, `App.tsx` 436. Menurut Rule 8, menambah kode ke file yang sudah over-limit ditolak, jadi pemecahan harus mendahului fitur yang menyentuhnya. (Sebagian, mis. `sessions.ts` 300, berada di batas, bukan jelas di atasnya, bergantung tipe file; tentukan di Fase 0.)
-5. **Jangan rename nama protokol `nodeterm`** (env var sesi agent, header `x-nodeterm-node-token`, event `nodeterm:`). Header baru berawalan `webterm`.
+5. **Nama protokol berawalan `webterm`** (env var sesi agent, header `x-webterm-node-token`, event `webterm:`). Header baru berawalan `webterm`.
 6. `Sessions` adalah singleton in-memory; `bun:sqlite` harus di-import lazy di test.
 
 ### 10.4 Titik integrasi termurah
@@ -577,7 +577,7 @@ Aturan yang berlaku untuk **setiap fase** (dari CLAUDE.md repo dan aturan global
 - Fitur baru wajib test nyata (assertion sungguhan), dijalankan sebelum klaim selesai: `TMPDIR=/tmp/st npm run typecheck`, `TMPDIR=/tmp/st npm test`, `TMPDIR=/tmp/st bun test src/server/*.bun.test.ts`.
 - Perubahan schema = file migration + dijalankan lokal + diverifikasi (Rule 4); guard idempotent.
 - File health (Rule 8): satu tanggung jawab per file, batas baris per tipe, hard limit 500 baris / 20.000 karakter; jangan menambah kode ke file over-limit.
-- Header/env baru berawalan `webterm`; jangan rename nama protokol `nodeterm`.
+- Header/env baru berawalan `webterm`; nama protokol berawalan `webterm`.
 - Dokumentasi diupdate di commit yang sama bila kontrak publik berubah (Rule 16); CHANGELOG sebelum deploy (Rule 5).
 
 Urutan di bawah mengikuti saran awal pemilik dengan **dua penyesuaian**: (a) inbox keputusan dan gate manusia (Fase 5) ditempatkan **sebelum** agent pusat (Fase 6), karena otonomi tanpa gate adalah risiko utama (bagian 8-9); (b) hardening, observability, dan eval dipisah ke fase akhir agar fase awal tetap kecil. Setiap fase berguna sendiri dan bisa dihentikan di situ.
@@ -608,7 +608,7 @@ Urutan di bawah mengikuti saran awal pemilik dengan **dua penyesuaian**: (a) inb
   - Test Bun: spawn headless tanpa klien WS; prompt dan wait mengembalikan status; sesi dapat ditutup.
   - Test negatif: token dengan skop salah/kedaluwarsa ditolak (4xx); token agent A tidak bisa mengakses sesi agent B; `/api/agent-status` dengan identitas tak valid ditolak.
   - Child PTY tidak lagi menerima kredensial berskop penuh (test memeriksa env anak, tanpa mencetak nilai secret).
-- **Risiko:** kompatibilitas hook agent yang ada dengan `stateVerified` (perilaku persisnya di `hooks.ts:110` belum dibaca oleh penulis dokumen ini); desain skop token (lihat bagian 13); jangan menyentuh nama protokol `nodeterm`.
+- **Risiko:** kompatibilitas hook agent yang ada dengan `stateVerified` (perilaku persisnya di `hooks.ts:110` belum dibaca oleh penulis dokumen ini); desain skop token (lihat bagian 13); nama protokol berawalan `webterm`.
 - **Berguna sendiri:** ya (otomasi lokal, dan menutup celah fail-open).
 
 ### Fase 2: Entitas project + ledger

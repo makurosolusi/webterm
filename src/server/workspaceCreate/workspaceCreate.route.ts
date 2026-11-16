@@ -8,7 +8,7 @@
 //                                                             wrong-place warnings, already cloned
 //   POST /api/workspace-create/clone   {url, parent, name?}   NDJSON stream: {type:'progress',phase,percent}*
 //                                                             then {type:'done',path} | {type:'error',error,message}
-//   POST /api/workspace-create/clone/cancel                   abort the in-flight clone (nodeterm cloneAbort)
+//   POST /api/workspace-create/clone/cancel                   abort the in-flight clone
 //   POST /api/workspace-create/project {parent, name, gitInit?}  201 {path}
 //   POST /api/workspace-create/reveal  {path}                 show it in Finder / the file manager
 import { stat } from 'node:fs/promises'

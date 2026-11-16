@@ -19,7 +19,7 @@ benar-benar dijalankan, bukan pada target desain.
   usage dapat bernilai nol pada turn tersebut. Free model juga dapat mengembalikan `429`
   `provider.quota`; error ini tidak boleh di-retry.
 - Adapter tidak memakai PTY atau `--auto`. Env allowlist membuang semua `WEBTERM_*` dan
-  `NODETERM_*`; `OPENCODE_PERMISSION` menolak `bash`/`edit`/`webfetch`/`task` secara default;
+  `WEBTERM_*`; `OPENCODE_PERMISSION` menolak `bash`/`edit`/`webfetch`/`task` secara default;
   cancel membunuh process; resume memakai `--session`. Model dan binary dikonfigurasi lewat
   `WEBTERM_CENTRAL_MODEL` dan `WEBTERM_OPENCODE_BIN`.
 

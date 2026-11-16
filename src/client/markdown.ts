@@ -60,7 +60,7 @@ md.use(markedFootnote({ prefixId: `${HEADING_ID_PREFIX}fn-` }))
 /**
  * Markdown → HTML yang sudah disanitasi, aman untuk `dangerouslySetInnerHTML`.
  *
- * Port dari nodeterm `src/renderer/lib/markdown.ts` (±10 baris): marked untuk render, DOMPurify
+ * Render markdown (±10 baris): marked untuk render, DOMPurify
  * untuk sanitasi. SENGAJA tanpa pipeline sendiri — isi file pengguna adalah input tak terpercaya,
  * dan satu sanitizer yang dirawat orang lain lebih aman daripada allowlist tulisan sendiri.
  * Tambahan GitHub: id heading (`user-content-<slug>`), alert (`> [!NOTE]`), footnote (`[^1]`).

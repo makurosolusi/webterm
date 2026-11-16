@@ -100,12 +100,13 @@ const ENV_ALLOWLIST: ReadonlySet<string> = new Set([
 ])
 const ENV_ALLOWED_PREFIXES: readonly string[] = ['LC_']
 /** Never forwarded via the allowlist (root tokens, provider keys); only the named provider vars pass, never the prefix. */
+// legacy: 'NODETERM_' = pre-rename prefix, still dropped; remove after 0.10.0.
 const ENV_FORBIDDEN_PREFIXES: readonly string[] = [
   'WEBTERM_', 'NODETERM_', 'ANTHROPIC_', 'OPENAI_', 'CLAUDE_CODE_OAUTH',
 ]
 const CAPABILITY_TOKEN_PREFIX = 'wcap_'
 
-/** Allowlisted child environment: no WEBTERM_/NODETERM_, only the named ANTHROPIC_* vars, no capability tokens. */
+/** Allowlisted child environment: no WEBTERM_ (or legacy NODETERM_), only the named ANTHROPIC_* vars, no capability tokens. */
 export function claudeChildEnv(parent: NodeJS.ProcessEnv): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [name, value] of Object.entries(parent)) {

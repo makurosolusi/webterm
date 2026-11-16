@@ -48,7 +48,7 @@ Semua gerbang hijau di tiap WS: `TMPDIR=/tmp/st npm run typecheck`, `TMPDIR=/tmp
 | C9 | "Dari .env" (K6) muncul bila `source==='env'` DAN terkunci/tak bisa diedit. Badge terpisah "Diabaikan (.env)" untuk `envShadowed` (DU-1) hanya di Lanjutan | UI | - |
 | C10 | Nama env mentah hanya di grup Lanjutan atau tooltip; baris utama memakai label Indonesia | UI | - |
 | C11 | Kartu Telegram wajib ikut pencarian Settings (hook `useChannels` diberi opsi `enabled`, bukan `return null`) | UI | - |
-| C12 | Nama protokol `nodeterm:`/`NODETERM_*`/`x-nodeterm-node-token` TIDAK diubah | - | - |
+| C12 | Nama protokol `webterm:`/`WEBTERM_*`/`x-webterm-node-token` dipakai sebagai nama baku | - | - |
 | C13 | Tombol/aksi token tak pernah menampilkan nilai token; kolom tulis-saja tetap (kontrak tes `ChannelsTelegramConfig.test.tsx`) | - | - |
 | C14 | Tuning, flag internal CA2 dan flag file diperlakukan sesuai inventori sec.3 | UI | lihat Q3 |
 | C15 | Satu worker per file per gelombang; dokumen rangkuman (README/CHANGELOG/decision) satu worker di akhir (CH-11) | - | - |
@@ -155,7 +155,7 @@ Semua S1..S* umum di ENV-MINIMAL-a tetap berlaku. Tambahan:
 |---|---|---|
 | S-C1 | Worker mengubah file di luar tabel sec.5 atau melewati batas barisnya | STOP, lapor; orkestrator putuskan |
 | S-C2 | Perubahan kontrak kawat yang bisa memecahkan klien lama (hapus/ganti field respons, ubah 404 status, ubah bentuk `EnvStateV2`) | STOP; hanya perubahan aditif yang boleh |
-| S-C3 | Nama `nodeterm:`, `NODETERM_NODE_ID/PORT`, `x-nodeterm-node-token`, `~/.nodeterm*` diubah | STOP, kembalikan |
+| S-C3 | Nama `webterm:`, `WEBTERM_NODE_ID/PORT`, `x-webterm-node-token`, `~/.referensi eksternal*` diubah | STOP, kembalikan |
 | S-C4 | Secret (token bot, rahasia webhook, token root) muncul di respons, log, DOM, snapshot tes, atau error. Pengecualian tunggal: respons `token/enable` envmin satu kali, no-store | STOP, rotasi diingatkan |
 | S-C5 | Key dihapus dari `ENV_REGISTRY`, `KNOWN_KEYS_FROZEN` diedit, atau invariant dilonggarkan untuk meloloskan tes | STOP |
 | S-C6 | Gerbang merah (typecheck/test/bun test) tanpa akar penyebab dan label "mitigasi sementara" | STOP |

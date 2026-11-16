@@ -65,7 +65,7 @@ describe('Agent Chat attention', () => {
     expect(unreadIds().has('watched')).toBe(false)
   })
 
-  it('a turn that ends while a subagent still runs is marked unread without a notification (nodeterm quiet rule)', async () => {
+  it('a turn that ends while a subagent still runs is marked unread without a notification (quiet rule)', async () => {
     visibility = 'hidden'
     focused = false
     await runTurn('fanout', [{ seq: 2, t: 'tool', id: 'sub', name: 'Task', input: {}, state: 'running' }])

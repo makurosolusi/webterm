@@ -1,6 +1,6 @@
-// Clone repository, after nodeterm CloneRepoDialog.tsx: URL (owner/repo shorthand previewed as the
+// Clone repository: URL (owner/repo shorthand previewed as the
 // GitHub URL), parent folder (last used remembered), live progress, inline error; Cancel or closing
-// the dialog aborts the clone and the server deletes the half-cloned folder. Added over nodeterm:
+// the dialog aborts the clone and the server deletes the half-cloned folder. Also:
 // an editable folder name, the full target path, a preflight (already cloned / name taken / wrong
 // place, see useCreateFlow) and a success state with Reveal in Finder and Copy path.
 import { useEffect, useState } from 'react'
@@ -49,7 +49,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
       setCloning(false)
     }
   }
-  // Cancel answers `aborted` while the dialog is already closing: stay silent (nodeterm).
+  // Cancel answers `aborted` while the dialog is already closing: stay silent.
   const flow = useCreateFlow({ parent: parent.trim(), name: folder.trim(), url: expanded }, run, onCreated, (e) => (e as { code?: string }).code === 'aborted')
   // A new URL drops every answer; a new folder keeps "clone again anyway" (it was about the repo).
   const edit = <T,>(set: (v: T) => void, keepExisting = true) => (v: T) => { set(v); flow.reset(keepExisting) }

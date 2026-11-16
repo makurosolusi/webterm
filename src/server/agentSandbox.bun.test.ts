@@ -65,7 +65,7 @@ test('an agent PTY finds no root token: not in its env, not in auth.json, not in
   const cmd = [
     `printf 'ENV_ROOT=%s\\n' "$(env | grep -c ${ROOT})"`,
     `printf 'ENV_NODE_TOKEN=%s\\n' "$(env | grep -c ${nodeToken('node-a')})"`,
-    `printf 'ENV_TOKEN_VARS=%s\\n' "$(env | grep -cE '^(WEBTERM_TOKEN|NODETERM_NODE_TOKEN)=')"`,
+    `printf 'ENV_TOKEN_VARS=%s\\n' "$(env | grep -cE '^(WEBTERM_TOKEN|WEBTERM_NODE_TOKEN)=')"`,
     `printf 'HEADERS_ENV_IS_OWN=%s\\n' "$([ "$WEBTERM_NODE_HEADERS" = ${shq(claudeHeadersPath('node-a'))} ] && [ -r "$WEBTERM_NODE_HEADERS" ] && echo yes || echo no)"`,
     `cat ${d}/auth.json >/dev/null 2>&1; printf 'AUTH_JSON_EXIT=%s\\n' "$?"`,
     `printf 'NODE_FILES_WITH_ROOT=%s\\n' "$(grep -rl ${ROOT} ${d}/node-settings ${d}/context-links ${d}/browser-agent 2>/dev/null | wc -l | tr -d ' ')"`,
@@ -122,7 +122,7 @@ test('the real shims, run inside an agent PTY, still authenticate as that node v
     installWebtermCli(DATA_DIR) // both shims are aliases that exec the `webterm` CLI
     writeFileSync(ctx, buildContextShim(), { mode: 0o700 })
     writeFileSync(browser, buildBrowserShim(), { mode: 0o700 })
-    const cmd = `NODETERM_PORT=${port} sh ${shq(ctx)}; echo; NODETERM_PORT=${port} sh ${shq(browser)} status; echo DONE_S`
+    const cmd = `WEBTERM_PORT=${port} sh ${shq(ctx)}; echo; WEBTERM_PORT=${port} sh ${shq(browser)} status; echo DONE_S`
     const out = await runAgentShell('node-s', 'claude', cmd, 'DONE_S')
     expect(out.match(/AUTH_OK:node-s/g)?.length).toBe(2)
     expect(out).not.toContain('AUTH_NO')

@@ -8,9 +8,9 @@
 // `onBeforeDelete`. Edge-only deletes (an edge double-click, Delete on a selected cable) pass
 // straight through: there is no node in them.
 //
-// Wording and keyboard rules copy nodeterm's node delete confirm (Canvas.tsx `deleteSelectionCommand`,
+// Wording and keyboard rules of the node delete confirm (Canvas.tsx `deleteSelectionCommand`,
 // components/ConfirmDialog): the dialog names what ends, and focus starts on Cancel so a stray
-// Enter never closes a node. nodeterm has no "Don't ask again" for this, so neither does webterm.
+// Enter never closes a node. There is no "Don't ask again" for this.
 //
 // Editors follow VS Code instead: a clean editor closes without asking, and one with unsaved
 // changes (editorDirty.ts) asks Save / Don't Save / Cancel. Focus starts on Save there, the
@@ -122,7 +122,7 @@ function CloseDialog({ req }: { req: Pending }): React.JSX.Element {
     <VscodeDialog
       open onOpenChange={(open) => { if (!open) answerNodeClose(false) }}
       title={title} description={body} width={420} className="node-close-confirm"
-      // nodeterm: the destructive button never takes focus, so a stray Enter cannot close a node.
+      // The destructive button never takes focus, so a stray Enter cannot close a node.
       initialFocus={cancelRef}
       footer={arrangeDialogButtons([close, cancel], 1)}
     />

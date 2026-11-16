@@ -1,4 +1,4 @@
-// Enam method filesystem lewat `/api/fs/*` (server: `src/server/fsApi.ts`). Di nodeterm ini
+// Enam method filesystem lewat `/api/fs/*` (server: `src/server/fsApi.ts`). Ini
 // `window.api.fs.*` di atas IPC Electron; di sini fetch same-origin.
 //
 // No credential in the URL or headers: the same-origin request carries the `wt_ui` session cookie.
@@ -17,7 +17,7 @@
 //    dengan nol byte. Kehilangan data, bukan cuma pesan yang kurang. Karena itu kegagalan keluar
 //    sebagai `Error` bercontext (operasi + path + penyebab asal) dan '' hanya berarti kosong.
 //
-// Sentinel too-large (`nodeterm:too-large:` lewat `src/shared/fsLimits.ts`) BUKAN kegagalan: ia
+// Sentinel too-large (`webterm:too-large:` lewat `src/shared/fsLimits.ts`) BUKAN kegagalan: ia
 // jawaban sukses yang disengaja dan bagian wire-protocol — lewat apa adanya ke pemanggil.
 //
 // `write`/`mkdir` mengembalikan boolean ok seperti sebelumnya. Tiap catch mengembalikan atau

@@ -89,7 +89,7 @@ describe('dropsResume', () => {
   it("hanya true untuk 'absent'", () => {
     expect(dropsResume('absent')).toBe(true)
     expect(dropsResume('present')).toBe(false)
-    // Inti aturan yang diporting dari nodeterm `cold-resume-session.ts`: salah me-resume id mati =
+    // Inti aturan cold-resume: salah me-resume id mati =
     // satu baris jelek, bisa dipulihkan. Salah menjatuhkan id hidup = kerja ditelantarkan diam-diam.
     expect(dropsResume('unknown')).toBe(false)
   })

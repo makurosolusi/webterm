@@ -17,8 +17,8 @@ import { createLogger } from './logs'
 
 const log = createLogger('auth')
 
-/** Header the client sends the token in on API requests. `webterm`, not `nodeterm`: this is
- *  our own transport token, unrelated to the `x-nodeterm-node-token` agent-session protocol. */
+/** Header the client sends the token in on API requests. This is
+ *  the transport token, distinct from the per-node `x-webterm-node-token` agent-session header. */
 export const TOKEN_HEADER = 'x-webterm-token'
 /** Query parameter of the `/?token=` landing link, which the client trades for a cookie through
  *  POST /auth/login. The server never accepts it as a credential; the proxy strips it defensively. */
@@ -72,7 +72,7 @@ export function readCookie(header: string | undefined, name: string): string | u
 }
 
 /**
- * Is this request same-origin? Mirrors nodeterm's `src/server/origin.ts` so the two cannot drift.
+ * Is this request same-origin? Same rule as the WebSocket origin gate (`wsOrigin.ts`) so the two cannot drift.
  *  - Origin present: its host must equal the request's own `Host`. A browser sets `Host` from the
  *    URL it dialled and `Origin` from the page — a hostile page cannot make the two agree.
  *  - `Origin: null` (sandboxed iframe, opaque redirect) and a malformed Origin are refused: they

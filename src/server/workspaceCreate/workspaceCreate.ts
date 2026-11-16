@@ -1,7 +1,7 @@
 // Folder side of "Clone repository" and "New project". The workspace row itself is made by the
 // client through the existing POST /api/workspaces once a path comes back.
 //
-// Clone copies nodeterm core/git-service.ts clone(): single flight, `git clone --progress -- url
+// Clone: single flight, `git clone --progress -- url
 // path`, progress parsed from stderr, abort, and on failure/abort delete ONLY the directory this
 // run created. New project copies Orca's repos:create: safe name, absolute parent (made if
 // missing), refuse a non-empty target, `git init` + an empty "Initial commit", undo on failure.
@@ -114,7 +114,7 @@ export function abortClone(): boolean {
 
 export interface CloneInput { url: string; parent: string; name?: string }
 
-/** Clones and resolves the cloned path; rejects with CreateError. `onProgress` gets nodeterm's {phase, percent}. */
+/** Clones and resolves the cloned path; rejects with CreateError. `onProgress` gets {phase, percent}. */
 export async function cloneRepo(input: CloneInput, onProgress: (p: CloneProgress) => void, deps: CreateDeps = {}): Promise<string> {
   const url = expandCloneUrl(input.url ?? '')
   if (!isValidCloneUrl(url)) throw new CreateError('bad_request', 'Use an https:// or git@host:owner/repo URL, or owner/repo for GitHub.')

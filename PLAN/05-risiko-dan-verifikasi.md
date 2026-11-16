@@ -63,7 +63,7 @@ Laporan 02 ([`rnd/02-harness-landscape.md`](rnd/02-harness-landscape.md)) menyeb
 | Migrasi ledger V10+ di DB berisi data | Kehilangan data | Migration idempotent, backup file sebelum migrasi, `channels.json.bak`, test migrasi dari snapshot V9 |
 | Checkpoint tidak menangkap repo non-git atau file ignored (`.env`) | Rewind tidak lengkap | Peringatan eksplisit di timeline, jangan diam-diam (A3) |
 | Kelelahan approval | Approve tanpa membaca | Batch item sejenis, ringkasan diff dan dampak, eskalasi otomatis untuk aksi tak terpulihkan, "izinkan pola" dari UI |
-| Supervisor PTY (F1-g) menambah proses | Kompleksitas lifecycle | Tiru pola tmux socket nodeterm yang terbukti. Uji kill/restart HTTP |
+| Supervisor PTY (F1-g) menambah proses | Kompleksitas lifecycle | Tiru pola tmux socket referensi eksternal yang terbukti. Uji kill/restart HTTP |
 | Big-bang refactor F1 | Lama tanpa fitur | Setiap WP F1 mengirim hal yang terlihat (timeline, catatan instan, sakelar live) + track I1 paralel |
 | Test drift terlalu ketat | Menghambat | Drift hanya untuk proyeksi yang sudah ada di fase itu |
 | Handoff/summarizer mengarang "selesai" | Laporan fiktif | Evidence hanya dari sistem, verifier menulis `done` |

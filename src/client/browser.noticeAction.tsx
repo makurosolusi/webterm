@@ -22,7 +22,7 @@ export interface NoticeActionProps {
 const BOX = 'nodrag nowheel absolute bottom-12 left-2 z-10 flex max-w-80 flex-col gap-1 rounded p-2 text-xs ' +
   'bg-(--vscode-editorWidget-background) text-(--vscode-foreground) border border-(--vscode-editorWidget-border)'
 
-// Plate over the stream: Chromium's own error page is another product's chrome with no way back (nodeterm WebviewErrorPlate).
+// Plate over the stream: Chromium's own error page is another product's chrome with no way back.
 const PLATE = 'nodrag nowheel absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 p-4 text-center text-xs ' +
   'bg-(--vscode-editor-background) text-(--vscode-foreground)'
 const TRY_AGAIN = 'Try again'

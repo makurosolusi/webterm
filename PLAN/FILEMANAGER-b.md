@@ -126,7 +126,7 @@ Perintah standar (macOS: `TMPDIR=/tmp/st` wajib): `TMPDIR=/tmp/st npm run typech
 | **16** Docs | Docstring 1 baris tiap symbol publik baru; README terbatas (hanya bagian env/endpoint yang berubah) oleh WS-11; keputusan non-obvious → `docs/decisions/files-manager.md` |
 | **17** Hutang | `TODO(files): … — issue #?` bergantung konteks; stub W0a yang belum diisi diberi tanda eksplisit `// STUB(WS-FM-xx): … belum diimplementasi` dan ditutup oleh pemilik; tidak ada kode mati/comment-out |
 | **8** File health | Batas per tipe (a §4.1); `index` re-export saja |
-| Identitas | Tidak mengubah `NODETERM_*`, `x-nodeterm-node-token`, `nodeterm:` atau sentinel `\u0000nodeterm:too-large:` |
+| Identitas | Tidak mengubah `WEBTERM_*`, `x-webterm-node-token`, `webterm:` atau sentinel `\u0000webterm:too-large:` |
 
 Path & traversal: semua verb melewati `resolveFsPath` (relatif ditolak, M-11 dipersempit di W0b oleh WS-01: path non-absolut → `EINVAL`). `rename/copy/delete` menolak root `/` dan home; nama entri divalidasi di server (NUL, `/`, `..`, panjang ≤255 byte) — validasi klien tetap hanya UX. Kelemahan DNS-rebinding (M-10) **tidak** ditutup di sini (P-6) dan WS-11 mencatatnya di docs.
 

@@ -23,10 +23,12 @@ export const FS_BODY_MAX = FS_READ_MAX_BYTES * 2 + 64 * 1024
 export const FILES_LIST_MAX_DEFAULT = 5000
 export const FILES_UPLOAD_MAX_MB_DEFAULT = 100
 
-// Prefiks dipertahankan apa adanya dari nodeterm: ia string protokol antar lapisan, dan CLAUDE.md
-// melarang rename permukaan `nodeterm:` tanpa perintah eksplisit. Konsumen tidak pernah menyentuh
-// literal ini — pakai `tooLargeSentinel` / `tooLargeSize`.
-const TOO_LARGE_PREFIX = '\u0000nodeterm:too-large:'
+// Prefiks string protokol antar lapisan. Konsumen tidak pernah menyentuh literal ini — pakai
+// `tooLargeSentinel` / `tooLargeSize`.
+const TOO_LARGE_PREFIX = '\u0000webterm:too-large:'
+// legacy: prefiks sebelum rename; hanya dikenali (tab/client lama yang belum reload), tak pernah
+// diterbitkan. Boleh dihapus setelah 0.10.0.
+const LEGACY_TOO_LARGE_PREFIX = '\u0000nodeterm:too-large:'
 
 export function tooLargeSentinel(sizeBytes: number): string {
   return `${TOO_LARGE_PREFIX}${sizeBytes}`
@@ -34,8 +36,9 @@ export function tooLargeSentinel(sizeBytes: number): string {
 
 /** Ukuran file dalam byte bila `s` adalah sentinel too-large, selain itu null. */
 export function tooLargeSize(s: string): number | null {
-  if (!s.startsWith(TOO_LARGE_PREFIX)) return null
-  const n = Number(s.slice(TOO_LARGE_PREFIX.length))
+  const prefix = [TOO_LARGE_PREFIX, LEGACY_TOO_LARGE_PREFIX].find((p) => s.startsWith(p))
+  if (!prefix) return null
+  const n = Number(s.slice(prefix.length))
   return Number.isFinite(n) ? n : null
 }
 

@@ -50,7 +50,7 @@ Hal terpenting: memory **tidak lagi khusus Central**. Semua node mengaksesnya le
 - Repo-map naik level: simbol + PageRank personal + LSP (03 §2.3, 05 G9).
 
 ### S6. Inbox & Attention: satu tempat untuk semua "butuh manusia"
-Satu model interrupt: **notify / question / review / gate** dengan aksi approve/edit/reply/ignore/snooze (04 §1, §3). Inbox menyatukan approval proposal, decision gate DAG, hook `PermissionRequest` yang **benar-benar dijawab** (sekarang hanya badge, knob `NODETERM_PERM_WAIT_SECS` mati, 01 D3), handoff browser, dan izin Codex/OpenCode. Antarmukanya ada di canvas, Telegram (inline button), Web Notification/PWA push (05 G4/G12), dan OSC 9/777 di terminal. Aturan perhatiannya meniru Orca: tidak mendorong notifikasi kalau user sedang menatap node itu, berita worker cukup untuk Central, ada mute dan digest (04 §2 `agent-attention-policy.ts`).
+Satu model interrupt: **notify / question / review / gate** dengan aksi approve/edit/reply/ignore/snooze (04 §1, §3). Inbox menyatukan approval proposal, decision gate DAG, hook `PermissionRequest` yang **benar-benar dijawab** (sekarang hanya badge, knob `WEBTERM_PERM_WAIT_SECS` mati, 01 D3), handoff browser, dan izin Codex/OpenCode. Antarmukanya ada di canvas, Telegram (inline button), Web Notification/PWA push (05 G4/G12), dan OSC 9/777 di terminal. Aturan perhatiannya meniru Orca: tidak mendorong notifikasi kalau user sedang menatap node itu, berita worker cukup untuk Central, ada mute dan digest (04 §2 `agent-attention-policy.ts`).
 
 **Diganti:** lima adapter approval (D3) diganti satu Inbox. Pengetikan `[webterm]` ke PTY turun menjadi **fallback**, sedangkan jalur utamanya adalah channel MCP `claude/channel` (02 §2, §12.4).
 

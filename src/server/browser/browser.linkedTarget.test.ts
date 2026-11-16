@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Workspace, WsNode } from '../../shared/workspace'
 import { TOKEN_HEADER } from '../auth'
-import { forgetNodeToken, NODE_TOKEN_HEADER, nodeToken } from '../hooksTokens'
+import { forgetNodeToken, LEGACY_NODE_TOKEN_HEADER, NODE_TOKEN_HEADER, nodeToken } from '../hooksTokens'
 import { requesterOf, resolveLinkedBrowser } from './browser.linkedTarget'
 
 const node = (id: string, kind: WsNode['kind'], title?: string): WsNode => ({ id, kind, x: 0, y: 0, ...(title ? { title } : {}) })
@@ -51,10 +51,12 @@ describe('resolveLinkedBrowser', () => {
 
 describe('requesterOf', () => {
   afterEach(() => forgetNodeToken('a1'))
-  it('maps a node token (transport or nodeterm header) to its node; anything else is anonymous', () => {
+  it('maps a node token (transport, node or legacy header) to its node; anything else is anonymous', () => {
     const t = nodeToken('a1')
     expect(requesterOf({ [TOKEN_HEADER]: t })).toBe('a1')
     expect(requesterOf({ [NODE_TOKEN_HEADER]: t })).toBe('a1')
+    expect(NODE_TOKEN_HEADER).toBe('x-webterm-node-token')
+    expect(requesterOf({ [LEGACY_NODE_TOKEN_HEADER]: t })).toBe('a1') // legacy: pre-rename sessions
     expect(requesterOf({ [TOKEN_HEADER]: 'root-or-foreign' })).toBeUndefined()
     expect(requesterOf({})).toBeUndefined()
     expect(requesterOf(undefined)).toBeUndefined()

@@ -17,7 +17,7 @@ const skills = vi.hoisted(() => ({ list: vi.fn() }))
 vi.mock('./centralControlApi', async (orig) => ({ ...(await orig<typeof import('./centralControlApi')>()), listActiveSkills: skills.list }))
 vi.mock('../api', async (orig) => ({
   ...(await orig<typeof import('../api')>()),
-  fetchWorkspaces: vi.fn(async () => [{ id: 'w1', name: 'webterm' }, { id: 'w2', name: 'nodeterm' }]),
+  fetchWorkspaces: vi.fn(async () => [{ id: 'w1', name: 'webterm' }, { id: 'w2', name: 'alpha' }]),
 }))
 
 const CONV: ChatConversation = {

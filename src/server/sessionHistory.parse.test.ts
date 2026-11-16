@@ -41,7 +41,7 @@ describe('helpers', () => {
   it('isInjectedTurn keeps unknown tags as real input', () => {
     expect(isInjectedTurn('<command-name>/clear</command-name>')).toBe(true)
     expect(isInjectedTurn('<div>layout question</div>')).toBe(false)
-    expect(isInjectedTurn('[nodeterm] linked')).toBe(true)
+    expect(isInjectedTurn('[webterm] linked')).toBe(true)
   })
 
   it('sessionIdFromFile', () => {

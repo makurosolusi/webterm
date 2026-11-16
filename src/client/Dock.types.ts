@@ -33,7 +33,7 @@ export interface DockProps {
   zoomPct: number; onZoomIn: () => void; onZoomOut: () => void
   /** Zoom ke persen absolut. Tanpa ini readout zoom cuma teks, bukan menu preset. */
   onZoomTo?: (pct: number) => void
-  /** Kunci PANDANGAN (pan/zoom) sementara node tetap bisa digeser — semantik nodeterm, kebalikan
+  /** Kunci PANDANGAN (pan/zoom) sementara node tetap bisa digeser — kebalikan
    *  dari `showInteractive` bawaan React Flow yang justru mematikan drag node. Tombolnya butuh
    *  `aria-pressed`, jadi ia dirender sendiri di bawah activity bar, bukan sebagai item primitif. */
   locked: boolean

@@ -7,7 +7,7 @@ import { fileKind } from '../shared/fileKind'
  * sekali. Dipisah dari `EditorNode.tsx` supaya bisa dites di node-env — mengimpor komponennya
  * akan menarik Monaco, yang tidak bisa dimuat di luar build Vite.
  *
- * Port dari nodeterm `src/renderer/lib/localFilePreview.ts` + `markdownPreview.ts`.
+ * Pratinjau file lokal dan markdown.
  */
 
 /** 'text' dibuka di Monaco; sisanya diserahkan ke `ViewerHost` (image/pdf/audio/video, placeholder

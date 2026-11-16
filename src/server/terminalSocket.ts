@@ -9,7 +9,7 @@ import { createStreamBridge, type StreamDispatch, type UpgradeIdentity } from '.
 /**
  * One terminal WebSocket (`/ws`): message dispatch plus the two guards a long-lived socket needs.
  *
- * Backpressure, copied from nodeterm (`ui-sink-registry.ts`): `ws` queues every unsent frame in
+ * Backpressure: `ws` queues every unsent frame in
  * user space without limit, so a stalled tab made server memory grow with PTY output. Above
  * `WS_DROP_BYTES` queued, that terminal's output is DROPPED for this socket and the terminal is
  * marked lagging; status/exit/reset still go out. A sweep resyncs every lagging terminal (reset +
@@ -21,11 +21,11 @@ import { createStreamBridge, type StreamDispatch, type UpgradeIdentity } from '.
  * `{t:'pong'}`; and every connection opens with `{t:'hello', bootId, build}` (health.api.ts).
  */
 
-/** Queued bytes above which a socket gets no more output (nodeterm `WS_DROP_WATER`). */
+/** Queued bytes above which a socket gets no more output. */
 export const WS_DROP_BYTES = 8_000_000
-/** Queued bytes at or below which lagging terminals are resynced (nodeterm `WS_LOW_WATER`). */
+/** Queued bytes at or below which lagging terminals are resynced. */
 export const WS_LOW_BYTES = 256_000
-/** How often a lagging socket is checked for drain (nodeterm's sweep interval). */
+/** How often a lagging socket is checked for drain. */
 export const WS_RESYNC_SWEEP_MS = 250
 /** Ping interval; a socket that misses one pong is terminated. */
 export const WS_HEARTBEAT_MS = 30_000

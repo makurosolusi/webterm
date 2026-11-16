@@ -348,7 +348,7 @@ describe('CSS mati sudah dibuang', () => {
   it('drops selectors and keyframes no component renders any more', () => {
     for (const gone of [
       '.node-mdhint',        // hint markdown yang tak pernah dirender
-      '.node-labeladd',      // chip '+ Label' — nodeterm memakai fallback teks 'Untitled'
+      '.node-labeladd',      // chip '+ Label' — fallback teks 'Untitled'
       '.node-status-text',   // teks chip sekarang bagian dari .node-status
       '.dock-flyout',        // digantikan .dock-menu
       'pulse-working',       // digantikan nt-pulse / nt-working-glow

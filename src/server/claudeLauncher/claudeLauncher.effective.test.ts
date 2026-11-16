@@ -73,7 +73,7 @@ describe('GET /api/claude-launch/effective', () => {
   })
 
   it('agents cannot read it, and only GET is allowed', async () => {
-    const agent = { ...req('GET'), headers: { 'x-nodeterm-node-token': 'n' } } as unknown as IncomingMessage
+    const agent = { ...req('GET'), headers: { 'x-webterm-node-token': 'n' } } as unknown as IncomingMessage
     expect((await claudeLaunchRoute(agent, url('/api/claude-launch/effective'), { isNodeToken: () => true, refreshCentral: vi.fn() }))?.status).toBe(403)
     expect((await claudeLaunchRoute(req('PUT'), url('/api/claude-launch/effective'), { isNodeToken: () => false, refreshCentral: vi.fn() }))?.status).toBe(405)
   })

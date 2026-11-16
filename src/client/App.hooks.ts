@@ -57,7 +57,7 @@ export function useStatusReasons(): Record<string, StatusReason> {
 
 // Satu-satunya penulis `data-theme`; `styles.css` menyimpan varian terangnya di
 // `:root[data-theme='light']`. 'auto' (label "System") mengikuti mode OS lewat `prefers-color-scheme`
-// dan ikut berubah saat OS berganti. Deviasi sadar dari nodeterm (auto = ikut tema terminal): kajian
+// dan ikut berubah saat OS berganti. Pilihan sadar (bukan auto = ikut tema terminal): kajian
 // settings overhaul meminta Light/Dark/System seperti app desktop lain.
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 

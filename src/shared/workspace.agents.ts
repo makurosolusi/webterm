@@ -1,5 +1,5 @@
 // Satu-satunya sumber kebenaran untuk identitas agent, kapabilitas harness, dan bentuk workspace
-// yang dipersist. Porting ramping dari nodeterm `src/shared/agents/config.ts` — hanya field dan
+// yang dipersist. Hanya field dan
 // kapabilitas yang punya konsumen nyata di webterm.
 
 // ---------------------------------------------------------------------------------------------
@@ -10,7 +10,7 @@
 // untouched, it just resolves like a custom agent without capabilities (`agentConfig` → undefined).
 export type BuiltinAgentId = 'claude'
 
-// Tipe TERBUKA. Agent custom adalah string apa pun (konvensi nodeterm: `custom:<uuid>`; nilai
+// Tipe TERBUKA. Agent custom adalah string apa pun (konvensi: `custom:<uuid>`; nilai
 // warisan webterm `'custom'` tetap valid). JANGAN pernah dipersempit jadi union tertutup —
 // begitu ditutup, agent custom dan node warisan (`agentId: 'codex'`) tidak lagi valid.
 export type AgentId = BuiltinAgentId | (string & {})
@@ -33,7 +33,6 @@ export interface AgentConfig {
 /** Urutan tampil di mana pun agent ditawarkan (menu, Dock, settings). */
 export const BUILTIN_AGENT_IDS: readonly BuiltinAgentId[] = ['claude']
 
-// Nilai dibaca langsung dari nodeterm v0.4.5 `src/shared/agents/config.ts`.
 export const AGENT_CONFIG: Record<BuiltinAgentId, AgentConfig> = {
   claude: { label: 'Claude Code', color: '#d97757', launchCmd: 'claude', expectedProcess: 'claude' },
 }

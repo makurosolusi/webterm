@@ -8,7 +8,7 @@
    `display: none`, bukan `visibility: hidden`: `.tabbar` adalah flex item 46px di dalam
    `.app-shell` dan harus BENAR-BENAR runtuh supaya canvas mengisi layar.
 
-   TIDAK ADA hover-reveal / proximity-reveal di sini. nodeterm punya itu dan komentarnya sendiri
+   TIDAK ADA hover-reveal / proximity-reveal di sini. versi lain punya itu dan komentarnya sendiri
    memperingatkan bahwa pita hover tak terlihat "memakan klik di baris yang justru dipakai shell
    untuk prompt". */
 body.clean-view .tabbar,
@@ -23,7 +23,7 @@ body.clean-view .minimap-dock {
 
    `pointer-events: none` WAJIB dan bukan kosmetik: ia melayang di atas canvas tempat shell
    menggambar prompt-nya, dan pita tak terlihat yang memakan klik adalah tepat kegagalan yang
-   dicatat hover-reveal nodeterm.
+   dicatat hover-reveal.
 
    Hanya OPACITY yang dianimasikan (bukan transform/posisi), jadi tidak ada override
    `prefers-reduced-motion`: fade bukan gerak, dan `animation: none` di sana justru akan

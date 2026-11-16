@@ -19,7 +19,7 @@ export const attentionOf = (s: AgentChatStatus): AgentStatus | undefined => ATTE
 const SUBAGENT_TOOLS = new Set(['Task', 'Agent'])
 
 /**
- * nodeterm's quiet rule (renderer/lib/completionAlert.ts `fanoutStillWorking`): a turn that ends
+ * The quiet rule (`fanoutStillWorking`): a turn that ends
  * while a subagent this chat positively holds as running is not "finished, wants you", so no chime.
  */
 export function subagentsRunning(s: Pick<AgentChatState, 'tools'>): boolean {

@@ -68,7 +68,7 @@ describe('assembleCmd', () => {
   it('tidak pernah membungkus perintah dengan wrapper apa pun', () => {
     // Regresi dari bug nyata: versi sebelumnya memancarkan `envman -e <profil> -- <agent>`, dan di
     // mesin tanpa envman SETIAP node agent mati dengan `load envman: no such file or directory`.
-    // nodeterm tidak membungkus perintah agent sama sekali, jadi webterm juga tidak boleh.
+    // Perintah agent tidak boleh dibungkus sama sekali.
     for (const id of BUILTIN_AGENT_IDS) {
       const cmd = assembleCmd(id)
       expect(cmd).not.toContain('envman')
@@ -304,7 +304,7 @@ describe('isSafeNodeId', () => {
 })
 
 describe('isPermissionMode', () => {
-  it('menerima lima mode nodeterm dan menolak sisanya', () => {
+  it('menerima lima mode permission dan menolak sisanya', () => {
     for (const m of ['manual', 'auto', 'acceptEdits', 'plan', 'bypassPermissions']) {
       expect(isPermissionMode(m)).toBe(true)
     }

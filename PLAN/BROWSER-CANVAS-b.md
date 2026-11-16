@@ -132,7 +132,7 @@ Allowlist CDP (`browserAgent.cdpAllowlist.ts`): default-deny, wrapper TUNGGAL `c
 | agent -> human | `release`, `takeover` (UI), atau tak ada aktivitas `LEASE_TTL_MS` |
 | lease agent aktif | input manusia ditolak `lease_agent`; node dianggap `driven` (tidak boleh discard) |
 | discarded -> live | `attach` mana pun: buka target baru dari `WsNode.url` (history/scroll hilang; cookie selamat di profil) |
-`shouldDiscard({loading,driven,hiddenMs,discardMs})` murni = `!loading && !driven && hiddenMs >= discardMs`; dibaca ulang saat timer menyala (salin nodeterm `browser-discard-policy.ts`).
+`shouldDiscard({loading,driven,hiddenMs,discardMs})` murni = `!loading && !driven && hiddenMs >= discardMs`; dibaca ulang saat timer menyala (salin referensi eksternal `browser-discard-policy.ts`).
 
 ### 4.8 Koordinat (`browser.coords.ts`)
 
@@ -154,7 +154,7 @@ Runner: `TMPDIR=/tmp/st npm test` (vitest, node default, jsdom per-file via prag
 | 07 | lease: transisi tabel §4.7 dengan jam palsu (`HUMAN_IDLE_MS`, `LEASE_TTL_MS`); verbs terhadap `fakeCdp`: `click` dengan `snapId` basi -> `stale_ref`; `snapshot` terpotong di `SNAPSHOT_MAX_CHARS` + `truncated`; konten dibungkus penanda; allowlist struktural (§4.6) dan tes bahwa `Network.getAllCookies` ditolak; handler: tanpa capability 401/403, capability verb salah 403, `agentControl` off 403 |
 | 08 | route (bun, DB/fs sementara): flag off -> 404; node-token ditolak (gerbang auth lama); `preview` tidak menulis ke disk; `commit` dengan `domains` subset hanya menyuntik subset; respons tidak pernah memuat nilai cookie (canary); `DELETE` menghapus vault; `413` untuk body > batas |
 | 09 | jsdom: dialog cookie menampilkan DOMAIN + jumlah saja (canary nilai tak ada di DOM), tombol Import nonaktif sebelum pilih domain, peringatan teks jelas; chip "agent mengemudi" menampilkan Stop dan memanggil `takeover`; banner diblokir menampilkan hostname saja |
-| 10 | shim: skrip hanya memuat nama env (`NODETERM_NODE_ID`,`NODETERM_PORT`), tidak ada nilai token; SKILL.md memuat peringatan konten tak tepercaya; idempoten saat ditulis dua kali |
+| 10 | shim: skrip hanya memuat nama env (`WEBTERM_NODE_ID`,`WEBTERM_PORT`), tidak ada nilai token; SKILL.md memuat peringatan konten tak tepercaya; idempoten saat ditulis dua kali |
 | 11 | typecheck exhaustiveness `Record<WsNodeKind,…>`; `toFlow`/`toWsNode` roundtrip `url`,`agentControl`; `upgradeRoute('/ws/browser')` lolos hanya saat flag on; env registry memuat kunci baru dengan default off; `browser.integration.bun.test.ts`: `fakeCdp` + gateway + REST + control, skenario end-to-end tanpa Chromium; board lama (tanpa node browser) tetap termuat |
 | 12 | registry memuat `browser.status` (R0) dan `browser.act` (R2) hanya bila flag on; validasi argumen; handler memakai verb kontrol (bukan CDP langsung) |
 

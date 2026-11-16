@@ -22,7 +22,7 @@ Prinsip mekanik: "Kemampuan" = VIEW atas kunci yang sudah ada, bukan penyimpanan
 | 6 | "Batas pemakaian harian agen" (angka token) | `DEFAULT_DAILY_TOKENS` | tidak (`ca2.ts:34` hot) | `CENTRAL_DAILY_TOKENS` (opsional `COST_MICROS`) |
 | 7 | "Lindungi dengan token akses" (kartu "Akses", bukan flag) | tidak | tidak, tapi muat ulang tab | `tokenAccess.api.ts` enable/rotate/status; bukan kunci registry |
 
-Kunci lain (62 registry: 18 `user` + 44 `advanced`, ditambah 11 `BOOTSTRAP_ONLY_KEYS`; sisa ~24 dari ~97 literal di `src` adalah internal/protokol `NODETERM_*`) [V dari dump registry]:
+Kunci lain (62 registry: 18 `user` + 44 `advanced`, ditambah 11 `BOOTSTRAP_ONLY_KEYS`; sisa ~24 dari ~97 literal di `src` adalah internal/protokol `WEBTERM_*`) [V dari dump registry]:
 - Diturunkan (hilang dari permukaan, masih ada sebagai kunci): `LEDGER`, `CHANNELS`, `TELEGRAM_MODE`, `RUN_REQUIRE_APPROVAL` (jadi sub-switch #1), `BROWSER_AGENT` (sudah ada toggle persetujuan per node, jadi bukan keputusan global), `MEMORY_FILES`, `KNOWLEDGE`, `CENTRAL_SKILLS` dan turunan central lain (`requires: CENTRAL`, `ca2.ts:37-50`).
 - Angka tuning (`CENTRAL_TURN_*`, `BROWSER_MAX_LIVE`, `FILES_LIST_MAX`, dst): tetap di lipatan "Lanjutan (operator)", tanpa badge apa pun selain nilai/sumber.
 - 9 bootstrap (`env-minimal.md:9`): tidak di Settings; satu baris informasi baca-saja (data dir, port, token aktif/tidak).

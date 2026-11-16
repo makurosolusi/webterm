@@ -24,7 +24,7 @@ const SERVER = { // test-only
   ANTHROPIC_BASE_URL: 'https://env-proxy.example.test', ANTHROPIC_AUTH_TOKEN: 'env-token-test-only',
   ANTHROPIC_MODEL: 'env-model', ANTHROPIC_DEFAULT_OPUS_MODEL: 'env-opus', ANTHROPIC_DEFAULT_SONNET_MODEL: 'env-sonnet',
   ANTHROPIC_DEFAULT_HAIKU_MODEL: 'env-haiku', ANTHROPIC_SMALL_FAST_MODEL: 'env-fast', ANTHROPIC_CUSTOM_HEADERS: 'X-Test: 1',
-  ANTHROPIC_UNLISTED: 'drop', WEBTERM_TOKEN: 'root-test-only', NODETERM_NODE_ID: 'parent', OPENAI_API_KEY: 'sk-openai-test-only',
+  ANTHROPIC_UNLISTED: 'drop', WEBTERM_TOKEN: 'root-test-only', WEBTERM_NODE_ID: 'parent', OPENAI_API_KEY: 'sk-openai-test-only',
   CLAUDE_CODE_OAUTH_TOKEN: 'oauth-test-only', CAP: 'wcap_test-only',
 }
 const CARD_SECRET = 'card-secret-test-only'
@@ -67,7 +67,7 @@ describe('provider env reaches every Claude child path', () => {
       const env = build(SERVER, false)
       for (const name of PROVIDER_ENV_ALLOWLIST) if (name in SERVER) expect(env[name] === SERVER[name as keyof typeof SERVER]).toBe(true)
       expect(Object.keys(env).filter((k) => (build.shell ? SHELL_FORBIDDEN : FORBIDDEN).test(k))).toEqual([])
-      expect(env.NODETERM_NODE_ID).not.toBe('parent')
+      expect(env.WEBTERM_NODE_ID).not.toBe('parent')
       if (path !== 'terminal') expect(Object.values(env).some((v) => v?.startsWith('wcap_'))).toBe(false)
     })
     test(`${path}: the Provider card beats server env`, () => {

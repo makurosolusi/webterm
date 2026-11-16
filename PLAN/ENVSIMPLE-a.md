@@ -25,7 +25,7 @@ Metrik (diuji):
 | D4-REV | Tidak ada "Perlu restart" di permukaan, tanpa pengecualian. Tiap kunci yang tampil wajib hot. Boot-only (HOST/PORT/DATA_DIR/token) keluar dari Settings pengguna. Browser/autonomy/CA2/Telegram/ledger dibuat hot-wire atau selalu-siap (-b §2). LEDGER selalu hidup internal, tanpa saklar. |
 | D5 | Deteksi/turunan: runtime Central (claude, opencode, mock), CHANNELS/TELEGRAM/CENTRAL_TELEGRAM/CENTRAL_CHAT diturunkan, webhook secret dibangkitkan otomatis, Chromium dideteksi. Satu dialek flag/angka kanonik di `envFlag.ts`. `RETIRED_KEYS` ditunda. Tidak ada kunci dihapus. |
 | D6 | Tab "Environment" diganti "Kemampuan". Teks UI Indonesia. |
-| D7 | Tidak ada secret ke DOM/log/respons/audit. `NODETERM_*`, `x-nodeterm-node-token`, `nodeterm:` tidak diubah. |
+| D7 | Tidak ada secret ke DOM/log/respons/audit. `WEBTERM_*`, `x-webterm-node-token`, `webterm:` adalah nama protokol baku. |
 | D8 (+tambahan) | 8 elemen lama (chip filter; banner/lencana restart; Default/Aktif sekarang/Tersimpan + Atur ulang; nama env var; Ledger Aktif/Bayangan; "Mesin agen" saat Central off; kelompok berisi satu kartu; tautan "ada di tab Channels") TIDAK ada di UI mana pun. Central chat bukan pengaturan: bagian dari Agent Pusat. Sub-opsi hanya di kartu induk saat induk aktif. |
 | D9 | Tidak ada "operator". Daftar flag Lanjutan DIHAPUS; kunci tuning tidak tampil di Settings. Bagian kecil tertutup "Lanjutan" maksimal 4 butir (-b §4). Telegram = tempel token, selesai. Kemampuan "tanya saat dibutuhkan" (-b §5). |
 
@@ -155,7 +155,7 @@ Jatah = tambahan bersih maksimum (cek `wc -lm`). Berkas yang sudah melewati bata
 - S-E7: hot-start tidak idempoten (start/stop/start) atau dua pollster/browser hidup.
 - S-E8: kunci `derive` berlabel `restart:'boot'` atau bacaan di-cache saat boot.
 - S-E9: typecheck, `npm test`, atau `bun test --no-env-file` merah.
-- S-E10: rename identitas protokol.
+- S-E10: mengubah nama protokol yang sudah baku.
 - S-E11: laporan worker tak cocok dengan `git diff` (laporan fiktif pernah terjadi).
 
 ## 7. Risiko keamanan jujur (D3-REV)

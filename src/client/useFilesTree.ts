@@ -1,5 +1,5 @@
 // Tree state of a Files node: which folders are expanded (persisted as node data `expanded`, paths
-// relative to cwd) and their lazily listed children. Ported from nodeterm's ExplorerPanel
+// relative to cwd) and their lazily listed children. 
 // `TreeEntry` (lazy list when a dir is open with nothing loaded; a refresh invalidates every open
 // subtree) and `state/explorer.ts` (expanded set per owner, persisted).
 import { useEffect, useMemo, useRef, useState } from 'react'

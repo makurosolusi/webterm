@@ -122,8 +122,8 @@ describe('createCentralCommands completion', () => {
   })
 
   it('"@" lists project names, fuzzy-ranked, with Central wording', async () => {
-    const c = createCentralCommands({ centralEnabled: true, loadProjects: async () => ['webterm', 'nodeterm', 'Billing API'] })
-    expect(names(await c.completion.provider(at('')))).toEqual(['webterm', 'nodeterm', 'Billing API'])
+    const c = createCentralCommands({ centralEnabled: true, loadProjects: async () => ['webterm', 'alpha', 'Billing API'] })
+    expect(names(await c.completion.provider(at('')))).toEqual(['webterm', 'alpha', 'Billing API'])
     expect(names(await c.completion.provider(at('bil')))).toEqual(['Billing API'])
     expect((await c.completion.provider(at('web')))[0]?.badge).toBe('project')
     expect(c.completion.text?.file).toEqual({ label: 'Projects', empty: 'No matching projects', loading: 'Loading projects…' })

@@ -1,5 +1,5 @@
 // "Agent is driving · Take control" chip (Take control = takeover). Mounted by BrowserNode.slots into
-// `renderOverlay`, z-20 so it stays above the net-error plate (z-10). Always visible while driven, with no setting to hide it (nodeterm BrowserDrivingChip rule).
+// `renderOverlay`, z-20 so it stays above the net-error plate (z-10). Always visible while driven, with no setting to hide it.
 import { Button } from '@/components/ui/button'
 import type { Lease } from '../shared/browser.contract'
 import { CHIP_TEXT } from './browser.uxText'

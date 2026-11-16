@@ -267,7 +267,7 @@ test('end to end: the real CLI, curl and the node header file against a real ser
   const port = String((server.address() as AddressInfo).port)
   // Async spawn: the server lives on this event loop, so a sync spawn would deadlock.
   const cli = (...args: string[]) => new Promise<{ code: number | null; out: string }>((resolve) => {
-    const env = { PATH: process.env.PATH ?? '/usr/bin:/bin', WEBTERM_NODE_HEADERS: hdr, NODETERM_PORT: port }
+    const env = { PATH: process.env.PATH ?? '/usr/bin:/bin', WEBTERM_NODE_HEADERS: hdr, WEBTERM_PORT: port }
     execFile(cliPath(), args, { env }, (err, out) => resolve({ code: err ? (err as { code?: number }).code ?? 1 : 0, out }))
     expect(args.join(' ')).not.toContain(token) // the token is never on the CLI's argv
   })

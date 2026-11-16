@@ -17,7 +17,7 @@ Tanggal 2026-11-03. Branch `chore/rnd-central-v2` (dari `main` fdaf2b4). Semua t
 | Kemampuan | Status | Bukti (fakta) |
 |---|---|---|
 | Spawn agent | **tidak** (untuk central); blok bangunan ada | Larangan: `RND/08:29` (I5), `RND/08:189` item 4, `RND/09:19`. `ALLOWED` hanya 4 tool, `proposalPolicy.ts:9`. Control plane `POST /api/control/spawn` ada, `controlApi.ts:28`, tapi tak dipanggil central. Orchestrator run spawn worker di worktree (`orchestratorRunProduction.ts`, `orchestrator/workerRuntime.ts`) hanya lewat jalur run. |
-| Prompt agent | **tidak** (central) | `POST /api/control/prompt` ada `controlApi.ts:29`; central tak punya jalur. Env child dibersihkan dari `WEBTERM_*`/`NODETERM_*`: `opencodeOptions.ts:47,91`. |
+| Prompt agent | **tidak** (central) | `POST /api/control/prompt` ada `controlApi.ts:29`; central tak punya jalur. Env child dibersihkan dari `WEBTERM_*: `opencodeOptions.ts:47,91`. |
 | Tutup agent | **tidak** (central) | `POST /api/control/close` `controlApi.ts:31`; tak diwire ke central. |
 | Assign task | **ada** | `task.assign` di `applyProposal.ts`, validasi `proposalPolicy.ts`. Membuat task ledger + kunci item plan; tidak spawn/run (RND/14 §B3). Perlu flag `PLANNER=on`, `TOOLS=write`, `ORCHESTRATOR_RUN=on` (`turnService.ts:177-179`). |
 | Run task | **sebagian** | Bukan tool LLM. Hanya timer otonomi: `centralAutonomy.ts` memanggil `orchestratorRunRoute` untuk 1 item assigned per tick; hidup bila `WEBTERM_CENTRAL_AUTONOMY=on` + `WEBTERM_ORCHESTRATOR_RUN=on` (`centralAutonomyBoot.ts:2,34,99`). Klaim "central tidak `task.run`" benar untuk LLM, salah untuk sistem. |
@@ -42,7 +42,7 @@ Tanggal 2026-11-03. Branch `chore/rnd-central-v2` (dari `main` fdaf2b4). Semua t
 **Mekanisme token**
 - Capability `wcap_*`: hanya sha256 di memori proses; TTL default 15 menit, maks 60; resource `node:|workspace:|project:|*` (`control/capabilities.ts`, `controlAuth.ts`). Diterima hanya di `/api/control/*` via header (`auth.ts` ~128-171).
 - Mint token: `POST /api/control/token`, wajib `WEBTERM_ALLOW_TOKEN_MINT=1` (`mount.ts:62`) dan root token.
-- Node token `x-nodeterm-node-token` + env `NODETERM_NODE_ID`/`NODETERM_PORT`: dipakai agent di PTY untuk hook status; protokol warisan, **jangan di-rename** (CLAUDE.md repo).
+- Node token `x-webterm-node-token` + env `WEBTERM_NODE_ID`/`WEBTERM_PORT`: dipakai agent di PTY untuk hook status; nama protokol webterm (lihat CLAUDE.md repo).
 - Ack idempoten 10 menit/1000 entri; cwd lewat `controlCwdAllowed` (realpath); cmd dibangun hanya dari `settings.agentLaunchCommands` (`spawnSession.ts`, `controlCwd.ts`).
 
 **Hari ini agent-node dibuat/di-prompt/ditutup lewat:** (1) UI client (user klik) -> workspace API + PTY WebSocket; (2) control plane (`spawn` -> `prompt` -> `wait` -> `close`) untuk klien terprogram; (3) orchestrator run: spawn di worktree, prompt, wait, verifikasi server-side, catat hasil (`workerRuntime.ts`, timeout default 300 s). Tidak ada satu pun yang dipicu oleh LLM central.
@@ -52,7 +52,7 @@ Tanggal 2026-11-03. Branch `chore/rnd-central-v2` (dari `main` fdaf2b4). Semua t
 1. **Tanpa tool pada runtime nyata.** `turnService` mengirim `tools: [...DEFAULT_CENTRAL_TOOLS]` = `['portfolio.read']` (`turnService.ts:184`, `toolExecutors.ts:15`), tetapi executor-nya hanya di-wire ke `MockRuntime` (`centralChatHandlers.ts:50`). OpenCode tak diberi MCP. Parser proposal sengaja tanpa MCP in-process (komentar `proposalParser.ts`).
 2. **Permission OpenCode menolak semua** `bash/edit/webfetch/task` (`OPENCODE_PERMISSION_DENY`, `opencodeOptions.ts:21-24,121`). Flag `WEBTERM_OPENCODE_ALLOW_TOOLS` benar-benar ter-wire (`opencodeRuntime.ts:140`, `opencodeToolsAllowed()`), tetapi mengubah semuanya jadi `allow` sekaligus — tak ada granularitas.
 3. **Jalur aksi tunggal = blok proposal 4 tool** (`goal.propose`, `plan.propose`, `task.assign`, `approval.request`), maks 4 blok/turn, 16 KiB/blok (`proposalParser.ts`), kunci terlarang `path, repo, command, cmd, cwd, capability, token, decision...` (`proposalPolicy.ts:10`). Efek: draf, bukan aksi.
-4. **Tak ada kredensial ke control plane.** Child env membuang `WEBTERM_*`/`NODETERM_*` (`opencodeOptions.ts:47`) — benar secara I2, tetapi tidak ada pengganti (adapter server-side) sehingga central buta terhadap `/api/control/*`.
+4. **Tak ada kredensial ke control plane.** Child env membuang `WEBTERM_* (`opencodeOptions.ts:47`) — benar secara I2, tetapi tidak ada pengganti (adapter server-side) sehingga central buta terhadap `/api/control/*`.
 5. **Prompt miskin pengetahuan**: tanpa path project, tanpa katalog tool/API, tanpa dokumentasi webterm, riwayat percakapan hanya id (`centralPrompt.ts`; `contextBuilder.ts`). Cwd child = cwd server (`opencodeRuntime.ts`), bukan folder project.
 6. **Kebijakan memblokir by design**: I5 (`RND/08:29`), tabel otoritas `RND/08:44` (central: "tidak decide approval, spawn, tulis fact"), I3, I4. Ini keputusan, bukan bug — perlu direvisi sadar (§6).
 7. **Worker run hard-coded ke `claude`**: `DEFAULT_AGENT_ID/CMD = 'claude'` (`orchestratorRunModel.ts:16-17`) — user tanpa langganan Claude tak bisa memakai jalur run apa adanya.
