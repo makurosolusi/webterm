@@ -51,7 +51,7 @@ const vscodeScreens = new Set([
   "src/client/App.secondarySideBar.tsx",
   "src/client/chat/chatComposer.tsx",
   "src/client/chat/chatConversation.tsx",
-  "src/client/chat/chatMessages.tsx",
+  "src/client/chat/chatMessageRow.tsx",
   "src/client/chat/chatApprovalCard.tsx",
   "src/client/chat/needsYouStrip.tsx",
 ]);
