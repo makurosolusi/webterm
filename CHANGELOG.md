@@ -36,6 +36,10 @@ Operator notes:
 - Default-on switches are written into the server's environment at start while nothing sets them (as `WEBTERM_CENTRAL=on` and so on), so readers and Settings agree; a value in `.env`, the shell or Settings still wins. Existing projects keep their auto-done value; only new projects start with it on.
 
 ### Added
+- Central can read one web page itself (`browser_read`): it opens or reuses an idle browser node, a separate sandboxed reader reads the page, and only a short structured summary reaches Central, never the raw page text, with a note when the page tries to give instructions.
+- Central reuses a finished worker and its browser for the next web research or review instead of creating new nodes.
+- Finished Central workers are parked (collapsed) after 15 minutes idle and closed after 2 hours, with an Undo. A switch "Tidy up finished workers" in Settings › Central Agent (on by default, setting `centralTidy`) turns it off; only Central's own nodes are touched, never yours.
+- After Central reads web content, actions that change things (spawn, close, memory, messages, new sites and so on) need your OK for 10 minutes in that conversation, with the reason shown on the approval card. In Danger mode approvals stay automatic, as before.
 - Task cards and the task detail show the owner, the next step, the lease time and a one-line summary of the worker's result, and read "Paused" instead of an overdue lease while Claude is unreachable.
 - `GET /api/cost/by-tier` returns spend by source, model-ladder tier and model (default window 7 days); worker cost rows now record the tier they ran on.
 - The connection status item at the top of the window can be reached and pressed from the keyboard.
@@ -209,6 +213,8 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- A finished worker no longer holds a worker slot: the cap counts only working agents (a worker waiting for your input still counts), and reusing a finished worker checks the cap again.
+- A message that only contains a link now suggests reading the page instead of starting a research worker.
 - Terminal colour schemes were rebuilt from openly licensed palettes. A few colours (notably the Solarized bright colours) now differ slightly; theme ids and your saved choice are unchanged.
 - Central's terminal workers follow the model ladder like its headless ones (Sonnet at medium effort by default) instead of the model your own Claude CLI defaults to, and `agent.spawn` takes `complexity` (simple, moderate or complex) to pick the tier. Central changes a worker's model only when you ask for it.
 - Agent Chat and Central chat show the turn status (Thinking, Responding, Running a tool, Waiting for approval, Reconnecting) inline at the end of the conversation instead of in the header; errors sit above the message box with Retry or Dismiss, and a "Jump to latest" pill keeps your place while a reply streams.
@@ -366,6 +372,8 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- A research worker (plus a browser) is no longer started for every lookup; see Added and Changed above.
+- The approval card for a Central action shows its own title when it has one.
 - A hook whose body is larger than 256 KiB no longer loses the task's status; the reply is flagged with the `x-webterm-truncated: 1` header.
 - The "went quiet" notice no longer fires for the recovery sweep's own internal step.
 - The "Central · just now" chip is now placed correctly on nodes inside a group.
