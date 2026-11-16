@@ -5,6 +5,8 @@ import { openLedgerDb } from '../ledger/migration'
 import { createLedger, type Ledger } from '../ledger/ledger'
 import { allRows } from '../ledger/ledgerCore'
 import { buildInbox, inboxCounts } from './inbox'
+import { requestApproval } from '../ledger/ledgerApproval'
+import { PERMISSION_KIND, VIA_CENTRAL } from '../permission/permission.model'
 
 const T0 = 1_700_000_000_000
 
@@ -192,4 +194,14 @@ test('approval decisions and task verdicts are reflected in counts and status', 
   })
   ledger.task.failTask(rejected.id, second.fence, 'rejected by human review', { actor: 'human' })
   expect(counts().join(',')).toBe('0,0,1,1')
+})
+
+test('central routing hides held agent.permission cards but never a pending model.fable card', () => {
+  const { db } = fixture()
+  const ctx = { db, now: () => T0 }
+  requestApproval(ctx, { id: 'perm_held', projectId: 'p1', kind: PERMISSION_KIND, request: { label: 'Bash(ls)', via: VIA_CENTRAL } })
+  requestApproval(ctx, { id: 'fable_1', projectId: 'p1', kind: 'model.fable', request: { via: VIA_CENTRAL, label: 'grant' } })
+  const ids = buildInbox(db, 'p1', { now: T0 }).items.map((i) => i.id)
+  expect(ids).toContain('fable_1')
+  expect(ids).not.toContain('perm_held')
 })
