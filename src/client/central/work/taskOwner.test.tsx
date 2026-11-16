@@ -7,7 +7,7 @@ import TaskBoard from './TaskBoard'
 import { TaskCard } from './TaskCard'
 import { TL } from './taskBoardLabels'
 import { assignment, card, makeClient, page } from './taskBoardFixtures.testutil'
-import { leaseLabel, nextStep, ownerFacts, ownerLabel } from './taskOwnerModel'
+import { RESULT_SUMMARY_MAX, leaseLabel, nextStep, ownerFacts, ownerLabel, resultSummary } from './taskOwnerModel'
 
 vi.mock('../../osNotify', () => ({ focusCanvasNode: vi.fn() }))
 afterEach(cleanup)
@@ -54,6 +54,57 @@ describe('owner model', () => {
     expect(ownerFacts({ status: 'running', owner: undefined, assignment: null }, NOW, false).owner).toBeNull()
     const f = ownerFacts({ status: 'running', owner: 'agent', assignment: assignment({ leaseUntil: NOW - MIN }) }, NOW, false)
     expect(f).toMatchObject({ owner: 'agent', lease: 'Overdue 1m', overdue: true, paused: false, aria: 'Owner Agent. Next: Agent is working.' })
+  })
+})
+
+const res = (over: Record<string, unknown>) => ({ source: 'stop_hook', text: '', truncated: false, at: 1, hash: 'h', ...over })
+
+describe('result summary', () => {
+  it('prefers the RESULT line, then the first text, and collapses whitespace', () => {
+    expect(resultSummary(res({ text: 'long\nstory', resultLine: 'Fixed the login' }))).toBe('Fixed the login')
+    expect(resultSummary(res({ text: 'did   the\nthing' }))).toBe('did the thing')
+  })
+
+  it('cuts a long line to 140 characters with an ellipsis', () => {
+    const out = resultSummary(res({ resultLine: 'x'.repeat(500) }))!
+    expect(out).toHaveLength(RESULT_SUMMARY_MAX)
+    expect(out.endsWith('…')).toBe(true)
+    expect(resultSummary(res({ resultLine: 'x'.repeat(140) }))).toHaveLength(140)
+  })
+
+  it('says why nothing was captured, and what interrupted the run', () => {
+    expect(resultSummary(res({ source: 'none', reason: 'transcript not found' }))).toBe('No result captured: transcript not found')
+    expect(resultSummary(res({ source: 'none' }))).toBe('No result captured')
+    expect(resultSummary(res({ source: 'none', failure: { error: 'rate_limit', kind: 'rate_limited' } }))).toBe('Interrupted: rate limit')
+    expect(resultSummary(res({ failure: { error: 'x', kind: 'network' }, text: 'raw stack trace '.repeat(40) }))).toBe('Interrupted: network')
+    expect(resultSummary(res({ failure: { error: 'x' } }))).toBe('Interrupted')
+  })
+
+  it('says nothing for an empty or foreign result', () => {
+    expect(resultSummary(res({ text: '  ' }))).toBeNull()
+    expect(resultSummary(null)).toBeNull()
+    expect(resultSummary({ summary: 'old shape' })).toBeNull()
+  })
+})
+
+describe('result on the card', () => {
+  const show = (result: unknown) => render(<TaskCard card={card('r', 'reported', { owner: 'verifier', assignment: assignment({ result, endedAt: 5 }) })} busy={false} refused={undefined} selected={false} onAct={vi.fn()} onOpen={vi.fn()} />)
+
+  it('shows a short result as it is, without a tooltip stop', () => {
+    show(res({ resultLine: 'Done: 3 files' }))
+    expect(screen.getByText('Done: 3 files').closest('p')?.getAttribute('tabindex')).toBeNull()
+  })
+
+  it('shows a clipped result with the full text for a screen reader and keyboard focus', () => {
+    show(res({ resultLine: `${'word '.repeat(60)}end` }))
+    const line = screen.getByLabelText(/^Result: word word/)
+    expect(line.getAttribute('tabindex')).toBe('0')
+    expect(line.textContent!.length).toBeLessThanOrEqual(RESULT_SUMMARY_MAX)
+  })
+
+  it('shows nothing without a result', () => {
+    show(null)
+    expect(document.querySelector('.task-card__result')).toBeNull()
   })
 })
 

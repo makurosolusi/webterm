@@ -44,10 +44,10 @@ export function resultLine(result: unknown): string | null {
   return reason ? TL.noResultBecause(reason) : TL.noResult
 }
 
-/** One line of the worker result, cut to RESULT_SUMMARY_MAX; null when there is none. */
-export function resultSummary(result: unknown): string | null {
+/** One line of the worker result, cut to `max` characters (the card's limit by default); null when there is none. */
+export function resultSummary(result: unknown, max = RESULT_SUMMARY_MAX): string | null {
   const line = resultLine(result)
-  return line !== null && line.length > RESULT_SUMMARY_MAX ? `${line.slice(0, RESULT_SUMMARY_MAX - 1)}…` : line
+  return line !== null && line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
 export interface OwnerFacts {

@@ -5,7 +5,7 @@ import type { AssignmentView, TaskCard as TaskCardData, WorkEventView } from '..
 import type { TaskBoardClient } from './taskBoardApi'
 import { TL } from './taskBoardLabels'
 import { actorWords, eventWords, outcomeText, ruleWords, verificationVerdict } from './taskBoardModel'
-import { ownerFacts, ownerLabel, type OwnerFacts as OwnerFactsData } from './taskOwnerModel'
+import { ownerFacts, ownerLabel, resultSummary, type OwnerFacts as OwnerFactsData } from './taskOwnerModel'
 import { TaskHealth } from './taskHealth'
 import { useTaskDetail } from './useTaskDetail'
 
@@ -16,7 +16,10 @@ export interface TaskDetailProps {
   onClose: () => void
 }
 
-const when = (at: number): string => new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+/** Longest worker result line the detail shows; the stored text can be several KB. */
+const DETAIL_RESULT_MAX = 600
+
+const when =(at: number): string => new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 /** Who holds an open task, what comes next and when the holder must act, from the same facts as the card. */
 function OwnerFacts({ facts }: { facts: OwnerFactsData }): React.JSX.Element | null {
@@ -31,14 +34,14 @@ function OwnerFacts({ facts }: { facts: OwnerFactsData }): React.JSX.Element | n
 }
 
 function Attempt({ a, nodeName }: { a: AssignmentView; nodeName: string }): React.JSX.Element {
-  const result = outcomeText(a.result)
+  const result = resultSummary(a.result, DETAIL_RESULT_MAX) ?? outcomeText(a.result)
   return (
     <li className="task-detail__attempt">
       <strong>{TL.attempt(a.attempt)}</strong>
       <span className="task-card__meta"> · {TL.channels[a.channel]} · {nodeName}</span>
       <p className="task-card__meta">{TL.startedAt(when(a.startedAt))}</p>
       <p>{a.endedAt === null ? TL.stillRunning : a.endReason ? ruleWords(a.endReason) : ''}</p>
-      {result && <p>{result}</p>}
+      {result && <p><strong>{TL.resultHeading}:</strong> {result}</p>}
     </li>
   )
 }

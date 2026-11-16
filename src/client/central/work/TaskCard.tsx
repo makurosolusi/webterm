@@ -2,13 +2,14 @@ import { useState, type MouseEvent } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import type { TaskCard as TaskCardData } from '../../../shared/centralWork'
 import { focusCanvasNode } from '../../osNotify'
 import { relativeTime } from '../../SessionHistory.model'
 import { TL } from './taskBoardLabels'
 import { cardBadges, legalActions, type TaskAction } from './taskBoardModel'
-import { ownerFacts, ownerLabel } from './taskOwnerModel'
+import { ownerFacts, ownerLabel, resultSummary } from './taskOwnerModel'
 
 export interface TaskCardProps {
   card: TaskCardData
@@ -23,6 +24,8 @@ const BUSY = { approve: 'Approving…', retry: 'Retrying…', cancel: 'Cancellin
 // The refusal's reason is the card's `refused` line; the result line adds the time and Retry.
 const outcome = (label: string) => ({ label, ok: (ok: boolean) => ok, success: (ok: boolean) => (ok ? 'Done' : `${label} failed`) })
 
+/** Longest result text a tooltip or a spoken label carries; the card line itself is cut sooner. */
+const RESULT_TOOLTIP_MAX = 600
 // Icon beside the owner so the owner reads without colour.
 const OWNER_ICON = { agent: 'hubot', central: 'server-process', verifier: 'verified', human: 'person' } as const
 
@@ -38,6 +41,14 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
   const legal = legalActions(card.status)
   const facts = ownerFacts(card, Date.now(), false)
   const signal = signalText(card)
+  const summary = resultSummary(card.assignment?.result)
+  const fullResult = resultSummary(card.assignment?.result, RESULT_TOOLTIP_MAX)
+  const clipped = summary !== fullResult
+  const resultLine = summary ? (
+    <p className="task-card__result" tabIndex={clipped ? 0 : undefined} aria-label={clipped ? TL.resultOf(fullResult!) : undefined}>
+      <span className="codicon codicon-output" aria-hidden="true" />{summary}
+    </p>
+  ) : null
   const named = (action: string): string => TL.actionOn(action, card.title)
 
   const run = async (action: TaskAction, body?: Record<string, string>): Promise<boolean> => {
@@ -72,6 +83,7 @@ export function TaskCard({ card, busy, refused, selected, onAct, onOpen }: TaskC
         {TL.created(relativeTime(card.createdAt))}{signal ? ` · ${signal}` : ''}
         {facts.lease && <span className="task-card__lease" data-overdue={facts.overdue ? 'true' : undefined}> · <span className={`codicon codicon-${facts.overdue ? 'warning' : 'clock'}`} aria-hidden="true" />{facts.lease}</span>}
       </p>
+      {resultLine && (clipped ? <IconTooltip label={fullResult!}>{resultLine}</IconTooltip> : resultLine)}
       {cardBadges(card).length > 0 && (
         <div className="task-card__badges">
           {cardBadges(card).map((b) => <Badge key={b.text} className="task-badge" data-tone={b.tone}>{b.text}</Badge>)}
