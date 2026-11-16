@@ -24,6 +24,7 @@ import { buildTelegramCentralPort } from './channels/telegramPollWiring'
 import { startCentralAutonomyBoot } from './centralAutonomyBoot'
 import { bootCa2 } from './central/ca2Boot'
 import { registerActBroadcast } from './central/tools/toolAct'
+import { startConnectivity } from './connectivity/connectivity.runtime'
 import { registerCanvasBroadcast, registerCanvasTeardown } from './canvas/canvasPush.runtime'
 import { createCanvasTeardown } from './canvas/canvasTeardown'
 import { initEnvSettings } from './envSettings.runtime'
@@ -212,6 +213,7 @@ const broadcastToClients = (msg: ServerMsg): void => {
 }
 registerCanvasBroadcast(broadcastToClients)
 registerActBroadcast(broadcastToClients)
+if (process.env.NODE_ENV !== 'test') startConnectivity({ runtime: ledgerRuntime, broadcast: broadcastToClients }) // server -> Claude API detector (connectivity/)
 registerCanvasTeardown(createCanvasTeardown({ sessions, browser: activeBrowser, agentChats: activeAgentChatPool }))
 const browserWss = new WebSocketServer({ noServer: true }) // terpisah: handler 'connection' PTY tidak boleh melihat socket browser
 server.on('upgrade', (req, socket, head) => {

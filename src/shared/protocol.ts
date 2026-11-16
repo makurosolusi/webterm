@@ -72,6 +72,8 @@ export interface WorkspacesMsg { t: 'workspaces' }
 // Central just acted on a node through a tool (`verb`, e.g. `typed`/`spawned`); `n` = actions folded into this frame.
 // Carries ids and a verb only, never prompts, typed text or results; the client reads titles from its board.
 export interface ActMsg { t: 'act'; v: 1; tool: string; verb: string; nodeId: string; nodeId2?: string; workspaceId?: string; turnId?: string; host?: string; n: number }
+// The server's connection to the Claude API changed state (src/server/connectivity). Class names only: never a URL, host or header.
+export interface NetMsg { t: 'net'; v: 1; state: 'online' | 'degraded' | 'offline'; since: number; cause?: 'dns' | 'tcp' | 'tls' | 'timeout' | 'http' | 'unknown'; scope?: 'network' | 'api' }
 export interface PongMsg { t: 'pong'; id: string }
 // First frame on every connection: `bootId` changes per server process start, `build` per release/rebuild.
 export interface HelloMsg { t: 'hello'; bootId: string; build: string }
@@ -81,7 +83,7 @@ export interface StreamOpenMsg { t: 'sse.open'; id: string }
 export interface StreamEventMsg { t: 'sse.ev'; id: string; event: string; data: string; lastId: string }
 // The stream ended (`status` 200) or was refused (its HTTP status). Nothing follows for this id.
 export interface StreamEndMsg { t: 'sse.end'; id: string; status: number }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | ActMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | ActMsg | NetMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
 
 export const WS_PATH = '/ws'
 /** `{bootId, build}` behind the /api gate: lets a failing socket tell "server down" from "credential refused". */

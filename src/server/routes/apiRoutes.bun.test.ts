@@ -33,7 +33,7 @@ test('full route order snapshot', () => {
     'central-chat', 'ca2', 'extended',
     'approval-human', 'policy', 'secrets', 'procedural', 'policy-sim', 'memory-controls', 'blackboard', 'memory-proposals', 'routines',
     'memory-write', 'inbox', 'memory', 'orchestrator',
-    'cost',
+    'cost', 'connectivity',
     'dag',
     'knowledge2',
     'push', 'mobile',
