@@ -13,7 +13,7 @@ Hari ini webterm punya banyak fitur cerdas yang tidak saling kenal. Ada tujuh da
 | Prinsip | Sumber | Dampak ke rencana |
 |---|---|---|
 | Perkaya fitur. Kode lama bukan alasan menolak fitur, dan merombak boleh | memory `feedback-perkaya-fitur` | Setiap penundaan di `04-buku-ide.md` wajib beralasan keamanan, kehilangan data, kebenaran, kematangan protokol, atau biaya yang terbukti |
-| Amati, tiru, lalu modifikasi | memory `feedback-tiru-referensi` | Setiap paket kerja di `02-fase.md` menyebut referensi (Orca, Claude Code, OpenCode, Codex, nodeterm) beserta file:baris atau link |
+| Amati, tiru, lalu modifikasi | memory `feedback-tiru-referensi` | Setiap paket kerja di `02-fase.md` menyebut referensi (Orca, Claude Code, OpenCode, Codex, referensi eksternal) beserta file:baris atau link |
 | Zero-config | memory `feedback-zero-config` | Tidak ada fitur yang hanya bisa diakses lewat env. Kemampuan baru untuk agent wajib terlihat di layar |
 | Laporan worker bisa fiktif | memory `worker-laporan-fiktif` | Status "selesai" hanya ditulis oleh verifier sistem, berdasarkan bukti yang diisi sistem |
 | Aturan sudah ada, tinggal dijalankan | memory `feedback-aturan-sudah-ada` | Gerbang Rule 6/18 ditegakkan oleh sistem (SCM, verifier), bukan diingat agent |

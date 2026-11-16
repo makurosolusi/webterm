@@ -2,7 +2,7 @@
 
 Lanjutan `-a.md` (kepemilikan §4.1, gelombang §4.2) dan `-b.md` (kontrak §5, tes §6, aturan §7). Setiap spec ditempel utuh ke worker. Preambul wajib untuk SEMUA worker (tempel di awal):
 
-> Kamu worker `wkr-fm-<ws>`. Worktree/branch: dari orkestrator. DILARANG: `git commit/push/merge/checkout/stash/reset`, install dependensi, membaca `.env*`, mencetak secret, membuka browser/dev server. HANYA edit path yang tertulis di "File milik". Butuh file lain → STOP dan lapor. Aturan global: Rule 8 (batas baris), 11, 12, 15, 16, 17. Identitas protokol `nodeterm` tidak diubah. Jalankan `TMPDIR=/tmp/st npm run typecheck`, `TMPDIR=/tmp/st npm test`, `TMPDIR=/tmp/st bun test src/server/*.bun.test.ts`; lapor angka nyata. Skenario manual jangan diklaim lulus. Laporan akhir: daftar file + `wc -l` + `git status --short` + hasil tes.
+> Kamu worker `wkr-fm-<ws>`. Worktree/branch: dari orkestrator. DILARANG: `git commit/push/merge/checkout/stash/reset`, install dependensi, membaca `.env*`, mencetak secret, membuka browser/dev server. HANYA edit path yang tertulis di "File milik". Butuh file lain → STOP dan lapor. Aturan global: Rule 8 (batas baris), 11, 12, 15, 16, 17. Identitas protokol `referensi eksternal` tidak diubah. Jalankan `TMPDIR=/tmp/st npm run typecheck`, `TMPDIR=/tmp/st npm test`, `TMPDIR=/tmp/st bun test src/server/*.bun.test.ts`; lapor angka nyata. Skenario manual jangan diklaim lulus. Laporan akhir: daftar file + `wc -l` + `git status --short` + hasil tes.
 
 ---
 

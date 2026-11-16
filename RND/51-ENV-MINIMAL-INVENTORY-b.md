@@ -8,8 +8,8 @@ Lanjutan `51-ENV-MINIMAL-INVENTORY.md` (fakta F1-F7, tabel A bootstrap, tabel B 
 |---|---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | `telegramSend.ts:23-30` (fallback setelah `WEBTERM_TELEGRAM_BOT_TOKEN`) | WARISAN/SECRET | HAPUS (deprecate) | TIDAK disapu `LEAKED_ENV` => bocor ke anak PTY bila ada di `.env` (F5) |
 | `VITE_WEBTERM_CENTRAL_CHAT` | `client/central/centralControlApi.ts:31-33` (`import.meta.env`) | FLAG build-time | HAPUS / pindah ke capability server | satu-satunya env klien; tak ada API runtime; panel central sebaiknya mengikuti `WEBTERM_CENTRAL_CHAT` dari server `[opini]` |
-| `NODETERM_NODE_ID`, `NODETERM_PORT` | disuntik `sessions.ts:74-83` ke sesi agen context-capable | PROTOKOL | TETAP (jangan rename) | bukan config operator |
-| `NODETERM_NODE_TOKEN`, `NODETERM_PERM_WAIT_SECS` | `hooks.ts:40`, `hooksTokens.ts:14` (hanya bila `hookReplyApprovals > 0`) | PROTOKOL | TETAP | per-node, disuntik server |
+| `WEBTERM_NODE_ID`, `WEBTERM_PORT` | disuntik `sessions.ts:74-83` ke sesi agen context-capable | PROTOKOL | TETAP (nama baku) | bukan config operator |
+| `WEBTERM_NODE_TOKEN`, `WEBTERM_PERM_WAIT_SECS` | `hooks.ts:40`, `hooksTokens.ts:14` (hanya bila `hookReplyApprovals > 0`) | PROTOKOL | TETAP | per-node, disuntik server |
 | `WEBTERM_TOKEN` (anak) | `sessions.ts` — diganti token per-node untuk sesi agen | PROTOKOL | TETAP | nama sama dengan root token; jangan tertukar |
 | `WEBTERM_BROWSER_NODE_ID`/`_READ_CAP`/`_ACT_CAP` | disuntik `browser` envFor/shim | PROTOKOL | TETAP | bukan config |
 | `WEBTERM_CHANNEL_HMAC_SECRET` | hanya `redactSecrets.ts:12` (`SECRET_ENV_NAMES`), tanpa pembaca | MATI (hantu) | HAPUS dari daftar redaksi atau pertahankan sebagai nama terlarang `[opini]` | tak ada fitur |
@@ -21,7 +21,7 @@ Lanjutan `51-ENV-MINIMAL-INVENTORY.md` (fakta F1-F7, tabel A bootstrap, tabel B 
 | `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION` | `opencodeOptions.ts` allowlist / set sendiri | pihak ketiga / internal | TETAP | |
 | `${env:NAME}` di agentCatalog | `central/agents/agentCatalog.ts:108` (+ filter `RESERVED_ENV`) | referensi pengguna | TETAP | sumber = `process.env` |
 | Seluruh `process.env` diteruskan ke anak PTY | `pty.ts:187` via `ptyEnv` | PEWARISAN | PERLU DIAUDIT | hanya regex F5 yang menyapu; `execRunner.scrubExecEnv`, `verifyEnv`, `claudeOptions`, `opencodeOptions` berbasis allowlist (aman) |
-| Tes/fixture: `WEBTERM_PORT`, `WEBTERM_ROOT_TOKEN`, `NODETERM_TOKEN`, `WEBTERM_FUTURE_FLAG`, `WEBTERM_X`, `WEBTERM_TEST_FLAG`, `WEBTERM_CENTRAL_NOTIFY` | hanya berkas tes | DEV-TES | tak perlu tindakan | `central/eval/goldenHarness.ts:104-152` memutasi `process.env` di harness (non-tes, perlu restore) |
+| Tes/fixture: `WEBTERM_PORT`, `WEBTERM_ROOT_TOKEN`, `WEBTERM_TOKEN`, `WEBTERM_FUTURE_FLAG`, `WEBTERM_X`, `WEBTERM_TEST_FLAG`, `WEBTERM_CENTRAL_NOTIFY` | hanya berkas tes | DEV-TES | tak perlu tindakan | `central/eval/goldenHarness.ts:104-152` memutasi `process.env` di harness (non-tes, perlu restore) |
 
 ## 2. Selisih `.env.example` vs registri vs kode
 

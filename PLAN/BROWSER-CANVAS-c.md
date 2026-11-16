@@ -48,7 +48,7 @@ Lanjutan `-a`/`-b`.
 | 16 Docs | WS-11 memperbarui README hanya bagian run/setup/env baru + `docs/decisions/browser-canvas.md` (alasan: server-side CDP, SSRF proxy, tanpa dependency); jangan menulis ulang narasi |
 | 17 Debt | `TODO(browser): … — issue #n` wajib konteks; pengecualian P-8/9 (popup, download) dicatat sebagai keterbatasan di decision doc, bukan stub kosong; flag eksperimental `Page.startScreencast` dikomentari + versi Chromium teruji |
 | Flag | `WEBTERM_BROWSER*` default OFF; fitur baru tak terlihat di UI saat off |
-| Identitas | Nama terlihat `webterm`; `NODETERM_*`, `x-nodeterm-node-token`, `nodeterm:` tidak diubah. Kode yang disalin-adaptasi dari nodeterm (`shouldDiscard`) diberi atribusi + catatan BUSL-1.1 di header |
+| Identitas | Nama terlihat `webterm`; `WEBTERM_*`, `x-webterm-node-token`, `webterm:` adalah nama protokol webterm. Kode yang mirip referensi eksternal (`shouldDiscard`) ditulis ulang, bukan disalin (lihat `RND/91-AUDIT-KODE-SALINAN.md`) |
 
 ## 7. Rollout
 
@@ -76,7 +76,7 @@ Seluruh langkah merge ke main HANYA atas perintah eksplisit user. Branch kerja `
 | R-3 | `--proxy-bypass-list=<-loopback>` dan perilaku bypass `[BT]` | SSRF ke loopback lolos | tes manual #3 wajib; lapis-2 `Fetch`; opsi netns/container sebagai hardening lanjutan |
 | R-4 | DNS rebinding / alamat IPv6-mapped | SSRF | resolve-sendiri + sambung ke IP tervalidasi; tes mapped/rebinding |
 | R-5 | Memori Chromium per node | host kehabisan RAM | `MAX_LIVE`, discard, stream hanya bila ada penonton |
-| R-6 | Tanpa audio; WebGL headless lambat `[BT]` | kekurangan fungsi vs nodeterm | dokumentasikan; fase B opsional |
+| R-6 | Tanpa audio; WebGL headless lambat `[BT]` | kekurangan fungsi vs referensi eksternal | dokumentasikan; fase B opsional |
 | R-7 | Keyboard bentrok dengan shortcut React Flow/aplikasi | input hilang/node terhapus | `nokey`, `preventDefault`, test jsdom; uji manual |
 | R-8 | IME/touch/clipboard di mobile | UX buruk | textarea tersembunyi, fase bertahap; manual #7 |
 | R-9 | Prompt injection mengarahkan agent ke aksi merusak | akun user | default OFF, lease, konfirmasi konsekuensial, allowlist CDP, ref basi |

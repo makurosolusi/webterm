@@ -95,10 +95,10 @@ Catatan untuk debat arsitektur: **registry kemampuan tunggal** (01 §6, 02 #1) a
 ## 3. Friksi yang TIDAK dibahas laporan 01–05
 
 1. **Setting yang berbohong.** Laporan 01 mencatat flag sprawl tapi tidak menuntut *status efektif + alasan*. Contohnya mock runtime: `runtimeDetect.ts` memang tidak pernah otomatis jatuh ke mock, tapi kalau dipilih eksplisit lewat env, UI harus berteriak.
-2. **Restart server untuk edit server** (`CLAUDE.md`: "edit server perlu restart"). Kalau user sendiri yang membangun webterm sambil memakainya, setiap restart memutus semua sesi. Dibutuhkan supervisor yang mempertahankan PTY (pola tmux socket `-L node-terminal` di nodeterm) sementara proses HTTP di-reload.
+2. **Restart server untuk edit server** (`CLAUDE.md`: "edit server perlu restart"). Kalau user sendiri yang membangun webterm sambil memakainya, setiap restart memutus semua sesi. Dibutuhkan supervisor yang mempertahankan PTY (pola tmux socket `-L node-terminal` di referensi eksternal) sementara proses HTTP di-reload.
 3. **Agent menolak karena aturan global.** Tidak ada laporan yang menyentuh benturan antara aturan `~/.claude/CLAUDE.md` dan perintah user lewat UI. Solusinya consent bridge (P1-1), bukan melonggarkan aturan.
 4. **Worker identik dan zombie.** Tidak dibahas. Panel agent webterm harus menampilkan nama, tugas, umur, dan tombol kill.
-5. **Latensi browser node.** Tidak ada laporan yang mengukurnya. Tuntutannya: anggaran latensi (input→frame) ditampilkan di chip node, dan pendekatan screencast/input ditiru dari Orca atau nodeterm yang terbukti, bukan ditambal (memory `tiru-referensi`).
+5. **Latensi browser node.** Tidak ada laporan yang mengukurnya. Tuntutannya: anggaran latensi (input→frame) ditampilkan di chip node, dan pendekatan screencast/input ditiru dari Orca atau referensi eksternal yang terbukti, bukan ditambal (memory `tiru-referensi`).
 6. **Mismatch angka lintas permukaan** (project count Telegram vs canvas). Akarnya tiga DB tanpa JOIN. Laporan 01 menyebut gap ini secara teknis tapi tidak sebagai keluhan user.
 7. **Health check yang memperbaiki sendiri ("Doctor")**: skill terpasang, hook terpasang, `claude auth`, socket, bot Telegram hidup. Sistem mendeteksi lalu memperbaiki dengan satu klik, bukan menyuruh user mengecek.
 8. **Undo setting dan undo tutup node lintas reload.** `layoutHistory` sudah ada, tapi setting dan node yang ditutup tidak bisa dikembalikan.

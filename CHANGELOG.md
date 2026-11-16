@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 Operator notes:
+- BREAKING: the agent-session protocol names are now all `webterm`. Agent sessions get `WEBTERM_NODE_ID`, `WEBTERM_PORT` and `WEBTERM_NODE_TOKEN`; hooks and shims send the `x-webterm-node-token` header; events and channels are named `webterm:*`. During a transition period the server still accepts the old environment variable and header names, but it only issues the new ones. Update any script, hook or skill that reads the old names.
+- If a data folder from the earlier layout exists and the webterm data dir (`WEBTERM_DATA_DIR`, default `~/.webterm-server`) does not, its contents are migrated into the webterm data dir on first start. The old folder is only read, never written.
 - Run `bun install` after pulling: new dependencies `electrobun` 2.0.6 (MIT, pinned exactly) for the native macOS app and `@xterm/addon-clipboard` (MIT) for OSC 52 copy; `@xterm/addon-fit` is removed.
 - A running server records `{pid, host, port}` in the new file `<data dir>/run/server.json`. It is used to refuse a second server on the same data dir and to let the native app attach; a record left by a crashed server is ignored and overwritten.
 - A server now refuses to start, with exit code 1 and one line ("webterm is already running for <data dir> on <origin> (pid N). Open that one, or set WEBTERM_DATA_DIR to run another."), while another live server already serves the same data dir. Scripts or service managers that start a second instance on the same data dir must give it its own `WEBTERM_DATA_DIR`.
@@ -192,6 +194,7 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Protocol names (agent session environment variables, node-token header, event and channel names) now use the `webterm` prefix everywhere, matching the product name; old names are still accepted for a while (see Operator notes).
 - Starting a second server on a data dir that a live server already serves now fails with exit code 1 and a one-line message instead of starting (see Operator notes). This applies to `bun run dev`, `./webterm` and the native app alike; to run another instance, set a different `WEBTERM_DATA_DIR`.
 - Settings pages redesigned: every page (Appearance, Terminal, Canvas, Notifications, Claude, Central, Rules & secrets, Account, Features, About this machine) uses rows on grouped cards, switches, one shared segmented control and confirm dialogs for destructive choices, with loading, empty and error states; the side navigation fits on one line per page, and Terminal settings show a live terminal preview.
 - Settings › Keyboard Shortcuts is a VS Code-style table: Command, Keybinding, When and Source columns, click a row to record new keys, and conflicts shown on the row.
@@ -731,7 +734,7 @@ Operator notes:
 
 ### Removed
 - Central's text proposal parser; Central proposals are MCP tool calls now.
-- The unused `NODETERM_PERM_WAIT_SECS` is no longer injected into agent sessions.
+- The unused `WEBTERM_PERM_WAIT_SECS` is no longer injected into agent sessions.
 - Four dead keys from the env registry: `WEBTERM_CENTRAL_TOOL_BRIDGE`, `WEBTERM_KNOWLEDGE_GRAPHIFY`, `WEBTERM_EMBED_URL`, `WEBTERM_EMBED_MODEL`. The unused `WEBTERM_CHANNEL_HMAC_SECRET` entry in log redaction is gone too.
 - `WEBTERM_ALLOW_LOOPBACK_APPROVAL`. Approvals from the webterm page need no configuration now (see Security).
 - Codex as a Central Agent engine choice: it has no adapter, so it could only ever show as ready without working.

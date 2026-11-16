@@ -105,7 +105,7 @@ never derived from, `WEBTERM_TOKEN`. Good:
 * **argv** — hooks now use `curl -H @<headers file>` (`hooks.ts:196`); the value never lands in a
   command line. The P0 finding (B1) is fixed and the test drives a real `curl` argv to prove it.
 * **settings JSON** — no token (`hooks.ts:184-206`, `writeClaudeSettings` at 229-237).
-* **agent env** — `ptyShell.ts:74` now strips `WEBTERM_*`/`NODETERM_*` and `sessions.ts:181-189`
+* **agent env** — `ptyShell.ts:74` now strips `WEBTERM_* and `sessions.ts:181-189`
   re-injects the *node* token, so an agent no longer inherits the root token.
 * **logs** — `index.ts:127-130` prints only `len=N`; `api.ts:142` logs method + pathname only.
 * **disk mode** — `node-settings` dir 0700 (`hooks.ts:240-247`), headers file 0600
@@ -113,7 +113,7 @@ never derived from, `WEBTERM_TOKEN`. Good:
 
 But: **the root token is on disk anyway** — see C1. And per-node 0600 does not isolate siblings
 (any agent is the same UID and can read every `*.headers`), which is why H1's fix cannot rely on
-token secrecy. Minor: `NODETERM_NODE_TOKEN`/`WEBTERM_TOKEN` remain readable via
+token secrecy. Minor: `WEBTERM_NODE_TOKEN`/`WEBTERM_TOKEN` remain readable via
 `ps -E` / `/proc/<pid>/environ` to the same UID (L3-adjacent), so treat node tokens as
 "same-user public".
 

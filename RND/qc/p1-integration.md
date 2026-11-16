@@ -133,7 +133,7 @@ and `launchLine.ts:47-49` **returns `cmd` verbatim when `sid` is absent**, which
 - no `--session-id` → every spawn is an unrelated Claude session, and there is no way to ask control
   for the id to resume it (`OpenMsg.sessionId` is not accepted by `/spawn`).
 
-The env block at `sessions.ts:181-189` (node token, `NODETERM_NODE_ID`, `hookEnv`) still runs, but
+The env block at `sessions.ts:181-189` (node token, `WEBTERM_NODE_ID`, `hookEnv`) still runs, but
 `hookEnv`'s token is useless when no hook is installed. So "does a spawned agent get
 `WEBTERM_TOKEN`?" — **yes** (`sessions.ts:182`), but the hook half of that contract is not wired.
 

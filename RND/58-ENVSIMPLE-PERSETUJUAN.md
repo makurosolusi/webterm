@@ -146,16 +146,16 @@ Vektor, urut dari yang paling parah:
 ### 5.1 Mitigasi V1 (urut dari murah ke kuat)
 
 1. **Murah, wajib:** `enable` dan `grant` menolak request tanpa `X-Webterm-Consent` dan `Sec-Fetch-Site: same-origin`. `curl` polos gagal. Friksi, bukan batas: agent yang sengaja bisa memalsukan header.
-2. **Kode klaim sekali pakai (P+, ditunda: `env-minimal.md:46`)** untuk Tier B dan `enable`: server mencetak kode ke stdout TTY saja (bukan `createLogger`, yang menulis file terbaca agent), manusia mengetiknya di dialog. Preseden nodeterm: `setupToken()` dicetak ke konsol, dikonsumsi sekali (`nodeterm-web/src/server/auth.ts:199-219`). Satu-satunya mekanisme yang tak terjangkau agent uid-sama (stdout proses lain tak terbaca tanpa ptrace). Tanpa TTY (layanan) turun ke butir 1. `[A]` bagian stdout.
+2. **Kode klaim sekali pakai (P+, ditunda: `env-minimal.md:46`)** untuk Tier B dan `enable`: server mencetak kode ke stdout TTY saja (bukan `createLogger`, yang menulis file terbaca agent), manusia mengetiknya di dialog. Preseden referensi eksternal: `setupToken()` dicetak ke konsol, dikonsumsi sekali (`referensi-eksternal/src/server/auth.ts:199-219`). Satu-satunya mekanisme yang tak terjangkau agent uid-sama (stdout proses lain tak terbaca tanpa ptrace). Tanpa TTY (layanan) turun ke butir 1. `[A]` bagian stdout.
 
 Jujur untuk UI: pada loopback terbuka, persetujuan melindungi dari kesalahan dan agent yang terinjeksi lewat kanal resmi, BUKAN dari proses uid-sama yang bermusuhan.
 
-## 6. Pembanding nodeterm (`/Users/bip/Documents/spawn/nodeterm-web`)
+## 6. Pembanding referensi eksternal (`/Users/bip/Documents/spawn/referensi-eksternal`)
 
 - Verb kanvas destruktif: dialog konfirmasi manusia; pembebasan per sesi aplikasi hanya di memori ("bukan jalan pintas"), pembebasan permanen hanya di Settings > Agents berlabel permanen (`src/renderer/state/controlConfirm.ts:1-60`, `src/shared/control-confirm.ts:1-40`). Prinsip yang sama dengan Tier A/B di sini: konfirmasi di titik penggunaan, cakupan lebih lebar butuh langkah lebih sadar, selalu dapat dicabut.
-- Mode server headless (tanpa dialog) memakai opt-in env `NODETERM_SERVER_CANVAS_CONTROL=1` (`nodeterm-web/src/server/index.ts:871`): env dipakai hanya bila tak ada manusia untuk dikonfirmasi; webterm punya UI web.
+- Mode server headless (tanpa dialog) memakai opt-in env `WEBTERM_SERVER_CANVAS_CONTROL=1` (`referensi-eksternal/src/server/index.ts:871`): env dipakai hanya bila tak ada manusia untuk dikonfirmasi; webterm punya UI web.
 - Bukti kepemilikan out-of-band: `setupToken` dicetak ke konsol, sekali pakai (`server/auth.ts:199-219`). Model untuk 5.1 butir 2.
-- Per aturan proyek (tiru nodeterm): dialog di titik pakai + opt-in terlihat/dapat dicabut; bukan env-only.
+- Per aturan proyek (tiru referensi eksternal): dialog di titik pakai + opt-in terlihat/dapat dicabut; bukan env-only.
 
 ## 7. REKOMENDASI TEGAS
 
@@ -163,7 +163,7 @@ Jujur untuk UI: pada loopback terbuka, persetujuan melindungi dari kesalahan dan
 2. **Pindah ke runtime sekarang (sudah hot di kode):** `orchestrator.run` (HTTP), `files.mutate`, `files.upload`; koreksi label `restart:'boot'` yang salah untuk RUN (`envRegistry.platform.ts:18`). Kenapa: biaya nyaris nol. Risiko: rendah. Ukuran: S.
 3. **Hot-wire berikutnya:** `browser` (konstanta `index.ts:188-210` -> `activeBrowser()`, start/stop di hook grant) lalu `central.autonomy` (cek per tick; tutup celah pencabutan `centralAutonomyBoot.ts:77`). Risiko: lifecycle Chromium saat revoke; tes start/stop/start. Ukuran: M masing-masing.
 4. **Tetap bootstrap:** 9 kunci L1 (termasuk `ENV_SETTINGS` sebagai veto operator). Jangan tambah kunci ke-10. Kenapa: batas kepercayaan tak boleh diubah lewat permukaan yang dilindunginya. Ukuran: 0.
-5. **Perlakukan `enable` token dan grant Tier B dengan bukti out-of-band (kode sekali pakai di konsol TTY; fallback header-consent bila tanpa TTY).** Kenapa: satu-satunya mitigasi V1 yang bukan sekadar friksi; presedennya ada di nodeterm. Risiko: server tanpa TTY turun ke friksi saja. Ukuran: M.
+5. **Perlakukan `enable` token dan grant Tier B dengan bukti out-of-band (kode sekali pakai di konsol TTY; fallback header-consent bila tanpa TTY).** Kenapa: satu-satunya mitigasi V1 yang bukan sekadar friksi; presedennya ada di referensi eksternal. Risiko: server tanpa TTY turun ke friksi saja. Ukuran: M.
 6. **Audit durabel `capability_audit` + `consentVersion` (2.4).** Kenapa: ledger default off tak bisa jadi satu-satunya jejak; Tier B harus minta persetujuan ulang bila definisi berubah. Risiko: skema baru idempoten (Rule 4). Ukuran: S-M.
 7. **Tolak grant tanpa token bila ada header forwarded (V6)** dan tambah tes statis bahwa tak ada def tool central yang mengimpor modul settings/grant (V4). Ukuran: S.
 8. **Jadikan ledger selalu aktif dan turunkan `RUN_REQUIRE_APPROVAL` dari saklar menjadi akibat Tier B** (kerja bersama R&D deps). Kenapa: menghapus rantai 3 flag di keluhan awal. Risiko: ledger on mengubah footprint DB. Ukuran: M.

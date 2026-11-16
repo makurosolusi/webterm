@@ -77,7 +77,7 @@ Rilis 0.6.0 ke bawah dipindah dari `CHANGELOG.md`; versi terbaru ada di `CHANGEL
 - The server binds loopback (`127.0.0.1`) by default and refuses to start on an externally reachable host unless `WEBTERM_TOKEN` is set. `/api` requests and `/ws` upgrades are now checked for same origin, and for the token when one is configured. A browser does not apply the same-origin policy to WebSocket, so any page you happened to have open could previously dial the local webterm and get a shell.
 - Restarting an agent no longer discards the conversation: Restart asks the CLI to quit and relaunches it with the prior session resumed, and starting over from scratch is a separate New session action.
 - Terminal scrollback is its own setting now, measured in lines (default 10,000), separate from the server's replay buffer, which stays measured in bytes (default 256 KiB). One value served both before, which gave every node a buffer hundreds of thousands of lines deep.
-- Node chrome, dock, and status chips follow nodeterm's wording; an idle node shows no chip at all instead of a DONE badge.
+- Node chrome, dock, and status chips follow referensi eksternal's wording; an idle node shows no chip at all instead of a DONE badge.
 - The envman profile field is gone from the agent form. Per-account launches are configured through the per-agent launch command setting instead.
 
 ### Fixed
@@ -94,7 +94,7 @@ Rilis 0.6.0 ke bawah dipindah dari `CHANGELOG.md`; versi terbaru ada di `CHANGEL
 - Minimap: a bottom-right overview whose dots are colored by agent status (working, waiting, blocked, done) or blue for terminals, over a dot-grid canvas background.
 ### Changed
 - The top-left panel is now a slim workspace switcher; adding terminals, agents, and workspaces moved into the dock.
-- Terminal and agent nodes, plus the Welcome, Board, and folder-picker screens, were restyled to a consistent nodeterm palette.
+- Terminal and agent nodes, plus the Welcome, Board, and folder-picker screens, were restyled to a consistent referensi eksternal palette.
 
 ## [0.3.0] - 2026-10-27
 ### Added

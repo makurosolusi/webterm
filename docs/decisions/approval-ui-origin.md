@@ -28,7 +28,7 @@ menyetujui aksinya sendiri".
 ## Referensi
 
 - Orca `rpc-caller-scope`: jenis kredensial pemanggil menentukan scope; scope agent tidak pernah mencapai gerbang manusia.
-- nodeterm `control-confirm` + `origin.ts`: konfirmasi hanya dari UI, cek Origin sama dengan Host (`sameOrigin()` di
+- referensi eksternal `control-confirm` + `origin.ts`: konfirmasi hanya dari UI, cek Origin sama dengan Host (`sameOrigin()` di
   sini adalah cerminnya).
 - Jupyter Server XSRF/Origin check: perlindungan bertumpu pada fakta yang sama, browser tidak bisa memalsukan header
   terlarang lintas situs.
@@ -40,11 +40,11 @@ menyetujui aksinya sendiri".
 - **Risiko yang diterima:** `Sec-Fetch-Site` hanya terlarang bagi browser. Proses dengan uid yang sama yang SENGAJA
   memalsukan header itu (dan tidak mengirim token node-nya) tetap lolos. Proses lokal yang bermusuhan di uid yang sama
   bisa juga membaca DB dan file rahasia, jadi gerbang ini tidak menjanjikan lebih. Penutup penuh: aktifkan root token
-  (gerbang luar), atau langkah konfirmasi yang terikat sesi UI ala nodeterm control-confirm.
+  (gerbang luar), atau langkah konfirmasi yang terikat sesi UI ala referensi eksternal control-confirm.
 - **Butir `/ws` dan `/ws/browser` (ditutup):** upgrade kanal manusia, yaitu PTY `/ws` dan stream node Browser
   `/ws/browser`, tanpa root token kini wajib membawa `Origin` yang sama dengan `Host` (`src/server/wsOrigin.ts`,
   dipasang di `index.ts` setelah `allowed()` dan sebelum cabang browser). Tanpa Origin (curl, shell agent) ditolak
-  `403 origin_required`. Tiruan nodeterm `ws.ts` `upgradeAllowed` (kredensial + `sameOriginRequest`) dan Jupyter
+  `403 origin_required`. Tiruan referensi eksternal `ws.ts` `upgradeAllowed` (kredensial + `sameOriginRequest`) dan Jupyter
   `check_origin` (Origin + token wajib): di bind tanpa token, Origin yang hadir adalah satu-satunya bukti pemanggil
   adalah UI. Tak ada konsumen non-browser sah untuk kedua jalur: token node memang sudah ditolak di sana, dan agent
   mengendalikan browser lewat `/api/control/browser/*` (shim `webterm-browser`), bukan `/ws/browser`. Smoke manual

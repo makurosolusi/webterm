@@ -14,7 +14,7 @@ Sumber: `RND/39..41`. Branch kerja rencana: `chore/rnd-env-settings` (worktree `
 4. Hubungan antar-flag hidup (`requires`) sehingga "kenapa fitur tak jalan" terjawab di UI.
 5. Registry menjadi data berskema v2 + tes invarian, sehingga domain baru (ca2, file manager, browser) tak bisa mengotori halaman lagi.
 
-**Non-tujuan:** tidak mengubah mekanisme inti (override > env > default, secret file 0600, gerbang `dangerous`+root token, `WEBTERM_ENV_SETTINGS=off`, satu baris JSON `app.env_overrides`); tidak ada tabel/skema DB baru; tidak ada dependency baru; tidak rename kunci env mana pun (kompat protokol nodeterm, CLAUDE.md); tidak membuat endpoint restart; tidak mengubah semantik pembaca env di luar registry.
+**Non-tujuan:** tidak mengubah mekanisme inti (override > env > default, secret file 0600, gerbang `dangerous`+root token, `WEBTERM_ENV_SETTINGS=off`, satu baris JSON `app.env_overrides`); tidak ada tabel/skema DB baru; tidak ada dependency baru; tidak rename kunci env mana pun; tidak membuat endpoint restart; tidak mengubah semantik pembaca env di luar registry.
 
 **Keputusan arsitektur (satu rekomendasi):** registry v2 = *data murni berskema* (`owner/section/audience/requires/restart/effectiveDefault/stage/since/aliases/dangerNote`) dengan **derivasi default** agar entri lama dan entri domain lain tetap valid tanpa diedit; server menormalisasi dan memvalidasi nilai efektif (field `valid`); klien hanya me-render data itu (tanpa daftar grup/urutan hardcode).
 - *Ditolak 1:* UI per-fitur ditulis tangan tanpa registry — duplikasi, drift (terbukti di `channelsLabels.ts`).
@@ -53,7 +53,7 @@ Sumber: `RND/39..41`. Branch kerja rencana: `chore/rnd-env-settings` (worktree `
 | **P-11** | Bahasa UI Indonesia; istilah teknis (token, webhook, worker, runtime, ledger) tetap. Badge: **Diubah · Perlu restart · Berbahaya · Dari .env · Dikunci**; badge "default" dihapus. | R&D 40 §9. | — |
 | **P-12** | Central tetap **section** di tab "Fitur & server" (tanpa tab baru); entri domain tanpa metadata (ca2/files/browser) otomatis `audience:'advanced'`, `owner` = domain. | Cegah banjir 23+ entri di tampilan utama. | Tab Central (tunda). |
 | **P-13** | Kunci `dangerous` tanpa root token: tampil **satu** kartu penjelasan ("butuh `WEBTERM_TOKEN`; tanpa token kunci ini tidak bisa diubah dari UI") + baris read-only, bukan pesan di tiap baris. | R&D E3. | — |
-| **P-14** | Tidak ada rename kunci di cabang ini; `aliases` hanya disiapkan (mekanisme migrasi override) untuk rename masa depan. | CLAUDE.md: jangan rename tanpa perintah. | — |
+| **P-14** | Tidak ada rename kunci di cabang ini; `aliases` hanya disiapkan (mekanisme migrasi override) untuk rename masa depan. | Nama protokol sudah baku (`webterm`). | — |
 
 ## 4. Arsitektur target (ringkas)
 

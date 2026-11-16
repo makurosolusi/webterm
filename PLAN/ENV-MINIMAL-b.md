@@ -118,7 +118,7 @@ Peer loopback = `req.socket.remoteAddress` ∈ {`127.0.0.1`, `::1`, `::ffff:127.
 | 6 | `logger.info('auth.token_enabled', { source:'file' })` tanpa nilai | - |
 | 7 | respons 200 (satu-satunya tempat nilai keluar di luar TTY boot; pengecualian S5 yang disengaja) | - |
 
-Batas jujur (dokumentasikan, jangan klaim lebih): (1) proses lokal sebagai uid yang sama dapat memanggil API terbuka sebelum `enable` dan dapat membaca berkas sesudahnya: tak dilindungi, setara T1 hari ini, tidak ada eskalasi baru. (2) Koneksi WebSocket yang sudah terbuka sebelum `enable`/`rotate` tetap hidup sampai tutup (gerbang dicek saat upgrade). (3) Token per-node (`NODETERM_NODE_TOKEN`) tidak terpengaruh. (4) Tidak ada `disable` via API; kembali ke terbuka = hentikan server, hapus `secrets/WEBTERM_TOKEN`, nyalakan lagi (§rollback di b2).
+Batas jujur (dokumentasikan, jangan klaim lebih): (1) proses lokal sebagai uid yang sama dapat memanggil API terbuka sebelum `enable` dan dapat membaca berkas sesudahnya: tak dilindungi, setara T1 hari ini, tidak ada eskalasi baru. (2) Koneksi WebSocket yang sudah terbuka sebelum `enable`/`rotate` tetap hidup sampai tutup (gerbang dicek saat upgrade). (3) Token per-node (`WEBTERM_NODE_TOKEN`) tidak terpengaruh. (4) Tidak ada `disable` via API; kembali ke terbuka = hentikan server, hapus `secrets/WEBTERM_TOKEN`, nyalakan lagi (§rollback di b2).
 
 ### 3.3 Pengerasan opsional "P+" (usul, default OFF)
 

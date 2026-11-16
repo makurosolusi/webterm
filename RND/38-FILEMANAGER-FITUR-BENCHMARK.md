@@ -21,7 +21,7 @@ Topik 4 R&D file manager (2026-11-03). Bukti kode = `file:baris` di worktree `rn
 | Favorit/recent/pin | Tidak ada; hanya `dirPath`, `title`, `color`, `collapsed`, `comments` di data node | `FilesNode.tsx:47-49` |
 | Multi-root | Praktis sudah ada: tiap node files = satu root; `onAddFiles` memakai `ws.cwd` | `App.tsx:233` |
 | Batas ukuran | Teks 10 MB, biner 24 MB (di atasnya sentinel too-large) | `shared/fsLimits.ts:12-13` |
-| Quick Open | Sengaja TIDAK diport dari nodeterm | `fsOps.ts:5-6` |
+| Quick Open | Sengaja TIDAK diport dari referensi eksternal | `fsOps.ts:5-6` |
 
 Ketersediaan di mesin dev: `rg`, `git`, `zip`, `unzip`, `tar` ada; Bun 1.4.2 punya `Bun.Glob` dan `Bun.Archive` (diuji `bun -e`). Di mesin produksi pengguna `rg` belum tentu ada `[BT]` → wajib fallback.
 
@@ -29,8 +29,8 @@ Ketersediaan di mesin dev: `rg`, `git`, `zip`, `unzip`, `tar` ada; Bun 1.4.2 pun
 
 | Referensi | Status/lisensi (verifikasi) | Pelajaran bagi webterm |
 |---|---|---|
-| nodeterm `listQuickOpenFiles` + `quickOpenSearch` | Repo referensi proyek (BUSL-1.1) | `rg` → `git ls-files` → walk ber-cap 50.000 (`nodeterm-web/src/core/fs-ops.ts:209-229`, `src/shared/quick-open-filter.ts` cap & blocklist); fuzzy murni 90 baris, limit 50 hasil (`src/renderer/lib/quickOpenSearch.ts`). Porting langsung, sesuai aturan "tiru nodeterm" |
-| nodeterm `ExplorerPanel` | Idem | Ada reveal (expand ancestor + select + scroll, berkunci `nonce`), pin panel, download. Pola reveal bisa ditiru |
+| referensi eksternal `listQuickOpenFiles` + `quickOpenSearch` | Repo referensi proyek (BUSL-1.1) | `rg` → `git ls-files` → walk ber-cap 50.000 (`referensi-eksternal/src/core/fs-ops.ts:209-229`, `src/shared/quick-open-filter.ts` cap & blocklist); fuzzy murni 90 baris, limit 50 hasil (`src/renderer/lib/quickOpenSearch.ts`). Porting langsung, sesuai aturan "tiru referensi eksternal" |
+| referensi eksternal `ExplorerPanel` | Idem | Ada reveal (expand ancestor + select + scroll, berkunci `nonce`), pin panel, download. Pola reveal bisa ditiru |
 | VS Code Explorer | Docs: `codebasics` | Terverifikasi: Select for Compare / Compare with Selected, Find in Folder, badge jumlah file belum disimpan, `search.exclude`/`files.exclude`, ripgrep + .gitignore. Tidak diverifikasi (pengetahuan umum `[BT]`): Open Editors, Outline/Timeline, `explorer.sortOrder`/`excludeGitIgnore`/`compactFolders`/`confirmDelete`/`enableUndo`/`autoReveal`, F2/Delete/Ctrl+Z, drag upload |
 | Cloud Commander | MIT, aktif (push terakhir 2026-10-25, API GitHub) | Dua panel + terminal + editor di web; pelajaran: pola dual-pane tidak perlu, canvas sudah memberi 2 node |
 | Filebrowser | Apache-2.0, **diarsipkan 2026-09-01**, tanpa patch keamanan (README) | JANGAN jadi dasar/dependensi. Pelajaran negatif: command runner dan JWT tak-revokable adalah sumber CVE |
@@ -134,8 +134,8 @@ Gelombang: **W0** = 00 → **W1 (paralel)** = 01, 03, 04, 05, 06, 09 → **W2** 
 - **Eksekusi tak sengaja lewat F2:** path tanpa quoting atau berakhir `\n` bisa menjalankan perintah; wajib `shellQuote` + tanpa newline + tes dengan nama `a b'$(x)`.
 - **Kontrak wire `DirEntry`:** menambah `size/mtime` memengaruhi dua deklarasi kembar client/server (`fileBrowse.ts:21`, `fsOps.ts:59`); buat additif/opsional.
 - **Beban `rg`/`git status` pada repo besar:** wajib cap, timeout, dan pembatalan; indeks Quick Open per root di-cache dengan invalidasi manual/watcher.
-- **Lisensi:** kode nodeterm di-port boleh (repo referensi proyek); Zed/Filebrowser jangan disalin (Zed campuran lisensi, Filebrowser diarsipkan).
+- **Lisensi:** kode referensi eksternal di-port boleh (repo referensi proyek); Zed/Filebrowser jangan disalin (Zed campuran lisensi, Filebrowser diarsipkan).
 - **Rule 13/8:** endpoint file index dan grep harus ber-cap/stream; `FilesNode.tsx` sudah 375 baris, penambahan fitur tanpa 00 melanggar batas.
-- **Rule 10:** tidak ada dependensi baru yang disarankan di Must; kandidat opsional (diverifikasi registry npm 2026-11): `fuzzysort@4.0.2` MIT (hanya bila port nodeterm kurang), `fflate@0.8.3` MIT, `@parcel/watcher@2.6.0` MIT, `@tanstack/react-virtual@3.14.25` MIT — semuanya ditunda sampai terbukti perlu.
+- **Rule 10:** tidak ada dependensi baru yang disarankan di Must; kandidat opsional (diverifikasi registry npm 2026-11): `fuzzysort@4.0.2` MIT (hanya bila port referensi eksternal kurang), `fflate@0.8.3` MIT, `@parcel/watcher@2.6.0` MIT, `@tanstack/react-virtual@3.14.25` MIT — semuanya ditunda sampai terbukti perlu.
 
 **Belum terverifikasi:** perilaku Finder/Nautilus/JetBrains/Zed (pengetahuan umum); nama setting `explorer.*` VS Code (halaman default-settings tak terbaca via curl); ketersediaan `rg` di lingkungan produksi pengguna; ukuran bundle `fflate`; apakah ada command palette/hotkey global webterm yang bentrok dengan Ctrl+P (grep "palette" hanya menunjukkan `App.tsx`/`CanvasToolbar.tsx`, tidak dibaca penuh); perilaku `Bun.Archive` untuk zip (hanya terdeteksi ada, tidak diuji).

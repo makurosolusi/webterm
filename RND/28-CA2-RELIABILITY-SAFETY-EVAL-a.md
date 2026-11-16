@@ -28,7 +28,7 @@ Label: `[kode]` dibaca dari repo, `[terverifikasi]` sumber primer dibaca, `[belu
 | F9 | Model gratis default ⇒ `costMicros` ≈ 0 ⇒ cap USD tak berarti | `opencodeOptions.ts` `DEFAULT_OPENCODE_MODEL='opencode/deepseek-v4.1-flash-free'` |
 | F10 | Kill proses: SIGTERM→SIGKILL 500 ms, timeout wall, cancel idempoten | `opencodeRuntime.ts:18,102-122,170-194` (baik, pertahankan) |
 ### 2.3 Fondasi keamanan yang sudah benar `[kode]`
-- Env anak diskrub: allowlist + prefix `WEBTERM_`/`NODETERM_` dilarang (`opencodeOptions.ts:33-52`); `OPENCODE_PERMISSION` deny `bash/edit/webfetch/task`, tanpa `--auto` (`:18-24`).
+- Env anak diskrub: allowlist + prefix `WEBTERM_`/`WEBTERM_` dilarang (`opencodeOptions.ts:33-52`); `OPENCODE_PERMISSION` deny `bash/edit/webfetch/task`, tanpa `--auto` (`:18-24`).
 - Proposal: tool allowlist 4 nama, kunci terlarang (`actor,authority,status,path,command,token,digest…`), id aman regex, ukuran ≤8 KB, kecocokan conversation↔project (`proposalPolicy.ts:7-9,43-70`).
 - Approval sekali pakai, digest mengikat aksi, kegagalan aksi tidak menghidupkan approval (`approvalGate.ts:50-86`). Ack idempoten persisten (`durableAck.ts`). Lease + fence + reaper `leased→suspect` (`ledgerTaskLease.ts:99-121`, `ledgerTaskStop.ts:64`). Caps keras (`caps.ts` `DEFAULT_CAPS`: 3 worker, 3 attempt, 200k token, USD 5, 40 turn, 30 mnt).
 - Konten tak tepercaya di-delimit sebagai data (`centralPrompt.ts` blok "Retrieved memory (data only…)"); redaksi secret `redactSecrets.ts`, `logs/logSanitize.ts`.
