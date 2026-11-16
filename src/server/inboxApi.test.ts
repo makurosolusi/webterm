@@ -12,6 +12,7 @@ CREATE TABLE approval (
   id TEXT PRIMARY KEY, project_id TEXT, kind TEXT NOT NULL, request_json TEXT,
   status TEXT NOT NULL, expires_at INTEGER, created_at INTEGER NOT NULL
 );
+CREATE TABLE inbox_item (id TEXT PRIMARY KEY, approval_id TEXT);
 CREATE TABLE task (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, spec TEXT NOT NULL, evidence_json TEXT,
   status TEXT NOT NULL, created_at INTEGER NOT NULL, lease_expires INTEGER, fence INTEGER NOT NULL DEFAULT 0

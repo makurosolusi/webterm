@@ -9,6 +9,7 @@ import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
 import { APPROVAL_LEVEL_TEXT } from '../shared/settings.approvalLevel'
 import { APPROVAL_TEXT, ApprovalModeFields } from './ApprovalModeControl'
+import { PermissionRoutingField } from './PermissionRoutingField'
 import type { EffectiveClaudeLaunch } from '../shared/claudeLaunch/claudeLaunch.effective'
 import type { AgentPermissionMode } from '../shared/workspace'
 import { ClaudeProviderCard } from './ClaudeProviderCard'
@@ -114,6 +115,7 @@ export function ClaudeSettingsSection({ settings: s, onChange, projectId }: { se
       <div data-claude-group="permissions">
         <SettingsGroup title={CLAUDE_TEXT.permissions}>
           <ApprovalModeFields settings={s} projectId={projectId} />
+          <PermissionRoutingField settings={s} onChange={onChange} />
         </SettingsGroup>
       </div>
       <div data-claude-group="models">
