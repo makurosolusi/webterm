@@ -70,13 +70,6 @@ describe('Write / Edit with an agent (Central skills)', () => {
     await waitFor(() => expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author', skillTarget: 'webterm-core' }))
   })
 
-  it('without a board a canvas skill is revised by the Central author too (it writes either kind)', async () => {
-    const { chat } = library([row({ audience: 'canvas', name: 'webterm-howto' })])
-    fireEvent.click(await screen.findByRole('button', { name: 'View webterm-howto 1' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Ask the agent to revise webterm-howto' }))
-    await waitFor(() => expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author', skillTarget: 'webterm-howto' }))
-  })
-
   it('shows a failed start as an alert and the button works again', async () => {
     const chat = { createConversation: vi.fn().mockRejectedValueOnce(new InboxApiError('x', 503, 'central_runtime_off')).mockResolvedValue(CREATED) }
     render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => [row()]) })} chat={chat} />)
@@ -90,11 +83,11 @@ describe('Write / Edit with an agent (Central skills)', () => {
 })
 
 describe('Drafts from Central', () => {
-  it('keeps only open drafts Central proposed, of either kind', () => {
+  it('keeps only open drafts Central proposed for Central skills (canvas drafts live in the canvas panel)', () => {
     const mine = draft()
     const canvasDraft = draft({ name: 'webterm-b', audience: 'canvas' })
     const rows = [mine, draft({ origin: 'agent', proposedBy: 'agent:n1', name: 'webterm-a' }), canvasDraft, draft({ name: 'webterm-c', status: 'rejected' }), row()]
-    expect(centralDraftsOf(rows)).toEqual([mine, canvasDraft])
+    expect(centralDraftsOf(rows)).toEqual([mine])
   })
 
   it('lists a draft with its diff, in the Central section, once (not again in the general review list)', async () => {
@@ -192,7 +185,7 @@ describe('the author chat', () => {
   it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Limited tools chip in author mode', () => {
     mount({ ...base, mode: 'skill-author', skillTarget: 'webterm-rule' })
     const banner = within(screen.getByRole('complementary', { name: 'Skill author' }))
-    expect(banner.getByText(/kind, title, steps and checks before writing/)).toBeTruthy()
+    expect(banner.getByText(/title, steps and checks before writing/)).toBeTruthy()
     expect(banner.getByText(/Can list, read and draft skills and read public web pages \(read-only\)\. Cannot .*use the canvas, run agents, use memory/)).toBeTruthy()
     expect(banner.getByText(/need your approval in the Skills tab/)).toBeTruthy()
     expect(banner.getByText('Editing webterm-rule.')).toBeTruthy()

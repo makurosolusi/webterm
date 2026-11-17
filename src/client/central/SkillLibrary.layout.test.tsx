@@ -76,7 +76,7 @@ describe('SkillLibrary inline switch', () => {
 })
 
 describe('SkillLibrary accordion', () => {
-  const rows = [row({ name: 'a' }), row({ name: 'b' }), row({ name: 'k', audience: 'canvas' })]
+  const rows = [row({ name: 'a' }), row({ name: 'b' }), row({ name: 'k' })]
   const mount = () => render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => rows) })} />)
 
   it('opens the detail inside the clicked row, one at a time', async () => {
@@ -109,16 +109,6 @@ describe('SkillLibrary accordion', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close details' }))
     expect(document.activeElement).toBe(rowBtn('b'))
   })
-
-  it('sections collapse and expand', async () => {
-    mount()
-    await screen.findByRole('button', { name: 'View a 1' })
-    const toggle = screen.getByRole('button', { name: 'Central skills: show or hide' })
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByRole('button', { name: 'View a 1' })).toBeNull()
-  })
 })
 
 describe('SkillLibrary drafts', () => {
@@ -147,11 +137,10 @@ describe('SkillLibrary states', () => {
     expect(screen.getByRole('status').textContent).toBe('Loading…')
   })
 
-  it('shows a one-line empty state for a section that has no skills while the other has some', async () => {
-    render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => [row({ name: 'a' })]) })} />)
-    await screen.findByRole('button', { name: 'View a 1' })
-    expect(screen.getByText(/^No canvas skills yet/)).toBeTruthy()
-    expect(screen.queryByText(/^No Central skills yet/)).toBeNull()
+  it('shows the Central-only empty line when only canvas skills exist', async () => {
+    render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => [row({ name: 'a', audience: 'canvas' })]) })} />)
+    expect(await screen.findByText(/^No skills yet/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View a 1' })).toBeNull()
   })
 
   it('uses a secondary, not primary, Write with an agent button', async () => {

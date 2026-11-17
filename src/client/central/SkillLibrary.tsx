@@ -1,14 +1,14 @@
-// Skills tab: a searchable library of every skill, a read-only detail, and the review actions for rows that wait on a
-// human. Skills are written only by the author agents: each section has "Write with an agent", no form types a skill.
+// Control > Skills: the library of CENTRAL skills only (rules Central follows): searchable rows, a detail under the
+// row, and the review actions for rows that wait on a human. Skills for agents on the canvas live in the canvas
+// sidebar Skills panel. Skills are written only by the author agent: "Write with an agent", no form types a skill.
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useEffect, useState } from 'react'
-import { SKILL_AUDIENCES, type SkillAudience } from '../../server/central/contracts/skill.types'
 import type { ChatClient } from '../chat/chatTypes'
-import { useNodeActions } from '../nodeActions'
+import { openSideBarView } from '../sideBar/sideBar.open'
 import CentralSkillAuthorButton from './CentralSkillAuthorButton'
-import SkillAuthorDrafts, { CentralDraftsPanel } from './SkillAuthorDrafts'
+import { CentralDraftsPanel } from './SkillAuthorDrafts'
 import { CL } from './centralLabels'
 import { SKILLS_OFF, centralControlApi } from './centralControlApi'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
@@ -16,7 +16,6 @@ import { useLoad } from './centralLoad'
 import { onCentralSkillAuthorActivity } from './centralSkillAuthor.events'
 import SkillDetail from './SkillDetail'
 import SkillRow from './SkillRow'
-import SkillSection from './SkillSection'
 import './skillLibrary.css'
 import SkillReviewList from './SkillReview'
 import SkillsOff from './SkillsOff'
@@ -36,10 +35,9 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
   const [filter, setFilter] = useState<SkillFilter>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [draftsOpen, setDraftsOpen] = useState(true)
-  const { openSkillAuthor } = useNodeActions()
-  const [authorNode, setAuthorNode] = useState<string | null>(null)
   const off = list.code === SKILLS_OFF
-  const rows = list.data ?? []
+  // Canvas skills have their own home (the canvas Skills panel); this library never lists them.
+  const rows = (list.data ?? []).filter((r) => r.record.audience === 'central')
   const searched = searchRows(rows, query)
   const counts = countByFilter(searched)
   const shown = searched.filter((r) => matchesFilter(r, filter))
@@ -49,17 +47,14 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
   const hasOpen = (d: SkillReviewRow): boolean => rows.some((r) => r.record.name === d.record.name && OPEN.includes(r.record.status))
   // "Ask the agent ..." of the open detail: a built-in is read only and only offers a variant; its name goes to the author as a read-only reference and the server only lets it propose a NEW name.
   const reviseOf = (d: SkillReviewRow) => {
-    const { name, origin, audience, status } = d.record
+    const { name, origin, status } = d.record
     const reason = status !== 'active' ? CL.skillReviseInactive : hasOpen(d) ? CL.skillEditOpenDraft : undefined
-    if (origin === 'builtin') return <><small>{CL.skillVariantHint(name)}</small> <CentralSkillAuthorButton key={`variant:${keyOf(d)}`} target={name} label={CL.skillAuthorVariant} kind={audience} {...(chat ? { chat } : {})} /></>
-    if (audience === 'canvas' && openSkillAuthor) return <><Button type="button" size="sm" variant="secondary" disabled={reason !== undefined} aria-describedby={reason ? 'skill-revise-reason' : undefined} onClick={() => setAuthorNode(openSkillAuthor(name))}>{CL.skillAuthorRevise}</Button>{reason && <small id="skill-revise-reason">{reason}</small>}</>
-    return <CentralSkillAuthorButton key={`author:${keyOf(d)}`} target={name} label={CL.skillAuthorRevise} kind={audience} {...(reason ? { disabledReason: reason } : {})} {...(chat ? { chat } : {})} />
+    if (origin === 'builtin') return <><small>{CL.skillVariantHint(name)}</small> <CentralSkillAuthorButton key={`variant:${keyOf(d)}`} target={name} label={CL.skillAuthorVariant} {...(chat ? { chat } : {})} /></>
+    return <CentralSkillAuthorButton key={`author:${keyOf(d)}`} target={name} label={CL.skillAuthorRevise} {...(reason ? { disabledReason: reason } : {})} {...(chat ? { chat } : {})} />
   }
   const rest = rows.filter((r) => needsReview(r) && !inDrafts.has(r))
   const clear = (): void => { setQuery(''); setFilter('all') }
-  const writeButton = (a: SkillAudience) => a === 'canvas' && openSkillAuthor
-    ? <Button type="button" size="sm" variant="secondary" aria-label={`${CL.skillAuthorWrite} (${CL.skillAudienceBadge[a]})`} onClick={() => setAuthorNode(openSkillAuthor())}><span className="codicon codicon-add" aria-hidden="true" />{CL.skillAuthorWrite}</Button>
-    : <CentralSkillAuthorButton label={CL.skillAuthorWrite} kind={a} {...(chat ? { chat } : {})} />
+  const detailOf = (r: SkillReviewRow) => (close: () => void) => <SkillDetail key={`${keyOf(r)}:${r.record.enabled}`} row={r} client={client} onClose={close} onChanged={list.reload} revise={reviseOf(r)} />
   return (
     <section className="ccp-section ccp-skills" aria-labelledby="ccp-skills-h" aria-busy={list.loading && !list.data ? true : undefined}>
       <h3 id="ccp-skills-h">{CL.skillsLibraryHeading}</h3>
@@ -68,6 +63,8 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
           <span className={`codicon codicon-refresh${list.loading ? ' codicon-modifier-spin' : ''}`} aria-hidden="true" />
         </IconButton>
       )}
+      <p className="ccp-skill-empty">{CL.skillsPurpose}</p>
+      <p className="ccp-skill-empty">{CL.skillsCanvasPointer} <Button type="button" size="xs" variant="link" onClick={() => openSideBarView('skills')}>{CL.skillsOpenCanvas}</Button></p>
       {off && <SkillsOff onEnabled={list.reload} />}
       {list.error && !off && (
         <div><p role="alert" className="ccp-error">{list.error}</p><Button type="button" size="sm" variant="secondary" onClick={list.reload}>{CL.skillsRetry}</Button></div>
@@ -75,10 +72,13 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
       {list.loading && !list.data && (
         <div><span role="status" className="sr-only">{CL.loading}</span>{SKELETON_ROWS.map((i) => <div key={i} className="ccp-skill-skel" aria-hidden="true" />)}</div>
       )}
-      {authorNode && !off && <SkillAuthorDrafts key={authorNode} nodeId={authorNode} client={client} onClose={() => setAuthorNode(null)} onChanged={list.reload} />}
       {list.data && rows.length === 0 && <p className="ccp-skill-empty">{CL.skillsEmpty}</p>}
       {!off && list.data && (
         <>
+          <div className="ccp-skill-section__actions">
+            {drafts > 0 && <Button type="button" size="sm" variant="ghost" aria-expanded={draftsOpen} onClick={() => setDraftsOpen(!draftsOpen)}>{CL.skillDraftsBadge(drafts)}</Button>}
+            <CentralSkillAuthorButton label={CL.skillAuthorWrite} {...(chat ? { chat } : {})} />
+          </div>
           {rows.length > 0 && (
             <div className="ccp-skill-toolbar">
               <Input type="search" value={query} aria-label={CL.skillsSearch} placeholder={CL.skillsSearch} autoComplete="off" onChange={(e) => setQuery(e.target.value)} />
@@ -92,22 +92,10 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
           {rows.length > 0 && shown.length === 0 && (
             <p className="ccp-skill-empty">{CL.skillsNoMatchFor(query.trim() || CL.skillsFilter[filter])} <Button type="button" size="xs" variant="link" onClick={clear}>{CL.skillsClear}</Button></p>
           )}
-          {SKILL_AUDIENCES.map((a) => {
-            const mine = shown.filter((r) => r.record.audience === a)
-            const detailOf = (r: SkillReviewRow) => (close: () => void) => <SkillDetail key={`${keyOf(r)}:${r.record.enabled}`} row={r} client={client} onClose={close} onChanged={list.reload} revise={reviseOf(r)} />
-            const badge = a === 'central' && drafts > 0 && (
-              <Button type="button" size="sm" variant="ghost" aria-expanded={draftsOpen} onClick={() => setDraftsOpen(!draftsOpen)}>{CL.skillDraftsBadge(drafts)}</Button>
-            )
-            return (
-              <SkillSection key={a} title={CL.skillSectionHeading[a]} count={mine.length} purpose={CL.skillSectionPurpose[a]} actions={<>{badge}{writeButton(a)}</>}>
-                {a === 'central' && drafts > 0 && draftsOpen && <CentralDraftsPanel list={list} client={client} />}
-                {rows.length > 0 && mine.length === 0 && rows.every((r) => r.record.audience !== a) && <p className="ccp-skill-empty">{CL.skillSectionEmpty[a]}</p>}
-                <ul aria-label={CL.skillSectionHeading[a]} className="ccp-skill-list">
-                  {mine.map((r) => <SkillRow key={keyOf(r)} row={r} client={client} open={keyOf(r) === selected} onToggle={() => setSelected(keyOf(r) === selected ? null : keyOf(r))} onChanged={list.reload} detail={detailOf(r)} />)}
-                </ul>
-              </SkillSection>
-            )
-          })}
+          {drafts > 0 && draftsOpen && <CentralDraftsPanel list={list} client={client} />}
+          <ul aria-label={CL.skillsLibraryHeading} className="ccp-skill-list">
+            {shown.map((r) => <SkillRow key={keyOf(r)} row={r} client={client} open={keyOf(r) === selected} onToggle={() => setSelected(keyOf(r) === selected ? null : keyOf(r))} onChanged={list.reload} detail={detailOf(r)} />)}
+          </ul>
           {rest.length > 0 && (
             <section className="ccp-skill-review" aria-labelledby="ccp-skills-review-h">
               <h4 id="ccp-skills-review-h">{CL.skillsReviewHeading}</h4>

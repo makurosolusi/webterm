@@ -11,13 +11,12 @@ import SkillPalette from './SkillPalette'
 import { SKILL_DRAG_MIME } from './skillPalette.drag'
 import { SKILL_NOTICE_KEY } from './skillPalette.notice'
 
-const h = vi.hoisted(() => ({ request: vi.fn(), showNotice: vi.fn(), openCentralTab: vi.fn() }))
+const h = vi.hoisted(() => ({ request: vi.fn(), showNotice: vi.fn() }))
 vi.mock('./inboxTransport', async (orig) => ({ ...(await orig<object>()), request: h.request }))
 vi.mock('./workspaceSave.notice', () => ({ showNotice: h.showNotice, closeNotice: vi.fn() }))
-vi.mock('./secondarySideBar.store', async (orig) => ({ ...(await orig<object>()), openCentralTab: h.openCentralTab }))
 
 const row = (name: string, over: Record<string, unknown> = {}, record: Record<string, unknown> = {}) => ({
-  record: { name, version: '3', status: 'active', audience: 'canvas', enabled: true, ...record }, description: `About ${name}`, ...over,
+  record: { name, version: '3', status: 'active', audience: 'canvas', origin: 'human', enabled: true, ...record }, description: `About ${name}`, ...over,
 })
 const LIBRARY = [
   row('webterm-release', {}, { title: 'Release notes' }),
@@ -127,12 +126,12 @@ describe('states', () => {
     expect(screen.getByRole('status').textContent).toBe('Loading skills…')
   })
 
-  it('empty library: message and a button to the Skills tab', async () => {
+  it('empty library (a draft is not a skill): message and Write with an agent instead of the old Skills tab button', async () => {
     h.request.mockResolvedValue([row('draft-skill', {}, { status: 'proposed' })])
     mount()
     expect(await screen.findByText('No canvas skills yet')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Skills tab' }))
-    expect(h.openCentralTab).toHaveBeenCalledWith('skills')
+    expect(screen.queryByRole('button', { name: 'Open Skills tab' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Write with an agent' }).length).toBeGreaterThan(0)
   })
 
   it('error shows an alert and Retry loads again', async () => {

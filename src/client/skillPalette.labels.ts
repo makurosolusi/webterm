@@ -1,4 +1,4 @@
-// User-facing text of the canvas skill palette (side bar view) and of the notices every skill add reports (English, like every product string).
+// User-facing text of the canvas Skills panel (side bar view) and of the notices every skill add reports (English, like every product string).
 export const SP = {
   title: 'Skills',
   search: 'Search skills',
@@ -9,7 +9,10 @@ export const SP = {
   off: 'Central skills are off, so there is no skill list.',
   empty: 'No canvas skills yet',
   noMatch: 'No skill matches the search.',
-  openSkillsTab: 'Open Skills tab',
+  subtitle: 'For agents on the canvas',
+  centralPointer: 'Rules for Central itself are in Control > Skills.',
+  openCentralSkills: 'Open Central skills',
+  writeNoBoard: 'Open a workspace to write a skill.',
   add: 'Add to canvas',
   addAria: (title: string, attached: boolean) => `Add ${title} to canvas${attached ? ' (attached)' : ''}`,
   dragHint: 'Drag a skill onto the canvas, or onto an agent to attach it. Enter adds the focused skill.',

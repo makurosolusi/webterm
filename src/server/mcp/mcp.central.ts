@@ -83,13 +83,15 @@ export function listCentralTools(c: Pick<CentralMcpDeps, 'registry' | 'env'> & {
   }))
 }
 
-/** Why a skill-author proposal is refused (no explicit kind, or another skill than the one this chat edits); null when fine. A kind change of an existing skill is refused by the store (`audience_immutable`). */
+/** Why a skill-author proposal is refused (no explicit kind, a non-central kind, or another skill than the one this chat edits); null when fine. A kind change of an existing skill is refused by the store (`audience_immutable`). */
 function skillAuthorViolation(db: Database, args: Record<string, unknown>, target: string | null): string | null {
   // A built-in target is a read-only reference (the "variant" flow): the proposal must be a NEW skill under another name.
   const builtin = target !== null && getRow(db, "SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'central_skill'") !== null
     && getRow(db, "SELECT 1 AS n FROM central_skill WHERE name = ? AND origin = 'builtin'", target) !== null
   if (target !== null && (builtin ? args.name === target : args.name !== target)) return 'skill_not_target'
   if (!isSkillAudience(args.audience)) return 'audience_required'
+  // Central's author writes Central skills only; canvas skills are written from the Skills panel on the canvas.
+  if (args.audience !== 'central') return 'audience_not_allowed_in_mode'
   return null
 }
 
@@ -150,10 +152,10 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
     const notPublic = authorWebReadViolation(args)
     if (notPublic) return receipt('denied', notPublic, null, 'only public http(s) pages can be read; ask the human to paste the text instead')
   }
-  // The model picks the kind explicitly (central or canvas) from the human's answer; a missing or unknown kind is refused here, after the redaction above (the other-tool denial is earlier).
+  // The kind is explicit and must be central in this mode; a missing, unknown or canvas kind is refused here, after the redaction above (the other-tool denial is earlier).
   if (role.mode && tool === 'skill.propose') {
     const denied = skillAuthorViolation(c.db, args, role.skillTarget)
-    if (denied) return receipt('denied', denied, null, 'propose with an explicit audience (central or canvas)' + (role.skillTarget ? ` and only the skill named ${role.skillTarget} (for a built-in reference: a new name)` : ''))
+    if (denied) return receipt('denied', denied, null, denied === 'audience_not_allowed_in_mode' ? 'canvas skills are written from the Skills panel on the canvas' : 'propose with audience central' + (role.skillTarget ? ` and only the skill named ${role.skillTarget} (for a built-in reference: a new name)` : ''))
   }
   if (OWN_APPROVAL_TOOLS.has(tool)) return (await exec(c, conversationId, tool, args, true)).receipt
 
