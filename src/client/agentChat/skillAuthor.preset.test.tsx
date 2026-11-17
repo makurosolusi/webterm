@@ -23,6 +23,11 @@ describe('skill-author instruction', () => {
     expect(text).toMatch(/waiting for approval in the Skills tab/)
     expect(text).toMatch(/NEVER say or imply the skill is active/)
   })
+  it('teaches the exact accepted command shapes, including the quoted heredoc', () => {
+    expect(text).toContain("--body-file - <<'EOF'")
+    expect(text).toMatch(/webterm skills list`, `webterm skills get <name>`/)
+    expect(skillAuthorInstruction('webterm-x')).toContain("webterm skills edit webterm-x --body-file - <<'EOF'")
+  })
   it('states the lint limits', () => {
     expect(text).toMatch(/No shell commands, URLs, file paths or secrets/)
     expect(text).toMatch(/4000 characters/)
