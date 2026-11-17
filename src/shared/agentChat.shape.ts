@@ -21,10 +21,8 @@ export interface AgentChatData {
   permissionMode?: AgentPermissionMode
   chatConfig?: AgentChatNodeConfig
   preset?: AgentChatPreset
-  /** Preset data: the full skill name a skill-author chat edits (none = a new skill). */
+  /** Preset data: the full skill name a skill-author chat edits (none = a new skill). The role prompt is built server-side. */
   presetTarget?: string
-  /** The preset's first message was sent (never sent twice). */
-  presetPrimed?: boolean
 }
 
 /** Chars of a stored model id (the server refuses longer ones too). */
@@ -53,5 +51,5 @@ export function validAgentChatData(v: unknown): AgentChatData | undefined {
   const chatConfig = validChatConfig(p['chatConfig'])
   const preset = isAgentChatPreset(p['preset']) ? { preset: p['preset'] } : {}
   const target = typeof p['presetTarget'] === 'string' && p['presetTarget'] !== '' ? { presetTarget: p['presetTarget'] } : {}
-  return { agentId: 'claude', ...text('claudeProfileId'), ...text('chatSessionId'), ...mode, ...(chatConfig ? { chatConfig } : {}), ...preset, ...target, ...(p['presetPrimed'] === true ? { presetPrimed: true } : {}) }
+  return { agentId: 'claude', ...text('claudeProfileId'), ...text('chatSessionId'), ...mode, ...(chatConfig ? { chatConfig } : {}), ...preset, ...target }
 }

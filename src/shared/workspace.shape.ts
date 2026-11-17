@@ -144,7 +144,6 @@ export interface WsNode {
   chatConfig?: AgentChatNodeConfig // node 'agentChat': model / effort / thinking picked in the footer (validChatConfig)
   preset?: AgentChatPreset // node 'agentChat': born as a preset (skill-author); absent = plain chat
   presetTarget?: string   // node 'agentChat': skill name a skill-author chat edits
-  presetPrimed?: boolean  // node 'agentChat': the preset's first message was sent
 }
 
 export interface Workspace {

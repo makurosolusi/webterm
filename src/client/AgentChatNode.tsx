@@ -22,7 +22,7 @@ const DEFAULT_H = 400
 
 /** Canvas shell of an Agent Chat node: chrome, cable handles and resizer around the chat body. */
 function AgentChatNode({ id, data, selected, height }: NodeProps) {
-  const d = data as { color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] } & Pick<AgentChatData, 'chatSessionId' | 'permissionMode' | 'chatConfig' | 'preset' | 'presetTarget' | 'presetPrimed'> & { cwd?: string }
+  const d = data as { color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] } & Pick<AgentChatData, 'chatSessionId' | 'permissionMode' | 'chatConfig' | 'preset'> & { cwd?: string }
   const rf = useReactFlow()
   const onNodeData = useCallback((patch: AgentChatPatch) => rf.updateNodeData(id, patch), [rf, id])
   const collapsed = d.collapsed ?? false
@@ -66,7 +66,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
         />
         <div className="node-body">
           <Suspense fallback={<LazyPaneFallback />}>
-            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} preset={d.preset} presetTarget={d.presetTarget} presetPrimed={d.presetPrimed} onNodeData={onNodeData} onBusy={setBusy} headerHost={headerHost} />
+            <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} preset={d.preset} onNodeData={onNodeData} onBusy={setBusy} headerHost={headerHost} />
           </Suspense>
         </div>
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}

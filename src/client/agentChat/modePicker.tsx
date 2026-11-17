@@ -25,7 +25,7 @@ const MODE_ICON: Record<AgentPermissionMode, string> = { manual: 'shield', accep
 const MODES = Object.keys(MODE_LABEL) as AgentPermissionMode[]
 
 /** Mode chip: shows the requested mode while the change is pending, the error with Retry if it fails. */
-export function ModePicker({ mode, onChange, disabled }: ModePickerProps) {
+export function ModePicker({ mode, onChange, disabled, lockedReason }: ModePickerProps) {
   const [pending, setPending] = useState<AgentPermissionMode>()
   const [failed, setFailed] = useState<{ mode: AgentPermissionMode; error: string }>()
   const change = async (m: AgentPermissionMode): Promise<void> => {
@@ -35,6 +35,18 @@ export function ModePicker({ mode, onChange, disabled }: ModePickerProps) {
   }
   // Feedback lives in the picker: the spinner (role=status) while pending, then this alert again on a new failure.
   const retry = (): void => { if (failed) void change(failed.mode) }
+  if (lockedReason) {
+    return (
+      <span className="act-picker acc-mode" data-mode="locked">
+        <IconTooltip label={lockedReason}>
+          <button type="button" className="act-trigger acc-mode__trigger" aria-disabled="true" aria-label={`Permission mode: Locked. ${lockedReason}`}>
+            <span className="codicon codicon-lock" aria-hidden="true" />
+            <span className="act-trigger__label">Locked</span>
+          </button>
+        </IconTooltip>
+      </span>
+    )
+  }
   const shown = pending ?? mode
   const off = disabled || pending !== undefined
   return (
