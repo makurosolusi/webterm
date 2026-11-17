@@ -1,0 +1,28 @@
+/* Skill node, its typed ports and its cable (SkillNode.tsx, SkillPort.tsx, SkillEdge.tsx).
+   The skill port is a DIAMOND (the context-link port is a dot), always faintly visible so the Skills
+   port of an agent can be found, like the typed sub-node ports of n8n's AI Agent. */
+.skill-node__body { padding: 6px 10px 8px; font-size: 12px; color: var(--vscode-descriptionForeground, var(--muted)); overflow: auto; }
+.skill-node__body p { margin: 0; }
+.skill-node__desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.skill-node__chips { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; }
+.skill-node__badge {
+  font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; white-space: nowrap;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--vscode-foreground, inherit);
+}
+.skill-node__badge--updated { cursor: pointer; background: color-mix(in srgb, var(--state-warning) 28%, transparent); }
+.skill-node__badge--off { background: color-mix(in srgb, var(--state-attention) 22%, transparent); }
+
+.react-flow__handle.skill-handle {
+  width: 12px; height: 12px; border: none; border-radius: 2px; background: var(--accent);
+  transform: translate(-50%, 50%) rotate(45deg); opacity: 0.45; cursor: pointer;
+}
+.react-flow__handle.skill-handle.react-flow__handle-top { transform: translate(-50%, -50%) rotate(45deg); }
+.react-flow__handle.skill-handle:hover,
+.react-flow__handle.skill-handle.connectingfrom,
+.react-flow__handle.skill-handle.connectingto { opacity: 1; box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); }
+/* Only a skill may land on a Skills port while one is being dragged: light it up, dim the rest. */
+.react-flow:has(.react-flow__connection) .react-flow__handle.skill-handle { opacity: 0.8; }
+.skill-port-label {
+  position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%); pointer-events: none;
+  font-size: 10px; line-height: 1; color: var(--vscode-descriptionForeground, var(--muted)); white-space: nowrap;
+}

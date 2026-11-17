@@ -23,6 +23,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   // Indirect reach: a spawned worker is a full Claude Code agent (not locked like Central) and can message sessions outside the canvas.
   ['reach a Claude session outside the canvas', ['task.create', 'agent.spawn']],
   ['open a node next to another and cable it (one call)', ['canvas.open']],
+  ['attach or detach a canvas skill on an agent (skill node cabled to its Skills port)', ['canvas.open', 'canvas.edit']],
   ['show the user something (fit, focus, zoom, pan; yields while they move the canvas)', ['canvas.camera']],
   ['switch the workspace the user sees (yields while they move the canvas)', ['workspace.switch']],
   ['undo your own canvas.close', ['canvas.reopen']],

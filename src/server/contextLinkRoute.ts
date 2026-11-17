@@ -23,6 +23,8 @@ import { readTranscriptFile, renderTranscriptLines } from './contextLinkTranscri
 export function linkedPeerIds(ws: Workspace, requesterId: string): Set<string> {
   const peerIds = new Set<string>()
   for (const b of ws.bridges) {
+    // A skill cable attaches a library skill (skillAttach.ts); the skill node is not a peer to read or a tool to drive.
+    if (b.kind === 'skill') continue
     if (b.source === requesterId) peerIds.add(b.target)
     else if (b.target === requesterId) peerIds.add(b.source)
   }

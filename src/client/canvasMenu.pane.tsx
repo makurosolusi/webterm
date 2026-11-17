@@ -16,6 +16,10 @@ import { CapabilityOffer } from './CapabilityOffer'
 import { resetBrowserStatusCache } from './browser.feature'
 import { VscodePopover } from './components/vscode/vscodePopover'
 import { buildCanvasMenuRows } from './canvasMenu.model'
+import { HandleMenuView } from './handleMenu.view'
+import { useSkillEntries } from './skillNode.entries'
+import type { SkillRef } from './skillNode.add'
+import { SN } from './skillNode.labels'
 import type { AgentId } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 
@@ -34,6 +38,8 @@ export interface CanvasPaneMenuDeps {
   /** Agent Chat node at the click point; absent = no menu row. */
   onAddAgentChat?: (at?: XYPosition) => void
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
+  /** Skill node (by reference) at the click point; absent = no "Skill…" row. */
+  onAddSkill?: (skill: SkillRef, at: XYPosition) => void
   onFit: () => void
   onSelectAll: () => void
 }
@@ -56,6 +62,8 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
   const [open, setOpen] = useState<{ x: number; y: number; at: XYPosition } | null>(null)
   // Tawaran menyalakan browser menggantikan isi menu (panel yang sama, titik yang sama).
   const [offering, setOffering] = useState(false)
+  // "Skill…" swaps the menu for the searchable skill list at the same point (loaded only while it is open).
+  const [picking, setPicking] = useState(false)
   // Titik node browser yang menunggu `onAddBrowser` terbit setelah kemampuan menyala.
   const pendingAt = useRef<{ at: XYPosition } | null>(null)
   // Dinyalakan oleh klik baris: menu menutup dirinya sesudah onSelect, tapi panelnya harus tetap hidup.
@@ -75,6 +83,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
       e.preventDefault()
       pendingAt.current = null
       setOffering(false)
+      setPicking(false)
       const screen = { x: e.clientX, y: e.clientY }
       // Koordinat flow dihitung SEKARANG, bukan saat item dipilih: pengguna masih bisa men-pan di
       // antara keduanya, dan node harus lahir di titik yang ia klik. Tanpa instance (sebelum
@@ -87,7 +96,15 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
   const close = useCallback(() => {
     if (keepOpen.current) return
     setOffering(false)
+    setPicking(false)
     setOpen(null)
+  }, [])
+
+  const skillEntries = useSkillEntries(picking, deps.onAddSkill)
+  const pickSkill = useCallback(() => {
+    keepOpen.current = true
+    queueMicrotask(() => { keepOpen.current = false }) // the menu closes itself right after onSelect
+    setPicking(true)
   }, [])
 
   const offerBrowser = useCallback(() => {
@@ -111,7 +128,14 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
     </VscodePopover>
   ) : null
 
-  const menuRows = open && !offering ? (
+  const picker = open && picking && anchor ? (
+    <HandleMenuView
+      point={{ x: open.x, y: open.y }} side="source" entries={skillEntries} title={SN.pickerTitle} placeholder={SN.pickerSearch} listLabel={SN.pickerGroup}
+      onPick={(entry) => { entry.spawn(open.at); setPicking(false); setOpen(null) }} onClose={close}
+    />
+  ) : null
+
+  const menuRows = open && !offering && !picking ? (
     <CanvasContextMenu
       x={open.x}
       y={open.y}
@@ -126,6 +150,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
           addDiff: deps.onAddDiff && (() => deps.onAddDiff?.(open.at)),
           addAgentChat: deps.onAddAgentChat && (() => deps.onAddAgentChat?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
+          addSkill: deps.onAddSkill && pickSkill,
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,
         },
@@ -139,5 +164,5 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
     />
   ) : null
 
-  return { onPaneContextMenu, menu: menu ?? menuRows }
+  return { onPaneContextMenu, menu: menu ?? picker ?? menuRows }
 }

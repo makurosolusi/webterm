@@ -47,7 +47,7 @@ describe('nodeRowLabel per kind (untitled)', () => {
   // Every kind, untitled and without a path: its own label, never another kind's ("Terminal").
   const EXPECTED: Record<WsNode['kind'], string> = {
     terminal: 'Terminal', agent: 'Agent', agentChat: 'Agent Chat', files: 'Files', editor: 'Editor',
-    browser: 'Browser', diff: 'Changes', plan: 'Plan', app: 'App',
+    browser: 'Browser', diff: 'Changes', plan: 'Plan', app: 'App', skill: 'Skill',
   }
   it('covers every kind', () => {
     expect(Object.keys(EXPECTED).sort()).toEqual(Object.keys(NODE_KIND_LABEL).sort())

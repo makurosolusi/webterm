@@ -4,6 +4,7 @@ import { Handle, Position, useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import NodeChrome, { termNodeClass } from './NodeChrome'
+import { SkillsInPort } from './SkillPort'
 import { randomId } from './randomId'
 import { AGENT_CHAT_TITLE } from './agentChat.add'
 import { agentConfig, FALLBACK_AGENT_COLOR } from '../shared/workspace'
@@ -73,6 +74,7 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
         <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
         <Handle id="link-in" type="target" position={Position.Left} className="bridge-handle" />
       </div>
+      <SkillsInPort />
     </>
   )
 }

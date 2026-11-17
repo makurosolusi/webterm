@@ -16,6 +16,7 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   diff: 'Changes',
   plan: 'Plan',
   app: 'App',
+  skill: 'Skill',
 }
 
 /** Codicon per kind, shared by the node tab strip and tab mode: shape tells kinds apart
@@ -30,6 +31,7 @@ export const KIND_ICON: Record<WsNodeKind, string> = {
   diff: 'git-compare',
   plan: 'type-hierarchy',
   app: 'window',
+  skill: 'book',
 }
 
 /** Nama node seperti yang dilihat pengguna di chrome-nya. Tiap kind memakai rantai fallback milik
@@ -39,6 +41,7 @@ export function nodeRowLabel(n: WsNode): string {
   const title = isAutoName(n.title) ? undefined : n.title?.trim()
   if (title) return title
   if (n.kind === 'files') return n.dirPath ? folderTitle(n.dirPath) : NODE_KIND_LABEL.files
+  if (n.kind === 'skill') return n.skill || NODE_KIND_LABEL.skill
   if (n.kind === 'editor') return n.filePath ? fileBaseName(n.filePath) : NODE_KIND_LABEL.editor
   // Only sessions are named by `sessionTitle` (its fallback is "Terminal"); the rest by their kind.
   return SESSION_KINDS.includes(n.kind) ? sessionTitle(n) : NODE_KIND_LABEL[n.kind]

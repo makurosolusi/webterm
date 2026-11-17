@@ -16,9 +16,9 @@ const TOOLS_PATH = '/api/tools'
 
 export const SKILL_CAPABILITIES: readonly CapabilitySpec[] = [
   defineCapability({
-    name: SKILL_LIST_CAPABILITY, summary: 'List skills made for canvas agents (audience canvas) + your drafts; `name` adds the body.',
+    name: SKILL_LIST_CAPABILITY, summary: 'List canvas skills attached to your node (cabled skill nodes) + your drafts; `name` adds an attached body.',
     tier: 'R0', scope: 'global', idempotent: true, projections: ['control-http'], route: { method: 'POST', path: `${TOOLS_PATH}/${SKILL_LIST_CAPABILITY}` },
-    input: obj({ name: S.str(undefined, { description: 'Optional: return the body of this ACTIVE canvas skill too.' }) }),
+    input: obj({ name: S.str(undefined, { description: 'Optional: return the body of this ATTACHED, active canvas skill too (404 not_attached otherwise).' }) }),
     output: S.keys('items'),
   }),
   defineCapability({

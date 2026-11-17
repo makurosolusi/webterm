@@ -7,12 +7,20 @@ import { canLink, DIFF_KIND } from './floatingEdge'
 import type { LinkEnd } from './floatingEdge'
 import { BROWSER_KIND } from '../shared/browser.contract'
 import type { AgentId } from '../shared/workspace'
+import { SKILL_KIND, SKILL_OUT, SKILLS_IN } from '../shared/skillPorts'
+import type { SkillRef } from './skillNode.add'
 
 /** source = the right handle (spawns a target); target = the left handle (spawns a source). */
 export type HandleSide = 'source' | 'target'
 
+/** Which port was clicked: the context-link dot (default) or the typed skill diamond (`skill-out` / `skills-in`). */
+export type HandlePort = 'link' | 'skill'
+
 /** The node the handle belongs to. */
-export interface HandleOrigin extends LinkEnd { side: HandleSide }
+export interface HandleOrigin extends LinkEnd { side: HandleSide; port?: HandlePort }
+
+/** A skill port whose menu is the skill list (an agent's Skills input), not the node spawner. */
+export const offersSkills = (o: HandleOrigin): boolean => o.port === 'skill' && o.kind !== SKILL_KIND
 
 /** Spawners the board offers; `at` is the FLOW point the new node is centred on. */
 export interface HandleSpawners {
@@ -24,6 +32,8 @@ export interface HandleSpawners {
   addDiff?: (at: XYPosition) => void
   /** Absent = Claude disabled in settings. */
   addAgentChat?: (at: XYPosition) => void
+  /** Places a skill node centred on `at`; the cable to the clicked Skills port follows. Absent = no board. */
+  addSkill?: (skill: SkillRef, at: XYPosition) => void
   /** Same entry as a user-drawn cable (canLink + dedupe + save). */
   link: (c: Connection) => void
 }
@@ -78,6 +88,7 @@ function paneItems(s: HandleSpawners, ctx: CanvasMenuContext, at: XYPosition): C
  * Features that are off stay listed, disabled, with a visible reason.
  */
 export function buildHandleEntries(s: HandleSpawners, ctx: CanvasMenuContext, from: HandleOrigin): HandleEntry[] {
+  if (offersSkills(from)) return [] // the Skills input lists library skills (useSkillEntries), not node kinds
   const off: Record<string, boolean> = { browser: !s.addBrowser, diff: !s.addDiff, agentChat: !s.addAgentChat }
   const origin: LinkEnd = { id: 'origin', kind: from.kind, agentId: from.agentId }
   return paneItems(s, ctx, { x: 0, y: 0 }).flatMap((item) => {
@@ -116,8 +127,25 @@ export function spawnCenter(origin: Rect, size: { width: number; height: number 
   return { x: x + size.width / 2, y: y + size.height / 2 }
 }
 
+/**
+ * Like `spawnCenter` for the typed skill ports, which sit on the top (skill output) and bottom (agent Skills input):
+ * the new node goes BELOW an agent (`below`) or ABOVE a skill (`above`), left-aligned, pushed right past any node it would cover.
+ */
+export function spawnCenterVertical(origin: Rect, size: { width: number; height: number }, dir: 'above' | 'below', others: readonly Rect[]): XYPosition {
+  const y = dir === 'below' ? origin.y + origin.height + SPAWN_GAP : origin.y - SPAWN_GAP - size.height
+  let x = origin.x
+  for (let i = 0; i <= others.length; i++) {
+    const hit = others.find((o) => overlaps({ x, y, ...size }, o))
+    if (!hit) break
+    x = hit.x + hit.width + SPAWN_GAP / 2
+  }
+  return { x: x + size.width / 2, y: y + size.height / 2 }
+}
+
 /** The cable for a spawn: a source handle cables origin -> new, a target handle new -> origin. */
-export function cableFor(originId: string, newId: string, side: HandleSide): Connection {
+export function cableFor(originId: string, newId: string, side: HandleSide, port: HandlePort = 'link'): Connection {
   const [source, target] = side === 'source' ? [originId, newId] : [newId, originId]
-  return { source, target, sourceHandle: 'link-out', targetHandle: 'link-in' }
+  return port === 'skill'
+    ? { source, target, sourceHandle: SKILL_OUT, targetHandle: SKILLS_IN }
+    : { source, target, sourceHandle: 'link-out', targetHandle: 'link-in' }
 }

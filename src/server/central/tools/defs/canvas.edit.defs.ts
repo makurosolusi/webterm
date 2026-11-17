@@ -37,8 +37,8 @@ const USAGE = '{"projectId":"<id>","ops":[<1-50 ops, applied in order; later ops
   + '{"op":"arrange","nodes":["<ref>",...]|"all","layout":"grid"|"row"|"column"} (from the top-left of those nodes); '
   + `{"op":"set","node":"<ref>","title":"<=${MAX_TITLE} chars"|null,"color":${NODE_COLORS.map((c) => `"${c}"`).join('|')}|null,"collapsed":<bool>,"hideLinks":<bool>} `
   + '(null clears; collapsed: terminal/Claude/files/browser/chat nodes; hideLinks: Claude agent nodes); '
-  + '{"op":"link","from":"<ref>","to":"<ref>"} (a cable as the user draws it; an existing one is kept); '
-  + '{"op":"unlink","from":"<ref>","to":"<ref>"} or {"op":"unlink","cable":"<cable id>"}. '
+  + '{"op":"link","from":"<ref>","to":"<ref>"} (a cable as the user draws it; an existing one is kept; a skill node + a Claude or Agent Chat node ATTACHES that skill to the agent, max 8, in either order); '
+  + '{"op":"unlink","from":"<ref>","to":"<ref>"} or {"op":"unlink","cable":"<cable id>"} (unlinking a skill cable DETACHES the skill at once). '
   + 'All-or-nothing: one unknown ref or refused op changes nothing.'
 
 /** Builds canvas.edit bound to `deps.canvas`. */

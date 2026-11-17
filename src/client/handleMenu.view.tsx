@@ -17,10 +17,14 @@ export interface HandleMenuViewProps {
   entries: HandleEntry[]
   onPick: (entry: HandleEntry) => void
   onClose: () => void
+  /** Dialog / search / list labels; default to the node spawner's. The skill list says "Add skill" instead. */
+  title?: string
+  placeholder?: string
+  listLabel?: string
 }
 
 /** Anchored spawn menu: "Nodes" section; the right handle opens it to the right, the left handle to the left. */
-export function HandleMenuView({ point, side, entries, onPick, onClose }: HandleMenuViewProps) {
+export function HandleMenuView({ point, side, entries, onPick, onClose, title = 'Add connected node', placeholder = 'Search nodes', listLabel = 'Nodes' }: HandleMenuViewProps) {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
   const listId = useId()
@@ -76,13 +80,13 @@ export function HandleMenuView({ point, side, entries, onPick, onClose }: Handle
   })
 
   return (
-    <VscodePopover anchor={anchor} open onOpenChange={(o) => { if (!o) onClose() }} placement={side === 'source' ? 'right' : 'left'} ariaLabel="Add connected node" className="handle-menu">
+    <VscodePopover anchor={anchor} open onOpenChange={(o) => { if (!o) onClose() }} placement={side === 'source' ? 'right' : 'left'} ariaLabel={title} className="handle-menu">
       <input
         role="combobox"
         type="text"
         value={query}
-        placeholder="Search nodes"
-        aria-label="Search nodes"
+        placeholder={placeholder}
+        aria-label={placeholder}
         aria-expanded="true"
         aria-controls={listId}
         aria-autocomplete="list"
@@ -91,7 +95,7 @@ export function HandleMenuView({ point, side, entries, onPick, onClose }: Handle
         onChange={(e) => { setQuery(e.target.value) }}
         onKeyDown={onKeyDown}
       />
-      <div id={listId} role="listbox" aria-label="Nodes" className="vscode-quick-pick__list">
+      <div id={listId} role="listbox" aria-label={listLabel} className="vscode-quick-pick__list">
         {shown.length > 0 ? rows : <div role="presentation" className="vscode-quick-pick__empty">{HANDLE_MENU_EMPTY}</div>}
       </div>
     </VscodePopover>

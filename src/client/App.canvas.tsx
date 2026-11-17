@@ -2,6 +2,8 @@ import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
 import { useMemo, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import ContextEdge from './ContextEdge'
+import SkillEdge from './SkillEdge'
+import { isValidConnection } from './floatingEdge'
 import { connectionLineStyle, withTouchedAccent } from './canvasStyle'
 import './canvas-ui.css'
 import { nodeTypes } from './nodeTypes'
@@ -24,7 +26,7 @@ import { useCentralAct } from './centralAct.store'
 import { useHandleMenu } from './handleMenu.hook'
 import CentralActMount, { markTouched } from './centralAct.layer'
 
-const edgeTypes = { context: ContextEdge }
+const edgeTypes = { context: ContextEdge, skill: SkillEdge }
 
 interface CanvasProps {
   rf: RefObject<ReactFlowInstance | null>
@@ -96,6 +98,8 @@ export default function BoardCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      // Typed ports: a skill output only lands on a Skills port and nothing else does (floatingEdge `isValidConnection`).
+      isValidConnection={(c) => isValidConnection(boardNodes, c)}
       connectOnClick={false}
       onConnectStart={handleMenu.onConnectStart}
       onConnectEnd={handleMenu.onConnectEnd}

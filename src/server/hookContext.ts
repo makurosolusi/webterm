@@ -9,6 +9,7 @@
 // Pembacaan isi tetap milik skill yang pull-based — jalur itu tidak disentuh di sini.
 import { SKILL_NAME, type LinkDoc, type LinkDocEntry } from './contextLink'
 import { forgetBrowserNotice } from './linkAwareness'
+import { forgetSkillNotice } from './skillAwareness'
 import { forgetAwareness } from './webtermAwareness'
 import { forgetAwarenessCard } from './awareness/awarenessHook'
 
@@ -177,6 +178,7 @@ export function markHookContextAnnounced(nodeId: string, doc: LinkDoc): void {
 export function forgetHookContext(nodeId: string): void {
   lastSignatures.delete(nodeId)
   forgetBrowserNotice(nodeId)
+  forgetSkillNotice(nodeId)
   forgetAwareness(nodeId)
   forgetAwarenessCard(nodeId)
 }

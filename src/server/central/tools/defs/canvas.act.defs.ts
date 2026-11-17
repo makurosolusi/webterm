@@ -24,6 +24,8 @@ import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
 import { containsForbidden } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
 import { canLink, nodeRefResolver } from './canvas.edit.ops'
+import type { SkillLookup } from '../../../skillAttach'
+import { resolveSkill, skillCapReached, skillCables, skillInputOk, skillNode, type SkillRef } from './canvas.open.skill'
 import { clip, isSafeId, MAX_ID, READ_TOOLS_FLAG } from './read.shared'
 
 /** The two CanvasPush writes these tools use (tests pass a fake). */
@@ -35,6 +37,8 @@ export interface CanvasActDeps {
   browserOn(): boolean
   /** webterm.db handle: Central's own closes are remembered there so canvas.reopen can undo exactly those. Absent = not remembered. */
   history?(): HistoryDb | Promise<HistoryDb>
+  /** Live skill library, for kind `skill` (null / absent = Central skills are off). */
+  skills?(): SkillLookup | null | Promise<SkillLookup | null>
 }
 
 const log = createLogger('central')
@@ -44,7 +48,7 @@ const MAX_OPEN = 5
 const MAX_TITLE = 80
 const MAX_REASON = 200
 const MAX_PATH = 1024
-const KINDS = ['terminal', 'claude', 'chat', 'browser', 'files', 'editor', 'diff'] as const
+const KINDS = ['terminal', 'claude', 'chat', 'browser', 'files', 'editor', 'diff', 'skill'] as const
 type Kind = (typeof KINDS)[number]
 /** Kinds that open in the project directory, so they need the workspace cwd. */
 const DIR_KINDS: readonly Kind[] = ['files', 'editor', 'diff']
@@ -67,8 +71,9 @@ function closeShape(input: ToolInput): boolean {
 }
 
 function openShape(input: ToolInput): boolean {
-  const { kind, count, title, url, path, connectTo, direction } = input
-  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path', 'connectTo', 'direction'])) return false
+  const { kind, count, title, url, path, connectTo, direction, skill } = input
+  if (!onlyKeys(input, ['projectId', 'kind', 'count', 'title', 'url', 'path', 'connectTo', 'direction', 'skill'])) return false
+  if (!skillInputOk(kind, skill)) return false
   if (connectTo !== undefined && !isNodeRef(connectTo)) return false
   if (direction !== undefined && (connectTo === undefined || (direction !== 'from' && direction !== 'to'))) return false
   if (!KINDS.includes(kind as Kind)) return false
@@ -116,8 +121,9 @@ export function liveAgentNodes(db: Database, projectId: string, ids: string[]): 
 
 /** The node the client builds (App.board.ts terminal/agent/files/diff, agentChat.add.ts chat, useBrowserOpen.ts, Omnibox.open.ts
  *  editor); x/y are placed by CanvasPush. `path` is the resolved dir (files) or file (editor). */
-function buildNode(kind: Kind, cwd: string | undefined, title: string | undefined, url: string | undefined, path: string | undefined): CanvasNode {
+function buildNode(kind: Kind, cwd: string | undefined, title: string | undefined, url: string | undefined, path: string | undefined, skill?: SkillRef): CanvasNode {
   const base = { id: randomUUID(), x: 0, y: 0, ...(title ? { title } : {}) }
+  if (kind === 'skill') return skillNode(base, skill!)
   if (kind === 'browser') return { ...base, kind: 'browser', ...BROWSER_SIZE, ...(url ? { url } : {}) }
   if (kind === 'files') return { ...base, kind: 'files', dirPath: path ?? cwd }
   if (kind === 'editor') return { ...base, kind: 'editor', title: title ?? basename(path!), filePath: path, ...EDITOR_SIZE }
@@ -185,18 +191,18 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
 
   const open: ToolDef = {
     name: 'canvas.open',
-    summary: 'Open terminal, Claude, Agent Chat, browser, files, file editor or git diff nodes on a project canvas.',
+    summary: 'Open terminal, Claude, Agent Chat, browser, files, file editor, git diff or canvas skill nodes on a project canvas.',
     tier: 'R1',
     flag: READ_TOOLS_FLAG,
-    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"chat"|"browser"|"files"|"editor"|"diff","count":<1-5, default 1; terminal/claude/chat only>,'
+    usage: '{"projectId":"<id>","kind":"terminal"|"claude"|"chat"|"browser"|"files"|"editor"|"diff"|"skill","skill":"<webterm-… name of an ACTIVE canvas skill; kind skill only, required>","count":<1-5, default 1; terminal/claude/chat only>,'
       + '"title":"<optional, <=80 chars>","url":"<optional http(s) URL; browser only>","path":"<files: optional folder, default the '
       + 'project directory; editor: required file>"}. path is relative to the project directory (absolute also works) and must stay inside it. '
-      + 'chat is an Agent Chat node (Claude without a terminal). An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. Nodes open in free space in the '
+      + 'chat is an Agent Chat node (Claude without a terminal). An editor for a file already open is reused, not doubled. diff shows the project\'s git changes. skill places a skill node (a reference to that library skill, not a copy); with connectTo set to a Claude or Agent Chat node it is ATTACHED to that agent (at most 8 per agent), and only the user and you can attach or detach (canvas.edit unlink). Nodes open in free space in the '
       + 'project directory. A browser url passes the same navigation guard as the user; a blocked one leaves the page blank. '
       + 'Optional "connectTo":"<node id or name>" cables each opened node to that existing node in the same call (a cable as the user draws it, '
       + 'placed beside it): "direction":"to" (default) runs the cable from connectTo to the new node, "from" the other way. Only kinds a cable may join '
       + '(see canvas.edit link) work; otherwise nothing is opened (link_not_allowed), an unknown ref is node_not_found.',
-    input: obj({ kind: S.oneOf(...KINDS), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH), connectTo: S.str(MAX_ID), direction: S.oneOf('from', 'to') }, ['kind']),
+    input: obj({ kind: S.oneOf(...KINDS), skill: S.str(64), count: S.int(1, MAX_OPEN), title: S.str(MAX_TITLE), url: S.str(), path: S.str(MAX_PATH), connectTo: S.str(MAX_ID), direction: S.oneOf('from', 'to') }, ['kind']),
     output: S.keys('opened', 'count', 'kind', 'ids'),
     auditKeys: ['count', 'kind', 'ids'],
     // `path` is a forbidden key for other tools but is this tool's own field, confined to the project
@@ -210,6 +216,13 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       }
       const found = projectWorkspace(ctx.db, projectId)
       if (!found.ok) return fail(found.code)
+      // A skill node references an active, switched-on canvas skill: checked before anything is placed.
+      let skill: SkillRef | undefined
+      if (kind === 'skill') {
+        const r = resolveSkill((await deps.skills?.()) ?? null, input.skill as string)
+        if (!r.ok) return fail(r.code, r.data)
+        skill = r.skill
+      }
       const parsed = input.url === undefined ? null : parseBrowserUrl(input.url)
       const url = parsed?.ok ? parsed.url : undefined
       const cwd = lookupWorkspace(found.workspaceId)?.cwd || undefined
@@ -226,13 +239,17 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       const target = typeof input.connectTo === 'string' ? board.find((n) => n.id === nodeRefResolver(board).resolve(input.connectTo as string)) : undefined
       if (input.connectTo !== undefined && !target) return fail('node_not_found', { unknown: [input.connectTo] })
       const same = kind === 'editor' ? (found.nodes as CanvasNode[]).find((n) => n.kind === 'editor' && n.filePath === path) : undefined
-      const nodes = same ? [] : Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url, path))
+      const nodes = same ? [] : Array.from({ length: (input.count as number | undefined) ?? 1 }, () => buildNode(kind, cwd, title, url, path, skill))
       // Validate the cable before touching the board, so a refused link leaves no orphan node.
       const bad = target && (same ? [same] : nodes).find((n) => !canLink(n, target))
-      if (bad) return fail('link_not_allowed', { kind, hint: 'This kind takes no cable to that node: a cable joins two Claude nodes, or an agent node with a browser, diff or plan node.' })
+      if (bad) return fail('link_not_allowed', { kind, hint: 'This kind takes no cable to that node: a cable joins two Claude nodes, or an agent node with a browser, diff or plan node; a skill node only attaches to a Claude agent or Agent Chat.' })
+      if (kind === 'skill' && target && skillCapReached((lookupWorkspace(found.workspaceId) as { bridges?: BridgeLink[] } | null)?.bridges ?? [], target.id)) {
+        return fail('skill_limit', { hint: 'That agent already has the most skills attached (8); detach one with canvas.edit unlink.' })
+      }
       if (same) return { ok: true, data: { opened: [{ id: same.id, name: same.name ?? null, kind: 'editor' }], count: 1, kind, ids: [same.id], alreadyOpen: true } }
       const toNew = input.direction !== 'from'
-      const bridges = target ? nodes.map((n) => {
+      // A skill cable always runs skill -> agent (`skill-out` into `skills-in`), whatever `direction` says.
+      const bridges = target && kind === 'skill' ? skillCables(nodes, target.id) : target ? nodes.map((n) => {
         const [source, to] = toNew ? [target.id, n.id] : [n.id, target.id]
         return { id: `bridge-${source}-${to}`, source, target: to, kind: 'context' as const }
       }) : undefined

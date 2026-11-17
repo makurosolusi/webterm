@@ -19,10 +19,15 @@ export const SKILLS_COMMAND = String.raw`skills_get() {
       resp=$(curl -sS -H "@$hdr" -H "$acc" -H 'content-type: application/json' --data-binary '{"name":"'"$name"'"}' -w '\n%{http_code}' "$API/skills.list") || exit 1
       code=$(printf '%s\n' "$resp" | tail -n 1)
       case "$code" in 2*) printf '%s\n' "$resp" | sed '$d'; exit 0 ;; esac
+      # Attachment is the user's wiring: say which wire is missing instead of calling the skill unknown.
+      case "$resp" in
+        *not_attached*) echo "$name is a canvas skill that is not attached to this node. The user attaches it by cabling its skill node to this node's Skills port." >&2; exit 2 ;;
+        *unavailable*) echo "$name is attached to this node but is switched off or gone from the library right now." >&2; exit 2 ;;
+      esac
     fi
     echo "Unknown skill: $name. Available:" >&2
     for g in "$SKILLS_DIR"/*.md; do [ -r "$g" ] && { g=$(basename "$g" .md); echo "  $g" >&2; }; done
-    echo "  (run: webterm skills list, for the approved canvas skills)" >&2
+    echo "  (run: webterm skills list, for the canvas skills attached to this node)" >&2
     exit 2
   fi
   if [ "$2" = --json ]; then

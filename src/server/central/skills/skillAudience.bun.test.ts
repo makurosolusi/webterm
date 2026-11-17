@@ -44,12 +44,15 @@ describe('visibility matrix', () => {
   it('agents see only active canvas skills (never central ones, built-ins included); Central index and load only central', async () => {
     await activate('webterm-m-central', 'central')
     await activate('webterm-m-canvas', 'canvas')
-    expect(names(agentSkillList(h, 'n1'))).toEqual(['webterm-m-canvas'])
-    expect(agentSkillList(h, 'n1', 'webterm-m-canvas').status).toBe(200)
-    for (const hidden of ['webterm-m-central', 'webterm-central-basics', 'webterm-approval-flow', 'webterm-project-status', 'webterm-skill-authoring']) {
-      expect([hidden, agentSkillList(h, 'n1', hidden).status]).toEqual([hidden, 404])
+    // Attachment is the cable (skillAttach.bun.test.ts); here every name is "attached" to prove a central one is unreachable even then.
+    const hiddenNames = ['webterm-m-central', 'webterm-central-basics', 'webterm-approval-flow', 'webterm-project-status', 'webterm-skill-authoring']
+    const attached = ['webterm-m-canvas', ...hiddenNames]
+    expect(names(agentSkillList(h, 'n1', undefined, attached))).toEqual(['webterm-m-canvas'])
+    expect(agentSkillList(h, 'n1', 'webterm-m-canvas', attached).status).toBe(200)
+    for (const hidden of hiddenNames) {
+      expect([hidden, agentSkillList(h, 'n1', hidden, attached).status]).toEqual([hidden, 404])
     }
-    const got = agentSkillList(h, 'n1', 'webterm-m-canvas').body as { skill: { audience: string; body: string } }
+    const got = agentSkillList(h, 'n1', 'webterm-m-canvas', attached).body as { skill: { audience: string; body: string } }
     expect(got.skill).toMatchObject({ audience: 'canvas' })
     expect(got.skill.body).toContain('Write five lines')
     const index = h.skills?.index().map((e) => e.name) ?? []
@@ -60,8 +63,8 @@ describe('visibility matrix', () => {
   it('a disabled canvas skill disappears from the agent list and get', async () => {
     await activate('webterm-m-off', 'canvas')
     await human('/api/central/skills/webterm-m-off/disable', {})
-    expect(names(agentSkillList(h, 'n1'))).toEqual([])
-    expect(agentSkillList(h, 'n1', 'webterm-m-off').status).toBe(404)
+    expect(names(agentSkillList(h, 'n1', undefined, ['webterm-m-off']))).toEqual([])
+    expect(agentSkillList(h, 'n1', 'webterm-m-off', ['webterm-m-off'])).toMatchObject({ status: 404, body: { error: 'unavailable' } })
   })
 })
 

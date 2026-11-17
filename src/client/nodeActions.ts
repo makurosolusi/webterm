@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
 import type { HandleSpawners } from './handleMenu.model'
+import type { AddSkillResult, SkillRef } from './skillNode.add'
 
 export type NodeActions = {
   /** Node mencetak session uuid-nya sendiri (atau restart) dan perlu dipersist ke node itu. */
@@ -14,6 +15,8 @@ export type NodeActions = {
   spawn?: HandleSpawners
   /** Opens a skill-author chat node (edit `target`, or a new skill) and returns its node id; absent = Claude disabled. */
   openSkillAuthor?: (target?: string) => string
+  /** Adds a skill node to the active board, cabled to the one selected Claude agent when there is exactly one; absent = no board provider. */
+  addSkillNode?: (skill: SkillRef) => AddSkillResult
 }
 
 /**

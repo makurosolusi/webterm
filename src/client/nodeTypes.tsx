@@ -9,6 +9,7 @@ import EditorNode from './EditorNode'
 import DiffNode from './DiffNode'
 import PlanNode from './PlanNode'
 import AgentChatNode from './AgentChatNode'
+import SkillNode from './SkillNode'
 import McpAppNode from './mcpapps/McpAppNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings, useSettingsUpdate } from './useSettings'
@@ -19,6 +20,8 @@ export const nodeTypes = {
   agent: withTabPortal(AgentNode),
   // Claude without a terminal, shown as a chat (AgentChatNode.tsx, PLAN/AGENT-CHAT.md).
   agentChat: withTabPortal(AgentChatNode),
+  // A canvas skill by reference, cabled to an agent's Skills port (SkillNode.tsx, docs/decisions/skill-canvas-nodes.md).
+  skill: withTabPortal(SkillNode),
   files: withTabPortal(FilesNode),
   browser: withTabPortal(BrowserNodeType),
   // Working-tree diff + review notes (DiffNode.tsx); cwd comes from node data or the wired agent.

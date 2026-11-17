@@ -75,7 +75,7 @@ const nodeDefs = (): ToolDef[] => [
     sessions: async () => (await import('../../sessions')).sessions,
     secrets: async () => (await import('../runtime/runtimeEvents')).brokerSecretValues(),
   }),
-  ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser'), history }),
+  ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser'), history, skills: async () => (await import('../ca2Active')).activeCa2()?.skills ?? null }),
   ...createCanvasReopenDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), history }),
   ...createCanvasViewDefs({ ui: viewUi }),
   ...createCanvasCameraDefs({ ui: viewUi, idleMs }),
