@@ -10,7 +10,7 @@ import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
 import { type SkillAction, closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
-import { type SkillManageAction, skillManage } from './ca2Routes.skillManage'
+import { type SkillManageAction, skillManage, skillToggleAudit } from './ca2Routes.skillManage'
 import { agentsView, memoryView, skillsView, statusView } from './ca2Routes.read'
 import { type BoardDeps, nodesView } from './ca2Routes.nodes'
 import { isMemoryPath, memoryDispatch } from './ca2Routes.memory'
@@ -34,7 +34,7 @@ const log = createLogger('central.ca2')
 
 /** Whether `path` belongs to the CA2 panel families (used to answer 405 instead of falling through). */
 export const isCa2Path = (path: string): boolean =>
-  ['/status', '/agents', '/nodes', '/skills', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path) || isWorkPath(path) || isGoalsPath(path) || isMemoryPath(path) || isCheckinPath(path) || isHealthPath(path) || isHealthAnalyzePath(path) || isTidyPath(path)
+  ['/status', '/agents', '/nodes', '/skills', '/skills/audit', '/memory', '/tools', '/control', '/halt'].some((p) => path === BASE + p) || AGENT_ACTION.test(path) || SKILL_ACTION.test(path) || isWorkPath(path) || isGoalsPath(path) || isMemoryPath(path) || isCheckinPath(path) || isHealthPath(path) || isHealthAnalyzePath(path) || isTidyPath(path)
 
 const notAllowed: RouteResult = { status: 405, body: { error: 'method_not_allowed' } }
 const decode = (s: string): string | null => { try { return decodeURIComponent(s) } catch { return null } }
@@ -55,7 +55,7 @@ export async function ca2Dispatch(
   const reads: Record<string, () => RouteResult | Promise<RouteResult>> = {
     '/nodes': () => nodesView(h, query, board),
     '/status': () => statusView(h), '/memory': () => memoryView(h, query),
-    '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query), '/tools': () => toolsView(h),
+    '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query), '/skills/audit': () => skillToggleAudit(h, query), '/tools': () => toolsView(h),
   }
   const read = reads[path.slice(BASE.length)]
   if (read) return method === 'GET' ? read() : notAllowed

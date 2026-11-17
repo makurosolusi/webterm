@@ -107,4 +107,12 @@ describe('skill tools and audience', () => {
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-for-canvas' })).code).toBe('not_found')
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-for-central' })).ok).toBe(true)
   })
+
+  it('skill.load refuses a skill the human switched off, and serves it again once switched on', async () => {
+    await activate({ name: 'webterm-switched', audience: 'central' })
+    expect(store.setEnabled('webterm-switched', false, 'human:root')).toMatchObject({ version: '1', from: true, to: false })
+    expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-switched' })).code).toBe('not_found')
+    store.setEnabled('webterm-switched', true, 'human:root')
+    expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-switched' })).ok).toBe(true)
+  })
 })
