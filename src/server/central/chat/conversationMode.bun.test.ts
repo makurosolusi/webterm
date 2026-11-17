@@ -150,8 +150,8 @@ describe('a turn of a mode chat', () => {
     expect(r).toContain('You are the webterm skill author in the Control panel. Your ONLY job')
     expect(r).toContain('do NOT ask one open question')
     expect(r).toContain('AT MOST 3 questions per turn')
-    expect(r).toContain('KIND first')
-    expect(r).toContain('Central vs Canvas')
+    expect(r).not.toContain('KIND first')
+    expect(r).toContain('every skill you write is `central`')
     expect(r).toContain('STATUS LINE')
     expect(r).toContain('Collected:')
     expect(r).toContain('never re-ask')
@@ -161,7 +161,8 @@ describe('a turn of a mode chat', () => {
     expect(r.indexOf('Only after "go"')).toBeGreaterThan(r.indexOf('SPEC SUMMARY'))
     for (const h of ['## Purpose', '## When to use', '## Steps', '## Do not', '## Done when']) expect(r).toContain(h)
     for (const f of ['title:', 'name:', 'audience:', 'description:', '300', '4000', '3 to 80']) expect(r).toContain(f)
-    expect(r).toContain('`central` or `canvas`')
+    expect(r).toContain('always `central`')
+    expect(r).toContain('Skills panel on the canvas')
     expect(r).toContain('DRAFT')
     expect(r).toContain('never say or imply a skill is active')
     expect(r).toContain('retry once')
@@ -172,18 +173,18 @@ describe('a turn of a mode chat', () => {
   it('the edit chat reads the skill first and handles user and built-in targets; a plain author chat has no edit line', () => {
     const edit = modePrompt('skill-author', 'webterm-project-status')
     expect(edit).toContain('skill_load it first')
-    expect(edit).toContain('under the SAME name and kind')
+    expect(edit).toContain('under the SAME name')
     expect(edit).toContain('built-ins are read-only: propose under a NEW')
     expect(edit).toContain('skill_not_target')
     expect(edit).toContain('`<base>-custom`')
-    expect(SKILL_AUTHOR_PROMPT).toContain('a user skill keeps its own name and kind')
+    expect(SKILL_AUTHOR_PROMPT).toContain('a user skill keeps its own name')
     expect(edit).toContain('webterm-project-status')
     expect(modePrompt('skill-author', null)).toBe(SKILL_AUTHOR_PROMPT)
   })
 })
 
-describe('an edit conversation keeps the kind (real store)', () => {
-  it('a canvas proposal over an active central skill is refused by the store, whatever the model sends', async () => {
+describe('an edit conversation stays central (real store)', () => {
+  it('a canvas proposal over an active central skill is refused before the store, whatever the model sends', async () => {
     const root = mkdtempSync(join(tmpdir(), 'author-kind-'))
     try {
       const db = openLedgerDb(':memory:')
@@ -198,8 +199,7 @@ describe('an edit conversation keeps the kind (real store)', () => {
       real.approve(first.name, first.version, 'human:ui', `approve ${first.name}@${first.version}`)
       const edit = createChatConversation(db, undefined, { mode: 'skill-author', skillTarget: 'webterm-edit-me' }).id
       const flipped = await callCentralTool(c, edit, 'skill_propose', { ...args, audience: 'canvas' })
-      expect(flipped.outcome).not.toBe('ok')
-      expect(JSON.stringify(flipped)).toContain('audience_immutable')
+      expect(flipped).toMatchObject({ outcome: 'denied', detail: 'audience_not_allowed_in_mode' })
       expect(real.list('pending_approval')).toEqual([])
       expect((await callCentralTool(c, edit, 'skill_propose', { ...args, audience: 'central' })).outcome).toBe('ok')
       expect(await callCentralTool(c, edit, 'skill_propose', { ...args, name: 'webterm-other-skill', audience: 'canvas' })).toMatchObject({ outcome: 'denied', detail: 'skill_not_target' })
@@ -270,15 +270,15 @@ describe('MCP backend narrowing', () => {
     expect((await callCentralTool(c, plain, 'test_peek', {})).outcome).toBe('ok')
   })
 
-  it('the author picks the kind explicitly: central and canvas both reach the store, a missing or unknown kind is refused', async () => {
+  it('the author writes central only: canvas is refused with audience_not_allowed_in_mode, a missing or unknown kind with audience_required', async () => {
     const before = proposed.length
-    expect((await propose(author, { audience: 'canvas' })).outcome).toBe('ok')
+    expect(await propose(author, { audience: 'canvas' })).toMatchObject({ outcome: 'denied', detail: 'audience_not_allowed_in_mode', next: 'canvas skills are written from the Skills panel on the canvas' })
     expect((await propose(author, { audience: 'central' })).outcome).toBe('ok')
-    expect(proposed.slice(before)).toEqual([{ name: 'webterm-x', audience: 'canvas' }, { name: 'webterm-x', audience: 'central' }])
+    expect(proposed.slice(before)).toEqual([{ name: 'webterm-x', audience: 'central' }])
     for (const args of [{}, { audience: 'both' }, { audience: 'everyone' }]) {
       expect(await propose(author, args)).toMatchObject({ outcome: 'denied', detail: 'audience_required' })
     }
-    expect(proposed.length).toBe(before + 2)
+    expect(proposed.length).toBe(before + 1)
   })
 
   it('an edit chat may propose only its target skill', async () => {
