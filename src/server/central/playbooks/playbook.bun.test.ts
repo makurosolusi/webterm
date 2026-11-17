@@ -52,10 +52,10 @@ afterAll(() => rmSync(root, { recursive: true, force: true }))
 const objective = (i = 0) => String(calls.filter((c) => c.tool === 'task.create')[i]?.args.objective)
 
 describe('registry', () => {
-  test('three playbooks, each one Central tool; the brief rides the spawn, nothing is prompted after it', () => {
-    expect(createPlaybookDefs().map((d) => d.name)).toEqual(['playbook.review', 'playbook.code_change', 'playbook.web_research'])
+  test('four playbooks, each one Central tool; the brief rides the spawn, nothing is prompted after it', () => {
+    expect(createPlaybookDefs().map((d) => d.name)).toEqual(['playbook.skill_authoring', 'playbook.review', 'playbook.code_change', 'playbook.web_research'])
     expect(Object.fromEntries(PLAYBOOKS.map((p) => [p.id, p.steps.map((s) => s.tool)]))).toEqual({
-      review: ['task.create', 'agent.spawn'], code_change: ['task.create', 'agent.spawn'], web_research: ['task.create', 'agent.spawn', 'browser_open'],
+      skill_authoring: ['task.create', 'agent.spawn'], review: ['task.create', 'agent.spawn'], code_change: ['task.create', 'agent.spawn'], web_research: ['task.create', 'agent.spawn', 'browser_open'],
     })
     const usage = String(createPlaybookDefs().find((d) => d.name === 'playbook.web_research')?.usage)
     expect(usage).toContain('status started')
@@ -84,7 +84,7 @@ describe('registry', () => {
   })
 
   test('every playbook states an honest complexity on its spawn; web_research is moderate (sonnet), never the strongest tier', async () => {
-    expect(PLAYBOOKS.map((p) => [p.id, p.complexity])).toEqual([['review', 'moderate'], ['code_change', 'moderate'], ['web_research', 'moderate']])
+    expect(PLAYBOOKS.map((p) => [p.id, p.complexity])).toEqual([['skill_authoring', 'moderate'], ['review', 'moderate'], ['code_change', 'moderate'], ['web_research', 'moderate']])
     await runPlaybook(ctx, pb('web_research'), { goal: 'read this repo and judge if it runs on an 8 GB Mac' }, 'p1', deps)
     expect(calls.find((c) => c.tool === 'agent.spawn')?.args).toMatchObject({ complexity: 'moderate' })
   })

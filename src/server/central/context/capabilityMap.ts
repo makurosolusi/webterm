@@ -17,6 +17,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['research the web', ['playbook.web_research']],
   ['change code', ['playbook.code_change']],
   ['review', ['playbook.review']],
+  ['write a skill (after the human approves an outline)', ['playbook.skill_authoring']],
   ['delegate by hand', ['task.create', 'agent.spawn', 'agent.prompt']],
   // Indirect reach: a spawned worker is a full Claude Code agent (not locked like Central) and can message sessions outside the canvas.
   ['reach a Claude session outside the canvas', ['task.create', 'agent.spawn']],

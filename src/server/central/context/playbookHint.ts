@@ -2,6 +2,7 @@
 // `Suggested playbook:` line in the volatile prompt tail, so Central runs the whole chain in one tool call
 // instead of rebuilding it from memory. English and Indonesian words; chit-chat matches nothing.
 import { PLAYBOOKS, playbookTool } from '../playbooks/playbook.defs'
+import { SKILL_DISCUSS_FIRST } from '../playbooks/playbook.skillAuthor'
 
 export interface PlaybookMatch { id: string; tool: string; args: Record<string, string> }
 
@@ -58,6 +59,8 @@ export function playbookHintLine(text: string, usable: (tool: string) => boolean
     const url = urlOf(text)
     return url && usable(BROWSER_READ) ? `Suggested tool: ${BROWSER_READ} ${JSON.stringify({ url })}` : ''
   }
+  // Never a ready-made call: the playbook needs the outline the human approves first.
+  if (m.id === 'skill_authoring') return usable(m.tool) ? SKILL_DISCUSS_FIRST : ''
   if (usable(m.tool)) {
     const note = m.id === 'web_research' && m.args.url && text.length <= SHORT_ASK && usable(BROWSER_READ) ? ` ${PAGE_NOTE}` : ''
     return `Suggested playbook: ${m.tool} ${JSON.stringify(m.args)}${note}`

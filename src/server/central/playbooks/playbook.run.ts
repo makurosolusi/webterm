@@ -69,7 +69,7 @@ const startedNote = (pb: Playbook, run: Run): string => {
   const agent = typeof run.saved.agent?.agentId === 'string' ? run.saved.agent.agentId : 'the agent'
   const browser = typeof run.saved.browser?.nodeId === 'string' ? ` with browser node ${run.saved.browser.nodeId} cabled to it` : ''
   const reused = run.saved.agent?.reused === true ? ' (a finished agent reused for this task, not a new one)' : ''
-  return `${pb.label} started: agent ${agent}${reused}${browser} has its brief and works on its own. Its RESULT, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.`
+  return `${pb.label} started: agent ${agent}${reused}${browser} has its brief and works on its own. Its RESULT, a question or a failure reaches you by itself as a check-in; do not poll it or set a reminder.${pb.centralNote ? ` ${pb.centralNote}` : ''}`
 }
 
 const subjectOf = (pb: Playbook, run: Run): string => run.params[pb.subject] ?? ''
