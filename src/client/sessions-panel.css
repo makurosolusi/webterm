@@ -110,6 +110,14 @@
   border-radius: 4px;
   color: var(--vscode-icon-foreground, var(--muted));
   cursor: default;
+  position: relative;
+}
+
+/* Hit area 28px (22px glyph box + 3px each side) without changing the toolbar layout. */
+.ss-action::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
 }
 
 .ss-action:hover,
