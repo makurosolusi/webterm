@@ -41,7 +41,6 @@ export const NO_ACT: Readonly<Record<string, string>> = {
   'blackboard.propose': PROPOSAL, 'channel.bot.propose': PROPOSAL,
   'playbook.review': 'chains task.create and agent.spawn, which announce themselves',
   'playbook.code_change': 'chains task.create and agent.spawn, which announce themselves',
-  'playbook.skill_authoring': 'chains task.create and agent.spawn, which announce themselves',
   'playbook.web_research': 'chains task.create and agent.spawn, which announce themselves',
   'memory.remember': CENTRAL_STATE, 'memory.update': CENTRAL_STATE, 'memory.forget': CENTRAL_STATE, 'memory.remember_user': CENTRAL_STATE,
   'state.update': CENTRAL_STATE, 'reminder.set': CENTRAL_STATE, 'reminder.cancel': CENTRAL_STATE,

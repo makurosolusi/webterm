@@ -37,6 +37,10 @@ export interface ConversationSummary {
   /** First human message, trimmed; null before the first send. */
   title: string | null
   turnCount: number
+  /** Role the chat is locked to (`skill-author`); null = ordinary Central chat. */
+  mode: string | null
+  /** With mode `skill-author`: the existing skill the chat edits; null for a new skill. */
+  skillTarget: string | null
 }
 
 /** One page of the conversation list, newest first; `nextOffset` null on the last page. */

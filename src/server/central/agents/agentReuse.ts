@@ -11,7 +11,7 @@ import { createAgentStore } from './agentStore'
  * Playbooks whose agents may take each other's tasks, by safety class (web research carries no private data, a review
  * is read-only). A playbook not listed here (code_change: its own worktree/branch) never reuses; unknown = spawn new.
  */
-export const REUSE_CLASS: Readonly<Record<string, string>> = { web_research: 'web_research', review: 'review', skill_authoring: 'skill_authoring' }
+export const REUSE_CLASS: Readonly<Record<string, string>> = { web_research: 'web_research', review: 'review' }
 /** guess: a context this many tasks deep starts to drag earlier work along; tune from observed result quality. */
 export const MAX_REUSES = 3
 /** guess: older than this the model context is mostly stale scrollback; tune with MAX_REUSES. */

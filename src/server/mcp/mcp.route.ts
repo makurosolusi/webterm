@@ -45,7 +45,7 @@ async function centralRoute(req: McpRequest, deps: McpDeps, token: string): Prom
   const c = deps.central
   const central = c?.guard ? { db: c.db, registry: c.registry, env: c.env, guard: c.guard } : null
   if (req.path === MCP_TOOLS_PATH) {
-    return req.method === 'GET' ? { status: 200, body: { tools: central ? listCentralTools(central) : [] } } : { status: 405, body: { error: 'method_not_allowed' } }
+    return req.method === 'GET' ? { status: 200, body: { tools: central ? listCentralTools(central, conversationId) : [] } } : { status: 405, body: { error: 'method_not_allowed' } }
   }
   if (req.method !== 'POST') return { status: 405, body: { error: 'method_not_allowed' } }
   const call = callArgs(req)

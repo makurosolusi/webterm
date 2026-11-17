@@ -17,6 +17,7 @@ import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
 import { approvalDigest, consumeApproval, requestApproval } from '../ledger/ledgerApproval'
 import { allRows, getRow } from '../ledger/ledgerCore'
 import { redactValue } from '../redactSecrets'
+import { type ConversationMode, SKILL_AUTHOR_AUDIENCE, isConversationMode, modeAllowsTool } from '../central/chat/conversationMode'
 import { APPROVAL_PENDING, CENTRAL_MCP_MINTER } from './mcp.paths'
 import type { McpTool } from './mcp.protocol'
 import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
@@ -57,14 +58,28 @@ export function centralCapabilities(c: Pick<CentralMcpDeps, 'registry' | 'env'>)
   return out
 }
 
-/** `tools/list` for Central: schema straight from the registry, tier in the description. */
-export function listCentralTools(c: Pick<CentralMcpDeps, 'registry' | 'env'>): McpTool[] {
-  return [...centralCapabilities(c)].map(([name, cap]) => ({
+/** Role of a conversation (null = ordinary Central chat or unknown id) and the skill a skill-author chat edits. */
+function roleOf(db: Database, conversationId: string): { mode: ConversationMode | null; skillTarget: string | null } {
+  const row = getRow(db, 'SELECT mode, skill_target FROM central_conversation WHERE id = ?', conversationId)
+  return { mode: isConversationMode(row?.mode) ? row.mode : null, skillTarget: typeof row?.skill_target === 'string' ? row.skill_target : null }
+}
+
+/** `tools/list` for Central: schema straight from the registry, tier in the description; a mode-locked conversation sees only its own tools. */
+export function listCentralTools(c: Pick<CentralMcpDeps, 'registry' | 'env'> & { db?: Database }, conversationId?: string): McpTool[] {
+  const mode = c.db && conversationId ? roleOf(c.db, conversationId).mode : null
+  return [...centralCapabilities(c)].filter(([, cap]) => modeAllowsTool(mode, cap.name)).map(([name, cap]) => ({
     name,
     description: `${cap.summary} (webterm ${cap.name}, tier ${cap.tier}${cap.tier >= 'R2' ? ', needs human approval unless the level allows it' : ''})`,
     inputSchema: { ...(cap.input ?? { type: 'object' }) } as Record<string, unknown>,
     annotations: { readOnlyHint: cap.tier === 'R0', destructiveHint: !!cap.destructive, idempotentHint: !!cap.idempotent },
   }))
+}
+
+/** Why a skill-author proposal is refused (a canvas skill, or another skill than the one this chat edits); null when fine. */
+function skillAuthorViolation(args: Record<string, unknown>, target: string | null): string | null {
+  if (args.audience !== undefined && args.audience !== SKILL_AUTHOR_AUDIENCE) return 'audience_not_allowed'
+  if (target !== null && args.name !== target) return 'skill_not_target'
+  return null
 }
 
 const receipt = (outcome: McpReceipt['outcome'], detail: string, data: unknown = null, next: string | null = null, evidence: Record<string, unknown> = {}): McpReceipt =>
@@ -112,6 +127,14 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   const violation = cap.input ? checkSchema(cap.input, args) : null
   if (violation !== null) return receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema', { violation })
   const tool = cap.name
+  // A mode-locked conversation (skill author) may only call its own tools, and only for its own kind of skill.
+  const role = roleOf(c.db, conversationId)
+  if (!modeAllowsTool(role.mode, tool)) return receipt('denied', 'tool_not_allowed_in_mode', null, `this chat is the ${role.mode}; it has no ${tool}. Tell the human what you cannot do here`)
+  if (role.mode && tool === 'skill.propose') {
+    const denied = skillAuthorViolation(args, role.skillTarget)
+    if (denied) return receipt('denied', denied, null, 'propose only a skill with audience central' + (role.skillTarget ? ` named ${role.skillTarget}` : ''))
+    args.audience = SKILL_AUTHOR_AUDIENCE
+  }
   if (OWN_APPROVAL_TOOLS.has(tool)) return (await exec(c, conversationId, tool, args, true)).receipt
 
   const now = (c.now ?? Date.now)()

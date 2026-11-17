@@ -23,6 +23,7 @@ import {
   CentralChatError, TurnService, chatErrorStatus, listConversationSummaries, listMessages, type TurnWiring,
 } from './central/chat/turnService'
 import { createChatConversation } from './central/chat/turnPersistence'
+import { parseConversationMode } from './central/chat/conversationMode'
 import { conversationModelState, parseModelChoice, setConversationModel } from './central/chat/conversationModelChoice'
 import { readCappedRequestBody } from './cappedRequestBody'
 import { createLogger } from './logs'
@@ -201,10 +202,18 @@ export function handleConversations(res: ServerResponse, db: Database, url: URL,
   }
 }
 
-/** `POST /conversations`: a new empty chat (body ignored), 201 with its list row. */
-export function handleCreateConversation(res: ServerResponse, db: Database, now?: number): void {
+/** `POST /conversations`: a new empty chat, 201 with its list row. Optional body `{mode?, skillTarget?}` locks it to a role (validated; an empty body is an ordinary chat). */
+export async function handleCreateConversation(req: IncomingMessage, res: ServerResponse, db: Database, now?: number): Promise<void> {
   try {
-    sendJson(res, 201, createChatConversation(db, now))
+    const read = await readCappedRequestBody(req, MODEL_BODY_MAX_BYTES)
+    if (!read.ok) return failJson(res, 'invalid_body', read.reason)
+    let body: { mode?: unknown; skillTarget?: unknown } | null = {}
+    if (read.body.trim() !== '') {
+      try { body = JSON.parse(read.body) as typeof body } catch { body = null } // malformed JSON is a 400 below
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return failJson(res, 'invalid_body', 'body must be {mode?, skillTarget?}')
+    const role = parseConversationMode(body.mode, body.skillTarget)
+    sendJson(res, 201, createChatConversation(db, now, role ?? undefined))
   } catch (err) {
     failFromError(res, err)
   }
