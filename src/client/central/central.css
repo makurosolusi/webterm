@@ -90,8 +90,6 @@
 .ccp-ab-row__text { grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); }
 .ccp-ab-row[open] .ccp-ab-row__text { display: none; }
 .ccp-ab-row__more { padding: 0 0 4px; overflow-wrap: anywhere; }
-.ccp-skill-list { list-style: none; margin: 4px 0; padding: 0; }
-.ccp-skill-row p { margin: 0 0 4px 8px; color: var(--vscode-descriptionForeground); }
 .ccp-name-field { display: flex; align-items: center; gap: 2px; }
 .ccp-cap { display: flex; align-items: center; gap: 6px; }
 

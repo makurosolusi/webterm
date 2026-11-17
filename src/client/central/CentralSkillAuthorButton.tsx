@@ -15,15 +15,13 @@ interface Props {
   label: string
   /** Section the button sits in (names it for screen readers); the Central author writes both kinds. */
   kind?: SkillAudience
-  /** The prominent style, for "Write with an agent" (the only way to start a skill). */
-  primary?: boolean
   /** Set while the skill cannot be revised: the button is disabled and this text says why. */
   disabledReason?: string
   /** Test seam; defaults to the live chat API. */
   chat?: Pick<ChatClient, 'createConversation'>
 }
 
-export default function CentralSkillAuthorButton({ target, label, kind = 'central', primary = false, disabledReason, chat = chatApi }: Props) {
+export default function CentralSkillAuthorButton({ target, label, kind = 'central', disabledReason, chat = chatApi }: Props) {
   const reasonId = useId()
   const disabled = disabledReason !== undefined
   const [busy, setBusy] = useState(false)
@@ -39,7 +37,7 @@ export default function CentralSkillAuthorButton({ target, label, kind = 'centra
   }
   return (
     <>
-      <Button type="button" size="sm" variant={primary ? 'default' : 'secondary'} disabled={busy || disabled} aria-describedby={disabled ? reasonId : undefined} aria-busy={busy || undefined} aria-label={target ? `${label} ${target}` : `${label} (${CL.skillAudienceBadge[kind]})`} onClick={start}>{busy ? CL.authorOpening : label}</Button>
+      <Button type="button" size="sm" variant="secondary" disabled={busy || disabled} aria-describedby={disabled ? reasonId : undefined} aria-busy={busy || undefined} aria-label={target ? `${label} ${target}` : `${label} (${CL.skillAudienceBadge[kind]})`} onClick={start}>{!target && <span className="codicon codicon-add" aria-hidden="true" />}{busy ? CL.authorOpening : label}</Button>
       {disabled && <small id={reasonId}>{disabledReason}</small>}
       {error && <span role="alert" className="ccp-error">{error}</span>}
     </>
