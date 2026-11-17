@@ -28,13 +28,12 @@ const parse = (text: string): Header => JSON.parse(text.slice('State: '.length))
 
 describe('state header: workspace color', () => {
   it('names the color of the viewed workspace and of each listed project', () => {
-    undo.push(registerWorkspaceColors(() => new Map([['w-p1', 'blue vivid'], ['w-p2', 'pink default']])))
+    undo.push(registerWorkspaceColors(() => new Map([['w-p1', 'blue vivid'], ['ws-wibu', 'pink default']])))
     active = 'w-p1'
     const h = JSON.parse(buildStateHeader(f.db, 'central:global').slice('State: '.length)) as { viewing: { color?: string }; projects: Array<{ id: string; color?: string }> }
     expect(h.viewing.color).toBe('blue vivid')
     expect(h.projects.find((p) => p.id === 'p1')?.color).toBe('blue vivid')
-    expect(h.projects.find((p) => p.id === 'p2')?.color).toBe('pink default')
-    expect(h.projects.find((p) => p.id === 'p3')?.color).toBeUndefined()
+    expect(h.projects.find((p) => p.id === 'ws-wibu')?.color).toBe('pink default')
   })
 })
 

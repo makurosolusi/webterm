@@ -32,7 +32,7 @@ import { openWorkspaceCanvasBackground } from './canvasBackground.open'
 import { setWorkspaceMuted, useNotifyPrefs } from './osNotify.prefs'
 import { openSetup } from './setup/setup.open'
 import { AccountMenu } from './AccountMenu'
-import { WorkspaceColorDialog } from './WorkspaceColorPicker'
+import { WorkspaceColorHost } from './WorkspaceColorPicker'
 import { workspaceColorVar } from '../shared/workspaceColor'
 import type { ColorChange } from './api'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
@@ -294,16 +294,7 @@ export default function WorkspaceBar({
           onClose={() => setAddMenu(null)}
         />
       )}
-      {onSetWorkspaceColor && colorWs && (
-        <WorkspaceColorDialog
-          open
-          onOpenChange={(o) => { if (!o) setColorId(null) }}
-          workspaceName={colorWs.name}
-          color={colorWs.color}
-          colorShade={colorWs.colorShade}
-          onChange={(change) => void onSetWorkspaceColor(colorWs.id, change)}
-        />
-      )}
+      {onSetWorkspaceColor && <WorkspaceColorHost workspace={colorWs} onClose={() => setColorId(null)} onSet={onSetWorkspaceColor} />}
       <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
       {menu && menuGroup && (

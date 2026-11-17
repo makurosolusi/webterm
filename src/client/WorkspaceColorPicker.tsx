@@ -2,8 +2,9 @@
 // typing). Every choice is saved at once through `onChange` (optimistic in the lifecycle, rolled back
 // and reported there on failure); the dialog only reflects the workspace's current color.
 import { useRef } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { CSSProperties, KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { IconTooltip } from '@/components/ui/icon-button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DEFAULT_WORKSPACE_SHADE, WORKSPACE_HUES, WORKSPACE_SHADES, isWorkspaceHue, isWorkspaceShade, workspaceColorVar, workspaceHueLabel,
@@ -26,20 +27,22 @@ function RadioRow({ label, items, value, onPick }: { label: string; items: Radio
   return (
     <div role="radiogroup" aria-label={label} className="ws-color-row">
       {items.map((item, i) => (
-        <button
-          key={item.id}
-          ref={(el) => { refs.current[i] = el }}
-          type="button"
-          role="radio"
-          aria-checked={item.id === value}
-          aria-label={item.label}
-          title={item.label}
-          tabIndex={item.id === value ? 0 : -1}
-          className="ws-swatch"
-          style={{ '--ws-swatch': item.swatch } as React.CSSProperties}
-          onClick={() => onPick(item.id)}
-          onKeyDown={(e) => onKey(e, i)}
-        />
+        <IconTooltip key={item.id} label={item.label}>
+          <Button
+            ref={(el) => { refs.current[i] = el }}
+            type="button"
+            variant="ghost"
+            size="xs"
+            role="radio"
+            aria-checked={item.id === value}
+            aria-label={item.label}
+            tabIndex={item.id === value ? 0 : -1}
+            className="ws-swatch"
+            style={{ '--ws-swatch': item.swatch } as CSSProperties}
+            onClick={() => onPick(item.id)}
+            onKeyDown={(e) => onKey(e, i)}
+          />
+        </IconTooltip>
       ))}
     </div>
   )
@@ -81,5 +84,24 @@ export function WorkspaceColorDialog({ open, onOpenChange, workspaceName, color,
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** The dialog for `workspace` (null = closed), wired to the lifecycle's optimistic setter. */
+export function WorkspaceColorHost({ workspace, onClose, onSet }: {
+  workspace: { id: string; name: string; color?: string; colorShade?: string } | null
+  onClose: () => void
+  onSet: (id: string, change: ColorChange) => void | Promise<unknown>
+}) {
+  if (!workspace) return null
+  return (
+    <WorkspaceColorDialog
+      open
+      onOpenChange={(o) => { if (!o) onClose() }}
+      workspaceName={workspace.name}
+      color={workspace.color}
+      colorShade={workspace.colorShade}
+      onChange={(change) => void onSet(workspace.id, change)}
+    />
   )
 }

@@ -13,7 +13,7 @@ function freshDb(): Db {
 
 test('create mints a workspace with defaults; get deep-equals it', () => {
   const db = freshDb()
-  const ws = db.create('proj', '/tmp', '#fff')
+  const ws = db.create('proj', '/tmp', 'blue')
   expect(ws.id.length > 0).toBe(true)
   expect(ws.nodes.length).toBe(0)
   expect(JSON.stringify(ws.viewport)).toBe(JSON.stringify(DEFAULT_VIEWPORT))
