@@ -164,9 +164,9 @@ describe('the author chat', () => {
   it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Skills only chip in author mode', () => {
     mount({ ...base, mode: 'skill-author', skillTarget: 'webterm-rule' })
     const banner = within(screen.getByRole('complementary', { name: 'Skill author' }))
-    expect(banner.getByText(/write and edit Central skills/)).toBeTruthy()
+    expect(banner.getByText(/kind, title, steps and checks before writing/)).toBeTruthy()
     expect(banner.getByText(/limited to skills/)).toBeTruthy()
-    expect(banner.getByText(/approve them in the Skills tab/)).toBeTruthy()
+    expect(banner.getByText(/need your approval in the Skills tab/)).toBeTruthy()
     expect(banner.getByText('Editing webterm-rule.')).toBeTruthy()
     expect(screen.getByText('Skills only')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Permission mode/ })).toBeNull()

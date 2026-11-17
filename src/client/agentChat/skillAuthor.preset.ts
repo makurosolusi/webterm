@@ -6,7 +6,7 @@
 export const SKILL_AUTHOR_PRESET = 'skill-author'
 
 /** Role banner at the top of a skill-author chat. */
-export const SKILL_AUTHOR_BANNER = 'Skill author: designs and edits webterm skills with you. Tools locked to `webterm skills`. Drafts need your approval in the Skills tab.'
+export const SKILL_AUTHOR_BANNER = 'Skill author: walks you through purpose, title, steps and checks before writing; drafts need your approval in the Skills tab.'
 
 /** Why the permission mode chip reads "Locked" in a skill-author chat. */
 export const SKILL_AUTHOR_LOCK_REASON = 'Locked by the Skill author role: the agent can only run `webterm skills` commands, whatever the mode.'
