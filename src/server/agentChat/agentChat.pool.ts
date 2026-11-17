@@ -6,6 +6,7 @@
 import type { AgentChatEvent, AgentChatImage } from '../../shared/agentChat.wire'
 import { AGENT_CHAT_KIND, type AgentChatNodeConfig } from '../../shared/agentChat.shape'
 import type { AgentPermissionMode, Workspace, WsNode } from '../../shared/workspace'
+import { agentChatLockFor } from './agentChat.toolLock'
 import { launchModeFor } from '../permission/permission.mode'
 import type { ApprovalSettings } from '../../shared/settings.projectApprovalLevels'
 import { resolveCwd } from '../ptyShell'
@@ -60,7 +61,7 @@ export interface AgentChatPoolDeps {
  * own mode else its workspace's approval level (Danger overrides both).
  */
 export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; settings: ApprovalSettings }) {
-  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: launchModeFor(d.settings, t.ws.id, t.node.permissionMode), workspaceId: t.ws.id }
+  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: launchModeFor(d.settings, t.ws.id, t.node.permissionMode), workspaceId: t.ws.id, ...(t.node.preset ? { preset: t.node.preset } : {}) }
 }
 
 interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void; phase?: 'busy' | 'awaiting' }
@@ -121,6 +122,7 @@ export class AgentChatPool {
     const s = this.session(nodeId)
     const t = this.target(nodeId)
     if (!s || !t) return false
+    if (agentChatLockFor(t.node.preset)) return true // locked preset: the mode is fixed server-side
     const from = s.currentMode() ?? t.node.permissionMode ?? null
     await s.setMode(mode)
     if (from !== mode) recordEvent({ kind: MODE_CHANGE_EVENT, source: 'agentChat', actor, trust: 'trusted', subject: `node:${nodeId}`, nodeId, workspaceId: t.ws.id, payload: { scope: 'node', from, to: mode } })

@@ -4,12 +4,11 @@
 /** Node `preset` value that makes a chat node a skill author. */
 export const SKILL_AUTHOR_PRESET = 'skill-author'
 
-// TOOL NARROWING IS NOT ENFORCED. The Agent Chat launcher (server/agentChat/agentChat.options.ts
-// `buildAgentChatOptions`) takes no per-node allowedTools/disallowedTools, so a skill-author node has the same
-// tools and permission mode as any other chat node. Building that mechanism is a server change outside this
-// preset's scope; until it exists the limits below are INSTRUCTIONS to the agent, not a sandbox. What does hold
-// regardless of the agent: it can only PROPOSE (`webterm skills`), a human approves, lint rejects unsafe text.
-// Remove this note when the launcher gains a per-node tool allowlist and the preset uses it.
+// TOOL NARROWING IS ENFORCED SERVER-SIDE, from this node's stored `preset` (server/agentChat/agentChat.toolLock.ts):
+// the session gets the Bash tool only, and only one `webterm skills list|get|propose|edit` command per call
+// (heredoc body via `--body-file -` is the one multi-line form), in dontAsk mode whatever the chat default is.
+// Anything else (file tools, browser, MCP, other shell commands) is denied. The text below is still the
+// agent's guidance; it is no longer the only guard. A human still approves every proposal; lint rejects unsafe text.
 
 /** Limits mirrored from the skill lint (server/central/skills/skillLint.ts); the server stays the authority. */
 const BODY_MAX = 4000

@@ -17,6 +17,7 @@ import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
 import { writeExplorePlugin } from '../subagents/exploreAgent'
 import { agentChatUploadsDir } from './agentChat.attach'
 import { agentChatEnv } from './agentChat.env'
+import { agentChatLockFor } from './agentChat.toolLock'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
 export const AGENT_CHAT_SETTING_SOURCES: NonNullable<Options['settingSources']> = ['user', 'project', 'local']
@@ -48,6 +49,8 @@ export interface AgentChatOptionsInput {
   uploadsRoot?: string
   /** Process spawner behind the SDK hook; tests inject a recorder. */
   spawn?: SpawnImpl
+  /** The node's stored preset; a known one locks the tools server-side (agentChat.toolLock.ts). */
+  preset?: string
 }
 
 /** SDK options for one `query()`; `notice` is set when the node's launch profile no longer exists. */
@@ -58,6 +61,7 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
   // Only this node's staged files, never other nodes': created first, the CLI expects an existing dir.
   const uploads = agentChatUploadsDir(i.nodeId, i.uploadsRoot)
   mkdirSync(uploads, { recursive: true, mode: 0o700 })
+  const lock = agentChatLockFor(i.preset)
   const options: Options = {
     cwd: i.cwd,
     additionalDirectories: [uploads],
@@ -78,6 +82,15 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     extraArgs: { 'append-system-prompt-file': writeHouseRules(), 'mcp-config': writeClaudeMcpConfig(i.nodeId, i.port), 'replay-user-messages': null },
     // The profile argv runs (not the bundled binary); the hook also drains stderr into `i.stderr`.
     ...claudeSdkSpawn({ launch, ...(i.spawn ? { spawn: i.spawn } : {}), ...(i.stderr ? { stderr: i.stderr } : {}) }),
+  }
+  if (lock) {
+    // Locked preset: its fields win over the chat mode (a bypass default must not apply), and no
+    // bypass flag, plugin, MCP config or uploads dir (no Read tool) is carried.
+    Object.assign(options, lock)
+    delete options.allowDangerouslySkipPermissions
+    delete options.plugins
+    delete options.additionalDirectories
+    options.extraArgs = { 'append-system-prompt-file': writeHouseRules(), 'disable-slash-commands': null, 'replay-user-messages': null }
   }
   return { options, ...(launch.missingId ? { notice: missingProfileNotice(launch.profile.name).trim() } : {}) }
 }
@@ -105,7 +118,7 @@ export interface AgentChatOpenInput {
 export type AgentChatOpen = (resumeId: string | undefined, canUseTool: CanUseTool, abort: AbortController, input: AgentChatOpenInput) => Query
 
 /** Production opener: SDK `query()` in streaming-input mode, options rebuilt from the profile on every open. */
-export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string }): AgentChatOpen {
+export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string; preset?: string }): AgentChatOpen {
   return (resumeId, canUseTool, abort, input) => {
     const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, ...(input.config ? { config: input.config } : {}), resume: resumeId, canUseTool, abort, stderr: input.stderr })
     if (notice) input.notice(notice)
