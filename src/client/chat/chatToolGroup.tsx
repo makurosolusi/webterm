@@ -32,7 +32,7 @@ function summarize(value: unknown): string {
 /** Tools whose success changes a node, as MCP names them (`mcp__webterm__` stripped, dots as underscores). Keep equal to ACT_TOOLS in
  *  server/central/tools/toolAct.ts (locked by chatToolGroup.act.test.tsx). Tools that close a node are left out: nothing to show. */
 export const ACT_SHOW_TOOLS: ReadonlySet<string> = new Set([
-  'agent_spawn', 'agent_prompt', 'agent_relay', 'canvas_open', 'canvas_type', 'canvas_edit', 'browser_open', 'browser_act', 'browser_read',
+  'agent_spawn', 'agent_prompt', 'agent_relay', 'canvas_open', 'canvas_type', 'canvas_edit', 'canvas_camera', 'canvas_reopen', 'browser_open', 'browser_act', 'browser_read',
   'chat_send', 'permission_decide', 'task_assign', 'chat_config', 'chat_mode',
 ])
 
