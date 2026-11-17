@@ -23,10 +23,11 @@ export interface BridgeLink {
   /** 'context' = link antar agent yang digambar pengguna lewat handle. 'file' = penanda "file ini
    *  sedang terbuka" dari node files ke node editor-nya, dibuat otomatis (bukan lewat onConnect).
    *  Dibedakan karena labelnya beda: melabeli kabel buka-file "⇄ context" adalah label bohong. */
-  kind: 'context' | 'file'
+  /** ... 'skill' = a skill node (source, `skill-out`) attached to an agent (target, `skills-in`); see skillPorts.ts. */
+  kind: 'context' | 'file' | 'skill'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app' | 'agentChat'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app' | 'agentChat' | 'skill'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -144,6 +145,8 @@ export interface WsNode {
   chatConfig?: AgentChatNodeConfig // node 'agentChat': model / effort / thinking picked in the footer (validChatConfig)
   preset?: AgentChatPreset // node 'agentChat': born as a preset (skill-author); absent = plain chat
   presetTarget?: string   // node 'agentChat': skill name a skill-author chat edits
+  skill?: string          // node 'skill': name of the library skill it references (never a copy)
+  seenVersion?: string    // node 'skill': active version when the node was added or last acknowledged
 }
 
 export interface Workspace {

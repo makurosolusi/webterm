@@ -62,8 +62,11 @@ export interface CaptureInput {
 /** Workspace -> validated template (validation also proves the capture is importable). */
 export function captureTemplate(input: CaptureInput): WebtermTemplate {
   const { ws } = input
-  const nodes = ws.nodes.slice(0, 50).map((n, i) => captureNode(n, i, ws.cwd, input.worktreeRoot))
-  const keyOf = new Map(ws.nodes.slice(0, 50).map((n, i) => [n.id, nodes[i].key]))
+  // A skill node references a library skill by name (docs/decisions/skill-canvas-nodes.md): not portable, so
+  // it and its cable stay out of a template (the cable drops because its source has no key).
+  const kept = ws.nodes.filter((n) => n.kind !== 'skill').slice(0, 50)
+  const nodes = kept.map((n, i) => captureNode(n, i, ws.cwd, input.worktreeRoot))
+  const keyOf = new Map(kept.map((n, i) => [n.id, nodes[i].key]))
   const cables = ws.bridges.flatMap((b) => {
     const from = keyOf.get(b.source), to = keyOf.get(b.target)
     return from && to && from !== to ? [{ from, to, kind: b.kind }] : []

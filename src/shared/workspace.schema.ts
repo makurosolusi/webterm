@@ -9,7 +9,7 @@
 // node never turns into a deleted node (and a reaped terminal) on the next save.
 import { DEFAULT_VIEWPORT, validDiffNotes, validExpanded, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
-const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true }
+const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true, skill: true }
 
 /** The persisted board fields of a workspace (identity, version and layout are handled elsewhere). */
 export interface WorkspaceBoard { name: string; cwd?: string; color?: string; viewport: Viewport; nodes: WsNode[]; bridges: BridgeLink[] }
@@ -43,6 +43,8 @@ function cleanNode(n: Record<string, unknown>): WsNode {
   if (n.expanded !== undefined) node.expanded = validExpanded(n.expanded)
   if (n.wordWrap !== undefined && typeof n.wordWrap !== 'boolean') delete node.wordWrap
   if (n.viewAs !== undefined && n.viewAs !== 'text') delete node.viewAs
+  if (n.skill !== undefined && typeof n.skill !== 'string') delete node.skill
+  if (n.seenVersion !== undefined && typeof n.seenVersion !== 'string') delete node.seenVersion
   if (n.plan !== undefined) {
     const plan = validPlanData(n.plan)
     if (plan) node.plan = plan
@@ -102,7 +104,7 @@ export function normalizeWorkspace(raw: Record<string, unknown>): NormalizedWork
   if (raw.bridges !== undefined && !Array.isArray(raw.bridges)) issues.push('bridges must be an array')
   else (raw.bridges as unknown[] | undefined ?? []).forEach((b, i) => {
     // Kind absent (rows from before `kind`) = 'context', exactly like the client's `toBridge`.
-    if (validBridge(b)) bridges.push({ id: b.id, source: b.source, target: b.target, kind: b.kind === 'file' ? 'file' : 'context' })
+    if (validBridge(b)) bridges.push({ id: b.id, source: b.source, target: b.target, kind: b.kind === 'file' || b.kind === 'skill' ? b.kind : 'context' })
     else issues.push(`bridges[${i}] must have non-empty string id, source and target`)
   })
   const str = (x: unknown) => (typeof x === 'string' ? x : undefined)

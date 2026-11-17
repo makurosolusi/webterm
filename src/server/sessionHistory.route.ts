@@ -64,7 +64,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const BRIDGES_MAX = 64
 const isBridge = (b: unknown): boolean =>
   isObj(b) && typeof b.id === 'string' && typeof b.source === 'string' && typeof b.target === 'string' &&
-  (b.kind === 'context' || b.kind === 'file')
+  (b.kind === 'context' || b.kind === 'file' || b.kind === 'skill')
 
 /** Validasi batas input: entry yang bentuknya salah ditolak seluruh body-nya (400), bukan
  *  diam-diam disaring, supaya klien yang rusak terlihat. */
