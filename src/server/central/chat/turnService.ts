@@ -33,6 +33,7 @@ import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
 import { markSystemTurn, systemTurnsToday, withoutHumanLabel, type SystemTurnOrigin } from './turnOrigin'
+import { skillNoteForTurn } from './turnSkillNote'
 import { freshSessionPending, prepareRerun, type RerunInput } from './turnRerun'
 
 const log = createLogger('central')
@@ -144,7 +145,11 @@ export class TurnService {
       ...(switchModel ? { rotate: true } : {}),
     })
     const { history } = built
-    const prompt = withFiles(origin ? withoutHumanLabel(built.prompt, text) : built.prompt, files)
+    // A skill switched since the previous turn of this chat: the model hears it once, the transcript shows the same note.
+    const skillNote = conversation.mode === null ? skillNoteForTurn(this.db, conversation.id, clientMessageId, this.now) : null
+    if (skillNote?.message) this.record(conversation.id, 'message.created', { messageId: skillNote.message.id, seq: skillNote.message.seq, role: 'system', parts: skillNote.message.parts }, null, skillNote.message.id)
+    const noted = (p: string): string => (skillNote ? `${skillNote.text}\n\n${p}` : p)
+    const prompt = noted(withFiles(origin ? withoutHumanLabel(built.prompt, text) : built.prompt, files))
     // Only the real assembler reports rotation; the legacy one never sets it.
     const rotate = (built as { rotateSession?: boolean }).rotateSession === true || switchModel
     const cacheEnv = (built as { cacheEnv?: Record<string, string> }).cacheEnv ?? {}
@@ -184,7 +189,7 @@ export class TurnService {
         rotate: true, beforeSeq: message.seq,
       })
       recordTurnTrace(this.db, turn.id, seeded.trace)
-      return withFiles(origin ? withoutHumanLabel(seeded.prompt, text) : seeded.prompt, files)
+      return noted(withFiles(origin ? withoutHumanLabel(seeded.prompt, text) : seeded.prompt, files))
     }
     const done = this.runTurn(conversation, turn, { prompt, images }, history, rotate, cacheEnv, freshSessionText, summarize)
     this.runs.set(turn.id, done)
