@@ -1,0 +1,32 @@
+/* Skills tab: dense, scannable rows (VS Code extensions list / Linear). Scale 13 / 12 / 11 px, tokens only. */
+.ccp-skills { padding-bottom: 32px; }
+.ccp-skill-toolbar { position: sticky; top: -8px; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 -16px; padding: 6px 16px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); }
+.ccp-skill-toolbar input { flex: 1 1 140px; min-width: 0; }
+.ccp-skill-seg { display: flex; gap: 2px; }
+.ccp-skill-seg button { min-height: 28px; }
+.ccp-skill-seg small { margin-left: 4px; color: var(--vscode-descriptionForeground); font-size: 11px; }
+.ccp-skill-section { margin: 12px 0 0; }
+.ccp-skill-section__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ccp-skill-section__titles { min-width: 0; }
+.ccp-skill-section__titles h4 { margin: 0; font-size: 13px; font-weight: 600; }
+.ccp-skill-section__titles h4 button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.ccp-skill-section__titles p { margin: 0; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-section__count { font-weight: 400; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-section__actions { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.ccp-skill-section__actions button { min-height: 28px; }
+.ccp-skill-list { list-style: none; margin: 4px 0; padding: 0; }
+.ccp-skill-row { border-bottom: 1px solid var(--vscode-panel-border); }
+.ccp-skill-row__main { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0 12px; }
+.ccp-skill-row__btn { display: flex; flex-direction: column; align-items: flex-start; gap: 0; min-width: 0; min-height: 28px; padding: 4px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; white-space: normal; height: auto; cursor: pointer; }
+.ccp-skill-row__btn:hover { background: var(--vscode-list-hoverBackground); }
+.ccp-skill-row__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; font-size: 13px; }
+.ccp-skill-row__title code { font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-row__desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 16px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-row__ver { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-row__detail { padding: 0 0 8px 8px; }
+.ccp-skill-skel { height: 36px; margin: 4px 0; border-radius: 2px; background: var(--vscode-panel-border); opacity: 0.5; animation: ccp-skill-pulse 1.2s ease-in-out infinite; }
+@keyframes ccp-skill-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .ccp-skill-skel { animation: none; } }
+.ccp-skill-empty { margin: 4px 0; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.ccp-skill-review { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--vscode-panel-border); }
+.ccp-skill-review h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }

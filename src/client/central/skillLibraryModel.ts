@@ -13,3 +13,21 @@ export function searchRows(rows: readonly SkillReviewRow[], query: string): Skil
 
 /** Rows that need a human decision or can be rolled back; the rest is browse-only. */
 export const needsReview = (r: SkillReviewRow): boolean => r.record.status !== 'active' || r.canRollback
+
+export type SkillFilter = 'all' | 'active' | 'disabled' | 'review'
+export const SKILL_FILTERS: readonly SkillFilter[] = ['all', 'active', 'disabled', 'review']
+
+/** Switched off by the human (the `enabled` flag) or by status. */
+export const isOff = (r: SkillReviewRow): boolean => r.record.status === 'disabled' || r.record.enabled === false
+
+/** Whether a row belongs under a status filter; "active" means approved and switched on. */
+export function matchesFilter(r: SkillReviewRow, f: SkillFilter): boolean {
+  if (f === 'active') return r.record.status === 'active' && !isOff(r)
+  if (f === 'disabled') return isOff(r)
+  if (f === 'review') return needsReview(r)
+  return true
+}
+
+/** Row counts per filter, for the segmented control. */
+export const countByFilter = (rows: readonly SkillReviewRow[]): Record<SkillFilter, number> =>
+  Object.fromEntries(SKILL_FILTERS.map((f) => [f, rows.filter((r) => matchesFilter(r, f)).length])) as Record<SkillFilter, number>

@@ -17,13 +17,14 @@ const row = (over: Partial<SkillReviewRow['record']> = {}, extra: Partial<SkillR
 const withRows = (...rows: SkillReviewRow[]) => fakeClient({ listSkills: vi.fn(async () => rows) })
 
 describe('SkillLibrary browse', () => {
-  it('lists name, description, origin, status and version', async () => {
+  it('lists name, description, built-in badge and version (no badge for the normal state)', async () => {
     render(<SkillLibrary client={withRows(row())} />)
     const item = (await screen.findByText('Summarize project status.')).closest('li') as HTMLElement
     expect(within(item).getByText('webterm-x')).toBeTruthy()
-    expect(within(item).getByText('builtin')).toBeTruthy()
-    expect(within(item).getByText('active')).toBeTruthy()
-    expect(within(item).getByText('1')).toBeTruthy()
+    expect(within(item).getByText('Built-in')).toBeTruthy()
+    expect(within(item).queryByText('active')).toBeNull()
+    expect(within(item).queryByText('Central')).toBeNull()
+    expect(within(item).getByText('v1')).toBeTruthy()
   })
 
   it('searches by name, description and origin', async () => {
@@ -35,7 +36,7 @@ describe('SkillLibrary browse', () => {
     fireEvent.change(search, { target: { value: 'builtin' } })
     expect(screen.getByRole('button', { name: 'View webterm-x 1' })).toBeTruthy()
     fireEvent.change(search, { target: { value: 'zzz' } })
-    expect(screen.getByText('No skills match your search.')).toBeTruthy()
+    expect(screen.getByText(/No skills match “zzz”/)).toBeTruthy()
   })
 
   it('opens a read-only detail with the body; builtin says so', async () => {
@@ -103,12 +104,12 @@ describe('SkillLibrary has no manual authoring', () => {
     expect(screen.getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy()
   })
 
-  it('shows the title first (the name when a skill has none), the kind badge, status and version', async () => {
+  it('shows the title first (the name when a skill has none) and no kind badge', async () => {
     render(<SkillLibrary client={withRows(row({ name: 'webterm-titled', title: 'Weekly status report', origin: 'central' }), row({ name: 'webterm-legacy', origin: 'central' }))} />)
     const titled = (await screen.findByRole('button', { name: 'View webterm-titled 1' })).closest('li') as HTMLElement
     expect(within(titled).getByText('Weekly status report')).toBeTruthy()
     expect(within(titled).getByText('webterm-titled')).toBeTruthy()
-    expect(within(titled).getByText('Central')).toBeTruthy()
+    expect(within(titled).queryByText('Central')).toBeNull()
     const legacy = screen.getByRole('button', { name: 'View webterm-legacy 1' }).closest('li') as HTMLElement
     expect(within(legacy).getAllByText('webterm-legacy')).toHaveLength(1)
   })

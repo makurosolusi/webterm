@@ -22,18 +22,18 @@ const show = (list = rows, openSkillAuthor?: (t?: string) => string) => {
 const section = async (name: string) => within(await screen.findByRole('region', { name }))
 
 describe('two skill sections', () => {
-  it('splits the library into Central skills and Canvas skills, each with its purpose, badge and rows', async () => {
+  it('splits the library into Central skills and Canvas skills, each with its purpose and rows (no per-row kind badge)', async () => {
     show()
     const central = await section('Central skills')
     expect(central.getByText('webterm-rule')).toBeTruthy()
     expect(central.queryByText('webterm-howto')).toBeNull()
     expect(central.getByText(/Rules Central follows/)).toBeTruthy()
-    expect(central.getByText('Central')).toBeTruthy()
+    expect(central.queryByText('Central')).toBeNull()
     const canvas = await section('Canvas skills')
     expect(canvas.getByText('webterm-howto')).toBeTruthy()
     expect(canvas.queryByText('webterm-rule')).toBeNull()
-    expect(canvas.getByText(/Reusable procedures for agents on the canvas/)).toBeTruthy()
-    expect(canvas.getByText('Canvas')).toBeTruthy()
+    expect(canvas.getByText(/Reusable procedures that canvas agents read/)).toBeTruthy()
+    expect(canvas.queryByText('Canvas')).toBeNull()
   })
 
   it('shows a per-section empty state', async () => {
