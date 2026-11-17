@@ -19,6 +19,7 @@ test('migration: legacy rows get a deterministic hue, a bad legacy value is repl
     viewport TEXT NOT NULL DEFAULT '{}', nodes TEXT NOT NULL DEFAULT '[]', bridges TEXT NOT NULL DEFAULT '[]', updated_at INTEGER NOT NULL)`)
   d.exec("INSERT INTO workspace (id, name, color, updated_at) VALUES ('a', 'A', NULL, 1), ('b', 'B', '#ff0000', 1), ('c', 'C', 'teal', 1)")
   ensureColorColumns(d)
+  new Db(d).backfillColors()
   const read = () => d.query('SELECT id, color, color_shade FROM workspace ORDER BY id').all() as { id: string; color: string; color_shade: string }[]
   const first = read()
   expect(first[0].color).toBe(backfillWorkspaceHue('a'))
@@ -26,6 +27,7 @@ test('migration: legacy rows get a deterministic hue, a bad legacy value is repl
   expect(first[2].color).toBe('teal') // a valid hue is kept
   expect(first[0].color_shade).toBe('default')
   ensureColorColumns(d)
+  new Db(d).backfillColors()
   expect(JSON.stringify(read())).toBe(JSON.stringify(first))
 })
 

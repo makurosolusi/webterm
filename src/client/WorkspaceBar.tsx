@@ -28,8 +28,8 @@ import { clearOutput, toggleOutput } from './output/outputCommands'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
 import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
-import { openWorkspaceCanvasBackground } from './canvasBackground.open'
-import { setWorkspaceMuted, useNotifyPrefs } from './osNotify.prefs'
+import { useNotifyPrefs } from './osNotify.prefs'
+import { WorkspaceTabMenu } from './WorkspaceTabMenu'
 import { openSetup } from './setup/setup.open'
 import { AccountMenu } from './AccountMenu'
 import { WorkspaceColorHost } from './WorkspaceColorPicker'
@@ -183,10 +183,7 @@ export default function WorkspaceBar({
 
   // Worktree state on the tab: VS Code's dirty dot plus branch in the tooltip; the full badge sits
   // next to the active workspace's name in the title bar (the tab label slot is a plain string).
-  const accentOf = (id: string): string => {
-    const w = workspaces.find((x) => x.id === id)
-    return workspaceColorVar(w?.color, w?.colorShade)
-  }
+  const accentOf = (id: string): string => workspaceColorVar(workspaces.find((x) => x.id === id)?.color, workspaces.find((x) => x.id === id)?.colorShade)
   const tabs: VscodeEditorTab[] = groups.map((g) => {
     const wt = worktrees[g.projectId]
     return {
@@ -298,26 +295,11 @@ export default function WorkspaceBar({
       <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
       {menu && menuGroup && (
-        <NodeContextMenu
-          x={menu.x}
-          y={menu.y}
-          rows={[
-            { label: 'Rename', onClick: () => setEditingId(menuGroup.projectId) },
-            // The background editor (Settings › Appearance) works on the active board, so open this one first.
-            { label: 'Canvas Background…', onClick: () => { if (menuGroup.projectId !== activeId) onSelect(menuGroup.projectId); openWorkspaceCanvasBackground() } },
-            ...(onSetWorkspaceColor ? [{ label: 'Color…', onClick: () => setColorId(menuGroup.projectId) }] : []),
-            // Per-workspace mute lives here, next to the workspace (Settings › Notifications holds the global switches).
-            mutedIds.includes(menuGroup.projectId)
-              ? { label: 'Unmute Notifications', onClick: () => setWorkspaceMuted(menuGroup.projectId, false) }
-              : { label: 'Mute Notifications', onClick: () => setWorkspaceMuted(menuGroup.projectId, true) },
-            { type: 'separator' },
-            {
-              label: 'Delete',
-              danger: true,
-              onClick: () => deleteWorkspace(menuGroup.projectId, menuGroup.projectName, menuGroup.sessions.length),
-            },
-          ]}
-          onClose={() => setMenu(null)}
+        <WorkspaceTabMenu
+          x={menu.x} y={menu.y} projectId={menuGroup.projectId} muted={mutedIds.includes(menuGroup.projectId)} isActive={menuGroup.projectId === activeId}
+          onSelect={onSelect} onRename={() => setEditingId(menuGroup.projectId)} onClose={() => setMenu(null)}
+          onColor={onSetWorkspaceColor ? () => setColorId(menuGroup.projectId) : undefined}
+          onDelete={() => deleteWorkspace(menuGroup.projectId, menuGroup.projectName, menuGroup.sessions.length)}
         />
       )}
     </>

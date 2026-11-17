@@ -99,9 +99,7 @@ function serverSources(dir: string): string[] {
 }
 
 test('policy: the workspace table is written only in db.ts, and every write takes nodes from nodesColumn', () => {
-  // A color-only statement (`UPDATE workspace SET color=...`, db.color.ts / Db.setColor) never names the nodes column,
-  // so it cannot drop a preserved node; it is the one explicit exemption (workspace color feature).
-  const writesWorkspace = /\b(INSERT INTO|UPDATE|REPLACE INTO)\s+workspace\b(?!\s+SET\s+color\b)/g
+  const writesWorkspace = /\b(INSERT INTO|UPDATE|REPLACE INTO)\s+workspace\b/g
   const offenders = serverSources(__dirname).filter((p) => !p.endsWith('/db.ts') && (readFileSync(p, 'utf8').match(writesWorkspace) ?? []).length > 0)
   expect(offenders).toEqual([])
   const src = readFileSync(join(__dirname, 'db.ts'), 'utf8')

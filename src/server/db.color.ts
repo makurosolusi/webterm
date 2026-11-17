@@ -1,18 +1,12 @@
 import type { Database } from 'bun:sqlite'
-import { backfillWorkspaceHue, isWorkspaceHue } from '../shared/workspaceColor'
 
 /**
- * Give every workspace a palette color (`color` = hue id, `color_shade` = soft|default|vivid).
- * `workspace.color` already existed as free text that nothing in the UI wrote, so it is reused
- * instead of adding a second column; rows whose value is not a palette hue (NULL or legacy text)
- * get a hue derived from their id, so the same board keeps the same color on every boot rather
- * than a new random one each load. The shade column is `NOT NULL DEFAULT 'default'` (backfills in
- * place, no rewrite). Idempotent: after the first run nothing matches the backfill query.
+ * Add `workspace.color_shade` (soft|default|vivid) for the workspace color feature. `NOT NULL DEFAULT 'default'`
+ * backfills every row in place; the column check is the step marker, so running it again is a no-op.
+ * The hue backfill (rows whose `color` is not a palette hue) writes the workspace table, so it lives in
+ * db.ts (`Db.backfillColors`), the only module allowed to.
  */
 export function ensureColorColumns(d: Database): void {
   const cols = d.query('PRAGMA table_info(workspace)').all() as { name: string }[]
   if (!cols.some((c) => c.name === 'color_shade')) d.exec("ALTER TABLE workspace ADD COLUMN color_shade TEXT NOT NULL DEFAULT 'default'")
-  const rows = d.query('SELECT id, color FROM workspace').all() as { id: string; color: string | null }[]
-  const update = d.query('UPDATE workspace SET color = ?1 WHERE id = ?2')
-  for (const r of rows) if (!isWorkspaceHue(r.color)) update.run(backfillWorkspaceHue(r.id), r.id)
 }

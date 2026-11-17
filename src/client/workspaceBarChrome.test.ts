@@ -74,9 +74,11 @@ describe('rename & hapus workspace tetap terjangkau', () => {
 
   it('tab context menu membuka permukaan Rename/Delete yang sama; tidak ada kebab', () => {
     expect(bar).not.toContain('aria-label="Workspace options"')
-    expect(bar).toContain("label: 'Rename'")
-    expect(bar).toContain("label: 'Delete'")
-    expect(bar).toContain('<NodeContextMenu')
+    const tabMenu = src('WorkspaceTabMenu.tsx') // the tab menu rows live in their own component
+    expect(bar).toContain('<WorkspaceTabMenu')
+    expect(tabMenu).toContain("label: 'Rename'")
+    expect(tabMenu).toContain("label: 'Delete'")
+    expect(tabMenu).toContain('<NodeContextMenu')
     expect(bar).toMatch(/<VscodeEditorTabBar[\s\S]{0,400}?onContextMenu=/)
   })
 

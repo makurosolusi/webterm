@@ -51,3 +51,24 @@ function removeOne(list: string[], value: string): string[] {
   const i = list.indexOf(value)
   return i < 0 ? list : [...list.slice(0, i), ...list.slice(i + 1)]
 }
+
+/** HTTP answers for a refused color change (`PUT /api/workspaces/:id/color`, and the color fields of a create). */
+export const BAD_COLOR = { status: 400, body: { error: 'color must be a palette hue id' } }
+export const BAD_SHADE = { status: 400, body: { error: 'colorShade must be soft, default or vivid' } }
+const BAD_COLOR_EMPTY = { status: 400, body: { error: 'send color, colorShade or random' } }
+const NOT_FOUND = { status: 404, body: { error: 'not found' } }
+
+/** `PUT /api/workspaces/:id/color` with a parsed object body: apply, broadcast to every window, answer. */
+export async function colorHttp(store: Db, id: string, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
+  const { broadcastUi } = await import('./canvas/canvasPush.runtime')
+  const r = setWorkspaceColor(store, id, body, broadcastUi)
+  if (r.ok) return { status: 200, body: { color: r.change.color, colorShade: r.change.shade } }
+  return r.bad === 'not_found' ? NOT_FOUND : r.bad === 'shade' ? BAD_SHADE : r.bad === 'empty' ? BAD_COLOR_EMPTY : BAD_COLOR
+}
+
+/** The color fields of a create body: validated palette ids (absent stay absent), or the field to refuse. */
+export function createColor(b: Record<string, unknown>): { color?: WorkspaceHue; colorShade?: WorkspaceShade } | { bad: 'color' | 'shade' } {
+  if (b.color != null && !isWorkspaceHue(b.color)) return { bad: 'color' }
+  if (b.colorShade != null && !isWorkspaceShade(b.colorShade)) return { bad: 'shade' }
+  return { color: b.color ?? undefined, colorShade: b.colorShade ?? undefined }
+}

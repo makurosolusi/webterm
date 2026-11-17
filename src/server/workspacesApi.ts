@@ -23,9 +23,8 @@ import { produceEdgeChange } from './events/producers.edge'
 import { normalizeTabLayout } from '../shared/tabLayout.schema'
 import { backgroundsDir } from './canvasBackground.store'
 import { dropWorkspaceBackground } from './canvasBackground.gc'
-import { isWorkspaceHue, isWorkspaceShade } from '../shared/workspaceColor'
 import type { WorkspaceShade } from '../shared/workspaceColor'
-import { setWorkspaceColor } from './workspaceColor'
+import { BAD_COLOR, BAD_SHADE, colorHttp, createColor } from './workspaceColor'
 import { closeRemovedAgentChats, closeWorkspaceAgentChats } from './agentChat/agentChat.pool'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
@@ -40,9 +39,6 @@ const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
 const BAD_NAME = { status: 400, body: { error: 'name must be a non-empty string' } }
 const BAD_CWD = { status: 400, body: { error: 'cwd must be an existing directory' } }
-const BAD_COLOR = { status: 400, body: { error: 'color must be a palette hue id' } }
-const BAD_SHADE = { status: 400, body: { error: 'colorShade must be soft, default or vivid' } }
-const BAD_COLOR_EMPTY = { status: 400, body: { error: 'send color, colorShade or random' } }
 const BAD_LIMIT = { status: 400, body: { error: 'limit must be an integer from 1 to 200' } }
 const BAD_CURSOR = { status: 400, body: { error: 'cursor is not valid' } }
 
@@ -68,10 +64,8 @@ async function createFields(b: Record<string, unknown>): Promise<{ name: string;
   if (!name) return { bad: 'name' }
   const cwd = b.cwd === undefined || b.cwd === null || b.cwd === '' ? undefined : b.cwd
   if (cwd !== undefined && (typeof cwd !== 'string' || !(await isDirectory(cwd)))) return { bad: 'cwd' }
-  // Palette ids only (shared/workspaceColor.ts); absent = the server picks an unused hue at create.
-  if (b.color != null && !isWorkspaceHue(b.color)) return { bad: 'color' }
-  if (b.colorShade != null && !isWorkspaceShade(b.colorShade)) return { bad: 'shade' }
-  return { name, cwd, color: b.color ?? undefined, colorShade: b.colorShade ?? undefined }
+  const c = createColor(b) // palette ids only; absent = the server picks an unused hue at create
+  return 'bad' in c ? c : { name, cwd, ...c }
 }
 
 /** The human create (POST `/api/workspaces`) without HTTP: validate, store, log, secrets guard. Central's `workspace.create` calls it too. */
@@ -180,18 +174,13 @@ export async function workspacesRoute(
     }
   }
 
-  // Color has its own route (not the board PUT): a window with an older board copy must not revert it.
-  // PUT, not PATCH: partial updates in this API (settings) are PUTs too.
+  // Own route, not the board PUT (an older board copy must not revert a color); PUT like other partial updates.
   const colorMatch = path.match(/^\/api\/workspaces\/([^/]+)\/color$/)
   if (colorMatch && method === 'PUT') {
     const read = await bodyOrFailure(body)
     if (!read.ok) return read.result
     const b = parseObjectBody<Record<string, unknown>>(read.raw)
-    if (!b) return BAD_JSON
-    const { broadcastUi } = await import('./canvas/canvasPush.runtime')
-    const r = setWorkspaceColor(store, decodeURIComponent(colorMatch[1]), b, broadcastUi)
-    if (r.ok) return { status: 200, body: { color: r.change.color, colorShade: r.change.shade } }
-    return r.bad === 'not_found' ? NOT_FOUND : r.bad === 'shade' ? BAD_SHADE : r.bad === 'empty' ? BAD_COLOR_EMPTY : BAD_COLOR
+    return b ? colorHttp(store, decodeURIComponent(colorMatch[1]), b) : BAD_JSON
   }
 
   const wsMatch = path.match(/^\/api\/workspaces\/([^/]+)$/)
