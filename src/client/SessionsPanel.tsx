@@ -144,7 +144,11 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       // SEBELUM klik. Peta lipatan menyimpan "terlipat", yang persis sama dengan nilai itu.
       // Click/Enter on a header ONLY expands/collapses: switching here made every expand jump
       // away. Switching = inline action, menu, or a row.
-      setCollapsed((prev) => ({ ...prev, [target.key]: item.open === true }))
+      // Read NOW, outside the updater: React defers an updater to render time whenever the panel
+      // already has a pending update (status tick, SSE), and by then the library has flipped
+      // `open`, so a lazy `item.open` wrote the inverse and the next render undid the click.
+      const collapsedNow = item.open === true
+      setCollapsed((prev) => ({ ...prev, [target.key]: collapsedNow }))
       return
     }
     if (target.kind === 'reopen') {
