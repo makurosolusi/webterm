@@ -7,6 +7,7 @@ import type { ControlRequest } from '../control/controlTypes'
 import { handleBrowserControl } from './browserControl.handler'
 import type { AgentVerbs } from './browserAgent.verbs.ctx'
 import { BrowserError } from './browserHost.targets'
+import { CdpTimeoutError } from './cdp.client'
 import { TOKEN_HEADER } from '../auth'
 import { forgetNodeToken, nodeToken } from '../hooksTokens'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
@@ -102,6 +103,11 @@ describe('handleBrowserControl success and errors', () => {
       .toEqual({ status: 403, body: { error: 'blocked', reason: 'private_host', hostname: 'intranet' } })
     const r = await setup({ navigate: async () => { throw new Error('token=abc123 boom') } })(P('navigate'), 'act1')
     expect(r).toEqual({ status: 500, body: { error: 'internal' } })
+  })
+  it('a stalled CDP command is a typed 504 timeout (retry hint), not internal', async () => {
+    const r = await setup({ navigate: async () => { throw new CdpTimeoutError('cdp Page.navigate (#12) timed out after 15000 ms', 'Page.navigate') } })(P('navigate'), 'act1')
+    expect(r).toMatchObject({ status: 504, body: { error: 'timeout', message: expect.stringMatching(/Retry once/) } })
+    expect(JSON.stringify(r?.body)).not.toContain('Page.navigate')
   })
 })
 

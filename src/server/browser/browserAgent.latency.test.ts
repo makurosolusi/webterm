@@ -4,6 +4,7 @@ import type { BrowserHostApi, BrowserState } from '../../shared/browser.contract
 import { LATENCY_BUFFER_MAX, LATENCY_KEYS, activeLatency, createLatencyRecorder, setActiveLatency } from './browserAgent.latency'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { createAgentVerbs } from './browserAgent.verbs'
+import { CdpTimeoutError } from './cdp.client'
 import { LeaseService } from './browserLease.service'
 
 const SECRET = 'SECRET-MARK-9f2c' // test-only
@@ -17,6 +18,15 @@ function scripted(durations: number[]) {
   let start = true
   return createLatencyRecorder({ perf: () => { if (start) { start = false; return t } start = true; t += durations[i++] ?? 0; return t }, wall: () => 1000 })
 }
+
+describe('stalled phase', () => {
+  it('a CDP timeout is recorded as a failed call with code cdp_timeout (never the message)', async () => {
+    const rec = createLatencyRecorder()
+    await expect(rec.timed('navigate', async () => { throw new CdpTimeoutError(`cdp Page.navigate (#1) timed out ${SECRET}`, 'Page.navigate') }, { url: 'https://a.test/x' })).rejects.toBeInstanceOf(CdpTimeoutError)
+    expect(rec.records()[0]).toMatchObject({ verb: 'navigate', ok: false, code: 'cdp_timeout', host: 'a.test' })
+    expect(JSON.stringify(rec.records())).not.toContain(SECRET)
+  })
+})
 
 describe('ring buffer', () => {
   it('never exceeds its capacity and drops the oldest first', async () => {

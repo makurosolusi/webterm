@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { CDP, CdpClient, CdpClosedError, CdpCommandError, ignoreClosed, isTargetGone } from './cdp.client'
+import { CDP, CdpClient, CdpClosedError, CdpCommandError, CdpTimeoutError, ignoreClosed, isTargetGone } from './cdp.client'
 import { logBus } from '../logs'
 import { SILENT, startFakeCdp, waitFor } from './fakeCdp.testkit'
 import type { FakeCdp } from './fakeCdp.testkit'
@@ -74,6 +74,14 @@ describe('CdpClient', () => {
     await setup(40)
     fake.handle('Hang.m', () => SILENT)
     await expect(client.send('Hang.m')).rejects.toThrow(/Hang\.m \(#\d+\) timed out after 40 ms/)
+  })
+
+  it('a timeout is a typed CdpTimeoutError naming the phase (method) and carrying a telemetry code', async () => {
+    await setup(40)
+    fake.handle('Page.navigate', () => SILENT)
+    const err = await client.send('Page.navigate', { url: 'https://a.test/' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(CdpTimeoutError)
+    expect(err).toMatchObject({ method: 'Page.navigate', code: 'cdp_timeout' })
   })
 
   it('rejects every pending call with context when the socket drops, and refuses later sends', async () => {

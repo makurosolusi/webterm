@@ -10,6 +10,7 @@ import { createLogger } from '../logs/logger'
 import type { AgentVerbs } from './browserAgent.verbs.ctx'
 import { controlOk } from './browserAgent.wrap'
 import { BrowserError } from './browserHost.targets'
+import { CdpTimeoutError } from './cdp.client'
 import { requesterOf } from './browser.linkedTarget'
 import { capabilityHolder } from '../control/controlAuth'
 import type { Policy } from '../policy/policy.decide'
@@ -54,6 +55,8 @@ const fail = (status: number, error: string, extra: object = {}): ControlResult 
 function mapError(err: unknown, nodeId: string): ControlResult {
   if (err instanceof BlockedError) return fail(403, 'blocked', { reason: err.reason, ...(err.hostname ? { hostname: err.hostname } : {}) })
   if (err instanceof BrowserError) return fail(STATUS_BY_CODE[err.code], err.code, { ...(err.hostname ? { hostname: err.hostname } : {}), ...(err.code === 'human_active' ? { message: HUMAN_ACTIVE_MESSAGE } : {}) })
+  // Page did not answer in time (e.g. a stalled first navigation): tell the agent to retry, not "internal".
+  if (err instanceof CdpTimeoutError) return fail(504, 'timeout', { message: 'The page did not respond in time. Retry once; if it repeats, tell the user.' })
   log.error('browser.control.fail', 'Browser control verb failed', { ids: { nodeId }, status: 500, error: err instanceof Error ? err.name : 'unknown' })
   return fail(500, 'internal')
 }
