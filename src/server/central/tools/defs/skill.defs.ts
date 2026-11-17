@@ -42,7 +42,7 @@ export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[]
     validate: (input) => (onlyKeys(input, ['status', 'limit', 'offset']) && (input.status === undefined || STATUSES.includes(input.status as SkillStatus)) && (input.limit === undefined || isInt(input.limit, 1, SKILL_LIST_MAX)) && (input.offset === undefined || isInt(input.offset, 0, 1_000_000)) ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       const records = await resolve(ctx).list(input.status as SkillStatus | undefined, { limit: (input.limit as number | undefined) ?? SKILL_LIST_DEFAULT, offset: (input.offset as number | undefined) ?? 0 })
-      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, audience: r.audience, enabled: r.enabled !== false })) } }
+      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, title: r.title || r.name, version: r.version, status: r.status, origin: r.origin, audience: r.audience, enabled: r.enabled !== false })) } }
     },
   }
   const load: ToolDef = {
@@ -59,11 +59,11 @@ export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[]
   }
   const propose: ToolDef = {
     name: 'skill.propose', summary: 'Propose a new skill draft for human review; never activates it.', tier: 'R1', flag: SKILL_PROPOSE_FLAG, projectScoped: false, forbidden,
-    usage: '{"name":"webterm-<slug>","description":"<=300 chars, what + when","body":"<=4000 chars markdown instructions","caps":["tool.verb"],"audience":"central|canvas"}. audience is required: central = a rule for you (Central), canvas = a procedure for canvas agent sessions (you never load it). Instructions only: no commands, URLs, paths or secrets. A human must approve before it is usable.',
-    input: obj({ name: S.str(), description: S.str(), body: S.str(), caps: S.arr(S.str()), audience: S.str() }, ['name', 'description', 'body', 'caps']),
+    usage: '{"name":"webterm-<slug>","title":"3-80 chars, one line, human-readable, no markdown","description":"<=300 chars, what + when","body":"<=4000 chars markdown that follows the template: ## Purpose, ## When to use, ## Steps (numbered, >= 2), ## Do not, ## Done when, optional ## Notes","caps":["tool.verb"],"audience":"central|canvas"}. audience is required: central = a rule for you (Central), canvas = a procedure for canvas agent sessions (you never load it). Instructions only: no commands, URLs, paths or secrets. A human must approve before it is usable.',
+    input: obj({ name: S.str(), title: S.str(), description: S.str(), body: S.str(), caps: S.arr(S.str()), audience: S.str() }, ['name', 'title', 'description', 'body', 'caps']),
     output: S.keys('name', 'version', 'status'),
     auditKeys: ['name', 'version', 'status'],
-    validate: (input) => (onlyKeys(input, ['name', 'description', 'body', 'caps', 'audience']) && typeof input.name === 'string' && typeof input.description === 'string' && typeof input.body === 'string' && Array.isArray(input.caps) && input.caps.every((c) => typeof c === 'string') ? null : 'invalid_shape'),
+    validate: (input) => (onlyKeys(input, ['name', 'title', 'description', 'body', 'caps', 'audience']) && typeof input.name === 'string' && typeof input.title === 'string' && typeof input.description === 'string' && typeof input.body === 'string' && Array.isArray(input.caps) && input.caps.every((c) => typeof c === 'string') ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       if (!flagged(ctx, SKILLS_FLAG)) return { ok: false, code: 'flag_off' }
       try {

@@ -38,68 +38,40 @@ describe('two skill sections', () => {
 
   it('shows a per-section empty state', async () => {
     show([row('webterm-howto', 'canvas')])
-    expect((await section('Central skills')).getByText('No Central skills yet')).toBeTruthy()
+    expect((await section('Central skills')).getByText(/^No Central skills yet\./)).toBeTruthy()
   })
 
   it('the canvas agent-author node button stays in the Canvas section; the Central section has its own chat-based author', async () => {
     show(rows, () => 'node-1')
-    expect((await section('Canvas skills')).getByRole('button', { name: 'Write with an agent' })).toBeTruthy()
-    expect((await section('Central skills')).queryByRole('button', { name: 'Write with an agent' })).toBeNull()
+    expect((await section('Canvas skills')).getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy()
     expect((await section('Central skills')).getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
     expect((await section('Canvas skills')).queryByRole('button', { name: 'Write with an agent (Central)' })).toBeNull()
+  })
+
+  it('without a board the Canvas section falls back to the Central author chat, which writes either kind', async () => {
+    show()
+    expect((await section('Canvas skills')).getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy()
   })
 
   it('the per-skill node edit is for a canvas skill; a central skill offers the Central chat author instead', async () => {
     show(rows, () => 'node-1')
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-rule 1' }))
-    expect(screen.queryByRole('button', { name: 'Edit with an agent' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Edit with an agent webterm-rule' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ask the agent to revise' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Ask the agent to revise webterm-rule' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'View webterm-howto 1' }))
-    expect(await screen.findByRole('button', { name: 'Edit with an agent' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Edit with an agent webterm-howto' })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Ask the agent to revise' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ask the agent to revise webterm-howto' })).toBeNull()
   })
 })
 
-describe('kind on create, detail and fork', () => {
-  it('New skill from a section preselects that kind, shows what it means, and sends it', async () => {
-    const client = show()
-    fireEvent.click(await within(await screen.findByRole('region', { name: 'Central skills' })).findByRole('button', { name: 'New skill (Central)' }))
-    const form = screen.getByRole('form', { name: 'New skill draft' })
-    expect(within(form).getByRole('combobox', { name: 'Kind' }).textContent).toContain('Central skill')
-    expect(within(form).getByText(/Canvas agents never see it/)).toBeTruthy()
-    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'my-rule' } })
-    fireEvent.change(within(form).getByLabelText('When to use'), { target: { value: 'Use when asked.' } })
-    fireEvent.change(within(form).getByLabelText('Instructions (markdown)'), { target: { value: '1. Do it.' } })
-    fireEvent.click(within(form).getByRole('button', { name: 'Create draft' }))
-    await waitFor(() => expect(client.createSkill).toHaveBeenCalledWith({ name: 'webterm-my-rule', description: 'Use when asked.', body: '1. Do it.', caps: [], audience: 'central' }))
-  })
-
-  it('a canvas section opens the form on Canvas skill', async () => {
+describe('kind in the detail', () => {
+  it('detail shows the badge and meaning, with no kind select and no duplicate', async () => {
     show()
-    fireEvent.click(await within(await screen.findByRole('region', { name: 'Canvas skills' })).findByRole('button', { name: 'New skill (Canvas)' }))
-    expect(within(screen.getByRole('form', { name: 'New skill draft' })).getByRole('combobox', { name: 'Kind' }).textContent).toContain('Canvas skill')
-  })
-
-  it('detail shows the badge and meaning; Duplicate sends the selected kind (default: the skill own kind)', async () => {
-    const client = show()
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-howto 1' }))
     const detail = await screen.findByRole('article', { name: 'webterm-howto 1 details' })
     expect(within(detail).getAllByText(/Central never loads it/).length).toBeGreaterThan(0)
-    expect(within(detail).getByRole('combobox', { name: 'Kind' }).textContent).toContain('Canvas skill')
-    fireEvent.click(within(detail).getByRole('button', { name: 'Duplicate and edit' }))
-    await waitFor(() => expect(client.forkSkill).toHaveBeenCalledWith('webterm-howto', 'canvas'))
-  })
-
-  it('Edit shows the fixed kind (no select) and does not send an audience', async () => {
-    const client = show()
-    fireEvent.click(await screen.findByRole('button', { name: 'View webterm-howto 1' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
-    const form = screen.getByRole('form', { name: 'Edit skill' })
-    expect(within(form).queryByRole('combobox', { name: 'Kind' })).toBeNull()
-    expect(within(form).getByText(/keeps its kind/)).toBeTruthy()
-    fireEvent.change(within(form).getByLabelText('Instructions (markdown)'), { target: { value: '1. Changed.' } })
-    fireEvent.click(within(form).getByRole('button', { name: 'Save new version' }))
-    await waitFor(() => expect(client.editSkill).toHaveBeenCalledWith('webterm-howto', { description: 'About webterm-howto.', body: '1. Changed.', caps: [] }))
+    expect(within(detail).queryByRole('combobox')).toBeNull()
+    expect(within(detail).queryByRole('button', { name: /Duplicate|^Edit$/ })).toBeNull()
   })
 })
 

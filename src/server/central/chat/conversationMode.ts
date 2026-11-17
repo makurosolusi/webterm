@@ -14,9 +14,6 @@ export const MODE_TOOLS: Readonly<Record<ConversationMode, readonly string[]>> =
   'skill-author': ['skill.list', 'skill.load', 'skill.propose'],
 }
 
-/** The only audience the skill-author mode may propose. */
-export const SKILL_AUTHOR_AUDIENCE = 'central'
-
 const MODE_SET: ReadonlySet<string> = new Set(CONVERSATION_MODES)
 export const isConversationMode = (v: unknown): v is ConversationMode => typeof v === 'string' && MODE_SET.has(v)
 

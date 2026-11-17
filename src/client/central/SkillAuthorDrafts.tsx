@@ -1,10 +1,10 @@
 // Draft panels for the human to review next to a conversation. Each card is the normal review card (diff against the
-// active version, lint, typed approval for an agent or Central draft, Reject). Edit saves the human's text as a NEW
-// human-origin version, which is then one-click approvable. No polling: a finished chat turn and the Refresh button reload.
+// active version, lint, typed approval, Reject). Changes are asked of the agent, never typed here. No polling: a
+// finished chat turn and the Refresh button reload.
 //  - default export: "Drafts from this agent", the open proposals of one canvas skill-author chat node.
 //  - `CentralDraftsPanel`: the open drafts Central proposed for a Central skill, read from the Skills tab's own list.
 import { Button } from '@/components/ui/button'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { onSkillAuthorActivity } from '../agentChat/skillAuthor.events'
 import { CL } from './centralLabels'
 import { SKILLS_OFF } from './centralControlApi'
@@ -12,7 +12,6 @@ import type { CentralControlClient, SkillReviewRow } from './centralControlTypes
 import { type Loaded, useLoad } from './centralLoad'
 import { onCentralSkillAuthorActivity } from './centralSkillAuthor.events'
 import { centralDraftsOf, draftsOf } from './skillAuthorModel'
-import SkillCreateForm from './SkillCreateForm'
 import SkillReviewList from './SkillReview'
 
 interface CardProps {
@@ -22,25 +21,14 @@ interface CardProps {
   drafts: SkillReviewRow[]
   client: CentralControlClient
   onClose?: () => void
-  /** A draft was approved, rejected or replaced: reload the library. */
+  /** A draft was approved or rejected: reload the library. */
   onChanged: () => void
   /** The host already shows the list's load error and loading line (the Skills tab does): the card then stays quiet about them. */
   hostShowsStatus?: boolean
 }
 
 function DraftsCard({ title, empty, list, drafts, client, onClose, onChanged, hostShowsStatus = false }: CardProps) {
-  const [editing, setEditing] = useState<SkillReviewRow | null>(null)
   const done = (): void => { list.reload(); onChanged() }
-  // An edit is refused while another version is open, so the agent draft is rejected first (once, even when the save is retried).
-  const rejected = useRef(false)
-  const editClient = useMemo<CentralControlClient>(() => ({
-    ...client,
-    editSkill: async (name, input) => {
-      if (editing && !rejected.current) { await client.rejectSkill(editing.record.name, editing.record.version); rejected.current = true }
-      await client.editSkill(name, input)
-    },
-  }), [client, editing])
-  const startEdit = (r: SkillReviewRow): void => { rejected.current = false; setEditing(r) }
   return (
     <section className="ccp-card" aria-label={title}>
       <header>
@@ -53,16 +41,8 @@ function DraftsCard({ title, empty, list, drafts, client, onClose, onChanged, ho
         <div><p role="alert" className="ccp-error">{list.error}</p><Button type="button" size="sm" variant="secondary" onClick={list.reload}>{CL.skillsRetry}</Button></div>
       )}
       {list.loading && !list.data && !hostShowsStatus && <p role="status">{CL.loading}</p>}
-      {list.data && drafts.length === 0 && !editing && <p>{empty}</p>}
-      {editing && (
-        <SkillCreateForm client={editClient} edit={editing} onCancel={() => setEditing(null)} onCreated={() => { setEditing(null); done() }} />
-      )}
-      {!editing && drafts.map((r) => (
-        <div key={`${r.record.name}@${r.record.version}:${r.record.status}`}>
-          <SkillReviewList rows={[r]} client={client} onDone={done} />
-          <Button type="button" size="sm" variant="secondary" aria-label={`${CL.skillEdit} ${r.record.name} ${r.record.version}`} onClick={() => startEdit(r)}>{CL.skillEdit}</Button>
-        </div>
-      ))}
+      {list.data && drafts.length === 0 && <p>{empty}</p>}
+      <SkillReviewList rows={drafts} client={client} onDone={done} />
     </section>
   )
 }

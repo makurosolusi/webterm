@@ -7,8 +7,7 @@ import type { Ca2Handle } from './ca2Boot'
 import { FEATURE_OFF } from './ca2Routes.read'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { SkillError } from './skills/skillIndex'
-import { MAX_BODY_CHARS, MAX_CAPS, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME_RE } from './skills/skillLint'
-import { SKILL_AUDIENCES, type SkillAudience, type SkillProposeInput, isSkillAudience } from './contracts/skill.types'
+import { SKILL_AUDIENCES } from './contracts/skill.types'
 import type { ToolResult } from './tools/toolTypes'
 
 /** Actor prefix the skill admin steps require. */
@@ -69,17 +68,15 @@ export function skillFailure(err: unknown): RouteResult {
 
 export type SkillAction = 'approve' | 'rollback' | 'reject'
 
-/** `POST /skills/:name/approve`, `/rollback` and `/reject`; all need a `human:*` actor. Approve also needs the typed phrase. */
+/** `POST /skills/:name/approve`, `/rollback` and `/reject`; all need a `human:*` actor. Approve needs the typed phrase, always. */
 export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw: unknown, actor: string): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
   try {
     if (action === 'rollback') { h.skills.rollback(name, actor); return { status: 200, body: { status: 'done' } } }
-    const { version, phrase, reviewed } = bodyOf(raw)
+    const { version, phrase } = bodyOf(raw)
     if (typeof version !== 'string') return fail(400, 'invalid_version')
     if (action === 'reject') { h.skills.reject(name, version, actor); return { status: 200, body: { status: 'done' } } }
-    // One click after the diff: the store only honours it for a human-origin draft (403 `forbidden` otherwise).
-    if (reviewed === true) { h.skills.approve(name, version, actor, undefined, true); return { status: 200, body: { status: 'done' } } }
     if (phrase !== CONFIRM_PHRASE) return fail(400, 'confirm_phrase_mismatch')
     h.skills.approve(name, version, actor, confirmPhrase(name, version))
     return { status: 200, body: { status: 'done' } }
@@ -88,40 +85,5 @@ export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw
   }
 }
 
-const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
-
 /** 400 `invalid_audience` naming the legal values; shared by every human and agent entry. */
 export const badAudience = (): RouteResult => fail(400, 'invalid_audience', { allowed: [...SKILL_AUDIENCES] })
-
-/** Validates the draft fields shared by create and edit; `carry` is the audience an edit keeps when none is sent (none on create: required). The server lint stays the authority. */
-export function parseDraft(raw: unknown, name: unknown, carry?: SkillAudience): { input: SkillProposeInput } | { error: RouteResult } {
-  const { description, body, caps = [], audience = carry } = bodyOf(raw)
-  if (typeof name !== 'string' || name.length > MAX_SKILL_NAME || !SKILL_NAME_RE.test(name)) return { error: fail(400, 'invalid_name') }
-  if (!isText(description, MAX_DESCRIPTION) || /[\r\n]/.test(description)) return { error: fail(400, 'invalid_description') }
-  if (!isText(body, MAX_BODY_CHARS)) return { error: fail(400, 'invalid_body') }
-  if (!Array.isArray(caps) || caps.length > MAX_CAPS || caps.some((c) => typeof c !== 'string')) return { error: fail(400, 'invalid_caps') }
-  if (!isSkillAudience(audience)) return { error: badAudience() }
-  return { input: { name, description, body, caps: caps as string[], audience } }
-}
-
-/** Proposes a validated human draft and answers 201 with its state; shared by create and edit. */
-export async function proposeHuman(h: Ca2Handle, input: SkillProposeInput, actor: string): Promise<RouteResult> {
-  if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
-  try {
-    const rec = await h.skills.propose(input, actor)
-    return { status: 201, body: { name: rec.name, version: rec.version, state: rec.status } }
-  } catch (err) {
-    return skillFailure(err)
-  }
-}
-
-/**
- * `POST /skills` — a human drafts a skill. It enters the same propose -> evaluate -> pending_approval path as a
- * Central proposal (same lint, same limits); activation stays the separate approve step.
- */
-export async function createSkill(h: Ca2Handle, raw: unknown, actor: string): Promise<RouteResult> {
-  if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
-  if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
-  const parsed = parseDraft(raw, bodyOf(raw).name)
-  return 'error' in parsed ? parsed.error : proposeHuman(h, parsed.input, actor)
-}

@@ -103,16 +103,13 @@ function pointActive(root: string, name: string, version: string): void {
 }
 
 /**
- * Human-only R3: needs a pending_approval version, an intact hash and a clean re-lint, plus either the typed phrase or,
- * only for a draft whose recorded origin is `human` (author = approver), `reviewed: true` after the diff was shown.
- * Central- and agent-origin drafts always need the typed phrase (docs/decisions/skill-approval.md).
+ * Human-only R3: needs a pending_approval version, an intact hash, a clean re-lint and the typed phrase. Every draft
+ * is written by an agent or Central, so there is no one-click path (docs/decisions/skill-approval.md).
  */
-export function approveSkill(ctx: SkillCtx, name: string, version: string, approvedBy: string, typedConfirm: string | undefined, reviewed = false): SkillRecord {
+export function approveSkill(ctx: SkillCtx, name: string, version: string, approvedBy: string, typedConfirm: string | undefined): SkillRecord {
   requireHuman(approvedBy)
   const rec = requireRecord(ctx, name, version)
-  if (reviewed) {
-    if (rec.origin !== 'human') throw new SkillError('forbidden', `one-click approval is only for human-origin drafts, not ${rec.origin}`)
-  } else if (typedConfirm !== confirmPhrase(name, version)) throw new SkillError('forbidden', 'typed confirmation does not match')
+  if (typedConfirm !== confirmPhrase(name, version)) throw new SkillError('forbidden', 'typed confirmation does not match')
   requireStatus(rec, ['pending_approval'])
   const previous = activeRecord(ctx.db, name)
   if (!previous && countActive(ctx.db) >= MAX_ACTIVE_SKILLS) throw new SkillError('limit', `at most ${MAX_ACTIVE_SKILLS} active skills`)

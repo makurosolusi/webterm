@@ -5,7 +5,6 @@
 import { useCapabilities } from '../useCapabilities'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
-import { createSkillRequest, skillPost } from './skillCreateApi'
 import type {
   AgentActionResult, AgentRow, BoardNodeRow, BoardProject, CentralControlClient, ContextView, ControlView, MemoryRow,
   SkillReviewRow, StateDoc, StatusView, ToolAccess, ToolGroup, ToolRow, ToolsView, TurnContext, WorkingState,
@@ -162,15 +161,7 @@ export const centralControlApi: CentralControlClient = {
   async listSkills(signal) { return compact(rowsOf(await request(SKILLS_PATH, { signal })).map(toSkill)) },
   async approveSkill(name, version, phrase) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, phrase }) },
   async rejectSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/reject`, { version }) },
-  createSkill: (input) => createSkillRequest(SKILLS_PATH, input),
-  async approveSkillReviewed(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, reviewed: true }) },
   async setSkillEnabled(name, enabled) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`, {}) },
-  async editSkill(name, input) { await skillPost(`${SKILLS_PATH}/${encodeURIComponent(name)}/versions`, input) },
-  async forkSkill(name, audience) {
-    const out = await skillPost(`${SKILLS_PATH}/${encodeURIComponent(name)}/fork`, { audience })
-    if (typeof out.name !== 'string') throw new InboxApiError('Fork response malformed', 502, 'bad_response')
-    return out.name
-  },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
   async listMemory(offset, signal, filter = {}) {
     const narrow = `${filter.projectId ? `&projectId=${encodeURIComponent(filter.projectId)}` : ''}${filter.status ? `&status=${filter.status}` : ''}`

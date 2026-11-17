@@ -73,10 +73,10 @@ usage: webterm <command> [args]
   skills get <name> [--json]      a launcher guide (webterm-cli, ...) or an approved canvas skill
   skills list [name]              canvas skills the user attached to your node (skill nodes cabled to Skills) + your open drafts
                                   (a name adds its body)
-  skills propose --name webterm-<slug> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-]
+  skills propose --name webterm-<slug> --title <text> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-]
                                   PROPOSE a new canvas skill (body from a file or stdin); a human must approve it.
                                   Always a canvas skill: central skills (Central's own rules) are not yours to write
-  skills edit <name> [--description <text>] [--caps a,b] [--body-file <path>|-]
+  skills edit <name> [--title <text>] [--description <text>] [--caps a,b] [--body-file <path>|-]
                                   PROPOSE a new version of an active skill (unset fields keep the active text)
   report "<text>" [--done|--blocked|--question|--progress]
                                   tell Central now where your work stands (default --progress);
@@ -174,10 +174,11 @@ ${cli} <command> [args]
    \`--progress\` (the default). done/blocked/question move your task and wake Central at once; progress is recorded.
 6. Skills: there are two kinds, never shared: \`central\` (rules for Central itself; you never see them) and \`canvas\` (reusable
    procedures for agents like you). \`${cli} skills list\` shows the canvas skills the user attached to your node (a skill node cabled to your Skills port) and
-   \`${cli} skills get <name>\` prints one; follow the ones that apply to your task. \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
+   \`${cli} skills get <name>\` prints one; follow the ones that apply to your task. \`${cli} skills propose --name webterm-<slug> --title "..." --description "..." --body-file <path|->\`
    proposes a new skill and \`${cli} skills edit <name> --body-file <path|->\` a new version of an existing one. You can only
-   propose: a human approves it in webterm, and only then does it become active. Bodies are plain instructions (max 4000 chars,
-   no URLs, shell commands or secrets; lint rejects them and names only the issue code).
+   propose: a human approves it in webterm, and only then does it become active. A title is required (3-80 chars, one line, no markdown). Bodies are plain instructions (max 4000 chars) with the sections
+   ## Purpose, ## When to use, ## Steps (numbered, at least 2), ## Do not, ## Done when (optional ## Notes); no URLs, shell commands or
+   secrets. Lint rejects a thin skill and names only the issue code (\`structure:missing ## Steps\`).
 
 Capabilities in this version:
 ${rows.join('\n')}

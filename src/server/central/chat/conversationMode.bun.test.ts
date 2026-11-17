@@ -15,6 +15,7 @@ import { callCentralTool, listCentralTools } from '../../mcp/mcp.central'
 import { obj, S } from '../../capability/capability.schema'
 import { getConversation, getOrCreateConversation, listConversationEvents } from '../conversationStore'
 import { createControlGuard } from '../guard/controlGuard'
+import { createSkillStore } from '../skills/skillStore'
 import { createSkillDefs, type SkillToolStore } from '../tools/defs/skill.defs'
 import { createRegistry } from '../tools/toolRegistry'
 import type { ToolDef } from '../tools/toolTypes'
@@ -177,6 +178,52 @@ describe('a turn of a mode chat', () => {
   })
 })
 
+describe('an edit conversation keeps the kind (real store)', () => {
+  it('a canvas proposal over an active central skill is refused by the store, whatever the model sends', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'author-kind-'))
+    try {
+      const db = openLedgerDb(':memory:')
+      const real = createSkillStore({ db, root })
+      const registry = createRegistry()
+      for (const def of createSkillDefs(() => real as unknown as SkillToolStore)) registry.register(def)
+      const env = { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_SKILL_PROPOSE: 'on' }
+      const c = { db, registry, env, guard: createControlGuard({ db, now: Date.now, env }) }
+      const body = '## Purpose\nx\n\n## When to use\nx\n\n## Steps\n1. One.\n2. Two.\n\n## Do not\n- x\n\n## Done when\nx\n'
+      const args = { name: 'webterm-edit-me', title: 'Edit me', description: 'd', body, caps: [] }
+      const first = await real.propose({ ...args, audience: 'central' }, 'central:seed')
+      real.approve(first.name, first.version, 'human:ui', `approve ${first.name}@${first.version}`)
+      const edit = createChatConversation(db, undefined, { mode: 'skill-author', skillTarget: 'webterm-edit-me' }).id
+      const flipped = await callCentralTool(c, edit, 'skill_propose', { ...args, audience: 'canvas' })
+      expect(flipped.outcome).not.toBe('ok')
+      expect(JSON.stringify(flipped)).toContain('audience_immutable')
+      expect(real.list('pending_approval')).toEqual([])
+      expect((await callCentralTool(c, edit, 'skill_propose', { ...args, audience: 'central' })).outcome).toBe('ok')
+      expect(await callCentralTool(c, edit, 'skill_propose', { ...args, name: 'webterm-other-skill', audience: 'canvas' })).toMatchObject({ outcome: 'denied', detail: 'skill_not_target' })
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('built-in reference (variant flow, real store)', () => {
+  it('the target is read-only: a new valid name is proposed, the built-in name itself is denied', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'author-variant-'))
+    try {
+      const db = openLedgerDb(':memory:')
+      const real = createSkillStore({ db, root })
+      real.installBuiltins()
+      const registry = createRegistry()
+      for (const def of createSkillDefs(() => real as unknown as SkillToolStore)) registry.register(def)
+      const env = { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_SKILL_PROPOSE: 'on' }
+      const c = { db, registry, env, guard: createControlGuard({ db, now: Date.now, env }) }
+      const variant = createChatConversation(db, undefined, { mode: 'skill-author', skillTarget: 'webterm-central-basics' }).id
+      const body = '## Purpose\nx\n\n## When to use\nx\n\n## Steps\n1. One.\n2. Two.\n\n## Do not\n- x\n\n## Done when\nx\n'
+      const args = { title: 'My variant', description: 'd', body, caps: [], audience: 'central' }
+      expect(await callCentralTool(c, variant, 'skill_propose', { ...args, name: 'webterm-central-basics' })).toMatchObject({ outcome: 'denied', detail: 'skill_not_target' })
+      expect((await callCentralTool(c, variant, 'skill_propose', { ...args, name: 'webterm-my-variant' })).outcome).toBe('ok')
+      expect(real.list('pending_approval').map((r) => r.name)).toEqual(['webterm-my-variant'])
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
 describe('MCP backend narrowing', () => {
   const proposed: { name: string; audience: string }[] = []
   const store = {
@@ -202,7 +249,7 @@ describe('MCP backend narrowing', () => {
   const plain = createChatConversation(db).id
   const names = (id: string): string[] => listCentralTools(c, id).map((t) => t.name).sort()
   const propose = (conv: string, args: Record<string, unknown>) =>
-    callCentralTool(c, conv, 'skill_propose', { name: 'webterm-x', description: 'd', body: 'b', caps: [], ...args })
+    callCentralTool(c, conv, 'skill_propose', { name: 'webterm-x', title: 'Title x', description: 'd', body: 'b', caps: [], ...args })
 
   it('lists only the skill tools in a skill-author chat, everything in an ordinary one', () => {
     expect(names(author)).toEqual(['skill_list', 'skill_load', 'skill_propose'])
@@ -219,18 +266,21 @@ describe('MCP backend narrowing', () => {
     expect((await callCentralTool(c, plain, 'test_peek', {})).outcome).toBe('ok')
   })
 
-  it('forces audience central and refuses a canvas skill', async () => {
+  it('the author picks the kind explicitly: central and canvas both reach the store, a missing or unknown kind is refused', async () => {
     const before = proposed.length
-    expect((await propose(author, { audience: 'canvas' }))).toMatchObject({ outcome: 'denied', detail: 'audience_not_allowed' })
-    expect(proposed.length).toBe(before)
-    expect((await propose(author, {})).outcome).toBe('ok')
+    expect((await propose(author, { audience: 'canvas' })).outcome).toBe('ok')
     expect((await propose(author, { audience: 'central' })).outcome).toBe('ok')
-    expect(proposed.slice(before)).toEqual([{ name: 'webterm-x', audience: 'central' }, { name: 'webterm-x', audience: 'central' }])
+    expect(proposed.slice(before)).toEqual([{ name: 'webterm-x', audience: 'canvas' }, { name: 'webterm-x', audience: 'central' }])
+    for (const args of [{}, { audience: 'both' }, { audience: 'everyone' }]) {
+      expect(await propose(author, args)).toMatchObject({ outcome: 'denied', detail: 'audience_required' })
+    }
+    expect(proposed.length).toBe(before + 2)
   })
 
   it('an edit chat may propose only its target skill', async () => {
     expect(await propose(targeted, { name: 'webterm-other' })).toMatchObject({ outcome: 'denied', detail: 'skill_not_target' })
-    expect((await propose(targeted, { name: 'webterm-edit-me' })).outcome).toBe('ok')
+    expect((await propose(targeted, { name: 'webterm-edit-me', audience: 'central' })).outcome).toBe('ok')
+    expect(await propose(targeted, { name: 'webterm-edit-me' })).toMatchObject({ outcome: 'denied', detail: 'audience_required' })
   })
 
   it('an ordinary chat is untouched: a canvas audience still reaches the store', async () => {

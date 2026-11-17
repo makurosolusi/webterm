@@ -1,11 +1,10 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { fakeClient } from './centralFixtures.testutil'
 import type { SkillReviewRow } from './centralControlTypes'
 import SkillLibrary from './SkillLibrary'
-import { SkillCreateError, skillPost } from './skillCreateApi'
 
 // Radix Checkbox/Switch measure themselves with ResizeObserver, which jsdom lacks.
 beforeAll(() => { globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver })
@@ -46,69 +45,37 @@ describe('enable switch', () => {
   })
 })
 
-describe('edit as a new version', () => {
-  it('prefills the form, shows a diff of the change, and saves through editSkill', async () => {
-    const client = await open([row()])
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    const form = screen.getByRole('form', { name: 'Edit skill' })
-    expect((within(form).getByLabelText('Instructions (markdown)') as HTMLTextAreaElement).value).toBe('1. Read it.\n2. Ship it.')
-    expect((within(form).getByLabelText('Name') as HTMLInputElement).disabled).toBe(true)
-    const save = within(form).getByRole('button', { name: 'Save new version' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    expect(within(form).getByText('No changes yet.')).toBeTruthy()
-    fireEvent.change(within(form).getByLabelText('Instructions (markdown)'), { target: { value: '1. Read it.\n2. Ship it twice.' } })
-    const diff = within(form).getByLabelText('Changes from the current version')
-    expect(diff.textContent).toContain('- 2. Ship it.')
-    expect(diff.textContent).toContain('+ 2. Ship it twice.')
-    fireEvent.click(save)
-    await waitFor(() => expect(client.editSkill).toHaveBeenCalledWith('webterm-mine', { description: 'Deploy checklist.', body: '1. Read it.\n2. Ship it twice.', caps: ['portfolio.read'] }))
-    expect(await screen.findByText('New version of webterm-mine saved. Review it below.')).toBeTruthy()
-  })
-
-  it('offers no Edit on a built-in skill and blocks Edit while a draft is open', async () => {
-    await open([row({ origin: 'builtin' })])
-    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+describe('revising goes through the agent', () => {
+  it('offers Ask the agent to revise on a user skill and blocks it while a draft is open', async () => {
+    await open([row()])
+    expect((screen.getByRole('button', { name: 'Ask the agent to revise webterm-mine' }) as HTMLButtonElement).disabled).toBe(false)
     cleanup()
     await open([row(), row({ version: '2', status: 'pending_approval' })])
-    expect((screen.getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Ask the agent to revise webterm-mine' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/already waiting for review/)).toBeTruthy()
   })
-})
 
-describe('duplicate a built-in skill', () => {
-  it('forks through the client and says where the draft went', async () => {
-    const client = await open([row({ origin: 'builtin', name: 'webterm-basics' })])
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate and edit' }))
-    await waitFor(() => expect(client.forkSkill).toHaveBeenCalledWith('webterm-basics', 'central'))
-    expect(await screen.findByText('Draft webterm-x-copy saved. Review it below.')).toBeTruthy()
+  it('a built-in has no revise button, only a variant, and nothing offers to edit or duplicate it', async () => {
+    await open([row({ origin: 'builtin', name: 'webterm-basics' })])
+    expect(screen.queryByRole('button', { name: /Ask the agent to revise/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Ask the agent for a variant webterm-basics' })).toBeTruthy()
+    for (const name of [/^Edit/, /Duplicate/]) expect(screen.queryByRole('button', { name })).toBeNull()
   })
 })
 
-describe('approval variants', () => {
+describe('approval needs the typed phrase for every draft', () => {
   const pending = (origin: SkillReviewRow['record']['origin']) => row({ name: `webterm-${origin}-d`, status: 'pending_approval', origin })
 
-  it('a human draft shows the diff and one Approve button, no typed phrase', async () => {
-    const client = fakeClient({ listSkills: vi.fn(async () => [pending('human')]) })
-    render(<SkillLibrary client={client} />)
-    expect(screen.queryByRole('textbox', { name: /Type/ })).toBeNull()
-    const btn = await screen.findByRole('button', { name: 'Approve skill webterm-human-d 1' })
-    expect(screen.getByLabelText('Diff')).toBeTruthy()
-    fireEvent.click(btn)
-    await waitFor(() => expect(client.approveSkillReviewed).toHaveBeenCalledWith('webterm-human-d', '1'))
-    expect(client.approveSkill).not.toHaveBeenCalled()
-  })
-
-  it.each(['central', 'agent'] as const)('a %s draft keeps the typed phrase and its reason', async (origin) => {
+  it.each(['central', 'agent', 'human'] as const)('a %s draft shows the diff and keeps the typed phrase', async (origin) => {
     const client = fakeClient({ listSkills: vi.fn(async () => [pending(origin)]) })
     render(<SkillLibrary client={client} />)
     const btn = (await screen.findByRole('button', { name: `Approve skill webterm-${origin}-d 1` })) as HTMLButtonElement
     expect(btn.disabled).toBe(true)
-    expect(screen.getByText(new RegExp(`came from ${origin === 'agent' ? 'an agent' : 'Central'}`))).toBeTruthy()
+    expect(screen.getByLabelText('Diff')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: CONFIRM_PHRASE } })
     await waitFor(() => expect(btn.disabled).toBe(false))
     fireEvent.click(btn)
     await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith(`webterm-${origin}-d`, '1', CONFIRM_PHRASE))
-    expect(client.approveSkillReviewed).not.toHaveBeenCalled()
   })
 })
 
@@ -117,14 +84,5 @@ describe('rejected drafts stay visible', () => {
     render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => [row({ status: 'rejected', rejectReason: 'rejected_by_human' })]) })} />)
     expect(await screen.findByText('Rejected: Rejected by you.')).toBeTruthy()
     expect(screen.getAllByText('rejected').length).toBeGreaterThan(0)
-  })
-})
-
-describe('skillPost', () => {
-  it('turns a non-JSON error body into the typed http_<status> error, never silently', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>bad gateway</html>', { status: 502 })))
-    const err = await skillPost('/x', {}).catch((e: unknown) => e)
-    expect(err).toBeInstanceOf(SkillCreateError)
-    expect(err).toMatchObject({ status: 502, code: 'http_502', issues: [] })
   })
 })

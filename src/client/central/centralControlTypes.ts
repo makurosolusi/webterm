@@ -68,11 +68,6 @@ export interface SkillReviewRow {
   body: string
 }
 
-/** A human-authored skill draft (`POST /api/central/skills`); `name` carries the full `webterm-` prefix. */
-export interface SkillDraftInput { name: string; description: string; body: string; caps: string[]; audience: SkillAudience }
-/** An edit never sends the audience: a skill keeps its kind (the server refuses a change). */
-export type SkillEditInput = Omit<SkillDraftInput, 'name' | 'audience'>
-
 export interface MemoryRow {
   id: string
   scope: MemoryBlockScope
@@ -143,16 +138,8 @@ export interface CentralControlClient {
   approveSkill(name: string, version: string, phrase: string): Promise<void>
   rejectSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
-  /** Stores a human draft for review; rejects with `SkillCreateError` (lint issue codes) on a 400. */
-  createSkill(input: SkillDraftInput): Promise<void>
-  /** One-click approval of a human-origin draft after the diff was shown; the server refuses other origins (403 `forbidden`). */
-  approveSkillReviewed(name: string, version: string): Promise<void>
   /** Human-only on/off switch of a skill; independent of approval. */
   setSkillEnabled(name: string, enabled: boolean): Promise<void>
-  /** Saves an edit as a new version through the normal review path; rejects with `SkillCreateError`. */
-  editSkill(name: string, input: SkillEditInput): Promise<void>
-  /** Copies a skill into a free `webterm-<base>-copy[-n]` draft of the chosen kind and resolves to the new name. */
-  forkSkill(name: string, audience: SkillAudience): Promise<string>
   listMemory(offset: number, signal?: AbortSignal, filter?: MemoryFilter): Promise<MemoryRow[]>
   confirmMemory(id: string): Promise<void>
   forgetMemory(id: string): Promise<void>

@@ -78,7 +78,6 @@ describe('drafts panel actions', () => {
     expect(approve.disabled).toBe(false)
     fireEvent.click(approve)
     await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-mine', '2', CONFIRM_PHRASE))
-    expect(client.approveSkillReviewed).not.toHaveBeenCalled()
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
   it('rejects a draft', async () => {
@@ -86,23 +85,20 @@ describe('drafts panel actions', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Reject webterm-mine 2' }))
     await waitFor(() => expect(client.rejectSkill).toHaveBeenCalledWith('webterm-mine', '2'))
   })
-  it('Edit saves a new version after rejecting the agent draft once, even when the save is retried', async () => {
-    const editSkill = vi.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue(undefined)
-    const { client } = panel([mine], { editSkill })
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit webterm-mine 2' }))
-    fireEvent.change(screen.getByLabelText('Instructions (markdown)'), { target: { value: '1. Ship it well.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
-    await waitFor(() => expect(editSkill).toHaveBeenCalledTimes(1))
-    fireEvent.click(await screen.findByRole('button', { name: 'Save new version' }))
-    await waitFor(() => expect(editSkill).toHaveBeenCalledTimes(2))
-    expect(editSkill).toHaveBeenLastCalledWith('webterm-mine', expect.objectContaining({ body: '1. Ship it well.' }))
-    expect(client.rejectSkill).toHaveBeenCalledTimes(1)
+  it('has no Edit on a draft: changes are asked of the agent', async () => {
+    panel([mine])
+    await screen.findByRole('button', { name: 'Reject webterm-mine 2' })
+    expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull()
+    expect(screen.queryByLabelText('Instructions (markdown)')).toBeNull()
   })
-  it('a human-origin version is approved with one click (no phrase)', async () => {
+  it('even a human-origin version (an old row) needs the typed phrase', async () => {
     const human = row({ origin: 'human', proposedBy: 'agent:n1' })
     const { client } = panel([human])
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve skill webterm-mine 2' }))
-    await waitFor(() => expect(client.approveSkillReviewed).toHaveBeenCalledWith('webterm-mine', '2'))
+    const approve = await screen.findByRole('button', { name: 'Approve skill webterm-mine 2' }) as HTMLButtonElement
+    expect(approve.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText(/Type/i), { target: { value: CONFIRM_PHRASE } })
+    fireEvent.click(approve)
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-mine', '2', CONFIRM_PHRASE))
   })
 })
 
@@ -116,26 +112,27 @@ describe('Write with an agent buttons', () => {
   it('library: opens a new-skill author node and shows its drafts panel', async () => {
     const open = vi.fn((_t?: string) => 'n1')
     lib([active, mine], open)
-    fireEvent.click(await screen.findByRole('button', { name: 'Write with an agent' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Write with an agent (Canvas)' }))
     expect(open).toHaveBeenCalledWith()
     expect(await screen.findByLabelText('Drafts from this agent')).toBeTruthy()
   })
-  it('detail: edits this skill with the skill name; builtin is disabled with the duplicate hint', async () => {
+  it('detail: revises this skill with the skill name; a built-in only offers a variant, read only', async () => {
     const open = vi.fn((_t?: string) => 'n1')
     lib([active], open)
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-mine 1' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit with an agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the agent to revise' }))
     expect(open).toHaveBeenCalledWith('webterm-mine')
     cleanup()
     lib([row({ status: 'active', origin: 'builtin', proposedBy: null, name: 'webterm-core' })], open)
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-core 2' }))
-    expect((screen.getByRole('button', { name: 'Edit with an agent' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/Use Duplicate and edit first/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ask the agent to revise/ })).toBeNull()
+    expect(screen.getByText('Built-in, read only')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ask the agent for a variant webterm-core' })).toBeTruthy()
   })
   it('hides the canvas node buttons when Claude is disabled (no opener); the Central chat author does not need one', async () => {
     lib([active])
     await screen.findByText('webterm-mine')
-    expect(screen.queryByRole('button', { name: 'Write with an agent' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy() // falls back to the Central author chat
   })
 })

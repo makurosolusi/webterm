@@ -17,7 +17,8 @@ import { type ToolRegistry, defEnabled } from '../central/tools/toolTypes'
 import { approvalDigest, consumeApproval, requestApproval } from '../ledger/ledgerApproval'
 import { allRows, getRow } from '../ledger/ledgerCore'
 import { redactValue } from '../redactSecrets'
-import { type ConversationMode, SKILL_AUTHOR_AUDIENCE, isConversationMode, modeAllowsTool } from '../central/chat/conversationMode'
+import { isSkillAudience } from '../central/contracts/skill.types'
+import { type ConversationMode, isConversationMode, modeAllowsTool } from '../central/chat/conversationMode'
 import { APPROVAL_PENDING, CENTRAL_MCP_MINTER } from './mcp.paths'
 import type { McpTool } from './mcp.protocol'
 import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
@@ -75,10 +76,13 @@ export function listCentralTools(c: Pick<CentralMcpDeps, 'registry' | 'env'> & {
   }))
 }
 
-/** Why a skill-author proposal is refused (a canvas skill, or another skill than the one this chat edits); null when fine. */
-function skillAuthorViolation(args: Record<string, unknown>, target: string | null): string | null {
-  if (args.audience !== undefined && args.audience !== SKILL_AUTHOR_AUDIENCE) return 'audience_not_allowed'
-  if (target !== null && args.name !== target) return 'skill_not_target'
+/** Why a skill-author proposal is refused (no explicit kind, or another skill than the one this chat edits); null when fine. A kind change of an existing skill is refused by the store (`audience_immutable`). */
+function skillAuthorViolation(db: Database, args: Record<string, unknown>, target: string | null): string | null {
+  // A built-in target is a read-only reference (the "variant" flow): the proposal must be a NEW skill under another name.
+  const builtin = target !== null && getRow(db, "SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'central_skill'") !== null
+    && getRow(db, "SELECT 1 AS n FROM central_skill WHERE name = ? AND origin = 'builtin'", target) !== null
+  if (target !== null && (builtin ? args.name === target : args.name !== target)) return 'skill_not_target'
+  if (!isSkillAudience(args.audience)) return 'audience_required'
   return null
 }
 
@@ -130,11 +134,10 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   const violation = cap.input ? checkSchema(cap.input, args) : null
   if (violation !== null) return receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema', { violation })
   const tool = cap.name
-  // Only for its own kind of skill: the audience is forced here, after the redaction above (the other-tool denial is earlier).
+  // The model picks the kind explicitly (central or canvas) from the human's answer; a missing or unknown kind is refused here, after the redaction above (the other-tool denial is earlier).
   if (role.mode && tool === 'skill.propose') {
-    const denied = skillAuthorViolation(args, role.skillTarget)
-    if (denied) return receipt('denied', denied, null, 'propose only a skill with audience central' + (role.skillTarget ? ` named ${role.skillTarget}` : ''))
-    args.audience = SKILL_AUTHOR_AUDIENCE
+    const denied = skillAuthorViolation(c.db, args, role.skillTarget)
+    if (denied) return receipt('denied', denied, null, 'propose with an explicit audience (central or canvas)' + (role.skillTarget ? ` and only the skill named ${role.skillTarget} (for a built-in reference: a new name)` : ''))
   }
   if (OWN_APPROVAL_TOOLS.has(tool)) return (await exec(c, conversationId, tool, args, true)).receipt
 

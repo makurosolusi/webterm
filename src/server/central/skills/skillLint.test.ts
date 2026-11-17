@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { type LintIssue, MAX_BODY_CHARS, MAX_FILE_BYTES, formatSkill, lintSkill } from './skillLint'
+import { GOOD_BODY, GOOD_TITLE, tpl } from './skillDraft.testutil'
+import { type LintIssue, BODY_SECTIONS, MAX_BODY_CHARS, MAX_FILE_BYTES, formatSkill, lintSkill } from './skillLint'
 
-const base = { name: 'webterm-demo', description: 'Summarize a project. Use when asked for status.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central' }
+const base = { name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize a project. Use when asked for status.', body: GOOD_BODY, caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central' }
 const doc = (over: Partial<typeof base> = {}) => formatSkill({ ...base, ...over })
 const issuesOf = (text: string) => lintSkill(text, { expectedName: 'webterm-demo' }).issues
 
@@ -9,7 +10,7 @@ describe('lintSkill accepts', () => {
   it('a well-formed skill and reports parsed meta', () => {
     const r = lintSkill(doc(), { expectedName: 'webterm-demo' })
     expect(r.ok).toBe(true)
-    expect(r.meta).toEqual({ name: 'webterm-demo', description: base.description, caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central' })
+    expect(r.meta).toEqual({ name: 'webterm-demo', description: base.description, caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central', title: GOOD_TITLE })
     expect(r.body).toContain('Read the portfolio')
   })
 })
@@ -78,4 +79,45 @@ describe('formatSkill', () => {
     expect(text.split('\n').filter((l) => l.startsWith('allowed-tools'))).toEqual([])
     expect(issuesOf(text)).toContain('description')
   })
+})
+
+describe('title and body template (requireStructure, for NEW proposals)', () => {
+  const strict = (text: string) => lintSkill(text, { expectedName: 'webterm-demo', requireStructure: true })
+  const without = (section: string) => GOOD_BODY.replace(new RegExp(`## ${section}\\n[^#]*`), '')
+
+  it('a complete skill passes', () => { expect(strict(doc()).ok).toBe(true) })
+  it('an optional trailing ## Notes is allowed', () => { expect(strict(doc({ body: `${GOOD_BODY}\n## Notes\nExtra.\n` })).ok).toBe(true) })
+
+  it.each(BODY_SECTIONS)('reports a missing ## %s as a structure issue', (section) => {
+    const r = strict(doc({ body: without(section) }))
+    expect(r.issues).toContain('structure')
+    expect(r.structure).toContain(`missing ## ${section}`)
+  })
+
+  it('needs at least two numbered steps', () => {
+    const r = strict(doc({ body: GOOD_BODY.replace('2. Write five lines.\n', '') }))
+    expect(r.structure.join()).toContain('numbered list')
+    expect(strict(doc({ body: GOOD_BODY.replace('1. Read', '- Read').replace('2. Write', '- Write') })).issues).toContain('structure')
+  })
+
+  it('rejects sections out of order, repeated or unknown, without echoing them', () => {
+    const swapped = `## When to use\nx\n\n## Purpose\ny\n\n${GOOD_BODY.slice(GOOD_BODY.indexOf('## Steps'))}`
+    expect(strict(doc({ body: swapped })).structure).toContain('order')
+    expect(strict(doc({ body: `${GOOD_BODY}\n## Purpose\nagain\n` })).structure).toContain('order')
+    const unknown = strict(doc({ body: `${GOOD_BODY}\n## Secret plan\nx\n` }))
+    expect(unknown.structure).toContain('unexpected_heading')
+    expect(JSON.stringify(unknown.structure)).not.toContain('Secret plan')
+  })
+
+  it('a legacy body without the template is valid unless the structure is required', () => {
+    const legacy = doc({ title: '', body: '1. Read the portfolio.\n2. Write five lines.' })
+    expect(lintSkill(legacy.replace('  webterm.title: ""\n', ''), { expectedName: 'webterm-demo' }).ok).toBe(true)
+    expect(strict(legacy.replace('  webterm.title: ""\n', '')).issues).toEqual(expect.arrayContaining(['title', 'structure']))
+  })
+
+  it.each([['', true], ['ab', true], ['x'.repeat(81), true], ['two\nlines', true], ['# Heading', true], ['Bold **word**', true], ['`code`', true], ['- bullet', true], ['Tab\there', true], [' padded', true], ['Weekly status report', false], ['abc', false], ['x'.repeat(80), false]])('title %j invalid=%s', (title, invalid) => {
+    expect(strict(doc({ title })).issues.includes('title')).toBe(invalid)
+  })
+
+  it('tpl() output is itself template-conformant for any first step', () => { expect(strict(doc({ body: tpl('Anything.') })).ok).toBe(true) })
 })

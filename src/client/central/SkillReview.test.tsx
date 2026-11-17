@@ -20,7 +20,7 @@ describe('SkillReview states', () => {
   it('shows the loading state, then empty', async () => {
     render(<SkillLibrary client={withRows()} />)
     expect(screen.getByRole('status').textContent).toBe('Loading…')
-    expect(await screen.findByText('No skills yet')).toBeTruthy()
+    expect((await screen.findAllByText(/^No skills yet/)).length).toBeGreaterThan(0)
   })
 
   it('shows an error, and the off state for skills_off', async () => {

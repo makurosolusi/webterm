@@ -8,12 +8,22 @@ export const MAX_FILE_BYTES = 8192
 export const MAX_CAPS = 12
 const CAP_RE = /^[a-z]+(\.[a-z_]+)+$/
 const FRONT_KEYS = new Set(['name', 'description', 'license', 'metadata'])
-const META_KEYS = new Set(['webterm.version', 'webterm.origin', 'webterm.caps', 'webterm.audience'])
+const META_KEYS = new Set(['webterm.version', 'webterm.origin', 'webterm.caps', 'webterm.audience', 'webterm.title'])
+export const MIN_TITLE = 3
+export const MAX_TITLE = 80
+// Markdown and control characters a one-line title never needs; rejected so a title renders the same everywhere.
+const TITLE_BAD = /[`*_#[\]<>|~\\\u0000-\u001F\u007F]|^[-+>]\s/
+/** Level-2 sections of a NEW skill body, in this order; `## Notes` may follow `## Done when`. */
+export const BODY_SECTIONS = ['Purpose', 'When to use', 'Steps', 'Do not', 'Done when'] as const
+export const OPTIONAL_SECTION = 'Notes'
+const MIN_STEPS = 2
 
-export type LintIssue = 'size' | 'frontmatter' | 'unknown_key' | 'name' | 'description' | 'caps' | 'audience' | 'hidden_char' | 'traversal' | 'url' | 'danger' | 'injection' | 'secret' | 'extra_file'
-export interface SkillMeta { name: string; description: string; caps: string[]; version: string | null; origin: string | null; audience: string | null }
-export interface LintResult { ok: boolean; issues: LintIssue[]; meta: SkillMeta | null; body: string }
-export interface LintOptions { expectedName?: string; allowedCaps?: ReadonlySet<string> }
+export type LintIssue = 'size' | 'frontmatter' | 'unknown_key' | 'name' | 'description' | 'caps' | 'audience' | 'title' | 'structure' | 'hidden_char' | 'traversal' | 'url' | 'danger' | 'injection' | 'secret' | 'extra_file'
+export interface SkillMeta { name: string; description: string; caps: string[]; version: string | null; origin: string | null; audience: string | null; title: string | null }
+/** `structure` lists the template problems behind a `structure` issue (fixed phrases, never skill content). */
+export interface LintResult { ok: boolean; issues: LintIssue[]; meta: SkillMeta | null; body: string; structure: string[] }
+/** `requireStructure`: a NEW proposal must carry a title and the body template; an already active (legacy) skill is linted without it. */
+export interface LintOptions { expectedName?: string; allowedCaps?: ReadonlySet<string>; requireStructure?: boolean }
 
 const HIDDEN = /[\u0000-\u0008\u000B-\u001F\u007F​-‏‪-‮⁠-⁤⁦-⁩﻿]/
 const BASE64_RUN = /[A-Za-z0-9+/]{60,}={0,2}/
@@ -24,6 +34,29 @@ const SCANS: ReadonlyArray<readonly [LintIssue, readonly RegExp[]]> = [
   ['injection', [/\b(ignore|disregard|forget)\s+(all\s+|any\s+|the\s+|your\s+)?(previous|prior|above|earlier)?\s*(instructions|rules|prompt|guidelines)/i, /abaikan\s+(semua\s+)?(aturan|instruksi|perintah)/i, /(reveal|print|show|leak|bocorkan)\s+.{0,30}(system prompt|secret|token|password)/i, /\b(activate|approve|enable)\s+(this|the|your own)\s+skill\b/i, /\bwithout\s+(human\s+)?(approval|confirmation)\b/i]],
   ['secret', [/\bsk-[A-Za-z0-9_-]{20,}/, /\bgh[pousr]_[A-Za-z0-9]{30,}/, /\bAKIA[0-9A-Z]{16}\b/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /\bxox[baprs]-[A-Za-z0-9-]{10,}/, /\bBearer\s+[A-Za-z0-9._~+/-]{20,}/, /\b\d{8,10}:[A-Za-z0-9_-]{35}\b/, /\b(api[_-]?key|secret|token|passw(or)?d)\b\s*[:=]\s*["']?[^\s"']{8,}/i]],
 ]
+
+/** Problems of a body against the template; empty when it conforms. Only level-2 headings and numbered lines are looked at. */
+export function bodyStructure(body: string): string[] {
+  const problems: string[] = []
+  const heads: Array<{ title: string; at: number }> = []
+  const lines = body.split('\n')
+  lines.forEach((line, at) => { const m = /^## (.+?)\s*$/.exec(line); if (m) heads.push({ title: m[1], at }) })
+  const names = heads.map((h) => h.title)
+  for (const s of BODY_SECTIONS) if (!names.includes(s)) problems.push(`missing ## ${s}`)
+  if (heads.some((h) => ![...BODY_SECTIONS, OPTIONAL_SECTION].includes(h.title as never))) problems.push('unexpected_heading')
+  const order = [...BODY_SECTIONS, OPTIONAL_SECTION].filter((s) => names.includes(s))
+  if (names.filter((n) => (order as string[]).includes(n)).join('|') !== order.join('|') || new Set(names).size !== names.length) problems.push('order')
+  const steps = heads.find((h) => h.title === 'Steps')
+  if (steps) {
+    const next = heads.find((h) => h.at > steps.at)
+    const items = lines.slice(steps.at + 1, next?.at ?? lines.length).filter((l) => /^\s*\d+[.)]\s+\S/.test(l))
+    if (items.length < MIN_STEPS) problems.push(`## Steps needs a numbered list of at least ${MIN_STEPS} items`)
+  }
+  return problems
+}
+
+/** True for a 3..80 char single-line title without markdown or control characters. */
+export const validTitle = (t: string): boolean => t.trim() === t && t.length >= MIN_TITLE && t.length <= MAX_TITLE && !TITLE_BAD.test(t)
 
 type Parsed = { front: Record<string, string>; meta: Record<string, string>; body: string }
 function scalar(raw: string): string | null {
@@ -62,7 +95,7 @@ function parseSkill(text: string): Parsed | null {
 /** Lints one SKILL.md; never throws and never returns offending content. */
 export function lintSkill(text: string, opts: LintOptions = {}): LintResult {
   const issues = new Set<LintIssue>()
-  const fail = (): LintResult => ({ ok: false, issues: [...issues], meta: null, body: '' })
+  const fail = (): LintResult => ({ ok: false, issues: [...issues], meta: null, body: '', structure: [] })
   if (Buffer.byteLength(text) > MAX_FILE_BYTES) { issues.add('size'); return fail() }
   if (HIDDEN.test(text.replace(/[\n\t]/g, ''))) issues.add('hidden_char')
   const parsed = parseSkill(text)
@@ -78,15 +111,19 @@ export function lintSkill(text: string, opts: LintOptions = {}): LintResult {
   // A missing key is legal: skills approved before audience existed carry none and the DB column (default central) rules.
   if (meta['webterm.audience'] !== undefined && !isSkillAudience(meta['webterm.audience'])) issues.add('audience')
   if (body.trim().length === 0 || body.length > MAX_BODY_CHARS) issues.add('size')
+  const title = meta['webterm.title']
+  if (title !== undefined ? !validTitle(title) : opts.requireStructure) issues.add('title')
+  const structure = opts.requireStructure ? bodyStructure(body) : []
+  if (structure.length > 0) issues.add('structure')
   const scan = text.normalize('NFKC')
   if (BASE64_RUN.test(scan)) issues.add('secret')
   for (const [code, patterns] of SCANS) if (patterns.some((re) => re.test(scan))) issues.add(code)
   const ok = issues.size === 0
-  return { ok, issues: [...issues], meta: { name, description, caps, version: meta['webterm.version'] ?? null, origin: meta['webterm.origin'] ?? null, audience: meta['webterm.audience'] ?? null }, body }
+  return { ok, issues: [...issues], meta: { name, description, caps, version: meta['webterm.version'] ?? null, origin: meta['webterm.origin'] ?? null, audience: meta['webterm.audience'] ?? null, title: title ?? null }, body, structure }
 }
 
 /** Renders a SKILL.md with every value JSON-quoted so input can never add frontmatter lines. */
-export function formatSkill(s: { name: string; description: string; body: string; caps: readonly string[]; version: string; origin: string; audience: string }): string {
-  const meta = [`  webterm.version: ${JSON.stringify(s.version)}`, `  webterm.origin: ${JSON.stringify(s.origin)}`, `  webterm.caps: ${JSON.stringify(s.caps.join(','))}`, `  webterm.audience: ${JSON.stringify(s.audience)}`]
+export function formatSkill(s: { name: string; title: string; description: string; body: string; caps: readonly string[]; version: string; origin: string; audience: string }): string {
+  const meta = [`  webterm.title: ${JSON.stringify(s.title)}`, `  webterm.version: ${JSON.stringify(s.version)}`, `  webterm.origin: ${JSON.stringify(s.origin)}`, `  webterm.caps: ${JSON.stringify(s.caps.join(','))}`, `  webterm.audience: ${JSON.stringify(s.audience)}`]
   return ['---', `name: ${s.name}`, `description: ${JSON.stringify(s.description)}`, 'metadata:', ...meta, '---', s.body.endsWith('\n') ? s.body : `${s.body}\n`].join('\n')
 }

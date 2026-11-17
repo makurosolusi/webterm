@@ -1,6 +1,6 @@
-// Skill review: lint result, diff, and the human-only actions. Approving activates a skill (R3), so it
-// needs the typed phrase, except for a draft you wrote yourself (origin `human`): one click after the diff.
-// Reject and rollback are one click (reject only frees the name, rollback re-points `active/<name>`).
+// Skill review: lint result, diff, and the human-only actions. Every draft is written by an agent, and approving
+// activates it (R3), so it always needs the typed phrase. Reject and rollback are one click (reject only frees the
+// name, rollback re-points `active/<name>`).
 import { Input } from '@/components/ui/input'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { useState } from 'react'
@@ -10,6 +10,7 @@ import { AudienceBadge } from './SkillAudience'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { centralErrorMessage } from './centralLoad'
 import SkillDiff from './SkillDiff'
+import { titleOf } from './skillLibraryModel'
 
 const OPEN_STATUSES: readonly SkillReviewRow['record']['status'][] = ['proposed', 'evaluated', 'pending_approval']
 
@@ -22,8 +23,7 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
   const [done, setDone] = useState(false)
   const failure = (err: unknown) => centralErrorMessage(err, CL.actionFailed)
   const then = (fn: () => Promise<void>) => async () => { await fn(); setDone(true); onDone() }
-  const oneClick = record.origin === 'human'
-  const approve = useAction(then(() => (oneClick ? client.approveSkillReviewed(record.name, record.version) : client.approveSkill(record.name, record.version, typed))), { label: CL.skillApprove, failure })
+  const approve = useAction(then(() => client.approveSkill(record.name, record.version, typed)), { label: CL.skillApprove, failure })
   const reject = useAction(then(() => client.rejectSkill(record.name, record.version)), { label: CL.skillReject, failure })
   const rollback = useAction(then(() => client.rollbackSkill(record.name)), { label: CL.skillRollback, failure })
   const busy = done || approve.busy || reject.busy || rollback.busy
@@ -32,7 +32,7 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version}`} aria-busy={busy}>
       <header>
-        <strong>{record.name}</strong> <span>{record.version}</span>
+        <strong>{titleOf(row)}</strong> {titleOf(row) !== record.name && <small>{record.name}</small>} <span>{record.version}</span>
         <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
         {record.evalScore !== null && <span>{CL.skillScore}: {record.evalScore}</span>}
       </header>
@@ -42,15 +42,11 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
       {diff && <SkillDiff text={diff} />}
       {record.status === 'pending_approval' && (
         <>
-          {oneClick ? <p>{CL.skillReviewedHint}</p> : (
-            <>
-              <p>{CL.skillTypedWhy(record.origin)}</p>
-              <label className="ccp-confirm-input">{CL.confirmLabel(CONFIRM_PHRASE)}
-                <Input value={typed} autoComplete="off" onChange={(e) => setTyped(e.target.value)} />
-              </label>
-            </>
-          )}
-          <ActionButton type="button" size="sm" aria-label={named(CL.skillApprove)} disabled={busy || (!oneClick && typed !== CONFIRM_PHRASE) || !lint.ok} action={approve} busyLabel={BUSY.approve}>{oneClick ? CL.skillApproveOnce : CL.skillApprove}</ActionButton>
+          <p>{CL.skillTypedWhy(record.origin)}</p>
+          <label className="ccp-confirm-input">{CL.confirmLabel(CONFIRM_PHRASE)}
+            <Input value={typed} autoComplete="off" onChange={(e) => setTyped(e.target.value)} />
+          </label>
+          <ActionButton type="button" size="sm" aria-label={named(CL.skillApprove)} disabled={busy || typed !== CONFIRM_PHRASE || !lint.ok} action={approve} busyLabel={BUSY.approve}>{CL.skillApprove}</ActionButton>
         </>
       )}
       {open && <ActionButton type="button" size="sm" variant="secondary" aria-label={named(CL.skillReject)} disabled={busy} action={reject} busyLabel={BUSY.reject}>{CL.skillReject}</ActionButton>}
