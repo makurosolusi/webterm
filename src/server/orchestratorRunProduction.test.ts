@@ -202,14 +202,17 @@ describe('orchestratorRunProduction approval port', () => {
     expect(approvalPortOf({ ledger: { ledger: { getApproval: () => null } } as never })).toBeNull()
   })
 
-  it('requires approval unless the flag is explicitly off, and only when the fields are missing', () => {
+  it('requires approval only when the flag is explicitly on, and only when the fields are missing', () => {
     const bare = { projectId: 'p1', itemId: 'i1', expectedVersion: 1 }
-    expect(approvalMissing({ ledger: null }, bare)).toBe(true)
+    expect(approvalMissing({ ledger: null }, bare)).toBe(false)
     expect(approvalMissing({ ledger: null, requireApproval: true }, bare)).toBe(true)
     expect(approvalMissing({ ledger: null, requireApproval: true }, RUN)).toBe(false)
 
-    process.env['WEBTERM_RUN_REQUIRE_APPROVAL'] = 'off'
+    process.env['WEBTERM_RUN_REQUIRE_APPROVAL'] = 'on'
     try {
+      expect(approvalMissing({ ledger: null }, bare)).toBe(true)
+      expect(approvalMissing({ ledger: null }, RUN)).toBe(false)
+      process.env['WEBTERM_RUN_REQUIRE_APPROVAL'] = 'off'
       expect(approvalMissing({ ledger: null }, bare)).toBe(false)
       expect(approvalMissing({ ledger: null, requireApproval: true }, bare)).toBe(true)
     } finally {

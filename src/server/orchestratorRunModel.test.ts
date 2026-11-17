@@ -45,9 +45,11 @@ describe('orchestratorRunModel', () => {
     expect(orchestratorRunEnabled(env)).toBe(false)
   })
 
-  it('approval policy defaults ON and is off only when set explicitly', () => {
-    expect(orchestratorRunRequireApproval({})).toBe(true)
-    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'typo' })).toBe(true)
+  it('approval policy defaults OFF (owner 2026-11-17) and is on only when set explicitly', () => {
+    expect(orchestratorRunRequireApproval({})).toBe(false)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'typo' })).toBe(false)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'on' })).toBe(true)
+    expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: '1' })).toBe(true)
     expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: 'off' })).toBe(false)
     expect(orchestratorRunRequireApproval({ WEBTERM_RUN_REQUIRE_APPROVAL: '0' })).toBe(false)
   })

@@ -45,7 +45,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_CENTRAL_MAX_INFLIGHT', () => String(maxInflightFromEnv('')), 'central/autonomyDispatch.ts:24'],
   ['WEBTERM_CENTRAL_CONTEXT_WINDOW', () => String(contextWindowTokens(E)), 'central/context/rotationPolicy.ts:15'],
   ['WEBTERM_AGENT_IDLE_DONE_MS', () => String(idleDoneMs(E)), 'orchestrator/workerSignal.ts:17'],
-  ['WEBTERM_RUN_REQUIRE_APPROVAL', () => onOff(orchestratorRunRequireApproval(E)), 'orchestratorRunModel.ts:42'],
+  ['WEBTERM_RUN_REQUIRE_APPROVAL', () => onOff(orchestratorRunRequireApproval(E)), 'orchestratorRunModel.ts:orchestratorRunRequireApproval'],
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
   ['WEBTERM_AGENT_SANDBOX', () => onOff(agentSandboxOn(E)), 'agentSandbox.ts:agentSandboxOn'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],

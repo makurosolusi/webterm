@@ -53,7 +53,7 @@ export function approvalPortOf(deps: OrchestratorRunDeps): ApprovalPort | null {
   return port as ApprovalPort
 }
 
-/** Policy gate (default on, sub dimatikan eksplisit): true bila approval wajib tetapi request tak menyebutnya. */
+/** Policy gate (default off sejak 2026-11-17, wajib hanya bila owner menyalakan): true bila approval wajib tetapi request tak menyebutnya. */
 export function approvalMissing(deps: OrchestratorRunDeps, request: RawRun): boolean {
   if (!(deps.requireApproval ?? orchestratorRunRequireApproval())) return false
   return request.approvalId === undefined || request.approvalDigest === undefined

@@ -5,7 +5,7 @@
 
 export const SAFEGUARDS: Readonly<Record<string, string>> = {
   WEBTERM_CENTRAL_AUTONOMY: 'Off by default: working on its own starts real workers (shell, file edits, commits) without asking.',
-  WEBTERM_RUN_REQUIRE_APPROVAL: 'On by default: a worker runs real commands on this computer, so you approve each one first.',
+  WEBTERM_RUN_REQUIRE_APPROVAL: 'Off by default (owner decision 2026-11-17: bypass, no complicated permissions); turn it on to approve each worker run first.',
   WEBTERM_TRUST_PROXY: 'Off by default: without a trusted proxy in front, anyone could fake their address and dodge throttling.',
   WEBTERM_CENTRAL_DAILY_COST_MICROS: 'The one hard stop on spend: once reached, Central stops for the day.',
   WEBTERM_CENTRAL_DAILY_SPAWNS: 'Caps how many workers, and so how much spend, Central can start in one day.',
