@@ -166,8 +166,8 @@ export const centralControlApi: CentralControlClient = {
   async approveSkillReviewed(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, reviewed: true }) },
   async setSkillEnabled(name, enabled) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`, {}) },
   async editSkill(name, input) { await skillPost(`${SKILLS_PATH}/${encodeURIComponent(name)}/versions`, input) },
-  async forkSkill(name) {
-    const out = await skillPost(`${SKILLS_PATH}/${encodeURIComponent(name)}/fork`, {})
+  async forkSkill(name, audience) {
+    const out = await skillPost(`${SKILLS_PATH}/${encodeURIComponent(name)}/fork`, { audience })
     if (typeof out.name !== 'string') throw new InboxApiError('Fork response malformed', 502, 'bad_response')
     return out.name
   },

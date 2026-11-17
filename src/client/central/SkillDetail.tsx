@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useRef, useState } from 'react'
 import { CL } from './centralLabels'
+import type { SkillAudience } from '../../server/central/contracts/skill.types'
+import { AudienceBadge, AudienceSelect } from './SkillAudience'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { createErrorLines } from './skillLibraryModel'
 
@@ -29,18 +31,20 @@ export default function SkillDetail({ row, client, onClose, onChanged, onEdit, o
   const [on, setOn] = useState(record.enabled !== false)
   const target = useRef(on)
   const toggle = useAction(async () => { await client.setSkillEnabled(record.name, target.current); setOn(target.current); onChanged() }, { label: CL.skillEnabled, failure: () => CL.skillEnabledFailed })
-  const fork = useAction(async () => { const name = await client.forkSkill(record.name); onForked(name) }, { label: CL.skillDuplicate, toast: 'never', failure: (e) => createErrorLines(e)[0] ?? CL.skillDuplicateFailed })
+  const [forkAudience, setForkAudience] = useState<SkillAudience>(record.audience)
+  const fork = useAction(async () => { const name = await client.forkSkill(record.name, forkAudience); onForked(name) }, { label: CL.skillDuplicate, toast: 'never', failure: (e) => createErrorLines(e)[0] ?? CL.skillDuplicateFailed })
   const active = record.status === 'active'
   const builtin = record.origin === 'builtin'
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version} details`}>
       <header>
         <strong>{record.name}</strong> <span>{record.version}</span>
-        <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span>
+        <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
         {!on && <span className="ccp-badge">{CL.skillOff}</span>}
         <Button type="button" size="xs" variant="secondary" onClick={onClose}>{CL.skillBack}</Button>
       </header>
       {description && <p>{description}</p>}
+      <p><small>{CL.skillAudienceHelp[record.audience]}</small></p>
       <p>{CL.skillCaps}: {record.caps.length > 0 ? record.caps.join(', ') : CL.skillCapsNone}</p>
       {active && (
         <div>
@@ -55,7 +59,8 @@ export default function SkillDetail({ row, client, onClose, onChanged, onEdit, o
       {onAuthor && !builtin && <Button type="button" size="sm" variant="secondary" disabled={!active || hasOpenDraft} onClick={onAuthor}>{CL.skillAuthorEdit}</Button>}
       {onAuthor && builtin && <><Button type="button" size="sm" variant="secondary" disabled>{CL.skillAuthorEdit}</Button><small>{CL.skillAuthorBuiltinHint}</small></>}
       {active && !builtin && hasOpenDraft && <small>{CL.skillEditOpenDraft}</small>}
-      {active && builtin && <ActionButton type="button" size="sm" action={fork} busyLabel={CL.skillDuplicating}>{CL.skillDuplicate}</ActionButton>}
+      {active && <AudienceSelect value={forkAudience} onChange={setForkAudience} disabled={fork.busy} />}
+      {active && <ActionButton type="button" size="sm" action={fork} busyLabel={CL.skillDuplicating}>{CL.skillDuplicate}</ActionButton>}
       <ActionResult action={fork} />
     </article>
   )

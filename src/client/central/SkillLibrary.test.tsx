@@ -12,7 +12,7 @@ beforeAll(() => { globalThis.ResizeObserver ??= class { observe() {} unobserve()
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const row = (over: Partial<SkillReviewRow['record']> = {}, extra: Partial<SkillReviewRow> = {}): SkillReviewRow => ({
-  record: { name: 'webterm-x', version: '1', sha256: null, status: 'active', origin: 'builtin', caps: ['portfolio.read'], createdAt: 1, proposedBy: null, approvedBy: 'system:builtin', approvedAt: 1, evalScore: null, ...over },
+  record: { name: 'webterm-x', version: '1', sha256: null, status: 'active', origin: 'builtin', caps: ['portfolio.read'], createdAt: 1, proposedBy: null, approvedBy: 'system:builtin', approvedAt: 1, evalScore: null, audience: 'central' as const, ...over },
   lint: { ok: true, findings: [] }, diff: '', canRollback: false, description: 'Summarize project status.', body: '1. Read the portfolio.', ...extra,
 })
 const withRows = (...rows: SkillReviewRow[]) => fakeClient({ listSkills: vi.fn(async () => rows) })
@@ -84,7 +84,7 @@ describe('SkillLibrary states', () => {
 describe('SkillLibrary new skill form', () => {
   const open = async (client = withRows()) => {
     render(<SkillLibrary client={client} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New skill' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'New skill (Canvas)' }))
     return client
   }
   const fill = () => {
@@ -113,7 +113,7 @@ describe('SkillLibrary new skill form', () => {
     fill()
     fireEvent.click(screen.getByRole('checkbox', { name: 'skill.load' }))
     fireEvent.click(submit())
-    await waitFor(() => expect(client.createSkill).toHaveBeenCalledWith({ name: 'webterm-my-skill', description: 'Use when asked.', body: '1. Do it.', caps: ['skill.load'] }))
+    await waitFor(() => expect(client.createSkill).toHaveBeenCalledWith({ name: 'webterm-my-skill', description: 'Use when asked.', body: '1. Do it.', caps: ['skill.load'], audience: 'canvas' }))
     expect(await screen.findByText('Draft webterm-my-skill saved. Review it below.')).toBeTruthy()
     expect(screen.queryByRole('form', { name: 'New skill draft' })).toBeNull()
     await waitFor(() => expect(client.listSkills).toHaveBeenCalledTimes(2))
@@ -165,7 +165,7 @@ describe('SkillLibrary new skill form', () => {
 describe('createSkillRequest', () => {
   it('turns a 400 body into a SkillCreateError with issue codes', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'invalid', issues: ['url'] }), { status: 400 })))
-    const err = await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [] }).catch((e: unknown) => e)
+    const err = await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(SkillCreateError)
     expect(err).toMatchObject({ status: 400, code: 'invalid', issues: ['url'] })
   })
@@ -173,7 +173,7 @@ describe('createSkillRequest', () => {
   it('posts JSON and resolves on 201', async () => {
     const f = vi.fn(async () => new Response('{}', { status: 201 }))
     vi.stubGlobal('fetch', f)
-    await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [] })
-    expect(f).toHaveBeenCalledWith('/x', expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'webterm-a', description: 'd', body: 'b', caps: [] }) }))
+    await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' })
+    expect(f).toHaveBeenCalledWith('/x', expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' }) }))
   })
 })
