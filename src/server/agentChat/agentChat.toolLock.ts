@@ -17,6 +17,7 @@
 //     STORED preset and refuses other verbs / non-public URLs with 403 (browser/browser.presetLock.ts).
 import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk'
 import { browserCommandDecision } from './agentChat.toolLock.browser'
+import { grantedChatFamilies, type ChatFamily } from '../../shared/agentCapabilities'
 import { isAgentChatPreset, type AgentChatPreset } from '../../shared/agentChat.shape'
 
 /** `webterm skills` verbs the author may run (cli.skills.ts): read, propose, edit. */
@@ -55,7 +56,10 @@ export function skillsCommandDecision(command: unknown): boolean {
   return true
 }
 
-const allowedCommand = (c: unknown): boolean => skillsCommandDecision(c) || browserCommandDecision(c)
+/** Strict parser per command family; WHICH families a chat may run comes from the capability registry. */
+const FAMILY_DECISION: Readonly<Record<ChatFamily, (command: unknown) => boolean>> = { skills: skillsCommandDecision, browser: browserCommandDecision }
+const AUTHOR_FAMILIES = grantedChatFamilies('chat.skill-author')
+const allowedCommand = (c: unknown): boolean => AUTHOR_FAMILIES.some((f) => FAMILY_DECISION[f](c))
 
 /** The SDK PreToolUse callback: allow a valid `webterm skills` / `webterm browser` Bash call, deny every other tool use. */
 export const skillAuthorPreToolUse: HookCallback = async (input) => {
@@ -70,7 +74,7 @@ export function agentChatLockFor(preset: unknown): Partial<Options> | undefined 
   const locks: Record<AgentChatPreset, Partial<Options>> = {
     'skill-author': {
       tools: ['Bash'],
-      allowedTools: ['Bash(webterm skills *)', 'Bash(webterm browser *)'],
+      allowedTools: AUTHOR_FAMILIES.map((f) => `Bash(webterm ${f} *)`),
       permissionMode: 'dontAsk',
       permissionPrompts: 'none',
       strictMcpConfig: true,

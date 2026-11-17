@@ -1,4 +1,5 @@
 // Seluruh string UI panel kontrol Central Agent v2 (Rule 15): satu tempat, tanpa literal di komponen.
+import { renderCapabilityLine } from '../../shared/agentCapabilities'
 import type { ControlLevel } from '../../server/central/contracts/level.types'
 
 export const CL = {
@@ -125,11 +126,11 @@ export const CL = {
   authorBannerLabel: 'Skill author',
   authorBannerTitle: 'Skill author',
   authorBannerPurpose: 'Walks you through kind, title, steps and checks before writing.',
-  authorBannerTools: 'Its tools are limited to skills: it cannot run agents, use the canvas or browse.',
+  authorBannerTools: renderCapabilityLine('central.skill-author'),
   authorBannerDrafts: 'Drafts need your approval in the Skills tab.',
   authorBannerTarget: (name: string) => `Editing ${name}.`,
-  authorChip: 'Skills only',
-  authorChipHelp: 'This chat can only list, read and draft Central skills.',
+  authorChip: 'Limited tools',
+  authorChipHelp: renderCapabilityLine('central.skill-author'),
   centralDrafts: 'Drafts from Central',
   centralDraftsEmpty: 'No drafts from Central are waiting for you.',
   skillTypedWhy: (origin: string) => `This draft was written by ${origin === 'agent' ? 'an agent' : 'Central'}, so you confirm it by typing the phrase.`,

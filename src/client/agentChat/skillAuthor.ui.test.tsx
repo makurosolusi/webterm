@@ -36,7 +36,7 @@ describe('skill-author chat', () => {
     expect(note.textContent).toContain(SKILL_AUTHOR_HEADER)
     expect(note.querySelector('.codicon-lock')).toBeTruthy()
     expect(note.querySelector('[tabindex="0"]')).toBeTruthy()
-    expect(SKILL_AUTHOR_LOCK_REASON).toMatch(/only run `webterm skills`/)
+    expect(SKILL_AUTHOR_LOCK_REASON).toMatch(/^Locked by the Skill author role.*Can list, read and draft skills and read public web pages \(read-only\)\./)
   })
 
   it('the composer guides: placeholder describes the procedure to turn into a skill', () => {

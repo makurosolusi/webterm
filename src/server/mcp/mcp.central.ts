@@ -19,6 +19,7 @@ import { allRows, getRow } from '../ledger/ledgerCore'
 import { redactValue } from '../redactSecrets'
 import { isSkillAudience } from '../central/contracts/skill.types'
 import { type ConversationMode, isConversationMode, modeAllowsTool } from '../central/chat/conversationMode'
+import { WEB_READ_TOOL, authorWebReadArgs, authorWebReadViolation } from './mcp.central.authorWeb'
 import { APPROVAL_PENDING, CENTRAL_MCP_MINTER } from './mcp.paths'
 import type { McpTool } from './mcp.protocol'
 import { type McpReceipt, mcpName, redactToolArgs } from './mcp.tools'
@@ -65,13 +66,19 @@ function roleOf(db: Database, conversationId: string): { mode: ConversationMode 
   return { mode: isConversationMode(row?.mode) ? row.mode : null, skillTarget: typeof row?.skill_target === 'string' ? row.skill_target : null }
 }
 
+/** A mode-locked chat has no projects: the server picks the board for `browser_read`, so the model never sees `projectId`. */
+function withoutProject(input: CapabilitySpec['input']): Record<string, unknown> {
+  const { projectId: _unused, ...properties } = (input?.properties ?? {}) as Record<string, unknown>
+  return { ...input, properties, required: (input?.required ?? []).filter((k: string) => k !== 'projectId') }
+}
+
 /** `tools/list` for Central: schema straight from the registry, tier in the description; a mode-locked conversation sees only its own tools. */
 export function listCentralTools(c: Pick<CentralMcpDeps, 'registry' | 'env'> & { db?: Database }, conversationId?: string): McpTool[] {
   const mode = c.db && conversationId ? roleOf(c.db, conversationId).mode : null
   return [...centralCapabilities(c)].filter(([, cap]) => modeAllowsTool(mode, cap.name)).map(([name, cap]) => ({
     name,
     description: `${cap.summary} (webterm ${cap.name}, tier ${cap.tier}${cap.tier >= 'R2' ? ', needs human approval unless the level allows it' : ''})`,
-    inputSchema: { ...(cap.input ?? { type: 'object' }) } as Record<string, unknown>,
+    inputSchema: (mode && cap.name === WEB_READ_TOOL ? withoutProject(cap.input) : { ...(cap.input ?? { type: 'object' }) }) as Record<string, unknown>,
     annotations: { readOnlyHint: cap.tier === 'R0', destructiveHint: !!cap.destructive, idempotentHint: !!cap.idempotent },
   }))
 }
@@ -130,10 +137,19 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   const role = roleOf(c.db, conversationId)
   if (!modeAllowsTool(role.mode, cap.name)) return receipt('denied', 'tool_not_allowed_in_mode', null, `this chat is the ${role.mode}; it has no ${cap.name}. Tell the human what you cannot do here`)
   // Scrubbed first, so the guard, approval digest, receipts and every store see only redacted input (K7-F1).
-  const args = redactToolArgs(cap.name, raw, c.secretValues ?? (() => brokerSecretValues()))
+  let args = redactToolArgs(cap.name, raw, c.secretValues ?? (() => brokerSecretValues()))
+  if (role.mode && cap.name === WEB_READ_TOOL) {
+    const picked = authorWebReadArgs(c.db, args)
+    if (!picked) return receipt('denied', 'no_project_for_web_read', null, 'tell the human web reading needs a project on the board; offer to continue from pasted text')
+    args = picked
+  }
   const violation = cap.input ? checkSchema(cap.input, args) : null
   if (violation !== null) return receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema', { violation })
   const tool = cap.name
+  if (role.mode && tool === WEB_READ_TOOL) {
+    const notPublic = authorWebReadViolation(args)
+    if (notPublic) return receipt('denied', notPublic, null, 'only public http(s) pages can be read; ask the human to paste the text instead')
+  }
   // The model picks the kind explicitly (central or canvas) from the human's answer; a missing or unknown kind is refused here, after the redaction above (the other-tool denial is earlier).
   if (role.mode && tool === 'skill.propose') {
     const denied = skillAuthorViolation(c.db, args, role.skillTarget)
