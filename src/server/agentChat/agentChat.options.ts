@@ -19,6 +19,8 @@ import { agentChatUploadsDir } from './agentChat.attach'
 import { agentChatEnv } from './agentChat.env'
 import { agentChatSystemPrompt } from './agentChat.role'
 import { agentChatLockFor } from './agentChat.toolLock'
+import { attachedSkillsIndex } from './agentChat.skills'
+import type { AttachedSkill } from '../skillAttach'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
 export const AGENT_CHAT_SETTING_SOURCES: NonNullable<Options['settingSources']> = ['user', 'project', 'local']
@@ -54,6 +56,8 @@ export interface AgentChatOptionsInput {
   preset?: string
   /** Preset data: full skill name a skill-author chat edits (validated before it reaches the prompt). */
   presetTarget?: string
+  /** Canvas skills cabled to this node when the Query opens; listed in the system prompt (agentChat.skills.ts). */
+  attachedSkills?: readonly AttachedSkill[]
 }
 
 /** SDK options for one `query()`; `notice` is set when the node's launch profile no longer exists. */
@@ -97,6 +101,13 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     delete options.additionalDirectories
     options.extraArgs = { 'append-system-prompt-file': writeHouseRules(), 'disable-slash-commands': null, 'replay-user-messages': null }
   }
+  // Index goes after any role text; a locked preset keeps its lock (its `skills get` form is allowed) and gains only this text.
+  const index = attachedSkillsIndex(i.attachedSkills)
+  if (index) {
+    const sp = options.systemPrompt
+    const role = sp && typeof sp === 'object' && !Array.isArray(sp) && 'append' in sp ? sp.append : undefined
+    options.systemPrompt = { type: 'preset', preset: 'claude_code', append: role ? `${role}\n\n${index}` : index }
+  }
   return { options, ...(launch.missingId ? { notice: missingProfileNotice(launch.profile.name).trim() } : {}) }
 }
 
@@ -123,7 +134,7 @@ export interface AgentChatOpenInput {
 export type AgentChatOpen = (resumeId: string | undefined, canUseTool: CanUseTool, abort: AbortController, input: AgentChatOpenInput) => Query
 
 /** Production opener: SDK `query()` in streaming-input mode, options rebuilt from the profile on every open. */
-export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string; preset?: string; presetTarget?: string }): AgentChatOpen {
+export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string; preset?: string; presetTarget?: string; attachedSkills?: readonly AttachedSkill[] }): AgentChatOpen {
   return (resumeId, canUseTool, abort, input) => {
     const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, ...(input.config ? { config: input.config } : {}), resume: resumeId, canUseTool, abort, stderr: input.stderr })
     if (notice) input.notice(notice)
