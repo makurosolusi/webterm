@@ -3,6 +3,8 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
+import { useNodeActions } from '../nodeActions'
+import SkillAuthorDrafts from './SkillAuthorDrafts'
 import { CL } from './centralLabels'
 import { SKILLS_OFF, centralControlApi } from './centralControlApi'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
@@ -37,6 +39,8 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
   const [editing, setEditing] = useState<SkillReviewRow | null>(null)
   const [created, setCreated] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const { openSkillAuthor } = useNodeActions()
+  const [authorNode, setAuthorNode] = useState<string | null>(null)
   const off = list.code === SKILLS_OFF
   const rows = list.data ?? []
   const shown = searchRows(rows, query)
@@ -50,6 +54,8 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
       )}
       {list.loading && !list.data && <p role="status">{CL.loading}</p>}
       {!off && !creating && <Button type="button" size="sm" onClick={() => { setCreating(true); setCreated(null) }}>{CL.skillNew}</Button>}
+      {!off && openSkillAuthor && <Button type="button" size="sm" variant="secondary" onClick={() => setAuthorNode(openSkillAuthor())}>{CL.skillAuthorWrite}</Button>}
+      {authorNode && !off && <SkillAuthorDrafts key={authorNode} nodeId={authorNode} client={client} onClose={() => setAuthorNode(null)} onChanged={list.reload} />}
       {created && <p role="status" className="ccp-ok">{created}</p>}
       {creating && !off && <SkillCreateForm client={client} onCancel={() => setCreating(false)} onCreated={(name) => { setCreating(false); setCreated(CL.skillCreated(name)); list.reload() }} />}
       {editing && !off && <SkillCreateForm client={client} edit={editing} onCancel={() => setEditing(null)} onCreated={(name) => { setEditing(null); setCreated(CL.skillEditSaved(name)); list.reload() }} />}
@@ -61,7 +67,7 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
           <ul aria-label={CL.skillsLibraryHeading} className="ccp-skill-list">
             {shown.map((r) => <LibraryRow key={keyOf(r)} row={r} selected={keyOf(r) === selected} onSelect={() => setSelected(keyOf(r) === selected ? null : keyOf(r))} />)}
           </ul>
-          {detail && <SkillDetail key={keyOf(detail)} row={detail} client={client} onClose={() => setSelected(null)} onChanged={list.reload} onEdit={() => { setEditing(detail); setCreating(false) }} hasOpenDraft={rows.some((r) => r.record.name === detail.record.name && OPEN.includes(r.record.status))} onForked={(name) => { setSelected(null); setCreated(CL.skillCreated(name)); list.reload() }} />}
+          {detail && <SkillDetail key={keyOf(detail)} row={detail} client={client} onClose={() => setSelected(null)} onChanged={list.reload} onEdit={() => { setEditing(detail); setCreating(false) }} onAuthor={openSkillAuthor && (() => setAuthorNode(openSkillAuthor(detail.record.name)))} hasOpenDraft={rows.some((r) => r.record.name === detail.record.name && OPEN.includes(r.record.status))} onForked={(name) => { setSelected(null); setCreated(CL.skillCreated(name)); list.reload() }} />}
           {rows.some(needsReview) && <h4>{CL.skillsReviewHeading}</h4>}
           <SkillReviewList rows={rows.filter(needsReview)} client={client} onDone={list.reload} />
         </>

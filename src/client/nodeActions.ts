@@ -12,6 +12,8 @@ export type NodeActions = {
   workspaceId?: string | null
   /** Node spawners for the handle menu (handleMenu.hook.tsx); absent = the menu stays closed. */
   spawn?: HandleSpawners
+  /** Opens a skill-author chat node (edit `target`, or a new skill) and returns its node id; absent = Claude disabled. */
+  openSkillAuthor?: (target?: string) => string
 }
 
 /**
