@@ -1,4 +1,5 @@
 // Migration (workspace.layout column) + API round-trip. Bun-only: needs bun:sqlite.
+import { backfillWorkspaceHue } from '../shared/workspaceColor'
 import { test, expect } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdtempSync } from 'node:fs'
@@ -37,7 +38,8 @@ test('migration: legacy data survives, layout backfills to canvas default, 2nd r
     expect(JSON.stringify(ws?.nodes)).toBe(JSON.stringify(NODES))
     expect(JSON.stringify(ws?.bridges)).toBe(JSON.stringify(BRIDGES))
     expect(JSON.stringify(ws?.viewport)).toBe('{"x":5,"y":6,"zoom":2}')
-    expect([ws?.name, ws?.cwd, ws?.color, ws?.updatedAt]).toEqual(['legacy', '/tmp', '#fff', 42])
+    // The legacy free-text color is replaced by the id-derived palette hue (db.color.ts).
+    expect([ws?.name, ws?.cwd, ws?.color, ws?.updatedAt]).toEqual(['legacy', '/tmp', backfillWorkspaceHue('old'), 42])
     expect(JSON.stringify(ws?.layout)).toBe(JSON.stringify(defaultTabLayout()))
     const cols = (d.query('PRAGMA table_info(workspace)').all() as { name: string }[]).filter((c) => c.name === 'layout')
     expect(cols.length).toBe(1)

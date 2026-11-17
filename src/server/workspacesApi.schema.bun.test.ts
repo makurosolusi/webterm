@@ -114,7 +114,7 @@ test('POST create: empty name and a cwd that is not an existing directory are 40
     [{ name: 'p', cwd: join(dir, 'missing') }, 'cwd must be an existing directory'],
     [{ name: 'p', cwd: file }, 'cwd must be an existing directory'],
     [{ name: 'p', cwd: 5 }, 'cwd must be an existing directory'],
-    [{ name: 'p', color: 5 }, 'color must be a string'],
+    [{ name: 'p', color: 5 }, 'color must be a palette hue id'],
   ]
   for (const [body, error] of cases) {
     const r = await post(store, body)
