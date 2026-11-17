@@ -2,7 +2,7 @@
 // `Suggested playbook:` line in the volatile prompt tail, so Central runs the whole chain in one tool call
 // instead of rebuilding it from memory. English and Indonesian words; chit-chat matches nothing.
 import { PLAYBOOKS, playbookTool } from '../playbooks/playbook.defs'
-import { SKILL_DISCUSS_FIRST } from '../playbooks/playbook.skillAuthor'
+import { SKILL_REQUEST_WORDS } from '../playbooks/playbook.intentWords'
 
 export interface PlaybookMatch { id: string; tool: string; args: Record<string, string> }
 
@@ -36,6 +36,8 @@ const goalOf = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(
 
 /** First playbook whose words match (priority = PLAYBOOKS order); a bare URL matches none (see `playbookHintLine`). */
 export function matchPlaybook(text: string): PlaybookMatch | null {
+  // A skill request is no worker job (a worker must never write a Central skill): no playbook, so "ubah skill ..." is not a code_change.
+  if (SKILL_REQUEST_WORDS.test(text)) return null
   const url = urlOf(text)
   const hit = PLAYBOOKS.find((pb) => pb.match.some((re) => re.test(text)))
   if (!hit) return null
@@ -59,8 +61,6 @@ export function playbookHintLine(text: string, usable: (tool: string) => boolean
     const url = urlOf(text)
     return url && usable(BROWSER_READ) ? `Suggested tool: ${BROWSER_READ} ${JSON.stringify({ url })}` : ''
   }
-  // Never a ready-made call: the playbook needs the outline the human approves first.
-  if (m.id === 'skill_authoring') return usable(m.tool) ? SKILL_DISCUSS_FIRST : ''
   if (usable(m.tool)) {
     const note = m.id === 'web_research' && m.args.url && text.length <= SHORT_ASK && usable(BROWSER_READ) ? ` ${PAGE_NOTE}` : ''
     return `Suggested playbook: ${m.tool} ${JSON.stringify(m.args)}${note}`

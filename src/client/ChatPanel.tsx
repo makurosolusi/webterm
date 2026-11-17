@@ -16,7 +16,7 @@ import { clearOpenRequest, refresh, upsertConversation, useChatFeed, watchConver
 import { ChatConversationList } from './chat/chatConversationList'
 import { NeedsYouStrip } from './chat/needsYouStrip'
 import type { ChatClient } from './chat/chatTypes'
-import { conversationLabel } from './chat/chatTypes'
+import { SKILL_AUTHOR_MODE, conversationLabel } from './chat/chatTypes'
 import { chatApi, chatErrorMessage, openChatStream } from './chatApi'
 import { InboxPanelSurface } from './inboxPanelSurface'
 import './chat/chat.css'
@@ -90,7 +90,10 @@ export default function ChatPanel(props: ChatPanelProps) {
   // An OS banner click asked for a conversation.
   useEffect(() => {
     if (feed.openRequest === null || conversations === null) return
-    if (conversations.some((row) => row.id === feed.openRequest)) select(feed.openRequest)
+    const asked = conversations.find((row) => row.id === feed.openRequest)
+    if (asked) select(asked.id)
+    // A skill-author chat opened from the Skills tab is new: show the thread (not History) and focus its composer.
+    if (asked?.mode === SKILL_AUTHOR_MODE) { setHistory(false); setFresh(asked.id) }
     clearOpenRequest()
   }, [feed.openRequest, conversations])
 
@@ -214,7 +217,8 @@ export default function ChatPanel(props: ChatPanelProps) {
               client={clientRef.current}
               streamFactory={streamRef.current}
               focusComposer={current.id === fresh}
-              commands={{ centralEnabled: props.centralEnabled === true, newChat, showHistory: () => setHistory(true) }}
+              // A skill-author chat has none of the steward's commands (/status, /halt, skills): only the model and new-chat ones.
+              commands={{ centralEnabled: props.centralEnabled === true && current.mode !== SKILL_AUTHOR_MODE, newChat, showHistory: () => setHistory(true) }}
             />
           ) : (
             conversations !== null && (

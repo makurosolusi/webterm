@@ -21,6 +21,7 @@ import { createLogger } from '../../logs'
 import { CENTRAL_ADVISOR_PROMPT } from '../context/advisorPrompt'
 import type { EffortLevel, Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { CompactionPort } from '../context/compactionHooks'
+import { type ConversationMode, modeAllowedMcpTools, modePrompt } from '../chat/conversationMode'
 import type { TurnInput } from './centralRuntime'
 import type { CentralMcpLink } from './claudeMcp'
 
@@ -33,7 +34,7 @@ import type { ClaudeReady } from './claudePreflight'
 export type ClaudeUnavailableCode = 'claude_not_found' | 'claude_not_authenticated' | 'claude_check_failed'
 
 /** A turn plus the compaction wiring only the Claude runtime uses. */
-export type ClaudeTurnInput = TurnInput & { compaction?: CompactionPort }
+export type ClaudeTurnInput = TurnInput & { compaction?: CompactionPort; /** Role of a mode-locked chat (conversationMode.ts); absent = the steward. */ mode?: ConversationMode; skillTarget?: string | null }
 
 /** The SDK `query()` shape; tests inject a scripted one (claude.fakeQuery.ts). */
 export type CentralQuery = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Query
@@ -143,6 +144,9 @@ export interface CentralQueryInput {
   abort: AbortController
   /** Programmatic SDK hooks (compaction); absent = none. */
   hooks?: Options['hooks']
+  /** Role of a mode-locked chat: swaps the steward prompt for its role and allows only its tools; absent = the steward, unchanged. */
+  mode?: ConversationMode | undefined
+  skillTarget?: string | null | undefined
 }
 
 /** SDK options: no built-in tools, webterm MCP only, deny-by-default; `resume` only with a sessionRef. */
@@ -152,11 +156,12 @@ export function centralQueryOptions(a: CentralQueryInput): Options {
     tools: [],
     extraArgs: { 'mcp-config': a.mcpConfig, 'disable-slash-commands': null },
     strictMcpConfig: true,
-    allowedTools: [WEBTERM_MCP_ALLOW],
+    // A mode names its own tools (second layer: the MCP backend refuses the rest, mcp.central); with dontAsk an unlisted tool is denied.
+    allowedTools: a.mode ? modeAllowedMcpTools(a.mode, WEBTERM_MCP_TOOL_PREFIX) : [WEBTERM_MCP_ALLOW],
     permissionMode: 'dontAsk',
     permissionPrompts: 'none',
     settingSources: [],
-    systemPrompt: { type: 'preset', preset: 'claude_code', append: CENTRAL_STEWARD_PROMPT },
+    systemPrompt: { type: 'preset', preset: 'claude_code', append: a.mode ? modePrompt(a.mode, a.skillTarget ?? null) : CENTRAL_STEWARD_PROMPT },
     includePartialMessages: true,
     ...(a.model === undefined ? {} : { model: a.model }),
     ...(a.effort === undefined ? {} : { effort: a.effort }),

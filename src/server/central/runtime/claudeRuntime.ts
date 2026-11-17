@@ -269,6 +269,7 @@ export class ClaudeRuntime implements CentralRuntime {
         ...(input.limits.maxCostMicros === undefined ? {} : { maxBudgetUsd: input.limits.maxCostMicros / MICROS_PER_USD }),
         cwd: ensureWorkDir(this.options.workDir), env, abort,
         ...(input.compaction?.hooks === undefined ? {} : { hooks: input.compaction.hooks }),
+        ...(input.mode === undefined ? {} : { mode: input.mode, skillTarget: input.skillTarget ?? null }),
       }),
       ...claudeSdkSpawn({
         launch: resolved, onChild,

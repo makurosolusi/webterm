@@ -37,6 +37,7 @@ import { applyV35 } from './ledgerSchemaV35'
 import { applyV36 } from './ledgerSchemaV36'
 import { applyV37 } from './ledgerSchemaV37'
 import { applyV38 } from './ledgerSchemaV38'
+import { applyV39 } from './ledgerSchemaV39'
 
 /** One forward-only schema step; `up` runs inside BEGIN IMMEDIATE. */
 export interface Migration {
@@ -118,4 +119,6 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 37, up: applyV37 },
   // v38: cost_usage.tier (ladder tier of a worker response); nullable, existing worker rows backfilled from their agent.
   { version: 38, up: applyV38 },
+  // v39: central_conversation.mode + skill_target (a chat locked to a role, e.g. the Central skill author); nullable, NULL = ordinary chat, no backfill.
+  { version: 39, up: applyV39 },
 ]

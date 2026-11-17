@@ -16,10 +16,13 @@ import {
   validateTurnStatus,
 } from './conversationModel'
 import { PERSIST_LIMITS, redactValue } from '../redactSecrets'
+import { type ConversationMode, isConversationMode } from './chat/conversationMode'
 
 export interface Conversation {
   id: string; scope: string; projectId: string | null; activeTurnId: string | null
   lastEventSeq: number; lastMessageSeq: number; createdAt: number; updatedAt: number
+  /** Role the chat is locked to (null = ordinary Central chat) and, for `skill-author`, the skill it edits. */
+  mode: ConversationMode | null; skillTarget: string | null
 }
 export interface Message {
   id: string; conversationId: string; seq: number; role: MessageRole
@@ -62,6 +65,7 @@ function toConversation(r: Row): Conversation {
     id: String(r['id']), scope: String(r['scope']), projectId: optional(r['project_id']),
     activeTurnId: optional(r['active_turn_id']), lastEventSeq: Number(r['last_event_seq']),
     lastMessageSeq: Number(r['last_message_seq']), createdAt: Number(r['created_at']), updatedAt: Number(r['updated_at']),
+    mode: isConversationMode(r['mode']) ? r['mode'] : null, skillTarget: optional(r['skill_target']),
   }
 }
 function toMessage(r: Row): Message {
@@ -109,7 +113,7 @@ function clampLimit(value: number | undefined, fallback: number): number {
   return Math.min(500, Math.trunc(value))
 }
 /** Returns the one canonical conversation for a scope, creating it on first use. */
-export function getOrCreateConversation(db: Database, rawScope: unknown, now?: number): Conversation {
+export function getOrCreateConversation(db: Database, rawScope: unknown, now?: number, role?: { mode: ConversationMode; skillTarget: string | null }): Conversation {
   const scope: ConversationScope = parseScope(rawScope)
   const id = conversationIdForScope(scope)
   const ts = now ?? Date.now()
@@ -119,9 +123,9 @@ export function getOrCreateConversation(db: Database, rawScope: unknown, now?: n
     execWrite(
       txDb,
       `INSERT INTO central_conversation (id, scope, project_id, active_turn_id, last_event_seq,
-        last_message_seq, created_at, updated_at) VALUES (?, ?, ?, NULL, 0, 0, ?, ?)`,
+        last_message_seq, created_at, updated_at, mode, skill_target) VALUES (?, ?, ?, NULL, 0, 0, ?, ?, ?, ?)`,
       id, scope.kind === 'project' ? `project:${scope.projectId}` : scope.chatId === undefined ? 'global' : `chat:${scope.chatId}`,
-      scope.kind === 'project' ? scope.projectId : null, ts, ts
+      scope.kind === 'project' ? scope.projectId : null, ts, ts, role?.mode ?? null, role?.skillTarget ?? null
     )
     return requireConversation(txDb, id)
   })

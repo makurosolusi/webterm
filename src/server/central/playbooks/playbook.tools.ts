@@ -23,7 +23,6 @@ function usageOf(pb: Playbook): string {
     + 'and answers {runId, taskId, step, status, agentId, reused, browserNodeId}: reused=true means a finished agent of yours (and its browser) took this task instead of a new one, so say "reusing agent X" in your report; status started = the agent is working on its own. An approval card parks it (status waiting) '
     + 'and webterm continues it by itself once the card is decided. The agent ends with a RESULT: line, and webterm brings that result, '
     + 'a question or a failure to you as a check-in by itself: do not poll it, read it in a loop or set a reminder for it.'
-    + (pb.centralNote ? ` ${pb.centralNote}` : '')
 }
 
 export function createPlaybookDefs(deps: PlaybookDeps = {}): ToolDef[] {

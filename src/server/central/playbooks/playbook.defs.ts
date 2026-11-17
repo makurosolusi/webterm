@@ -6,8 +6,7 @@ import { type JsonSchema, obj, S } from '../../capability/capability.schema'
 import type { Brief } from '../../dag/dag.model'
 import type { Complexity } from '../agents/agentLadder'
 import type { Tier, ToolInput } from '../tools/toolTypes'
-import { CODE_CHANGE_WORDS, REVIEW_WORDS, SKILL_AUTHORING_WORDS, WEB_RESEARCH_WORDS } from './playbook.intentWords'
-import { SKILL_AUTHORING_CENTRAL_NOTE, skillAuthorInstructions } from './playbook.skillAuthor'
+import { CODE_CHANGE_WORDS, REVIEW_WORDS, WEB_RESEARCH_WORDS } from './playbook.intentWords'
 
 /** Results of earlier steps by `saveAs` name (their `data`). */
 export type Saved = Record<string, Record<string, unknown> | undefined>
@@ -41,8 +40,6 @@ export interface Playbook {
   subject: string
   /** How hard the spawned agent's task honestly is; sets its model (agent.spawn `complexity`). */
   complexity: Complexity
-  /** Extra guidance for Central, appended to the tool usage and the started receipt. */
-  centralNote?: string
   steps: PlaybookStep[]
   /** `runId` names what the run sets up for the agent (its browser node); `browserNode` overrides it with an existing one (a reused agent's). */
   brief(p: Params, runId: string, browserNode?: string): PlaybookBrief
@@ -132,27 +129,8 @@ const review = delegate({
   }),
 }, 'reviewer')
 
-const MAX_OUTLINE = 4000
-
-const skillAuthoring = delegate({
-  id: 'skill_authoring', label: 'skill authoring', subject: 'goal', tier: 'R1',
-  // Writing short, linted Markdown steps needs care, not the strongest model; never T4 (Fable needs a human grant).
-  complexity: 'moderate',
-  summary: 'Write a skill draft AFTER the human approved an outline in chat; an author worker proposes it for Skills-tab approval.',
-  match: [SKILL_AUTHORING_WORDS],
-  // `outline` is required: the call is refused until Central has an approved outline to hand over.
-  params: obj({ goal: S.str(MAX_GOAL), outline: S.str(MAX_OUTLINE), kind: S.str(100) }, ['goal', 'outline']), required: ['goal', 'outline'],
-  centralNote: SKILL_AUTHORING_CENTRAL_NOTE,
-  brief: (p) => ({
-    objective: p.goal ?? '',
-    instructions: skillAuthorInstructions(p.outline ?? ''),
-    outputFormat: `${RESULT_LINE} markdown: the skill name, whether it was proposed or edited, and the lint result; say it is a draft awaiting human approval.`,
-    boundaries: 'Only propose or edit a skill draft through webterm skills; change no other file, run nothing else, and never approve or enable.',
-  }),
-}, 'worker')
-
 /** Every playbook; the order is the hint's match priority (most specific first). */
-export const PLAYBOOKS: readonly Playbook[] = [skillAuthoring, review, codeChange, webResearch]
+export const PLAYBOOKS: readonly Playbook[] = [review, codeChange, webResearch]
 
 export const playbookTool = (id: string): string => `playbook.${id}`
 export const playbookById = (id: string): Playbook | undefined => PLAYBOOKS.find((p) => p.id === id)

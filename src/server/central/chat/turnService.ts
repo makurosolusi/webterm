@@ -22,6 +22,7 @@ import {
   resolveOrCreateConversation, type StoredMessage,
 } from './turnPersistence'
 import { createRunState, projectRuntimeEvent, type RunState } from './turnEvents'
+import { MODE_TOOLS } from './conversationMode'
 import { createLegacyContextAssembler, type ContextAssembler } from '../context/contextPort'
 import { createCompactionPort } from '../context/compactionHooks'
 import type { Summarize } from '../context/checkpointSummarizer'
@@ -35,6 +36,7 @@ import { markSystemTurn, systemTurnsToday, withoutHumanLabel, type SystemTurnOri
 import { freshSessionPending, prepareRerun, type RerunInput } from './turnRerun'
 
 const log = createLogger('central')
+const MODE_CONTEXT: ContextAssembler = createLegacyContextAssembler()
 
 export { CentralChatError, chatErrorStatus }
 export type { ChatErrorCode } from './chatErrors'
@@ -132,9 +134,13 @@ export class TurnService {
     }
     // A `/model` choice or a Regenerate/Edit since the last good turn: this turn opens a fresh session (reseeded like a rotation).
     const switchModel = modelSwitchPending(this.db, conversation.id) || freshSessionPending(this.db, conversation.id)
-    const { context = this.context, summarize } = this.wiring()
+    const wired = this.wiring()
+    const { summarize } = wired
+    // A mode-locked chat sees only its own conversation: no State header, memory or capability map of the steward.
+    const context = conversation.mode === null ? (wired.context ?? this.context) : MODE_CONTEXT
+    const memoryEnabled = conversation.mode === null && isEnabled('central')
     const built = context.build({
-      db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+      db: this.db, conversationId: conversation.id, text, memoryEnabled, now: this.now,
       ...(switchModel ? { rotate: true } : {}),
     })
     const { history } = built
@@ -174,7 +180,7 @@ export class TurnService {
     // Rotated-session context, built only if the runtime finds its resumed session gone.
     const freshSessionText = (): string => {
       const seeded = context.build({
-        db: this.db, conversationId: conversation.id, text, memoryEnabled: isEnabled('central'), now: this.now,
+        db: this.db, conversationId: conversation.id, text, memoryEnabled, now: this.now,
         rotate: true, beforeSeq: message.seq,
       })
       recordTurnTrace(this.db, turn.id, seeded.trace)
@@ -250,7 +256,8 @@ export class TurnService {
       conversationId: conversation.id, turnId: turn.id,
       text: ask.prompt, history,
       ...(ask.images?.length ? { images: ask.images } : {}),
-      tools: [...DEFAULT_CENTRAL_TOOLS], limits: resolveLimits(this.env),
+      tools: conversation.mode === null ? [...DEFAULT_CENTRAL_TOOLS] : [...MODE_TOOLS[conversation.mode]], limits: resolveLimits(this.env),
+      ...(conversation.mode === null ? {} : { mode: conversation.mode, skillTarget: conversation.skillTarget }),
       // A rotated conversation starts a fresh runtime session seeded from the checkpoint.
       ...(resume === null ? {} : { sessionRef: resume }),
       ...(pick.model ? { model: pick.model } : {}),

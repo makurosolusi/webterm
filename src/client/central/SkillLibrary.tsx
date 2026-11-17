@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input'
 import { useState } from 'react'
 import { SKILL_AUDIENCES, type SkillAudience } from '../../server/central/contracts/skill.types'
 import { AudienceBadge } from './SkillAudience'
+import type { ChatClient } from '../chat/chatTypes'
 import { useNodeActions } from '../nodeActions'
-import SkillAuthorDrafts from './SkillAuthorDrafts'
+import CentralSkillAuthorButton from './CentralSkillAuthorButton'
+import SkillAuthorDrafts, { CentralDraftsPanel } from './SkillAuthorDrafts'
 import { CL } from './centralLabels'
 import { SKILLS_OFF, centralControlApi } from './centralControlApi'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
@@ -16,6 +18,7 @@ import SkillDetail from './SkillDetail'
 import SkillReviewList from './SkillReview'
 import SkillsOff from './SkillsOff'
 import { needsReview, searchRows } from './skillLibraryModel'
+import { centralDraftsOf } from './skillAuthorModel'
 
 const OPEN: readonly string[] = ['proposed', 'evaluated', 'pending_approval']
 const keyOf = (r: SkillReviewRow): string => `${r.record.name}@${r.record.version}`
@@ -34,7 +37,7 @@ function LibraryRow({ row, selected, onSelect }: { row: SkillReviewRow; selected
   )
 }
 
-export default function SkillLibrary({ client = centralControlApi }: { client?: CentralControlClient }) {
+export default function SkillLibrary({ client = centralControlApi, chat }: { client?: CentralControlClient; /** Test seam for the chat API the Central skill author opens its conversation with. */ chat?: Pick<ChatClient, 'createConversation'> }) {
   const list = useLoad((s) => client.listSkills(s))
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState<SkillAudience | null>(null)
@@ -47,6 +50,9 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
   const rows = list.data ?? []
   const shown = searchRows(rows, query)
   const detail = rows.find((r) => keyOf(r) === selected)
+  // Central's own drafts are reviewed in their Drafts panel, so the general review list does not repeat them.
+  const inDrafts = new Set(centralDraftsOf(rows))
+  const rest = rows.filter((r) => needsReview(r) && !inDrafts.has(r))
   return (
     <section className="ccp-section" aria-labelledby="ccp-skills-h">
       <h3 id="ccp-skills-h">{CL.skillsLibraryHeading}</h3>
@@ -69,6 +75,8 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
               <h4>{CL.skillSectionHeading[a]}</h4>
               <p>{CL.skillSectionPurpose[a]}</p>
               {!creating && <Button type="button" size="sm" aria-label={`${CL.skillNew} (${CL.skillAudienceBadge[a]})`} onClick={() => { setCreating(a); setCreated(null) }}>{CL.skillNew}</Button>}
+              {a === 'central' && <CentralSkillAuthorButton label={CL.skillAuthorWrite} {...(chat ? { chat } : {})} />}
+              {a === 'central' && <CentralDraftsPanel list={list} client={client} />}
               {a === 'canvas' && openSkillAuthor && <Button type="button" size="sm" variant="secondary" onClick={() => setAuthorNode(openSkillAuthor())}>{CL.skillAuthorWrite}</Button>}
               {shown.every((r) => r.record.audience !== a) && query.trim() === '' && <p>{CL.skillSectionEmpty[a]}</p>}
               <ul aria-label={CL.skillSectionHeading[a]} className="ccp-skill-list">
@@ -77,8 +85,11 @@ export default function SkillLibrary({ client = centralControlApi }: { client?: 
             </section>
           ))}
           {detail && <SkillDetail key={keyOf(detail)} row={detail} client={client} onClose={() => setSelected(null)} onChanged={list.reload} onEdit={() => { setEditing(detail); setCreating(null) }} onAuthor={openSkillAuthor && detail.record.audience === 'canvas' ? () => setAuthorNode(openSkillAuthor(detail.record.name)) : undefined} hasOpenDraft={rows.some((r) => r.record.name === detail.record.name && OPEN.includes(r.record.status))} onForked={(name) => { setSelected(null); setCreated(CL.skillCreated(name)); list.reload() }} />}
-          {rows.some(needsReview) && <h4>{CL.skillsReviewHeading}</h4>}
-          <SkillReviewList rows={rows.filter(needsReview)} client={client} onDone={list.reload} />
+          {detail && detail.record.audience === 'central' && (detail.record.origin === 'builtin'
+            ? <p>{CL.skillAuthorBuiltinHint}</p>
+            : <CentralSkillAuthorButton key={`author:${keyOf(detail)}`} target={detail.record.name} label={CL.skillAuthorEdit} {...(chat ? { chat } : {})} />)}
+          {rest.length > 0 && <h4>{CL.skillsReviewHeading}</h4>}
+          <SkillReviewList rows={rest} client={client} onDone={list.reload} />
         </>
       )}
     </section>

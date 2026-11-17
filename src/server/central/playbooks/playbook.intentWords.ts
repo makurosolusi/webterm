@@ -9,5 +9,5 @@ export const WEB_RESEARCH_WORDS = /\b(analisa|analisis|analy[sz]e|analysis|riset
 export const CODE_CHANGE_WORDS = /\b(perbaiki|betulkan|fix|implement\w*|tambah\w*|refactor\w*|ubah|bikin\s+fitur|add\s+(a\s+)?feature)\b/i
 /** review: review a PR, branch, diff or code. */
 export const REVIEW_WORDS = /\b(review|periksa|cek\s+kode|pull\s+request|PR|diff)\b/i
-/** skill_authoring: create or change a skill (the verb must sit right before "skill", so "fix the skill loader" stays code_change). */
-export const SKILL_AUTHORING_WORDS = /\b(buat(kan)?|bikin(kan)?|tulis(kan)?|create|write|draft|make|edit|ubah|change|update|tambah\w*|add)\s+((a|an|the|new|sebuah|satu|baru)\s+)*skills?\b/i
+/** A request to create or change a skill (the verb must sit right before "skill", so "fix the skill loader" stays code_change). Not a playbook job: Central drafts it with skill.propose or points to the Skills tab author, and a worker must never write a Central skill. */
+export const SKILL_REQUEST_WORDS = /\b(buat(kan)?|bikin(kan)?|tulis(kan)?|create|write|draft|make|edit|ubah|change|update|tambah\w*|add)\s+((a|an|the|new|sebuah|satu|baru)\s+)*skills?\b/i

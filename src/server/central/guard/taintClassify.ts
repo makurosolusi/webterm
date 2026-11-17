@@ -12,7 +12,7 @@ export const IMPACTFUL_TOOLS: readonly string[] = [
   'task.assign', 'task.create', 'task.update', 'task.cancel', 'permission.decide',
   'memory.remember', 'memory.update', 'memory.forget', 'memory.remember_user', 'state.update', 'reminder.set', 'reminder.cancel',
   'workspace.create', 'workspace.rename',
-  'playbook.code_change', 'playbook.review', 'playbook.web_research', 'playbook.skill_authoring',
+  'playbook.code_change', 'playbook.review', 'playbook.web_research',
   'browser_open', 'browser_act', 'browser_read',
 ]
 

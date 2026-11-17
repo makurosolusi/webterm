@@ -21,6 +21,7 @@ import type { ConversationPage, ConversationSummary } from '../centralTypes'
 import type { RuntimeResult } from '../runtime/centralRuntime'
 import { lookupWorkspace } from '../workspaceLookup'
 import { CentralChatError } from './chatErrors'
+import { type ConversationMode, isConversationMode } from './conversationMode'
 import type { StreamHub } from './streamHub'
 import { currentPartState, registerApprovalStream } from './approvalPublish'
 import type { RunState, ToolRecord } from './turnEvents'
@@ -199,8 +200,8 @@ export const MAX_CONVERSATION_LIMIT = 200
 const TITLE_CHARS = 80
 
 /** A fresh global chat ("New chat"): its own id, so its first turn has no session to resume. */
-export function createChatConversation(db: Database, now?: number): ConversationSummary {
-  const conversation = getOrCreateConversation(db, `chat:${randomUUID()}`, now)
+export function createChatConversation(db: Database, now?: number, role?: { mode: ConversationMode; skillTarget: string | null }): ConversationSummary {
+  const conversation = getOrCreateConversation(db, `chat:${randomUUID()}`, now, role)
   return { ...conversation, title: null, turnCount: 0 }
 }
 
@@ -250,6 +251,7 @@ export function listConversationSummaries(
     lastEventSeq: Number(row['last_event_seq']), lastMessageSeq: Number(row['last_message_seq']),
     createdAt: Number(row['created_at']), updatedAt: Number(row['updated_at']),
     title: projectTitle(row), turnCount: Number(row['turn_count']),
+    mode: isConversationMode(row['mode']) ? row['mode'] : null, skillTarget: optional(row['skill_target']),
   }))
   return { items, nextOffset: rows.length > limit ? offset + limit : null }
 }

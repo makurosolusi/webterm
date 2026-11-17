@@ -61,6 +61,10 @@ export interface ChatConversation {
   updatedAt: number
   /** First human message, trimmed by the server; null until the first send. */
   title: string | null
+  /** Role the chat is locked to (`skill-author`); absent/null = an ordinary Central chat. */
+  mode?: string | null
+  /** With mode `skill-author`: the skill the chat edits; null for a new skill. */
+  skillTarget?: string | null
 }
 
 /** `nextOffset` null = no older conversations. */
@@ -139,8 +143,8 @@ export interface ChatStream {
 export interface ChatClient {
   /** One page, newest first; `offset` from the previous page's `nextOffset`. */
   listConversations: (opts?: RequestOptions & { offset?: number }) => Promise<ChatConversationPage>
-  /** A new, empty chat (fresh Claude session server-side). */
-  createConversation: (opts?: RequestOptions) => Promise<ChatConversation>
+  /** A new, empty chat (fresh Claude session server-side); `mode` locks it to a role (the Central skill author). */
+  createConversation: (opts?: RequestOptions & { mode?: 'skill-author'; skillTarget?: string }) => Promise<ChatConversation>
   listMessages: (conversationId: string, opts?: RequestOptions) => Promise<ChatMessage[]>
   sendMessage: (
     conversationId: string,
@@ -164,8 +168,12 @@ export function isActiveTurnStatus(status: ChatTurnStatus | null): boolean {
   return status !== null && ACTIVE.includes(status)
 }
 
+/** `mode` of a Central chat that writes Central skills (server chat/conversationMode.ts). */
+export const SKILL_AUTHOR_MODE = 'skill-author'
+
 /** Conversation list label: the server title (a project's name), else the project id, else "Global" / "New chat". */
-export function conversationLabel(conversation: Pick<ChatConversation, 'id' | 'projectId'> & { title?: string | null }): string {
+export function conversationLabel(conversation: Pick<ChatConversation, 'id' | 'projectId'> & { title?: string | null; mode?: string | null; skillTarget?: string | null }): string {
+  if (conversation.mode === SKILL_AUTHOR_MODE) return conversation.skillTarget ? `Skill author: ${conversation.skillTarget}` : 'Skill author'
   if (conversation.title) return conversation.title
   if (conversation.projectId) return conversation.projectId
   if (conversation.id === GLOBAL_CONVERSATION_ID) return 'Global'

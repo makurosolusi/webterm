@@ -11,7 +11,7 @@ import ChatMessages from './chatMessages'
 import type {
   ChatClient, ChatConversation, ChatEvent, ChatStream, ChatStreamOptions,
 } from './chatTypes'
-import { isActiveTurnStatus, newClientMessageId } from './chatTypes'
+import { SKILL_AUTHOR_MODE, isActiveTurnStatus, newClientMessageId } from './chatTypes'
 import {
   buildOptimisticMessage, chatReducer, initialChatState, orderedMessages,
 } from './chatStore'
@@ -24,6 +24,8 @@ import { CentralModelPicker } from '../central/centralModelPicker'
 import { useActiveWorkspaceId } from '../activeWorkspace.context'
 import { CentralContextMeter } from '../central/centralContextMeter'
 import { ApprovalModeChip } from '../ApprovalModeControl'
+import { CentralSkillAuthorBanner, CentralSkillAuthorChip } from '../central/CentralSkillAuthorBanner'
+import { notifyCentralSkillAuthorActivity } from '../central/centralSkillAuthor.events'
 
 export type StreamFactory = (conversationId: string, opts: ChatStreamOptions) => ChatStream
 
@@ -121,6 +123,13 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
   const busy = state.activeTurnId !== null || isActiveTurnStatus(state.turnStatus)
   const turn = turnPhase({ stream: state.stream, busy, messages: state.messages })
+  const authoring = conversation.mode === SKILL_AUTHOR_MODE
+  // A finished turn of a skill-author chat may have proposed a draft: tell the Skills tab (no polling there).
+  const wasBusy = useRef(busy)
+  useEffect(() => {
+    if (authoring && wasBusy.current && !busy) notifyCentralSkillAuthorActivity()
+    wasBusy.current = busy
+  }, [authoring, busy])
 
   /** Sends text plus attachments (image/file parts: fresh bytes, or stored refs on a Retry). */
   const send = (text: string, attached: ChatPart[] = []): void => {
@@ -199,6 +208,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
   return (
     <section ref={section} className="chat-conversation" aria-label="Conversation">
+      {authoring && <CentralSkillAuthorBanner target={conversation.skillTarget ?? null} />}
       <TurnLiveRegion info={turn} failed={failed} />
       <ChatMessages messages={orderedMessages(state)} streaming={busy || rerunning || state.stream === 'reconnecting'} status={turn} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)}
@@ -213,7 +223,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
         toolbar={props.commands && (
           <>
-            <ApprovalModeChip workspaceId={workspaceId} />
+            {authoring ? <CentralSkillAuthorChip /> : <ApprovalModeChip workspaceId={workspaceId} />}
             <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
               openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />
             <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />

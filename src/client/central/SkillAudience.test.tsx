@@ -41,18 +41,22 @@ describe('two skill sections', () => {
     expect((await section('Central skills')).getByText('No Central skills yet')).toBeTruthy()
   })
 
-  it('the agent-author button exists only in the Canvas section', async () => {
+  it('the canvas agent-author node button stays in the Canvas section; the Central section has its own chat-based author', async () => {
     show(rows, () => 'node-1')
     expect((await section('Canvas skills')).getByRole('button', { name: 'Write with an agent' })).toBeTruthy()
     expect((await section('Central skills')).queryByRole('button', { name: 'Write with an agent' })).toBeNull()
+    expect((await section('Central skills')).getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
+    expect((await section('Canvas skills')).queryByRole('button', { name: 'Write with an agent (Central)' })).toBeNull()
   })
 
-  it('the per-skill agent edit is offered for a canvas skill and hidden for a central one', async () => {
+  it('the per-skill node edit is for a canvas skill; a central skill offers the Central chat author instead', async () => {
     show(rows, () => 'node-1')
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-rule 1' }))
     expect(screen.queryByRole('button', { name: 'Edit with an agent' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Edit with an agent webterm-rule' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'View webterm-howto 1' }))
     expect(await screen.findByRole('button', { name: 'Edit with an agent' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit with an agent webterm-howto' })).toBeNull()
   })
 })
 

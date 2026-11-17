@@ -119,9 +119,7 @@ export async function centralChatRoute(
   }
 
   if (method === 'POST') {
-    // The create body is ignored (`{}`); drain it so keep-alive is not desynced.
-    req.resume()
-    handleCreateConversation(res, db, deps.now?.())
+    await handleCreateConversation(req, res, db, deps.now?.())
     return true
   }
   if (method !== 'GET') return methodNotAllowed(res, method), true
