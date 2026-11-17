@@ -44,3 +44,12 @@ not blocked; only reported.
 Settings > Central: "Chat only". Settings > Advanced: "Workers Central may start" = `propose` (a card per worker)
 or `off`. Or `WEBTERM_CENTRAL_AGENTS=propose` in `.env`. A global or per-project level can be lowered through
 `PUT /api/central/control`.
+
+## Worker run approval default (2026-11-17)
+
+Owner: "no complicated permissions; default bypass; Central is free except writing code." The last default-on
+approval gate, `WEBTERM_RUN_REQUIRE_APPROVAL`, now defaults to `off` (registry, `orchestratorRunRequireApproval`,
+the Worker card sub-option). A run with no `approvalId` is accepted unless the owner explicitly sets the flag to `on`;
+then the digest-bound ledger gate applies exactly as before. Explicit stored values are honoured, so no migration is
+needed. Budget, daily spawn cap, halt, breaker and SSRF guards are unchanged. The Central `agent.spawn` path is
+governed separately by `WEBTERM_CENTRAL_AGENTS` (default `auto`), not by this flag.

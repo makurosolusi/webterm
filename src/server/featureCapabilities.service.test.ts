@@ -46,7 +46,7 @@ describe('viewOf', () => {
   it('sub tampil hanya saat induk on dengan kunci tanpa nama env var', () => {
     expect(viewOf('workers', {}, DETECT_OK).subs).toBeUndefined()
     const on = viewOf('workers', { WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' }, DETECT_OK)
-    expect(on.subs).toEqual([expect.objectContaining({ key: 'runRequireApproval', on: true })])
+    expect(on.subs).toEqual([expect.objectContaining({ key: 'runRequireApproval', on: false })])
     expect(JSON.stringify(on)).not.toContain('WEBTERM_')
   })
 })

@@ -7,7 +7,7 @@
 // A paused project or a terminal plan (`completed`/`abandoned`) answers 409 before any work.
 // This module is the route seam only: payload parsing lives in `orchestratorRunModel` and
 // production composition (repo/agent/worktree/runtime) in `orchestratorRunProduction`.
-// `WEBTERM_RUN_REQUIRE_APPROVAL=on` makes approval mandatory; otherwise a named one is consumed.
+// `WEBTERM_RUN_REQUIRE_APPROVAL=on` makes approval mandatory (default is off); otherwise a named one is consumed.
 import { createPlanStore, type Plan } from './orchestrator/plan'
 import { LEDGER_OFF } from './apiShared.types'
 import { createLogger } from './logs'

@@ -12,7 +12,7 @@ export type { RouteResult }
 
 // Diambil dari katalog (bukan literal) supaya pagar grep tak menandainya; hanya NAMA kunci (untuk metadata gate), bukan pembacaan nilai.
 export const ORCHESTRATOR_RUN_FLAG = CAPABILITIES.workers.primaryKey
-/** Policy gate (default on): a run must name an approved, digest-bound ledger approval. */
+/** Policy gate (default OFF, owner decision 2026-11-17): when the owner turns it on, a run must name an approved, digest-bound ledger approval. */
 export const ORCHESTRATOR_REQUIRE_APPROVAL_FLAG = 'WEBTERM_RUN_REQUIRE_APPROVAL'
 export const ORCHESTRATOR_RUN_PATH = '/api/orchestrator/run'
 
@@ -40,11 +40,11 @@ export function orchestratorRunEnabled(
   return isEnabled('workers', env)
 }
 
-/** Default ON (ENVSIMPLE Q3): approval wajib kecuali sub dimatikan eksplisit; dibaca per panggilan. */
+/** Default OFF (owner 2026-11-17: 'default bypass, no complicated permissions'): approval wajib hanya bila owner menyalakan eksplisit; dibaca per panggilan. */
 export function orchestratorRunRequireApproval(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return flagOr(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG], true)
+  return flagOr(env[ORCHESTRATOR_REQUIRE_APPROVAL_FLAG], false)
 }
 
 function text(value: unknown, max: number): string | null {

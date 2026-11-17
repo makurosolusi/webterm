@@ -66,7 +66,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   workers: {
     id: 'workers', title: 'Worker orchestrator', implies: ['central'], primaryKey: 'WEBTERM_ORCHESTRATOR_RUN',
     blurb: 'Let agents run commands on this computer.',
-    subs: [{ key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: 'Ask for approval before a worker runs', defaultOn: true }],
+    subs: [{ key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: 'Ask for approval before a worker runs', defaultOn: false }],
   },
   autonomy: {
     id: 'autonomy', title: 'Central Agent autonomy', implies: ['workers'], primaryKey: 'WEBTERM_CENTRAL_AUTONOMY',

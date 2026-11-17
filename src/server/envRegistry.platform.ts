@@ -22,8 +22,8 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
   }, 'on'),
   flag('WEBTERM_RUN_REQUIRE_APPROVAL', 'orchestrator', {
     ...ORCH, audience: 'user', hot: true, requires: [{ key: 'WEBTERM_ORCHESTRATOR_RUN' }],
-    label: 'Runs require approval', description: 'Every run needs a ledger approval (on by default); re-read on every run call.',
-  }, 'on'),
+    label: 'Runs require approval', description: 'Every run needs a ledger approval (off by default, owner decision 2026-11-17); re-read on every run call.',
+  }, 'off'),
   flag('WEBTERM_MEMORY_FILES', 'memory', { ...MEM, audience: 'user', hot: true, label: 'Memory files', description: 'Gate for exporting and rebuilding memory files.' }, 'on'),
   text('WEBTERM_MEMORY_DIR', 'memory', {
     ...MEM, audience: 'advanced', hot: true, dangerous: true, allowEmpty: true, unsetLabel: '<dataDir>/memory',

@@ -32,7 +32,7 @@ describe('katalog', () => {
     expect(CAPABILITIES.browser.needs).toBe('chromium')
     expect(CAPABILITIES.telegram.needs).toBe('telegramToken')
     expect(CAPABILITIES.workers.subs).toEqual([
-      { key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: expect.any(String), defaultOn: true },
+      { key: 'WEBTERM_RUN_REQUIRE_APPROVAL', label: expect.any(String), defaultOn: false },
     ])
     // Kendali agent atas browser default ON (alat developer); tetap `dangerous` = mematikan/menyalakan lewat konfirmasi.
     expect(CAPABILITIES.browser.subs).toEqual([
