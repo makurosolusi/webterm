@@ -9,7 +9,6 @@ import { createLogger } from '../logs'
 import type { CdpClient } from './cdp.client'
 import { createChromiumPool, detectChromium } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
-import { BrowserError } from './browserHost.targets'
 import { createNavigationGuard } from './navigation.guard'
 import { parseAllowHosts } from './ssrf.allowlist'
 import { startSsrfProxy } from './ssrf.proxy'
@@ -33,7 +32,7 @@ import { openProjectBrowser } from './browser.projectOpen'
 import { handleBrowserControl } from './browserControl.handler'
 import { handleBrowserApi } from '../browserApi'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
-import { adaptGatewayHost, agentControlOn, cookieImportOn } from './browser.runtime.parts'
+import { adaptGatewayHost, agentControlOn, cookieImportOn, wakeDiscarded } from './browser.runtime.parts'
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { Workspace } from '../../shared/workspace'
@@ -117,11 +116,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
   const agentEnv = () => agentControlOn(env)
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
-  const wake = async (id: string, url: string): Promise<void> => {
-    const ws = d.workspaces().find((w) => w.nodes.some((n) => n.id === id))
-    if (!ws) throw new BrowserError('not_found', `browser node ${id} is not on any board`)
-    await gwHost.open(id, ws.id, url)
-  }
+  const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
   const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
   const live = new Set<string>()
   const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })

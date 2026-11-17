@@ -85,11 +85,9 @@ export function actVerbs(ctx: AgentCtx): Pick<AgentVerbs, 'navigate' | 'click' |
       const url = needString(asRecord(raw).url, 'url', URL_MAX_CHARS)
       const s = await driving(ctx, nodeId)
       // A discarded node is rebuilt by navigate: that must take a MAX_LIVE slot and be tracked by the lifecycle like any open.
-      // `wake` opens the page at `url` (BlockedError 'max_live' when full); only a guard-blocked url still needs host.navigate to throw.
-      if (s.live === 'discarded' && ctx.wake) {
-        await ctx.wake(nodeId, url)
-        if (stateOf(ctx, nodeId).blocked) await ctx.host.navigate(nodeId, url)
-      } else await ctx.host.navigate(nodeId, url) // BlockedError -> 403 di handler
+      // `wake` opens the page at `url` (BlockedError 'max_live' when full, guard-blocked url throws BlockedError).
+      if (s.live === 'discarded' && ctx.wake) await ctx.wake(nodeId, url)
+      else await ctx.host.navigate(nodeId, url) // BlockedError -> 403 di handler
       ctx.snapshots.drop(nodeId)
       return { ok: true }
     },

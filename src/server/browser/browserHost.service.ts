@@ -130,6 +130,9 @@ export class BrowserHost implements BrowserHostApi {
 
   discard(nodeId: string): Promise<void> { return this.life.discard(nodeId) }
 
+  /** Workspace that owns a known node (also a discarded one); undefined = unknown to the host. */
+  workspaceOf(nodeId: string): string | undefined { return this.table.nodes.get(nodeId)?.workspaceId }
+
   state(nodeId: string): BrowserState | undefined {
     const rec = this.table.nodes.get(nodeId)
     return rec && { ...rec.state }
