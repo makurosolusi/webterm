@@ -36,6 +36,14 @@ Operator notes:
 - Default-on switches are written into the server's environment at start while nothing sets them (as `WEBTERM_CENTRAL=on` and so on), so readers and Settings agree; a value in `.env`, the shell or Settings still wins. Existing projects keep their auto-done value; only new projects start with it on.
 
 ### Added
+- Central recognises idle browsers with one shared rule: `browser_read` and the reuse playbook reuse an idle browser cabled to a finished agent instead of opening a new one, and the tidy sweep uses the same rule. Browsers you own are never taken automatically. `browser_status` now reports `idle`, `idleReason`, `owner`, `cabledTo` and `idleCount`.
+- Browser latency is recorded per verb and per `browser_read` phase (navigate, waitLoaded, snapshot, reader, plus the CLI API time `apiMs`); read it with the read-only `GET /api/browser/latency`.
+- Handle menu: click a node's blue connection dot, or release a dragged cable on empty canvas, to get a searchable menu of nodes to spawn. The node is created next to it and cabled automatically; unavailable entries show why.
+- Central `canvas.open` accepts `connectTo` (and optional `direction`) to open a node and cable it in one call.
+- Skills tab in the Central panel is now a library: browse and search, create skills, switch each one on or off (a disabled skill cannot be loaded by Central), edit as a new version with a diff, and duplicate a built-in skill to edit it. A draft you wrote yourself is approved with one click; drafts proposed by an agent or Central still need the typed confirmation (see docs/decisions/skill-approval.md).
+- Agents on the canvas can list, propose and edit skills with `webterm skills list|propose|edit`. Proposals are drafts marked as from an agent (3 per day); agents can never approve or enable a skill.
+- "Write with an agent": an Agent Chat preset that discusses a skill with you, then proposes it, with a drafts panel (diff, edit, approve, reject). Its tool restriction is instruction only and is not enforced yet.
+- Central playbook `skill_authoring`: Central discusses the skill with you first (an outline is required), hands it to one author worker and reports that the draft awaits your approval. The wait for your go is enforced by the required outline and by your approval, not by a verified go signal.
 - Central can read one web page itself (`browser_read`): it opens or reuses an idle browser node, a separate sandboxed reader reads the page, and only a short structured summary reaches Central, never the raw page text, with a note when the page tries to give instructions.
 - Central reuses a finished worker and its browser for the next web research or review instead of creating new nodes.
 - Finished Central workers are parked (collapsed) after 15 minutes idle and closed after 2 hours, with an Undo. A switch "Tidy up finished workers" in Settings › Central Agent (on by default, setting `centralTidy`) turns it off; only Central's own nodes are touched, never yours.
@@ -213,6 +221,9 @@ Operator notes:
 - Central now acts as an advisor: it points out what a project is missing, cites the evidence for each point and says how confident it is. Its context header carries the project's health. It can read findings but cannot dismiss them or change code on their behalf; fixes go through a task you approve.
 - Deep analysis (Health tab): a read-only Claude run maps the project's structure and debt, and each claim is kept only after the server finds its quoted code at the cited file and line. It costs about $0.50 at most and runs at most once per hour per project.
 ### Changed
+- Clicking a bridge handle no longer starts click-to-connect; it opens the handle menu instead. Drag-to-connect is unchanged.
+- Helper `claude -p` calls skip non-essential CLI traffic: about 1.2 s faster per page read, measured on one idle machine (re-measure on yours).
+- Skills have an `enabled` flag, and the `central_skill` table is rebuilt once to allow drafts from agents (transactional, idempotent, nothing to do by hand).
 - A finished worker no longer holds a worker slot: the cap counts only working agents (a worker waiting for your input still counts), and reusing a finished worker checks the cap again.
 - A message that only contains a link now suggests reading the page instead of starting a research worker.
 - Terminal colour schemes were rebuilt from openly licensed palettes. A few colours (notably the Solarized bright colours) now differ slightly; theme ids and your saved choice are unchanged.
@@ -372,6 +383,7 @@ Operator notes:
 - `task.assign` now assigns a task to a canvas node; only you can mark work done.
 
 ### Fixed
+- Rejected skill drafts stay listed with a reason instead of disappearing.
 - A research worker (plus a browser) is no longer started for every lookup; see Added and Changed above.
 - The approval card for a Central action shows its own title when it has one.
 - A hook whose body is larger than 256 KiB no longer loses the task's status; the reply is flagged with the `x-webterm-truncated: 1` header.
