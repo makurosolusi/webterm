@@ -24,7 +24,7 @@ let cycleHandler: (() => void) | null = null
  * Ctrl+Shift+M is the browser's own (Chrome: profile switcher; Firefox: Responsive Design Mode).
  */
 export const CYCLE_APPROVAL_MODE_COMMAND: Command = {
-  id: 'permissions.cycleMode', label: 'Central: Cycle Permission Mode (Ask, Auto, Danger)', run: () => cycleHandler?.(),
+  id: 'permissions.cycleMode', label: 'Central: Cycle Permission Mode (Ask, Auto, Bypass)', run: () => cycleHandler?.(),
 }
 registerCommands([CYCLE_APPROVAL_MODE_COMMAND])
 
@@ -104,7 +104,7 @@ export function useApprovalModeChange(settings: Settings): ApprovalModeChange {
       const r = await putLevel(a.target, a.level, confirmDanger)
       if (!r.ok && r.confirm) {
         // The server wants the confirmation (another tab moved the level, or it was never asked): ask again.
-        settle({ ok: false, message: 'Danger needs your confirmation', retry: () => setAsking(a) })
+        settle({ ok: false, message: 'Bypass needs your confirmation', retry: () => setAsking(a) })
         setAsking(a)
         return
       }

@@ -4,8 +4,6 @@
 // (server/settings.defaults.policy.test.ts) fails for any boolean default that is off without a reason.
 
 export const SAFEGUARDS: Readonly<Record<string, string>> = {
-  agentApprovalLevel: 'Auto by default, not Danger: actions that cannot be undone still ask you first.',
-  skipApprovals: 'Off by default: skipping approvals lets agents run actions that cannot be undone without asking.',
   WEBTERM_CENTRAL_AUTONOMY: 'Off by default: working on its own starts real workers (shell, file edits, commits) without asking.',
   WEBTERM_RUN_REQUIRE_APPROVAL: 'On by default: a worker runs real commands on this computer, so you approve each one first.',
   WEBTERM_TRUST_PROXY: 'Off by default: without a trusted proxy in front, anyone could fake their address and dodge throttling.',
@@ -15,7 +13,7 @@ export const SAFEGUARDS: Readonly<Record<string, string>> = {
   centralCheckinDailyLimit: 'Caps the turns Central starts by itself, so it never spends without you in the loop for long.',
   dailySpendWarning: 'Cost is covered by the model plan; spend warnings are noise unless you ask for them.',
   secretAccess: 'Agents ask before they use a secret, because a leaked secret cannot be taken back.',
-  denyRules: 'Deny rules hold even in Danger mode, so a block you set is never skipped.',
+  denyRules: 'Deny rules hold even in Bypass mode, so a block you set is never skipped.',
 }
 
 /** UI field id -> its SAFEGUARDS key, where the two differ (Central rows are `central.<id>`, ../client/settings.link). */

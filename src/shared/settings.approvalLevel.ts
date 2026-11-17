@@ -8,8 +8,12 @@ import type { AgentPermissionMode } from './workspace'
 export const APPROVAL_LEVELS = ['never', 'risky', 'always'] as const
 export type ApprovalLevel = (typeof APPROVAL_LEVELS)[number]
 
-/** Level while nothing is stored (user decision 2026-11-12). A stored choice (e.g. skipApprovals: true) is kept. */
-export const DEFAULT_APPROVAL_LEVEL: ApprovalLevel = 'risky'
+/**
+ * Level while nothing is stored: Bypass ('never'). Owner decision 2026-11-17, replacing 2026-11-12 ('risky'):
+ * agents asked for approval too often. A stored choice is kept; boot moves an old default once
+ * (server/approvalDefaultMigration.ts). Deny rules, spend limits, caps and secret access still protect.
+ */
+export const DEFAULT_APPROVAL_LEVEL: ApprovalLevel = 'never'
 
 export const isApprovalLevel = (v: unknown): v is ApprovalLevel => (APPROVAL_LEVELS as readonly unknown[]).includes(v)
 
@@ -39,5 +43,5 @@ export function approvalClassifierSwitch(level: ApprovalLevel): { central: boole
 export const APPROVAL_LEVEL_TEXT: Record<ApprovalLevel, { label: string; hint: string }> = {
   always: { label: 'Ask', hint: 'Every action that needs permission waits for your approval first.' },
   risky: { label: 'Auto', hint: 'Routine work runs on its own; only actions that cannot be undone ask first.' },
-  never: { label: 'Danger', hint: 'Nothing asks, like --dangerously-skip-permissions; only your Deny rules, spend limits and secret access still protect you.' },
+  never: { label: 'Bypass', hint: 'Nothing asks (bypass permissions, the default); only your Deny rules, spend limits and secret access still protect you.' },
 }

@@ -44,7 +44,7 @@ export const CLAUDE_TEXT = {
   approval: APPROVAL_LEVEL_TEXT,
   rawMode: 'Claude permission mode',
   rawModeHint: 'Passed to Claude as --permission-mode when it starts. The choice above sets it for you.',
-  rawModeLocked: 'Danger is on, so agents start without asking.',
+  rawModeLocked: 'Bypass is on, so agents start without asking.',
   rawModeFix: 'Use Auto instead',
 } as const
 

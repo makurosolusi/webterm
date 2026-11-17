@@ -74,6 +74,13 @@ describe('AgentChatView', () => {
     expect(await screen.findByText('Sending…')).toBeTruthy()
   })
 
+  it('a node without a stored mode shows Bypass on its permission chip (owner decision 2026-11-17)', () => {
+    setup()
+    const chip = screen.getByRole('button', { name: /^Permission mode/ })
+    expect(chip.textContent).toBe('Bypass')
+    expect(chip.getAttribute('aria-label')).toBe('Permission mode: Bypass permissions')
+  })
+
   it('puts the controls inside the composer box and ends the message list before the composer', async () => {
     const { emit, view } = setup()
     emit({ seq: 1, t: 'delta', messageId: 'm1', kind: 'text', text: 'last line' })

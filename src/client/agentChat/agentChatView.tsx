@@ -36,7 +36,8 @@ import './agentChat.css'
 
 /** Distance from the bottom (px) that still counts as "pinned" for auto-scroll. */
 const NEAR_BOTTOM_PX = 80
-const DEFAULT_MODE: AgentPermissionMode = 'manual'
+// Owner decision 2026-11-17: a node without a stored mode starts in Bypass (the server launch mode follows Settings).
+const DEFAULT_MODE: AgentPermissionMode = 'bypassPermissions'
 
 export type { AgentChatPatch }
 

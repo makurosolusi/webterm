@@ -135,6 +135,14 @@ test('boot batch: one notice per boot, then none when the next boot changes noth
   expect(records('auto.boot_changes')).toHaveLength(1)
 })
 
+test('boot batch: the Bypass default move names where to change it', () => {
+  queueBootChange('approval', ['agentApprovalLevel'])
+  expect(flushBootChanges(db, now)).toBe(true)
+  const text = notices().at(-1) ?? ''
+  expect(text).toContain('Default permission changed to Bypass; change it in Settings > Claude > Permissions')
+  expect(text).not.toContain('not set yet')
+})
+
 test('the classifier switch survives pruning of its event row', () => {
   const file = join(root, 'switch.db')
   const first = openLedgerDb(file)

@@ -223,7 +223,9 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
         completion={cmd.completion} seed={cmd.seed} attach={centralChatAttach} dropZone={section}
         toolbar={props.commands && (
           <>
-            {authoring ? <CentralSkillAuthorChip /> : <ApprovalModeChip workspaceId={workspaceId} />}
+            {/* The role chip is info only; it never replaces the permission control (owner decision 2026-11-17). */}
+            {authoring && <CentralSkillAuthorChip />}
+            <ApprovalModeChip workspaceId={workspaceId} />
             <CentralModelPicker conversationId={conversation.id} refreshKey={settledKey}
               openRequest={cmd.modelPickerRequest} onModelSet={modelSet} />
             <CentralContextMeter conversationId={conversation.id} refreshKey={settledKey} />
