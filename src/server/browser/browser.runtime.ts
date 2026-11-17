@@ -9,6 +9,7 @@ import { createLogger } from '../logs'
 import type { CdpClient } from './cdp.client'
 import { createChromiumPool, detectChromium } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
+import { BrowserError } from './browserHost.targets'
 import { createNavigationGuard } from './navigation.guard'
 import { parseAllowHosts } from './ssrf.allowlist'
 import { startSsrfProxy } from './ssrf.proxy'
@@ -116,7 +117,12 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
   const agentEnv = () => agentControlOn(env)
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
-  const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
+  const wake = async (id: string, url: string): Promise<void> => {
+    const ws = d.workspaces().find((w) => w.nodes.some((n) => n.id === id))
+    if (!ws) throw new BrowserError('not_found', `browser node ${id} is not on any board`)
+    await gwHost.open(id, ws.id, url)
+  }
+  const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
   const live = new Set<string>()
   const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })
   host.onState((s: BrowserState) => {
