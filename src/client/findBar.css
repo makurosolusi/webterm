@@ -20,3 +20,7 @@
 }
 /* Kotak input 216 lebar (diukur); lebih spesifik dari `.node-find__field` (140px) di node-chrome.css. */
 .findbar .node-find__field { width: 216px; }
+/* Match counter of the transcript find ("2 of 5"); muted like the VS Code find widget's. */
+.findbar__count { min-width: 56px; font-size: 12px; text-align: center; white-space: nowrap; color: var(--vscode-descriptionForeground, var(--muted)); }
+::highlight(chat-find) { background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33)); }
+::highlight(chat-find-active) { background: var(--vscode-editor-findMatchBackground, #a8ac94); color: #000; }

@@ -93,7 +93,7 @@ export default function NodeToolbar(props: NodeToolbarProps) {
       node: (
         <IconTooltip label="Search"><ToolbarButton
           label="Search" data-title="Search"
-          toggleable checked={Boolean(props.searchOpen)}
+          toggleable checked={Boolean(props.searchOpen)} aria-expanded={props.searchOpen ? 'true' : 'false'}
           onClick={props.onToggleSearch}
         ><Codicon name="search" /></ToolbarButton></IconTooltip>
       ),

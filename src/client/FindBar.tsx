@@ -14,9 +14,13 @@ import './findBar.css'
  * diterapkan lewat properti lit di browser, sedangkan `input`/keydown adalah event yang
  * diteruskan ke host — jadi state React tetap satu-satunya sumber istilah.
  */
-export default function FindBar({ onSearch, onClose }: {
+export default function FindBar({ onSearch, onClose, onTermChange, result }: {
   onSearch: (term: string, direction: 'next' | 'prev') => void
   onClose: () => void
+  /** Fires on every keystroke (live search); hosts that only search on Enter omit it. */
+  onTermChange?: (term: string) => void
+  /** Match counter ("2 of 5" / "No matches"); omitted by hosts that cannot count (terminal). */
+  result?: { index: number; total: number }
 }) {
   const [term, setTerm] = useState('')
   const fieldRef = useRef<HTMLElement | null>(null)
@@ -32,9 +36,18 @@ export default function FindBar({ onSearch, onClose }: {
       <Textfield
         ref={(node) => { fieldRef.current = node }}
         value={term} placeholder="Find" aria-label="Find" className="node-find__field"
-        onInput={(e) => setTerm((e.target as unknown as { value: string }).value)}
+        onInput={(e) => {
+          const v = (e.target as unknown as { value: string }).value
+          setTerm(v)
+          onTermChange?.(v)
+        }}
         onKeyDown={onKey}
       />
+      {result && (
+        <span className="findbar__count" role="status" aria-live="polite">
+          {!term ? '' : result.total === 0 ? 'No matches' : `${result.index} of ${result.total}`}
+        </span>
+      )}
       <ToolbarContainer className="node-find__actions">
         <IconTooltip label="Previous Match" shortcut="Shift+Enter"><ToolbarButton label="Previous Match" data-title="Previous Match (Shift+Enter)" onClick={() => onSearch(term, 'prev')}><span className="codicon codicon-arrow-up" aria-hidden="true" /></ToolbarButton></IconTooltip>
         <IconTooltip label="Next Match" shortcut="Enter"><ToolbarButton label="Next Match" data-title="Next Match (Enter)" onClick={() => onSearch(term, 'next')}><span className="codicon codicon-arrow-down" aria-hidden="true" /></ToolbarButton></IconTooltip>
