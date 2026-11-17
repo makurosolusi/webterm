@@ -18,7 +18,7 @@ describe('no attach path for a canvas agent', () => {
   })
 
   it('the CLI verbs for skills are list, propose, edit and get', () => {
-    expect(SKILLS_USAGE).toBe('usage: webterm skills <list [name] | propose --name <webterm-slug> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-] | edit <name> [--description <text>] [--caps a,b] [--body-file <path>|-] | get <name> [--json]>')
+    expect(SKILLS_USAGE).toBe('usage: webterm skills <list [name] | propose --name <webterm-slug> --title <text> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-] | edit <name> [--title <text>] [--description <text>] [--caps a,b] [--body-file <path>|-] | get <name> [--json]>')
     expect(SKILLS_USAGE).not.toMatch(/attach|detach|link/)
   })
 })
