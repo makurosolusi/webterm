@@ -36,10 +36,38 @@ usage, chat family and usage), then grant it in the profiles that get it. For a 
 strict parser to `FAMILY_DECISION` in `agentChat.toolLock.ts` (the compiler flags the missing entry). Prompts, banner
 and tool lists follow; the parity test fails if enforcement does not.
 
+## Coverage
+
+| Profile | Consumer | What derives from the registry |
+|---|---|---|
+| `central.skill-author`, `chat.skill-author` | author prompts, tool lists, banner | everything (briefing, enforcement, UI line) |
+| `chat.default` (plain Agent Chat node) | system prompt (`agentChat.options.ts`) | the briefing (<= 12 lines): `webterm browser ...` verbs (web.read + web.drive) and the untrusted-page rule; no CANNOT list (`listDenied: false`), because the node has a general shell and a denied list would claim more than is enforced. Attached skills stay the separate index of `agentChat.skills.ts`; the skill-author preset gets no `chat.default` text |
+| `central.steward` | `CENTRAL_STEWARD_PROMPT` (`claudeOptions.ts`) | only the web sentences (`renderCapabilityProse`); the rest of the prompt stays hand-written. `capabilityMap.ts` stays the live source of access (auto/asks/blocked/off) |
+
+Per-profile wording differences (the steward's `browser_act` is navigate/click/type only; a chat drives through CLI verbs) are
+`override` entries on the profile, not edits of the shared capability.
+
+Live switches: a granted ability can be switched off right now (browser feature or `WEBTERM_BROWSER_AGENT` off; a Central tool
+`off` in the catalog). `renderCapabilityBriefing/Line/Prose(profile, off)` then say "not available right now" instead of
+promising it. A chat prompt is rebuilt on every open, so it follows the switch; the steward prompt is cache-stable, so the
+live state rides in the Capabilities line next to the state header.
+
+## Sessions that already run
+
+A resumed session keeps the system prompt it started with. `capabilityNote` (`src/server/capabilityNote.ts`) closes that gap
+without polling: per scope (`central:<conversationId>`, `chat:<nodeId>`) the hash of the briefing last seen is kept as an audit
+row of kind `agent.capabilities` in the ledger `event` table (no migration, the existing audit retention bounds it). On the
+next turn, if the current hash differs, the turn text gets `[webterm] Capabilities updated: <line>` plus the full briefing once,
+the transcript gets the same line as a system notice, and the new hash is recorded. First sight of a scope only records;
+no change costs one indexed lookup. Central skips the check while no tool catalog is registered (not armed). A chat node needs
+the booted Central for the ledger; without it no note is sent.
+
 ## Limits
 
-- `central.steward` and `chat.default` are registered but their prompts (`claudeOptions.ts`, `capabilityMap.ts`,
-  agent chat options) are still hand-written: a follow-up moves them onto the renderer.
-- A resumed session keeps the system prompt it started with; a prompt change reaches old sessions only after a new
-  session. `capabilityHash` is available to detect that, but nothing compares it yet.
+- The first turn after this shipped only records: a session that started before it with an old prompt is not told about
+  changes made before the first record. Scopes idle past the audit retention (90 days) record again silently.
+- Hash = the rendered briefing, not the full prompt: editing hand-written steward prose outside the web sentences does not
+  trigger a note.
+- `central.steward` and `chat.default` list only what the registry models (web, plus the author's skills/canvas/agents/memory/
+  channels for the steward); linked-context and other `webterm` CLI families are not in the chat briefing yet.
 - Tests prove enforcement and wording match; they cannot prove the model obeys the briefing (needs a real-model smoke).
