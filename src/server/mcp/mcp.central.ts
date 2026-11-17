@@ -140,7 +140,7 @@ export async function callCentralTool(c: CentralMcpDeps, conversationId: string,
   let args = redactToolArgs(cap.name, raw, c.secretValues ?? (() => brokerSecretValues()))
   if (role.mode && cap.name === WEB_READ_TOOL) {
     const picked = authorWebReadArgs(c.db, args)
-    if (!picked) return receipt('denied', 'no_project_for_web_read', null, 'tell the human web reading needs a project on the board; offer to continue from pasted text')
+    if (!picked) return receipt('denied', 'no_project_for_web_read', null, 'there is no board yet, so no browser to read with: tell the human to create a board (workspace) and ask again, or paste the page text here and continue from it')
     args = picked
   }
   const violation = cap.input ? checkSchema(cap.input, args) : null
