@@ -116,6 +116,7 @@ describe('SessionsPanel sebagai VS Code tree', () => {
     // punya sesuatu untuk dibalik.
     ;(beta as HTMLElement & { open: boolean }).open = true
     select(beta as Element)
+    ;(beta as HTMLElement & { open: boolean }).open = false // the library flips `open` right after the event
 
     expect(onSelectWorkspace).not.toHaveBeenCalled()
     await waitFor(() =>

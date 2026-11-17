@@ -23,7 +23,6 @@ import { useSessionsTreeEvents } from './useSessionsTreeEvents'
 import {
   buildSessionList,
   buildStatusList,
-  isProjectCollapsed,
   projectCollapseKey,
   sessionIds,
   sidebarEmptyState,
@@ -34,7 +33,8 @@ import { CLOSED_KEY, SessionsTree } from './SessionsPanel.tree'
 import type { ClosedEntry } from './closedHistory'
 import { confirmReopen } from './reopenConfirm'
 import { useGitBranches } from './useGitBranches'
-import { useCollapsedGroups } from './SessionsPanel.collapsed'
+import { useTreeItemOpenSync } from './useTreeItemOpenSync'
+import { useGroupFolds } from './SessionsPanel.collapsed'
 import { useUnreadIds } from './unread'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import type { StatusReason } from '../shared/protocol'
@@ -82,7 +82,6 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   const { active, closedSessions = [], onReopenSession, reasons, onRenameNode, onAddTerminal, onAddAgent } = props
   const [grouping, setGrouping] = useState<SidebarGrouping>('project')
   const [filter, setFilter] = useState('')
-  const [collapsed, setCollapsed] = useCollapsedGroups()
   // Snapshot awal dibaca saat mount: kanal unread tidak memancar ulang saat disubscribe, dan
   // panel ini bisa di-mount setelah status pertama sudah lewat.
   const unread = useUnreadIds()
@@ -121,11 +120,12 @@ export default function SessionsPanel(props: SessionsPanelProps) {
   }
 
   const filterEmpty = filter.trim() === ''
-  // Selagi memfilter semuanya dibuka: hasil yang disembunyikan di balik baris terlipat terbaca
-  // seperti "tidak ada hasil".
-  // Recently closed starts collapsed (it would push live sessions off screen); others start open.
-  const groupOpen = (key: string) => !filterEmpty || !(collapsed[key] ?? key === CLOSED_KEY)
-  const projectOpen = (key: string) => !filterEmpty || !isProjectCollapsed(collapsed, key)
+  // Filtering opens everything (hidden results behind a folded row read as "no results"); see useGroupFolds.
+  const { openOf, setFold, foldAll } = useGroupFolds(!filterEmpty)
+  const setFoldRef = useRef(setFold)
+  setFoldRef.current = setFold
+  const openRef = useRef(openOf)
+  openRef.current = openOf
 
   const onSelectRef = useRef<(event: VscTreeSelectEvent) => void>(() => {})
   onSelectRef.current = (event) => {
@@ -147,8 +147,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       // Read NOW, outside the updater: React defers an updater to render time whenever the panel
       // already has a pending update (status tick, SSE), and by then the library has flipped
       // `open`, so a lazy `item.open` wrote the inverse and the next render undid the click.
-      const collapsedNow = item.open === true
-      setCollapsed((prev) => ({ ...prev, [target.key]: collapsedNow }))
+      setFoldRef.current(target.key, item.open !== true)
       return
     }
     if (target.kind === 'reopen') {
@@ -172,6 +171,14 @@ export default function SessionsPanel(props: SessionsPanelProps) {
     return () => el.removeEventListener('vsc-tree-select', handler)
   }, [active])
 
+  // Keyboard (Left/Right) and programmatic folds never emit an event: observe the DOM so React state
+  // follows, otherwise the next render writes the stale value back over the user's fold.
+  useTreeItemOpenSync(treeRef, (item, open) => {
+    const target = targets.current.get(item)
+    // Echo of our own write (or the default) = nothing to learn; only a real divergence is stored.
+    if (target?.kind === 'group' && open !== openRef.current(target.key)) setFoldRef.current(target.key, open)
+  }, active)
+
   const [menu, setMenu] = useState<MenuState | null>(null)
   useSessionsTreeEvents(treeRef, {
     resolve: (el) => targets.current.get(el),
@@ -188,7 +195,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
             onRenameSession: (id) => { const row = rowById(id); if (row) startRename(row) },
             onReopenSession,
             onSelectWorkspace,
-            onToggleGroup: (key, expanded) => setCollapsed((prev) => ({ ...prev, [key]: expanded })),
+            onToggleGroup: (key, expanded) => setFold(key, !expanded),
             onCopyText: (text) => {
               navigator.clipboard?.writeText(text).catch((err: unknown) => {
                 console.warn('Copy path failed', err)
@@ -206,7 +213,7 @@ export default function SessionsPanel(props: SessionsPanelProps) {
       ? sections.map((s) => `status:${s.bucket}`)
       : [...groups.map((g) => projectCollapseKey(g.projectId)), ...(closed.length > 0 ? [CLOSED_KEY] : [])]
   const collapseAll = () =>
-    setCollapsed((prev) => ({ ...prev, ...Object.fromEntries(groupKeys().map((k) => [k, true])) }))
+    foldAll(groupKeys())
 
   return (
     <div className="sessions-view">
@@ -256,8 +263,8 @@ export default function SessionsPanel(props: SessionsPanelProps) {
           sections={sections}
           groups={groups}
           closedSessions={closed}
-          groupOpen={groupOpen}
-          projectOpen={projectOpen}
+          groupOpen={openOf}
+          projectOpen={openOf}
           register={register}
           now={now}
           onCloseSession={onCloseSession}
