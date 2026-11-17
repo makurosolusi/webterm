@@ -141,6 +141,13 @@ export function watchConversation(id: string | null): void {
   reconcile()
 }
 
+/** Opens `row` (just created elsewhere, e.g. the Skills tab) in the Central chat: side bar on Chat, the panel selects it. Before the first list load the id waits and the load brings the row. */
+export function requestOpenConversation(row: ChatConversation): void {
+  if (state.rows !== null) upsertConversation(row)
+  setSideBar({ open: true, view: 'chat' })
+  set({ openRequest: row.id })
+}
+
 export function clearOpenRequest(): void {
   if (state.openRequest !== null) set({ openRequest: null })
 }

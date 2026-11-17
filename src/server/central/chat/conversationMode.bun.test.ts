@@ -188,6 +188,8 @@ describe('MCP backend narrowing', () => {
     expect((await callCentralTool(c, author, 'skill_list', {})).outcome).toBe('ok')
     const denied = await callCentralTool(c, author, 'test_peek', {})
     expect(denied).toMatchObject({ outcome: 'denied', detail: 'tool_not_allowed_in_mode' })
+    // Denied before the input is even read: a malformed call to a forbidden tool is a denial, not a schema hint.
+    expect(await callCentralTool(c, author, 'test_peek', { junk: 1 })).toMatchObject({ outcome: 'denied', detail: 'tool_not_allowed_in_mode' })
     // The same tool still works in an ordinary chat.
     expect((await callCentralTool(c, plain, 'test_peek', {})).outcome).toBe('ok')
   })

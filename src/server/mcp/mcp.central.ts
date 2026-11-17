@@ -122,14 +122,15 @@ async function exec(c: CentralMcpDeps, conversationId: string, tool: string, arg
 export async function callCentralTool(c: CentralMcpDeps, conversationId: string, name: string, raw: Record<string, unknown>): Promise<McpReceipt> {
   const cap = centralCapabilities(c).get(name)
   if (!cap) return receipt('error', 'unknown_tool', null, 'tools/list or cap_search shows the tools that exist')
+  // A mode-locked conversation (skill author) may only call its own tools: refused before anything else reads the input.
+  const role = roleOf(c.db, conversationId)
+  if (!modeAllowsTool(role.mode, cap.name)) return receipt('denied', 'tool_not_allowed_in_mode', null, `this chat is the ${role.mode}; it has no ${cap.name}. Tell the human what you cannot do here`)
   // Scrubbed first, so the guard, approval digest, receipts and every store see only redacted input (K7-F1).
   const args = redactToolArgs(cap.name, raw, c.secretValues ?? (() => brokerSecretValues()))
   const violation = cap.input ? checkSchema(cap.input, args) : null
   if (violation !== null) return receipt('error', 'invalid_shape', null, 'tools/list shows the exact input schema', { violation })
   const tool = cap.name
-  // A mode-locked conversation (skill author) may only call its own tools, and only for its own kind of skill.
-  const role = roleOf(c.db, conversationId)
-  if (!modeAllowsTool(role.mode, tool)) return receipt('denied', 'tool_not_allowed_in_mode', null, `this chat is the ${role.mode}; it has no ${tool}. Tell the human what you cannot do here`)
+  // Only for its own kind of skill: the audience is forced here, after the redaction above (the other-tool denial is earlier).
   if (role.mode && tool === 'skill.propose') {
     const denied = skillAuthorViolation(args, role.skillTarget)
     if (denied) return receipt('denied', denied, null, 'propose only a skill with audience central' + (role.skillTarget ? ` named ${role.skillTarget}` : ''))

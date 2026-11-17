@@ -101,7 +101,7 @@ describe('chat fetch client', () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${CHAT_PATH}/conversations?limit=50`)
     expect(headersOf(0) ?? {}).not.toHaveProperty(TOKEN_HEADER) // the session cookie is the credential
-    expect(rows).toEqual([conversation])
+    expect(rows).toEqual([{ ...conversation, mode: null, skillTarget: null }])
   })
 
   it('creates a conversation with POST and rejects a malformed answer', async () => {

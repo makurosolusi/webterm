@@ -94,3 +94,6 @@
 .ccp-skill-row p { margin: 0 0 4px 8px; color: var(--vscode-descriptionForeground); }
 .ccp-name-field { display: flex; align-items: center; gap: 2px; }
 .ccp-cap { display: flex; align-items: center; gap: 6px; }
+
+/* Compact role banner of a Central skill-author chat (display only). */
+.ccp-author-banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 12px; font-size: 12px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-editorWidget-background); }

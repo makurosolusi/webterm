@@ -46,11 +46,11 @@ export async function listConversations(
   }
 }
 
-export async function createConversation(opts: RequestOptions = {}): Promise<ChatConversation> {
+export async function createConversation(opts: RequestOptions & { mode?: 'skill-author'; skillTarget?: string } = {}): Promise<ChatConversation> {
   const body = await requestJson<unknown>(`${CHAT_PATH}/conversations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify({ ...(opts.mode ? { mode: opts.mode } : {}), ...(opts.skillTarget ? { skillTarget: opts.skillTarget } : {}) }),
     signal: opts.signal,
   })
   const row = normalizeConversation(body)

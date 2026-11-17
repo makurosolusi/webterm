@@ -132,9 +132,10 @@ describe('Write with an agent buttons', () => {
     expect((screen.getByRole('button', { name: 'Edit with an agent' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/Use Duplicate and edit first/)).toBeTruthy()
   })
-  it('hides the buttons when Claude is disabled (no opener)', async () => {
+  it('hides the canvas node buttons when Claude is disabled (no opener); the Central chat author does not need one', async () => {
     lib([active])
     await screen.findByText('webterm-mine')
     expect(screen.queryByRole('button', { name: 'Write with an agent' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
   })
 })
