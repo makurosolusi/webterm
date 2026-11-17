@@ -20,6 +20,7 @@ import type { LinkedTarget } from './browser.linkedTarget'
 import { parseBrowserUrl } from '../../shared/browser.url'
 import { openAgentBrowser, openedNote } from './browser.agentOpen'
 import type { AgentOpenDeps } from './browser.agentOpen'
+import { presetBrowserDenial } from './browser.presetLock'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -35,6 +36,8 @@ export interface BrowserControlDeps {
   policy?: () => Pick<Policy, 'decide'> | null
   /** `open` (and `navigate` with no cabled browser) on the node-token path; absent = 503 `open_unavailable`. */
   open?: AgentOpenDeps
+  /** Stored `preset` of a canvas node (read from the DB-backed board, never from the client); set = read-only public-web lock. */
+  presetOf?(nodeId: string): string | undefined
 }
 
 type NodeVerb = Exclude<BrowserVerb, 'open'>
@@ -87,6 +90,10 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   const requester = linked && requesterOf(req.headers)
   if (!requester || !linked) return fail(401, 'unauthorized')
   const principal = `node:${requester}`
+  if (deps.presetOf?.(requester)) {
+    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url)
+    if (denied) return denied
+  }
   if (asked !== 'open') {
     const target = linked(requester, wanted)
     const none = !target.ok && asked === 'navigate' && deps.open !== undefined && (target.result.body as { error?: string }).error === 'no_linked_browser'

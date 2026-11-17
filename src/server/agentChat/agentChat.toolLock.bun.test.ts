@@ -17,7 +17,7 @@ describe('skill-author options lock', () => {
   test('Bash only, allow rule, dontAsk even when the chat default is bypass, nothing else loaded', () => {
     const o = build({ mode: 'bypassPermissions', preset: 'skill-author' })
     expect(o.tools).toEqual(['Bash'])
-    expect(o.allowedTools).toEqual(['Bash(webterm skills *)'])
+    expect(o.allowedTools).toEqual(['Bash(webterm skills *)', 'Bash(webterm browser *)'])
     expect(o.permissionMode).toBe('dontAsk')
     expect(o.allowDangerouslySkipPermissions).toBe(undefined)
     expect(o.strictMcpConfig).toBe(true)
@@ -75,7 +75,7 @@ const DENIED = [
   "webterm skills propose --name x --description d --body-file - <<'EOF'",
   "webterm skills propose --name x --description d --body-file - <<'eof'\nbody\neof",
   'webterm context read n-2',
-  'webterm browser open https://example.com',
+  'webterm browser click e1 s1',
   'webterm skills',
   'webterm skills delete x',
   'webterm skills-evil list',
