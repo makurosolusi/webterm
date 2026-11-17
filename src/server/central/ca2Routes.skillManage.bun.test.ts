@@ -7,6 +7,7 @@ import type { SessionsLike } from '../orchestrator/workerRuntimeSession'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from './ca2Boot'
 import { ca2Dispatch } from './ca2Routes'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
+import { pruneAuditEvents } from '../ledger/ledgerRetentionEvent'
 import { freshDb, T0 } from './guard/controlGuard.testutil'
 import { GOOD_BODY, GOOD_TITLE } from './skills/skillDraft.testutil'
 import { CORE_DEFS } from './tools/defs/core.defs'
@@ -78,5 +79,42 @@ describe('approve needs the typed phrase', () => {
       expect(await post(name, 'approve', { version: '1', phrase: CONFIRM_PHRASE })).toMatchObject({ status: 200 })
       expect(h.skills?.load(name)).not.toBeNull()
     }
+  })
+})
+
+describe('toggle audit trail', () => {
+  const get = (q: string) => ca2Dispatch(h, { method: 'GET', path: '/api/central/skills/audit', query: new URLSearchParams(q), body: async () => ({}) })
+  const audit = async (q = '') => ((await get(q))?.body as { items: Array<Record<string, any>> }).items
+
+  it('writes exactly one row per flip (actor, version, from -> to), newest first, paginated, none for a rejected or repeated toggle', async () => {
+    await seed()
+    await post(NAME, 'disable', {}, 'central:c1') // refused: not human
+    expect(await audit()).toEqual([])
+    await post(NAME, 'disable')
+    await post(NAME, 'disable') // already off: no row
+    await post(NAME, 'enable')
+    const rows = await audit()
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ skill: NAME, version: '1', from: false, to: true, actor: 'human:root', at: T0 })
+    expect(rows[1]).toMatchObject({ from: true, to: false })
+    expect(await audit('limit=1')).toHaveLength(1)
+    expect(await audit('limit=1&offset=1')).toMatchObject([{ from: true, to: false }])
+    expect(await get('limit=0')).toMatchObject({ status: 400 })
+  })
+
+  it('rows age out with the existing audit retention (90 days)', async () => {
+    await seed()
+    await post(NAME, 'disable')
+    const ctx = { db: h.db, now: () => T0 + 91 * 24 * 60 * 60 * 1000 }
+    expect(pruneAuditEvents(ctx, ctx.now(), 100)).toBeGreaterThan(0)
+    expect(await audit()).toEqual([])
+  })
+
+  it('a disabled central skill cannot be loaded by Central (the store behind skill.load), an enabled one can', async () => {
+    await seed()
+    await post(NAME, 'disable')
+    expect(h.skills?.load(NAME)).toBeNull()
+    await post(NAME, 'enable')
+    expect(h.skills?.load(NAME)?.record.name).toBe(NAME)
   })
 })

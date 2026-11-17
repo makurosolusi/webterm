@@ -11,6 +11,7 @@ import {
   activeDescriptionMap, countCreatedSince, ensureSkillTable, getRecord, hashFolder, isSkillName, listRecords, putRecord, setEnabled, setStatus, skillDir, versionsOf,
 } from './skillIndex'
 import { formatSkill, lintSkill } from './skillLint'
+import type { SkillToggle } from './skillToggleAudit'
 
 /** Prompt-prefix budget of the skill index: 500 tokens at 4 chars per token (RND/25 4.6). */
 export const INDEX_CHAR_BUDGET = 2000
@@ -43,7 +44,7 @@ export interface SkillAdminStore extends SkillStore {
   /** Needs a `human:` actor and the typed phrase from `confirmPhrase`; there is no other way to activate a draft. */
   approve(name: string, version: string, approvedBy: string, typedConfirm?: string): SkillRecord
   /** Human-only on/off switch, independent of status; builtin skills can be switched too. */
-  setEnabled(name: string, enabled: boolean, by: string): void
+  setEnabled(name: string, enabled: boolean, by: string): SkillToggle
   evaluate(name: string, version: string): Promise<SkillRecord>
   submit(name: string, version: string): SkillRecord
   reject(name: string, version: string, by: string): SkillRecord
@@ -162,7 +163,9 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
     setEnabled(name, enabled, by) {
       requireHuman(by)
       assertSkillName(name)
-      if (!setEnabled(ctx.db, name, enabled)) throw new SkillError('not_found', `skill ${name} not found`)
+      const latest = versionsOf(ctx.db, name)[0]
+      if (!latest || !setEnabled(ctx.db, name, enabled)) throw new SkillError('not_found', `skill ${name} not found`)
+      return { name, version: latest.version, audience: latest.audience, from: latest.enabled !== false, to: enabled }
     },
     rollback: (name, by) => rollbackSkill(ctx, name, by),
     evaluate: (name, version) => evaluateSkill(ctx, name, version, evaluator),
