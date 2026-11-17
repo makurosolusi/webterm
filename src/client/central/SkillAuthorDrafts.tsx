@@ -11,7 +11,6 @@ import { CL } from './centralLabels'
 import { SKILLS_OFF } from './centralControlApi'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { type Loaded, useLoad } from './centralLoad'
-import { onCentralSkillAuthorActivity } from './centralSkillAuthor.events'
 import { centralDraftsOf, draftsOf } from './skillAuthorModel'
 import { SD } from './skillDetail.labels'
 import SkillReviewList from './SkillReview'
@@ -64,9 +63,8 @@ export default function SkillAuthorDrafts({ nodeId, client, onClose, onChanged }
   return <DraftsCard title={CL.skillAuthorDrafts} empty={CL.skillAuthorEmpty} list={list} drafts={draftsOf(list.data ?? [], nodeId)} client={client} onClose={onClose} onChanged={onChanged} />
 }
 
-/** "Drafts from Central": reads the Skills tab's list (one load, no second request) and reloads it when a Central skill-author chat finishes a turn. */
+/** "Drafts from Central": reads the Skills tab's list (one load, no second request) and the library (SkillLibrary) reloads it when a Central skill-author chat finishes a turn. */
 export function CentralDraftsPanel({ list, client }: { list: Loaded<SkillReviewRow[]>; client: CentralControlClient }) {
   const reload = list.reload
-  useEffect(() => onCentralSkillAuthorActivity(reload), [reload])
   return <DraftsCard title={CL.centralDrafts} empty={CL.centralDraftsEmpty} list={list} drafts={centralDraftsOf(list.data ?? [])} client={client} onChanged={reload} hostShowsStatus />
 }

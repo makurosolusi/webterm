@@ -91,6 +91,7 @@ export const CL = {
   skillSectionToggle: (title: string) => `${title}: show or hide`,
   skillsSearch: 'Search skills',
   skillsRetry: 'Retry',
+  skillsRefresh: 'Refresh skills',
   skillInstructions: 'Instructions (markdown)',
   skillCaps: 'Tools it relies on',
   skillCapsHelp: 'Optional. Pick only what the steps need.',
