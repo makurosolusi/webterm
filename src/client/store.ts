@@ -1,7 +1,7 @@
 // Pure serializers between React Flow nodes and persisted WsNodes.
 // The DB (via api.ts) is the source of truth; these functions carry no DOM/IO.
 import type { Node, Edge } from '@xyflow/react'
-import { validChatConfig } from '../shared/agentChat.shape'
+import { isAgentChatPreset, validChatConfig } from '../shared/agentChat.shape'
 import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
 
@@ -50,6 +50,9 @@ export function toWsNode(n: Node): WsNode {
     chatSessionId: d.chatSessionId,
     permissionMode: isPermissionMode(d.permissionMode) ? d.permissionMode : undefined,
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),
+    preset: isAgentChatPreset(d.preset) ? d.preset : undefined,
+    presetTarget: typeof d.presetTarget === 'string' ? d.presetTarget : undefined,
+    presetPrimed: d.presetPrimed === true ? true : undefined,
     // Validated on the way out: node data is written by the Diff node and must not persist junk.
     diffNotes: d.diffNotes === undefined ? undefined : validDiffNotes(d.diffNotes),
     plan: d.plan === undefined ? undefined : validPlanData(d.plan),

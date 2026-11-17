@@ -8,6 +8,10 @@ export const AGENT_CHAT_KIND = 'agentChat'
 /** Model / effort / thinking the user picked for this node; the server forgets them on restart, the node does not. */
 export interface AgentChatNodeConfig { model?: string; effort?: string; thinking?: boolean }
 
+/** Presets a chat node can be born with; absent or unknown = a plain chat. */
+export type AgentChatPreset = 'skill-author'
+export const isAgentChatPreset = (v: unknown): v is AgentChatPreset => v === 'skill-author'
+
 /** Fields an agentChat node persists on top of the common WsNode ones. */
 export interface AgentChatData {
   agentId: 'claude'
@@ -16,6 +20,11 @@ export interface AgentChatData {
   chatSessionId?: string
   permissionMode?: AgentPermissionMode
   chatConfig?: AgentChatNodeConfig
+  preset?: AgentChatPreset
+  /** Preset data: the full skill name a skill-author chat edits (none = a new skill). */
+  presetTarget?: string
+  /** The preset's first message was sent (never sent twice). */
+  presetPrimed?: boolean
 }
 
 /** Chars of a stored model id (the server refuses longer ones too). */
@@ -42,5 +51,7 @@ export function validAgentChatData(v: unknown): AgentChatData | undefined {
   const text = (k: 'claudeProfileId' | 'chatSessionId') => (typeof p[k] === 'string' && p[k] !== '' ? { [k]: p[k] as string } : {})
   const mode = isPermissionMode(p['permissionMode']) ? { permissionMode: p['permissionMode'] } : {}
   const chatConfig = validChatConfig(p['chatConfig'])
-  return { agentId: 'claude', ...text('claudeProfileId'), ...text('chatSessionId'), ...mode, ...(chatConfig ? { chatConfig } : {}) }
+  const preset = isAgentChatPreset(p['preset']) ? { preset: p['preset'] } : {}
+  const target = typeof p['presetTarget'] === 'string' && p['presetTarget'] !== '' ? { presetTarget: p['presetTarget'] } : {}
+  return { agentId: 'claude', ...text('claudeProfileId'), ...text('chatSessionId'), ...mode, ...(chatConfig ? { chatConfig } : {}), ...preset, ...target, ...(p['presetPrimed'] === true ? { presetPrimed: true } : {}) }
 }

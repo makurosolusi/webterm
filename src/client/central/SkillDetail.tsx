@@ -16,13 +16,15 @@ interface Props {
   onChanged: () => void
   /** Opens the edit form for this row. */
   onEdit: () => void
+  /** Opens a skill-author chat for this skill; absent when Claude is disabled. */
+  onAuthor?: () => void
   /** Called with the new name after a copy of a built-in skill was saved. */
   onForked: (name: string) => void
   /** A newer version of this name already waits for review, so an edit would be refused. */
   hasOpenDraft: boolean
 }
 
-export default function SkillDetail({ row, client, onClose, onChanged, onEdit, onForked, hasOpenDraft }: Props) {
+export default function SkillDetail({ row, client, onClose, onChanged, onEdit, onAuthor, onForked, hasOpenDraft }: Props) {
   const { record, description, body } = row
   const [on, setOn] = useState(record.enabled !== false)
   const target = useRef(on)
@@ -50,6 +52,8 @@ export default function SkillDetail({ row, client, onClose, onChanged, onEdit, o
       {builtin && <p>{CL.skillBuiltinReadOnly}</p>}
       {body ? <pre className="ccp-diff" tabIndex={0} aria-label={CL.skillInstructions}>{body}</pre> : <p>{CL.skillNoBody}</p>}
       {active && !builtin && <Button type="button" size="sm" disabled={hasOpenDraft} onClick={onEdit}>{CL.skillEdit}</Button>}
+      {onAuthor && !builtin && <Button type="button" size="sm" variant="secondary" disabled={!active || hasOpenDraft} onClick={onAuthor}>{CL.skillAuthorEdit}</Button>}
+      {onAuthor && builtin && <><Button type="button" size="sm" variant="secondary" disabled>{CL.skillAuthorEdit}</Button><small>{CL.skillAuthorBuiltinHint}</small></>}
       {active && !builtin && hasOpenDraft && <small>{CL.skillEditOpenDraft}</small>}
       {active && builtin && <ActionButton type="button" size="sm" action={fork} busyLabel={CL.skillDuplicating}>{CL.skillDuplicate}</ActionButton>}
       <ActionResult action={fork} />

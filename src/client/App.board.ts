@@ -13,7 +13,7 @@ import { paneSessionIds } from './paneTree'
 import { send } from './ws'
 import type { HandleSpawners } from './handleMenu.model'
 import { useBrowserAdd } from './useBrowserAdd'
-import { useAgentChatAdd } from './agentChat.add'
+import { useAgentChatAdd, useSkillAuthorAdd } from './agentChat.add'
 import { useBrowserOpen } from './useBrowserOpen'
 import { connectWorkspaceLayout } from './App.tabs'
 import { bridgesToRestore, type ClosedHistory } from './closedHistory'
@@ -160,6 +160,7 @@ export function useBoardActions({
   const onAddDiff = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'diff', cwd: ws.cwd, title: 'Changes' }), at), [addFlowNode])
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
   const onAddAgentChat = useAgentChatAdd(addFlowNode, settings) // undefined = Claude disabled in settings
+  const openSkillAuthor = useSkillAuthorAdd(addFlowNode, settings)
   const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
   const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
 
@@ -216,7 +217,7 @@ export function useBoardActions({
     link: onConnect,
   }), [onAddTerminal, onAddFiles, onAddAgent, onAddBrowser, onAddDiff, onAddAgentChat, onConnect])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn])
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn, openSkillAuthor }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn, openSkillAuthor])
 
   return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, nodeActions }
 }

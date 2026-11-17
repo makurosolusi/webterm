@@ -2,7 +2,7 @@ import type { AgentId } from './workspace.agents'
 import { canContextLink, type AgentPermissionMode } from './workspace.capabilities'
 import type { DeviceChoice } from './browser.devices'
 import type { TabLayout } from './tabLayout.schema'
-import type { AgentChatNodeConfig } from './agentChat.shape'
+import type { AgentChatNodeConfig, AgentChatPreset } from './agentChat.shape'
 
 // ---------------------------------------------------------------------------------------------
 // Bentuk workspace yang dipersist.
@@ -142,6 +142,9 @@ export interface WsNode {
   chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)
   permissionMode?: AgentPermissionMode // node 'agentChat': per-node mode; absent = settings default
   chatConfig?: AgentChatNodeConfig // node 'agentChat': model / effort / thinking picked in the footer (validChatConfig)
+  preset?: AgentChatPreset // node 'agentChat': born as a preset (skill-author); absent = plain chat
+  presetTarget?: string   // node 'agentChat': skill name a skill-author chat edits
+  presetPrimed?: boolean  // node 'agentChat': the preset's first message was sent
 }
 
 export interface Workspace {
