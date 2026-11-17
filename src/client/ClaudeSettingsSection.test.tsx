@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Settings › Claude: the effective-launch line and profile badges come from the server (command mode
 // included), Central's own pick shows as a deviation, the permissions choice saves `agentApprovalLevel` through ApprovalModeControl,
-// the raw permission mode sits under Advanced locked by "Danger", and no Claude bits are left elsewhere.
+// the raw permission mode sits under Advanced locked by "Bypass", and no Claude bits are left elsewhere.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
@@ -86,22 +86,22 @@ describe('Connection', () => {
 describe('Permissions', () => {
   const level = () => screen.getByRole('radiogroup', { name: 'How much may agents do on their own?' })
 
-  it('one segmented choice Ask, Auto, Danger; a choice is saved straight to the server (ApprovalModeControl)', async () => {
+  it('one segmented choice Ask, Auto, Bypass; a choice is saved straight to the server (ApprovalModeControl)', async () => {
     render(<Harness />)
-    expect(within(level()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
-    expect(within(level()).getByRole('radio', { name: 'Auto' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(level()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Bypass'])
+    expect(within(level()).getByRole('radio', { name: 'Bypass' }).getAttribute('aria-checked')).toBe('true') // default since 2026-11-17
     fireEvent.click(within(level()).getByRole('radio', { name: 'Ask' }))
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u, i]) => u === '/api/settings' && (i as RequestInit | undefined)?.body === JSON.stringify({ agentApprovalLevel: 'always' }))).toBe(true))
   })
 
-  it('"Danger" reads as a warning; the separate skip / hook switches are gone', () => {
+  it('"Bypass" reads as a warning; the separate skip / hook switches are gone', () => {
     render(<Harness initial={{ skipApprovals: true, agentApprovalLevel: 'never' }} />)
     expect(screen.getByText(/only your Deny rules, spend limits and secret access/)).toBeTruthy()
     expect(screen.queryByLabelText('Skip approvals')).toBeNull()
     expect(screen.queryByLabelText('Hook approvals from the canvas')).toBeNull()
   })
 
-  it('raw permission mode lives under Advanced, locked by Danger, with a fix to the risky level', () => {
+  it('raw permission mode lives under Advanced, locked by Bypass, with a fix to the risky level', () => {
     const spy = vi.fn()
     render(<Harness spy={spy} initial={{ skipApprovals: true, agentApprovalLevel: 'never' }} />)
     const raw = screen.getByLabelText('Claude permission mode') as HTMLSelectElement

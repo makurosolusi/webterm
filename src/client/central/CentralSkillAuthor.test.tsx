@@ -182,7 +182,7 @@ describe('the author chat', () => {
     return render(<TooltipProvider><ChatConversationView conversation={conversation} client={client} streamFactory={() => ({ close: () => {} })} commands={host} /></TooltipProvider>)
   }
 
-  it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Limited tools chip in author mode', () => {
+  it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Limited tools chip next to the permission control in author mode', () => {
     mount({ ...base, mode: 'skill-author', skillTarget: 'webterm-rule' })
     const banner = within(screen.getByRole('complementary', { name: 'Skill author' }))
     expect(banner.getByText(/title, steps and checks before writing/)).toBeTruthy()
@@ -190,7 +190,8 @@ describe('the author chat', () => {
     expect(banner.getByText(/need your approval in the Skills tab/)).toBeTruthy()
     expect(banner.getByText('Editing webterm-rule.')).toBeTruthy()
     expect(screen.getByText('Limited tools')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /^Permission mode/ })).toBeNull()
+    // The role chip is info only: the permission control stays (owner decision 2026-11-17), Bypass by default.
+    expect(screen.getByRole('button', { name: /^Permission mode: Bypass/ })).toBeTruthy()
   })
 
   it('shows neither in an ordinary Central chat', () => {

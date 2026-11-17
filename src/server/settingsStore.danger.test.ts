@@ -12,13 +12,16 @@ const refused = (fn: () => unknown): string[] => {
   throw new Error('expected SettingsConfirmError')
 }
 
+// The default level is Bypass since 2026-11-17, so the "moves to Bypass" cases start from a stored Auto.
+const AUTO = JSON.stringify({ skipApprovals: false })
+
 describe('confirmDanger', () => {
   it('global or per-workspace Danger needs it; with it the level is stored', () => {
-    expect(refused(() => nextSettingsDocument(null, { agentApprovalLevel: 'never' }))).toEqual(['global'])
-    expect(refused(() => nextSettingsDocument(null, { skipApprovals: true }))).toEqual(['global'])
-    expect(refused(() => nextSettingsDocument(null, { projectApprovalLevels: { w1: 'never' } }))).toEqual(['w1'])
-    expect(nextSettingsDocument(null, { agentApprovalLevel: 'never', confirmDanger: true }).settings.agentApprovalLevel).toBe('never')
-    const { doc, settings } = nextSettingsDocument(null, { projectApprovalLevels: { w1: 'never' }, confirmDanger: true })
+    expect(refused(() => nextSettingsDocument(AUTO, { agentApprovalLevel: 'never' }))).toEqual(['global'])
+    expect(refused(() => nextSettingsDocument(AUTO, { skipApprovals: true }))).toEqual(['global'])
+    expect(refused(() => nextSettingsDocument(AUTO, { projectApprovalLevels: { w1: 'never' } }))).toEqual(['w1'])
+    expect(nextSettingsDocument(AUTO, { agentApprovalLevel: 'never', confirmDanger: true }).settings.agentApprovalLevel).toBe('never')
+    const { doc, settings } = nextSettingsDocument(AUTO, { projectApprovalLevels: { w1: 'never' }, confirmDanger: true })
     expect(settings.projectApprovalLevels).toEqual({ w1: 'never' })
     expect(doc.confirmDanger).toBe(undefined) // never stored
   })
@@ -27,7 +30,7 @@ describe('confirmDanger', () => {
     const danger = JSON.stringify({ skipApprovals: true })
     expect(nextSettingsDocument(danger, { projectApprovalLevels: { w1: 'never' } }).settings.projectApprovalLevels).toEqual({ w1: 'never' })
     expect(nextSettingsDocument(danger, { agentApprovalLevel: 'risky' }).settings.agentApprovalLevel).toBe('risky')
-    expect(nextSettingsDocument(null, { projectApprovalLevels: { w1: 'always' } }).settings.projectApprovalLevels).toEqual({ w1: 'always' })
+    expect(nextSettingsDocument(AUTO, { projectApprovalLevels: { w1: 'always' } }).settings.projectApprovalLevels).toEqual({ w1: 'always' })
     // Clearing an Ask override under a global Danger moves that workspace to Danger.
     expect(refused(() => nextSettingsDocument(JSON.stringify({ skipApprovals: true, projectApprovalLevels: { w1: 'always' } }), { projectApprovalLevels: { w1: null } }))).toEqual(['w1'])
   })
@@ -41,7 +44,7 @@ describe('confirmDanger', () => {
     process.nextTick(() => { r.emit('data', Buffer.from(JSON.stringify({ projectApprovalLevels: { w1: 'never' } }))); r.emit('end') })
     const out = { statusCode: 0, body: '', setHeader() {}, end(b?: string) { out.body = b ?? '' } }
     let saved = false
-    await settingsRoute(r, out as unknown as ServerResponse, 'PUT', { getSettings: () => DEFAULT_SETTINGS, saveSettings: (p) => { const n = nextSettingsDocument(null, p).settings; saved = true; return n } })
+    await settingsRoute(r, out as unknown as ServerResponse, 'PUT', { getSettings: () => DEFAULT_SETTINGS, saveSettings: (p) => { const n = nextSettingsDocument(AUTO, p).settings; saved = true; return n } })
     expect(out.statusCode).toBe(400)
     expect(JSON.parse(out.body)).toEqual({ error: 'confirm_required', scopes: ['w1'] })
     expect(saved).toBe(false)

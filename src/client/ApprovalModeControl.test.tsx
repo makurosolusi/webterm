@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// The permission-mode control: the Central composer mode button (effective mode, icon + tooltip, scope, Danger confirm with
+// The permission-mode control: the Central composer mode button (effective mode, icon + tooltip, scope, Bypass confirm with
 // confirmDanger in the payload, a confirm_required reply reopening the dialog, the stale-sessions line)
 // and the Settings rows (all projects + This project, "Same as all projects" clears the override).
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -41,14 +41,17 @@ const open = () => fireEvent.keyDown(trigger(), { key: 'Enter' })
 const radio = (name: string) => screen.getByRole('menuitemradio', { name })
 
 describe('ApprovalModeChip', () => {
-  it('shows the EFFECTIVE mode of the open project, with Danger marked', () => {
+  it('shows the EFFECTIVE mode of the open project, with Bypass marked', () => {
     chip(settings({ projectApprovalLevels: { w1: 'never' } }))
-    expect(trigger().textContent).toContain('Danger')
-    expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Danger (this project)')
+    expect(trigger().textContent).toContain('Bypass')
+    expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Bypass (this project)')
     expect(trigger().closest('[data-mode]')?.getAttribute('data-mode')).toBe('never')
     cleanup()
-    chip(settings(), 'w2')
+    chip(settings({ skipApprovals: false }), 'w2')
     expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Auto (all projects)')
+    cleanup()
+    chip(settings(), 'w2') // default: Bypass (owner decision 2026-11-17)
+    expect(trigger().getAttribute('aria-label')).toBe('Permission mode: Bypass (all projects)')
   })
 
   it('ghost text button: icon per mode, no chevron; the tooltip states mode, scope and what it means', () => {
@@ -62,12 +65,12 @@ describe('ApprovalModeChip', () => {
     chip(settings({ projectApprovalLevels: { w1: 'never' } }))
     expect(trigger().querySelector('.codicon-warning')).toBeTruthy()
     expect(trigger().querySelector('.codicon-chevron-down')).toBeNull()
-    expect(tipOf(trigger())).toBe('Danger in this project: agents act without asking. Your Deny rules, spend limits and secret access still apply.')
+    expect(tipOf(trigger())).toBe('Bypass in this project: agents act without asking. Your Deny rules, spend limits and secret access still apply.')
     cleanup()
     chip(settings({ projectApprovalLevels: { w1: 'always' } }))
     expect(trigger().querySelector('.codicon-shield')).toBeTruthy()
     cleanup()
-    chip(settings(), 'w2')
+    chip(settings({ skipApprovals: false }), 'w2')
     expect(trigger().querySelector('.codicon-workspace-trusted')).toBeTruthy()
     expect(tipOf(trigger())).toBe('Auto in all projects: routine work runs on its own; actions that cannot be undone ask first.')
   })
@@ -93,31 +96,31 @@ describe('ApprovalModeChip', () => {
     await waitFor(() => expect(puts).toEqual([{ agentApprovalLevel: 'always' }]))
   })
 
-  it('Danger asks once; Cancel sends nothing, Confirm sends confirmDanger: true', async () => {
-    chip(settings())
+  it('Bypass asks once; Cancel sends nothing, Confirm sends confirmDanger: true', async () => {
+    chip(settings({ skipApprovals: false }))
     open()
-    fireEvent.click(radio('Danger'))
+    fireEvent.click(radio('Bypass'))
     expect(await screen.findByRole('alertdialog')).toBeTruthy()
     expect(screen.getByText(/run commands, edit and delete files and push without asking/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(puts).toEqual([])
     open()
-    fireEvent.click(radio('Danger'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Danger' }))
+    fireEvent.click(radio('Bypass'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Bypass' }))
     await waitFor(() => expect(puts).toEqual([{ projectApprovalLevels: { w1: 'never' }, confirmDanger: true }]))
   })
 
   it('a 400 confirm_required reopens the dialog and says so; never a silent failure', async () => {
-    chip(settings())
+    chip(settings({ skipApprovals: false }))
     putReplies.push(json({ error: 'confirm_required', scopes: ['w1'] }, 400))
     open()
-    fireEvent.click(radio('Danger'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Danger' }))
+    fireEvent.click(radio('Bypass'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Bypass' }))
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(await screen.findByRole('alertdialog')).toBeTruthy()
     // Behind the modal dialog (aria-hidden there), the chip's save line says why it did not switch.
-    expect(document.querySelector('[data-save="error"]')?.textContent).toContain('Danger needs your confirmation')
+    expect(document.querySelector('[data-save="error"]')?.textContent).toContain('Bypass needs your confirmation')
   })
 
   it('a failed save shows the error with Retry, which sends it again', async () => {
@@ -146,23 +149,23 @@ describe('ApprovalModeFields (Settings › Claude › Permissions)', () => {
   const all = () => screen.getByRole('radiogroup', { name: 'How much may agents do on their own?' })
   const project = () => screen.getByLabelText('This project') as HTMLSelectElement
 
-  it('the all-projects row is a segmented Ask, Auto, Danger and writes the global level', async () => {
+  it('the all-projects row is a segmented Ask, Auto, Bypass and writes the global level', async () => {
     fields(settings())
     expect(all().getAttribute('data-control')).toBe('segmented')
-    expect(within(all()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Danger'])
+    expect(within(all()).getAllByRole('radio').map((o) => o.textContent)).toEqual(['Ask', 'Auto', 'Bypass'])
     expect(screen.queryByLabelText('This project')).toBeNull()
     fireEvent.click(within(all()).getByRole('radio', { name: 'Ask' }))
     await waitFor(() => expect(puts).toEqual([{ agentApprovalLevel: 'always' }]))
   })
 
-  it('"This project" shows the override; Same as all projects clears it; Danger confirms first', async () => {
-    fields(settings({ projectApprovalLevels: { w1: 'always' } }), 'w1')
+  it('"This project" shows the override; Same as all projects clears it; Bypass confirms first', async () => {
+    fields(settings({ skipApprovals: false, projectApprovalLevels: { w1: 'always' } }), 'w1')
     expect(project().value).toBe('always')
     expect([...project().options][0]?.textContent).toBe('Same as all projects (Auto)')
     fireEvent.change(project(), { target: { value: 'inherit' } })
     await waitFor(() => expect(puts).toEqual([{ projectApprovalLevels: { w1: null } }]))
     fireEvent.change(project(), { target: { value: 'never' } })
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Danger' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Bypass' }))
     await waitFor(() => expect(puts.at(-1)).toEqual({ projectApprovalLevels: { w1: 'never' }, confirmDanger: true }))
   })
 })

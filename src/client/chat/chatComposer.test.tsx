@@ -121,11 +121,11 @@ describe('ChatComposer', () => {
     const s = mergeSettings({ ...DEFAULT_SETTINGS, projectApprovalLevels: { w1: 'never' } })
     render(<SettingsProvider value={s}><ChatComposer busy={false} onSend={() => {}} onStop={() => {}} attach={centralChatAttach}
       toolbar={<ApprovalModeChip workspaceId="w1" />} /></SettingsProvider>)
-    const mode = screen.getByRole('button', { name: 'Permission mode: Danger (this project)' })
+    const mode = screen.getByRole('button', { name: 'Permission mode: Bypass (this project)' })
     const row = mode.closest('.chat-composer__toolbar') as HTMLElement
     expect(row.closest('.chat-composer__box')).toBeTruthy()
     const buttons = Array.from(row.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))
-    expect(buttons).toEqual(['Attach files', 'Permission mode: Danger (this project)', 'Send message'])
+    expect(buttons).toEqual(['Attach files', 'Permission mode: Bypass (this project)', 'Send message'])
     expect(row.compareDocumentPosition(box()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // textarea above the row
   })
 

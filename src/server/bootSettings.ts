@@ -8,6 +8,7 @@ import { queueBootChange } from './bootChanges'
 import { syncLinkedSettings } from './featureCapabilities.service'
 import { backfillSetup } from './setupBackfill'
 import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
+import { migrateApprovalDefault } from './approvalDefaultMigration'
 import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
 
 type BootLog = Pick<Logger, 'info' | 'warn'>
@@ -37,6 +38,13 @@ export function migrateStoredSettings(log: BootLog): void {
     if (backfillSetup({ storedJson: () => db.storedSettingsJson(), save: (p) => db.saveSettings(p), existingInstall: () => db.listSummaries(1).items.length > 0 || providerSaved() }) === 'completed') queueBootChange('setup', ['setup'])
   } catch (e) {
     log.warn('settings.setup.backfill_failed', 'Cannot backfill first-run setup state at boot', { cause: cause(e) })
+  }
+  // Owner decision 2026-11-17: Bypass is the default permission level; an old stored Ask/Auto moves once.
+  try {
+    const r = migrateApprovalDefault({ getFlag: (k) => db.getAppFlag(k), setFlag: (k, v) => db.setAppFlag(k, v), settings: () => db.getSettings(), save: (p) => db.saveSettings(p) })
+    if (r === 'moved') { queueBootChange('approval', ['agentApprovalLevel']); log.info('settings.approval_default.moved', 'Default permission level moved to Bypass', {}) }
+  } catch (e) {
+    log.warn('settings.approval_default.migrate_failed', 'Cannot move the default permission level to Bypass at boot', { cause: cause(e) })
   }
   // Command mode's profile is the default for new agents (saved together since the Claude page); an older
   // install that saved command mode alone gets the default written once (idempotent: equal = no write).

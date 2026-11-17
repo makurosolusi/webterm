@@ -12,12 +12,12 @@ afterEach(cleanup)
 describe('safeguard hints', () => {
   it('Settings key and Central row show their reason; an ordinary field shows none', () => {
     render(<>
-      <Field label="Approval" setting="agentApprovalLevel"><span /></Field>
+      <Field label="Approval" setting="centralCheckinDailyLimit"><span /></Field>
       <Field label="Level" field="central.level"><span /></Field>
       <Field label="Cost" field="central.costLimit"><span /></Field>
       <Field label="Copy" setting="copyOnSelect"><span /></Field>
     </>)
-    expect(screen.getByText(SAFEGUARDS.agentApprovalLevel)).toBeTruthy()
+    expect(screen.getByText(SAFEGUARDS.centralCheckinDailyLimit)).toBeTruthy()
     expect(screen.getByText(SAFEGUARDS.WEBTERM_CENTRAL_AUTONOMY)).toBeTruthy()
     expect(screen.getByText(SAFEGUARDS.WEBTERM_CENTRAL_DAILY_COST_MICROS)).toBeTruthy()
     expect(document.querySelectorAll('[data-safeguard]')).toHaveLength(3)

@@ -260,6 +260,16 @@ export class Db {
     return parseStored(this.storedSettingsJson())
   }
 
+  /** A one-time marker kept in the `app` table (boot migrations); null = never set. */
+  getAppFlag(key: string): string | null {
+    const row = this.d.query('SELECT value FROM app WHERE key = ?').get(key) as { value: string } | null
+    return row ? row.value : null
+  }
+
+  setAppFlag(key: string, value: string): void {
+    this.d.query('INSERT INTO app (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value)
+  }
+
   /** The raw stored settings row (null = never written); boot backfills inspect stored keys with it. */
   storedSettingsJson(): string | null {
     const row = this.d.query("SELECT value FROM app WHERE key = 'settings'").get() as { value: string } | null

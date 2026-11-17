@@ -1,7 +1,7 @@
-// The one permission-mode control (Ask / Auto / Danger), in two shapes over the same save path
+// The one permission-mode control (Ask / Auto / Bypass), in two shapes over the same save path
 // (approvalMode.state.ts): the Settings rows (all projects, plus "This project") and the quiet text button in
 // the Central chat composer toolbar (like Claude Code's mode line under the input, Cursor's composer mode
-// picker). Danger asks once per change in the app AlertDialog.
+// picker). Switching to Bypass asks once per change in the app AlertDialog.
 import { DropdownMenu } from 'radix-ui'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -31,9 +31,9 @@ export const APPROVAL_TEXT = {
   projectLabel: 'This project',
   projectHint: 'Overrides the mode above for the open project only.',
   sameAsAll: (level: ApprovalLevel): string => `Same as all projects (${APPROVAL_LEVEL_TEXT[level].label})`,
-  confirmTitle: 'Switch to Danger?',
+  confirmTitle: 'Switch to Bypass?',
   confirmBody: 'Agents will run commands, edit and delete files and push without asking; your Deny rules, spend limits and secret access still apply.',
-  confirmAction: 'Switch to Danger',
+  confirmAction: 'Switch to Bypass',
   cancel: 'Cancel',
   chip: (level: ApprovalLevel, scoped: boolean): string => `Permission mode: ${APPROVAL_LEVEL_TEXT[level].label}${scoped ? ' (this project)' : ' (all projects)'}`,
   scopeProject: 'This project',

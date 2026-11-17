@@ -96,7 +96,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Claude (ClaudeSettingsSection.tsx, ClaudeProviderCard.tsx, ClaudeLaunchProfilesCard.tsx, SettingsModels.tsx, SettingsAgents.tsx)
   e('claude', 'claude-provider', PROVIDER_TEXT.title, PROVIDER_TEXT.why, 'claude provider anthropic api key proxy gateway custom command envman wrapper login'),
   e('claude', 'claudeLaunchProfiles', PROFILES_TEXT.title, 'How webterm starts Claude.', 'command wrapper envman account default'),
-  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Danger.', `permission permissions mode approval approvals skip yolo ask auto danger dangerous bypass hook ${APPROVAL_HINTS}`),
+  e('claude', 'agentApprovalLevel', CLAUDE_TEXT.approvalLabel, 'Ask, Auto or Bypass.', `permission permissions mode approval approvals skip yolo ask auto danger dangerous bypass hook ${APPROVAL_HINTS}`),
   e('claude', 'permissionRouting', ROUTING_TEXT.label, ROUTING_TEXT.hint, 'permission approval central agent human escalate prompt who decides'),
   e('claude', 'projectApprovalLevels', APPROVAL_TEXT.projectLabel, APPROVAL_TEXT.projectHint, `permission mode project override ask auto danger ${APPROVAL_HINTS}`),
   e('claude', 'model-ladder', MODELS_TEXT.label, MODELS_TEXT.hint, 'opus sonnet haiku effort ladder'),

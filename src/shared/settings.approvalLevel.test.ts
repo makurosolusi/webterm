@@ -19,8 +19,9 @@ describe('approval level', () => {
   })
 
   it('the default comes from the one constant and is consistent with its keys', () => {
-    expect(DEFAULT_APPROVAL_LEVEL).toBe('risky')
-    expect(DEFAULT_SETTINGS).toMatchObject({ skipApprovals: false, claudePermissionMode: 'auto', hookReplyApprovals: true })
+    // Owner decision 2026-11-17: Bypass by default (was Auto).
+    expect(DEFAULT_APPROVAL_LEVEL).toBe('never')
+    expect(DEFAULT_SETTINGS).toMatchObject({ skipApprovals: true, claudePermissionMode: 'auto', hookReplyApprovals: true })
     expect(DEFAULT_SETTINGS.agentApprovalLevel).toBe(DEFAULT_APPROVAL_LEVEL)
     expect(approvalLevelOf(DEFAULT_SETTINGS)).toBe(DEFAULT_APPROVAL_LEVEL)
   })
@@ -28,7 +29,7 @@ describe('approval level', () => {
   it('a stored explicit choice is kept; only an unset value gets the default', () => {
     expect(mergeSettings({ skipApprovals: true }).agentApprovalLevel).toBe('never')
     expect(mergeSettings({ skipApprovals: false, claudePermissionMode: 'manual' }).agentApprovalLevel).toBe('always')
-    expect(mergeSettings({}).agentApprovalLevel).toBe('risky')
+    expect(mergeSettings({}).agentApprovalLevel).toBe('never')
   })
 
   it('a patch is written as the keys; a stored level is never trusted over them', () => {

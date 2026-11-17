@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-// Command "Central: Cycle Permission Mode": Ask → Auto → Danger → Ask through the mounted chip; the
-// move to Danger opens the chip's confirmation (never skips it). No default chord: ⌘⇧M / Ctrl+Shift+M
+// Command "Central: Cycle Permission Mode": Ask → Auto → Bypass → Ask through the mounted chip; the
+// move to Bypass opens the chip's confirmation (never skips it). No default chord: ⌘⇧M / Ctrl+Shift+M
 // is reserved by the browser, so it is bound only by the user, and that binding dispatches it.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,13 +33,13 @@ const chip = (s: Settings) => render(<SettingsProvider value={s}><Keys /><Approv
 const cycle = (): void => act(() => listCommands().find((c) => c.id === CYCLE_APPROVAL_MODE_COMMAND.id)!.run!())
 
 describe('cycle permission mode command', () => {
-  it('orders Ask → Auto → Danger → Ask', () => {
+  it('orders Ask → Auto → Bypass → Ask', () => {
     expect(['always', 'risky', 'never'].map((l) => nextApprovalLevel(l as 'always'))).toEqual(['risky', 'never', 'always'])
   })
 
   it('is registered, labelled, and left unbound (the browser owns ⌘⇧M / Ctrl+Shift+M)', () => {
     const cmd = listCommands().find((c) => c.id === 'permissions.cycleMode')
-    expect(cmd?.label).toBe('Central: Cycle Permission Mode (Ask, Auto, Danger)')
+    expect(cmd?.label).toBe('Central: Cycle Permission Mode (Ask, Auto, Bypass)')
     expect(cmd?.defaultKey).toBeUndefined()
   })
 
@@ -50,7 +50,7 @@ describe('cycle permission mode command', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('Auto → Danger opens the confirmation: Cancel sends nothing, Switch sends confirmDanger', async () => {
+  it('Auto → Bypass opens the confirmation: Cancel sends nothing, Switch sends confirmDanger', async () => {
     chip(settings({ projectApprovalLevels: { w1: 'risky' } }))
     cycle()
     expect(await screen.findByRole('alertdialog')).toBeTruthy()
@@ -59,11 +59,11 @@ describe('cycle permission mode command', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(puts).toEqual([])
     cycle()
-    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Danger' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch to Bypass' }))
     await waitFor(() => expect(puts).toEqual([{ projectApprovalLevels: { w1: 'never' }, confirmDanger: true }]))
   })
 
-  it('a user binding dispatches it, and still goes through the Danger confirmation', async () => {
+  it('a user binding dispatches it, and still goes through the Bypass confirmation', async () => {
     connectKeybindings({ 'permissions.cycleMode': 'Mod+Alt+M' }, null)
     chip(settings({ projectApprovalLevels: { w1: 'risky' } }))
     fireEvent.keyDown(document.body, { key: 'm', code: 'KeyM', ctrlKey: true, altKey: true })
