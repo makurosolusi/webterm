@@ -6,6 +6,9 @@ import { Switch } from '@/components/ui/switch'
 import { type ReactNode, useRef, useState } from 'react'
 import { CL } from './centralLabels'
 import { AudienceBadge } from './SkillAudience'
+import SkillContent from './SkillContent'
+import { SD } from './skillDetail.labels'
+import './skillDetail.css'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { titleOf } from './skillLibraryModel'
 import { useNodeActions } from '../nodeActions'
@@ -37,35 +40,52 @@ export default function SkillDetail({ row, client, onClose, onChanged, revise }:
     setAdded(r === undefined || r.status === 'no_board' ? SN.addToCanvasNoBoard : r.status === 'attached' ? SN.addedAttached : r.status === 'limit' ? SN.addedLimit(MAX_ATTACHED_SKILLS) : SN.added)
   }
   const builtin = record.origin === 'builtin'
+  const changed = record.approvedAt ?? record.createdAt
+  const meta: Array<[string, ReactNode]> = [
+    [SD.metaKind, <AudienceBadge key="k" audience={record.audience} />],
+    [SD.metaOrigin, SD.originName[record.origin] ?? record.origin],
+    [SD.metaVersion, record.version],
+    [SD.metaStatus, record.status],
+    ...(changed > 0 ? [[SD.metaChanged, <time key="t" dateTime={new Date(changed).toISOString()}>{new Date(changed).toLocaleDateString()}</time>] as [string, ReactNode]] : []),
+    [SD.metaEnabled, on ? SD.yes : SD.no],
+  ]
+  const titled = titleOf(row)
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version} details`}>
-      <header>
-        <strong>{titleOf(row)}</strong> {titleOf(row) !== record.name && <small>{record.name}</small>} <span>{record.version}</span>
-        <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
+      <header className="skd-head">
+        <strong>{titled}</strong>
+        {titleOf(row) !== record.name && <code className="skd-slug">{record.name}</code>}
+        <span>{record.version}</span>
+        <span className="ccp-badge">{record.status}</span>
         {!on && <span className="ccp-badge">{CL.skillOff}</span>}
         <Button type="button" size="xs" variant="secondary" onClick={onClose}>{CL.skillBack}</Button>
       </header>
       {description && <p>{description}</p>}
+      <dl className="skd-meta" aria-label="Skill details">
+        {meta.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+      </dl>
       <p><small>{CL.skillAudienceHelp[record.audience]}</small></p>
       <p>{CL.skillCaps}: {record.caps.length > 0 ? record.caps.join(', ') : CL.skillCapsNone}</p>
-      {active && (
-        <div>
-          <label className="ccp-cap"><Switch checked={on} disabled={toggle.busy} aria-label={CL.skillEnabled} onCheckedChange={(v) => { target.current = v; void toggle.run() }} />{CL.skillEnabled}</label>
-          <small role="status">{on ? CL.skillEnabledOn : CL.skillEnabledOff}</small>
-          <ActionResult action={toggle} />
-        </div>
-      )}
-      {builtin && <p>{CL.skillBuiltinReadOnly}</p>}
+      {body ? <SkillContent body={body} /> : <p className="skd-muted">{CL.skillNoBody}</p>}
+      {builtin && <p className="skd-note">{CL.skillBuiltinReadOnly}</p>}
+      <footer className="skd-footer">
+        {revise}
+        {record.audience === 'canvas' && active && (
+          <Button type="button" size="sm" variant="secondary" disabled={!canAdd || !addSkillNode} onClick={addToCanvas}>{SN.addToCanvas}</Button>
+        )}
+        {active && (
+          <label className="ccp-cap"><Switch checked={on} disabled={toggle.busy} aria-label={CL.skillEnabled} onCheckedChange={(v) => { target.current = v; void toggle.run() }} />{on ? SD.switchOn : SD.switchOff}</label>
+        )}
+      </footer>
+      {active && <small role="status">{on ? CL.skillEnabledOn : CL.skillEnabledOff}</small>}
+      {active && <ActionResult action={toggle} />}
       {record.audience === 'canvas' && active && (
         <div>
-          <Button type="button" size="sm" variant="secondary" disabled={!canAdd || !addSkillNode} onClick={addToCanvas}>{SN.addToCanvas}</Button>
-          {!canAdd && <small> {SN.addToCanvasOnly}</small>}
-          {canAdd && !addSkillNode && <small> {SN.addToCanvasNoBoard}</small>}
+          {!canAdd && <small>{SN.addToCanvasOnly}</small>}
+          {canAdd && !addSkillNode && <small>{SN.addToCanvasNoBoard}</small>}
           {added && <small role="status"> {added}</small>}
         </div>
       )}
-      {body ? <pre className="ccp-diff" tabIndex={0} aria-label={CL.skillInstructions}>{body}</pre> : <p>{CL.skillNoBody}</p>}
-      {revise}
     </article>
   )
 }

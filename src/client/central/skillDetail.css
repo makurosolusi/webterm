@@ -1,0 +1,40 @@
+/* Skill detail, review card, diff and drafts card. Colors are VS Code theme tokens only. */
+.skd-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.skd-slug { font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; color: var(--vscode-descriptionForeground); }
+.skd-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 6px 16px; margin: 8px 0; }
+.skd-meta dt { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.skd-meta dd { margin: 0; font-size: 12px; }
+.skd-content { padding: 6px 8px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; }
+.skd-content--clamped { max-height: 20rem; overflow: hidden; }
+.skd-section { margin: 0 0 8px; }
+.skd-h { margin: 0 0 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
+.skd-p { margin: 0 0 4px; white-space: pre-wrap; }
+.skd-ol, .skd-ul { margin: 0 0 4px; padding-left: 0; list-style: none; }
+.skd-ul { list-style: disc; padding-left: 1.2em; }
+.skd-ol li, .skd-ul li { margin: 2px 0; }
+.skd-content code { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.95em; background: var(--vscode-textCodeBlock-background); padding: 0 3px; border-radius: 3px; }
+.skd-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.skd-footer .ccp-cap { display: inline-flex; align-items: center; gap: 6px; }
+.skd-footer button { min-height: 28px; }
+.skd-diff { max-height: 240px; overflow: auto; margin: 6px 0; font-family: var(--vscode-editor-font-family, monospace); font-size: 12px; background: var(--vscode-textCodeBlock-background); }
+.skd-diff-line { display: block; white-space: pre; min-width: max-content; padding: 0 6px; }
+.skd-diff-line--add { color: var(--vscode-gitDecoration-addedResourceForeground); background: var(--vscode-diffEditor-insertedLineBackground, transparent); }
+.skd-diff-line--del { color: var(--vscode-gitDecoration-deletedResourceForeground); background: var(--vscode-diffEditor-removedLineBackground, transparent); }
+.skd-diff-line--hunk { color: var(--vscode-descriptionForeground); }
+.skd-diff-no { display: inline-block; min-width: 3ch; margin-right: 8px; text-align: right; color: var(--vscode-editorLineNumber-foreground); user-select: none; }
+.skd-lint { margin: 4px 0; padding: 0; list-style: none; }
+.skd-lint li { display: flex; gap: 6px; align-items: baseline; }
+.skd-lint--pass { color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); }
+.skd-lint--fail { color: var(--vscode-errorForeground); }
+.skd-approval { margin-top: 8px; padding: 8px; border: 1px solid var(--vscode-inputValidation-errorBorder); border-radius: 4px; display: grid; gap: 6px; }
+.skd-approval h5 { margin: 0; font-size: 12px; }
+.skd-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.skd-approval-actions button { min-height: 28px; }
+.skd-note { margin: 4px 0; font-size: 12px; color: var(--vscode-foreground); }
+.skd-drafts-head { display: flex; align-items: center; gap: 8px; }
+.skd-drafts-head h4 { margin: 0; }
+.skd-drafts-count { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.skd-drafts-spacer { flex: 1; }
+.skd-muted { margin: 4px 0; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.skd-banner-lock { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--vscode-panel-border); }
+.ccp-author-banner { color: var(--vscode-foreground); }
