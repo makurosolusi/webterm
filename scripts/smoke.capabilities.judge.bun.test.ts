@@ -1,7 +1,7 @@
 // Grading logic of the capability smoke, on synthetic evidence (no model, no server).
 import { describe, expect, test } from 'bun:test'
 import { centralEvidence, chatEvidence, isNetworkFailure } from './smoke.capabilities.evidence'
-import { claimsNoBrowser, gradeNegative, gradeRead, type Evidence, type ToolEvidence } from './smoke.capabilities.judge'
+import { claimsNoBrowser, gradeDirect, gradeNegative, gradeRead, type Evidence, type ToolEvidence } from './smoke.capabilities.judge'
 
 const tool = (o: Partial<ToolEvidence>): ToolEvidence => ({ id: 'toolu_000001', name: 'browser_read', command: '', state: 'ok', code: '', ...o })
 const bash = (command: string, state: ToolEvidence['state'] = 'ok'): ToolEvidence => tool({ name: 'Bash', command, state })
@@ -82,4 +82,15 @@ describe('evidence parsers', () => {
     expect(isNetworkFailure('API Error 529 overloaded')).toBe(true)
     expect(isNetworkFailure('browser_read denied')).toBe(false)
   })
+})
+
+describe('gradeDirect (one message, propose succeeds, nothing asked back)', () => {
+  const propose = bash("webterm skills propose --name webterm-contoh --title 'Contoh' --body-file - <<'EOF'")
+  const centralPropose = tool({ name: 'mcp__webterm__skill_propose' })
+  test('PASS chat: propose ok, draft stored, calm answer', () => expect(gradeDirect('chat', { tools: [bash('webterm skills list'), propose], text: 'Contoh (webterm-contoh, canvas). Draft proposed. Tell me what to change.', drafts: 1 }).pass).toBe(true))
+  test('PASS central: skill_propose ok', () => expect(gradeDirect('central', { tools: [centralPropose], text: 'Draft proposed.', drafts: 1 }).pass).toBe(true))
+  test('FAIL: only a questionnaire, no propose', () => expect(gradeDirect('chat', { tools: [bash('webterm skills list')], text: 'Collected: purpose. Still needed: steps.', drafts: 0 }).evidence).toContain('no propose call'))
+  test('FAIL: propose failed lint', () => expect(gradeDirect('chat', { tools: [{ ...propose, state: 'failed' }], text: 'x', drafts: 0 }).evidence).toContain('never succeeded'))
+  test('FAIL: propose ok but nothing in the store', () => expect(gradeDirect('central', { tools: [centralPropose], text: 'x', drafts: 0 }).evidence).toContain('no draft in the store'))
+  test('FAIL: drafted but still asks for a go', () => expect(gradeDirect('chat', { tools: [propose], text: 'Draft proposed. Reply go to continue.', drafts: 1 }).pass).toBe(false))
 })

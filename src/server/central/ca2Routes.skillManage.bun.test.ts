@@ -69,14 +69,15 @@ describe('human write routes are removed', () => {
   })
 })
 
-describe('approve needs the typed phrase', () => {
-  it('reviewed:true is ignored: every draft stays pending until the exact phrase arrives', async () => {
+describe('approve is human-only; the phrase is optional', () => {
+  it('an agent or Central actor gets 403 with or without a phrase; a human approves with no phrase; a wrong phrase is still refused', async () => {
     for (const [name, by] of [['webterm-c-demo', 'central:c1'], ['webterm-a-demo', 'agent:n1']] as const) {
       await h.skills?.propose({ name, ...DRAFT, audience: by.startsWith('agent:') ? 'canvas' as const : 'central' as const }, by)
-      expect(await post(name, 'approve', { version: '1', reviewed: true })).toMatchObject({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
+      expect(await post(name, 'approve', { version: '1' }, by)).toMatchObject({ status: 403, body: { error: 'human_only' } })
+      expect(await post(name, 'approve', { version: '1', phrase: 'nope' })).toMatchObject({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
       expect(h.skills?.load(name)).toBeNull()
       expect(await post(name, 'approve', { version: '1', phrase: CONFIRM_PHRASE }, 'central:c1')).toMatchObject({ status: 403, body: { error: 'human_only' } })
-      expect(await post(name, 'approve', { version: '1', phrase: CONFIRM_PHRASE })).toMatchObject({ status: 200 })
+      expect(await post(name, 'approve', { version: '1' })).toMatchObject({ status: 200 })
       expect(h.skills?.load(name)).not.toBeNull()
     }
   })

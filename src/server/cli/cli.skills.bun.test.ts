@@ -299,14 +299,16 @@ describe('author-worker integration (agent origin, daily cap, human-only steps)'
     expect(h.skills?.load('webterm-human-only')).toBeNull()
   })
 
-  test('approving an agent-origin draft with {reviewed:true} is refused (400, typed phrase needed); the typed phrase approves it', async () => {
+  test('an agent cannot approve its own draft without a phrase either (403); a human approves it with one click, no phrase', async () => {
     await start()
     await propose('webterm-approve-gate')
-    const oneClick = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', reviewed: true })
-    expect(oneClick).toMatchObject({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
+    const byAgent = await agentRoute('/api/central/skills/webterm-approve-gate/approve', 'agent:a1', { version: '1' })
+    expect(byAgent).toMatchObject({ status: 403, body: { error: 'human_only' } })
     expect(h.skills?.load('webterm-approve-gate')).toBeNull()
-    const typed = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', phrase: CONFIRM_PHRASE })
-    expect(typed?.status).toBe(200)
+    const wrong = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', phrase: 'nope' })
+    expect(wrong).toMatchObject({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
+    const click = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1' })
+    expect(click?.status).toBe(200)
     expect(h.skills?.load('webterm-approve-gate')?.record.version).toBe('1')
   })
 })

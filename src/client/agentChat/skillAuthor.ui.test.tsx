@@ -7,10 +7,8 @@ import { fakeAgentChatTransport } from './agentChatTransport.fake'
 import { AgentChatView } from './agentChatView'
 import { SKILL_AUTHOR_EMPTY, SKILL_AUTHOR_HEADER, SKILL_AUTHOR_LOCK_REASON, SKILL_AUTHOR_PLACEHOLDER } from './skillAuthor.preset'
 import { proposedDraft } from './SkillAuthorChat'
-import { openCentralTab } from '../secondarySideBar.store'
+import { OPEN_SIDE_BAR_VIEW } from '../sideBar/sideBar.open'
 import type { AgentChatEvent } from '../../shared/agentChat.wire'
-
-vi.mock('../secondarySideBar.store', async (orig) => ({ ...(await orig<typeof import('../secondarySideBar.store')>()), openCentralTab: vi.fn() }))
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
@@ -62,15 +60,20 @@ describe('skill-author chat', () => {
     expect(screen.queryByText(/Draft proposed/)).toBeNull()
   })
 
-  it('a finished propose shows the draft card; its button opens the Skills tab; a failed one shows nothing', async () => {
+  it('a finished propose shows the draft card; its button opens the Skills panel; a failed one shows nothing', async () => {
     const f = mount('skill-author')
     f.emit(tool(1, 'error', 'webterm skills propose --name webterm-x'))
     await new Promise((r) => setTimeout(r, 20)) // events are applied in a batched tick
-    expect(screen.queryByText('Draft proposed - review in Control > Skills')).toBeNull()
+    expect(screen.queryByText('Draft proposed - review in the Skills panel')).toBeNull()
     f.emit(tool(2, 'done', 'webterm skills propose --name webterm-x --description "d" --body-file - <<\'EOF\''))
-    expect(await screen.findByText('Draft proposed - review in Control > Skills')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Skills tab' }))
-    expect(openCentralTab).toHaveBeenCalledWith('skills')
+    expect(await screen.findByText('Draft proposed - review in the Skills panel')).toBeTruthy()
+    const seen: unknown[] = []
+    const on = (e: Event) => seen.push((e as CustomEvent).detail)
+    window.addEventListener(OPEN_SIDE_BAR_VIEW, on)
+    fireEvent.click(screen.getByRole('button', { name: 'Open Skills panel' }))
+    window.removeEventListener(OPEN_SIDE_BAR_VIEW, on)
+    expect(seen).toEqual([{ view: 'skills' }])
+    expect(screen.queryByText(/Control > Skills/)).toBeNull()
   })
 
   it('proposedDraft ignores other commands and other tools', () => {

@@ -9,13 +9,15 @@ import { CASES, PROFILE_IDS, caseLabel, gradeCase, runCase, type SmokeCase } fro
 import { seedBoard, type RunResult } from './smoke.capabilities.run'
 import { startServer, type SmokeServer } from './smoke.capabilities.server'
 
-const USAGE = `usage: bun scripts/smoke.capabilities.ts [--profile <id>] [--verbose]\n  profiles: ${PROFILE_IDS.join(', ')}`
+const USAGE = `usage: bun scripts/smoke.capabilities.ts [--profile <id>] [--direct] [--verbose]\n  profiles: ${PROFILE_IDS.join(', ')}`
 
 const VERBOSE = process.argv.includes('--verbose')
+/** `--direct`: only the one-message skill-author cases (owner rule: a clear request is written at once). */
+const DIRECT_ONLY = process.argv.includes('--direct')
 
 function parseProfile(args: readonly string[]): string | undefined {
   if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0) }
-  const argv = args.filter((a) => a !== '--verbose')
+  const argv = args.filter((a) => a !== '--verbose' && a !== '--direct')
   const i = argv.indexOf('--profile')
   if (i < 0 && argv.length === 0) return undefined
   const id = i >= 0 ? argv[i + 1] : undefined
@@ -57,7 +59,7 @@ function printTable(rows: readonly Row[]): void {
 
 async function main(): Promise<void> {
   const only = parseProfile(process.argv.slice(2))
-  const cases = CASES.filter((c) => only === undefined || c.profile === only)
+  const cases = CASES.filter((c) => (only === undefined || c.profile === only) && (!DIRECT_ONLY || c.kind === 'direct'))
   const server = await startServer()
   const onSignal = (): void => void server.stop().finally(() => process.exit(130))
   process.once('SIGINT', onSignal)

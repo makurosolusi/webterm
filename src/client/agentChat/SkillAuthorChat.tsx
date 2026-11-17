@@ -2,7 +2,7 @@
 // starters, and the "draft proposed" card. Nothing here is ever sent to the model.
 import { IconTooltip } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
-import { openCentralTab } from '../secondarySideBar.store'
+import { openSideBarView } from '../sideBar/sideBar.open'
 import type { AgentChatState } from './agentChatStore'
 import { SKILL_AUTHOR_BANNER, SKILL_AUTHOR_DRAFT, SKILL_AUTHOR_EMPTY, SKILL_AUTHOR_HEADER, SKILL_AUTHOR_LOCK_REASON } from './skillAuthor.preset'
 
@@ -46,13 +46,13 @@ export function proposedDraft(state: Pick<AgentChatState, 'tools'>): boolean {
   })
 }
 
-/** Inline status card: a draft is waiting for review; the button opens the Skills tab (the existing Central tab request). */
+/** Inline status card: a draft is waiting for review; the button opens the Skills panel of the canvas side bar, where the draft is approved. */
 export function SkillAuthorDraftCard() {
   return (
     <div className="skill-author__draft" role="status">
       <span className="codicon codicon-check" aria-hidden="true" />
       <span>{SKILL_AUTHOR_DRAFT.text}</span>
-      <Button type="button" size="xs" variant="secondary" onClick={() => openCentralTab('skills')}>{SKILL_AUTHOR_DRAFT.open}</Button>
+      <Button type="button" size="xs" variant="secondary" onClick={() => openSideBarView('skills')}>{SKILL_AUTHOR_DRAFT.open}</Button>
     </div>
   )
 }

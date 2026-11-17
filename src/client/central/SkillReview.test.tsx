@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { InboxApiError } from '../inboxTypes'
-import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { fakeClient } from './centralFixtures.testutil'
 import type { SkillReviewRow } from './centralControlTypes'
 import SkillLibrary from './SkillLibrary'
@@ -35,14 +34,22 @@ describe('SkillReview states', () => {
 })
 
 describe('SkillReview actions', () => {
-  it('sends the typed phrase with approve', async () => {
+  it('approves in one click, no phrase field', async () => {
     const client = withRows(row())
     render(<SkillLibrary client={client} />)
     const approve = await button('Approve skill webterm-x 1')
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: CONFIRM_PHRASE } })
+    expect(approve.disabled).toBe(false)
+    expect(screen.queryByRole('textbox')).toBeNull()
     fireEvent.click(approve)
-    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1', CONFIRM_PHRASE))
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1'))
+  })
+
+  it('Approve stays disabled with a reason when lint fails', async () => {
+    const client = withRows(row({}, { lint: { ok: false, findings: ['structure: missing ## Steps'] } }))
+    render(<SkillLibrary client={client} />)
+    const approve = await button('Approve skill webterm-x 1')
+    expect(approve.disabled).toBe(true)
+    expect(screen.getByText('Approve is locked until the checks pass.')).toBeTruthy()
   })
 
   it('rejects an open row in one click, no phrase', async () => {
@@ -50,7 +57,6 @@ describe('SkillReview actions', () => {
     render(<SkillLibrary client={client} />)
     fireEvent.click(await button('Reject webterm-x 1'))
     await waitFor(() => expect(client.rejectSkill).toHaveBeenCalledWith('webterm-x', '1'))
-    expect(screen.queryByLabelText(/Type APPROVE/)).toBeNull()
   })
 
   it('a double click is one action and only that row is busy', async () => {

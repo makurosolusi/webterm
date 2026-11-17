@@ -53,6 +53,13 @@ export async function runCentral(s: SmokeServer, opts: { mode?: 'skill-author'; 
   }
 }
 
+/** Pending skill drafts in the store (what the Skills panel would show for review). */
+export async function countDrafts(s: SmokeServer): Promise<number> {
+  const body = await api<{ items?: Array<{ record?: { status?: string } }> } | Array<{ record?: { status?: string } }>>(s, 'GET', '/api/central/skills')
+  const rows = Array.isArray(body) ? body : (body.items ?? [])
+  return rows.filter((r) => r.record?.status === 'pending_approval').length
+}
+
 const NODE_BASE = { x: 0, y: 0, agentId: 'claude', title: 'Agent Chat' } as const
 let workspaceId: string | undefined
 
@@ -107,7 +114,7 @@ export async function runChat(s: SmokeServer, opts: { preset?: 'skill-author'; p
     if (e.t === 'permission' && typeof e.requestId === 'string' && !answered.has(e.requestId)) {
       answered.add(e.requestId)
       const cmd = String((e.input as { command?: unknown } | null)?.command ?? '')
-      const allow = e.toolName === 'Bash' && /^webterm browser (open|navigate|snapshot)\b/.test(cmd)
+      const allow = e.toolName === 'Bash' && /^webterm (browser (open|navigate|snapshot)|skills (list|propose|get))\b/.test(cmd)
       const body = allow ? { requestId: e.requestId, behavior: 'allow' } : { requestId: e.requestId, behavior: 'deny', message: 'smoke: not part of the browser capability' }
       void api(s, 'POST', `/api/agent-chat/${nodeId}/permission`, body).catch(() => undefined) // 409 = already settled
     }

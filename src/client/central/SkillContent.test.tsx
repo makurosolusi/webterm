@@ -2,7 +2,6 @@
 // Detail content per template section, unified diff prefixes, and the review card's block order and approval gate.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { fakeClient } from './centralFixtures.testutil'
 import type { SkillReviewRow } from './centralControlTypes'
 import SkillContent, { parseSections } from './SkillContent'
@@ -64,7 +63,7 @@ describe('SkillDiff', () => {
 })
 
 describe('SkillReview card', () => {
-  it('orders summary, checks, diff, approval; Approve stays locked with a reason until the phrase matches', () => {
+  it('orders summary, checks, diff, approval; Approve is enabled at once (one click, no phrase)', () => {
     const client = fakeClient()
     render(<SkillReviewList rows={[row({}, { lint: { ok: true, findings: ['name is long'] } })]} client={client} onDone={vi.fn()} />)
     const card = screen.getByRole('article', { name: 'webterm-x 2' })
@@ -73,18 +72,15 @@ describe('SkillReview card', () => {
     for (let i = 1; i < order.length; i++) expect((order[i - 1] as Element).compareDocumentPosition(order[i] as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(card).getByRole('status').textContent).toBe('Pass: Lint passed')
     const approve = within(card).getByRole('button', { name: 'Approve skill webterm-x 2' }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    expect(within(card).getByText(`Type ${CONFIRM_PHRASE} above to enable Approve.`)).toBeTruthy()
-    fireEvent.change(within(card).getByLabelText(`Type ${CONFIRM_PHRASE} to confirm`), { target: { value: CONFIRM_PHRASE } })
     expect(approve.disabled).toBe(false)
+    expect(within(card).queryByRole('textbox')).toBeNull()
     expect(within(card).queryByText(/above to enable Approve/)).toBeNull()
   })
 
-  it('shows a failed check as text and keeps Approve locked even with the phrase', () => {
+  it('shows a failed check as text and keeps Approve locked', () => {
     render(<SkillReviewList rows={[row({}, { lint: { ok: false, findings: ['missing Steps'] } })]} client={fakeClient()} onDone={vi.fn()} />)
     expect(screen.getByRole('status').textContent).toBe('Fail: Lint failed')
     expect(screen.getByText('missing Steps')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(`Type ${CONFIRM_PHRASE} to confirm`), { target: { value: CONFIRM_PHRASE } })
     expect((screen.getByRole('button', { name: 'Approve skill webterm-x 2' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('Approve is locked until the checks pass.')).toBeTruthy()
   })

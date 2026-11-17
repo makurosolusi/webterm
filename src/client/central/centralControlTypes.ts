@@ -135,7 +135,7 @@ export interface CentralControlClient {
   listBoardNodes(offset: number, projectId?: string, signal?: AbortSignal): Promise<BoardNodesPage>
   agentAction(id: string, action: AgentAction, message?: string): Promise<AgentActionResult>
   listSkills(signal?: AbortSignal): Promise<SkillReviewRow[]>
-  approveSkill(name: string, version: string, phrase: string): Promise<void>
+  approveSkill(name: string, version: string): Promise<void>
   rejectSkill(name: string, version: string): Promise<void>
   rollbackSkill(name: string): Promise<void>
   /** Human-only on/off switch of a skill; independent of approval. */

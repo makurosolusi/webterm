@@ -1,11 +1,8 @@
-// Skill review: lint result, diff, and the human-only actions. Every draft is written by an agent, and approving
-// activates it (R3), so it always needs the typed phrase. Reject and rollback are one click (reject only frees the
-// name, rollback re-points `active/<name>`).
-import { Input } from '@/components/ui/input'
+// Skill review: lint result, diff, and the human-only actions. Approve, reject and rollback are one click each; the
+// server still requires a human actor (agents get 403), approving activates the draft (R3).
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { DisabledReason } from '@/components/ui/disabled-reason'
 import { useRef, useState } from 'react'
-import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { CL } from './centralLabels'
 import { AudienceBadge } from './SkillAudience'
 import './skillDetail.css'
@@ -49,20 +46,18 @@ function LintList({ lint }: { lint: SkillReviewRow['lint'] }) {
 
 function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: CentralControlClient; onDone: () => void }) {
   const { record, lint, diff, canRollback } = row
-  const [typed, setTyped] = useState('')
   const card = useRef<HTMLElement>(null)
   // On success the row stays disabled: the status it acted on changed, so the reload remounts it.
   const [done, setDone] = useState(false)
   const failure = (err: unknown) => centralErrorMessage(err, CL.actionFailed)
   const then = (fn: () => Promise<void>) => async () => { await fn(); setDone(true); keepFocus(card.current); onDone() }
-  const approve = useAction(then(() => client.approveSkill(record.name, record.version, typed)), { label: CL.skillApprove, failure })
+  const approve = useAction(then(() => client.approveSkill(record.name, record.version)), { label: CL.skillApprove, failure })
   const reject = useAction(then(() => client.rejectSkill(record.name, record.version)), { label: CL.skillReject, failure })
   const rollback = useAction(then(() => client.rollbackSkill(record.name)), { label: CL.skillRollback, failure })
   const busy = done || approve.busy || reject.busy || rollback.busy
   const named = (verb: string): string => `${verb} ${record.name} ${record.version}`
   const open = OPEN_STATUSES.includes(record.status)
-  const phraseOk = typed === CONFIRM_PHRASE
-  const blocked = !lint.ok ? SD.approveBlockedLint : !phraseOk ? SD.approveBlockedPhrase(CONFIRM_PHRASE) : null
+  const blocked = !lint.ok ? SD.approveBlockedLint : null
   const id = `skd-approve-${record.name}-${record.version}`
   return (
     <article ref={card} className="ccp-card" aria-label={`${record.name} ${record.version}`} aria-busy={busy}>
@@ -78,10 +73,7 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
       {record.status === 'pending_approval' && (
         <div className="skd-approval">
           <h5>{SD.approvalHeading}</h5>
-          <p className="skd-note">{CL.skillTypedWhy(record.origin)} {SD.phraseInstruction(CONFIRM_PHRASE)}</p>
-          <label className="ccp-confirm-input">{CL.confirmLabel(CONFIRM_PHRASE)}
-            <Input value={typed} autoComplete="off" disabled={busy} aria-describedby={blocked ? id : undefined} onChange={(e) => setTyped(e.target.value)} />
-          </label>
+          <p className="skd-note">{CL.skillOneClickWhy(record.origin)}</p>
           <div className="skd-approval-actions">
             <ActionButton type="button" size="sm" aria-label={named(CL.skillApprove)} aria-describedby={blocked ? id : undefined} disabled={busy || blocked !== null} action={approve} busyLabel={BUSY.approve}>{SD.approveVisible}</ActionButton>
             {open && <ActionButton type="button" size="sm" variant="secondary" aria-label={named(CL.skillReject)} disabled={busy} action={reject} busyLabel={BUSY.reject}>{SD.rejectVisible}</ActionButton>}

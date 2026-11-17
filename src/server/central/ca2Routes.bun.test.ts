@@ -212,13 +212,14 @@ describe('skill review policy', () => {
     expect(h.skills?.list('pending_approval').map((r) => r.name)).toEqual([SKILL.name])
   })
 
-  it('the server refuses approve unless the body carries the typed phrase', async () => {
+  it('a phrase, when sent, must be exact; none is needed', async () => {
     await h.skills?.propose(SKILL, 'central:c1')
     run(h.db, "UPDATE central_skill SET status = 'pending_approval' WHERE name = ?", SKILL.name)
-    for (const body of [{ version: '1' }, { version: '1', phrase: 'approve' }, { version: '1', phrase: confirmPhrase(SKILL.name, '1') }]) {
+    for (const body of [{ version: '1', phrase: 'approve' }, { version: '1', phrase: confirmPhrase(SKILL.name, '1') }]) {
       expect(await call('POST', `/api/central/skills/${SKILL.name}/approve`, body)).toEqual({ status: 400, body: { error: 'confirm_phrase_mismatch' } })
     }
     expect(h.skills?.load(SKILL.name)).toBeNull()
+    expect(await call('POST', `/api/central/skills/${SKILL.name}/approve`, { version: '1' })).toMatchObject({ status: 200 })
   })
 })
 

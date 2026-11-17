@@ -120,16 +120,15 @@ describe('AgentList', () => {
 })
 
 describe('SkillReview', () => {
-  it('shows lint and diff and approves only with the typed phrase', async () => {
+  it('shows lint and diff and approves in one click', async () => {
     const client = fakeClient()
     render(<SkillLibrary client={client} />)
     expect(await screen.findByText('Lint passed')).toBeTruthy()
     expect(screen.getByLabelText('Diff').textContent).toContain('+added line')
     const approve = screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: 'APPROVE' } })
+    expect(approve.disabled).toBe(false)
     fireEvent.click(approve)
-    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1', 'APPROVE'))
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-x', '1'))
   })
 
   it('failed lint blocks approval; active skill offers rollback', async () => {
@@ -140,7 +139,6 @@ describe('SkillReview', () => {
     ]) })
     render(<SkillLibrary client={client} />)
     expect(await screen.findByText('Lint failed')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(/Type APPROVE/), { target: { value: 'APPROVE' } })
     expect((screen.getByRole('button', { name: /^Approve skill/ }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: /^Rollback/ }))
     await waitFor(() => expect(client.rollbackSkill).toHaveBeenCalledWith('webterm-y'))
