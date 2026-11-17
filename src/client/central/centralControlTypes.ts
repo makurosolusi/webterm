@@ -3,7 +3,7 @@
 import type { AgentRecord } from '../../server/central/contracts/agent.types'
 import type { ControlLevel, Tier } from '../../server/central/contracts/level.types'
 import type { MemoryBlockScope, MemoryKind, MemoryTrust } from '../../server/central/contracts/memory.types'
-import type { SkillRecord } from '../../server/central/contracts/skill.types'
+import type { SkillAudience, SkillRecord } from '../../server/central/contracts/skill.types'
 
 /** `GET /api/central/control` (global part). */
 export interface ControlView {
@@ -69,7 +69,9 @@ export interface SkillReviewRow {
 }
 
 /** A human-authored skill draft (`POST /api/central/skills`); `name` carries the full `webterm-` prefix. */
-export interface SkillDraftInput { name: string; description: string; body: string; caps: string[] }
+export interface SkillDraftInput { name: string; description: string; body: string; caps: string[]; audience: SkillAudience }
+/** An edit never sends the audience: a skill keeps its kind (the server refuses a change). */
+export type SkillEditInput = Omit<SkillDraftInput, 'name' | 'audience'>
 
 export interface MemoryRow {
   id: string
@@ -148,9 +150,9 @@ export interface CentralControlClient {
   /** Human-only on/off switch of a skill; independent of approval. */
   setSkillEnabled(name: string, enabled: boolean): Promise<void>
   /** Saves an edit as a new version through the normal review path; rejects with `SkillCreateError`. */
-  editSkill(name: string, input: Omit<SkillDraftInput, 'name'>): Promise<void>
-  /** Copies a skill into a free `webterm-<base>-copy[-n]` draft and resolves to the new name. */
-  forkSkill(name: string): Promise<string>
+  editSkill(name: string, input: SkillEditInput): Promise<void>
+  /** Copies a skill into a free `webterm-<base>-copy[-n]` draft of the chosen kind and resolves to the new name. */
+  forkSkill(name: string, audience: SkillAudience): Promise<string>
   listMemory(offset: number, signal?: AbortSignal, filter?: MemoryFilter): Promise<MemoryRow[]>
   confirmMemory(id: string): Promise<void>
   forgetMemory(id: string): Promise<void>

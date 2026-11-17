@@ -16,7 +16,7 @@ beforeAll(() => { globalThis.ResizeObserver ??= class { observe() {} unobserve()
 afterEach(cleanup)
 
 const row = (over: Partial<SkillReviewRow['record']> = {}, extra: Partial<SkillReviewRow> = {}): SkillReviewRow => ({
-  record: { name: 'webterm-mine', version: '2', sha256: null, status: 'pending_approval', origin: 'agent', caps: [], createdAt: 1, proposedBy: 'agent:n1', approvedBy: null, approvedAt: null, evalScore: null, enabled: true, ...over },
+  record: { name: 'webterm-mine', version: '2', sha256: null, status: 'pending_approval', origin: 'agent', caps: [], createdAt: 1, proposedBy: 'agent:n1', approvedBy: null, approvedAt: null, evalScore: null, enabled: true, audience: 'canvas' as const, ...over },
   lint: { ok: true, findings: [] }, diff: '+ new step', canRollback: false, description: 'Deploy.', body: '1. Ship.', ...extra,
 })
 const mine = row()

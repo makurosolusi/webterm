@@ -18,7 +18,7 @@ import { isSecretCapability } from '../secrets/secret.capabilities'
 import { SECRET_SUBJECT_PREFIX } from '../secrets/secret.store'
 import { callFingerprint, createMemoryReceiptLog, runOnce, type Receipt } from './capability.receipt'
 import { AGENT_REPORT_CAPABILITY, reportByDefault } from './report.capabilities'
-import { SKILL_CAPABILITY_NAMES, skillsByDefault } from './skill.capabilities'
+import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from './skill.capabilities'
 
 export type { ToolsDeps }
 export const TOOLS_BODY_MAX_BYTES = 256 * 1024
@@ -100,7 +100,9 @@ async function runCapability(req: IncomingMessage, url: URL, deps: ToolsDeps, pr
     data = run.data
     return run.receipt
   })
-  return { status: httpStatus(r), body: { receipt: r, ...(data !== undefined ? { data } : {}) } }
+  // `webterm skills get <name>` asks for text/plain: the skill body as is, so the sh client needs no JSON decoder.
+  const skill = name === SKILL_LIST_CAPABILITY && /text\/plain/.test(firstHeader(req.headers.accept) ?? '') ? (data as { skill?: { body?: unknown } } | undefined)?.skill?.body : undefined
+  return { status: httpStatus(r), body: { receipt: r, ...(data !== undefined ? { data } : {}) }, ...(r.outcome === 'ok' && typeof skill === 'string' ? { text: skill } : {}) }
 }
 
 async function handle(req: IncomingMessage, url: URL, deps: ToolsDeps): Promise<Reply> {

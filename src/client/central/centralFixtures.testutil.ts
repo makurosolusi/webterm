@@ -11,7 +11,7 @@ export function fakeClient(over: Partial<CentralControlClient> = {}): CentralCon
     listBoardNodes: vi.fn(async () => ({ items: [], projects: [] })),
     agentAction: vi.fn(async () => ({ status: 'done' as const })),
     listSkills: vi.fn(async () => [{
-      record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval' as const, origin: 'central' as const, caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 0.9 },
+      record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval' as const, origin: 'central' as const, audience: 'central' as const, caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 0.9 },
       lint: { ok: true, findings: [] }, diff: '+added line\n-removed line\n context', canRollback: false, description: 'Summarize project status.', body: '1. Read the portfolio.',
     }]),
     approveSkill: vi.fn(async () => undefined),

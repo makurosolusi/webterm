@@ -3,12 +3,12 @@ import type { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { SkillContent, SkillIndexEntry, SkillOrigin, SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../contracts/skill.types'
+import { type SkillAudience, type SkillContent, type SkillIndexEntry, SkillOrigin, SkillProposeInput, SkillRecord, SkillStatus, SkillStore, SKILL_AUDIENCES, isSkillAudience } from '../contracts/skill.types'
 import { createLogger } from '../../logs'
 import { type SkillEvaluator, activeDir, approveSkill, evaluateSkill, rejectSkill, requireHuman, rollbackSkill, staticEvaluator, submitForApproval, verifyFolder } from './skillLifecycle'
 import {
   DAY_MS, HASH_FILE, MAX_ACTIVE_SKILLS, MAX_AGENT_PROPOSALS_PER_DAY, MAX_PROPOSALS_PER_DAY, SKILL_FILE, type SkillCtx, SkillError, type StoredSkill, activeDescriptions, activeRecord, assertSkillName,
-  countCreatedSince, ensureSkillTable, getRecord, hashFolder, isSkillName, listRecords, putRecord, setEnabled, setStatus, skillDir, versionsOf,
+  activeDescriptionMap, countCreatedSince, ensureSkillTable, getRecord, hashFolder, isSkillName, listRecords, putRecord, setEnabled, setStatus, skillDir, versionsOf,
 } from './skillIndex'
 import { formatSkill, lintSkill } from './skillLint'
 
@@ -33,6 +33,8 @@ export interface SkillPage { limit?: number; offset?: number }
 /** `SkillStore` plus the human-only admin steps; none of these are exposed as tools. */
 export interface SkillAdminStore extends SkillStore {
   index(): readonly SkillIndexEntry[]
+  /** Description of every active skill by name, audience-blind (agent list and edit; `index` is Central's audience-filtered view). */
+  descriptions(): ReadonlyMap<string, string>
   list(status?: SkillStatus, page?: SkillPage): readonly StoredSkill[]
   load(name: string): SkillContent | null
   /** Stores the draft, then evaluates and submits it; resolves to its final state (`pending_approval` or `rejected`). */
@@ -43,7 +45,7 @@ export interface SkillAdminStore extends SkillStore {
   /** Human-only on/off switch, independent of status; builtin skills can be switched too. */
   setEnabled(name: string, enabled: boolean, by: string): void
   /** Human-only: copies an active skill into a free `webterm-<base>-copy[-n]` name as a human draft. */
-  fork(name: string, by: string): Promise<StoredSkill>
+  fork(name: string, by: string, audience?: SkillAudience): Promise<StoredSkill>
   evaluate(name: string, version: string): Promise<SkillRecord>
   submit(name: string, version: string): SkillRecord
   reject(name: string, version: string, by: string): SkillRecord
@@ -58,20 +60,24 @@ function proposeSkill(ctx: SkillCtx, input: SkillProposeInput, proposedBy: strin
   if (typeof input?.description !== 'string' || typeof input.body !== 'string' || !Array.isArray(input.caps) || input.caps.some((c) => typeof c !== 'string')) throw new SkillError('invalid', 'propose input shape is invalid')
   if (typeof proposedBy !== 'string' || proposedBy.length < 1 || proposedBy.length > 100) throw new SkillError('invalid', 'proposedBy is required')
   assertSkillName(input.name)
+  if (!isSkillAudience(input.audience)) throw new SkillError('invalid_audience', `audience is required: ${SKILL_AUDIENCES.join(' | ')}`)
   const existing = versionsOf(ctx.db, input.name)
-  if (existing.some((r) => r.origin === 'builtin')) throw new SkillError('forbidden', 'builtin skills cannot be replaced')
-  if (existing.some((r) => OPEN_STATES.includes(r.status))) throw new SkillError('limit', `${input.name} already has an open proposal`)
   const origin = originOf(proposedBy)
+  // Security: Central loads `central` skills as rules, so no agent session may ever author one.
+  if (origin === 'agent' && input.audience !== 'canvas') throw new SkillError('audience_forbidden', 'agent sessions may only write canvas skills')
+  if (existing.some((r) => r.origin === 'builtin')) throw new SkillError('forbidden', 'builtin skills cannot be replaced')
+  if (existing.length && existing[0].audience !== input.audience) throw new SkillError('audience_immutable', `${input.name} is a ${existing[0].audience} skill; a skill keeps its kind, fork it to get the other kind`)
+  if (existing.some((r) => OPEN_STATES.includes(r.status))) throw new SkillError('limit', `${input.name} already has an open proposal`)
   const cap = origin === 'central' ? MAX_PROPOSALS_PER_DAY : origin === 'agent' ? MAX_AGENT_PROPOSALS_PER_DAY : Infinity
   if (countCreatedSince(ctx.db, origin, ctx.now() - DAY_MS) >= cap) throw new SkillError('limit', `at most ${cap} ${origin} proposals per day`)
   const version = String((existing.length ? Number(existing[0].version) : 0) + 1)
-  const text = formatSkill({ name: input.name, description: input.description, body: input.body, caps: input.caps, version, origin })
+  const text = formatSkill({ name: input.name, description: input.description, body: input.body, caps: input.caps, version, origin, audience: input.audience })
   const lint = lintSkill(text, { expectedName: input.name, ...(ctx.allowedCaps ? { allowedCaps: ctx.allowedCaps } : {}) })
   if (!lint.ok) throw new SkillError('invalid', `proposal ${input.name} failed lint`, lint.issues)
   const dir = skillDir(ctx.root, 'proposed', input.name, version)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, SKILL_FILE), text, { flag: 'wx' })
-  const rec: SkillRecord = { name: input.name, version, sha256: hashFolder(dir), status: 'proposed', origin, caps: lint.meta?.caps ?? [], createdAt: ctx.now(), proposedBy, approvedBy: null, approvedAt: null, evalScore: null, enabled: existing[0]?.enabled !== false }
+  const rec: SkillRecord = { name: input.name, version, sha256: hashFolder(dir), status: 'proposed', origin, audience: input.audience, caps: lint.meta?.caps ?? [], createdAt: ctx.now(), proposedBy, approvedBy: null, approvedAt: null, evalScore: null, enabled: existing[0]?.enabled !== false }
   putRecord(ctx.db, rec, input.description)
   return rec
 }
@@ -118,13 +124,13 @@ function freeCopyName(ctx: SkillCtx, name: string): string {
   throw new SkillError('limit', `no free copy name for ${name}`)
 }
 
-async function forkSkill(ctx: SkillCtx, name: string, by: string, evaluator: SkillEvaluator): Promise<StoredSkill> {
+async function forkSkill(ctx: SkillCtx, name: string, by: string, audience: SkillAudience | undefined, evaluator: SkillEvaluator): Promise<StoredSkill> {
   requireHuman(by)
   assertSkillName(name)
   const rec = activeRecord(ctx.db, name)
   if (!rec) throw new SkillError('not_found', `no active version of ${name} to copy`)
   const lint = verifyFolder(ctx, rec, activeDir(ctx, rec))
-  return advanceProposal(ctx, proposeSkill(ctx, { name: freeCopyName(ctx, name), description: lint.meta?.description ?? '', body: lint.body, caps: rec.caps }, by), evaluator)
+  return advanceProposal(ctx, proposeSkill(ctx, { name: freeCopyName(ctx, name), description: lint.meta?.description ?? '', body: lint.body, caps: rec.caps, audience: audience ?? rec.audience }, by), evaluator)
 }
 
 function installBuiltins(ctx: SkillCtx, source: Readonly<Record<string, string>>): SkillRecord[] {
@@ -135,6 +141,8 @@ function installBuiltins(ctx: SkillCtx, source: Readonly<Record<string, string>>
     const lint = lintSkill(text, { expectedName: entry })
     if (!lint.ok || !lint.meta?.version) throw new SkillError('invalid', `builtin skill ${entry} failed lint`, lint.issues)
     const { version, description, caps } = lint.meta
+    // Built-ins are Central's own rules; a shipped file without `webterm.audience` stays central (see ensureSkillTable).
+    const audience: SkillAudience = isSkillAudience(lint.meta.audience) ? lint.meta.audience : 'central'
     const dir = skillDir(ctx.root, 'builtin', entry, version)
     rmSync(dir, { recursive: true, force: true })
     mkdirSync(dir, { recursive: true })
@@ -143,7 +151,7 @@ function installBuiltins(ctx: SkillCtx, source: Readonly<Record<string, string>>
     writeFileSync(join(dir, HASH_FILE), `${sha256}\n`)
     const previous = activeRecord(ctx.db, entry)
     if (previous && previous.version !== version) setStatus(ctx.db, entry, previous.version, 'archived')
-    const rec: SkillRecord = { name: entry, version, sha256, status: 'active', origin: 'builtin', caps, createdAt: ctx.now(), proposedBy: null, approvedBy: BUILTIN_ACTOR, approvedAt: ctx.now(), evalScore: null, enabled: versionsOf(ctx.db, entry)[0]?.enabled !== false } // keep a human's off switch across boots
+    const rec: SkillRecord = { name: entry, version, sha256, status: 'active', origin: 'builtin', audience, caps, createdAt: ctx.now(), proposedBy: null, approvedBy: BUILTIN_ACTOR, approvedAt: ctx.now(), evalScore: null, enabled: versionsOf(ctx.db, entry)[0]?.enabled !== false } // keep a human's off switch across boots
     putRecord(ctx.db, rec, description)
     out.push(rec)
   }
@@ -167,6 +175,7 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
       }
       return out
     },
+    descriptions: () => activeDescriptionMap(ctx.db),
     list: (status, page = {}) => listRecords(ctx.db, status, page.limit, page.offset),
     load: (name) => loadSkill(ctx, name),
     propose: async (input, proposedBy) => advanceProposal(ctx, proposeSkill(ctx, input, proposedBy), evaluator),
@@ -176,7 +185,7 @@ export function createSkillStore(opts: SkillStoreOptions): SkillAdminStore {
       assertSkillName(name)
       if (!setEnabled(ctx.db, name, enabled)) throw new SkillError('not_found', `skill ${name} not found`)
     },
-    fork: (name, by) => forkSkill(ctx, name, by, evaluator),
+    fork: (name, by, audience) => forkSkill(ctx, name, by, audience, evaluator),
     rollback: (name, by) => rollbackSkill(ctx, name, by),
     evaluate: (name, version) => evaluateSkill(ctx, name, version, evaluator),
     submit: (name, version) => submitForApproval(ctx, name, version),

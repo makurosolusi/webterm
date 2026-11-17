@@ -5,6 +5,7 @@ metadata:
   webterm.version: "1"
   webterm.origin: "builtin"
   webterm.caps: "approval.request"
+  webterm.audience: "central"
 ---
 # Approval flow
 

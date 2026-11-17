@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useState } from 'react'
 import { CL } from './centralLabels'
+import type { SkillAudience } from '../../server/central/contracts/skill.types'
+import { AudienceBadge, AudienceSelect } from './SkillAudience'
 import type { CentralControlClient } from './centralControlTypes'
 import { lineDiff } from '../../server/central/ca2Routes.diff'
 import SkillDiff from './SkillDiff'
@@ -15,9 +17,10 @@ import { CAP_PRESETS, MAX_INSTRUCTIONS, MAX_WHEN, createErrorLines, draftValid, 
 
 const Counter = ({ n, max }: { n: number; max: number }) => <span className={n > max ? 'ccp-error' : undefined} aria-live="polite">{CL.skillCount(n, max)}</span>
 
-interface Props { client: CentralControlClient; onCreated: (name: string) => void; onCancel: () => void; /** Set to edit this skill as a new version instead of creating one. */ edit?: SkillReviewRow }
+interface Props { client: CentralControlClient; onCreated: (name: string) => void; onCancel: () => void; /** Set to edit this skill as a new version instead of creating one. */ edit?: SkillReviewRow; /** Kind preselected on a new skill (the section it was opened from); it stays visible and changeable. */ initialAudience?: SkillAudience }
 
-export default function SkillCreateForm({ client, onCreated, onCancel, edit }: Props) {
+export default function SkillCreateForm({ client, onCreated, onCancel, edit, initialAudience = 'central' }: Props) {
+  const [audience, setAudience] = useState<SkillAudience>(initialAudience)
   const [name, setName] = useState(edit ? tailOf(edit.record.name) : '')
   const [when, setWhen] = useState(edit?.description ?? '')
   const [body, setBody] = useState(edit?.body ?? '')
@@ -32,7 +35,7 @@ export default function SkillCreateForm({ client, onCreated, onCancel, edit }: P
     setErrors([])
     try {
       if (edit) await client.editSkill(fullName(name), { description: when.trim(), body, caps })
-      else await client.createSkill({ name: fullName(name), description: when.trim(), body, caps })
+      else await client.createSkill({ name: fullName(name), description: when.trim(), body, caps, audience })
     } catch (err) {
       setErrors(createErrorLines(err))
       throw err
@@ -44,6 +47,9 @@ export default function SkillCreateForm({ client, onCreated, onCancel, edit }: P
     <form className="ccp-card" aria-label={heading} aria-busy={create.busy} onSubmit={(e) => e.preventDefault()}>
       <h4>{heading}</h4>
       <p>{edit ? CL.skillEditHint : CL.skillNewHint}</p>
+      {edit
+        ? <p><AudienceBadge audience={edit.record.audience} /> <small>{CL.skillAudienceFixed}</small></p>
+        : <AudienceSelect value={audience} onChange={setAudience} disabled={create.busy} />}
       <label>{CL.skillName}
         <span className="ccp-name-field"><span aria-hidden="true">{CL.skillNamePrefix}</span>
           <Input value={name} aria-label={CL.skillName} autoComplete="off" disabled={create.busy || !!edit} aria-describedby="skill-name-help" onChange={(e) => setName(e.target.value)} />

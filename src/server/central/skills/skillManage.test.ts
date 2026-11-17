@@ -11,7 +11,7 @@ let root: string
 let clock: number
 let raw: ReturnType<typeof nodeSqlite>
 let store: SkillAdminStore
-const input = (name = 'webterm-demo', body = '1. Read the portfolio.') => ({ name, description: 'Summarize status. Use when asked.', body, caps: ['portfolio.read'] })
+const input = (name = 'webterm-demo', body = '1. Read the portfolio.') => ({ name, description: 'Summarize status. Use when asked.', body, caps: ['portfolio.read'], audience: 'central' as const })
 const code = (p: unknown): string | undefined => { try { (p as () => unknown)(); return undefined } catch (e) { return e instanceof SkillError ? e.code : `other:${String(e)}` } }
 const asyncCode = (p: Promise<unknown>) => p.then(() => undefined, (e: unknown) => (e instanceof SkillError ? e.code : `other:${String(e)}`))
 
@@ -56,7 +56,7 @@ describe('one-click approval', () => {
     await store.propose(input('webterm-h'), HUMAN)
     expect(store.approve('webterm-h', '1', HUMAN, undefined, true).status).toBe('active')
     for (const [name, by] of [['webterm-c', 'central:c1'], ['webterm-a', 'agent:node1']] as const) {
-      await store.propose(input(name), by)
+      await store.propose({ ...input(name), audience: by.startsWith('agent:') ? 'canvas' as const : 'central' as const }, by)
       expect(code(() => store.approve(name, '1', HUMAN, undefined, true))).toBe('forbidden')
       expect(code(() => store.approve(name, '1', HUMAN))).toBe('forbidden')
       expect(store.approve(name, '1', HUMAN, `approve ${name}@1`).status).toBe('active')
@@ -77,12 +77,12 @@ describe('one-click approval', () => {
 
 describe('agent origin', () => {
   it('maps agent: proposers to origin agent with a daily cap separate from central', async () => {
-    for (let i = 0; i < MAX_AGENT_PROPOSALS_PER_DAY; i++) expect((await store.propose(input(`webterm-a${i}`), `agent:n${i}`)).origin).toBe('agent')
-    expect(await asyncCode(store.propose(input('webterm-a9'), 'agent:n9'))).toBe('limit')
+    for (let i = 0; i < MAX_AGENT_PROPOSALS_PER_DAY; i++) expect((await store.propose({ ...input(`webterm-a${i}`), audience: 'canvas' as const }, `agent:n${i}`)).origin).toBe('agent')
+    expect(await asyncCode(store.propose({ ...input('webterm-a9'), audience: 'canvas' as const }, 'agent:n9'))).toBe('limit')
     for (let i = 0; i < MAX_PROPOSALS_PER_DAY; i++) expect((await store.propose(input(`webterm-c${i}`), 'central:x')).origin).toBe('central')
     expect(await asyncCode(store.propose(input('webterm-c9'), 'central:x'))).toBe('limit')
     clock += DAY_MS + 1
-    expect((await store.propose(input('webterm-a10'), 'agent:n1')).origin).toBe('agent')
+    expect((await store.propose({ ...input('webterm-a10'), audience: 'canvas' as const }, 'agent:n1')).origin).toBe('agent')
   })
 })
 

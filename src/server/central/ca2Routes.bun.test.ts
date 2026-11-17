@@ -14,7 +14,7 @@ import { createRegistry } from './tools/toolRegistry'
 
 const BOT_TOKEN = '123456789:AAEhBP0av28ABCDEFGHIJKLMNOPQRSTUVWXYZ1234'
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
-const SKILL = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'] }
+const SKILL = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], audience: 'central' as const }
 let dir: string
 let h: Ca2Handle
 

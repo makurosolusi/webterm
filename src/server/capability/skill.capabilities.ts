@@ -16,9 +16,9 @@ const TOOLS_PATH = '/api/tools'
 
 export const SKILL_CAPABILITIES: readonly CapabilitySpec[] = [
   defineCapability({
-    name: SKILL_LIST_CAPABILITY, summary: 'List the skill library (active skills + your own open drafts); `name` also returns that skill body.',
+    name: SKILL_LIST_CAPABILITY, summary: 'List skills made for canvas agents (audience canvas) + your drafts; `name` adds the body.',
     tier: 'R0', scope: 'global', idempotent: true, projections: ['control-http'], route: { method: 'POST', path: `${TOOLS_PATH}/${SKILL_LIST_CAPABILITY}` },
-    input: obj({ name: S.str(undefined, { description: 'Optional: return the body of this ACTIVE skill too.' }) }),
+    input: obj({ name: S.str(undefined, { description: 'Optional: return the body of this ACTIVE canvas skill too.' }) }),
     output: S.keys('items'),
   }),
   defineCapability({
@@ -29,6 +29,7 @@ export const SKILL_CAPABILITIES: readonly CapabilitySpec[] = [
       description: S.str(undefined, { description: 'One line: what it does and when to use it.' }),
       body: S.str(undefined, { description: 'Skill instructions (markdown).' }),
       caps: S.arr(S.any()),
+      audience: S.str(undefined, { description: 'Optional; agents can only write `canvas` skills (central is refused with audience_forbidden). An edit keeps the audience.' }),
       edit: S.bool(),
     }, ['name']),
     output: S.keys('name', 'version', 'state'),

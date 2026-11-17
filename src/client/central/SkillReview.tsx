@@ -6,6 +6,7 @@ import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { useState } from 'react'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { CL } from './centralLabels'
+import { AudienceBadge } from './SkillAudience'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { centralErrorMessage } from './centralLoad'
 import SkillDiff from './SkillDiff'
@@ -32,7 +33,7 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
     <article className="ccp-card" aria-label={`${record.name} ${record.version}`} aria-busy={busy}>
       <header>
         <strong>{record.name}</strong> <span>{record.version}</span>
-        <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span>
+        <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
         {record.evalScore !== null && <span>{CL.skillScore}: {record.evalScore}</span>}
       </header>
       <p className={lint.ok ? 'ccp-ok' : 'ccp-error'} role="status">{lint.ok ? CL.skillLintOk : CL.skillLintFail}</p>

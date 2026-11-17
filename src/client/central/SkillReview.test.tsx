@@ -10,7 +10,7 @@ import SkillLibrary from './SkillLibrary'
 afterEach(cleanup)
 
 const row = (over: Partial<SkillReviewRow['record']> = {}, extra: Partial<SkillReviewRow> = {}): SkillReviewRow => ({
-  record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval', origin: 'central', caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 1, ...over },
+  record: { name: 'webterm-x', version: '1', sha256: null, status: 'pending_approval', origin: 'central', caps: [], createdAt: 1, proposedBy: 'c', approvedBy: null, approvedAt: null, evalScore: 1, audience: 'central' as const, ...over },
   lint: { ok: true, findings: [] }, diff: '', canRollback: false, description: 'Demo skill.', body: '1. Step.', ...extra,
 })
 const withRows = (...rows: SkillReviewRow[]) => fakeClient({ listSkills: vi.fn(async () => rows) })

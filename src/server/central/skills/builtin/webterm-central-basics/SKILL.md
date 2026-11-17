@@ -5,6 +5,7 @@ metadata:
   webterm.version: "1"
   webterm.origin: "builtin"
   webterm.caps: "portfolio.read,skill.list,skill.load"
+  webterm.audience: "central"
 ---
 # Central agent basics
 

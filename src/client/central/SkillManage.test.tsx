@@ -12,7 +12,7 @@ beforeAll(() => { globalThis.ResizeObserver ??= class { observe() {} unobserve()
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const row = (over: Partial<SkillReviewRow['record']> = {}, extra: Partial<SkillReviewRow> = {}): SkillReviewRow => ({
-  record: { name: 'webterm-mine', version: '1', sha256: null, status: 'active', origin: 'human', caps: ['portfolio.read'], createdAt: 1, proposedBy: 'human:root', approvedBy: 'human:root', approvedAt: 1, evalScore: null, enabled: true, ...over },
+  record: { name: 'webterm-mine', version: '1', sha256: null, status: 'active', origin: 'human', caps: ['portfolio.read'], createdAt: 1, proposedBy: 'human:root', approvedBy: 'human:root', approvedAt: 1, evalScore: null, enabled: true, audience: 'central' as const, ...over },
   lint: { ok: true, findings: [] }, diff: '+ a line', canRollback: false, description: 'Deploy checklist.', body: '1. Read it.\n2. Ship it.', ...extra,
 })
 const open = async (rows: SkillReviewRow[], over = {}) => {
@@ -79,7 +79,7 @@ describe('duplicate a built-in skill', () => {
   it('forks through the client and says where the draft went', async () => {
     const client = await open([row({ origin: 'builtin', name: 'webterm-basics' })])
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate and edit' }))
-    await waitFor(() => expect(client.forkSkill).toHaveBeenCalledWith('webterm-basics'))
+    await waitFor(() => expect(client.forkSkill).toHaveBeenCalledWith('webterm-basics', 'central'))
     expect(await screen.findByText('Draft webterm-x-copy saved. Review it below.')).toBeTruthy()
   })
 })
