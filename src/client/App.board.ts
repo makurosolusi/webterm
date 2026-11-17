@@ -5,6 +5,9 @@ import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
+import { SKILL_NODE_SIZE, skillConnection } from '../shared/skillPorts'
+import { selectedSkillHost, skillCable, skillNodeSpec, type AddSkillResult, type SkillRef } from './skillNode.add'
+import { spawnCenterVertical } from './handleMenu.model'
 import type { LinkEnd } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
 import { randomId } from './randomId'
@@ -102,12 +105,26 @@ export function useBoardActions({
     })
   }, [recordClosed, scheduleSave, pushLayout])
 
+  /** Cables skill -> agent as a `skill` bridge (React Flow edge with both typed handles); false when refused (already cabled, or the cap). */
+  const attachSkill = useCallback((skillId: string, hostId: string): 'attached' | 'exists' | 'limit' => {
+    const cable = skillCable(edgesRef.current, skillId, hostId)
+    if ('refused' in cable) return cable.refused
+    const next = [...edgesRef.current, cable.edge]
+    edgesRef.current = next
+    setEdges(next)
+    scheduleSave()
+    return 'attached'
+  }, [scheduleSave])
+
   const onConnect = useCallback((c: Connection) => {
     if (!c.source || !c.target) return
     const end = (id: string): LinkEnd => {
       const n = nodesRef.current.find((x) => x.id === id)
       return { id, kind: n?.type, agentId: (n?.data as { agentId?: AgentId } | undefined)?.agentId }
     }
+    // Typed ports first: a skill output into a Skills input attaches (refused past the per-agent cap); any other use of them is dropped.
+    const skill = skillConnection(end(c.source), c.sourceHandle, end(c.target), c.targetHandle)
+    if (skill !== undefined) { if (skill) attachSkill(c.source, c.target); return }
     if (!canLink(end(c.source), end(c.target))) return
     if (bridgeExists(edgesRef.current, c.source, c.target)) return
     setEdges((es) => {
@@ -150,6 +167,26 @@ export function useBoardActions({
       return next
     })
   }, [scheduleSave, pushLayout, settings.defaultNodeWidth, settings.defaultNodeHeight])
+
+  const onAddSkill = useCallback((skill: SkillRef, at?: XYPosition): string | null => {
+    if (!activeWsRef.current) return null
+    const id = randomId()
+    // `at` is the CENTRE of the card; `addFlowNode` centres a DEFAULT-size node there and the spec then shrinks it, so shift by the difference.
+    const c = at ?? spawnAt(rf.current, settings, nodesRef.current.length)
+    addFlowNode(() => skillNodeSpec(id, skill), { x: c.x - SKILL_NODE_SIZE.width / 2 + settings.defaultNodeWidth / 2, y: c.y - SKILL_NODE_SIZE.height / 2 + settings.defaultNodeHeight / 2 })
+    return id
+  }, [addFlowNode, rf, settings])
+
+  /** "Add to canvas": a skill node on the board; with exactly one Claude agent selected it lands below that agent and is cabled to it. */
+  const addSkillNode = useCallback((skill: SkillRef): AddSkillResult => {
+    const host = selectedSkillHost(nodesRef.current)
+    const size = { width: host?.measured?.width ?? host?.width ?? 400, height: host?.measured?.height ?? host?.height ?? 300 }
+    const at = host ? spawnCenterVertical({ ...host.position, ...size }, SKILL_NODE_SIZE, 'below', nodesRef.current.filter((n) => n.id !== host.id).map((n) => ({ ...n.position, width: n.measured?.width ?? n.width ?? 400, height: n.measured?.height ?? n.height ?? 300 }))) : undefined
+    const id = onAddSkill(skill, at)
+    if (!id) return { status: 'no_board' }
+    if (!host) return { status: 'added' }
+    return { status: attachSkill(id, host.id) === 'attached' ? 'attached' : 'limit' }
+  }, [onAddSkill, attachSkill])
 
   const onAddTerminal = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'terminal', cwd: ws.cwd }), at), [addFlowNode])
 
@@ -214,10 +251,11 @@ export function useBoardActions({
     addBrowser: onAddBrowser,
     addDiff: onAddDiff,
     addAgentChat: onAddAgentChat,
+    addSkill: (skill, at) => { onAddSkill(skill, at) },
     link: onConnect,
-  }), [onAddTerminal, onAddFiles, onAddAgent, onAddBrowser, onAddDiff, onAddAgentChat, onConnect])
+  }), [onAddTerminal, onAddFiles, onAddAgent, onAddBrowser, onAddDiff, onAddAgentChat, onAddSkill, onConnect])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn, openSkillAuthor }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn, openSkillAuthor])
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn, openSkillAuthor, addSkillNode }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn, openSkillAuthor, addSkillNode])
 
-  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, nodeActions }
+  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, nodeActions }
 }

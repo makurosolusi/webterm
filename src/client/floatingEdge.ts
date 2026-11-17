@@ -4,6 +4,7 @@ import { Position } from '@xyflow/react'
 import { classifyLink } from '../shared/workspace'
 import type { AgentId } from '../shared/workspace'
 import { BROWSER_KIND } from '../shared/browser.contract'
+import { canSkillLink, skillConnection } from '../shared/skillPorts'
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -56,6 +57,9 @@ export interface LinkEnd { id: string; kind?: string; agentId?: AgentId }
  *  pola `classifyLink` (sticky hanya bertaut ke terminal, sticky↔sticky null). */
 export function canLink(a: LinkEnd, b: LinkEnd): boolean {
   if (a.id === b.id) return false
+  // Skill node: only into a Claude agent's `skills-in` (shared rule, same as the server's canLink).
+  const skill = canSkillLink(a, b)
+  if (skill !== undefined) return skill
   // Plan node (F4-f): its cables are DAG edges to the workers it dispatched (a Diff node on the worker's
   // worktree) or to an agent node; plan↔plan and plan↔plain node carry nothing.
   const plans = (a.kind === PLAN_KIND ? 1 : 0) + (b.kind === PLAN_KIND ? 1 : 0)
@@ -69,6 +73,22 @@ export function canLink(a: LinkEnd, b: LinkEnd): boolean {
   if (browsers === 0) return classifyLink(a.agentId, b.agentId) === 'context'
   if (browsers === 2) return false
   return !!(a.kind === BROWSER_KIND ? b : a).agentId
+}
+
+/** A drawn connection's two nodes and handles; the shape React Flow hands to `isValidConnection` / `onConnect`. */
+export interface DrawnConnection { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null }
+
+/**
+ * `isValidConnection` of the canvas: a connection touching a typed skill port is valid only as `skill-out` of a
+ * skill node into `skills-in` of a Claude agent / agent chat (shared `skillConnection`); every other connection is left
+ * to `onConnect`'s `canLink`, as before.
+ */
+export function isValidConnection(nodes: ReadonlyArray<{ id: string; type?: string; data?: unknown }>, c: DrawnConnection): boolean {
+  const end = (id: string): LinkEnd => {
+    const n = nodes.find((x) => x.id === id)
+    return { id, kind: n?.type, agentId: (n?.data as { agentId?: AgentId } | undefined)?.agentId }
+  }
+  return skillConnection(end(c.source), c.sourceHandle, end(c.target), c.targetHandle) ?? true
 }
 
 // Dedupe: a bridge already connects the pair in either direction.

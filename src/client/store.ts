@@ -3,6 +3,7 @@
 import type { Node, Edge } from '@xyflow/react'
 import { isAgentChatPreset, validChatConfig } from '../shared/agentChat.shape'
 import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
+import { SKILLS_IN, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
 
 export function toFlow(n: WsNode): Node {
@@ -10,9 +11,9 @@ export function toFlow(n: WsNode): Node {
     id: n.id,
     type: n.kind,
     position: { x: n.x, y: n.y },
-    width: n.width ?? 400,
-    height: n.height ?? 300,
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig },
+    width: n.width ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.width : 400),
+    height: n.height ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.height : 300),
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, skill: n.skill, seenVersion: n.seenVersion },
   }
 }
 
@@ -52,6 +53,8 @@ export function toWsNode(n: Node): WsNode {
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),
     preset: isAgentChatPreset(d.preset) ? d.preset : undefined,
     presetTarget: typeof d.presetTarget === 'string' ? d.presetTarget : undefined,
+    skill: typeof d.skill === 'string' ? d.skill : undefined,
+    seenVersion: typeof d.seenVersion === 'string' ? d.seenVersion : undefined,
     // Validated on the way out: node data is written by the Diff node and must not persist junk.
     diffNotes: d.diffNotes === undefined ? undefined : validDiffNotes(d.diffNotes),
     plan: d.plan === undefined ? undefined : validPlanData(d.plan),
@@ -60,6 +63,8 @@ export function toWsNode(n: Node): WsNode {
 
 // Pure serializers between a React Flow Edge and a persisted BridgeLink.
 export function toFlowEdge(b: BridgeLink): Edge {
+  // A skill cable joins two typed ports, so the handles are named (an agent has more than one target handle).
+  if (b.kind === 'skill') return { id: b.id, source: b.source, target: b.target, sourceHandle: SKILL_OUT, targetHandle: SKILLS_IN, type: 'skill', data: { kind: 'skill' } }
   return { id: b.id, source: b.source, target: b.target, type: 'context', data: { kind: b.kind } }
 }
 
@@ -67,7 +72,7 @@ export function toBridge(e: Edge): BridgeLink {
   // Kind ikut edge-nya: meng-hardcode 'context' membuat kabel buka-file berubah jenis (dan salah
   // label) begitu workspace dimuat ulang. Edge dari sebelum `kind` ada tidak punya data → 'context'.
   const kind = (e.data as { kind?: BridgeLink['kind'] } | undefined)?.kind
-  return { id: e.id, source: e.source, target: e.target, kind: kind === 'file' ? 'file' : 'context' }
+  return { id: e.id, source: e.source, target: e.target, kind: kind === 'file' || kind === 'skill' ? kind : 'context' }
 }
 
 export const KANBAN_COLUMNS: AgentStatus[] = ['working', 'waiting', 'blocked', 'done']

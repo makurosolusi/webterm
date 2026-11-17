@@ -15,7 +15,7 @@ import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
-export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'select-all' | 'fit'
+export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'skill' | 'select-all' | 'fit'
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
@@ -25,6 +25,7 @@ export const MENU_LABELS = {
   files: 'New File Manager',
   browser: 'New Browser',
   diff: 'Diff (working changes)',
+  skill: 'Skill…',
   selectAll: 'Select All',
   fitView: 'Fit View',
 } as const
@@ -67,6 +68,8 @@ export interface CanvasMenuHandlers {
   addDiff?: () => void
   /** Claude chat node (no terminal); absent = Claude disabled, no row. */
   addAgentChat?: () => void
+  /** Opens the skill picker at the click point (a canvas skill node, by reference); absent = no row. */
+  addSkill?: () => void
   fitView: () => void
   selectAll?: () => void
 }
@@ -141,6 +144,7 @@ export function buildCanvasMenuRows(
   rows.push({ key: 'files', label: MENU_LABELS.files, icon: 'files', onClick: handlers.addFiles })
   if (handlers.addBrowser) rows.push({ key: 'browser', label: MENU_LABELS.browser, icon: 'browser', onClick: handlers.addBrowser })
   if (handlers.addDiff) rows.push({ key: 'diff', label: MENU_LABELS.diff, icon: 'diff', onClick: handlers.addDiff })
+  if (handlers.addSkill) rows.push({ key: 'skill', label: MENU_LABELS.skill, icon: 'skill', onClick: handlers.addSkill })
 
   rows.push({ type: 'separator' })
 

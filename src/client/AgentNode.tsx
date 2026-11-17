@@ -7,6 +7,8 @@ import type { AgentId, AgentStatus, Comment, Pane } from '../shared/workspace'
 import TerminalCore from './TerminalCore'
 import type { TerminalHandle } from './TerminalCore'
 import NodeChrome, { termNodeClass } from './NodeChrome'
+import { SkillsInPort } from './SkillPort'
+import { isSkillHost } from '../shared/skillPorts'
 import { withNodeName } from './nodeName.label'
 import UsagePill from './UsagePill'
 import FindBar from './FindBar'
@@ -337,6 +339,8 @@ function AgentNode({ id, data, selected, height }: NodeProps) {
           <Handle id="link-in"  type="target" position={Position.Left}  className="bridge-handle" />
         </>)}
       </div>
+      {/* Typed `skill` input (bottom diamond): only Claude agents take skills (shared `isSkillHost`). */}
+      {isSkillHost({ kind: 'agent', agentId }) && <SkillsInPort />}
       {menu && <NodeContextMenu x={menu.x} y={menu.y} rows={menuRows} onClose={() => setMenu(null)} />}
       {provenanceOpen && <ProvenancePanel nodeId={id} onClose={() => setProvenanceOpen(false)} />}
     </>

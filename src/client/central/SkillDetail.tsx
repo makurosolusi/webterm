@@ -9,6 +9,9 @@ import type { SkillAudience } from '../../server/central/contracts/skill.types'
 import { AudienceBadge, AudienceSelect } from './SkillAudience'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { createErrorLines } from './skillLibraryModel'
+import { useNodeActions } from '../nodeActions'
+import { SN } from '../skillNode.labels'
+import { MAX_ATTACHED_SKILLS } from '../../shared/skillPorts'
 
 interface Props {
   row: SkillReviewRow
@@ -34,6 +37,14 @@ export default function SkillDetail({ row, client, onClose, onChanged, onEdit, o
   const [forkAudience, setForkAudience] = useState<SkillAudience>(record.audience)
   const fork = useAction(async () => { const name = await client.forkSkill(record.name, forkAudience); onForked(name) }, { label: CL.skillDuplicate, toast: 'never', failure: (e) => createErrorLines(e)[0] ?? CL.skillDuplicateFailed })
   const active = record.status === 'active'
+  // Canvas skills only, and only while active and switched on: a skill node of anything else would be Unavailable at once.
+  const { addSkillNode } = useNodeActions()
+  const [added, setAdded] = useState<string | null>(null)
+  const canAdd = active && on && record.audience === 'canvas'
+  const addToCanvas = () => {
+    const r = addSkillNode?.({ name: record.name, version: record.version })
+    setAdded(r === undefined || r.status === 'no_board' ? SN.addToCanvasNoBoard : r.status === 'attached' ? SN.addedAttached : r.status === 'limit' ? SN.addedLimit(MAX_ATTACHED_SKILLS) : SN.added)
+  }
   const builtin = record.origin === 'builtin'
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version} details`}>
@@ -54,6 +65,14 @@ export default function SkillDetail({ row, client, onClose, onChanged, onEdit, o
         </div>
       )}
       {builtin && <p>{CL.skillBuiltinReadOnly}</p>}
+      {record.audience === 'canvas' && active && (
+        <div>
+          <Button type="button" size="sm" variant="secondary" disabled={!canAdd || !addSkillNode} onClick={addToCanvas}>{SN.addToCanvas}</Button>
+          {!canAdd && <small> {SN.addToCanvasOnly}</small>}
+          {canAdd && !addSkillNode && <small> {SN.addToCanvasNoBoard}</small>}
+          {added && <small role="status"> {added}</small>}
+        </div>
+      )}
       {body ? <pre className="ccp-diff" tabIndex={0} aria-label={CL.skillInstructions}>{body}</pre> : <p>{CL.skillNoBody}</p>}
       {active && !builtin && <Button type="button" size="sm" disabled={hasOpenDraft} onClick={onEdit}>{CL.skillEdit}</Button>}
       {onAuthor && !builtin && <Button type="button" size="sm" variant="secondary" disabled={!active || hasOpenDraft} onClick={onAuthor}>{CL.skillAuthorEdit}</Button>}

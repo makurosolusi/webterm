@@ -60,6 +60,21 @@ export const connectionLineStyle = (width: number = EDGE_WIDTH) => ({ stroke: ED
 const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }> = {
   context: { idle: '⇄ context', selected: '⇄ context — ⌫ to remove' },
   file: { idle: '↔ open', selected: '↔ open — ⌫ to remove' },
+  skill: { idle: '', selected: 'skill — ⌫ to detach' },
+}
+
+/** Skill cable: dashed, thin and arrowless (a reference, not a conversation); never hidden by `hideLinks`,
+ *  which only governs context links. Drawn by `SkillEdge` between the two typed ports. */
+function decorateSkillEdge(e: Edge, width: number): Edge {
+  return {
+    ...e,
+    hidden: false,
+    label: e.selected ? EDGE_LABEL.skill.selected : undefined,
+    labelStyle: { fill: 'var(--vscode-descriptionForeground, var(--muted))', fontSize: 11 },
+    labelBgStyle: { fill: 'var(--canvas-bg)', fillOpacity: 1 },
+    style: { stroke: e.selected ? EDGE_STROKE_SELECTED : EDGE_STROKE, strokeWidth: Math.max(1, width - 1), strokeDasharray: '5 4' },
+    interactionWidth: EDGE_INTERACTION_WIDTH,
+  }
 }
 
 /** Edge yang benar-benar dirender: yang node ujungnya menyembunyikan link ditandai `hidden` (flag
@@ -72,6 +87,7 @@ const EDGE_LABEL: Record<BridgeLink['kind'], { idle: string; selected: string }>
 export function decorateEdges(edges: Edge[], nodes: Node[], width: number = EDGE_WIDTH): Edge[] {
   const hidden = hiddenEdgeNodeIds(nodes as { id: string; data: { hideLinks?: boolean } }[])
   return edges.map((e) => {
+    if ((e.data as { kind?: BridgeLink['kind'] } | undefined)?.kind === 'skill') return decorateSkillEdge(e, width)
     const arrow = {
       type: MarkerType.Arrow, color: 'currentColor', width: ARROW_SIZE, height: ARROW_SIZE,
       strokeWidth: e.selected ? SELECTED_ARROW_STROKE : IDLE_ARROW_STROKE,

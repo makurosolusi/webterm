@@ -8,8 +8,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { FinalConnectionState, Node, OnConnectStartParams } from '@xyflow/react'
 import { HandleMenuView } from './handleMenu.view'
-import { buildHandleEntries, cableFor, spawnCenter } from './handleMenu.model'
-import type { HandleEntry, HandleOrigin, HandleSpawners } from './handleMenu.model'
+import { buildHandleEntries, cableFor, offersSkills, spawnCenter, spawnCenterVertical } from './handleMenu.model'
+import { useSkillEntries } from './skillNode.entries'
+import { SKILL_OUT, SKILLS_IN, SKILL_NODE_SIZE } from '../shared/skillPorts'
+import { SN } from './skillNode.labels'
+import type { HandleEntry, HandleOrigin, HandlePort, HandleSpawners } from './handleMenu.model'
 import type { AgentId } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 
@@ -39,14 +42,15 @@ const rectOf = (n: Node, d: { width: number; height: number }) => ({ ...n.positi
 /** `onConnectStart`/`onConnectEnd` for <ReactFlow connectOnClick={false}> plus the menu element (null when closed). */
 export function useHandleMenu({ nodes, settings, spawn, frame }: HandleMenuDeps) {
   const [open, setOpen] = useState<{ point: { x: number; y: number }; origin: HandleOrigin } | null>(null)
-  const start = useRef<{ x: number; y: number; nodeId: string; side: HandleOrigin['side'] } | null>(null)
+  const start = useRef<{ x: number; y: number; nodeId: string; side: HandleOrigin['side']; port: HandlePort } | null>(null)
   const pending = useRef<Pending | null>(null)
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
   const close = useCallback(() => setOpen(null), [])
 
   const onConnectStart = useCallback((e: MouseEvent | TouchEvent, p: OnConnectStartParams) => {
-    start.current = p.nodeId && p.handleType && p.handleId?.startsWith('link-') ? { ...pointOf(e), nodeId: p.nodeId, side: p.handleType } : null
+    const port: HandlePort | null = p.handleId?.startsWith('link-') ? 'link' : p.handleId === SKILL_OUT || p.handleId === SKILLS_IN ? 'skill' : null
+    start.current = p.nodeId && p.handleType && port ? { ...pointOf(e), nodeId: p.nodeId, side: p.handleType, port } : null
   }, [])
 
   const onConnectEnd = useCallback((e: MouseEvent | TouchEvent, state: FinalConnectionState) => {
@@ -60,14 +64,17 @@ export function useHandleMenu({ nodes, settings, spawn, frame }: HandleMenuDeps)
     const n = nodesRef.current.find((x) => x.id === from.nodeId)
     if (!n) return
     const agentId = (n.data as { agentId?: AgentId } | undefined)?.agentId
-    setOpen({ point: p, origin: { id: n.id, kind: n.type, agentId, side: from.side } })
+    setOpen({ point: p, origin: { id: n.id, kind: n.type, agentId, side: from.side, port: from.port } })
   }, [spawn])
 
   const ctx = useMemo(
     () => ({ nodeCount: nodes.length, disabledAgents: settings.disabledAgents, customAgents: settings.customAgents, agentLaunchCommands: settings.agentLaunchCommands }),
     [nodes.length, settings.disabledAgents, settings.customAgents, settings.agentLaunchCommands],
   )
-  const entries = useMemo(() => (open && spawn ? buildHandleEntries(spawn, ctx, open.origin) : []), [open, spawn, ctx])
+  const skillList = !!open && offersSkills(open.origin)
+  const skillEntries = useSkillEntries(skillList, spawn?.addSkill)
+  const nodeEntries = useMemo(() => (open && spawn ? buildHandleEntries(spawn, ctx, open.origin) : []), [open, spawn, ctx])
+  const entries = skillList ? skillEntries : nodeEntries
 
   const pick = useCallback((entry: HandleEntry) => {
     if (!open) return
@@ -77,7 +84,11 @@ export function useHandleMenu({ nodes, settings, spawn, frame }: HandleMenuDeps)
     if (!origin) return setOpen(null)
     const others = all.filter((x) => x.id !== origin.id).map((x) => rectOf(x, d))
     pending.current = { origin: open.origin, before: new Set(all.map((x) => x.id)), at: Date.now() }
-    entry.spawn(spawnCenter(rectOf(origin, d), d, open.origin.side, others))
+    // Skill ports are vertical: a skill goes below the agent's Skills input, an agent above the skill's output.
+    const at = open.origin.port === 'skill'
+      ? (offersSkills(open.origin) ? spawnCenterVertical(rectOf(origin, d), SKILL_NODE_SIZE, 'below', others) : spawnCenterVertical(rectOf(origin, d), d, 'above', others))
+      : spawnCenter(rectOf(origin, d), d, open.origin.side, others)
+    entry.spawn(at)
     setOpen(null)
   }, [open, settings.defaultNodeWidth, settings.defaultNodeHeight])
 
@@ -89,12 +100,12 @@ export function useHandleMenu({ nodes, settings, spawn, frame }: HandleMenuDeps)
     const fresh = nodes.filter((n) => !p.before.has(n.id)).at(-1)
     if (!fresh) return
     pending.current = null
-    spawn.link(cableFor(p.origin.id, fresh.id, p.origin.side))
+    spawn.link(cableFor(p.origin.id, fresh.id, p.origin.side, p.origin.port))
     frame([p.origin.id, fresh.id])
   }, [nodes, spawn, frame])
 
   const menu: ReactNode = open && spawn
-    ? <HandleMenuView point={open.point} side={open.origin.side} entries={entries} onPick={pick} onClose={close} />
+    ? <HandleMenuView point={open.point} side={open.origin.side} entries={entries} onPick={pick} onClose={close} {...(skillList ? { title: SN.pickerTitle, placeholder: SN.pickerSearch, listLabel: SN.pickerGroup } : {})} />
     : null
   return { onConnectStart, onConnectEnd, menu }
 }
