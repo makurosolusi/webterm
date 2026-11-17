@@ -40,8 +40,8 @@ const CREATED: ChatConversation = { id: 'central:chat:a1', scope: 'chat:a1', pro
 function library(rows: SkillReviewRow[], over = {}) {
   const chat = { createConversation: vi.fn(async () => CREATED) }
   const client = fakeClient({ listSkills: vi.fn(async () => rows), ...over })
-  render(<SkillLibrary client={client} chat={chat} />)
-  return { client, chat }
+  const { unmount } = render(<SkillLibrary client={client} chat={chat} />)
+  return { client, chat, unmount }
 }
 const section = async (name: string) => within(await screen.findByRole('region', { name }))
 
@@ -126,13 +126,14 @@ describe('Drafts from Central', () => {
     expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull()
   })
 
-  it('shows the empty line, then refreshes on the Refresh button and when an author chat finishes a turn (no polling)', async () => {
+  it('with no drafts there is no card; the toolbar Refresh and a finished author chat turn reload (no polling)', async () => {
     const listSkills = vi.fn(async () => [row()])
     library([], { listSkills })
-    const panel = within(await screen.findByLabelText('Drafts from Central'))
-    expect(panel.getByText('No drafts from Central are waiting for you.')).toBeTruthy()
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Refresh skills' }) as HTMLButtonElement).disabled).toBe(false))
+    const refresh = screen.getByRole('button', { name: 'Refresh skills' })
+    expect(screen.queryByLabelText('Drafts from Central')).toBeNull()
     const base = listSkills.mock.calls.length
-    fireEvent.click(panel.getByRole('button', { name: 'Refresh' }))
+    fireEvent.click(refresh)
     await waitFor(() => expect(listSkills.mock.calls.length).toBe(base + 1))
     act(() => notifyCentralSkillAuthorActivity())
     await waitFor(() => expect(listSkills.mock.calls.length).toBe(base + 2))
@@ -141,12 +142,35 @@ describe('Drafts from Central', () => {
   it('a failed refresh shows one error with a working retry (the panel does not repeat the library error)', async () => {
     const listSkills = vi.fn().mockResolvedValueOnce([row()]).mockRejectedValueOnce(new InboxApiError('boom', 500, 'x')).mockResolvedValue([draft()])
     library([], { listSkills })
-    const panel = within(await screen.findByLabelText('Drafts from Central'))
-    fireEvent.click(panel.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Refresh skills' }) as HTMLButtonElement).disabled).toBe(false))
+    const refresh = screen.getByRole('button', { name: 'Refresh skills' })
+    fireEvent.click(refresh)
     expect((await screen.findAllByRole('alert'))).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect((await screen.findAllByText('webterm-new-rule')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('the first draft proposed after a chat turn appears without a manual refresh (subscription lives while 0 drafts)', async () => {
+    const listSkills = vi.fn().mockResolvedValueOnce([row()]).mockResolvedValue([row(), draft()])
+    library([], { listSkills })
+    await screen.findByRole('button', { name: 'Refresh skills' })
+    await waitFor(() => expect(listSkills).toHaveBeenCalledTimes(1))
+    act(() => notifyCentralSkillAuthorActivity())
+    await waitFor(() => expect(listSkills).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: '1 draft to review' })).toBeTruthy()
+    expect(within(screen.getByLabelText('Drafts from Central')).getByText('webterm-new-rule')).toBeTruthy()
+  })
+
+  it('unmounting the library releases the subscription', async () => {
+    const listSkills = vi.fn(async () => [row()])
+    const { unmount } = library([], { listSkills })
+    await screen.findByRole('button', { name: 'Refresh skills' })
+    const n = listSkills.mock.calls.length
+    unmount()
+    act(() => notifyCentralSkillAuthorActivity())
+    await new Promise((r) => setTimeout(r, 20))
+    expect(listSkills.mock.calls.length).toBe(n)
   })
 
   it('has no panel and no author button while skills are off', async () => {

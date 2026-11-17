@@ -1,8 +1,9 @@
 // Skills tab: a searchable library of every skill, a read-only detail, and the review actions for rows that wait on a
 // human. Skills are written only by the author agents: each section has "Write with an agent", no form types a skill.
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SKILL_AUDIENCES, type SkillAudience } from '../../server/central/contracts/skill.types'
 import type { ChatClient } from '../chat/chatTypes'
 import { useNodeActions } from '../nodeActions'
@@ -12,6 +13,7 @@ import { CL } from './centralLabels'
 import { SKILLS_OFF, centralControlApi } from './centralControlApi'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
 import { useLoad } from './centralLoad'
+import { onCentralSkillAuthorActivity } from './centralSkillAuthor.events'
 import SkillDetail from './SkillDetail'
 import SkillRow from './SkillRow'
 import SkillSection from './SkillSection'
@@ -27,6 +29,9 @@ const keyOf = (r: SkillReviewRow): string => `${r.record.name}@${r.record.versio
 
 export default function SkillLibrary({ client = centralControlApi, chat }: { client?: CentralControlClient; /** Test seam for the chat API the Central skill author opens its conversation with. */ chat?: Pick<ChatClient, 'createConversation'> }) {
   const list = useLoad((s) => client.listSkills(s))
+  // Owned here, not by the Drafts panel: the panel is mounted only while drafts exist, and the first draft Central proposes must still trigger a reload.
+  const reload = list.reload
+  useEffect(() => onCentralSkillAuthorActivity(reload), [reload])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<SkillFilter>('all')
   const [selected, setSelected] = useState<string | null>(null)
@@ -58,6 +63,11 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
   return (
     <section className="ccp-section ccp-skills" aria-labelledby="ccp-skills-h" aria-busy={list.loading && !list.data ? true : undefined}>
       <h3 id="ccp-skills-h">{CL.skillsLibraryHeading}</h3>
+      {!off && (
+        <IconButton label={CL.skillsRefresh} size="icon-sm" disabled={list.loading} onClick={list.reload}>
+          <span className={`codicon codicon-refresh${list.loading ? ' codicon-modifier-spin' : ''}`} aria-hidden="true" />
+        </IconButton>
+      )}
       {off && <SkillsOff onEnabled={list.reload} />}
       {list.error && !off && (
         <div><p role="alert" className="ccp-error">{list.error}</p><Button type="button" size="sm" variant="secondary" onClick={list.reload}>{CL.skillsRetry}</Button></div>
