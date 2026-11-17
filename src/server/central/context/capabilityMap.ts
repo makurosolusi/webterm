@@ -3,6 +3,7 @@
 // the same `toolAccess` the Settings list shows), so it follows the control level. It changes with the level,
 // so it rides in the volatile prompt tail next to the state header, never in the cached steward prompt.
 // ca2Boot registers the source; the assembler only reads it, so this module stays free of the boot graph.
+import { renderCapabilityProse, type CapabilityId } from '../../../shared/agentCapabilities'
 import { createLogger } from '../../logs'
 import { PLAYBOOKS, playbookTool } from '../playbooks/playbook.defs'
 
@@ -37,6 +38,17 @@ const WORST: readonly Access[] = ['auto', 'asks', 'blocked', 'off']
 /** A playbook asks when any required step asks: its own tier says nothing about the spawn card inside. */
 const CHAINS = new Map(PLAYBOOKS.map((pb) => [playbookTool(pb.id), pb.steps.filter((s) => !s.optional).map((s) => s.tool)]))
 
+/** Registry abilities of the steward whose tool is switched off in this turn's catalog (feature or env flag off). */
+export function stewardOffAbilities(tools: readonly MapTool[]): Set<CapabilityId> {
+  const off = new Set<CapabilityId>()
+  for (const t of tools) {
+    if (t.access !== 'off') continue
+    if (t.name === 'browser_read') off.add('web.read')
+    if (t.name === 'browser_act') off.add('web.drive')
+  }
+  return off
+}
+
 /** Renders the map from catalog rows; goals whose tools are not registered are left out. */
 export function renderCapabilityMap(tools: readonly MapTool[]): string {
   const access = new Map(tools.map((t) => [t.name, t.access]))
@@ -50,7 +62,9 @@ export function renderCapabilityMap(tools: readonly MapTool[]): string {
     const parts = names.flatMap((n) => { const a = of(n); return a ? [`${n} (${a})`] : [] })
     return parts.length ? `${goal}: ${parts.join(', ')}` : ''
   }).filter((g) => g !== '')
-  return goals.length ? `Capabilities: ${goals.join(' · ')}` : ''
+  const off = stewardOffAbilities(tools)
+  const notice = off.size ? ` ${renderCapabilityProse('central.steward', [...off], off)}` : ''
+  return goals.length ? `Capabilities: ${goals.join(' · ')}${notice}` : ''
 }
 
 let source: () => readonly MapTool[] = () => []

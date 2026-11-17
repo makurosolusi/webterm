@@ -9,6 +9,7 @@ import { PORT } from '../launchLine'
 import { activeCa2 } from '../central/ca2Active'
 import { attachedSkills, type AttachedSkill } from '../skillAttach'
 import { createLogger } from '../logs/logger'
+import { chatCapabilityNote } from './agentChat.capabilities'
 import { agentChatQueryOpener } from './agentChat.options'
 import { activeAgentChatPool, AgentChatPool, agentChatOpenConfig, setAgentChatPool, type AgentChatNodePatch, type AgentChatTarget } from './agentChat.pool'
 import { createAgentChatPort, type ChatPort } from './agentChat.port'
@@ -42,6 +43,8 @@ export function agentChatPool(): AgentChatPool {
       return agentChatQueryOpener({ ...agentChatOpenConfig(t, { port: PORT, settings: db.getSettings() }), attachedSkills: attached(t) })
     },
     attached,
+    // Ledger = the booted Central's db; without Central nothing is recorded and no note is sent.
+    capabilityNote: (t) => { const h = activeCa2(); return h ? chatCapabilityNote({ db: h.db, now: h.now }, t.node.id, t.node.preset) : undefined },
     persist,
     onStatus: (nodeId, st) => sessions.setStatus(nodeId, st.status, undefined, st.reason),
   })
