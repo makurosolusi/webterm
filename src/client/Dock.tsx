@@ -152,6 +152,7 @@ export default function Dock(props: DockProps) {
       badge: attention, tooltip: attention > 0 ? `Sessions (${attention} need${attention === 1 ? 's' : ''} attention)` : undefined,
     },
     { id: 'history', label: 'Agent History', icon: codicon('history'), commandId: SIDE_BAR_VIEW_COMMANDS.history.id },
+    { id: 'skills', label: 'Skills', icon: codicon('tools'), commandId: SIDE_BAR_VIEW_COMMANDS.skills.id },
     ...(props.onToggleChat
       ? [{
           id: 'chat', label: 'Central', icon: codicon('comment-discussion'), commandId: 'view.secondarySideBar',
@@ -167,6 +168,7 @@ export default function Dock(props: DockProps) {
       case 'layers':
       case 'sessions':
       case 'history':
+      case 'skills':
         props.onSideBarView(id)
         break
       case 'chat':

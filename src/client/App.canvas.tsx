@@ -10,6 +10,7 @@ import { nodeTypes } from './nodeTypes'
 import McpAppsWatcher from './mcpapps/McpAppsWatcher'
 import { DROP_URL_TYPES, urlFromDrop } from './browser.dropUrl'
 import { useNodeActions } from './nodeActions'
+import { acceptSkillDrag, dropSkill } from './skillPalette.drop'
 import { useNodeResizeWiring } from './nodeResize/useNodeResizeWiring'
 import { QuickDrag } from './quickDrag/useQuickDrag'
 import { useRecordLegacyClaudeProfiles } from './claudeLauncher/useLegacyClaudeProfiles'
@@ -26,6 +27,7 @@ import { useCentralAct } from './centralAct.store'
 import { useHandleMenu } from './handleMenu.hook'
 import CentralActMount, { markTouched } from './centralAct.layer'
 
+const DELETE_KEYS = ['Backspace', 'Delete']
 const edgeTypes = { context: ContextEdge, skill: SkillEdge }
 
 interface CanvasProps {
@@ -57,7 +59,7 @@ export default function BoardCanvas({
   const { nodes, edges } = useMemo(() => markTouched(boardNodes, boardEdges, acted), [boardNodes, boardEdges, acted])
   const touchedIds = useMemo(() => new Set(acted.map((e) => e.nodeId)), [acted])
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
-  const { openBrowserAt, workspaceId, spawn } = useNodeActions()
+  const { openBrowserAt, workspaceId, spawn, addSkillNode } = useNodeActions()
   // Click a bridge handle / release a cable on the pane -> spawn menu (needs connectOnClick off below).
   const handleMenu = useHandleMenu({
     nodes: boardNodes, settings, spawn,
@@ -71,9 +73,12 @@ export default function BoardCanvas({
   // Drop di atas node (mis. xterm) milik node itu, bukan pemicu node browser baru.
   const overNode = (e: DragEvent) => closestNodeRoot(e.target as HTMLElement) !== null
   const onDragOver = (e: DragEvent) => {
+    // A skill row from the palette may land anywhere, also on a node (an agent takes it).
+    if (acceptSkillDrag(e)) return
     if (openBrowserAt && !overNode(e) && DROP_URL_TYPES.some((t) => e.dataTransfer.types.includes(t))) e.preventDefault()
   }
   const onDrop = (e: DragEvent) => {
+    if (dropSkill(e, rf.current, boardNodes, addSkillNode)) return
     if (!openBrowserAt || overNode(e) || !DROP_URL_TYPES.some((t) => e.dataTransfer.types.includes(t))) return
     // Selalu dicegah: dragover sudah menerima drop ini, kalau tidak peramban menavigasi tab ke teks yang dijatuhkan.
     e.preventDefault()
@@ -105,6 +110,8 @@ export default function BoardCanvas({
       onConnectEnd={handleMenu.onConnectEnd}
       // Every user node close (× buttons, tabs, sessions panel, Delete key) asks first: nodeCloseConfirm.tsx.
       onBeforeDelete={beforeNodeDelete}
+      // Delete as well as Backspace; React Flow ignores both while an input, textarea (xterm's too) or editor has focus.
+      deleteKeyCode={DELETE_KEYS}
       onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
       onMoveEnd={onMoveEnd}
       onPaneContextMenu={onPaneContextMenu}

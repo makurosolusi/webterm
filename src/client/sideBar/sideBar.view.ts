@@ -2,8 +2,8 @@
 // on the activity bar. Open/closed stays in `useSessionsOpen` (key `webterm.sessionsPinned`).
 import { useEffect, useState } from 'react'
 
-export type SideBarView = 'layers' | 'sessions' | 'history'
-export const SIDE_BAR_VIEWS: readonly SideBarView[] = ['layers', 'sessions', 'history']
+export type SideBarView = 'layers' | 'sessions' | 'history' | 'skills'
+export const SIDE_BAR_VIEWS: readonly SideBarView[] = ['layers', 'sessions', 'history', 'skills']
 export const SIDE_BAR_VIEW_KEY = 'webterm.sideBarView'
 export const DEFAULT_SIDE_BAR_VIEW: SideBarView = 'layers'
 

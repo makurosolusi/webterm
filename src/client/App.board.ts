@@ -5,8 +5,9 @@ import { applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react'
 import type { Node, NodeChange, Edge, EdgeChange, Connection, ReactFlowInstance, XYPosition } from '@xyflow/react'
 import { toFlow, toWsNode, toFlowEdge, toBridge, addNode } from './store'
 import { canLink, bridgeExists } from './floatingEdge'
-import { SKILL_NODE_SIZE, skillConnection } from '../shared/skillPorts'
-import { selectedSkillHost, skillCable, skillNodeSpec, type AddSkillResult, type SkillRef } from './skillNode.add'
+import { SKILL_NODE_SIZE, isSkillHost, skillConnection } from '../shared/skillPorts'
+import { attachedSkillNames, selectedSkillHost, skillCable, skillNodeSpec, type AddSkillResult, type AddSkillTarget, type SkillRef } from './skillNode.add'
+import { hostName, reportSkillRefused } from './skillPalette.notice'
 import { spawnCenterVertical } from './handleMenu.model'
 import type { LinkEnd } from './floatingEdge'
 import { spawnAt, spawnPosition } from './nodeSpawn'
@@ -124,7 +125,11 @@ export function useBoardActions({
     }
     // Typed ports first: a skill output into a Skills input attaches (refused past the per-agent cap); any other use of them is dropped.
     const skill = skillConnection(end(c.source), c.sourceHandle, end(c.target), c.targetHandle)
-    if (skill !== undefined) { if (skill) attachSkill(c.source, c.target); return }
+    if (skill !== undefined) {
+      // A refused cable (ninth skill, same pair twice) says so: the drop used to vanish without a word.
+      if (skill) { const r = attachSkill(c.source, c.target); if (r !== 'attached') reportSkillRefused(r, hostName(nodesRef.current.find((n) => n.id === c.target))) }
+      return
+    }
     if (!canLink(end(c.source), end(c.target))) return
     if (bridgeExists(edgesRef.current, c.source, c.target)) return
     setEdges((es) => {
@@ -177,12 +182,15 @@ export function useBoardActions({
     return id
   }, [addFlowNode, rf, settings])
 
-  /** "Add to canvas": a skill node on the board; with exactly one Claude agent selected it lands below that agent and is cabled to it. */
-  const addSkillNode = useCallback((skill: SkillRef): AddSkillResult => {
-    const host = selectedSkillHost(nodesRef.current)
+  /** The one add path of every skill entry (Add to canvas, palette row, drag to the canvas, drop on an agent): a node, cabled when it lands on or beside one agent. */
+  const addSkillNode = useCallback((skill: SkillRef, target?: AddSkillTarget): AddSkillResult => {
+    const nodes = nodesRef.current
+    const picked = target === undefined ? selectedSkillHost(nodes) : 'hostId' in target ? nodes.find((n) => n.id === target.hostId) : undefined
+    const host = picked && isSkillHost({ kind: picked.type, agentId: (picked.data as { agentId?: AgentId } | undefined)?.agentId }) ? picked : undefined
+    if (host && attachedSkillNames(nodes, edgesRef.current, host.id).has(skill.name)) return { status: 'exists' }
     const size = { width: host?.measured?.width ?? host?.width ?? 400, height: host?.measured?.height ?? host?.height ?? 300 }
-    const at = host ? spawnCenterVertical({ ...host.position, ...size }, SKILL_NODE_SIZE, 'below', nodesRef.current.filter((n) => n.id !== host.id).map((n) => ({ ...n.position, width: n.measured?.width ?? n.width ?? 400, height: n.measured?.height ?? n.height ?? 300 }))) : undefined
-    const id = onAddSkill(skill, at)
+    const below = host ? spawnCenterVertical({ ...host.position, ...size }, SKILL_NODE_SIZE, 'below', nodes.filter((n) => n.id !== host.id).map((n) => ({ ...n.position, width: n.measured?.width ?? n.width ?? 400, height: n.measured?.height ?? n.height ?? 300 }))) : undefined
+    const id = onAddSkill(skill, below ?? (target && 'at' in target ? target.at : undefined))
     if (!id) return { status: 'no_board' }
     if (!host) return { status: 'added' }
     return { status: attachSkill(id, host.id) === 'attached' ? 'attached' : 'limit' }

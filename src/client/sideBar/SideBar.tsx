@@ -14,6 +14,7 @@ export const SIDE_BAR_VIEW_TITLE: Record<SideBarView, string> = {
   layers: 'Layers',
   sessions: 'Sessions',
   history: 'Agent History',
+  skills: 'Skills',
 }
 
 export interface SideBarProps {
@@ -26,6 +27,7 @@ export interface SideBarProps {
   layers: ReactNode
   sessions: ReactNode
   history: ReactNode
+  skills: ReactNode
 }
 
 export default function SideBar({ open, view, onClose, layerCount, ...slots }: SideBarProps) {

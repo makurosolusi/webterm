@@ -22,7 +22,7 @@ const sessionsProps = (over: Partial<SessionsPanelProps> = {}): SessionsPanelPro
 })
 const shell = (over: Partial<SideBarProps> = {}): SideBarProps => ({
   open: true, view: 'layers', onClose: vi.fn(), layerCount: 4,
-  layers: <div data-testid="layers-body" />, sessions: <div data-testid="sessions-body" />, history: <div data-testid="history-body" />,
+  layers: <div data-testid="layers-body" />, sessions: <div data-testid="sessions-body" />, history: <div data-testid="history-body" />, skills: <div data-testid="skills-body" />,
   ...over,
 })
 const title = () => document.querySelector('.sessions-sidebar__head .sessions-sidebar__title')?.textContent

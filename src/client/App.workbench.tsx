@@ -2,7 +2,7 @@
 // Dock, side bar, bottom panel, secondary side bar, hosts and overlays. State stays in App; this file
 // only lays it out, so App.tsx stays the owner of every hook and its order.
 import { lazy, Suspense, type ComponentProps, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import type { Node } from '@xyflow/react'
+import type { Edge, Node } from '@xyflow/react'
 import AppDock from './App.chrome'
 import SessionsPanel from './SessionsPanel'
 import SideBar from './sideBar/SideBar'
@@ -16,6 +16,7 @@ import type { toWsNode } from './store'
 import type { useWorkspaceLifecycle } from './workspaceLifecycle'
 import type { ReopenDeps, useClosedHistory } from './closedHistory'
 import SessionHistory from './SessionHistory'
+import SkillPalette from './SkillPalette'
 import type { useBoardActions } from './App.board'
 import LayersPanel from './layersPanel'
 import type { useAppTabs } from './App.tabs'
@@ -40,6 +41,7 @@ export interface AppWorkbenchProps {
   rf: ComponentProps<typeof LayersPanel>['rf']
   flowNodes: Node[]
   nodes: Node[]
+  edges: Edge[]
   nodesRef: ComponentProps<typeof AppBottomPanel>['nodesRef']
   statuses: Record<string, AgentStatus>
   statusReasons: ReturnType<typeof useStatusReasons>
@@ -81,6 +83,7 @@ export default function AppWorkbench(p: AppWorkbenchProps) {
           closedSessions={p.closedSessions} onReopenSession={(id) => void reopenClosed(id, reopenDeps)}
           onRenameNode={tabsProps.onRenameNode} onAddTerminal={tabsProps.onAddTerminal} onAddAgent={tabsProps.onAddAgent} />}
         history={<SessionHistory active={sideBar.open && sideBar.view === 'history'} activeWs={activeWs} workspaces={p.workspaces} deps={{ activeId, addNode: addFlowNode, setWorkspaces: p.setWorkspaces, selectWorkspace: onSelect }} />}
+        skills={<SkillPalette nodes={p.nodes} edges={p.edges} />}
       />
       {/* Problems, Activity, dan Output satu permukaan bertab: tepat satu view tampil. Panel
           menutup lewat Escape/X tab-nya. Persetujuan tinggal di strip Needs-you chat Central. */}

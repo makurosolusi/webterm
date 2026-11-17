@@ -208,7 +208,7 @@ describe('chrome sidebar', () => {
   })
 
   it('Collapse all sits in the side bar title row (VS Code view title), next to Hide Side Bar', () => {
-    render(<SideBar open view="sessions" onClose={() => {}} layers={null} history={null} sessions={<SessionsPanel {...baseProps()} />} />)
+    render(<SideBar open view="sessions" onClose={() => {}} layers={null} history={null} skills={null} sessions={<SessionsPanel {...baseProps()} />} />)
     const head = document.querySelector('.sessions-sidebar__head')
     expect(head?.querySelector('[aria-label="Collapse all"]')).not.toBeNull()
     expect(document.querySelector('.sessions-view__toolbar [aria-label="Collapse all"]')).toBeNull()
