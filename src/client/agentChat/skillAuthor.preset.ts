@@ -9,7 +9,7 @@ export const SKILL_AUTHOR_PRESET = 'skill-author'
 export const SKILL_AUTHOR_BANNER = 'Skill author: walks you through purpose, title, steps and checks before writing; drafts need your approval in the Skills tab.'
 
 /** Why the permission mode chip reads "Locked" in a skill-author chat. */
-export const SKILL_AUTHOR_LOCK_REASON = 'Locked by the Skill author role: the agent can only run `webterm skills` commands, whatever the mode.'
+export const SKILL_AUTHOR_LOCK_REASON = 'Locked by the Skill author role: the agent can only run `webterm skills` commands, whatever the mode. Can read public web pages (read-only).'
 
 /** Compact role line of the chat header (the full explanation is the tooltip + SKILL_AUTHOR_BANNER). */
 export const SKILL_AUTHOR_HEADER = 'Skill author · writes canvas skills only'

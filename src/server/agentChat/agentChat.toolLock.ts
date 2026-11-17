@@ -7,12 +7,16 @@
 //  2. `strictMcpConfig` with no `--mcp-config`, `settingSources: []` (no user/project allow rules, hooks,
 //     skills), `--disable-slash-commands`, no plugins.
 //  3. `permissionMode: 'dontAsk'` + `permissionPrompts: 'none'`: whatever is not allowed is denied.
-//     The allow rule `Bash(webterm skills *)` is only a convenience: the CLI matcher splits compound
+//     The allow rules `Bash(webterm skills *)` / `Bash(webterm browser *)` are only a convenience: the CLI matcher splits compound
 //     commands on `&& || ; | |& &` and newlines, but heredoc bodies and quoting are NOT proven safe there.
 //  4. A PreToolUse SDK callback (fail-closed, `onFailure: 'block'`) is the layer we can prove in a test:
-//     `skillsCommandDecision` allows one strictly parsed `webterm skills <verb> ...` command and denies
-//     everything else, in every permission mode.
+//     it allows one strictly parsed command of two families and denies everything else, in every permission
+//     mode: `skillsCommandDecision` (`webterm skills <verb> ...`) and `browserCommandDecision` (read-only
+//     public web research: `webterm browser open|navigate|snapshot [url]`, agentChat.toolLock.browser.ts).
+//  5. The server is the authority for the browser family: the browser control handler reads the calling node's
+//     STORED preset and refuses other verbs / non-public URLs with 403 (browser/browser.presetLock.ts).
 import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk'
+import { browserCommandDecision } from './agentChat.toolLock.browser'
 import { isAgentChatPreset, type AgentChatPreset } from '../../shared/agentChat.shape'
 
 /** `webterm skills` verbs the author may run (cli.skills.ts): read, propose, edit. */
@@ -22,7 +26,7 @@ const TOKEN = `(?:${WORD}|"[^"$\`\\\\\\n]*"|'[^'\\n]*')`
 const HEADER = new RegExp(`^webterm skills (?:${VERBS})((?: +${TOKEN})*)(?: +<<'([A-Z][A-Z0-9_]{0,15})')?[ \\t]*$`)
 const TOKEN_G = new RegExp(TOKEN, 'g')
 
-export const DENY_REASON = 'Only one `webterm skills list|get|propose|edit ...` command is allowed. Pass the body with `--body-file -` and a quoted heredoc: `webterm skills propose --name x --description "..." --body-file - <<\'EOF\'` then the body, then a line `EOF`. No pipes, `;`, `&&`, `$()`, backticks or redirects.'
+export const DENY_REASON = 'Only one `webterm skills list|get|propose|edit ...` command or one `webterm browser open|navigate|snapshot [https-url]` command (public pages, read-only) is allowed. Pass the body with `--body-file -` and a quoted heredoc: `webterm skills propose --name x --description "..." --body-file - <<\'EOF\'` then the body, then a line `EOF`. No pipes, `;`, `&&`, `$()`, backticks or redirects.'
 
 const unquote = (t: string): string => (t.startsWith('"') || t.startsWith("'") ? t.slice(1, -1) : t)
 
@@ -51,11 +55,13 @@ export function skillsCommandDecision(command: unknown): boolean {
   return true
 }
 
-/** The SDK PreToolUse callback: allow a valid `webterm skills` Bash call, deny every other tool use. */
+const allowedCommand = (c: unknown): boolean => skillsCommandDecision(c) || browserCommandDecision(c)
+
+/** The SDK PreToolUse callback: allow a valid `webterm skills` / `webterm browser` Bash call, deny every other tool use. */
 export const skillAuthorPreToolUse: HookCallback = async (input) => {
   const ok = input.hook_event_name === 'PreToolUse' && input.tool_name === 'Bash'
-    && skillsCommandDecision((input.tool_input as { command?: unknown } | null)?.command)
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny', permissionDecisionReason: ok ? 'webterm skills command' : DENY_REASON } }
+    && allowedCommand((input.tool_input as { command?: unknown } | null)?.command)
+  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: ok ? 'allow' : 'deny', permissionDecisionReason: ok ? 'allowed webterm command' : DENY_REASON } }
 }
 
 /** Preset -> forced option fields; `undefined` = not locked. Pure, derived from the node's preset only. */
@@ -64,7 +70,7 @@ export function agentChatLockFor(preset: unknown): Partial<Options> | undefined 
   const locks: Record<AgentChatPreset, Partial<Options>> = {
     'skill-author': {
       tools: ['Bash'],
-      allowedTools: ['Bash(webterm skills *)'],
+      allowedTools: ['Bash(webterm skills *)', 'Bash(webterm browser *)'],
       permissionMode: 'dontAsk',
       permissionPrompts: 'none',
       strictMcpConfig: true,

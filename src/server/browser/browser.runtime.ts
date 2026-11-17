@@ -157,7 +157,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
-      open: openDeps,
+      open: openDeps, presetOf: (id) => nodeOf(id)?.preset,
     }),
     openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled'),
     openProject: (workspaceId, nodeId) => openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId),
