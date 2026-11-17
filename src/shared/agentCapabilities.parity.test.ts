@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { agentChatLockFor, skillAuthorPreToolUse } from '../server/agentChat/agentChat.toolLock'
 import { agentChatRoleFor } from '../server/agentChat/agentChat.role'
 import { MODE_TOOLS, SKILL_AUTHOR_PROMPT, modeAllowsTool } from '../server/central/chat/conversationMode'
-import { capabilitiesOf, grantedCentralTools, grantedChatFamilies, renderCapabilityBriefing, type ProfileId } from './agentCapabilities'
+import { BROWSER_VERB_CAP } from './browser.contract'
+import { capabilitiesOf, grantedCentralTools, grantedChatFamilies, renderCapabilityBriefing, renderCapabilityProse, type ProfileId } from './agentCapabilities'
 
 const cannotSection = (briefing: string): string => briefing.slice(briefing.indexOf('WHAT YOU CANNOT DO'))
 const canSection = (briefing: string): string => briefing.slice(0, briefing.indexOf('WHAT YOU CANNOT DO'))
@@ -66,6 +67,23 @@ describe('chat.skill-author: registry == enforcement == briefing', () => {
 
   it('the lock allow-rules are the granted families', () => {
     expect(agentChatLockFor('skill-author')?.allowedTools).toEqual(grantedChatFamilies(profile).map((f) => `Bash(webterm ${f} *)`))
+  })
+
+  it('chat.default: every `webterm browser <verb>` named is a real CLI verb; no CANNOT list; at most 12 lines; browser family only', () => {
+    const b = renderCapabilityBriefing('chat.default')
+    const verbs = [...b.matchAll(/`webterm browser (\w+)/g)].map((m) => m[1]!)
+    expect(verbs.length).toBeGreaterThan(5)
+    for (const v of verbs) expect(Object.keys(BROWSER_VERB_CAP), `verb ${v}`).toContain(v)
+    expect(b).not.toContain('WHAT YOU CANNOT DO')
+    expect(b.split('\n').length).toBeLessThanOrEqual(12)
+    for (const m of b.matchAll(/`webterm (\w+)/g)) expect(m[1]).toBe('browser')
+  })
+
+  it('central.steward: the web prose names only tools the steward is granted', () => {
+    const granted = new Set(grantedCentralTools('central.steward').map((t) => t.replace(/\./g, '_')))
+    const named = renderCapabilityProse('central.steward', ['web.read', 'web.drive']).match(/\bbrowser_[a-z]+\b/g) ?? []
+    expect(named.length).toBeGreaterThan(0)
+    for (const n of named) expect(granted.has(n), n).toBe(true)
   })
 
   it('the role carries the briefing and names only granted command families and read-only browser verbs', () => {
