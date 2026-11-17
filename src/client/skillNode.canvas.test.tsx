@@ -123,4 +123,41 @@ describe('typed skill ports on the canvas', () => {
     await waitFor(() => expect(savedBridges()).toEqual([]), { timeout: 3000 })
     expect(renderedEdgeIds()).toEqual([])
   })
+
+  it('the Skills port shows how many are attached (N/8) and the Skill port is labelled', async () => {
+    await mount([agent, skill], [{ id: 'bridge-sk-1-agent-1', source: 'sk-1', target: 'agent-1', kind: 'skill' }])
+    await waitFor(() => expect(screen.getByText('Skills 1/8')).toBeTruthy())
+    expect(screen.getByText('Skill')).toBeTruthy()
+    expect(handle('agent-1', SKILLS_IN).getAttribute('aria-label')).toBe('Skills port, 1 of 8 attached: connect a skill node here')
+    expect(document.querySelector('.skill-port-label--full')).toBeNull()
+  })
+
+  it('a full agent (8/8) says why a ninth cable would do nothing, on the port itself', async () => {
+    const skills: WsNode[] = Array.from({ length: 8 }, (_, n) => ({ ...skill, id: `sk-${n}`, x: n * 280 }))
+    const bridges: BridgeLink[] = skills.map((s) => ({ id: `bridge-${s.id}-agent-1`, source: s.id, target: 'agent-1', kind: 'skill' }))
+    await mount([agent, ...skills], bridges)
+    await waitFor(() => expect(screen.getByText('Skills 8/8')).toBeTruthy())
+    expect(document.querySelector('.skill-port-label--full')?.textContent).toContain('Full (8/8): detach a skill first')
+    expect(handle('agent-1', SKILLS_IN).classList).toContain('skill-handle--full')
+    expect(handle('agent-1', SKILLS_IN).getAttribute('aria-label')).toMatch(/full \(8 of 8\)/)
+  })
+
+  it('the cable has a keyboard-reachable Detach button that removes it', async () => {
+    await mount([agent, skill], [{ id: 'bridge-sk-1-agent-1', source: 'sk-1', target: 'agent-1', kind: 'skill' }])
+    const detach = await screen.findByRole('button', { name: 'Detach skill' })
+    expect(detach.tabIndex).toBeGreaterThanOrEqual(0)
+    expect(document.querySelector('.skill-edge-path')).toBeTruthy()
+    fireEvent.click(detach)
+    await waitFor(() => expect(savedBridges()).toEqual([]), { timeout: 3000 })
+    expect(renderedEdgeIds()).toEqual([])
+  })
+
+  it('Backspace (the React Flow delete key) on a selected skill cable detaches it', async () => {
+    await mount([agent, skill], [{ id: 'bridge-sk-1-agent-1', source: 'sk-1', target: 'agent-1', kind: 'skill' }])
+    await waitFor(() => expect(renderedEdgeIds()).toEqual(['bridge-sk-1-agent-1']))
+    fireEvent.click(document.querySelector('.react-flow__edge[data-id="bridge-sk-1-agent-1"]') as Element)
+    await waitFor(() => expect(document.querySelector('.react-flow__edge.selected')).toBeTruthy())
+    fireEvent.keyDown(document, { key: 'Backspace', code: 'Backspace' })
+    await waitFor(() => expect(renderedEdgeIds()).toEqual([]))
+  })
 })

@@ -10,3 +10,23 @@ export const SKILL_AUTHOR_BANNER = 'Skill author: walks you through purpose, tit
 
 /** Why the permission mode chip reads "Locked" in a skill-author chat. */
 export const SKILL_AUTHOR_LOCK_REASON = 'Locked by the Skill author role: the agent can only run `webterm skills` commands, whatever the mode.'
+
+/** Compact role line of the chat header (the full explanation is the tooltip + SKILL_AUTHOR_BANNER). */
+export const SKILL_AUTHOR_HEADER = 'Skill author · writes canvas skills only'
+
+/** Composer hint of a skill-author chat while idle. */
+export const SKILL_AUTHOR_PLACEHOLDER = 'Describe the procedure you want to turn into a skill'
+
+/** Empty-state copy and click-to-fill starters. */
+export const SKILL_AUTHOR_EMPTY = {
+  title: 'What should this skill teach an agent?',
+  hint: 'Pick a starter or describe it yourself. Drafts need your approval before they go live.',
+  examples: [
+    'Turn our release checklist into a skill: run tests, bump the version, update the changelog, tag.',
+    'Write a skill for reviewing a pull request: what to read first, what to flag, how to report.',
+    'Create a skill for triaging a failing test: reproduce, find the root cause, propose a fix.',
+  ],
+} as const
+
+/** Inline card shown once the author has proposed or edited a draft. */
+export const SKILL_AUTHOR_DRAFT = { text: 'Draft proposed - review in Control > Skills', open: 'Open Skills tab' } as const

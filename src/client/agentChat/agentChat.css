@@ -63,3 +63,15 @@
 .agent-chat .chat-composer { padding: 4px 12px 8px; }
 /* Node header slot for the history button (AgentChatNode `extraHeader`). */
 .agent-chat-head-slot { display: inline-flex; align-items: center; }
+
+/* Skill-author chat (SkillAuthorChat.tsx) */
+.skill-author__role { display: inline-flex; align-items: center; gap: 6px; border-radius: 3px; }
+.skill-author__role:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 2px; }
+.skill-author__empty { display: flex; flex-direction: column; gap: 6px; align-items: stretch; padding: 8px 0; }
+.skill-author__examples { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.skill-author__example { width: 100%; height: auto; white-space: normal; text-align: left; justify-content: flex-start; padding-block: 6px; }
+.skill-author__draft {
+  display: flex; align-items: center; gap: 8px; margin: 4px 12px; padding: 6px 10px; border-radius: 4px; font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.skill-author__draft > span:nth-child(2) { flex: 1; min-width: 0; }
