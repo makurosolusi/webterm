@@ -1,45 +1,15 @@
 /** @vitest-environment jsdom */
-import { renderHook, waitFor, act } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { useSkillAuthorAdd } from '../agentChat.add'
 import { validAgentChatData } from '../../shared/agentChat.shape'
 import { buildAgentChatNode } from '../../shared/agentChat.node'
 import { toWsNode } from '../store'
-import type { AgentChatTransport } from './agentChatTransport'
 import { SKILL_AUTHOR_ACTIVITY } from './skillAuthor.events'
-import { skillAuthorInstruction } from './skillAuthor.preset'
-import { useSkillAuthorPriming } from './useSkillAuthorPriming'
-
-describe('skill-author instruction', () => {
-  const text = skillAuthorInstruction()
-  it('discusses first and waits for an explicit go before writing', () => {
-    expect(text).toMatch(/DISCUSS first/)
-    expect(text).toMatch(/OUTLINE/)
-    expect(text).toMatch(/wait for the human to say "go"/)
-    expect(text.indexOf('"go"')).toBeLessThan(text.indexOf('webterm skills propose'))
-  })
-  it('proposes through the CLI and never claims the skill is active', () => {
-    expect(text).toMatch(/webterm skills propose/)
-    expect(text).toMatch(/waiting for approval in the Skills tab/)
-    expect(text).toMatch(/NEVER say or imply the skill is active/)
-  })
-  it('teaches the exact accepted command shapes, including the quoted heredoc', () => {
-    expect(text).toContain("--body-file - <<'EOF'")
-    expect(text).toMatch(/webterm skills list`, `webterm skills get <name>`/)
-    expect(skillAuthorInstruction('webterm-x')).toContain("webterm skills edit webterm-x --body-file - <<'EOF'")
-  })
-  it('states the lint limits', () => {
-    expect(text).toMatch(/No shell commands, URLs, file paths or secrets/)
-    expect(text).toMatch(/4000 characters/)
-    expect(text).toMatch(/at most 300/)
-  })
-  it('an edit reads the current body first and uses `skills edit` on the target', () => {
-    const edit = skillAuthorInstruction('webterm-deploy')
-    expect(edit).toMatch(/webterm skills list webterm-deploy/)
-    expect(edit).toMatch(/webterm skills edit webterm-deploy/)
-    expect(edit.indexOf('skills list')).toBeLessThan(edit.indexOf('DISCUSS first'))
-  })
-})
+import { SKILL_AUTHOR_BANNER } from './skillAuthor.preset'
+import { useSkillAuthorActivity } from './useSkillAuthorActivity'
+import { fakeAgentChatTransport } from './agentChatTransport.fake'
+import { AgentChatView } from './agentChatView'
 
 describe('creation path', () => {
   it('useSkillAuthorAdd makes a skill-author chat node with the target and returns its id', () => {
@@ -61,36 +31,63 @@ describe('creation path', () => {
     expect(validAgentChatData(n)).toMatchObject({ preset: 'skill-author', presetTarget: 'webterm-x' })
     expect(validAgentChatData({ agentId: 'claude', preset: 'bogus' })).not.toHaveProperty('preset')
     const flow = { id: 'a', type: 'agentChat', position: { x: 0, y: 0 }, data: { ...n, presetPrimed: true } }
-    expect(toWsNode(flow as never)).toMatchObject({ preset: 'skill-author', presetTarget: 'webterm-x', presetPrimed: true })
+    expect(toWsNode(flow as never)).toMatchObject({ preset: 'skill-author', presetTarget: 'webterm-x' })
+    expect(toWsNode(flow as never)).not.toHaveProperty('presetPrimed') // old field tolerated on load, never written
+    expect(validAgentChatData({ ...n, presetPrimed: true })).not.toHaveProperty('presetPrimed')
   })
 })
 
-const transport = (send = vi.fn(async (_text: string) => undefined)) => ({ send }) as unknown as AgentChatTransport & { send: typeof send }
+afterEach(cleanup)
+beforeAll(() => {
+  globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
+  Element.prototype.hasPointerCapture ??= () => false
+  Element.prototype.scrollIntoView ??= () => undefined
+})
 
-describe('priming', () => {
-  const base = { nodeId: 'n1', preset: 'skill-author' as const, ready: true, busy: false, markPrimed: vi.fn() }
-  it('sends the instruction once the stream is open, then marks the node primed', async () => {
-    const t = transport()
-    const markPrimed = vi.fn()
-    renderHook(() => useSkillAuthorPriming({ ...base, presetTarget: 'webterm-x', transport: t, markPrimed }))
-    await waitFor(() => expect(markPrimed).toHaveBeenCalledTimes(1))
-    expect(t.send).toHaveBeenCalledTimes(1)
-    expect(t.send.mock.calls[0][0]).toBe(skillAuthorInstruction('webterm-x'))
-  })
-  it('does nothing for a plain chat, before the stream opens, once primed, or with a session', () => {
-    const t = transport()
-    renderHook(() => useSkillAuthorPriming({ ...base, preset: undefined, transport: t }))
-    renderHook(() => useSkillAuthorPriming({ ...base, ready: false, transport: t }))
-    renderHook(() => useSkillAuthorPriming({ ...base, presetPrimed: true, transport: t }))
-    renderHook(() => useSkillAuthorPriming({ ...base, chatSessionId: 's1', transport: t }))
+function mount(preset?: 'skill-author') {
+  const f = fakeAgentChatTransport()
+  const header = document.body.appendChild(document.createElement('div'))
+  render(<AgentChatView nodeId="n1" onNodeData={vi.fn()} transport={f.t} headerHost={header} {...(preset ? { preset } : {})} />)
+  f.emit()
+  return f
+}
+const modeChip = () => screen.getByRole('button', { name: /^Permission mode/ })
+
+describe('role is server-side: no client priming', () => {
+  it('opening a preset chat sends nothing', () => {
+    const { t } = mount('skill-author')
     expect(t.send).not.toHaveBeenCalled()
   })
-  it('reports a finished turn to the Skills tab', () => {
+  it('shows the role banner for a preset node only', () => {
+    mount('skill-author')
+    expect(screen.getByRole('note', { name: 'Chat role' }).textContent).toBe(SKILL_AUTHOR_BANNER)
+    cleanup()
+    mount()
+    expect(screen.queryByRole('note', { name: 'Chat role' })).toBeNull()
+  })
+  it('the composer shows Locked and cannot switch the mode; a plain chat keeps its picker', () => {
+    const { t } = mount('skill-author')
+    expect(modeChip().textContent).toBe('Locked')
+    expect(modeChip().getAttribute('aria-label')).toMatch(/Locked.*only run `webterm skills`/)
+    fireEvent.keyDown(modeChip(), { key: 'Enter' })
+    fireEvent.click(modeChip())
+    expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0)
+    expect(t.setMode).not.toHaveBeenCalled()
+    cleanup()
+    mount()
+    expect(modeChip().textContent).not.toBe('Locked')
+  })
+})
+
+describe('turn-finished report', () => {
+  it('reports a finished turn of a skill-author chat to the Skills tab, and only that', () => {
     const seen: string[] = []
     const h = (e: Event) => seen.push((e as CustomEvent<{ nodeId: string }>).detail.nodeId)
     window.addEventListener(SKILL_AUTHOR_ACTIVITY, h)
-    const { rerender } = renderHook((p: { busy: boolean }) => useSkillAuthorPriming({ ...base, presetTarget: undefined, presetPrimed: true, transport: transport(), busy: p.busy }), { initialProps: { busy: true } })
+    const { rerender } = renderHook((p: { busy: boolean }) => useSkillAuthorActivity('n1', 'skill-author', p.busy), { initialProps: { busy: true } })
     act(() => rerender({ busy: false }))
+    const plain = renderHook((p: { busy: boolean }) => useSkillAuthorActivity('n2', undefined, p.busy), { initialProps: { busy: true } })
+    act(() => plain.rerender({ busy: false }))
     window.removeEventListener(SKILL_AUTHOR_ACTIVITY, h)
     expect(seen).toEqual(['n1'])
   })

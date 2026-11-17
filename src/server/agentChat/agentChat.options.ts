@@ -17,6 +17,7 @@ import { writeClaudeMcpConfig } from '../mcp/mcp.launch'
 import { writeExplorePlugin } from '../subagents/exploreAgent'
 import { agentChatUploadsDir } from './agentChat.attach'
 import { agentChatEnv } from './agentChat.env'
+import { agentChatSystemPrompt } from './agentChat.role'
 import { agentChatLockFor } from './agentChat.toolLock'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
@@ -51,6 +52,8 @@ export interface AgentChatOptionsInput {
   spawn?: SpawnImpl
   /** The node's stored preset; a known one locks the tools server-side (agentChat.toolLock.ts). */
   preset?: string
+  /** Preset data: full skill name a skill-author chat edits (validated before it reaches the prompt). */
+  presetTarget?: string
 }
 
 /** SDK options for one `query()`; `notice` is set when the node's launch profile no longer exists. */
@@ -87,6 +90,8 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     // Locked preset: its fields win over the chat mode (a bypass default must not apply), and no
     // bypass flag, plugin, MCP config or uploads dir (no Read tool) is carried.
     Object.assign(options, lock)
+    const systemPrompt = agentChatSystemPrompt(i.preset, i.presetTarget)
+    if (systemPrompt) options.systemPrompt = systemPrompt
     delete options.allowDangerouslySkipPermissions
     delete options.plugins
     delete options.additionalDirectories
@@ -118,7 +123,7 @@ export interface AgentChatOpenInput {
 export type AgentChatOpen = (resumeId: string | undefined, canUseTool: CanUseTool, abort: AbortController, input: AgentChatOpenInput) => Query
 
 /** Production opener: SDK `query()` in streaming-input mode, options rebuilt from the profile on every open. */
-export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string; preset?: string }): AgentChatOpen {
+export function agentChatQueryOpener(cfg: { nodeId: string; port: number; cwd: string; profileId?: string; mode: AgentPermissionMode; workspaceId?: string; preset?: string; presetTarget?: string }): AgentChatOpen {
   return (resumeId, canUseTool, abort, input) => {
     const { options, notice } = buildAgentChatOptions({ ...cfg, mode: input.mode ?? cfg.mode, ...(input.config ? { config: input.config } : {}), resume: resumeId, canUseTool, abort, stderr: input.stderr })
     if (notice) input.notice(notice)

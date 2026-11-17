@@ -16,7 +16,8 @@ import { isAbortError } from '../chat/chatTransport'
 import type { ChatStreamStatus } from '../chat/chatTypes'
 import { AGENT_CHAT_TEXT_MAX, type AgentChatEvent } from '../../shared/agentChat.wire'
 import type { AgentChatNodeConfig, AgentChatPreset } from '../../shared/agentChat.shape'
-import { useSkillAuthorPriming } from './useSkillAuthorPriming'
+import { SKILL_AUTHOR_BANNER, SKILL_AUTHOR_LOCK_REASON, SKILL_AUTHOR_PRESET } from './skillAuthor.preset'
+import { useSkillAuthorActivity } from './useSkillAuthorActivity'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import { agentChatReducer, initialAgentChatState, isBusyStatus, runningToolName, type AgentChatState } from './agentChatStore'
 import { createAgentChatTransport, type AgentChatTransport } from './agentChatTransport'
@@ -45,10 +46,8 @@ export interface AgentChatViewProps {
   chatSessionId?: string
   permissionMode?: AgentPermissionMode
   chatConfig?: AgentChatNodeConfig
-  /** Preset the node was born with (skill-author primes the chat once, see useSkillAuthorPriming). */
+  /** Preset the node was born with: the server derives the role and tool lock from it; the client shows the banner. */
   preset?: AgentChatPreset
-  presetTarget?: string
-  presetPrimed?: boolean
   /** Persists session id / mode / config into the node's data (rf.updateNodeData). */
   onNodeData: (patch: AgentChatPatch) => void
   /** Told whenever a turn starts or ends (the node chrome disables "Open as terminal" meanwhile). */
@@ -106,7 +105,7 @@ function useBatchedEvents(apply: (events: AgentChatEvent[]) => void) {
   return useMemo(() => ({ push, cancel }), [push, cancel])
 }
 
-export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, preset, presetTarget, presetPrimed, onNodeData, onBusy, transport: injected, headerHost }: AgentChatViewProps) {
+export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chatConfig, preset, onNodeData, onBusy, transport: injected, headerHost }: AgentChatViewProps) {
   const transport = useMemo(() => injected ?? createAgentChatTransport(nodeId), [injected, nodeId])
   const [state, dispatch] = useReducer(agentChatReducer, nodeId, initialAgentChatState)
   const [stream, setStream] = useState<ChatStreamStatus>('connecting')
@@ -183,8 +182,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
   const busy = isBusyStatus(state.status)
   const offline = useDisconnected() // Retry below re-sends; the composer under it says why (OFFLINE_REASON)
   useEffect(() => { onBusy?.(busy) }, [busy, onBusy])
-  const markPrimed = useCallback(() => onNodeData({ presetPrimed: true }), [onNodeData])
-  useSkillAuthorPriming({ nodeId, preset, presetTarget, presetPrimed, chatSessionId, ready: opened, busy, transport, markPrimed })
+  useSkillAuthorActivity(nodeId, preset, busy)
   const send = (text: string, images: ComposerImage[] = []): void => {
     if (!branch.editing && controls.intercept(text, images.length > 0)) return
     setSendError(null)
@@ -245,6 +243,13 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
         <div className="agent-chat-banner" role="status">
           <span className="codicon codicon-debug-disconnect" aria-hidden="true" />
           <span>{state.status === 'closed' ? 'This Claude session has ended. Send a message to start a new turn.' : 'Live updates stopped. Reload the board to reconnect.'}</span>
+        </div>
+      )}
+
+      {preset === SKILL_AUTHOR_PRESET && (
+        <div className="agent-chat-banner" role="note" aria-label="Chat role">
+          <span className="codicon codicon-lock" aria-hidden="true" />
+          <span>{SKILL_AUTHOR_BANNER}</span>
         </div>
       )}
 
@@ -329,7 +334,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
       <ChatComposer busy={false} seed={branch.editing?.seed} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
         completion={controls.completion} maxLength={AGENT_CHAT_TEXT_MAX}
         placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'}
-        toolbar={<AgentChatToolbar modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} />} {...controls.footer} />} />
+        toolbar={<AgentChatToolbar modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} {...(preset === SKILL_AUTHOR_PRESET ? { lockedReason: SKILL_AUTHOR_LOCK_REASON } : {})} />} {...controls.footer} />} />
       {headerHost && createPortal(<AgentChatHistory modePicker={null} {...controls.footer} />, headerHost)}
     </section>
   )

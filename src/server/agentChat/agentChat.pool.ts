@@ -61,7 +61,7 @@ export interface AgentChatPoolDeps {
  * own mode else its workspace's approval level (Danger overrides both).
  */
 export function agentChatOpenConfig(t: AgentChatTarget, d: { port: number; settings: ApprovalSettings }) {
-  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: launchModeFor(d.settings, t.ws.id, t.node.permissionMode), workspaceId: t.ws.id, ...(t.node.preset ? { preset: t.node.preset } : {}) }
+  return { nodeId: t.node.id, port: d.port, cwd: resolveCwd(t.node.cwd ?? t.ws.cwd), profileId: t.node.claudeProfileId, mode: launchModeFor(d.settings, t.ws.id, t.node.permissionMode), workspaceId: t.ws.id, ...(t.node.preset ? { preset: t.node.preset } : {}), ...(t.node.preset && t.node.presetTarget ? { presetTarget: t.node.presetTarget } : {}) }
 }
 
 interface Entry { session: AgentChatSession; sessionId?: string; init?: AgentChatEvent; off(): void; phase?: 'busy' | 'awaiting' }

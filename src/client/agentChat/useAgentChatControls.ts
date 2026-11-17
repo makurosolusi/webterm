@@ -22,7 +22,7 @@ import { agentChatCompletion, type ComposerCompletion, type FileEntry } from './
 /** Matches every file of the folder (Quick Open's query); `@` ranks the list itself. */
 const ALL_FILES = '*'
 
-export type AgentChatPatch = { chatSessionId?: string; permissionMode?: AgentPermissionMode; chatConfig?: AgentChatNodeConfig; presetPrimed?: boolean }
+export type AgentChatPatch = { chatSessionId?: string; permissionMode?: AgentPermissionMode; chatConfig?: AgentChatNodeConfig }
 
 /** User text of a failed request (agent chat errors carry their own; anything else gets the shared text). */
 export const why = (err: unknown): string => (err instanceof AgentChatApiError ? err.message : chatErrorMessage(err))

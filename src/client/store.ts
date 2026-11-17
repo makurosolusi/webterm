@@ -52,7 +52,6 @@ export function toWsNode(n: Node): WsNode {
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),
     preset: isAgentChatPreset(d.preset) ? d.preset : undefined,
     presetTarget: typeof d.presetTarget === 'string' ? d.presetTarget : undefined,
-    presetPrimed: d.presetPrimed === true ? true : undefined,
     // Validated on the way out: node data is written by the Diff node and must not persist junk.
     diffNotes: d.diffNotes === undefined ? undefined : validDiffNotes(d.diffNotes),
     plan: d.plan === undefined ? undefined : validPlanData(d.plan),
