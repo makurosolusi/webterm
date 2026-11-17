@@ -12,11 +12,14 @@ export const SKILLS_COMMAND = String.raw`skills_get() {
   f="$SKILLS_DIR/$name.md"
   if [ ! -r "$f" ]; then
     # Not a launcher guide: ask the server for an approved canvas skill (audience canvas).
-    session
-    if [ "$2" = --json ]; then acc='accept: application/json'; else acc='accept: text/plain'; fi
-    resp=$(curl -sS -H "@$hdr" -H "$acc" -H 'content-type: application/json' --data-binary '{"name":"'"$name"'"}' -w '\n%{http_code}' "$API/skills.list") || exit 1
-    code=$(printf '%s\n' "$resp" | tail -n 1)
-    case "$code" in 2*) printf '%s\n' "$resp" | sed '$d'; exit 0 ;; esac
+    # (session) in a subshell: outside an agent session it fails quietly and we just list the guides.
+    if (session) >/dev/null 2>&1; then
+      session
+      if [ "$2" = --json ]; then acc='accept: application/json'; else acc='accept: text/plain'; fi
+      resp=$(curl -sS -H "@$hdr" -H "$acc" -H 'content-type: application/json' --data-binary '{"name":"'"$name"'"}' -w '\n%{http_code}' "$API/skills.list") || exit 1
+      code=$(printf '%s\n' "$resp" | tail -n 1)
+      case "$code" in 2*) printf '%s\n' "$resp" | sed '$d'; exit 0 ;; esac
+    fi
     echo "Unknown skill: $name. Available:" >&2
     for g in "$SKILLS_DIR"/*.md; do [ -r "$g" ] && { g=$(basename "$g" .md); echo "  $g" >&2; }; done
     echo "  (run: webterm skills list, for the approved canvas skills)" >&2
