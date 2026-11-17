@@ -11,6 +11,7 @@ import { toolsRoute, type ToolsDeps } from '../capability/capability.http'
 import { createMemoryReceiptLog } from '../capability/capability.receipt'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from '../central/ca2Boot'
 import { ca2Dispatch } from '../central/ca2Routes'
+import { agentSkillPropose } from '../central/ca2Routes.agentSkill'
 import { createSkill, skillAction } from '../central/ca2Routes.act'
 import { freshDb, T0 } from '../central/guard/controlGuard.testutil'
 import { CORE_DEFS } from '../central/tools/defs/core.defs'
@@ -249,5 +250,50 @@ describe('/api/tools identity for skills', () => {
     activePolicy()?.createGrant('human-ui', { subject: 'node:a1', capability: 'skills.propose', effect: 'deny' })
     const r = await post('skills.propose', { [NODE_TOKEN_HEADER]: token }, { name: 'webterm-denied', ...GOOD })
     expect(r.body.receipt).toMatchObject({ outcome: 'denied', detail: 'policy_denied' })
+  })
+})
+
+describe('author-worker integration (agent origin, daily cap, human-only steps)', () => {
+  const agentRoute = (path: string, actor: string, body: unknown = {}) => ca2Dispatch(h, { method: 'POST', path, query: new URLSearchParams(), body: async () => body }, actor)
+
+  test('a CLI proposal is stored with origin agent and proposedBy agent:<id>, and stays a draft', async () => {
+    await start()
+    expect((await propose('webterm-origin-demo')).code).toBe(0)
+    const [draft] = draftsOf('webterm-origin-demo')
+    expect(draft).toMatchObject({ origin: 'agent', proposedBy: 'agent:a1', status: 'pending_approval' })
+    expect(h.skills?.load('webterm-origin-demo')).toBeNull()
+  })
+
+  test('the 4th proposal of the day from agent origin is refused with limit (409); the CLI exits 1 and stores nothing', async () => {
+    await start()
+    for (const n of ['one', 'two', 'three']) expect((await propose(`webterm-cap-${n}`)).code).toBe(0)
+    const cap = await agentSkillPropose(h, { name: 'webterm-cap-four', ...GOOD }, 'a1')
+    expect(cap).toMatchObject({ status: 409, body: { error: 'limit' } })
+    const viaCli = await propose('webterm-cap-five')
+    expect(viaCli.code).toBe(1)
+    expect(viaCli.err).toContain('limit')
+    expect(h.skills?.list('pending_approval').filter((r) => r.name.startsWith('webterm-cap-'))).toHaveLength(3)
+  })
+
+  test('an agent: actor gets 403 human_only on approve, enable, disable, reject, versions and fork', async () => {
+    await start()
+    await propose('webterm-human-only')
+    for (const verb of ['approve', 'enable', 'disable', 'reject', 'versions', 'fork']) {
+      const r = await agentRoute(`/api/central/skills/webterm-human-only/${verb}`, 'agent:a1', { version: '1', phrase: CONFIRM_PHRASE })
+      expect([verb, r?.status, r?.body]).toEqual([verb, 403, { error: 'human_only' }])
+    }
+    expect(draftsOf('webterm-human-only')).toHaveLength(1)
+    expect(h.skills?.load('webterm-human-only')).toBeNull()
+  })
+
+  test('approving an agent-origin draft with {reviewed:true} is 403 forbidden; the typed phrase approves it', async () => {
+    await start()
+    await propose('webterm-approve-gate')
+    const oneClick = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', reviewed: true })
+    expect(oneClick).toMatchObject({ status: 403, body: { error: 'forbidden' } })
+    expect(h.skills?.load('webterm-approve-gate')).toBeNull()
+    const typed = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', phrase: CONFIRM_PHRASE })
+    expect(typed?.status).toBe(200)
+    expect(h.skills?.load('webterm-approve-gate')?.record.version).toBe('1')
   })
 })
