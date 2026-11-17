@@ -2,11 +2,11 @@
 // right under it (the library keeps one open at a time); Esc closes and returns focus to the row.
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { type KeyboardEvent, type ReactNode, useId, useRef } from 'react'
 import { CL } from './centralLabels'
 import type { CentralControlClient, SkillReviewRow } from './centralControlTypes'
-import { centralErrorMessage } from './centralLoad'
 import { isOff, titleOf } from './skillLibraryModel'
+import { useSkillSwitch } from './useSkillSwitch'
 
 interface Props {
   row: SkillReviewRow
@@ -32,21 +32,8 @@ export default function SkillRow({ row, client, open, onToggle, onChanged, detai
   const { record, description } = row
   const detailId = useId()
   const button = useRef<HTMLButtonElement>(null)
-  const serverOn = record.enabled !== false
-  const [on, setOn] = useState(serverOn)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  useEffect(() => setOn(serverOn), [serverOn])
+  const { on, busy, error, flip } = useSkillSwitch(row, client, onChanged)
   const title = titleOf(row)
-  const flip = (next: boolean): void => {
-    setOn(next)
-    setBusy(true)
-    setError(null)
-    client.setSkillEnabled(record.name, next).then(
-      () => { setBusy(false); onChanged() },
-      (err: unknown) => { setOn(!next); setBusy(false); setError(centralErrorMessage(err, CL.skillEnabledFailed)) },
-    )
-  }
   const close = (): void => { onToggle(); button.current?.focus() }
   const onKeyDown = (e: KeyboardEvent): void => { if (e.key === 'Escape' && open) { e.stopPropagation(); close() } }
   return (

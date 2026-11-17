@@ -98,10 +98,10 @@ describe('SkillLibrary has no manual authoring', () => {
     expect(document.querySelectorAll('textarea')).toHaveLength(0)
   })
 
-  it('offers Write with an agent in each section', async () => {
+  it('offers Write with an agent for Central only', async () => {
     await mount()
     expect(screen.getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Write with an agent (Canvas)' })).toBeNull()
   })
 
   it('shows the title first (the name when a skill has none) and no kind badge', async () => {

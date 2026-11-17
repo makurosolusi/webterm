@@ -103,3 +103,14 @@ store the single source of truth.
 - Announcing only (no server check): a model could still `skills get` anything. Announced is not enforced.
 - Reusing `link-in/link-out`: would make a skill a context-link peer and leak it into the peer roster.
 - Letting the agent attach through a tool: breaks "the human decides what an agent may follow".
+
+## Two surfaces, one per kind of skill
+
+Control > Skills lists and writes Central skills only (rules Central follows); the Skills panel in the canvas
+sidebar is the whole home of canvas skills (list, search, filter, switch, detail, drafts with the typed
+approval, "Write with an agent"). Each surface has one job, and each points to the other (one muted line plus a
+link). Why: the two kinds have different readers (Central vs agents on the canvas), different authors (a Central
+chat vs a chat node on the board) and different next actions (a canvas skill is dragged onto the board, a Central
+skill never is); one mixed library made people pick a kind in every dialog. Server side the split is enforced, not
+just drawn: Central's skill-author mode refuses a `canvas` proposal (`audience_not_allowed_in_mode`), a canvas agent
+is forced to the `canvas` audience (`audience_forbidden` for `central`), and approval stays a typed phrase by a human.

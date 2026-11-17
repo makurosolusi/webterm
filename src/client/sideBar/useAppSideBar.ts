@@ -5,6 +5,7 @@ import { useSessionsOpen } from '../SessionsPanel.open'
 import { buildSessionList, otherWorkspaceGroups, signalCounts } from '../sessionList'
 import type { AgentStatus, Workspace, WsNode } from '../../shared/workspace'
 import { useSideBarViewCommands } from './sideBar.commands'
+import { useOpenSideBarRequests } from './sideBar.open'
 import { activityClick, useSideBarView, type SideBarView } from './sideBar.view'
 
 /** Sessions in OTHER workspaces waiting for the user (the open board's are on the canvas already). */
@@ -24,6 +25,8 @@ export function useAppSideBar() {
     setView(next.view)
   }, [open, view, setOpen, setView])
   useSideBarViewCommands(select)
+  const show = useCallback((v: SideBarView) => { setOpen(true); setView(v) }, [setOpen, setView])
+  useOpenSideBarRequests(show)
   return { open, setOpen, view, select }
 }
 

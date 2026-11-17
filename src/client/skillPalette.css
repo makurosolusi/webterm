@@ -1,5 +1,18 @@
 /* Skills view of the side bar: search on top, one scrolling list of skill rows below. */
 .sp { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow-y: auto; padding: 8px; gap: 6px; font-size: 12px; }
+.sp__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.sp__titles h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.sp__titles p { margin: 0; color: var(--vscode-descriptionForeground); }
+.sp__write { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sp__seg { display: flex; flex-wrap: wrap; gap: 2px; }
+.sp__seg small { margin-left: 3px; color: var(--vscode-descriptionForeground); }
+.sp__review h4 { margin: 8px 0 4px; font-size: 12px; font-weight: 600; }
+.sp__item { border-bottom: 1px solid var(--vscode-panel-border); }
+.sp__main { display: flex; align-items: center; gap: 4px; }
+.sp__main > .sp__row { flex: 1 1 auto; min-width: 0; }
+.sp__ctl { display: flex; flex: none; align-items: center; gap: 4px; }
+.sp__row--static { padding: 6px 8px; cursor: default; display: flex; flex-direction: column; gap: 2px; }
+.sp__detail { padding: 0 0 8px; }
 .sp__tools { display: flex; flex-direction: column; gap: 6px; }
 .sp__agent { margin: 0; font-weight: 600; }
 .sp__hint, .sp__state { margin: 0; color: var(--vscode-descriptionForeground); }
