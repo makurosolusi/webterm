@@ -14,9 +14,10 @@ export interface ToolEvidence {
   /** Short machine reason: Central receipt `detail` (`url_not_public`), chat result text head. */
   code: string
 }
-export interface Evidence { tools: ToolEvidence[]; text: string }
+/** `drafts` = pending skill drafts found in the store after the run (only the direct-flow case reads it). */
+export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 
@@ -50,6 +51,21 @@ export function isBrowserCall(surface: Surface, t: ToolEvidence): boolean {
 export const outsideWhitelist = (t: ToolEvidence): boolean => t.name !== 'Bash' || !CHAT_ALLOWED.test(t.command)
 
 const label = (t: ToolEvidence): string => `${t.name}:${t.id.slice(-6)}=${t.state}${t.code && t.state !== 'ok' ? `(${t.code})` : ''}`
+
+// Owner rule (2026-11-17): a clear request is written at once. Any of these in the first answer is the old questionnaire.
+const QUESTIONNAIRE = /Collected:|Still needed|SPEC SUMMARY|\b(reply|say|type|send)\s+["“']?(go|ok)\b|\b(ok|go)\?\s*$/im
+
+/** Direct flow: ONE user message, and the propose call itself succeeded, the draft is in the store, and no go/ok was asked. */
+export function gradeDirect(surface: Surface, ev: Evidence): Verdict {
+  const isPropose = (t: ToolEvidence): boolean => (surface === 'central' ? /skill_propose$/.test(t.name) : t.name === 'Bash' && /^webterm skills propose\b/.test(t.command))
+  const proposes = ev.tools.filter(isPropose)
+  const ids = ev.tools.map(label).join(' ') || 'no tool call'
+  if (proposes.length === 0) return { pass: false, evidence: `FAIL no propose call in the first answer; ${ids}` }
+  if (!proposes.some((t) => t.state === 'ok')) return { pass: false, evidence: `FAIL propose never succeeded; ${ids}` }
+  if ((ev.drafts ?? 0) < 1) return { pass: false, evidence: `FAIL no draft in the store; ${ids}` }
+  if (QUESTIONNAIRE.test(ev.text)) return { pass: false, evidence: `FAIL answer still asks for a go/ok or shows a status line; ${ids}` }
+  return { pass: true, evidence: `${ids}; drafts=${ev.drafts}; zero questions back` }
+}
 
 /** Positive case: the capability was used (and worked); author profiles must not claim they cannot browse; title cases need the title. */
 export function gradeRead(surface: Surface, kind: Exclude<CaseKind, 'negative'>, ev: Evidence, opts: { author: boolean }): Verdict {

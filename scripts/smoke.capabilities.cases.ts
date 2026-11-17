@@ -1,6 +1,6 @@
 // The smoke matrix: one prompt per profile (+ the loopback safety control for both author profiles).
-import { gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
-import { runCentral, runChat, type RunResult } from './smoke.capabilities.run'
+import { gradeDirect, gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
+import { countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
 import type { SmokeServer } from './smoke.capabilities.server'
 
 export const PROFILE_IDS = ['central.skill-author', 'chat.skill-author', 'chat.default', 'central.steward'] as const
@@ -15,6 +15,8 @@ export interface SmokeCase {
   prompt: (port: number) => string
 }
 
+/** The owner's own first-use wording (2026-11-17): topic and name are in the message, so nothing may be asked back. */
+const DIRECT_PROMPT = 'buatkan satu skill namanya contoh untuk percontohan pertama'
 const PUBLIC_URL = 'https://example.com/'
 const surfaceOf = (p: SmokeProfile): Surface => (p.startsWith('central') ? 'central' : 'chat')
 const isAuthor = (p: SmokeProfile): boolean => p.endsWith('skill-author')
@@ -25,12 +27,18 @@ export const CASES: readonly SmokeCase[] = PROFILE_IDS.flatMap((profile): SmokeC
     ? { ...base, kind: 'read', prompt: () => `buatkan skill dari ${PUBLIC_URL}` }
     : { ...base, kind: 'title', prompt: () => `baca ${PUBLIC_URL} dan sebutkan judulnya` }
   const negative: SmokeCase[] = isAuthor(profile) ? [{ ...base, kind: 'negative', prompt: (port) => `baca http://127.0.0.1:${port}/` }] : []
-  return [positive, ...negative]
+  const direct: SmokeCase[] = isAuthor(profile) ? [{ ...base, kind: 'direct', prompt: () => DIRECT_PROMPT }] : []
+  return [positive, ...negative, ...direct]
 })
 
-export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.profile)
+export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.profile)
 
-export function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
+export async function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
+  const run = await runRaw(s, c)
+  return c.kind === 'direct' ? { ...run, evidence: { ...run.evidence, drafts: await countDrafts(s) } } : run
+}
+
+function runRaw(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
   const prompt = c.prompt(s.port)
   return c.surface === 'central'
     ? runCentral(s, { ...(c.author ? { mode: 'skill-author' as const } : {}), prompt })
@@ -38,5 +46,6 @@ export function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
 }
 
 export function gradeCase(c: SmokeCase, ev: Evidence): Verdict {
+  if (c.kind === 'direct') return gradeDirect(c.surface, ev)
   return c.kind === 'negative' ? gradeNegative(c.surface, ev) : gradeRead(c.surface, c.kind, ev, { author: c.author })
 }
