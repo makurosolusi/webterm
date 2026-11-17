@@ -244,7 +244,7 @@ export default function App() {
             onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary,
             extraStatusItems: [...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems],
           }}
-          {...{ sideBar, tabsProps, rf, flowNodes, nodes, nodesRef, statuses, statusReasons, workspaces, activeWs, activeId, liveNodes, setWorkspaces, onFocus, onSelect, closeSession }}
+          {...{ sideBar, tabsProps, rf, flowNodes, nodes, edges, nodesRef, statuses, statusReasons, workspaces, activeWs, activeId, liveNodes, setWorkspaces, onFocus, onSelect, closeSession }}
           {...{ addFlowNode, restoreBridges, onAddDiff, closedSessions, reopenClosed, reopenDeps, problems, centralEnabled, route, board, setBoard, paneMenu }}
           tasksMenu={tasks.menu} setCentralTab={routeActions.setCentralTab}
         />

@@ -12,7 +12,10 @@ import { MAX_ATTACHED_SKILLS, SKILL_OUT, SKILLS_IN } from '../shared/skillPorts'
 import { toFlowEdge } from './store'
 import type { Workspace } from '../shared/workspace'
 
-afterEach(cleanup)
+const notices = vi.hoisted(() => ({ showNotice: vi.fn() }))
+vi.mock('./workspaceSave.notice', () => ({ showNotice: notices.showNotice, closeNotice: vi.fn() }))
+
+afterEach(() => { cleanup(); notices.showNotice.mockClear() })
 
 const WS: Workspace = { id: 'w', name: 'B', cwd: '/', viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], bridges: [], updatedAt: 1 }
 const agent = (id: string, selected = false, agentId = 'claude'): Node => ({ id, type: 'agent', position: { x: 0, y: 0 }, width: 400, height: 300, data: { agentId }, selected })
@@ -82,6 +85,65 @@ describe('Add to canvas (addSkillNode)', () => {
     expect(r).toEqual({ status: 'limit' })
     expect(skillEdges()).toHaveLength(MAX_ATTACHED_SKILLS)
     expect(state.nodes.some((n) => n.type === 'skill')).toBe(true)
+  })
+})
+
+describe('addSkillNode with a target (drop on an agent, drop on the pane)', () => {
+  const REF = { name: 'webterm-release', version: '4' }
+
+  it('hostId: node below that agent (selected or not) and cabled to it', () => {
+    render(<Host nodes={[agent('a1'), agent('a2', true)]} />)
+    let r: unknown
+    act(() => { r = actions.nodeActions.addSkillNode?.(REF, { hostId: 'a1' }) })
+    expect(r).toEqual({ status: 'attached' })
+    const added = state.nodes.find((n) => n.type === 'skill')!
+    expect(skillEdges()).toEqual([expect.objectContaining({ source: added.id, target: 'a1' })])
+  })
+
+  it('at: a bare node at that point even when one agent is selected; no cable', () => {
+    render(<Host nodes={[agent('a1', true)]} />)
+    let r: unknown
+    act(() => { r = actions.nodeActions.addSkillNode?.(REF, { at: { x: 900, y: 700 } }) })
+    expect(r).toEqual({ status: 'added' })
+    const added = state.nodes.find((n) => n.type === 'skill')!
+    expect(added.position.x).toBeCloseTo(900 - 130, 0) // the 260x44 card is centred on the point
+    expect(state.edges).toEqual([])
+  })
+
+  it('a skill already cabled to that agent makes no second node and no second cable', () => {
+    const edge = toFlowEdge({ id: 'b', source: 's1', target: 'a1', kind: 'skill' })
+    render(<Host nodes={[agent('a1', true), { ...skill('s1'), data: { skill: 'webterm-release' } }]} edges={[edge]} />)
+    let r: unknown
+    act(() => { r = actions.nodeActions.addSkillNode?.(REF, { hostId: 'a1' }) })
+    expect(r).toEqual({ status: 'exists' })
+    act(() => { r = actions.nodeActions.addSkillNode?.(REF) }) // the keyboard path: same answer
+    expect(r).toEqual({ status: 'exists' })
+    expect(state.nodes.filter((n) => n.type === 'skill')).toHaveLength(1)
+    expect(skillEdges()).toHaveLength(1)
+  })
+
+  it('a hostId that is not a Claude agent cables nothing', () => {
+    render(<Host nodes={[agent('x', false, 'codex')]} />)
+    act(() => { actions.nodeActions.addSkillNode?.(REF, { hostId: 'x' }) })
+    expect(state.edges).toEqual([])
+    expect(state.nodes.some((n) => n.type === 'skill')).toBe(true)
+  })
+})
+
+describe('onConnect reports a refused cable', () => {
+  it('a ninth skill drawn onto an agent says the agent is full', () => {
+    const full = Array.from({ length: MAX_ATTACHED_SKILLS }, (_, i) => toFlowEdge({ id: `b${i}`, source: `s${i}`, target: 'a1', kind: 'skill' }))
+    render(<Host nodes={[{ ...agent('a1'), data: { agentId: 'claude', title: 'Ada' } }, skill('s9')]} edges={full} />)
+    act(() => actions.onConnect(connection('s9', 'a1', SKILL_OUT, SKILLS_IN)))
+    expect(notices.showNotice).toHaveBeenCalledWith(expect.any(String), { title: `Ada already has ${MAX_ATTACHED_SKILLS} skills. Detach one first.`, severity: 'warning' })
+  })
+
+  it('the same pair drawn twice says already attached; a good cable says nothing', () => {
+    render(<Host nodes={[agent('a1'), skill('s1')]} />)
+    act(() => actions.onConnect(connection('s1', 'a1', SKILL_OUT, SKILLS_IN)))
+    expect(notices.showNotice).not.toHaveBeenCalled()
+    act(() => actions.onConnect(connection('s1', 'a1', SKILL_OUT, SKILLS_IN)))
+    expect(notices.showNotice).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ title: 'Already attached to claude.' }))
   })
 })
 

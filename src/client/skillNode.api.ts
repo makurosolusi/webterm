@@ -7,7 +7,7 @@ import { InboxApiError } from './inboxTypes'
 import { SKILLS_OFF, SKILLS_PATH } from './central/centralControlApi'
 
 /** A canvas skill as the library lists it; `enabled` false = switched off. */
-export interface CanvasSkill { name: string; version: string; description: string; enabled: boolean }
+export interface CanvasSkill { name: string; version: string; description: string; enabled: boolean; title?: string }
 
 export type CanvasSkillsLoad =
   | { status: 'loading' }
@@ -24,9 +24,9 @@ export async function fetchCanvasSkills(signal?: AbortSignal): Promise<CanvasSki
   const items = Array.isArray(body) ? body : rec(body) && Array.isArray(body.items) ? body.items : []
   return items.flatMap((r): CanvasSkill[] => {
     if (!rec(r) || !rec(r.record)) return []
-    const { name, version, status, audience, enabled } = r.record
+    const { name, version, status, audience, enabled, title } = r.record
     if (typeof name !== 'string' || !name || status !== 'active' || audience !== 'canvas') return []
-    return [{ name, version: text(version), description: text(r.description), enabled: enabled !== false }]
+    return [{ name, version: text(version), description: text(r.description), enabled: enabled !== false, ...(text(title).trim() ? { title: text(title).trim() } : {}) }]
   })
 }
 

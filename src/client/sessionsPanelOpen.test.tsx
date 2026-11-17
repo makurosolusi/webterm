@@ -26,7 +26,7 @@ const sessions = (
   <SessionsPanel active workspaces={[]} activeId={null} liveActiveNodes={null} statuses={{}}
     onFocusNode={() => {}} onCloseSession={() => {}} onSelectWorkspace={() => {}} />
 )
-const props: SideBarProps = { open: true, view: 'sessions', onClose: () => {}, layers: null, sessions, history: null }
+const props: SideBarProps = { open: true, view: 'sessions', onClose: () => {}, layers: null, sessions, history: null, skills: null }
 
 afterEach(cleanup)
 

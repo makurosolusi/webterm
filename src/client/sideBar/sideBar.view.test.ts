@@ -57,10 +57,11 @@ describe('View: Show … commands', () => {
       ['view.layers', 'View: Show Layers'],
       ['view.sessionsList', 'View: Show Sessions'],
       ['view.agentHistory', 'View: Show Agent History'],
+      ['view.skills', 'View: Show Skills'],
     ])
     expect(cmds.every((c) => c.defaultKey === undefined)).toBe(true)
     cmds.forEach((c) => c.run?.())
-    expect(select.mock.calls.map(([v]) => v)).toEqual(['layers', 'sessions', 'history'])
+    expect(select.mock.calls.map(([v]) => v)).toEqual(['layers', 'sessions', 'history', 'skills'])
   })
 })
 

@@ -13,6 +13,7 @@ import type { CentralControlClient, SkillReviewRow } from './centralControlTypes
 import { titleOf } from './skillLibraryModel'
 import { useNodeActions } from '../nodeActions'
 import { SN } from '../skillNode.labels'
+import { SP } from '../skillPalette.labels'
 import { MAX_ATTACHED_SKILLS } from '../../shared/skillPorts'
 
 interface Props {
@@ -37,7 +38,7 @@ export default function SkillDetail({ row, client, onClose, onChanged, revise }:
   const canAdd = active && on && record.audience === 'canvas'
   const addToCanvas = () => {
     const r = addSkillNode?.({ name: record.name, version: record.version })
-    setAdded(r === undefined || r.status === 'no_board' ? SN.addToCanvasNoBoard : r.status === 'attached' ? SN.addedAttached : r.status === 'limit' ? SN.addedLimit(MAX_ATTACHED_SKILLS) : SN.added)
+    setAdded(r === undefined ? SN.addToCanvasNoBoard : r.status === 'no_board' ? SN.addToCanvasNoBoard : r.status === 'attached' ? SN.addedAttached : r.status === 'limit' ? SN.addedLimit(MAX_ATTACHED_SKILLS) : r.status === 'exists' ? SP.exists('the selected agent') : SN.added)
   }
   const builtin = record.origin === 'builtin'
   const changed = record.approvedAt ?? record.createdAt

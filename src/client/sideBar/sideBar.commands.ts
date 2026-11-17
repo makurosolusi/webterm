@@ -8,6 +8,7 @@ export const SIDE_BAR_VIEW_COMMANDS: Record<SideBarView, { id: string; label: st
   layers: { id: 'view.layers', label: 'View: Show Layers' },
   sessions: { id: 'view.sessionsList', label: 'View: Show Sessions' },
   history: { id: 'view.agentHistory', label: 'View: Show Agent History' },
+  skills: { id: 'view.skills', label: 'View: Show Skills' },
 }
 
 /** The three commands for `select` (pure; tests read it without React). */

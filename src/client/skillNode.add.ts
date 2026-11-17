@@ -1,6 +1,6 @@
 // Pure helpers behind "add a skill node": what the node is, which agent a new one should be cabled to, and the
 // cable itself. The board wiring (state, save) is in App.board.ts; the typed-port rule is `shared/skillPorts`.
-import type { Edge, Node } from '@xyflow/react'
+import type { Edge, Node, XYPosition } from '@xyflow/react'
 import { isSkillHost, MAX_ATTACHED_SKILLS, SKILL_KIND, SKILL_NODE_SIZE } from '../shared/skillPorts'
 import type { AgentId, WsNode } from '../shared/workspace'
 import { toFlowEdge } from './store'
@@ -8,8 +8,11 @@ import { toFlowEdge } from './store'
 /** A library skill as the pickers hand it over: name + the active version seen now. */
 export interface SkillRef { name: string; version: string }
 
-/** Outcome of "Add to canvas" (SkillDetail): on the board, and whether it was cabled to the selected agent. */
-export type AddSkillResult = { status: 'no_board' } | { status: 'added' } | { status: 'attached' } | { status: 'limit' }
+/** Where a new skill node goes: dropped on agent `hostId` (placed below it and cabled), or at a flow point (no cable). No target = the selected agent, if exactly one. */
+export type AddSkillTarget = { hostId: string } | { at: XYPosition }
+
+/** Outcome of adding a skill (SkillDetail, the palette): on the board, and whether it was cabled to the agent. `exists` = already attached to it, nothing was created. */
+export type AddSkillResult = { status: 'no_board' } | { status: 'added' } | { status: 'attached' } | { status: 'limit' } | { status: 'exists' }
 
 /** The node a skill reference becomes: collapsed card size, `seenVersion` recorded so only a later change reads "Updated". */
 export const skillNodeSpec = (id: string, s: SkillRef): Omit<WsNode, 'x' | 'y'> =>
@@ -26,6 +29,12 @@ const isSkillEdge = (e: Edge): boolean => (e.data as { kind?: string } | undefin
 
 /** Skills already cabled to `hostId`. */
 export const attachedCount = (edges: readonly Edge[], hostId: string): number => edges.filter((e) => e.target === hostId && isSkillEdge(e)).length
+
+/** Library names of the skill nodes already cabled to `hostId` (a name is one reference per agent). */
+export function attachedSkillNames(nodes: readonly Node[], edges: readonly Edge[], hostId: string): Set<string> {
+  const sources = new Set(edges.filter((e) => e.target === hostId && isSkillEdge(e)).map((e) => e.source))
+  return new Set(nodes.flatMap((n) => (sources.has(n.id) ? [(n.data as { skill?: string } | undefined)?.skill ?? ''] : [])).filter(Boolean))
+}
 
 /** The skill cable skill -> host, or why not: this pair is already cabled, or the host holds MAX_ATTACHED_SKILLS. */
 export function skillCable(edges: readonly Edge[], skillId: string, hostId: string): { edge: Edge } | { refused: 'exists' | 'limit' } {
