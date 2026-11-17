@@ -15,6 +15,7 @@ import { flagOn } from '../envFlag'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { BROWSER_COMMAND, CONTEXT_COMMAND, ESC_FN } from './cli.commands'
 import { buildEvalCommand } from './cli.eval'
+import { SKILLS_COMMAND } from './cli.skills'
 import { snapshotOf, TOOL_INDEX } from './cli.registry'
 import { AGENT_REPORT_CAPABILITY } from '../capability/report.capabilities'
 
@@ -70,6 +71,11 @@ usage: webterm <command> [args]
                [--operation-id <id>]  replay-safe retry: same id + same call = same receipt
   whats-new [--since <v>] [--json]  capabilities added/removed/changed since the registry you last saw
   skills get <name> [--json]      the version-matched guide for a skill (webterm-cli, ...)
+  skills list [name]              the skill library: active skills + your open drafts (a name adds its body)
+  skills propose --name webterm-<slug> --description <text> [--caps a,b] [--body-file <path>|-]
+                                  PROPOSE a new skill (body from a file or stdin); a human must approve it
+  skills edit <name> [--description <text>] [--caps a,b] [--body-file <path>|-]
+                                  PROPOSE a new version of an active skill (unset fields keep the active text)
   report "<text>" [--done|--blocked|--question|--progress]
                                   tell Central now where your work stands (default --progress);
                                   done/blocked/question move your task and wake Central
@@ -78,23 +84,7 @@ usage: webterm <command> [args]
   eval run [--model fake|real]    replay promoted eval cases (user rejections) against Central
 EOF
 }
-cmd_skills() {
-  [ "$1" = get ] || die "usage: webterm skills get <name> [--json]"
-  name="$2"
-  case "$name" in ""|*[!a-z0-9-]*) die "usage: webterm skills get <name> [--json]" ;; esac
-  f="$SKILLS_DIR/$name.md"
-  if [ ! -r "$f" ]; then
-    echo "Unknown skill: $name. Available:" >&2
-    for g in "$SKILLS_DIR"/*.md; do [ -r "$g" ] && { g=\${g##*/}; echo "  \${g%.md}" >&2; }; done
-    exit 2
-  fi
-  if [ "$3" = --json ]; then
-    ver=$(sed -n 's/^version: //p' "$f" | head -n 1)
-    printf '{"name":"%s","version":"%s","markdown":"%s"}\\n' "$name" "$(esc "$ver")" "$(esc "$(cat "$f")")"
-  else
-    cat "$f"
-  fi
-}
+${SKILLS_COMMAND}
 cmd_call() {
   name="$1"; shift
   case "$name" in ""|.*|*[!a-z0-9_.]*) die "Unknown command: $name (run: webterm help)" ;; esac
@@ -180,6 +170,10 @@ ${cli} <command> [args]
 4. \`${cli} whats-new\` shows what changed since the registry you last saw.
 5. Report to Central any time: \`${cli} report "<text>" --done\` (your result), \`--blocked\`, \`--question\`, or
    \`--progress\` (the default). done/blocked/question move your task and wake Central at once; progress is recorded.
+6. Skills: \`${cli} skills list\` shows the library; \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
+   proposes a new skill and \`${cli} skills edit <name> --body-file <path|->\` a new version of an existing one. You can only
+   propose: a human approves it in webterm, and only then does it become active. Bodies are plain instructions (max 4000 chars,
+   no URLs, shell commands or secrets; lint rejects them and names only the issue code).
 
 Capabilities in this version:
 ${rows.join('\n')}

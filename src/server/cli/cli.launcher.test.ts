@@ -67,6 +67,17 @@ describe('install', () => {
     for (const c of snapshotOf().capabilities) expect(guide).toContain(`\`${c.name}\``)
   })
 
+  it('help and the version-matched guide teach the skills verbs, and say a human approves', () => {
+    installWebtermCli(home())
+    const help = run(['help'], {}).stdout
+    for (const verb of ['skills list', 'skills propose', 'skills edit']) expect(help).toContain(verb)
+    const guide = buildCliGuide('/x/webterm')
+    expect(guide).toContain('skills propose --name webterm-<slug>')
+    expect(guide).toContain('a human approves it in webterm')
+    expect(run(['skills'], {}).status).toBe(2) // bare `skills` = usage, not a crash
+    expect(run(['skills', 'approve', 'webterm-x'], {}).stderr).toContain('usage: webterm skills')
+  })
+
   it('tells agents how to show an MCP Apps ui:// view (webterm MCP tool app_open)', () => {
     expect(buildCliGuide('/x/webterm')).toMatch(/_meta\.ui\.resourceUri.*`app_open`/)
   })
