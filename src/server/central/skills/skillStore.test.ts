@@ -118,7 +118,7 @@ describe('lifecycle', () => {
     expect(codeOf(() => store.reject('webterm-demo', '1', 'central:c1'))).toBe('forbidden')
     const rejected = store.reject('webterm-demo', '1', HUMAN)
     expect(rejected.status).toBe('rejected')
-    expect(rejected).not.toHaveProperty('rejectReason')
+    expect(rejected).toHaveProperty('rejectReason', 'rejected_by_human') // stays listed with a reason code
     expect(store.load('webterm-demo')).toBeNull()
     expect((await store.propose(input(), 'central:c1')).version).toBe('2')
   })

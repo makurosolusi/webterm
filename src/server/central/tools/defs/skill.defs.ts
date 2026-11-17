@@ -41,7 +41,7 @@ export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[]
     validate: (input) => (onlyKeys(input, ['status', 'limit', 'offset']) && (input.status === undefined || STATUSES.includes(input.status as SkillStatus)) && (input.limit === undefined || isInt(input.limit, 1, SKILL_LIST_MAX)) && (input.offset === undefined || isInt(input.offset, 0, 1_000_000)) ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       const records = await resolve(ctx).list(input.status as SkillStatus | undefined, { limit: (input.limit as number | undefined) ?? SKILL_LIST_DEFAULT, offset: (input.offset as number | undefined) ?? 0 })
-      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin })) } }
+      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, enabled: r.enabled !== false })) } }
     },
   }
   const load: ToolDef = {

@@ -20,7 +20,8 @@ const HUMAN_RE = /^human:[A-Za-z0-9._@-]{1,64}$/
 /** The exact text a human types to activate a version (R3 typed confirm). */
 export function confirmPhrase(name: string, version: string): string { return `approve ${name}@${version}` }
 
-function requireHuman(by: string): void {
+/** Throws `forbidden` unless `by` is a `human:*` actor. */
+export function requireHuman(by: string): void {
   if (!HUMAN_RE.test(by)) throw new SkillError('forbidden', 'only a human actor may change skill activation')
 }
 
@@ -86,7 +87,8 @@ export function submitForApproval(ctx: SkillCtx, name: string, version: string):
 export function rejectSkill(ctx: SkillCtx, name: string, version: string, by: string): SkillRecord {
   requireHuman(by)
   requireStatus(requireRecord(ctx, name, version), ['proposed', 'evaluated', 'pending_approval'])
-  setStatus(ctx.db, name, version, 'rejected')
+  // A reason code keeps the draft listed (as rejected) instead of vanishing.
+  setStatus(ctx.db, name, version, 'rejected', { rejectReason: 'rejected_by_human' })
   return requireRecord(ctx, name, version)
 }
 
@@ -100,11 +102,17 @@ function pointActive(root: string, name: string, version: string): void {
   renameSync(tmp, join(activeDir, name))
 }
 
-/** Human-only R3: needs the typed phrase, a pending_approval version, an intact hash and a clean re-lint. */
-export function approveSkill(ctx: SkillCtx, name: string, version: string, approvedBy: string, typedConfirm: string | undefined): SkillRecord {
+/**
+ * Human-only R3: needs a pending_approval version, an intact hash and a clean re-lint, plus either the typed phrase or,
+ * only for a draft whose recorded origin is `human` (author = approver), `reviewed: true` after the diff was shown.
+ * Central- and agent-origin drafts always need the typed phrase (docs/decisions/skill-approval.md).
+ */
+export function approveSkill(ctx: SkillCtx, name: string, version: string, approvedBy: string, typedConfirm: string | undefined, reviewed = false): SkillRecord {
   requireHuman(approvedBy)
   const rec = requireRecord(ctx, name, version)
-  if (typedConfirm !== confirmPhrase(name, version)) throw new SkillError('forbidden', 'typed confirmation does not match')
+  if (reviewed) {
+    if (rec.origin !== 'human') throw new SkillError('forbidden', `one-click approval is only for human-origin drafts, not ${rec.origin}`)
+  } else if (typedConfirm !== confirmPhrase(name, version)) throw new SkillError('forbidden', 'typed confirmation does not match')
   requireStatus(rec, ['pending_approval'])
   const previous = activeRecord(ctx.db, name)
   if (!previous && countActive(ctx.db) >= MAX_ACTIVE_SKILLS) throw new SkillError('limit', `at most ${MAX_ACTIVE_SKILLS} active skills`)

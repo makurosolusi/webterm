@@ -104,8 +104,9 @@ function recordText(root: string, r: SkillRecord): string | null {
 
 /** SKILL.md of the version active now for `name`, or null when none is active (first proposal). */
 function activeText(h: Ca2Handle, name: string): string | null {
-  const active = h.skills?.load(name)
-  return active ? recordText(h.skillsRoot, active.record) : null
+  // Not `load`: a disabled skill still is the version a new draft must be compared with.
+  const active = h.skills?.list('active', { limit: MAX_PAGE }).find((r) => r.name === name)
+  return active ? recordText(h.skillsRoot, active) : null
 }
 
 /**
@@ -118,8 +119,8 @@ export function skillsView(h: Ca2Handle, q: URLSearchParams): RouteResult {
   if (q.get('status') === 'active') return { status: 200, body: { items: h.skills.index().map((e) => ({ name: clip(e.name), description: clip(e.description) })) } }
   const page = pageOf(q)
   if (!page) return fail(400, 'invalid_page')
-  // A human reject carries no reason and drops off the list; a rejection by evaluation stays so its reason is visible.
-  const records = REVIEW_STATUSES.flatMap((s) => h.skills?.list(s, { limit: page.limit, offset: page.offset }) ?? []).filter((r) => r.status !== 'rejected' || r.rejectReason)
+  // Rejected drafts stay listed with their reason code (evaluation failures and `rejected_by_human`).
+  const records = REVIEW_STATUSES.flatMap((s) => h.skills?.list(s, { limit: page.limit, offset: page.offset }) ?? [])
   const archived = h.skills.list('archived', { limit: MAX_PAGE })
   const items = records.slice(0, page.limit).map((stored) => {
     const record = stored.rejectReason ? { ...stored, rejectReason: clip(stored.rejectReason) } : stored
