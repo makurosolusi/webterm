@@ -19,6 +19,7 @@ import { agentConfig } from '../shared/workspace'
 import { isAutoName } from './nodeIdentity'
 import { withNodeName } from './nodeName.label'
 import { AGENT_CHAT_TITLE } from '../shared/agentChat.node'
+import { workspaceColorVar } from '../shared/workspaceColor'
 
 /** Kind node yang dihitung sebagai "sesi". `files`/`editor` adalah penampil, bukan shell —
  *  Hanya mendaftar node terminal di sidebar-nya. `agentChat` is a Claude session
@@ -181,7 +182,7 @@ function toRow(
     cwd: n.cwd ?? ws.cwd,
     projectId: ws.id,
     projectName: ws.name,
-    projectColor: ws.color,
+    projectColor: ws.color ? workspaceColorVar(ws.color, ws.colorShade) : undefined,
   }
 }
 
@@ -244,7 +245,7 @@ export function buildSessionList(
     return {
       projectId: ws.id,
       projectName: ws.name,
-      projectColor: ws.color,
+      projectColor: ws.color ? workspaceColorVar(ws.color, ws.colorShade) : undefined,
       cwd: ws.cwd,
       isActive,
       // Urutan array node, BUKAN aktif-dulu: sidebar mencerminkan urutan canvas.

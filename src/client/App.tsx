@@ -125,7 +125,7 @@ export default function App() {
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
   // jadi `scheduleSave` dan canvas tetap membaca ref yang SAMA dengan yang ditulis di sana.
-  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace, onCreateReported, onNewProject, boot, retryBoot } =
+  const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onCreateWorkspace, onCreateReported, onNewProject, boot, retryBoot } =
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
@@ -215,7 +215,7 @@ export default function App() {
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp }} />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam

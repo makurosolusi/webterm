@@ -19,6 +19,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'canvas.camera': { title: 'Move the camera', text: 'Fits the board, focuses a node, zooms or pans your canvas; waits while you are moving it.' },
   'canvas.reopen': { title: 'Reopen nodes', text: 'Brings back a node Central closed; never one you closed.' },
   'workspace.switch': { title: 'Switch workspace', text: 'Shows another project workspace; waits while you are moving the canvas.' },
+  'workspace.color': { title: 'Workspace color', text: 'Reads or changes the color that identifies a workspace, only when you ask; you get a notice with Undo.' },
   'workspace.create': { title: 'Create a workspace', text: 'Creates a new workspace for an existing folder after you approve.' },
   'workspace.rename': { title: 'Rename a workspace', text: 'Renames a project workspace.' },
   'canvas.screenshot': { title: 'Take screenshot', text: 'Captures what you see in the webterm window.' },

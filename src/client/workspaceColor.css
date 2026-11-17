@@ -78,3 +78,27 @@
   --ws-slate-default: #758295;
   --ws-slate-vivid: #72849c;
 }
+
+/* Identity marker on a workspace tab: a bar along the bottom edge (dimmer when inactive), and the
+   active tab's top border takes the color too. The status dot inside the tab keeps its own meaning. */
+.vscode-editor-tab[data-accent]::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--tab-accent); opacity: 0.55; pointer-events: none;
+}
+.vscode-editor-tab[data-accent][data-active='true']::after { height: 3px; opacity: 1; }
+.vscode-editor-tab[data-accent][data-active='true'] { border-top-color: var(--tab-accent); }
+
+/* Small color chip beside the active workspace's name (title bar, status bar). */
+.ws-chip { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 2px; background: var(--ws-chip, var(--ws-slate-default)); }
+
+/* Color picker dialog. */
+.ws-color-dialog { max-width: 420px; }
+.ws-color-hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.ws-color-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ws-swatch {
+  width: 26px; height: 26px; padding: 0; border: 2px solid transparent; border-radius: 6px;
+  background: var(--ws-swatch); cursor: pointer;
+}
+.ws-swatch[aria-checked='true'] { border-color: var(--vscode-foreground); box-shadow: 0 0 0 2px var(--vscode-editor-background) inset; }
+.ws-swatch:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.ws-color-actions { display: flex; justify-content: flex-end; gap: 8px; }

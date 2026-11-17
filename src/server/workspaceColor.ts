@@ -26,6 +26,7 @@ export function setWorkspaceColor(
   input: { color?: unknown; colorShade?: unknown; random?: unknown },
   broadcast: (msg: ServerMsg) => void,
   rand: () => number = Math.random,
+  by?: 'central',
 ): { ok: true; change: ColorChange } | { ok: false; bad: ColorRefusal } {
   const ws = store.get(id)
   if (!ws) return { ok: false, bad: 'not_found' }
@@ -38,7 +39,10 @@ export function setWorkspaceColor(
   const color = input.color ?? (wantsRandom ? pickWorkspaceColor(others, rand) : (isWorkspaceHue(ws.color) ? ws.color : pickWorkspaceColor(others, rand)))
   const shade = input.colorShade ?? (isWorkspaceShade(ws.colorShade) ? ws.colorShade : DEFAULT_WORKSPACE_SHADE)
   if (!store.setColor(id, color, shade)) return { ok: false, bad: 'not_found' }
-  broadcast({ t: 'workspaceColor', workspaceId: id, color, shade })
+  broadcast({
+    t: 'workspaceColor', workspaceId: id, color, shade,
+    ...(by && isWorkspaceHue(previous.color) ? { by, name: ws.name, previous: { color: previous.color, shade: previous.shade ?? DEFAULT_WORKSPACE_SHADE } } : {}),
+  })
   return { ok: true, change: { color, shade, previous } }
 }
 

@@ -28,6 +28,17 @@ export function registerActiveWorkspace(get: () => string | null): () => void {
   return () => { activeSource = () => null }
 }
 
+// Workspace identity colors live in webterm.db too ("blue vivid" per workspace id; a workspace's own project has
+// id = workspace id), so they come through a port as well: the header names the color so Central can say which
+// workspace it is in ("the indigo one") and the user can recognise it by color.
+let colorSource: () => ReadonlyMap<string, string> = () => new Map()
+
+/** Registers where the workspace colors are read from; returns the unregister. */
+export function registerWorkspaceColors(get: () => ReadonlyMap<string, string>): () => void {
+  colorSource = get
+  return () => { colorSource = () => new Map() }
+}
+
 // Approval settings live in webterm.db too, so they come through the same kind of port (canvasPush.runtime.ts).
 let settingsSource: () => ApprovalSettings | null = () => null
 
@@ -42,10 +53,16 @@ function approvalModes(ledger: Database, projectIds: string[]): Map<string, Appr
   const out = new Map<string, ApprovalModeName>()
   const s = settingsSource()
   if (!s || projectIds.length === 0) return out
-  const rows = allRows(ledger, `SELECT id, workspace_id FROM project WHERE id IN (${projectIds.map(() => '?').join(',')})`, ...projectIds)
-  const ws = new Map(rows.map((r) => [String(r['id']), r['workspace_id'] == null ? null : String(r['workspace_id'])]))
+  const ws = workspaceIdsOf(ledger, projectIds)
   for (const id of projectIds) out.set(id, approvalModeName(approvalLevelFor(s, ws.get(id) ?? null)))
   return out
+}
+
+/** Workspace id per project id (null = not linked to a workspace); one statement for the whole list. */
+function workspaceIdsOf(ledger: Database, projectIds: string[]): Map<string, string | null> {
+  if (projectIds.length === 0) return new Map()
+  const rows = allRows(ledger, `SELECT id, workspace_id FROM project WHERE id IN (${projectIds.map(() => '?').join(',')})`, ...projectIds)
+  return new Map(rows.map((r) => [String(r['id']), r['workspace_id'] == null ? null : String(r['workspace_id'])]))
 }
 
 /** The project of the workspace the user is viewing; null when none is active or it no longer exists. */
@@ -75,9 +92,12 @@ export function buildStateHeader(db: Database, conversationId: string, now = Dat
   const scope = scopeFromConversationId(conversationId)
   const page = livePortfolio(db, { limit: PROJECT_FETCH_LIMIT })
   const viewing = viewingProject(db)
+  const colors = colorSource()
+  const wsOf = workspaceIdsOf(db, [...page.items.map((p) => p.id), ...(viewing ? [viewing.projectId] : [])])
+  const colorOf = (projectId: string): string | undefined => colors.get(wsOf.get(projectId) ?? '')
   const modes = approvalModes(db, page.items.map((p) => p.id))
   // `approval` = the mode that decides whether a tool call shows a card (ask) or just runs (auto/danger).
-  const projects = page.items.map((p) => ({ approval: modes.get(p.id), approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status }))
+  const projects = page.items.map((p) => ({ approval: modes.get(p.id), approvals: p.pendingApprovals, id: p.id, name: p.name.slice(0, MAX_NAME), status: p.status, color: colorOf(p.id) }))
   const work = openWork(db, now)
   const openDuties = duties(db, now)
   const time = headerClock(now, timeZone)
@@ -92,7 +112,7 @@ export function buildStateHeader(db: Database, conversationId: string, now = Dat
     projectTotal: page.total,
     projects: projects.slice(0, size.list),
     scope: scope.kind === 'project' ? scope.projectId : 'global',
-    viewing,
+    viewing: viewing ? { ...viewing, color: colorOf(viewing.projectId) } : null,
   })}`
   const shrink: Array<() => boolean> = [
     () => size.list > PROJECT_LIST_FLOOR && (size.list -= 1, true),

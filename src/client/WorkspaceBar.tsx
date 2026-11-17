@@ -13,7 +13,7 @@
 //
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
 // bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout toggle DISEMBUNYIKAN.
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
 import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
@@ -32,6 +32,9 @@ import { openWorkspaceCanvasBackground } from './canvasBackground.open'
 import { setWorkspaceMuted, useNotifyPrefs } from './osNotify.prefs'
 import { openSetup } from './setup/setup.open'
 import { AccountMenu } from './AccountMenu'
+import { WorkspaceColorDialog } from './WorkspaceColorPicker'
+import { workspaceColorVar } from '../shared/workspaceColor'
+import type { ColorChange } from './api'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
 /** Jarak menu dari tepi bawah tombol `+` (`r.bottom + 4`). */
@@ -49,6 +52,8 @@ export interface WorkspaceBarProps {
   onNewWorkspace: (path?: string) => void
   /** Nama sudah dinormalkan (trim, tidak pernah kosong). A returned promise shows the tab editor busy. */
   onRenameWorkspace: (id: string, name: string) => void | Promise<unknown>
+  /** Tab menu > Color…: change a workspace's identity color (the menu row is absent without it). */
+  onSetWorkspaceColor?: (id: string, change: ColorChange) => void | Promise<unknown>
   /** Sudah dikonfirmasi pengguna di sini — pemanggil langsung menghapus. */
   onDeleteWorkspace: (id: string) => void
   /** Sign out (POST /auth/logout) then reload to SignInScreen. Rendered only when `showLogout`. */
@@ -81,6 +86,7 @@ export default function WorkspaceBar({
   onNewWorkspace,
   onRenameWorkspace,
   onDeleteWorkspace,
+  onSetWorkspaceColor,
   onLogout,
   showLogout,
   onOpenAccount,
@@ -108,8 +114,10 @@ export default function WorkspaceBar({
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [colorId, setColorId] = useState<string | null>(null)
 
   const worktrees = useWorktreeStatuses(workspaces)
+  const colorWs = colorId ? workspaces.find((w) => w.id === colorId) ?? null : null
   const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
 
   const menuGroup = menu ? groups.find((g) => g.projectId === menu.id) ?? null : null
@@ -175,9 +183,14 @@ export default function WorkspaceBar({
 
   // Worktree state on the tab: VS Code's dirty dot plus branch in the tooltip; the full badge sits
   // next to the active workspace's name in the title bar (the tab label slot is a plain string).
+  const accentOf = (id: string): string => {
+    const w = workspaces.find((x) => x.id === id)
+    return workspaceColorVar(w?.color, w?.colorShade)
+  }
   const tabs: VscodeEditorTab[] = groups.map((g) => {
     const wt = worktrees[g.projectId]
     return {
+      accent: accentOf(g.projectId),
       id: g.projectId,
       label: g.projectName,
       tooltip: wt?.managed ? `${workspaceTabTitle(g)}\n${worktreeSummary(wt)}` : workspaceTabTitle(g),
@@ -206,6 +219,7 @@ export default function WorkspaceBar({
             <IconTooltip label="Go to anything: nodes, files, URLs, agents, commands" commandId="workbench.omnibox">
               <button type="button" className="app-titlebar__name" aria-label="Search" onClick={onOpenPalette}>
                 <span className="codicon codicon-search" aria-hidden />
+                {activeId && <span className="ws-chip" aria-hidden style={{ '--ws-chip': accentOf(activeId) } as CSSProperties} />}
                 <span className="app-titlebar__label">{activeGroup?.projectName ?? 'Search'}</span>
                 <WorkspaceWorktreeBadge status={activeId ? worktrees[activeId] : undefined} />
                 {paletteKey && <span className="kbd">{paletteKey}</span>}
@@ -280,6 +294,16 @@ export default function WorkspaceBar({
           onClose={() => setAddMenu(null)}
         />
       )}
+      {onSetWorkspaceColor && colorWs && (
+        <WorkspaceColorDialog
+          open
+          onOpenChange={(o) => { if (!o) setColorId(null) }}
+          workspaceName={colorWs.name}
+          color={colorWs.color}
+          colorShade={colorWs.colorShade}
+          onChange={(change) => void onSetWorkspaceColor(colorWs.id, change)}
+        />
+      )}
       <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
 
       {menu && menuGroup && (
@@ -290,6 +314,7 @@ export default function WorkspaceBar({
             { label: 'Rename', onClick: () => setEditingId(menuGroup.projectId) },
             // The background editor (Settings › Appearance) works on the active board, so open this one first.
             { label: 'Canvas Background…', onClick: () => { if (menuGroup.projectId !== activeId) onSelect(menuGroup.projectId); openWorkspaceCanvasBackground() } },
+            ...(onSetWorkspaceColor ? [{ label: 'Color…', onClick: () => setColorId(menuGroup.projectId) }] : []),
             // Per-workspace mute lives here, next to the workspace (Settings › Notifications holds the global switches).
             mutedIds.includes(menuGroup.projectId)
               ? { label: 'Unmute Notifications', onClick: () => setWorkspaceMuted(menuGroup.projectId, false) }

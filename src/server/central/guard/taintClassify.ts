@@ -19,7 +19,7 @@ export const IMPACTFUL_TOOLS: readonly string[] = [
 /** Above R0 but harmless under taint: they only propose (a human still decides), start a read-only scan, or move the view. */
 export const SAFE_UNDER_TAINT: readonly string[] = [
   'approval.request', 'blackboard.propose', 'goal.propose', 'plan.propose', 'skill.propose',
-  'health.scan', 'health.analyze', 'canvas.show', 'canvas.group', 'canvas.camera', 'workspace.switch',
+  'health.scan', 'health.analyze', 'canvas.show', 'canvas.group', 'canvas.camera', 'workspace.switch', 'workspace.color',
 ]
 
 /** Browser tools whose url is an exfiltration channel (data can ride in the query): allowed only to an origin already read. */

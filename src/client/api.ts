@@ -72,6 +72,18 @@ export function saveWorkspace(ws: Workspace): Promise<Workspace> {
   })
 }
 
+/** What the color picker can ask for: a hue and/or shade, or `random` (an unused hue, chosen by the server). */
+export interface ColorChange { color?: string; colorShade?: string; random?: boolean }
+
+/** Change a workspace's identity color; resolves the stored `{ color, colorShade }`. Not part of the board save. */
+export function setWorkspaceColor(id: string, change: ColorChange): Promise<{ color: string; colorShade: string }> {
+  return jsonFetch(`/api/workspaces/${encodeURIComponent(id)}/color`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(change),
+  })
+}
+
 export async function deleteWorkspace(id: string): Promise<void> {
   const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
     method: 'DELETE',

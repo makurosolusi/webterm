@@ -18,7 +18,7 @@ import { ensureAuditSchema } from './featureCapabilities.audit'
 import { defaultTabLayout } from '../shared/tabLayout.schema'
 import { ensureLayoutColumn, parseLayout, serializeLayout } from './db.layout'
 import { ensureColorColumns } from './db.color'
-import { pickWorkspaceColor, DEFAULT_WORKSPACE_SHADE } from '../shared/workspaceColor'
+import { pickWorkspaceColor, DEFAULT_WORKSPACE_SHADE, describeWorkspaceColor } from '../shared/workspaceColor'
 import type { WorkspaceHue, WorkspaceShade } from '../shared/workspaceColor'
 
 const DB_FILE_MODE = 0o600
@@ -138,6 +138,12 @@ export class Db {
   /** Hue ids of every stored workspace (one per row, repeats kept): what `pickWorkspaceColor` avoids. */
   usedHues(): string[] {
     return (this.d.query('SELECT color FROM workspace').all() as { color: string | null }[]).flatMap((r) => (r.color ? [r.color] : []))
+  }
+
+  /** `<hue> <shade>` per workspace id ("blue vivid"): what Central's state header shows next to each workspace. */
+  colorMap(): Map<string, string> {
+    const rows = this.d.query('SELECT id, color, color_shade FROM workspace').all() as { id: string; color: string | null; color_shade: string }[]
+    return new Map(rows.flatMap((r) => (r.color ? [[r.id, describeWorkspaceColor(r.color, r.color_shade)] as [string, string]] : [])))
   }
 
   /** New workspace; without `color` it gets a random hue no other workspace uses (the single create point for every path). */

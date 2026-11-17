@@ -4,6 +4,7 @@
 // versioned `t:'canvas'` frame with `name` so an unsent save in any window neither reverts it nor 409s.
 import { existsSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
+import { WORKSPACE_HUES } from '../../../../shared/workspaceColor'
 import type { ServerMsg } from '../../../../shared/protocol'
 import type { Workspace } from '../../../../shared/workspace'
 import type { Db } from '../../../db'
@@ -56,7 +57,8 @@ export function createWorkspaceDefs(deps: WorkspaceDefsDeps): ToolDef[] {
     tier: 'R2',
     flag: READ_TOOLS_FLAG,
     projectScoped: false,
-    usage: `{"name":"<1-${WORKSPACE_NAME_MAX} chars>","cwd":"<absolute path of an existing directory>","color":"<optional>"}. `
+    usage: `{"name":"<1-${WORKSPACE_NAME_MAX} chars>","cwd":"<absolute path of an existing directory>","color":"<optional: ${WORKSPACE_HUES.join('|')}>"}. `
+      + 'A new board gets an unused color at random unless you name one; the user tells boards apart by it. '
       + 'Returns {"workspaceId","projectId","name","cwd"}; projectId works in the next tool call (canvas.open, canvas.show ...). '
       + 'Every open webterm tab lists the new board; the user stays where they are (use canvas.show to switch).',
     input: obj({ name: S.str(WORKSPACE_NAME_MAX), cwd: S.str(MAX_CWD), color: S.str(MAX_COLOR) }, ['name', 'cwd']),
