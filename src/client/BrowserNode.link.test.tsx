@@ -2,9 +2,10 @@
 // Kabel agent↔browser di canvas SUNGGUHAN. Kabel inilah izin agent mengemudikan browser
 // (`resolveLinkedBrowser` server membaca `ws.bridges` lewat `linkedPeerIds`), jadi yang dibuktikan:
 // node browser punya handle, menyambungnya ke node agent (dua arah) MENYIMPAN bridge, dan sambungan
-// yang tak berguna tetap ditolak. Sambungan dibuat dengan click-connect React Flow (klik handle
-// sumber lalu handle tujuan) — jalur `onConnect` yang sama dengan drag.
-import { fireEvent, waitFor } from '@testing-library/react'
+// yang tak berguna tetap ditolak. Sambungan dibuat dengan DRAG React Flow (mousedown di handle sumber,
+// mousemove, mouseup di handle tujuan). Click-connect sengaja mati (`connectOnClick={false}`): klik
+// handle kabel membuka menu spawn, jadi satu klik tidak boleh membuat kabel.
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserStatusResp } from '../shared/browser.contract'
 import type { BridgeLink, Workspace, WsNode } from '../shared/workspace'
@@ -36,10 +37,13 @@ afterEach(unmountCanvas)
 async function mount(nodes: WsNode[], bridges: BridgeLink[] = []): Promise<void> {
   await mountCanvas({ nodes, bridges, dirs: {}, browserStatus: STATUS })
   vi.stubGlobal('WebSocket', FakeWs)
-  // jsdom tak punya hit-test; null = React Flow memakai handle yang diklik (`isValidHandle`).
-  document.elementFromPoint = () => null
+  // jsdom tak punya hit-test: `dragTarget` = handle yang "ada di bawah pointer" saat drag (`isValidHandle`).
+  dragTarget = null
+  document.elementFromPoint = () => dragTarget
   await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser').length).toBeGreaterThan(0))
 }
+
+let dragTarget: Element | null = null
 
 const handle = (nodeId: string, id: 'link-out' | 'link-in'): HTMLElement => {
   const el = document.querySelector(`.react-flow__node[data-id="${nodeId}"] .react-flow__handle[data-handleid="${id}"]`)
@@ -59,9 +63,13 @@ function savedBridges(): BridgeLink[] | undefined {
 const peersOf = (bridges: BridgeLink[], id: string) =>
   new Set(bridges.flatMap((b) => (b.source === id ? [b.target] : b.target === id ? [b.source] : [])))
 
+/** Drag a cable: mousedown on the source handle, move, release over the target handle (document listeners, as React Flow v12 does). */
 function connect(fromNode: string, toNode: string): void {
-  fireEvent.click(handle(fromNode, 'link-out'))
-  fireEvent.click(handle(toNode, 'link-in'))
+  fireEvent.mouseDown(handle(fromNode, 'link-out'), { clientX: 100, clientY: 100 })
+  dragTarget = handle(toNode, 'link-in')
+  fireEvent.mouseMove(document, { clientX: 400, clientY: 120 })
+  fireEvent.mouseMove(document, { clientX: 700, clientY: 140 })
+  fireEvent.mouseUp(document, { clientX: 700, clientY: 140 })
 }
 
 describe('kabel agent ↔ browser', () => {
@@ -69,6 +77,21 @@ describe('kabel agent ↔ browser', () => {
     await mount([browser])
     expect(handle('br-1', 'link-out').classList).toContain('bridge-handle')
     expect(handle('br-1', 'link-in').classList).toContain('bridge-handle')
+  })
+
+  it('a plain click on a bridge handle opens the handle menu and creates no cable', async () => {
+    await mount([agent, browser])
+    const h = handle('agent-1', 'link-out')
+    fireEvent.mouseDown(h, { clientX: 100, clientY: 100 })
+    // A real click jitters >1px (React Flow's connectionDragThreshold) but stays under the menu's click slop.
+    fireEvent.mouseMove(document, { clientX: 102, clientY: 100 })
+    fireEvent.mouseUp(document, { clientX: 102, clientY: 100 })
+    fireEvent.click(h)
+    fireEvent.click(handle('br-1', 'link-in'))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Add connected node' })).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 700)) // past the save debounce
+    expect(savedBridges() ?? []).toEqual([])
+    expect(renderedEdgeIds()).toEqual([])
   })
 
   it('agent → browser menyimpan bridge yang dilihat linkedPeerIds', async () => {
