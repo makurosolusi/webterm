@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import type { Workspace, WsNode } from '../shared/workspace'
 import { DEFAULT_VIEWPORT } from '../shared/workspace'
+import { lockNodePresets } from './workspace.presets'
 import { normalizeWorkspace, splitNodes, withPreservedNodes } from '../shared/workspace.schema'
 import { withNodeNames } from '../shared/nodeNames'
 import type { WorkspaceSummaryPage } from '../shared/workspace.summary'
@@ -156,7 +157,8 @@ export class Db {
    */
   private nodesColumn(id: string, incoming: readonly WsNode[]): string {
     const row = this.d.query('SELECT nodes FROM workspace WHERE id = ?').get(id) as Pick<Row, 'nodes'> | null
-    return JSON.stringify(withPreservedNodes(withNodeNames(incoming), row ? parseColumn(row.nodes, '[]') : []))
+    const stored = row ? parseColumn(row.nodes, '[]') : []
+    return JSON.stringify(withPreservedNodes(withNodeNames(lockNodePresets(incoming, splitNodes(stored).nodes)), stored))
   }
 
   /** BEGIN IMMEDIATE: the write lock is taken before `fn` reads, so no other connection writes in between. */

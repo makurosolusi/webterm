@@ -13,7 +13,7 @@ export function toFlow(n: WsNode): Node {
     position: { x: n.x, y: n.y },
     width: n.width ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.width : 400),
     height: n.height ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.height : 300),
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, skill: n.skill, seenVersion: n.seenVersion },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion },
   }
 }
 
