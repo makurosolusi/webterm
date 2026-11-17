@@ -1,6 +1,7 @@
 // One row of the canvas Skills panel: the add button (drag onto the canvas / agent, or press Enter) beside a details
 // toggle and the inline on/off switch; the open detail sits under the row. A skill that is off is not addable.
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Switch } from '@/components/ui/switch'
 import { type KeyboardEvent, type ReactNode, useId, useRef } from 'react'
 import { CL } from './central/centralLabels'
@@ -55,9 +56,9 @@ export default function SkillPaletteRow({ row, client, attached, open, onToggle,
           )
           : <div className="sp__row sp__row--static">{body}</div>}
         <div className="sp__ctl">
-          <Button ref={toggle} type="button" variant="ghost" size="icon-sm" aria-expanded={open} aria-controls={open ? detailId : undefined} aria-label={`${CL.skillView} ${record.name} ${record.version}`} onClick={onToggle}>
+          <IconButton ref={toggle} label={`${CL.skillView} ${record.name} ${record.version}`} size="icon-sm" aria-expanded={open} aria-controls={open ? detailId : undefined} onClick={onToggle}>
             <span className={`codicon codicon-chevron-${open ? 'down' : 'right'}`} aria-hidden="true" />
-          </Button>
+          </IconButton>
           <Switch checked={on} disabled={busy} aria-label={CL.skillRowEnabled(record.name)} onCheckedChange={flip} />
         </div>
       </div>
