@@ -64,19 +64,42 @@ describe('SkillNode', () => {
     expect(screen.queryByText(/Updated/)).toBeNull()
   })
 
-  it('disabled: Unavailable badge and the reason; the node is not removed', async () => {
+  it('disabled: badge with icon AND text, the reason, a Remove action; the node is dimmed but stays', async () => {
     show(ready({ enabled: false }))
-    await waitFor(() => expect(screen.getByText('Unavailable')).toBeTruthy())
+    const badge = await screen.findByText('Disabled')
+    expect(badge.querySelector('.codicon-circle-slash')).toBeTruthy() // not colour alone
+    expect(document.querySelector('.skill-node--unavailable')).toBeTruthy()
+    expect(screen.getByRole('group', { name: /^Skill webterm-release/ }).getAttribute('aria-label')).toBe('Skill webterm-release, not attached, Disabled')
     expand()
     expect(screen.getByText(/Switched off in the library/)).toBeTruthy()
     expect(latest).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(latest).toHaveLength(0))
   })
 
-  it('missing: Unavailable with its own reason', async () => {
+  it('missing: Unavailable badge with a warning icon and its own reason', async () => {
     show({ status: 'ready', skills: [] })
-    await waitFor(() => expect(screen.getByText('Unavailable')).toBeTruthy())
+    const badge = await screen.findByText('Unavailable')
+    expect(badge.querySelector('.codicon-warning')).toBeTruthy()
     expand()
     expect(screen.getByText(/Not in the library any more/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeTruthy()
+  })
+
+  it('active: green dot + version, the description is clamped to one line with the full text in a tooltip trigger, aria-label says active', async () => {
+    show(ready({ description: 'Ship a release.' }))
+    await waitFor(() => expect(screen.getByText('v2')).toBeTruthy())
+    expect(document.querySelector('.skill-node__dot')).toBeTruthy()
+    expect(screen.getByRole('group', { name: /^Skill webterm-release/ }).getAttribute('aria-label')).toBe('Skill webterm-release, not attached, Active')
+    expect(screen.queryByText('Disabled')).toBeNull()
+    expand()
+    expect(document.querySelector('.skill-node__slug')?.textContent).toBe('webterm-release')
+    expect(document.querySelector('.skill-node__desc')?.textContent).toBe('Ship a release.')
+  })
+
+  it('shows the label of its Skill port', async () => {
+    show(ready())
+    await waitFor(() => expect(document.querySelector('.skill-port-label--top')?.textContent).toBe('Skill'))
   })
 
   it('loading, failed (with Retry) and Central-skills-off each say so', async () => {

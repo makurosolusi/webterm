@@ -19,6 +19,13 @@ export function cardState(load: CanvasSkillsLoad, name: string | undefined): Ski
   return hit.enabled ? { kind: 'active', version: hit.version, description: hit.description } : { kind: 'disabled' }
 }
 
+/** One word per card state, shared by the badge, the node's aria-label and the cable style. `off` (Central skills off) reads as unavailable. */
+export type SkillStatus = 'active' | 'disabled' | 'unavailable' | 'loading' | 'error'
+export const statusOf = (s: SkillCardState): SkillStatus => (s.kind === 'missing' || s.kind === 'off' ? 'unavailable' : s.kind)
+
+/** The cable of a skill that has no effect right now is drawn as a warning. */
+export const isWarnStatus = (s: SkillStatus | undefined): boolean => s === 'disabled' || s === 'unavailable'
+
 /** Unavailable = the attachment has no effect right now (disabled or missing). */
 export const isUnavailable = (s: SkillCardState): boolean => s.kind === 'disabled' || s.kind === 'missing'
 

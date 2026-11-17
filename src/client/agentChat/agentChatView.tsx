@@ -16,7 +16,8 @@ import { isAbortError } from '../chat/chatTransport'
 import type { ChatStreamStatus } from '../chat/chatTypes'
 import { AGENT_CHAT_TEXT_MAX, type AgentChatEvent } from '../../shared/agentChat.wire'
 import type { AgentChatNodeConfig, AgentChatPreset } from '../../shared/agentChat.shape'
-import { SKILL_AUTHOR_BANNER, SKILL_AUTHOR_LOCK_REASON, SKILL_AUTHOR_PRESET } from './skillAuthor.preset'
+import { SKILL_AUTHOR_LOCK_REASON, SKILL_AUTHOR_PLACEHOLDER, SKILL_AUTHOR_PRESET } from './skillAuthor.preset'
+import { proposedDraft, SkillAuthorDraftCard, SkillAuthorEmpty, SkillAuthorHeader } from './SkillAuthorChat'
 import { useSkillAuthorActivity } from './useSkillAuthorActivity'
 import type { AgentPermissionMode } from '../../shared/workspace.capabilities'
 import { agentChatReducer, initialAgentChatState, isBusyStatus, runningToolName, type AgentChatState } from './agentChatStore'
@@ -180,6 +181,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
   useStickToBottom(scrollRef, atBottom, state)
 
   const busy = isBusyStatus(state.status)
+  const authoring = preset === SKILL_AUTHOR_PRESET
+  const [picked, setPicked] = useState<{ text: string; key: number } | null>(null) // a clicked skill-author starter
   const offline = useDisconnected() // Retry below re-sends; the composer under it says why (OFFLINE_REASON)
   useEffect(() => { onBusy?.(busy) }, [busy, onBusy])
   useSkillAuthorActivity(nodeId, preset, busy)
@@ -246,12 +249,7 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
         </div>
       )}
 
-      {preset === SKILL_AUTHOR_PRESET && (
-        <div className="agent-chat-banner" role="note" aria-label="Chat role">
-          <span className="codicon codicon-lock" aria-hidden="true" />
-          <span>{SKILL_AUTHOR_BANNER}</span>
-        </div>
-      )}
+      {authoring && <SkillAuthorHeader />}
 
       <RateLimitNotice limit={state.rateLimit} />
 
@@ -277,7 +275,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
             </div>
           )}
           {empty && !history.loading && refused === null && (
-            <p className="chat-empty">{opened ? 'Ask Claude anything about this folder.' : 'Connecting to Claude…'}</p>
+            authoring && opened ? <SkillAuthorEmpty onPick={(text) => setPicked((p) => ({ text, key: (p?.key ?? 0) + 1 }))} />
+              : <p className="chat-empty">{opened ? 'Ask Claude anything about this folder.' : 'Connecting to Claude…'}</p>
           )}
           <AgentChatThread state={state} actions={actions} />
         </div>
@@ -288,6 +287,8 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
           </Button>
         )}
       </div>
+
+      {authoring && proposedDraft(state) && <SkillAuthorDraftCard />}
 
       {/* Working indicator; Stop is the composer's primary button while a turn runs. */}
       {label && (
@@ -331,10 +332,10 @@ export function AgentChatView({ nodeId, cwd, chatSessionId, permissionMode, chat
       {branch.editing && <EditBanner onCancel={branch.cancelEdit} />}
       <TodoPanel todos={state.todos} />
       <TasksPanel tasks={state.tasks} onStop={(id) => transport.stopTask(id)} />
-      <ChatComposer busy={false} seed={branch.editing?.seed} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
+      <ChatComposer busy={false} seed={branch.editing?.seed ?? picked ?? undefined} running={busy} onSend={send} onStop={stop} label="Message Claude" attach={attach} dropZone={sectionRef}
         completion={controls.completion} maxLength={AGENT_CHAT_TEXT_MAX}
-        placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : 'Ask Claude, / for commands, @ for files…'}
-        toolbar={<AgentChatToolbar modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} {...(preset === SKILL_AUTHOR_PRESET ? { lockedReason: SKILL_AUTHOR_LOCK_REASON } : {})} />} {...controls.footer} />} />
+        placeholder={busy ? 'Claude is working. Your message runs next (Esc stops)…' : authoring ? SKILL_AUTHOR_PLACEHOLDER : 'Ask Claude, / for commands, @ for files…'}
+        toolbar={<AgentChatToolbar modePicker={<ModePicker mode={mode} onChange={(m) => transport.setMode(m)} {...(authoring ? { lockedReason: SKILL_AUTHOR_LOCK_REASON } : {})} />} {...controls.footer} />} />
       {headerHost && createPortal(<AgentChatHistory modePicker={null} {...controls.footer} />, headerHost)}
     </section>
   )

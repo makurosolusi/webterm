@@ -6,7 +6,7 @@ import { validAgentChatData } from '../../shared/agentChat.shape'
 import { buildAgentChatNode } from '../../shared/agentChat.node'
 import { toWsNode } from '../store'
 import { SKILL_AUTHOR_ACTIVITY } from './skillAuthor.events'
-import { SKILL_AUTHOR_BANNER } from './skillAuthor.preset'
+import { SKILL_AUTHOR_BANNER, SKILL_AUTHOR_HEADER } from './skillAuthor.preset'
 import { useSkillAuthorActivity } from './useSkillAuthorActivity'
 import { fakeAgentChatTransport } from './agentChatTransport.fake'
 import { AgentChatView } from './agentChatView'
@@ -60,7 +60,10 @@ describe('role is server-side: no client priming', () => {
   })
   it('shows the role banner for a preset node only', () => {
     mount('skill-author')
-    expect(screen.getByRole('note', { name: 'Chat role' }).textContent).toBe(SKILL_AUTHOR_BANNER)
+    const note = screen.getByRole('note', { name: 'Chat role' })
+    expect(note.textContent).toContain(SKILL_AUTHOR_HEADER)
+    expect(note.textContent).toContain(SKILL_AUTHOR_BANNER) // sr-only: the full role for assistive tech
+    expect(note.querySelector('.codicon-lock')).toBeTruthy()
     expect(SKILL_AUTHOR_BANNER).toMatch(/purpose, title, steps and checks before writing.*approval in the Skills tab/)
     cleanup()
     mount()
