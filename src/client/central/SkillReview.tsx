@@ -40,7 +40,7 @@ function LintList({ lint }: { lint: SkillReviewRow['lint'] }) {
       {items.map((it, i) => (
         <li key={i} role={i === 0 ? 'status' : undefined}>
           <span className={`codicon codicon-${it.pass ? 'pass' : 'error'}`} aria-hidden="true" />
-          <span>{i === 0 ? `${it.pass ? SD.lintPass : SD.lintFail}: ${it.text}` : it.text}</span>
+          {i === 0 && <strong>{it.pass ? SD.lintPass : SD.lintFail}: </strong>}<span>{it.text}</span>
         </li>
       ))}
     </ul>
