@@ -151,19 +151,19 @@ describe('Settings › Central Agent', () => {
     expect(onChange).toHaveBeenCalledWith({ centralTidy: false })
   })
 
-  it('"What Central may do" is the shared segmented control; On its own asks in the app dialog first', async () => {
+  it('"What Central may do" is the shared segmented control; Full, on its own asks in the app dialog first', async () => {
     await open()
     const confirm = vi.spyOn(window, 'confirm')
     const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
     expect(group.getAttribute('data-control')).toBe('segmented')
-    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Chat only', 'Propose work', 'On its own'])
-    expect(within(group).getByRole('radio', { name: 'Propose work' }).getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(within(group).getByRole('radio', { name: 'On its own' }))
+    expect(within(group).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Chat only', 'Full', 'Full, on its own'])
+    expect(within(group).getByRole('radio', { name: 'Full' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(group).getByRole('radio', { name: 'Full, on its own' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Let Central work on its own?' })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(posts).toEqual([])
-    fireEvent.click(within(group).getByRole('radio', { name: 'On its own' }))
+    fireEvent.click(within(group).getByRole('radio', { name: 'Full, on its own' }))
     fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Let it work on its own' }))
     await waitFor(() => expect(posts).toEqual([{ url: '/api/capabilities/autonomy', body: { enabled: true } }]))
     expect(confirm).not.toHaveBeenCalled()
@@ -171,15 +171,12 @@ describe('Settings › Central Agent', () => {
     await waitFor(() => expect(posts[1]).toEqual({ url: '/api/capabilities/workers', body: { enabled: false } }))
   })
 
-  it('Propose work always asks: moving there also turns the worker approval on', async () => {
+  it('Full turns only the workers card on: no approval switch is changed', async () => {
     on = new Set(['central'])
     await open()
     const group = screen.getByRole('radiogroup', { name: 'What Central may do' })
-    fireEvent.click(within(group).getByRole('radio', { name: 'Propose work' }))
-    await waitFor(() => expect(posts).toEqual([
-      { url: '/api/capabilities/workers', body: { enabled: true } },
-      { url: '/api/capabilities/workers/sub', body: { key: 'runRequireApproval', on: true } },
-    ]))
+    fireEvent.click(within(group).getByRole('radio', { name: 'Full' }))
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/capabilities/workers', body: { enabled: true } }]))
   })
 
   it('Workers per day writes through /api/settings/env in stored units', async () => {

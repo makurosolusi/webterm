@@ -26,10 +26,10 @@ const TGC = { owner: 'channels', section: 'Telegram', audience: 'advanced' } as 
 const AGENTS_ON = { key: 'WEBTERM_CENTRAL_AGENTS', oneOf: ['propose', 'auto'], note: 'Needs the Worker orchestrator on.' }
 
 export const CA2_ENV_SPECS: readonly EnvSpec[] = [
-  enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'off', {
+  enumOf('WEBTERM_CENTRAL_AGENTS', 'central', ['off', 'propose', 'auto'], 'auto', {
     ...C, dangerNote: 'Central can run real workers (shell, file edits) on the server machine; auto runs without a per-action approval card.', requires: [{ key: 'WEBTERM_ORCHESTRATOR_RUN' }],
     label: 'Workers Central may start',
-    description: 'Set by the Worker orchestrator card (Central asks you to approve each worker) and the Autonomy card (Central starts workers on its own within its limits). A value in .env or the shell still wins.',
+    description: 'Full (default): Central starts workers and acts on its own, within its limits; it never writes code itself. Ask first: Central asks you to approve each worker. Off: no workers. A value in .env or the shell still wins.',
     dangerous: true,
   }),
   flag('WEBTERM_CENTRAL_CHECKPOINT', 'central-context', { ...C, hot: true, label: 'Summarize long conversations', description: 'Keep Central up to date in every reply (time, open work, pinned state) and keep a running summary so long chats stay on track. On by default; turn off only for the bare conversation.' }, 'on'),

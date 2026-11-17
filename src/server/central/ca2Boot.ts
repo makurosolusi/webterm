@@ -40,6 +40,7 @@ import { type MapTool, registerCapabilityMap } from './context/capabilityMap'
 import { watchPlaybookApprovals } from './playbooks/playbook.run'
 import { toolsView } from './toolsCatalog.api'
 import { activeCa2, setActiveCa2 } from './ca2Active'
+import { agentsModeOf } from './agentsMode'
 import { projectWorkspaceId } from './workspaceLookup'
 import { skipApprovalsFor } from '../../shared/settings.projectApprovalLevels'
 import { reconcileTurns } from './chat/turnReconciler'
@@ -54,7 +55,6 @@ import type { SyncMemoryBlockProvider } from './context/contextAssembler'
 type Env = Record<string, string | undefined>
 const log = createLogger('central.ca2')
 
-const AGENT_MODES = ['propose', 'auto']
 const SWEEP_INTERVAL_MS = 2_000
 const SKILLS_SUBDIR = join('central', 'skills')
 const KNOWLEDGE_FILE = 'knowledge.db'
@@ -161,7 +161,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
   let built: ReturnType<typeof buildExecutor> | undefined
   const work = createWorkTracking({ db, sessions, now, noTimer: opts.noTimer === true, recover: {
     // Looked up on use: the executor exists only after `start` and only in agent mode; `propose` makes a respawn wait for its card.
-    runtime: () => ({ executor: built?.executor ?? null, host: built?.host ?? null, guard, requireApproval: (effectiveEnv(env).WEBTERM_CENTRAL_AGENTS ?? '').trim().toLowerCase() === 'propose' }),
+    runtime: () => ({ executor: built?.executor ?? null, host: built?.host ?? null, guard, requireApproval: agentsModeOf(effectiveEnv(env)) === 'propose' }),
   } })
   let armed = false
   // Crash recovery runs once per process: a re-arm (Central off -> on) must not sweep turns this process is still running.
@@ -180,7 +180,7 @@ export function bootCa2(opts: Ca2BootOptions): Ca2Handle | null {
     if (armed || !ca2Active(env)) return
     armed = true
     const eff = effectiveEnv(env)
-    if (AGENT_MODES.includes((eff.WEBTERM_CENTRAL_AGENTS ?? '').trim().toLowerCase())) built ??= buildExecutor(opts, db, guard, eff, now, dir)
+    if (agentsModeOf(eff) !== 'off') built ??= buildExecutor(opts, db, guard, eff, now, dir)
     handle.executor = built?.executor ?? null
     // Re-read on every (re)start: the Settings switch for Central skills bounces Central, so on and off both apply live.
     handle.skills = flagOn(eff.WEBTERM_CENTRAL_SKILLS) || flagOn(eff.WEBTERM_CENTRAL_SKILL_PROPOSE) ? handle.skills ?? buildSkills(db, handle.skillsRoot, now) : null

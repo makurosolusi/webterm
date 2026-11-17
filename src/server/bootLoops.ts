@@ -5,9 +5,10 @@ import { basename } from 'node:path'
 import { createLogger, type Logger } from './logs'
 import { startLedgerReaper, type LedgerRuntime } from './ledger/ledgerRuntime'
 import { createTrashReaper } from './fsBoot'
-import { flushBootChanges } from './bootChanges'
+import { flushBootChanges, queueBootChange } from './bootChanges'
 import { announceRetentionSweep } from './central/retentionNotice'
 import { db } from './db'
+import { migrateGlobalLevelDefault } from './centralAutonomyMigration'
 import { bootCentralNotices } from './central/centralNotices'
 import { ensureRoutines } from './routines/routinesRuntime'
 import { startCostCapture } from './cost/costRuntime'
@@ -49,5 +50,9 @@ export function startDeviceLoops(log: BootLog): void {
 export function startLedgerLoops(rt: LedgerRuntime, log: BootLog): void {
   createLogger('ledger').info('ledger.start', `Ledger ${rt.mode}`, { mode: rt.mode, file: basename(rt.path) })
   startLedgerReaper({ task: rt.ledger.task, retention: rt.ledger.retention, trash: createTrashReaper(), onRetention: (changed) => announceRetentionSweep(changed) })
+  // Owner decision 2026-11-17: an old default `propose` global level rises once (centralAutonomyMigration.ts); queued before the notice.
+  try {
+    if (migrateGlobalLevelDefault({ db: rt.db, now: Date.now, getFlag: (k) => db.getAppFlag(k), setFlag: (k, v) => db.setAppFlag(k, v) }) === 'moved') queueBootChange('autonomy', ['central.control'])
+  } catch (e) { log.warn('central.autonomy_default.migrate_failed', 'Cannot raise the Central autonomy default at boot', { cause: cause(e) }) }
   try { flushBootChanges(rt.db) } catch (e) { log.warn('boot.changes_notice_failed', 'Cannot post the startup changes notice', { cause: cause(e) }) }
 }

@@ -156,7 +156,7 @@ test('grants, lineage, tier data and principal tokens survive a restart', () => 
 
 test('controlGuard reads the tier minimum from data and obeys a human rule for central', () => {
   const db = freshDb()
-  const guard = createControlGuard({ db, now: () => T0, env: {} })
+  const guard = createControlGuard({ db, now: () => T0, env: { WEBTERM_CENTRAL_AGENTS: 'off' } }) // explicit off = ceiling propose
   const req = { action: 'tool' as const, projectId: 'p1', tool: 'goal.propose', tier: 'R1' as const }
   expect(guard.check(req).verdict).toBe('allow')
   guard.policy.store.setTierMinimum('R1', 'act_gated')

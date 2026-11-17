@@ -9,6 +9,8 @@ import { syncLinkedSettings } from './featureCapabilities.service'
 import { backfillSetup } from './setupBackfill'
 import { loadConfig, providerSaved } from './claudeProvider/claudeProvider.store'
 import { migrateApprovalDefault } from './approvalDefaultMigration'
+import { migrateAgentsEnvDefault } from './centralAutonomyMigration'
+import { AGENTS_ENV } from './central/agentsMode'
 import { defaultProfileAfter } from './claudeProvider/claudeProvider.command'
 
 type BootLog = Pick<Logger, 'info' | 'warn'>
@@ -22,6 +24,13 @@ const cause = (e: unknown): string => (e instanceof Error ? e.message : String(e
 export function applyLinkedSettings(envSettings: EnvSettings, log: BootLog): void {
   // Gagal (mis. Pengaturan dikunci) tidak menghentikan boot: kartu tetap bisa dimatikan-nyalakan.
   try {
+    // Before the sync below: an old stored `propose` (the former card default) moves to `auto` once (owner decision 2026-11-17).
+    const m = migrateAgentsEnvDefault({
+      getFlag: (k) => db.getAppFlag(k), setFlag: (k, v) => db.setAppFlag(k, v),
+      stored: () => envSettings.state({ root: true }).entries.find((e) => e.key === AGENTS_ENV) ?? null,
+      save: (value) => envSettings.update({ set: { [AGENTS_ENV]: value }, unset: [] }, { root: true }),
+    })
+    if (m === 'moved') queueBootChange('autonomy', [AGENTS_ENV])
     queueBootChange('default_on', envSettings.defaultsApplied())
     const linked = syncLinkedSettings(envSettings, process.env)
     queueBootChange('linked', linked)

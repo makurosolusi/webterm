@@ -117,7 +117,7 @@ describe('flags on', () => {
     const registry = coreRegistry()
     const handle = bootCa2({
       runtime: runtime(), sessions, registry, noTimer: true, dataDirPath: tmp(),
-      env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_SKILLS: 'on' },
+      env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_AGENTS: 'off' },
     })
     expect(handle).not.toBeNull()
     expect(activeCa2()).toBe(handle)
@@ -126,6 +126,17 @@ describe('flags on', () => {
     expect(handle?.toolNames).toEqual(expect.arrayContaining(registry.list().map((d) => d.name).filter((n) => !CORE_DEFS.some((c) => c.name === n))))
     expect(handle?.toolsHash).toBe(toolsHash(registry))
     handle?.stop()
+  })
+
+  it('owner decision 2026-11-17: with the agents flag unset the executor is built (default auto); an explicit off keeps it out', () => {
+    const base = { runtime: runtime(), sessions, noTimer: true, dataDirPath: tmp() }
+    const on = bootCa2({ ...base, registry: coreRegistry(), env: { WEBTERM_CENTRAL: 'on' } })
+    expect(on?.executor).not.toBeNull()
+    expect(on?.toolNames).toEqual(expect.arrayContaining(['agent.spawn']))
+    on?.stop()
+    const off = bootCa2({ ...base, registry: coreRegistry(), env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'off' } })
+    expect(off?.executor).toBeNull()
+    off?.stop()
   })
 
   it('boot with the agents flag builds an executor under the injected data dir and sweeps nothing', async () => {

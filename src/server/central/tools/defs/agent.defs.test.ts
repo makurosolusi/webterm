@@ -44,10 +44,11 @@ describe('agent tools', () => {
     const { executor } = setup()
     expect(createAgentDefs(executor).map((d) => `${d.name}:${d.tier}`)).toEqual(['agent.list:R0', 'agent.status:R0', 'agent.read:R0', 'agent.spawn:R2', 'agent.prompt:R1', 'agent.close:R1'])
   })
-  it('is inert unless the flag is propose or auto', async () => {
+  it('is inert unless the flag is propose or auto (unset = auto)', async () => {
     const s = setup()
-    for (const mode of ['', 'off', 'on', 'bogus']) expect((await s.spawn({}, mode)).code).toBe('flag_off')
-    expect((await s.run('agent.list', { projectId: 'p1' }, '')).code).toBe('flag_off')
+    for (const mode of ['off', 'on', 'bogus']) expect((await s.spawn({}, mode)).code).toBe('flag_off')
+    expect((await s.run('agent.list', { projectId: 'p1' }, 'off')).code).toBe('flag_off')
+    expect((await s.run('agent.list', { projectId: 'p1' }, '')).code).not.toBe('flag_off')
     expect(s.executor.store.list({ projectId: 'p1' })).toEqual([])
     expect(s.sessions.size).toBe(0)
   })

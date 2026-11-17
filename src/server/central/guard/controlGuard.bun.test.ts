@@ -11,6 +11,7 @@ import { addAgent, eventKinds, freshDb, HUMAN, run, T0 } from './controlGuard.te
 const DAY_MS = 86_400_000
 const GATED = { WEBTERM_CENTRAL_AGENTS: 'propose' }
 const AUTO = { WEBTERM_CENTRAL_AGENTS: 'auto' }
+const OFF = { WEBTERM_CENTRAL_AGENTS: 'off' } // explicit owner choice: propose only
 
 function setup(env: Record<string, string | undefined> = {}) {
   const db = freshDb()
@@ -23,8 +24,15 @@ const level = (db: Database, l: 'off' | 'observe' | 'propose' | 'act_gated' | 'a
   expect(setLevel(db, { scope, level: l, actor: HUMAN, now: () => T0 }).ok).toBe(true)
 const code = (d: GuardDecision) => (d.verdict === 'deny' ? d.code : d.verdict)
 
+test('default (no row, env unset): Central spawns and acts without a card or level_denied; R3 still asks', () => {
+  const { guard } = setup()
+  expect(code(guard.check(req({ action: 'spawn', tool: 'agent.spawn', tier: 'R2' })))).toBe('allow')
+  expect(code(guard.check(req({ tier: 'R2', tool: 'agent.prompt' })))).toBe('allow')
+  expect(code(guard.check(req({ tier: 'R3', tool: 'project.bootstrap' })))).toBe('needs_approval')
+})
+
 test('verdict follows the ladder and the tier', () => {
-  const { db, guard } = setup()
+  const { db, guard } = setup(OFF)
   expect(code(guard.check(req({ tier: 'R0' })))).toBe('allow')
   expect(code(guard.check(req()))).toBe('allow')
   expect(code(guard.check(req({ action: 'spawn', tool: 'agent.spawn', tier: 'R2' })))).toBe('level_denied')
@@ -136,7 +144,7 @@ test('doom-loop: the same proposal digest repeated opens its breaker; reads and 
 })
 
 test('every decision is audited with verdict and code, without free text from the request', () => {
-  const { db, guard } = setup()
+  const { db, guard } = setup(OFF)
   guard.check(req({ tier: 'R0' }))
   guard.check(req({ action: 'spawn', tool: 'agent.spawn', tier: 'R2' }))
   const audits = eventKinds(db, 'central.guard')

@@ -75,13 +75,10 @@ export function CentralSettingsSection({ settings: s, onChange }: CentralSetting
   const checkin = useCheckinSettings()
   const view = (id: CapabilityId): CapabilityView | undefined => api.data?.capabilities.find((v) => v.id === id)
   const central = view('central')
-  // "Propose work" always asks before each worker runs: moving there also turns that approval on (the old
-  // separate switch), so the ledger setting cannot drift from what the level promises.
   const moveLevel = async (v: string): Promise<void> => {
     const levelField = CENTRAL_FIELDS.find((x) => x.id === 'level')!
     const t = levelToggle(levelField, v, view)
-    if (t && !(await api.toggle(t.id, t.on))) return
-    if (v === 'workers') await api.setSub('workers', 'runRequireApproval', true)
+    if (t) await api.toggle(t.id, t.on)
   }
   // Busy only: the step disappears once Central is on, and a refusal is the alert at the top.
   const fixChain = useAction(() => api.toggle('central', true), { label: CENTRAL_TEXT.fixChain, toast: 'never' })

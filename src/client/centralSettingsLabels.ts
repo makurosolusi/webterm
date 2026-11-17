@@ -11,8 +11,8 @@ export const CENTRAL_GROUP_TITLE: Readonly<Record<CentralGroup, string>> = {
 
 export const CENTRAL_TEXT = {
   offReason: 'Turn on Central Agent first.',
-  workersOffReason: 'Choose "Propose work" or "Work on its own" first.',
-  autonomyOffReason: 'Choose "Work on its own" first.',
+  workersOffReason: 'Choose "Full" first.',
+  autonomyOffReason: 'Choose "Full, on its own" first.',
   unavailable: 'Not available on this server.',
   locked: 'Locked by the server environment.',
   loading: 'Loading…',
@@ -37,7 +37,7 @@ export const CENTRAL_TEXT = {
 /** Label + hint per registry id. */
 export const CENTRAL_FIELD_TEXT = {
   central: { label: 'Central Agent', hint: 'An assistant that knows all your projects and nodes, and that you can talk to.' },
-  level: { label: 'What Central may do', hint: 'Chat only: Central answers but starts no workers. Propose work: it asks you before each worker. On its own: it starts workers without asking.' },
+  level: { label: 'What Central may do', hint: 'Full: Central acts on its own (starts workers, drives the canvas, runs tools) and never writes code itself; workers do. Full, on its own: it also keeps going without being asked. Chat only: Central answers but starts no workers. To make it ask first, set "Workers Central may start" to propose in Advanced.' },
   checkin: { label: 'Let Central check in by itself', hint: 'Central starts a turn on its own when something needs a decision, such as a stalled task or a reminder that came due.' },
   tidy: { label: 'Tidy up finished workers', hint: 'Central folds away workers it started once they finish and you have their result, then closes them after a couple of hours. It never touches your own nodes.' },
   costLimit: { label: 'Daily spending limit', hint: 'At 80% work moves to cheaper models; at 100% Central, routines, plans and bake-offs pause until the next day. Empty = no limit.' },
@@ -47,6 +47,6 @@ export const CENTRAL_FIELD_TEXT = {
   maxInflight: { label: 'Max workers at once', hint: 'How many workers Central runs side by side when it works on its own. Applies to the next worker it starts.' },
 } as const
 
-export const LEVEL_TEXT = { none: 'Chat only', workers: 'Propose work', autonomy: 'On its own' } as const
+export const LEVEL_TEXT = { none: 'Chat only', workers: 'Full', autonomy: 'Full, on its own' } as const
 
 export const UNIT_TEXT = { workers: 'workers' } as const

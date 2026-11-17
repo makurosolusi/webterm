@@ -3,13 +3,13 @@
 import type { Database } from 'bun:sqlite'
 import { appendEvent } from '../../ledger/ledgerEvent'
 import { execWrite, getRow, tx } from '../../ledger/ledgerCore'
+import { agentsModeOf } from '../agentsMode'
 import { CONTROL_LEVELS, type ControlLevel, type ControlScope } from '../contracts/level.types'
 
-/** Level of the global scope when no row exists yet (L2 propose, RND/28b 4.1). */
-export const DEFAULT_GLOBAL_LEVEL: ControlLevel = 'propose'
+/** Level of the global scope when no row exists yet: the top of the ladder (owner decision 2026-11-17, Central is free except for writing code). */
+export const DEFAULT_GLOBAL_LEVEL: ControlLevel = 'act_envelope'
 /** A project without its own row inherits the global level, i.e. it adds no restriction. */
 const TOP_LEVEL: ControlLevel = CONTROL_LEVELS[CONTROL_LEVELS.length - 1]!
-const CENTRAL_AGENTS_ENV = 'WEBTERM_CENTRAL_AGENTS'
 const MAX_REASON = 200
 const MAX_ACTOR_ID = 80
 /** Audit kind for every level change. */
@@ -33,12 +33,11 @@ export function minLevel(...levels: ControlLevel[]): ControlLevel {
   return levels.reduce((low, next) => (levelRank(next) < levelRank(low) ? next : low))
 }
 
-/** Ceiling ("Batas tertinggi") from `WEBTERM_CENTRAL_AGENTS` (derived from the Worker/Otonomi cards): off = propose only, propose = act_gated, auto = act_envelope. */
+/** Ceiling from `WEBTERM_CENTRAL_AGENTS`: unset/auto = act_envelope, propose = act_gated, off = propose only. */
 export function envCeiling(env: Record<string, string | undefined>): ControlLevel {
-  const mode = (env[CENTRAL_AGENTS_ENV] ?? '').trim().toLowerCase()
+  const mode = agentsModeOf(env)
   if (mode === 'propose') return 'act_gated'
-  if (mode === 'auto') return 'act_envelope'
-  return 'propose'
+  return mode === 'auto' ? 'act_envelope' : 'propose'
 }
 
 /** `{projectId}` for an audit event only when the project exists (events reject dangling refs). */
@@ -56,21 +55,17 @@ export function readLevel(db: Database, scope: ControlScope): StoredLevel | null
   return { scope, level: String(r.level) as ControlLevel, reason: r.reason === null ? null : String(r.reason), setBy: String(r.set_by), setAt: Number(r.set_at), version: Number(r.version) }
 }
 
-/** A global scope without a row inherits the ceiling, capped here: per-action approval, never envelope by default. */
-const INHERIT_MAX: ControlLevel = 'act_gated'
-
-/** Global level in force: the stored row, else the ceiling capped at act_gated. */
-export function globalLevelOf(db: Database, env: Record<string, string | undefined>): ControlLevel {
-  return readLevel(db, 'global')?.level ?? minLevel(envCeiling(env), INHERIT_MAX)
+/** Global level in force: the stored row, else the default (the effective level is still capped by the env ceiling). */
+export function globalLevelOf(db: Database): ControlLevel {
+  return readLevel(db, 'global')?.level ?? DEFAULT_GLOBAL_LEVEL
 }
 
 /**
- * `min(ceiling, global, project)` read fresh from the DB on every call. No global row = the ceiling up to
- * act_gated, so turning on the Worker card is enough for Central to run workers (each run still needs an
- * approval card); act_envelope always needs a human to raise the global level.
+ * `min(ceiling, global, project)` read fresh from the DB on every call. No global row = the top level, so the
+ * owner's env ceiling and an explicit lowering are the only things that narrow Central.
  */
 export function effectiveLevelOf(db: Database, projectId: string | null, env: Record<string, string | undefined>): ControlLevel {
-  const global = globalLevelOf(db, env)
+  const global = globalLevelOf(db)
   const project = projectId ? readLevel(db, scopeOf(projectId))?.level ?? TOP_LEVEL : TOP_LEVEL
   return minLevel(envCeiling(env), global, project)
 }
