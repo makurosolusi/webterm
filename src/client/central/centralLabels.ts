@@ -192,7 +192,7 @@ export const LEVEL_NAMES: Record<ControlLevel, string> = {
   observe: 'L1 Chat only',
   propose: 'L2 Proposes work, you approve',
   act_gated: 'L3 Starts workers, asks before risky steps',
-  act_envelope: 'L4 Works on its own within its limits',
+  act_envelope: 'L4 Full: acts on its own, never writes code',
 }
 
 /** One plain sentence per level, shown under the level name on the Status tab. */
@@ -201,7 +201,7 @@ export const LEVEL_MEANING: Record<ControlLevel, string> = {
   observe: 'Central can chat and look things up, but changes nothing.',
   propose: 'Central suggests plans and work; nothing runs until you approve it.',
   act_gated: 'Central can start workers on its own and asks you before anything risky.',
-  act_envelope: 'Central works on its own within its budget and asks only before the riskiest steps.',
+  act_envelope: 'Full: Central acts on its own within its budget and limits; it never writes code (workers do).',
 }
 
 /** Plain-English provenance of a memory (the trust ladder in contracts/memory.types.ts). */

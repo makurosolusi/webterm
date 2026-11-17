@@ -34,7 +34,7 @@ describe('agent.kinds', () => {
 
   it('is inert while the agents flag is off', async () => {
     const { run } = setup()
-    for (const mode of ['', 'off', 'on']) expect((await run(mode)).code).toBe('flag_off')
+    for (const mode of ['off', 'on']) expect((await run(mode)).code).toBe('flag_off')
   })
 
   it('lists builtins and open custom kinds only, without argv, env, program or secret', async () => {

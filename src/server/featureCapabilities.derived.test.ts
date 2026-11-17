@@ -24,21 +24,21 @@ function spy(ids: CapabilityId[]): void {
 afterEach(() => { offs.splice(0).forEach((off) => off()); events.length = 0 })
 
 describe('kunci turunan Worker/Otonomi', () => {
-  it('linkedSettings: Worker = propose; Otonomi = auto; mati = off; retired dead keys are no longer written', () => {
+  it('linkedSettings: Worker = auto (owner decision 2026-11-17); mati = off; retired dead keys are no longer written', () => {
     // Knowledge, steadier autonomy and agent mail are on by default on their own, so no card writes them any more.
-    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'propose' })
-    expect(linkedSettings(new Set(['autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
+    expect(linkedSettings(new Set(['workers']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
+    expect(linkedSettings(new Set(['workers', 'autonomy']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'auto' })
     expect(linkedSettings(new Set(['central']))).toEqual({ WEBTERM_CENTRAL_AGENTS: 'off' })
   })
-  it('toggle menulis nilainya ke env; mematikan Otonomi turun ke propose', async () => {
+  it('toggle menulis nilainya ke env; mematikan Otonomi tidak menurunkan Worker', async () => {
     const h = harness()
     await toggle(h.ctx, 'workers', true)
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose' })
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'auto' })
     expect(h.target.WEBTERM_CENTRAL_TOOLS).toBeUndefined()
     await toggle(h.ctx, 'autonomy', true)
     expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('auto')
     await toggle(h.ctx, 'autonomy', false)
-    expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('propose')
+    expect(h.target.WEBTERM_CENTRAL_AGENTS).toBe('auto')
   })
   it('nilai eksplisit dari shell/.env tidak ditimpa kartu', async () => {
     const h = harness({ WEBTERM_CENTRAL_AGENTS: 'off' })
@@ -83,7 +83,7 @@ describe('syncLinkedSettings (boot)', () => {
   it('Worker yang sudah on sebelum perubahan mendapat nilai turunan tanpa toggle; boot kedua tak menulis', () => {
     const h = harness({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on' })
     expect(syncLinkedSettings(h.svc, h.target)).toEqual(['WEBTERM_CENTRAL_AGENTS'])
-    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'propose' })
+    expect(h.target).toMatchObject({ WEBTERM_CENTRAL_AGENTS: 'auto' })
     expect(syncLinkedSettings(h.svc, h.target)).toEqual([])
   })
   it('env eksplisit menang dan kartu mati tidak menulis apa pun', () => {

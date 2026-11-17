@@ -7,7 +7,8 @@ import type { UserMemoryStore } from '../../memory/memoryUserStore'
 import type { AgentExecutor } from '../agents/agentExecutor'
 import type { MailDeliver } from '../agents/mailDeliver'
 import { AGENT_MAIL_FLAG, createAgentRelayDef } from './defs/agent.relay.def'
-import { AGENTS_FLAG, createAgentDefs } from './defs/agent.defs'
+import { createAgentDefs } from './defs/agent.defs'
+import { agentsModeOf } from '../agentsMode'
 import { BROWSER_TOOLS_FLAG, createBrowserDefs } from './defs/browser.act'
 import { CAP_DEFS } from './defs/cap.defs'
 import type { BrowserToolDeps } from './defs/browser.status'
@@ -43,7 +44,6 @@ import { type ToolDef, type ToolRegistry, defEnabled } from './toolTypes'
 export { toolsHash } from './toolRegistry'
 
 const BOTS_FLAG = 'WEBTERM_CENTRAL_BOTS'
-const AGENT_MODES = ['propose', 'auto']
 
 /** What each group needs from the process; a missing dependency skips its group instead of failing boot. */
 export interface Ca2ToolDeps {
@@ -58,7 +58,7 @@ export interface Ca2ToolDeps {
 
 type Env = Record<string, string | undefined>
 const on = (env: Env, name: string): boolean => flagOn(env[name])
-const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?? '').trim().toLowerCase())
+const agentsOn = (env: Env): boolean => agentsModeOf(env) !== 'off'
 // Loaded on first call, not at import: the board runtime opens webterm.db and `sessions` boots the PTY
 // supervisor, neither of which a module that merely registers tools (or its tests) should trigger.
 const chats = async () => (await import('../../agentChat/agentChat.runtime')).agentChatPort()

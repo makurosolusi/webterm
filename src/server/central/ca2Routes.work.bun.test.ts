@@ -27,7 +27,7 @@ beforeEach(() => {
   clock = T0
   const registry = createRegistry()
   for (const d of CORE_DEFS) registry.register(d)
-  const booted = bootCa2({ runtime: { db: freshDb() } as unknown as LedgerRuntime, sessions, registry, noTimer: true, dataDirPath: dir, now: () => clock, env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MODEL: 'paid' } })
+  const booted = bootCa2({ runtime: { db: freshDb() } as unknown as LedgerRuntime, sessions, registry, noTimer: true, dataDirPath: dir, now: () => clock, env: { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_MODEL: 'paid', WEBTERM_CENTRAL_AGENTS: 'off' } })
   if (!booted) throw new Error('boot failed')
   h = booted
   store = createWorkStore(h.db, () => clock)

@@ -107,11 +107,9 @@ export const DERIVED_FLAGS: readonly { key: string; needs: readonly CapabilityId
  * menang. Nilai eksplisit dari shell/.env tidak ditimpa (lihat `commit` di layanan).
  */
 export const LINKED_SETTINGS: readonly { key: string; needs: readonly CapabilityId[]; on: string; off: string }[] = [
-  // Worker on = Central boleh mengusulkan dan menjalankan worker; tiap aksi tetap lewat kartu persetujuan (propose).
-  // (WEBTERM_CENTRAL_TOOLS/_PLANNER dulu ditulis di sini tanpa pembaca runtime; dihapus, nilai tersimpan lama diabaikan.)
-  // Tanpa kartu per aksi (auto) hanya lewat kartu Otonomi yang berbahaya; urutan ini = auto menang atas propose.
-  { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['autonomy'], on: 'auto', off: 'off' },
-  { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['workers'], on: 'propose', off: 'off' },
+  // Worker on = Central menjalankan worker tanpa kartu per aksi (auto; keputusan pemilik 2026-11-17, docs/decisions/central-autonomy-default.md).
+  // Menurunkan ke propose/off: nilai eksplisit di Settings lanjutan, .env atau shell (tidak ditimpa).
+  { key: 'WEBTERM_CENTRAL_AGENTS', needs: ['workers'], on: 'auto', off: 'off' },
   // Knowledge index, steadier autonomy and agent mail are on by default on their own (registry default `on`), so
   // they are no longer tied to "Work on its own": the knowledge index helps chat too, mail needs workers anyway.
 ]

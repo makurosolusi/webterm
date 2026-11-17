@@ -50,7 +50,7 @@ async function halt(req: ControlRequest, deps: ControlDeps): Promise<RouteResult
 function readControl(req: ControlRequest, deps: ControlDeps): RouteResult {
   const env = deps.env ?? process.env
   const global = readLevel(deps.db, 'global')
-  const base = { ceiling: envCeiling(env), global: { level: globalLevelOf(deps.db, env), version: global?.version ?? 0, reason: global?.reason ?? null, setBy: global?.setBy ?? null, setAt: global?.setAt ?? null } }
+  const base = { ceiling: envCeiling(env), global: { level: globalLevelOf(deps.db), version: global?.version ?? 0, reason: global?.reason ?? null, setBy: global?.setBy ?? null, setAt: global?.setAt ?? null } }
   const projectId = req.query?.get('projectId')?.trim()
   if (projectId) {
     if (projectId.length > MAX_PROJECT_ID) return fail(400, 'invalid_project')

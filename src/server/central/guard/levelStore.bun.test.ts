@@ -1,6 +1,6 @@
 // Bun-only. Level ladder: min(env, global, project), lowering open, raising human-only.
 import { expect, test } from 'bun:test'
-import { envCeiling, effectiveLevelOf, minLevel, readLevel, setLevel } from './levelStore'
+import { envCeiling, effectiveLevelOf, globalLevelOf, minLevel, readLevel, setLevel } from './levelStore'
 import { eventKinds, freshDb, HUMAN, T0 } from './controlGuard.testutil'
 
 const now = () => T0
@@ -8,10 +8,11 @@ const none = {}
 
 test('effective level is min(env ceiling, global, project)', () => {
   const db = freshDb()
-  expect(effectiveLevelOf(db, 'p1', none)).toBe('propose')
+  expect(effectiveLevelOf(db, 'p1', none)).toBe('act_envelope')
+  expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'off' })).toBe('propose')
   expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
   expect(setLevel(db, { scope: 'global', level: 'act_envelope', actor: HUMAN, now }).ok).toBe(true)
-  expect(effectiveLevelOf(db, 'p1', none)).toBe('propose')
+  expect(effectiveLevelOf(db, 'p1', none)).toBe('act_envelope')
   expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
   expect(effectiveLevelOf(db, 'p1', { WEBTERM_CENTRAL_AGENTS: 'auto' })).toBe('act_envelope')
   expect(setLevel(db, { scope: 'project:p1', level: 'observe', actor: HUMAN, now }).ok).toBe(true)
@@ -55,9 +56,12 @@ test('lowering applies at once, CAS conflicts and bad input are typed, changes a
   expect(audits[1]?.to).toBe('off')
 })
 
-test('no global row inherits the ceiling up to act_gated (Worker card is enough; envelope needs a human)', () => {
+test('no global row = the top level (owner decision 2026-11-17); only an explicit env ceiling narrows it', () => {
   const db = freshDb()
+  expect(globalLevelOf(db)).toBe('act_envelope')
+  expect(envCeiling(none)).toBe('act_envelope')
+  expect(effectiveLevelOf(db, null, none)).toBe('act_envelope')
+  expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'auto' })).toBe('act_envelope')
   expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'propose' })).toBe('act_gated')
-  expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'auto' })).toBe('act_gated')
-  expect(effectiveLevelOf(db, null, none)).toBe('propose')
+  expect(effectiveLevelOf(db, null, { WEBTERM_CENTRAL_AGENTS: 'off' })).toBe('propose')
 })

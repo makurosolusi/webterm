@@ -9,9 +9,10 @@ import { createWorkStore } from '../../work/workStore'
 import { type ToolCtx, type ToolDef, type ToolInput, type ToolResult, type ToolValidationCode, tierWithin } from '../toolTypes'
 import { FORBIDDEN_KEYS } from '../toolValidate'
 import { obj, S } from '../../../capability/capability.schema'
+import { AGENTS_ENV, agentsModeOf, type AgentsMode } from '../../agentsMode'
 
-/** Env var that switches the agent tools: `off` (default) hides them, `propose` forces approval cards, `auto` defers to the guard. */
-export const AGENTS_FLAG = 'WEBTERM_CENTRAL_AGENTS'
+/** Env var that switches the agent tools: `off` hides them, `propose` forces approval cards, `auto` (and unset) defers to the guard. */
+export const AGENTS_FLAG = AGENTS_ENV
 const SAFE_ID = /^[A-Za-z0-9._:-]+$/
 const MAX_ID = 200
 const MAX_KIND = 100
@@ -27,7 +28,7 @@ const AUDIT_KEYS = ['agentId', 'state', 'approvalId', 'count', 'kind', 'defHash'
 const safeId = (v: unknown, max = MAX_ID): v is string => typeof v === 'string' && v.length >= 1 && v.length <= max && SAFE_ID.test(v)
 const intIn = (v: unknown, min: number, max: number): boolean => v === undefined || (Number.isSafeInteger(v) && (v as number) >= min && (v as number) <= max)
 const onlyKeys = (input: ToolInput, allowed: readonly string[]): boolean => Object.keys(input).every((k) => allowed.includes(k))
-const agentsMode = (ctx: ToolCtx): string => ((ctx.env ?? process.env)[AGENTS_FLAG] ?? '').trim().toLowerCase()
+const agentsMode = (ctx: ToolCtx): AgentsMode => agentsModeOf(ctx.env ?? process.env)
 const noControl = (s: string): boolean => !/[\x00-\x08\x0b-\x1f\x7f]/.test(s)
 
 type AgentDelegation = Pick<DelegationInput, 'projectId' | 'nodeId' | 'agentId' | 'instruction'>

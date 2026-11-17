@@ -36,7 +36,7 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_TELEGRAM', () => onOff(telegramChannelEnabled(E)), 'channels/channelsRuntime.ts:94'],
   ['WEBTERM_CENTRAL_RUNTIME', () => centralRuntimeKind(''), 'central/runtime/runtimeFlag.ts:18'],
   ['WEBTERM_CENTRAL_AUTONOMY', () => onOff(autonomyEnabled('')), 'central/centralAutonomy.ts:99'],
-  ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'propose' ? 'off' : '?'), 'central/guard/levelStore.ts:37 (off = hanya propose)'],
+  ['WEBTERM_CENTRAL_AGENTS', () => (envCeiling(E) === 'act_envelope' ? 'auto' : '?'), 'central/agentsMode.ts:9 (kosong = auto)'],
   ['WEBTERM_CENTRAL_TURN_STEPS', () => String(resolveLimits(E).maxTurns), 'central/chat/turnLimits.ts:27'],
   ['WEBTERM_CENTRAL_TURN_WALL_MS', () => String(resolveLimits(E).maxWallMs), 'central/chat/turnLimits.ts:28'],
   ['WEBTERM_CENTRAL_DAILY_TOKENS', budget('tokens'), 'central/guard/budgetStore.ts:29 (fallback = spec registry sendiri)'],

@@ -71,8 +71,8 @@ test('GET control is human/root only, shows effective level, paginates and valid
   expect(body.projects.length).toBe(1)
   expect(body.projects[0]?.scope).toBe('project:p1')
   expect(body.ceiling).toBe('act_envelope')
-  expect(body.effective).toBe('act_gated') // no global row: inherits the ceiling, capped at act_gated
-  expect(body.global).toMatchObject({ level: 'act_gated', version: 0 }) // shown level = the one in force, not the stored default
+  expect(body.effective).toBe('act_envelope') // no global row: the default is the top level
+  expect(body.global).toMatchObject({ level: 'act_envelope', version: 0 }) // shown level = the one in force, not the stored default
   const one = await call(db, { method: 'GET', path: CONTROL_PATH, actor: ROOT, query: new URLSearchParams('projectId=p1') })
   expect((one?.body as { effective: string }).effective).toBe('observe')
   expect((await call(db, { method: 'GET', path: CONTROL_PATH, actor: HUMAN, query: new URLSearchParams('limit=0') }))?.status).toBe(400)

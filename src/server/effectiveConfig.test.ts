@@ -34,9 +34,9 @@ describe('buildEffectiveConfig', () => {
   })
 
   it('derived row names the card it follows (Worker card)', () => {
-    const { row } = build({}, JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AGENTS: 'propose' }))
-    expect(row('WEBTERM_CENTRAL_AGENTS')).toMatchObject({ source: 'capability', value: 'propose' })
-    expect(row('WEBTERM_CENTRAL_AGENTS').reason).toContain('Worker orchestrator card (Central agent autonomy off, Worker orchestrator on)')
+    const { row } = build({}, JSON.stringify({ WEBTERM_CENTRAL: 'on', WEBTERM_ORCHESTRATOR_RUN: 'on', WEBTERM_CENTRAL_AGENTS: 'auto' }))
+    expect(row('WEBTERM_CENTRAL_AGENTS')).toMatchObject({ source: 'capability', value: 'auto' })
+    expect(row('WEBTERM_CENTRAL_AGENTS').reason).toContain('Worker orchestrator card (Worker orchestrator on)')
   })
 
   it('secrets and bootstrap keys carry set/unset only, never a value', () => {

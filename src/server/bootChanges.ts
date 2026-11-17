@@ -6,7 +6,7 @@ import type { Database } from 'bun:sqlite'
 import { automaticAction } from './central/automaticAction'
 import { readCentralSetting, writeCentralSetting } from './central/centralSetting'
 
-export type BootChangeKind = 'linked' | 'default_on' | 'setup' | 'profile' | 'approval'
+export type BootChangeKind = 'linked' | 'default_on' | 'setup' | 'profile' | 'approval' | 'autonomy'
 const ANNOUNCED = 'boot_defaults_announced'
 const LIST_MAX = 6
 
@@ -24,6 +24,7 @@ const PHRASE: Record<BootChangeKind, (keys: string[]) => string> = {
   setup: () => 'marked first-run setup complete for this existing install',
   profile: () => 'set the default Claude profile to match command mode',
   approval: () => 'Default permission changed to Bypass; change it in Settings > Claude > Permissions',
+  autonomy: () => 'Central autonomy default raised: it may now spawn workers and act without approval, except writing code; change it in Settings',
 }
 
 /** Posts the batch; returns whether a notice was posted. The queue is emptied either way. */
@@ -44,7 +45,7 @@ export function flushBootChanges(db: Database, now: () => number = Date.now): bo
   const at = now()
   return automaticAction({ db, now }, {
     name: 'boot_changes', actor: 'system:boot', subject: 'boot', noticeKey: `auto:boot_changes:${at}`,
-    text: `At startup webterm ${parts.join('; ')}${batch.some((b) => b.kind === 'approval') ? '.' : ', because these were not set yet.'}`,
+    text: `At startup webterm ${parts.join('; ')}${batch.some((b) => b.kind === 'approval' || b.kind === 'autonomy') ? '.' : ', because these were not set yet.'}`,
   })
 }
 
