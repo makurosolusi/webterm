@@ -61,6 +61,7 @@ describe('role is server-side: no client priming', () => {
   it('shows the role banner for a preset node only', () => {
     mount('skill-author')
     expect(screen.getByRole('note', { name: 'Chat role' }).textContent).toBe(SKILL_AUTHOR_BANNER)
+    expect(SKILL_AUTHOR_BANNER).toMatch(/purpose, title, steps and checks before writing.*approval in the Skills tab/)
     cleanup()
     mount()
     expect(screen.queryByRole('note', { name: 'Chat role' })).toBeNull()
