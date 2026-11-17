@@ -70,10 +70,12 @@ usage: webterm <command> [args]
   <capability> --json '{...}'     run a capability (e.g. git.diff); prints a receipt
                [--operation-id <id>]  replay-safe retry: same id + same call = same receipt
   whats-new [--since <v>] [--json]  capabilities added/removed/changed since the registry you last saw
-  skills get <name> [--json]      the version-matched guide for a skill (webterm-cli, ...)
-  skills list [name]              the skill library: active skills + your open drafts (a name adds its body)
-  skills propose --name webterm-<slug> --description <text> [--caps a,b] [--body-file <path>|-]
-                                  PROPOSE a new skill (body from a file or stdin); a human must approve it
+  skills get <name> [--json]      a launcher guide (webterm-cli, ...) or an approved canvas skill
+  skills list [name]              approved canvas skills (procedures for agents like you) + your open drafts
+                                  (a name adds its body)
+  skills propose --name webterm-<slug> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-]
+                                  PROPOSE a new canvas skill (body from a file or stdin); a human must approve it.
+                                  Always a canvas skill: central skills (Central's own rules) are not yours to write
   skills edit <name> [--description <text>] [--caps a,b] [--body-file <path>|-]
                                   PROPOSE a new version of an active skill (unset fields keep the active text)
   report "<text>" [--done|--blocked|--question|--progress]
@@ -170,7 +172,9 @@ ${cli} <command> [args]
 4. \`${cli} whats-new\` shows what changed since the registry you last saw.
 5. Report to Central any time: \`${cli} report "<text>" --done\` (your result), \`--blocked\`, \`--question\`, or
    \`--progress\` (the default). done/blocked/question move your task and wake Central at once; progress is recorded.
-6. Skills: \`${cli} skills list\` shows the library; \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
+6. Skills: there are two kinds, never shared: \`central\` (rules for Central itself; you never see them) and \`canvas\` (reusable
+   procedures for agents like you). \`${cli} skills list\` shows the approved canvas skills and \`${cli} skills get <name>\` prints one;
+   follow the ones that apply to your task. \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
    proposes a new skill and \`${cli} skills edit <name> --body-file <path|->\` a new version of an existing one. You can only
    propose: a human approves it in webterm, and only then does it become active. Bodies are plain instructions (max 4000 chars,
    no URLs, shell commands or secrets; lint rejects them and names only the issue code).

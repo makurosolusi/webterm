@@ -11,7 +11,7 @@ import { CORE_DEFS } from './tools/defs/core.defs'
 import { createRegistry } from './tools/toolRegistry'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
-const DRAFT = { description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: ['portfolio.read'] }
+const DRAFT = { description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: ['portfolio.read'], audience: 'central' as const }
 const NAME = 'webterm-human-demo'
 const ENV = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_MODEL: 'vendor/model:free', WEBTERM_CENTRAL_SKILLS: 'on' }
 let dir: string
@@ -83,7 +83,7 @@ describe('approve with reviewed:true', () => {
     await seed()
     expect(h.skills?.load(NAME)?.record.origin).toBe('human')
     for (const [name, by] of [['webterm-c-demo', 'central:c1'], ['webterm-a-demo', 'agent:n1']] as const) {
-      await h.skills?.propose({ name, ...DRAFT }, by)
+      await h.skills?.propose({ name, ...DRAFT, audience: by.startsWith('agent:') ? 'canvas' as const : 'central' as const }, by)
       expect(await post(name, 'approve', { version: '1', reviewed: true })).toMatchObject({ status: 403, body: { error: 'forbidden' } })
       expect(h.skills?.load(name)).toBeNull()
     }

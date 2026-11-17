@@ -6,32 +6,36 @@ import type { RouteResult } from '../apiShared.types'
 import { redactSecrets } from '../redactSecrets'
 import type { Ca2Handle } from './ca2Boot'
 import { FEATURE_OFF } from './ca2Routes.read'
-import type { SkillStatus } from './contracts/skill.types'
+import { type SkillStatus, canvasSees, isSkillAudience } from './contracts/skill.types'
+import { badAudience } from './ca2Routes.act'
 import { SkillError } from './skills/skillIndex'
 import { MAX_BODY_CHARS, MAX_CAPS, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME_RE } from './skills/skillLint'
 
 export const AGENT_ACTOR_PREFIX = 'agent:'
 const LIST_LIMIT = 200
 const OPEN_STATES: readonly SkillStatus[] = ['proposed', 'evaluated', 'pending_approval']
-const SKILL_STATUS: Readonly<Record<string, number>> = { forbidden: 403, not_found: 404, invalid: 400, limit: 409, hash_mismatch: 409 }
+const SKILL_STATUS: Readonly<Record<string, number>> = { audience_forbidden: 403, forbidden: 403, not_found: 404, invalid: 400, limit: 409, hash_mismatch: 409 }
 
 const fail = (status: number, error: string, extra: Record<string, unknown> = {}): RouteResult => ({ status, body: { error, ...extra } })
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
 
-/** Library as an agent sees it: active skills (with description) and the caller's own open drafts; `name` adds that active body. */
+/**
+ * Library as an agent sees it: enabled active skills whose audience is canvas (never a central one, built-ins
+ * included) and the caller's own open drafts; `name` adds that skill's body when it is a canvas skill.
+ */
 export function agentSkillList(h: Ca2Handle, nodeId: string, name?: string): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
-  const described = new Map(h.skills.index().map((e) => [e.name, e.description]))
+  const described = h.skills.descriptions()
   const mine = `${AGENT_ACTOR_PREFIX}${nodeId}`
   const rows = [
-    ...h.skills.list('active', { limit: LIST_LIMIT }),
+    ...h.skills.list('active', { limit: LIST_LIMIT }).filter((r) => r.enabled !== false && canvasSees(r.audience)),
     ...OPEN_STATES.flatMap((s) => h.skills?.list(s, { limit: LIST_LIMIT }) ?? []).filter((r) => r.proposedBy === mine),
   ]
-  const items = rows.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, description: r.status === 'active' ? described.get(r.name) ?? '' : '', caps: r.caps }))
+  const items = rows.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, audience: r.audience, description: r.status === 'active' ? described.get(r.name) ?? '' : '', caps: r.caps }))
   if (name === undefined) return { status: 200, body: { items } }
   const current = h.skills.load(name)
-  if (!current) return fail(404, 'not_found')
-  return { status: 200, body: { items, skill: { name, version: current.record.version, description: described.get(name) ?? '', caps: current.record.caps, body: redactSecrets(current.body) } } }
+  if (!current || !canvasSees(current.record.audience)) return fail(404, 'not_found')
+  return { status: 200, body: { items, skill: { name, version: current.record.version, audience: current.record.audience, description: described.get(name) ?? '', caps: current.record.caps, body: redactSecrets(current.body) } } }
 }
 
 /** `skills.propose`: validates like the human create route, then stores a draft as `agent:<nodeId>`; never activates. */
@@ -39,19 +43,24 @@ export async function agentSkillPropose(h: Ca2Handle, raw: Record<string, unknow
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   const { name } = raw
   if (typeof name !== 'string' || name.length > MAX_SKILL_NAME || !SKILL_NAME_RE.test(name)) return fail(400, 'invalid_name')
-  let { description, body, caps = [] } = raw
+  let { description, body, caps = [], audience } = raw
   if (raw.edit === true) {
     const current = h.skills.load(name)
     if (!current) return fail(404, 'not_found')
-    description ??= h.skills.index().find((e) => e.name === name)?.description
+    description ??= h.skills.descriptions().get(name)
     body ??= current.body
     caps = raw.caps ?? current.record.caps
+    if (!canvasSees(current.record.audience)) return fail(404, 'not_found') // a central skill is invisible to agents
+    audience ??= current.record.audience
   }
   if (!isText(description, MAX_DESCRIPTION) || /[\r\n]/.test(description)) return fail(400, 'invalid_description')
   if (!isText(body, MAX_BODY_CHARS)) return fail(400, 'invalid_body')
   if (!Array.isArray(caps) || caps.length > MAX_CAPS || caps.some((c) => typeof c !== 'string')) return fail(400, 'invalid_caps')
+  // A new proposal from an agent is forced to `canvas`; an explicit `central` is refused by the store (403 audience_forbidden).
+  audience ??= 'canvas'
+  if (!isSkillAudience(audience)) return badAudience()
   try {
-    const rec = await h.skills.propose({ name, description, body, caps: caps as string[] }, `${AGENT_ACTOR_PREFIX}${nodeId}`)
+    const rec = await h.skills.propose({ name, description, body, caps: caps as string[], audience }, `${AGENT_ACTOR_PREFIX}${nodeId}`)
     return { status: 201, body: { name: rec.name, version: rec.version, state: rec.status } }
   } catch (err) {
     if (!(err instanceof SkillError)) throw err

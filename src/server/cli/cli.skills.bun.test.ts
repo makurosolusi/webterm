@@ -27,7 +27,7 @@ import { cliPath, installWebtermCli } from './cli.launcher'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as never
 const ENV = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_MODEL: 'vendor/model:free' }
-const GOOD = { description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.' }
+const GOOD = { description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', audience: 'canvas' as const }
 const prevDir = process.env.WEBTERM_DATA_DIR
 let root: string
 let h: Ca2Handle
@@ -85,7 +85,7 @@ const cli = (args: string[], stdin?: string) => new Promise<{ code: number; out:
   const child = execFile(cliPath(), args, { env }, (e, out, err) => resolve({ code: e ? Number((e as { code?: number }).code ?? 1) : 0, out, err }))
   child.stdin?.end(stdin ?? '')
 })
-const propose = (name: string, extra: string[] = [], stdin: string = GOOD.body) => cli(['skills', 'propose', '--name', name, '--description', GOOD.description, '--body-file', '-', ...extra], stdin)
+const propose = (name: string, extra: string[] = [], stdin: string = GOOD.body) => cli(['skills', 'propose', '--name', name, '--description', GOOD.description, '--body-file', '-', ...(extra.includes('--audience') ? [] : ['--audience', 'canvas']), ...extra], stdin)
 const human = (path: string, body: unknown) => ca2Dispatch(h, { method: 'POST', path, query: new URL(path, 'http://x').searchParams, body: async () => body })
 const draftsOf = (name: string) => h.skills?.list('pending_approval').filter((r) => r.name === name) ?? []
 /** A human-approved active skill, so agents have something to edit. */
@@ -135,7 +135,7 @@ describe('webterm skills propose', () => {
     expect(big.err).toContain('invalid_body')
     const empty = await propose('webterm-empty', [], '   ')
     expect(empty.err).toContain('invalid_body')
-    const long = await cli(['skills', 'propose', '--name', 'webterm-long', '--description', 'd'.repeat(301), '--body-file', '-'], GOOD.body)
+    const long = await cli(['skills', 'propose', '--name', 'webterm-long', '--description', 'd'.repeat(301), '--body-file', '-', '--audience', 'canvas'], GOOD.body)
     expect(long.err).toContain('invalid_description')
     expect(h.skills?.list('pending_approval')).toHaveLength(0)
   })
@@ -188,7 +188,7 @@ describe('webterm skills list', () => {
     await start()
     await activate('webterm-listed')
     await propose('webterm-mine')
-    await h.skills?.propose({ name: 'webterm-theirs', description: 'Theirs. Use when asked.', body: 'SECRET-OTHER-BODY step one.', caps: [] }, 'agent:a2')
+    await h.skills?.propose({ name: 'webterm-theirs', description: 'Theirs. Use when asked.', body: 'SECRET-OTHER-BODY step one.', caps: [], audience: 'canvas' }, 'agent:a2')
     const out = (await cli(['skills', 'list'])).out
     const items = JSON.parse(out).data.items as Array<{ name: string; status: string }>
     const rows = items.map((i) => `${i.name}:${i.status}`)
@@ -295,5 +295,49 @@ describe('author-worker integration (agent origin, daily cap, human-only steps)'
     const typed = await human('/api/central/skills/webterm-approve-gate/approve', { version: '1', phrase: CONFIRM_PHRASE })
     expect(typed?.status).toBe(200)
     expect(h.skills?.load('webterm-approve-gate')?.record.version).toBe('1')
+  })
+})
+
+describe('audience over the CLI', () => {
+  test('propose without --audience stores a canvas draft; --audience central is refused (nothing stored); bad values exit 2', async () => {
+    await start()
+    expect((await cli(['skills', 'propose', '--name', 'webterm-aud-default', '--description', GOOD.description, '--body-file', '-'], GOOD.body)).code).toBe(0)
+    expect(draftsOf('webterm-aud-default')[0]).toMatchObject({ origin: 'agent', audience: 'canvas' })
+    const central = await propose('webterm-aud-central', ['--audience', 'central'])
+    expect(central.code).toBe(2)
+    expect(central.err).toContain('cannot write central skills')
+    expect((await propose('webterm-aud-both', ['--audience', 'both'])).code).toBe(2)
+    expect(draftsOf('webterm-aud-central')).toHaveLength(0)
+    // The server refuses it too when the CLI is bypassed (HTTP, valid node token).
+    const res = await fetch(`http://127.0.0.1:${port}/api/tools/skills.propose`, { method: 'POST', headers: { [NODE_TOKEN_HEADER]: token }, body: JSON.stringify({ name: 'webterm-aud-http', ...GOOD, audience: 'central' }) })
+    expect((await res.json() as { receipt: { detail: string } }).receipt.detail).toBe('audience_forbidden')
+    expect(draftsOf('webterm-aud-http')).toHaveLength(0)
+  })
+
+  test('list and get: a canvas skill is listed and served as plain text; a central skill and built-ins are invisible', async () => {
+    await start()
+    h.skills?.installBuiltins()
+    await activate('webterm-aud-canvas')
+    expect((await human('/api/central/skills', { name: 'webterm-aud-rule', ...GOOD, audience: 'central' }))?.status).toBe(201)
+    expect((await human('/api/central/skills/webterm-aud-rule/approve', { version: '1', phrase: CONFIRM_PHRASE }))?.status).toBe(200)
+    const items = JSON.parse((await cli(['skills', 'list'])).out).data.items as Array<{ name: string; audience: string }>
+    expect(items.filter((i) => i.audience !== 'canvas')).toEqual([])
+    expect(items.map((i) => i.name)).toEqual(['webterm-aud-canvas'])
+    const got = await cli(['skills', 'get', 'webterm-aud-canvas'])
+    expect(got.code).toBe(0)
+    expect(got.out).toContain('Write five lines')
+    for (const hidden of ['webterm-aud-rule', 'webterm-central-basics']) {
+      const r = await cli(['skills', 'get', hidden])
+      expect(r.code).toBe(2)
+      expect(r.out).not.toContain('Write five lines')
+    }
+    expect((await cli(['skills', 'get', 'webterm-cli'])).code).toBe(0) // launcher guide still served locally
+  })
+
+  test('edit keeps the audience of the active skill', async () => {
+    await start()
+    await activate('webterm-aud-edit')
+    expect((await cli(['skills', 'edit', 'webterm-aud-edit', '--body-file', '-'], '1. Changed.')).code).toBe(0)
+    expect(draftsOf('webterm-aud-edit')[0]).toMatchObject({ version: '2', audience: 'canvas' })
   })
 })

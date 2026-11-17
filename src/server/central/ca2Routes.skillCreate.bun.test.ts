@@ -12,7 +12,7 @@ import { CORE_DEFS } from './tools/defs/core.defs'
 import { createRegistry } from './tools/toolRegistry'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
-const NEW = { name: 'webterm-human-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'] }
+const NEW = { name: 'webterm-human-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], audience: 'canvas' }
 const ENV = { WEBTERM_CENTRAL: 'on', WEBTERM_CENTRAL_AGENTS: 'propose', WEBTERM_CENTRAL_MEMORY: 'on', WEBTERM_CENTRAL_MODEL: 'vendor/model:free' }
 let dir: string
 let h: Ca2Handle

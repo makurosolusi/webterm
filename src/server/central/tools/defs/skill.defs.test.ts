@@ -10,7 +10,7 @@ import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import type { Tier, ToolCtx } from '../toolTypes'
 import { createSkillDefs } from './skill.defs'
 
-const input = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: ['portfolio.read'] }
+const input = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: ['portfolio.read'], audience: 'central' }
 const ON = { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_SKILL_PROPOSE: 'on' }
 let f: Fixture
 let root: string
@@ -47,7 +47,7 @@ describe('skill tool defs', () => {
     expect(store.list('active')).toEqual([])
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })).code).toBe('not_found')
     const listed = await execTool(ctxOf(), 'skill.list', { status: 'pending_approval' })
-    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', version: '1', status: 'pending_approval', origin: 'central', enabled: true }])
+    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', audience: 'central', version: '1', status: 'pending_approval', origin: 'central', enabled: true }])
     store.approve('webterm-demo', '1', 'human:alice', confirmPhrase('webterm-demo', '1'))
     const loaded = await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })
     expect(loaded).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1' } })
@@ -76,5 +76,34 @@ describe('skill tool defs', () => {
     expect((await execTool(ctxOf(), 'skill.load', { name: '../../etc/passwd' })).code).toBe('not_found')
     expect((await execTool(ctxOf(), 'skill.load', { name: 'frontend-design' })).code).toBe('not_found')
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-project-status' })).ok).toBe(true)
+  })
+})
+
+describe('skill tools and audience', () => {
+  const activate = async (over: Record<string, unknown>) => {
+    const rec = await store.propose({ ...input, ...over } as never, 'human:alice')
+    store.approve(rec.name, rec.version, 'human:alice', confirmPhrase(rec.name, rec.version))
+  }
+
+  it('skill.propose without a legal audience is invalid_audience and names the allowed values; none is stored', async () => {
+    const { audience: _omit, ...noAudience } = input
+    for (const body of [noAudience, { ...input, audience: 'everyone' }, { ...input, audience: 'both' }]) {
+      const r = await execTool(ctxOf(), 'skill.propose', body)
+      expect(r.ok).toBe(false)
+      expect(r.code).toBe('invalid_audience')
+      expect(r.data).toEqual({ allowed: ['central', 'canvas'] })
+    }
+    expect(store.list()).toEqual([])
+    expect((await execTool(ctxOf(), 'skill.propose', { ...input, audience: 'canvas' })).ok).toBe(true)
+    expect(store.list()[0].audience).toBe('canvas')
+  })
+
+  it('skill.list returns the audience (read-only view of canvas skills); skill.load serves only central skills', async () => {
+    await activate({ name: 'webterm-for-central', audience: 'central' })
+    await activate({ name: 'webterm-for-canvas', audience: 'canvas' })
+    const listed = (await execTool(ctxOf(), 'skill.list', {})).data as { skills: Array<{ name: string; audience: string }> }
+    expect(Object.fromEntries(listed.skills.map((s) => [s.name, s.audience]))).toEqual({ 'webterm-for-central': 'central', 'webterm-for-canvas': 'canvas' })
+    expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-for-canvas' })).code).toBe('not_found')
+    expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-for-central' })).ok).toBe(true)
   })
 })

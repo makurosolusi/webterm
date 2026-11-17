@@ -5,16 +5,18 @@ metadata:
   webterm.version: "1"
   webterm.origin: "builtin"
   webterm.caps: "skill.propose,skill.load"
+  webterm.audience: "central"
 ---
 # Writing a skill proposal
 
-Propose a skill only for a procedure that has repeated and that you can state as steps. Call skill.propose with name, description, body and caps. The draft stays in quarantine until a human approves it.
+Propose a skill only for a procedure that has repeated and that you can state as steps. Call skill.propose with name, description, body, caps and audience. The draft stays in quarantine until a human approves it.
 
 ## Shape
 - name: `webterm-` plus lowercase words joined by hyphens.
 - description: up to 300 characters. Say what it does and when to use it.
 - body: up to 4000 characters of Markdown. Numbered steps, short.
 - caps: the tool verbs the steps rely on. List only what the steps need.
+- audience (required, no default): `central` for rules Central itself follows, `canvas` for procedures canvas agent sessions follow. A skill has exactly one kind; Central cannot load `canvas` skills and agents never see `central` ones.
 
 ## Lint rejects
 - Shell commands, download-and-run patterns, or anything that needs a terminal.

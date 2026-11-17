@@ -8,7 +8,7 @@ import { FEATURE_OFF } from './ca2Routes.read'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { SkillError } from './skills/skillIndex'
 import { MAX_BODY_CHARS, MAX_CAPS, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME_RE } from './skills/skillLint'
-import type { SkillProposeInput } from './contracts/skill.types'
+import { SKILL_AUDIENCES, type SkillAudience, type SkillProposeInput, isSkillAudience } from './contracts/skill.types'
 import type { ToolResult } from './tools/toolTypes'
 
 /** Actor prefix the skill admin steps require. */
@@ -18,11 +18,11 @@ const RELAY_TOOL = 'agent.relay'
 const RELAY_TIER = 'R1'
 const UI_CLOSE_REASON = 'closed_from_panel'
 const CENTRAL_OWNER_PREFIX = 'central:'
-const SKILL_STATUS: Readonly<Record<string, number>> = { forbidden: 403, not_found: 404, invalid: 400, limit: 409, hash_mismatch: 409 }
+const SKILL_STATUS: Readonly<Record<string, number>> = { audience_forbidden: 403, forbidden: 403, not_found: 404, invalid: 400, limit: 409, hash_mismatch: 409 }
 
 type Body = Record<string, unknown>
 const fail = (status: number, error: string, extra: Body = {}): RouteResult => ({ status, body: { error, ...extra } })
-const bodyOf = (raw: unknown): Body => (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Body) : {})
+export const bodyOf = (raw: unknown): Body => (raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Body) : {})
 
 /** Maps an executor result to a response; an approval requirement becomes `{approvalId}`. */
 function fromTool(res: ToolResult): RouteResult {
@@ -90,14 +90,18 @@ export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw
 
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
 
-/** Validates the draft fields shared by create and edit; the server lint stays the authority. */
-export function parseDraft(raw: unknown, name: unknown): { input: SkillProposeInput } | { error: RouteResult } {
-  const { description, body, caps = [] } = bodyOf(raw)
+/** 400 `invalid_audience` naming the legal values; shared by every human and agent entry. */
+export const badAudience = (): RouteResult => fail(400, 'invalid_audience', { allowed: [...SKILL_AUDIENCES] })
+
+/** Validates the draft fields shared by create and edit; `carry` is the audience an edit keeps when none is sent (none on create: required). The server lint stays the authority. */
+export function parseDraft(raw: unknown, name: unknown, carry?: SkillAudience): { input: SkillProposeInput } | { error: RouteResult } {
+  const { description, body, caps = [], audience = carry } = bodyOf(raw)
   if (typeof name !== 'string' || name.length > MAX_SKILL_NAME || !SKILL_NAME_RE.test(name)) return { error: fail(400, 'invalid_name') }
   if (!isText(description, MAX_DESCRIPTION) || /[\r\n]/.test(description)) return { error: fail(400, 'invalid_description') }
   if (!isText(body, MAX_BODY_CHARS)) return { error: fail(400, 'invalid_body') }
   if (!Array.isArray(caps) || caps.length > MAX_CAPS || caps.some((c) => typeof c !== 'string')) return { error: fail(400, 'invalid_caps') }
-  return { input: { name, description, body, caps: caps as string[] } }
+  if (!isSkillAudience(audience)) return { error: badAudience() }
+  return { input: { name, description, body, caps: caps as string[], audience } }
 }
 
 /** Proposes a validated human draft and answers 201 with its state; shared by create and edit. */

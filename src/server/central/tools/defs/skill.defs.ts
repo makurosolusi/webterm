@@ -2,7 +2,7 @@
 // activation is a human R3 action on the admin store (skillLifecycle), never reachable from a model.
 import { flagOn } from '../../../envFlag'
 import { automaticAction } from '../../automaticAction'
-import type { SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../../contracts/skill.types'
+import { SKILL_AUDIENCES, centralSees, type SkillProposeInput, SkillRecord, SkillStatus, SkillStore } from '../../contracts/skill.types'
 import type { Awaitable } from '../../contracts/tool.types'
 import { SkillError, type StoredSkill } from '../../skills/skillIndex'
 import type { ToolCtx, ToolDef, ToolInput, ToolResult } from '../toolTypes'
@@ -27,6 +27,7 @@ const forbidden = (input: ToolInput): boolean => Object.keys(input).some((k) => 
 const flagged = (ctx: ToolCtx, flag: string): boolean => flagOn((ctx.env ?? process.env)[flag])
 
 function failure(err: unknown): ToolResult {
+  if (err instanceof SkillError && err.code === 'invalid_audience') return { ok: false, code: err.code, data: { allowed: [...SKILL_AUDIENCES] } }
   if (err instanceof SkillError) return { ok: false, code: err.code, data: err.issues.length ? { issues: [...err.issues] } : {} }
   throw err
 }
@@ -34,35 +35,35 @@ function failure(err: unknown): ToolResult {
 /** Builds the three skill tool definitions over a store resolver. */
 export function createSkillDefs(resolve: SkillStoreResolver): readonly ToolDef[] {
   const list: ToolDef = {
-    name: 'skill.list', summary: 'List skills (name, version, status, origin), newest first, paginated.', tier: 'R0', flag: SKILLS_FLAG, projectScoped: false, forbidden,
+    name: 'skill.list', summary: 'List skills (name, version, status, origin, audience), newest first, paginated.', tier: 'R0', flag: SKILLS_FLAG, projectScoped: false, forbidden,
     usage: `{"status":"active|proposed|...","limit":<=${SKILL_LIST_MAX},"offset":0}; all fields optional.`,
     input: obj({ status: S.str(), limit: S.int(1, SKILL_LIST_MAX), offset: S.int(0) }),
     output: S.keys('skills'),
     validate: (input) => (onlyKeys(input, ['status', 'limit', 'offset']) && (input.status === undefined || STATUSES.includes(input.status as SkillStatus)) && (input.limit === undefined || isInt(input.limit, 1, SKILL_LIST_MAX)) && (input.offset === undefined || isInt(input.offset, 0, 1_000_000)) ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       const records = await resolve(ctx).list(input.status as SkillStatus | undefined, { limit: (input.limit as number | undefined) ?? SKILL_LIST_DEFAULT, offset: (input.offset as number | undefined) ?? 0 })
-      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, enabled: r.enabled !== false })) } }
+      return { ok: true, data: { skills: records.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, audience: r.audience, enabled: r.enabled !== false })) } }
     },
   }
   const load: ToolDef = {
-    name: 'skill.load', summary: 'Load the body of an active webterm-* skill (hash-verified).', tier: 'R0', flag: SKILLS_FLAG, projectScoped: false, forbidden,
-    usage: '{"name":"webterm-<slug>"}. Returns the skill body; a skill that is not active or fails its hash check is not_found.',
+    name: 'skill.load', summary: 'Load the body of an active central webterm-* skill (hash-verified).', tier: 'R0', flag: SKILLS_FLAG, projectScoped: false, forbidden,
+    usage: '{"name":"webterm-<slug>"}. Returns the skill body; a skill that is not active, is a canvas skill (audience canvas) or fails its hash check is not_found.',
     input: obj({ name: S.str(64) }, ['name']),
     output: S.keys('name', 'version', 'body'),
     auditKeys: ['name', 'version'],
     validate: (input) => (onlyKeys(input, ['name']) && typeof input.name === 'string' && input.name.length <= 64 ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       const content = await resolve(ctx).load(input.name as string)
-      return content ? { ok: true, data: { name: content.record.name, version: content.record.version, body: content.body } } : { ok: false, code: 'not_found' }
+      return content && centralSees(content.record.audience) ? { ok: true, data: { name: content.record.name, version: content.record.version, body: content.body } } : { ok: false, code: 'not_found' }
     },
   }
   const propose: ToolDef = {
     name: 'skill.propose', summary: 'Propose a new skill draft for human review; never activates it.', tier: 'R1', flag: SKILL_PROPOSE_FLAG, projectScoped: false, forbidden,
-    usage: '{"name":"webterm-<slug>","description":"<=300 chars, what + when","body":"<=4000 chars markdown instructions","caps":["tool.verb"]}. Instructions only: no commands, URLs, paths or secrets. A human must approve before it is usable.',
-    input: obj({ name: S.str(), description: S.str(), body: S.str(), caps: S.arr(S.str()) }, ['name', 'description', 'body', 'caps']),
+    usage: '{"name":"webterm-<slug>","description":"<=300 chars, what + when","body":"<=4000 chars markdown instructions","caps":["tool.verb"],"audience":"central|canvas"}. audience is required: central = a rule for you (Central), canvas = a procedure for canvas agent sessions (you never load it). Instructions only: no commands, URLs, paths or secrets. A human must approve before it is usable.',
+    input: obj({ name: S.str(), description: S.str(), body: S.str(), caps: S.arr(S.str()), audience: S.str() }, ['name', 'description', 'body', 'caps']),
     output: S.keys('name', 'version', 'status'),
     auditKeys: ['name', 'version', 'status'],
-    validate: (input) => (onlyKeys(input, ['name', 'description', 'body', 'caps']) && typeof input.name === 'string' && typeof input.description === 'string' && typeof input.body === 'string' && Array.isArray(input.caps) && input.caps.every((c) => typeof c === 'string') ? null : 'invalid_shape'),
+    validate: (input) => (onlyKeys(input, ['name', 'description', 'body', 'caps', 'audience']) && typeof input.name === 'string' && typeof input.description === 'string' && typeof input.body === 'string' && Array.isArray(input.caps) && input.caps.every((c) => typeof c === 'string') ? null : 'invalid_shape'),
     async handler(ctx, input): Promise<ToolResult> {
       if (!flagged(ctx, SKILLS_FLAG)) return { ok: false, code: 'flag_off' }
       try {

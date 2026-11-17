@@ -8,6 +8,16 @@ export type SkillStatus =
 /** Where a skill came from. */
 export type SkillOrigin = 'builtin' | 'human' | 'central' | 'agent'
 
+/** The two skill kinds, never shared: `central` = rules for Central, `canvas` = procedures for Claude agents on the canvas. */
+export type SkillAudience = 'central' | 'canvas'
+export const SKILL_AUDIENCES: readonly SkillAudience[] = ['central', 'canvas']
+/** True for a legal audience value. */
+export const isSkillAudience = (v: unknown): v is SkillAudience => typeof v === 'string' && (SKILL_AUDIENCES as readonly string[]).includes(v)
+/** Central loads (and acts on) only `central` skills; canvas ones stay list-only for it. */
+export const centralSees = (a: SkillAudience): boolean => a === 'central'
+/** Canvas agents see only `canvas` skills; `central` ones (Central's own rules) stay invisible. */
+export const canvasSees = (a: SkillAudience): boolean => a === 'canvas'
+
 /** One row of the skill index (`central_skill`). */
 export interface SkillRecord {
   name: string
@@ -16,6 +26,7 @@ export interface SkillRecord {
   sha256: string | null
   status: SkillStatus
   origin: SkillOrigin
+  audience: SkillAudience
   /** Tool verbs the skill may ask for; a subset of what central owns. */
   caps: readonly string[]
   createdAt: number
@@ -45,10 +56,12 @@ export interface SkillProposeInput {
   description: string
   body: string
   caps: readonly string[]
+  /** Required: who the skill is for; there is no silent default for a new proposal. */
+  audience: SkillAudience
 }
 
 /** Failure codes of the store; callers never parse messages. */
-export type SkillErrorCode = 'invalid' | 'not_found' | 'hash_mismatch' | 'limit' | 'forbidden'
+export type SkillErrorCode = 'invalid' | 'not_found' | 'hash_mismatch' | 'limit' | 'forbidden' | 'invalid_audience' | 'audience_forbidden' | 'audience_immutable'
 
 /** File-backed skill store; the SQLite index is rebuildable from folders. */
 export interface SkillStore {

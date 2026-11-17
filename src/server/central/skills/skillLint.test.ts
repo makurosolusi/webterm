@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type LintIssue, MAX_BODY_CHARS, MAX_FILE_BYTES, formatSkill, lintSkill } from './skillLint'
 
-const base = { name: 'webterm-demo', description: 'Summarize a project. Use when asked for status.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], version: '1', origin: 'central' }
+const base = { name: 'webterm-demo', description: 'Summarize a project. Use when asked for status.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central' }
 const doc = (over: Partial<typeof base> = {}) => formatSkill({ ...base, ...over })
 const issuesOf = (text: string) => lintSkill(text, { expectedName: 'webterm-demo' }).issues
 
@@ -9,7 +9,7 @@ describe('lintSkill accepts', () => {
   it('a well-formed skill and reports parsed meta', () => {
     const r = lintSkill(doc(), { expectedName: 'webterm-demo' })
     expect(r.ok).toBe(true)
-    expect(r.meta).toEqual({ name: 'webterm-demo', description: base.description, caps: ['portfolio.read'], version: '1', origin: 'central' })
+    expect(r.meta).toEqual({ name: 'webterm-demo', description: base.description, caps: ['portfolio.read'], version: '1', origin: 'central', audience: 'central' })
     expect(r.body).toContain('Read the portfolio')
   })
 })

@@ -5,6 +5,7 @@ metadata:
   webterm.version: "1"
   webterm.origin: "builtin"
   webterm.caps: "portfolio.read"
+  webterm.audience: "central"
 ---
 # Project status report
 

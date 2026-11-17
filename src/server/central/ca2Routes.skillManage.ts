@@ -3,8 +3,9 @@
 import type { RouteResult } from '../apiShared.types'
 import { createLogger } from '../logs'
 import type { Ca2Handle } from './ca2Boot'
-import { HUMAN_PREFIX, parseDraft, proposeHuman, skillFailure } from './ca2Routes.act'
+import { HUMAN_PREFIX, badAudience, bodyOf, parseDraft, proposeHuman, skillFailure } from './ca2Routes.act'
 import { FEATURE_OFF } from './ca2Routes.read'
+import { isSkillAudience } from './contracts/skill.types'
 import { SkillError, versionsOf } from './skills/skillIndex'
 
 export type SkillManageAction = 'enable' | 'disable' | 'versions' | 'fork'
@@ -23,12 +24,14 @@ export async function skillManage(h: Ca2Handle, name: string, action: SkillManag
       return { status: 200, body: { status: 'done', enabled: action === 'enable' } }
     }
     if (action === 'fork') {
-      const rec = await h.skills.fork(name, actor)
+      const audience = bodyOf(raw).audience
+      if (audience !== undefined && !isSkillAudience(audience)) return badAudience()
+      const rec = await h.skills.fork(name, actor, audience)
       return { status: 201, body: { name: rec.name, version: rec.version, state: rec.status } }
     }
     // versions: an edit is a new version of an existing user skill; the store refuses builtin and a second open draft.
     if (versionsOf(h.db, name).length === 0) throw new SkillError('not_found', `skill ${name} not found`)
-    const parsed = parseDraft(raw, name)
+    const parsed = parseDraft(raw, name, versionsOf(h.db, name)[0].audience)
     return 'error' in parsed ? parsed.error : await proposeHuman(h, parsed.input, actor)
   } catch (err) {
     return skillFailure(err)

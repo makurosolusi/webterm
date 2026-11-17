@@ -12,7 +12,7 @@ let root: string
 let clock: number
 let raw: ReturnType<typeof nodeSqlite>
 let store: SkillAdminStore
-const input = (over: Partial<{ name: string; description: string; body: string; caps: string[] }> = {}) => ({ name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], ...over })
+const input = (over: Partial<{ name: string; description: string; body: string; caps: string[]; audience: 'central' | 'canvas' }> = {}) => ({ name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], audience: 'central' as const, ...over })
 const codeOf = (fn: () => unknown): string | undefined => { try { fn() } catch (err) { return err instanceof SkillError ? err.code : `other:${String(err)}` } return undefined }
 const asyncCode = (p: Promise<unknown>): Promise<string | undefined> => p.then(() => undefined, (err: unknown) => (err instanceof SkillError ? err.code : `other:${String(err)}`))
 function activate(name: string, version: string): void {
@@ -266,7 +266,7 @@ describe('propose guards', () => {
     expect((await store.propose(input({ name: 'webterm-e' }), 'central:c1')).status).toBe('pending_approval')
   })
   it('caps the number of active skills', async () => {
-    for (let i = 0; i < MAX_ACTIVE_SKILLS; i += 1) putRecord(raw.db, { name: `webterm-fill-${i}`, version: '1', sha256: null, status: 'active', origin: 'human', caps: [], createdAt: 1, proposedBy: null, approvedBy: HUMAN, approvedAt: 1, evalScore: null }, 'filler')
+    for (let i = 0; i < MAX_ACTIVE_SKILLS; i += 1) putRecord(raw.db, { name: `webterm-fill-${i}`, version: '1', sha256: null, status: 'active', origin: 'human', audience: 'central', caps: [], createdAt: 1, proposedBy: null, approvedBy: HUMAN, approvedAt: 1, evalScore: null }, 'filler')
     await store.propose(input(), 'central:c1')
     expect(codeOf(() => store.approve('webterm-demo', '1', HUMAN, confirmPhrase('webterm-demo', '1')))).toBe('limit')
   })
@@ -279,7 +279,7 @@ describe('list and index', () => {
     expect(store.list('active')).toHaveLength(0)
     expect(store.list(undefined, { limit: 2 })).toHaveLength(2)
     expect(store.list(undefined, { limit: 2, offset: 2 })).toHaveLength(1)
-    for (let i = 0; i < 15; i += 1) putRecord(raw.db, { name: `webterm-long-${i}`, version: '1', sha256: null, status: 'active', origin: 'human', caps: [], createdAt: 1, proposedBy: null, approvedBy: HUMAN, approvedAt: 1, evalScore: null }, 'd'.repeat(280))
+    for (let i = 0; i < 15; i += 1) putRecord(raw.db, { name: `webterm-long-${i}`, version: '1', sha256: null, status: 'active', origin: 'human', audience: 'central', caps: [], createdAt: 1, proposedBy: null, approvedBy: HUMAN, approvedAt: 1, evalScore: null }, 'd'.repeat(280))
     const entries = store.index()
     expect(entries.length).toBeGreaterThan(0)
     expect(entries.length).toBeLessThan(15)

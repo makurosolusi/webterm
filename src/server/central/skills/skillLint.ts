@@ -1,4 +1,5 @@
 // Skill lint + format (RND/25 4.4-4.5): strict Agent Skills subset. Issues are codes only, never echoed content.
+import { isSkillAudience } from '../contracts/skill.types'
 export const SKILL_NAME_RE = /^webterm-[a-z0-9]+(-[a-z0-9]+)*$/
 export const MAX_SKILL_NAME = 64
 export const MAX_DESCRIPTION = 300
@@ -7,10 +8,10 @@ export const MAX_FILE_BYTES = 8192
 export const MAX_CAPS = 12
 const CAP_RE = /^[a-z]+(\.[a-z_]+)+$/
 const FRONT_KEYS = new Set(['name', 'description', 'license', 'metadata'])
-const META_KEYS = new Set(['webterm.version', 'webterm.origin', 'webterm.caps'])
+const META_KEYS = new Set(['webterm.version', 'webterm.origin', 'webterm.caps', 'webterm.audience'])
 
-export type LintIssue = 'size' | 'frontmatter' | 'unknown_key' | 'name' | 'description' | 'caps' | 'hidden_char' | 'traversal' | 'url' | 'danger' | 'injection' | 'secret' | 'extra_file'
-export interface SkillMeta { name: string; description: string; caps: string[]; version: string | null; origin: string | null }
+export type LintIssue = 'size' | 'frontmatter' | 'unknown_key' | 'name' | 'description' | 'caps' | 'audience' | 'hidden_char' | 'traversal' | 'url' | 'danger' | 'injection' | 'secret' | 'extra_file'
+export interface SkillMeta { name: string; description: string; caps: string[]; version: string | null; origin: string | null; audience: string | null }
 export interface LintResult { ok: boolean; issues: LintIssue[]; meta: SkillMeta | null; body: string }
 export interface LintOptions { expectedName?: string; allowedCaps?: ReadonlySet<string> }
 
@@ -74,16 +75,18 @@ export function lintSkill(text: string, opts: LintOptions = {}): LintResult {
   if (description.length < 1 || description.length > MAX_DESCRIPTION || /[\r\n]/.test(description)) issues.add('description')
   const caps = (meta['webterm.caps'] ?? '').split(',').map((c) => c.trim()).filter(Boolean)
   if (caps.length > MAX_CAPS || caps.some((c) => !CAP_RE.test(c) || (opts.allowedCaps && !opts.allowedCaps.has(c)))) issues.add('caps')
+  // A missing key is legal: skills approved before audience existed carry none and the DB column (default central) rules.
+  if (meta['webterm.audience'] !== undefined && !isSkillAudience(meta['webterm.audience'])) issues.add('audience')
   if (body.trim().length === 0 || body.length > MAX_BODY_CHARS) issues.add('size')
   const scan = text.normalize('NFKC')
   if (BASE64_RUN.test(scan)) issues.add('secret')
   for (const [code, patterns] of SCANS) if (patterns.some((re) => re.test(scan))) issues.add(code)
   const ok = issues.size === 0
-  return { ok, issues: [...issues], meta: { name, description, caps, version: meta['webterm.version'] ?? null, origin: meta['webterm.origin'] ?? null }, body }
+  return { ok, issues: [...issues], meta: { name, description, caps, version: meta['webterm.version'] ?? null, origin: meta['webterm.origin'] ?? null, audience: meta['webterm.audience'] ?? null }, body }
 }
 
 /** Renders a SKILL.md with every value JSON-quoted so input can never add frontmatter lines. */
-export function formatSkill(s: { name: string; description: string; body: string; caps: readonly string[]; version: string; origin: string }): string {
-  const meta = [`  webterm.version: ${JSON.stringify(s.version)}`, `  webterm.origin: ${JSON.stringify(s.origin)}`, `  webterm.caps: ${JSON.stringify(s.caps.join(','))}`]
+export function formatSkill(s: { name: string; description: string; body: string; caps: readonly string[]; version: string; origin: string; audience: string }): string {
+  const meta = [`  webterm.version: ${JSON.stringify(s.version)}`, `  webterm.origin: ${JSON.stringify(s.origin)}`, `  webterm.caps: ${JSON.stringify(s.caps.join(','))}`, `  webterm.audience: ${JSON.stringify(s.audience)}`]
   return ['---', `name: ${s.name}`, `description: ${JSON.stringify(s.description)}`, 'metadata:', ...meta, '---', s.body.endsWith('\n') ? s.body : `${s.body}\n`].join('\n')
 }
