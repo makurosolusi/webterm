@@ -27,6 +27,8 @@ export interface SkillRecord {
   status: SkillStatus
   origin: SkillOrigin
   audience: SkillAudience
+  /** Human-readable name (`webterm.title`); '' on skills approved before titles existed: show `name` then. */
+  title?: string
   /** Tool verbs the skill may ask for; a subset of what central owns. */
   caps: readonly string[]
   createdAt: number
@@ -53,6 +55,8 @@ export interface SkillContent {
 /** Input of `skill.propose`; writes to `proposed/` only, never to `active/`. */
 export interface SkillProposeInput {
   name: string
+  /** Required for a new proposal: 3..80 chars, one line, no markdown. */
+  title: string
   description: string
   body: string
   caps: readonly string[]

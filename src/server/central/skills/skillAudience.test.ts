@@ -1,17 +1,18 @@
-// Audience (central | canvas): lint, stored record, built-ins, prompt index, fork and the guarded column migration.
+// Audience (central | canvas): lint, stored record, built-ins, prompt index and the guarded column migration.
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nodeSqlite } from '../../nodeSqlite.testutil'
+import { GOOD_BODY, GOOD_TITLE, tpl } from './skillDraft.testutil'
 import { confirmPhrase } from './skillLifecycle'
 import { SkillError, ensureSkillTable, getRecord } from './skillIndex'
 import { formatSkill, lintSkill } from './skillLint'
 import { type SkillAdminStore, createSkillStore } from './skillStore'
 
-const base = { name: 'webterm-demo', description: 'Summarize a project. Use when asked for status.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], version: '1', origin: 'human' }
+const base = { name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize a project. Use when asked for status.', body: GOOD_BODY, caps: ['portfolio.read'], version: '1', origin: 'human' }
 const HUMAN = 'human:alice'
-const input = (over: Record<string, unknown> = {}) => ({ name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: [], audience: 'canvas' as const, ...over }) as never
+const input = (over: Record<string, unknown> = {}) => ({ name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize status. Use when asked.', body: GOOD_BODY, caps: [], audience: 'canvas' as const, ...over }) as never
 let root: string
 let raw: ReturnType<typeof nodeSqlite>
 let store: SkillAdminStore
@@ -80,13 +81,11 @@ describe('store', () => {
     expect((await store.propose(input({ name: 'webterm-x-three', audience: 'central' }), 'central:c1')).audience).toBe('central')
     expect((await store.propose(input({ name: 'webterm-x-four', audience: 'central' }), HUMAN)).audience).toBe('central')
   })
-  it('a new version keeps the kind (audience_immutable); fork is how a skill gets the other kind', async () => {
+  it('a new version keeps the kind (audience_immutable); a skill of the other kind is a new skill', async () => {
     await activate({ audience: 'canvas' })
     const err = await store.propose(input({ audience: 'central' }), HUMAN).catch((e: unknown) => e)
     expect((err as SkillError).code).toBe('audience_immutable')
-    expect((await store.propose(input({ body: '1. Newer.' }), HUMAN)).version).toBe('2')
-    expect((await store.fork('webterm-demo', HUMAN)).audience).toBe('canvas')
-    expect((await store.fork('webterm-demo', HUMAN, 'central')).audience).toBe('central')
+    expect((await store.propose(input({ body: tpl('Newer.') }), HUMAN)).version).toBe('2')
   })
 })
 

@@ -8,13 +8,14 @@ import { type Ca2Handle, bootCa2, setActiveCa2 } from './ca2Boot'
 import { ca2Dispatch, isCa2Path } from './ca2Routes'
 import { addAgent, freshDb, rows, run, T0 } from './guard/controlGuard.testutil'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
+import { GOOD_BODY, GOOD_TITLE } from './skills/skillDraft.testutil'
 import { confirmPhrase } from './skills/skillLifecycle'
 import { CORE_DEFS } from './tools/defs/core.defs'
 import { createRegistry } from './tools/toolRegistry'
 
 const BOT_TOKEN = '123456789:AAEhBP0av28ABCDEFGHIJKLMNOPQRSTUVWXYZ1234'
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
-const SKILL = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], audience: 'central' as const }
+const SKILL = { name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize status. Use when asked.', body: GOOD_BODY, caps: ['portfolio.read'], audience: 'central' as const }
 let dir: string
 let h: Ca2Handle
 
@@ -143,7 +144,7 @@ describe('skills admin', () => {
     expect(first).toContain('+ 2. Write five lines.')
     expect(first.split('\n').filter((l) => l !== '' && !l.startsWith('+ '))).toEqual([])
     await approve('1')
-    await h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
+    await h.skills?.propose({ ...SKILL, body: GOOD_BODY.replace('five', 'ten') }, 'central:c1')
     const diff = ((await get('/api/central/skills'))?.body as { items: Array<{ diff: string }> }).items[0]?.diff ?? ''
     expect(diff).toContain('- 2. Write five lines.')
     expect(diff).toContain('+ 2. Write ten lines.')
@@ -170,7 +171,7 @@ describe('skills admin', () => {
     await pend()
     await approve('1')
     expect((await listed()).find((i) => i.record.name === SKILL.name)?.canRollback).toBe(false)
-    await h.skills?.propose({ ...SKILL, body: '1. Read the portfolio.\n2. Write ten lines.' }, 'central:c1')
+    await h.skills?.propose({ ...SKILL, body: GOOD_BODY.replace('five', 'ten') }, 'central:c1')
     await approve('2')
     expect((await listed()).find((i) => i.record.name === SKILL.name)).toMatchObject({ record: { version: '2' }, canRollback: true })
     expect((await call('POST', `/api/central/skills/${SKILL.name}/rollback`))?.status).toBe(200)
@@ -233,7 +234,7 @@ describe('a family whose feature is off answers 503 <feature>_off, not a fall-th
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/approve'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/rollback'))).toEqual({ status: 503, body: { error: 'skills_off' } })
     expect(await ca2Dispatch(off, req('POST', '/api/central/skills/x/reject'))).toEqual({ status: 503, body: { error: 'skills_off' } })
-    expect(await ca2Dispatch(off, req('POST', '/api/central/skills'))).toEqual({ status: 503, body: { error: 'skills_off' } })
+    expect(await ca2Dispatch(off, req('POST', '/api/central/skills'))).toEqual({ status: 405, body: { error: 'method_not_allowed' } }) // the human create route is gone
     expect((await ca2Dispatch(off, req('PUT', '/api/central/skills')))?.status).toBe(405)
     for (const p of ['/api/central/status', '/api/central/memory', '/api/central/control']) expect((await ca2Dispatch(off, req('GET', p)))?.status).toBe(200)
   })

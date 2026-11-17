@@ -4,7 +4,7 @@
 // answer always says a human must approve, and nothing here can activate, enable, disable or reject a skill.
 // Uses launcher helpers `die`, `esc`, `session` (sets `$API`, `$hdr`) and `$SKILLS_DIR`. Written with String.raw and
 // no sh parameter expansions with braces on purpose, so the sh reads exactly as it runs (the only interpolation is SKILLS_USAGE).
-export const SKILLS_USAGE = 'usage: webterm skills <list [name] | propose --name <webterm-slug> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-] | edit <name> [--description <text>] [--caps a,b] [--body-file <path>|-] | get <name> [--json]>'
+export const SKILLS_USAGE = 'usage: webterm skills <list [name] | propose --name <webterm-slug> --title <text> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-] | edit <name> [--title <text>] [--description <text>] [--caps a,b] [--body-file <path>|-] | get <name> [--json]>'
 
 export const SKILLS_COMMAND = String.raw`skills_get() {
   name="$1"
@@ -39,11 +39,12 @@ export const SKILLS_COMMAND = String.raw`skills_get() {
 }
 skills_write() {
   verb="$1"; shift
-  name=""; desc=""; has_desc=0; caps=""; bf=""; has_body=0; aud=""
+  name=""; title=""; has_title=0; desc=""; has_desc=0; caps=""; bf=""; has_body=0; aud=""
   if [ "$verb" = edit ]; then name="$1"; [ "$#" -gt 0 ] && shift; fi
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --name) [ "$verb" = propose ] && [ "$#" -ge 2 ] || die "${SKILLS_USAGE}"; name="$2"; shift 2 ;;
+      --title) [ "$#" -ge 2 ] || die "${SKILLS_USAGE}"; title="$2"; has_title=1; shift 2 ;;
       --description) [ "$#" -ge 2 ] || die "${SKILLS_USAGE}"; desc="$2"; has_desc=1; shift 2 ;;
       --audience) [ "$#" -ge 2 ] || die "${SKILLS_USAGE}"; aud="$2"; shift 2 ;;
       --caps) [ "$#" -ge 2 ] || die "${SKILLS_USAGE}"; caps="$2"; shift 2 ;;
@@ -53,9 +54,13 @@ skills_write() {
   done
   case "$name" in ""|*[!a-z0-9-]*) die "${SKILLS_USAGE}" ;; esac
   case "$aud" in ""|canvas) ;; central) die "agents cannot write central skills (rules Central loads); only canvas skills" ;; *) die "--audience can only be canvas" ;; esac
-  if [ "$verb" = propose ]; then [ "$has_desc" = 1 ] && [ "$has_body" = 1 ] || die "propose needs --description and --body-file (a path, or - for stdin)"; fi
-  if [ "$verb" = edit ]; then [ "$has_desc" = 1 ] || [ "$has_body" = 1 ] || [ -n "$caps" ] || die "edit needs at least one of --description, --body-file, --caps"; fi
+  if [ "$verb" = propose ]; then
+    [ "$has_title" = 1 ] || die "propose needs --title (3-80 chars, one line, no markdown)"
+    [ "$has_desc" = 1 ] && [ "$has_body" = 1 ] || die "propose needs --description and --body-file (a path, or - for stdin)"
+  fi
+  if [ "$verb" = edit ]; then [ "$has_title" = 1 ] || [ "$has_desc" = 1 ] || [ "$has_body" = 1 ] || [ -n "$caps" ] || die "edit needs at least one of --title, --description, --body-file, --caps"; fi
   json='{"name":"'"$name"'"'
+  [ "$has_title" = 0 ] || json="$json"',"title":"'"$(esc "$title")"'"'
   [ "$has_desc" = 0 ] || json="$json"',"description":"'"$(esc "$desc")"'"'
   if [ "$has_body" = 1 ]; then
     if [ "$bf" = - ]; then body=$(tr -d '\r'); else [ -r "$bf" ] || die "cannot read $bf"; body=$(tr -d '\r' < "$bf"); fi

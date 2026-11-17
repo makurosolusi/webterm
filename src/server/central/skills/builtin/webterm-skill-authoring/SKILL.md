@@ -1,31 +1,35 @@
 ---
 name: webterm-skill-authoring
-description: "How to draft a skill proposal that passes lint and review. Use when a procedure repeats and should be written down."
+description: "How to write a skill that passes lint and review: kind, title, template and intake checklist. Use when a procedure repeats and should be written down."
 metadata:
-  webterm.version: "1"
+  webterm.title: "Writing a skill"
+  webterm.version: "2"
   webterm.origin: "builtin"
   webterm.caps: "skill.propose,skill.load"
   webterm.audience: "central"
 ---
-# Writing a skill proposal
+# Writing a skill
 
-Propose a skill only for a procedure that has repeated and that you can state as steps. Call skill.propose with name, description, body, caps and audience. The draft stays in quarantine until a human approves it.
+## Purpose
+Skills are written only by an author agent together with the human, never typed by hand. Every skill is structured and complete so a reader can follow it without guessing. The draft stays in quarantine until the human approves it by typing the confirmation phrase.
 
-## Shape
-- name: `webterm-` plus lowercase words joined by hyphens.
-- description: up to 300 characters. Say what it does and when to use it.
-- body: up to 4000 characters of Markdown. Numbered steps, short.
-- caps: the tool verbs the steps rely on. List only what the steps need.
-- audience (required, no default): `central` for rules Central itself follows, `canvas` for procedures canvas agent sessions follow. A skill has exactly one kind; Central cannot load `canvas` skills and agents never see `central` ones.
+## When to use
+When a procedure has repeated and you can state it as steps, or when the human asks for a new skill or a revision of one.
 
-## Lint rejects
-- Shell commands, download-and-run patterns, or anything that needs a terminal.
-- Links, absolute paths, parent-folder paths and file URLs.
-- Anything shaped like a key, token or password.
-- Text that tells the reader to skip rules, hide output or activate a skill.
-- Hidden or control characters, and bodies over the size limit.
+## Steps
+1. Run the intake checklist with the human, one question at a time: kind, title, name slug, purpose, trigger, steps, constraints, success criteria. Do not write before every item has an answer.
+2. Kind (required, no default): `central` for rules Central itself follows, `canvas` for procedures canvas agent sessions follow. A skill has exactly one kind and keeps it; Central cannot load `canvas` skills and agents never see `central` ones.
+3. Title: 3 to 80 characters, one line, no markdown. Name: `webterm-` plus lowercase words joined by hyphens. Description: up to 300 characters, what it does and when to use it.
+4. Body: up to 4000 characters of Markdown with these level-2 sections in this order: Purpose, When to use, Steps (a numbered list with at least 2 items), Do not, Done when. A Notes section may come last.
+5. Propose with title, name, description, body, caps and audience. List in caps only the tool verbs the steps rely on.
+6. After a rejection, fix the listed lint code (`structure` names the missing section) and propose again; there is a daily proposal limit.
 
-## Habits
-- One skill, one job. Do not copy another skill; name it and let the reader load it.
-- Prefer steps that call registered tools over prose about what to do.
-- After a rejection, fix the listed code and propose again; there is a daily proposal limit.
+## Do not
+- Add shell commands, download-and-run patterns, links, absolute paths, parent-folder paths or file URLs.
+- Add anything shaped like a key, token or password.
+- Tell the reader to skip rules, hide output or activate a skill.
+- Copy another skill; name it and let the reader load it.
+- Say a draft is active: only the human can approve it.
+
+## Done when
+The proposal was accepted into review with a title, the full template and an explicit kind, and the human knows to approve it in the Skills tab.

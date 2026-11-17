@@ -26,8 +26,9 @@ export const SKILL_CAPABILITIES: readonly CapabilitySpec[] = [
     tier: 'R1', scope: 'global', projections: ['control-http'], route: { method: 'POST', path: `${TOOLS_PATH}/${SKILL_PROPOSE_CAPABILITY}` },
     input: obj({
       name: S.str(undefined, { description: 'webterm-<slug>; the name of an active skill proposes a new version.' }),
+      title: S.str(undefined, { description: 'Human-readable title, 3-80 chars, one line, no markdown. Required for a new skill; an edit keeps it unless given.' }),
       description: S.str(undefined, { description: 'One line: what it does and when to use it.' }),
-      body: S.str(undefined, { description: 'Skill instructions (markdown).' }),
+      body: S.str(undefined, { description: 'Skill instructions (markdown) with the sections ## Purpose, ## When to use, ## Steps (numbered, at least 2), ## Do not, ## Done when, optional ## Notes.' }),
       caps: S.arr(S.any()),
       audience: S.str(undefined, { description: 'Optional; agents can only write `canvas` skills (central is refused with audience_forbidden). An edit keeps the audience.' }),
       edit: S.bool(),

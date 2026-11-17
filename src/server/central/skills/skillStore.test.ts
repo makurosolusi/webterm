@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { nodeSqlite } from '../../nodeSqlite.testutil'
 import { DAY_MS, DDL_SKILL, MAX_ACTIVE_SKILLS, SKILL_PERMISSION, SkillError, ensureSkillTable, getRecord, isSkillName, putRecord } from './skillIndex'
+import { GOOD_BODY, GOOD_TITLE, tpl } from './skillDraft.testutil'
 import { confirmPhrase } from './skillLifecycle'
 import { BUILTIN_DIR, type SkillAdminStore, createSkillStore, readBuiltinDir } from './skillStore'
 
@@ -12,7 +13,7 @@ let root: string
 let clock: number
 let raw: ReturnType<typeof nodeSqlite>
 let store: SkillAdminStore
-const input = (over: Partial<{ name: string; description: string; body: string; caps: string[]; audience: 'central' | 'canvas' }> = {}) => ({ name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: ['portfolio.read'], audience: 'central' as const, ...over })
+const input = (over: Partial<{ name: string; title: string; description: string; body: string; caps: string[]; audience: 'central' | 'canvas' }> = {}) => ({ name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize status. Use when asked.', body: GOOD_BODY, caps: ['portfolio.read'], audience: 'central' as const, ...over })
 const codeOf = (fn: () => unknown): string | undefined => { try { fn() } catch (err) { return err instanceof SkillError ? err.code : `other:${String(err)}` } return undefined }
 const asyncCode = (p: Promise<unknown>): Promise<string | undefined> => p.then(() => undefined, (err: unknown) => (err instanceof SkillError ? err.code : `other:${String(err)}`))
 function activate(name: string, version: string): void {
@@ -33,7 +34,7 @@ describe('builtin skills', () => {
     expect(recs.map((r) => r.name)).toEqual(['webterm-approval-flow', 'webterm-central-basics', 'webterm-project-status', 'webterm-skill-authoring'])
     expect(recs.every((r) => r.status === 'active' && r.origin === 'builtin' && /^[0-9a-f]{64}$/.test(r.sha256 ?? ''))).toBe(true)
     const loaded = store.load('webterm-central-basics')
-    expect(loaded?.body).toContain('You propose; humans and the server decide.')
+    expect(loaded?.body).toContain('it proposes while humans and the server decide')
     expect(store.index().map((e) => e.name)).toHaveLength(4)
     expect(store.installBuiltins()).toHaveLength(4)
     expect(store.list('active')).toHaveLength(4)
@@ -59,7 +60,7 @@ describe('builtin skill sources', () => {
     const text = readFileSync(join(BUILTIN_DIR, 'webterm-central-basics', 'SKILL.md'), 'utf8')
     const only = createSkillStore({ db: raw.db, root, now: () => clock, builtins: { 'webterm-central-basics': text } })
     expect(only.installBuiltins().map((r) => r.name)).toEqual(['webterm-central-basics'])
-    expect(only.load('webterm-central-basics')?.body).toContain('You propose; humans and the server decide.')
+    expect(only.load('webterm-central-basics')?.body).toContain('it proposes while humans and the server decide')
   })
 })
 
@@ -193,7 +194,7 @@ describe('rollback and active-state tamper', () => {
   it('v2 replaces v1, rollback restores v1 by repointing, a second rollback has nowhere to go', async () => {
     await store.propose(input(), 'central:c1')
     activate('webterm-demo', '1')
-    const v2 = await store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
+    const v2 = await store.propose(input({ body: tpl('Newer procedure.') }), 'central:c1')
     expect(v2.version).toBe('2')
     activate('webterm-demo', '2')
     expect(getRecord(raw.db, 'webterm-demo', '1')?.status).toBe('archived')
@@ -210,7 +211,7 @@ describe('rollback and active-state tamper', () => {
   it('rollback refuses a target whose hash no longer matches', async () => {
     await store.propose(input(), 'central:c1')
     activate('webterm-demo', '1')
-    await store.propose(input({ body: '1. Newer procedure.' }), 'central:c1')
+    await store.propose(input({ body: tpl('Newer procedure.') }), 'central:c1')
     activate('webterm-demo', '2')
     appendFileSync(join(root, 'versions', 'webterm-demo', '1', 'SKILL.md'), 'tampered\n')
     expect(codeOf(() => store.rollback('webterm-demo', HUMAN))).toBe('hash_mismatch')
@@ -233,7 +234,7 @@ describe('rollback and active-state tamper', () => {
   it('load disables a skill whose active pointer was redirected', async () => {
     await store.propose(input(), 'central:c1')
     activate('webterm-demo', '1')
-    await store.propose(input({ body: '1. Other.' }), 'central:c1')
+    await store.propose(input({ body: tpl('Other.') }), 'central:c1')
     const other = join(root, 'proposed', 'webterm-demo', '2')
     rmSync(join(root, 'active', 'webterm-demo'))
     symlinkSync(other, join(root, 'active', 'webterm-demo'))
@@ -244,7 +245,7 @@ describe('rollback and active-state tamper', () => {
 
 describe('propose guards', () => {
   it('lint failures throw invalid with codes only and write nothing', async () => {
-    const err = await store.propose(input({ body: 'Run rm -rf build and open ../x' }), 'central:c1').then(() => null, (e: SkillError) => e)
+    const err = await store.propose(input({ body: `${GOOD_BODY}Run rm -rf build and open ../x` }), 'central:c1').then(() => null, (e: SkillError) => e)
     expect(err?.code).toBe('invalid')
     expect(err?.issues).toEqual(expect.arrayContaining(['danger', 'traversal']))
     expect(existsSync(join(root, 'proposed'))).toBe(false)

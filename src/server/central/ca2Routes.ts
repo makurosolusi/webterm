@@ -9,7 +9,7 @@ import { panicSnapshotAll } from '../checkpoint/checkpoint.service'
 import { createLogger } from '../logs'
 import { activeCa2 } from './ca2Active'
 import type { Ca2Handle } from './ca2Boot'
-import { type SkillAction, closeAgent, closeAllAgents, createSkill, relayAgent, skillAction } from './ca2Routes.act'
+import { type SkillAction, closeAgent, closeAllAgents, relayAgent, skillAction } from './ca2Routes.act'
 import { type SkillManageAction, skillManage } from './ca2Routes.skillManage'
 import { agentsView, memoryView, skillsView, statusView } from './ca2Routes.read'
 import { type BoardDeps, nodesView } from './ca2Routes.nodes'
@@ -26,7 +26,7 @@ import { toolsView } from './toolsCatalog.api'
 const BASE = '/api/central'
 const BODY_MAX_BYTES = 64 * 1024
 const AGENT_ACTION = /^\/api\/central\/agents\/([^/]+)\/(relay|close)$/
-const SKILL_ACTION = /^\/api\/central\/skills\/([^/]+)\/(approve|rollback|reject|enable|disable|versions|fork)$/
+const SKILL_ACTION = /^\/api\/central\/skills\/([^/]+)\/(approve|rollback|reject|enable|disable)$/
 /** The transport only admits the root credential, so that is the identity every action runs as. */
 const ROOT_ACTOR = { kind: 'root', id: 'root' } as const
 const ROOT_HUMAN = 'human:root'
@@ -57,7 +57,6 @@ export async function ca2Dispatch(
     '/status': () => statusView(h), '/memory': () => memoryView(h, query),
     '/agents': () => agentsView(h, query), '/skills': () => skillsView(h, query), '/tools': () => toolsView(h),
   }
-  if (path === `${BASE}/skills` && method === 'POST') return createSkill(h, await req.body(), actor)
   const read = reads[path.slice(BASE.length)]
   if (read) return method === 'GET' ? read() : notAllowed
   const agent = AGENT_ACTION.exec(path)
@@ -68,7 +67,7 @@ export async function ca2Dispatch(
     if (id === null) return { status: 400, body: { error: 'invalid_id' } }
     if (agent) return agent[2] === 'relay' ? relayAgent(h, id, await req.body()) : closeAgent(h, id)
     const verb = skill?.[2] as string
-    if (['enable', 'disable', 'versions', 'fork'].includes(verb)) return skillManage(h, id, verb as SkillManageAction, await req.body(), actor)
+    if (verb === 'enable' || verb === 'disable') return skillManage(h, id, verb as SkillManageAction, actor)
     return skillAction(h, id, verb as SkillAction, await req.body(), actor)
   }
   if (path === `${BASE}/control` || path === `${BASE}/halt`) {

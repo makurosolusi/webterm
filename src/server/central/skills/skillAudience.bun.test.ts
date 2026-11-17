@@ -1,5 +1,5 @@
 // Audience matrix on a real Ca2 handle: who sees which active skill (agent list/get vs Central), required audience on
-// every entry (human route, agent route), edit keeps audience, fork can change it.
+// the agent entry, edit keeps audience; the human create/edit/fork routes are gone.
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -13,9 +13,10 @@ import { ca2Dispatch } from '../ca2Routes'
 import { freshDb, T0 } from '../guard/controlGuard.testutil'
 import { CORE_DEFS } from '../tools/defs/core.defs'
 import { createRegistry } from '../tools/toolRegistry'
+import { GOOD_BODY, GOOD_TITLE, tpl } from './skillDraft.testutil'
 
 const sessions = { open() {}, input() {}, statusOf: () => undefined, getTerminal: () => '', isLive: () => false, close() {} } as unknown as SessionsLike
-const DRAFT = { description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.\n2. Write five lines.', caps: [] as string[] }
+const DRAFT = { title: GOOD_TITLE, description: 'Summarize status. Use when asked.', body: GOOD_BODY, caps: [] as string[] }
 let dir: string
 let h: Ca2Handle
 
@@ -35,7 +36,8 @@ afterEach(() => { h.stop(); setActiveCa2(null); rmSync(dir, { recursive: true, f
 
 const human = (path: string, body: unknown) => ca2Dispatch(h, { method: 'POST', path, query: new URLSearchParams(), body: async () => body }, 'human:ui')
 async function activate(name: string, audience: string): Promise<void> {
-  expect((await human('/api/central/skills', { name, ...DRAFT, audience }))?.status).toBe(201)
+  // Skills are written by an author: Central's own proposals for `central`, an agent session's for `canvas`.
+  await h.skills?.propose({ name, ...DRAFT, audience: audience as 'central' | 'canvas' }, audience === 'canvas' ? 'agent:n9' : 'central:c1')
   expect((await human(`/api/central/skills/${name}/approve`, { version: '1', phrase: CONFIRM_PHRASE }))?.status).toBe(200)
 }
 const names = (r: { body: unknown }) => (r.body as { items: Array<{ name: string; status: string }> }).items.filter((i) => i.status === 'active').map((i) => i.name).sort()
@@ -68,50 +70,48 @@ describe('visibility matrix', () => {
   })
 })
 
-describe('audience on every proposal entry', () => {
-  it('human create answers 400 invalid_audience naming the allowed values (also for the removed `both`); nothing stored', async () => {
-    for (const audience of [undefined, 'everyone', 'both', 'agents']) {
-      const r = await human('/api/central/skills', { name: 'webterm-noaud', ...DRAFT, ...(audience ? { audience } : {}) })
-      expect(r).toMatchObject({ status: 400, body: { error: 'invalid_audience', allowed: ['central', 'canvas'] } })
-    }
-    expect(h.skills?.list('pending_approval')).toEqual([])
-  })
-  it('agent route: no audience is forced to canvas, central is 403 audience_forbidden, junk is 400 invalid_audience', async () => {
+describe('audience on the agent proposal entry', () => {
+  it('no audience is forced to canvas, central is 403 audience_forbidden, junk is 400 invalid_audience', async () => {
     expect((await agentSkillPropose(h, { name: 'webterm-agent-default', ...DRAFT }, 'n1')).status).toBe(201)
-    expect(h.skills?.list('pending_approval')[0]).toMatchObject({ origin: 'agent', audience: 'canvas' })
+    expect(h.skills?.list('pending_approval')[0]).toMatchObject({ origin: 'agent', audience: 'canvas', title: GOOD_TITLE })
     expect(await agentSkillPropose(h, { name: 'webterm-agent-central', ...DRAFT, audience: 'central' }, 'n1')).toMatchObject({ status: 403, body: { error: 'audience_forbidden' } })
     expect(await agentSkillPropose(h, { name: 'webterm-agent-junk', ...DRAFT, audience: 'both' }, 'n1')).toMatchObject({ status: 400, body: { error: 'invalid_audience' } })
     expect(h.skills?.list('pending_approval').map((r) => r.name)).toEqual(['webterm-agent-default'])
   })
-  it('humans may create either kind', async () => {
-    expect((await human('/api/central/skills', { name: 'webterm-h-central', ...DRAFT, audience: 'central' }))?.status).toBe(201)
-    expect((await human('/api/central/skills', { name: 'webterm-h-canvas', ...DRAFT, audience: 'canvas' }))?.status).toBe(201)
+  it('the title is required and validated (400 invalid_title); a thin body is 400 invalid with the structure issues', async () => {
+    for (const title of [undefined, '', 'ab', '**x**']) expect(await agentSkillPropose(h, { name: 'webterm-agent-t', ...DRAFT, title }, 'n1')).toMatchObject({ status: 400, body: { error: 'invalid_title' } })
+    const thin = await agentSkillPropose(h, { name: 'webterm-agent-t', ...DRAFT, body: '1. One.\n2. Two.' }, 'n1')
+    expect(thin).toMatchObject({ status: 400, body: { error: 'invalid', issues: expect.arrayContaining(['structure', 'structure:missing ## Purpose']) } })
+    expect(h.skills?.list().some((r) => r.name === 'webterm-agent-t')).toBe(false)
   })
 })
 
-describe('edit keeps the kind; fork changes it', () => {
-  it('human versions without audience keeps it; a different audience is 400 audience_immutable', async () => {
-    await activate('webterm-e-demo', 'canvas')
-    expect((await human('/api/central/skills/webterm-e-demo/versions', { ...DRAFT, body: '1. New body.' }))?.status).toBe(201)
-    expect(h.skills?.list('pending_approval')[0]).toMatchObject({ version: '2', audience: 'canvas' })
-    expect((await human('/api/central/skills/webterm-e-demo/reject', { version: '2' }))?.status).toBe(200)
-    expect(await human('/api/central/skills/webterm-e-demo/versions', { ...DRAFT, audience: 'central' })).toMatchObject({ status: 400, body: { error: 'audience_immutable' } })
+describe('the human write routes are gone', () => {
+  it('create is 405, versions and fork match no route (null: 404 downstream), and nothing is stored', async () => {
+    expect(await human('/api/central/skills', { name: 'webterm-x', ...DRAFT, audience: 'central' })).toMatchObject({ status: 405 })
+    for (const verb of ['versions', 'fork']) expect(await human(`/api/central/skills/webterm-central-basics/${verb}`, { ...DRAFT })).toBeNull()
     expect(h.skills?.list('pending_approval')).toEqual([])
   })
-  it('agent edit keeps the audience; an agent can neither see nor edit a central skill', async () => {
+})
+
+describe('edit keeps the kind', () => {
+  it('agent edit keeps the audience and the title; an agent can neither see nor edit a central skill', async () => {
     await activate('webterm-e-canvas', 'canvas')
     await activate('webterm-e-central', 'central')
-    expect((await agentSkillPropose(h, { name: 'webterm-e-canvas', edit: true, body: '1. Other.' }, 'n1')).status).toBe(201)
-    expect(h.skills?.list('pending_approval')[0]).toMatchObject({ version: '2', audience: 'canvas' })
-    expect(await agentSkillPropose(h, { name: 'webterm-e-central', edit: true, body: '1. Other.' }, 'n1')).toMatchObject({ status: 404, body: { error: 'not_found' } })
+    expect((await agentSkillPropose(h, { name: 'webterm-e-canvas', edit: true, body: tpl('Other.') }, 'n1')).status).toBe(201)
+    expect(h.skills?.list('pending_approval')[0]).toMatchObject({ version: '2', audience: 'canvas', title: GOOD_TITLE })
+    expect(await agentSkillPropose(h, { name: 'webterm-e-central', edit: true, body: tpl('Other.') }, 'n1')).toMatchObject({ status: 404, body: { error: 'not_found' } })
     expect(await agentSkillPropose(h, { name: 'webterm-e-canvas', edit: true, audience: 'central' }, 'n1')).toMatchObject({ status: 403 })
   })
-  it('fork copies the kind, or takes the selected one; an invalid one is 400', async () => {
-    await activate('webterm-f-demo', 'canvas')
-    expect((await human('/api/central/skills/webterm-f-demo/fork', {}))?.status).toBe(201)
-    expect(await human('/api/central/skills/webterm-f-demo/fork', { audience: 'both' })).toMatchObject({ status: 400, body: { error: 'invalid_audience' } })
-    expect((await human('/api/central/skills/webterm-f-demo/fork', { audience: 'central' }))?.status).toBe(201)
-    expect(h.skills?.list('pending_approval').map((r) => r.audience).sort()).toEqual(['canvas', 'central'])
+  it('a different kind for an existing name is audience_immutable at the store', async () => {
+    await activate('webterm-e-demo', 'canvas')
+    const err = await h.skills?.propose({ name: 'webterm-e-demo', ...DRAFT, audience: 'central' }, 'central:c2').catch((e: unknown) => e)
+    expect((err as { code?: string }).code).toBe('audience_immutable')
+  })
+  it('an edit of an active skill given a new title replaces it', async () => {
+    await activate('webterm-e-title', 'canvas')
+    expect((await agentSkillPropose(h, { name: 'webterm-e-title', edit: true, title: 'Better title' }, 'n1')).status).toBe(201)
+    expect(h.skills?.list('pending_approval')[0].title).toBe('Better title')
   })
 })
 
