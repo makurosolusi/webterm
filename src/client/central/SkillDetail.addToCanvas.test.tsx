@@ -16,7 +16,7 @@ const row = (over: { audience?: 'canvas' | 'central'; status?: string; enabled?:
 })
 
 function show(r: SkillReviewRow, actions: Partial<NodeActions> | null) {
-  const detail = <SkillDetail row={r} client={{} as CentralControlClient} onClose={vi.fn()} onChanged={vi.fn()} onEdit={vi.fn()} onForked={vi.fn()} hasOpenDraft={false} />
+  const detail = <SkillDetail row={r} client={{} as CentralControlClient} onClose={vi.fn()} onChanged={vi.fn()} />
   render(actions ? <NodeActionsProvider value={{ onSession: () => undefined, onToggleHideLinks: () => undefined, ...actions }}>{detail}</NodeActionsProvider> : detail)
 }
 const addBtn = () => screen.getByRole('button', { name: 'Add to canvas' }) as HTMLButtonElement

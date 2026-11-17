@@ -20,11 +20,9 @@ interface Props {
   onChanged: () => void
   /** The "Ask the agent ..." control for this skill; the library picks the author (Central chat or canvas node) by kind. */
   revise?: ReactNode
-  /** A newer version of this name already waits for review, so a revision would be refused. */
-  hasOpenDraft: boolean
 }
 
-export default function SkillDetail({ row, client, onClose, onChanged, revise, hasOpenDraft }: Props) {
+export default function SkillDetail({ row, client, onClose, onChanged, revise }: Props) {
   const { record, description, body } = row
   const [on, setOn] = useState(record.enabled !== false)
   const target = useRef(on)
@@ -42,7 +40,7 @@ export default function SkillDetail({ row, client, onClose, onChanged, revise, h
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version} details`}>
       <header>
-        <strong>{titleOf(row)}</strong> <small>{record.name}</small> <span>{record.version}</span>
+        <strong>{titleOf(row)}</strong> {titleOf(row) !== record.name && <small>{record.name}</small>} <span>{record.version}</span>
         <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
         {!on && <span className="ccp-badge">{CL.skillOff}</span>}
         <Button type="button" size="xs" variant="secondary" onClick={onClose}>{CL.skillBack}</Button>
@@ -68,7 +66,6 @@ export default function SkillDetail({ row, client, onClose, onChanged, revise, h
       )}
       {body ? <pre className="ccp-diff" tabIndex={0} aria-label={CL.skillInstructions}>{body}</pre> : <p>{CL.skillNoBody}</p>}
       {revise}
-      {active && !builtin && hasOpenDraft && <small>{CL.skillEditOpenDraft}</small>}
     </article>
   )
 }

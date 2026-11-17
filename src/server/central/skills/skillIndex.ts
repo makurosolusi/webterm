@@ -78,7 +78,7 @@ const toRecord = (r: Row): StoredSkill => ({ name: r.name, version: r.version, s
  * Creates the index table when missing and migrates older ones (idempotent, safe to run on every boot).
  * Why: `enabled` (default 1 backfills every existing skill as on) and `reject_reason` are plain added columns; the
  * `audience` defaults to `central`: until audience existed Central was the only consumer, so every existing skill (and the
- * built-ins) keeps its old behavior and stays invisible to canvas agents; a canvas skill is a separate skill (fork), never a kind change.
+ * built-ins) keeps its old behavior and stays invisible to canvas agents; a canvas skill is a separate skill, never a kind change.
  * The `agent` origin needs a wider CHECK, which SQLite cannot alter, so a table whose CHECK lacks it is rebuilt once.
  */
 export function ensureSkillTable(db: Database): void {

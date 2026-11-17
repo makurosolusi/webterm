@@ -203,6 +203,27 @@ describe('an edit conversation keeps the kind (real store)', () => {
   })
 })
 
+describe('built-in reference (variant flow, real store)', () => {
+  it('the target is read-only: a new valid name is proposed, the built-in name itself is denied', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'author-variant-'))
+    try {
+      const db = openLedgerDb(':memory:')
+      const real = createSkillStore({ db, root })
+      real.installBuiltins()
+      const registry = createRegistry()
+      for (const def of createSkillDefs(() => real as unknown as SkillToolStore)) registry.register(def)
+      const env = { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_SKILL_PROPOSE: 'on' }
+      const c = { db, registry, env, guard: createControlGuard({ db, now: Date.now, env }) }
+      const variant = createChatConversation(db, undefined, { mode: 'skill-author', skillTarget: 'webterm-central-basics' }).id
+      const body = '## Purpose\nx\n\n## When to use\nx\n\n## Steps\n1. One.\n2. Two.\n\n## Do not\n- x\n\n## Done when\nx\n'
+      const args = { title: 'My variant', description: 'd', body, caps: [], audience: 'central' }
+      expect(await callCentralTool(c, variant, 'skill_propose', { ...args, name: 'webterm-central-basics' })).toMatchObject({ outcome: 'denied', detail: 'skill_not_target' })
+      expect((await callCentralTool(c, variant, 'skill_propose', { ...args, name: 'webterm-my-variant' })).outcome).toBe('ok')
+      expect(real.list('pending_approval').map((r) => r.name)).toEqual(['webterm-my-variant'])
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+})
+
 describe('MCP backend narrowing', () => {
   const proposed: { name: string; audience: string }[] = []
   const store = {

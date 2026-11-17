@@ -5,7 +5,6 @@ import { InboxApiError } from '../inboxTypes'
 import { fakeClient } from './centralFixtures.testutil'
 import type { SkillReviewRow } from './centralControlTypes'
 import SkillLibrary from './SkillLibrary'
-import { SkillCreateError, createSkillRequest } from './skillCreateApi'
 
 // Radix Checkbox measures itself with ResizeObserver, which jsdom lacks.
 beforeAll(() => { globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver })
@@ -44,7 +43,7 @@ describe('SkillLibrary browse', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-x 1' }))
     const detail = screen.getByRole('article', { name: 'webterm-x 1 details' })
     expect(within(detail).getByLabelText('Instructions (markdown)').textContent).toBe('1. Read the portfolio.')
-    expect(within(detail).getByText('Built-in skills are read-only.')).toBeTruthy()
+    expect(within(detail).getByText('Built-in, read only')).toBeTruthy()
     expect(within(detail).queryByRole('textbox')).toBeNull()
     fireEvent.click(within(detail).getByRole('button', { name: 'Close details' }))
     expect(screen.queryByRole('article', { name: 'webterm-x 1 details' })).toBeNull()
@@ -61,7 +60,7 @@ describe('SkillLibrary states', () => {
   it('shows empty, and a loading line first', async () => {
     render(<SkillLibrary client={withRows()} />)
     expect(screen.getByRole('status').textContent).toBe('Loading…')
-    expect(await screen.findByText('No skills yet')).toBeTruthy()
+    expect(await screen.findByText(/^No skills yet\. Skills are written with the agent/)).toBeTruthy()
     expect(screen.queryByLabelText('Search skills')).toBeNull()
   })
 
@@ -74,106 +73,59 @@ describe('SkillLibrary states', () => {
     expect(listSkills).toHaveBeenCalledTimes(2)
   })
 
-  it('when skills are off it shows the reason and no New skill button', async () => {
+  it('when skills are off it shows the reason and no Write with an agent button', async () => {
     render(<SkillLibrary client={fakeClient({ listSkills: vi.fn(async () => { throw new InboxApiError('off', 503, 'skills_off') }) })} />)
     expect(await screen.findByText(/Central skills are off/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'New skill' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Write with an agent/ })).toBeNull()
   })
 })
 
-describe('SkillLibrary new skill form', () => {
-  const open = async (client = withRows()) => {
-    render(<SkillLibrary client={client} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'New skill (Canvas)' }))
-    return client
+describe('SkillLibrary has no manual authoring', () => {
+  const mount = async (client = withRows(row({ origin: 'central', status: 'active' }))) => {
+    render(<SkillLibrary client={client} chat={{ createConversation: vi.fn(async () => ({}) as never) }} />)
+    await screen.findAllByText('Summarize project status.')
   }
-  const fill = () => {
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Webterm-My-Skill' } })
-    fireEvent.change(screen.getByLabelText('When to use'), { target: { value: 'Use when asked.' } })
-    fireEvent.change(screen.getByLabelText('Instructions (markdown)'), { target: { value: '1. Do it.' } })
-  }
-  const submit = () => screen.getByRole('button', { name: 'Create draft' }) as HTMLButtonElement
 
-  it('is disabled until valid, and shows counters', async () => {
-    await open()
-    expect(submit().disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('When to use'), { target: { value: 'abc' } })
-    expect(screen.getByText('3 / 300')).toBeTruthy()
-    expect(screen.getByText('0 / 4000')).toBeTruthy()
-    fill()
-    expect(submit().disabled).toBe(false)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Bad Name!' } })
-    expect(submit().disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('Instructions (markdown)'), { target: { value: 'x'.repeat(4001) } })
-    expect(screen.getByText('4001 / 4000').className).toContain('ccp-error')
+  it('has no New skill button, no form, no text field for a skill, no Edit or Duplicate anywhere', async () => {
+    await mount(withRows(row({ origin: 'central' }), row({ name: 'webterm-d', status: 'pending_approval', origin: 'agent' }), row({ name: 'webterm-b', origin: 'builtin' })))
+    for (const name of [/New skill/, /^Edit/, /Duplicate/, /Create draft/, /Save new version/]) expect(screen.queryByRole('button', { name })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'View webterm-x 1' }))
+    for (const name of [/New skill/, /^Edit/, /Duplicate/]) expect(screen.queryByRole('button', { name })).toBeNull()
+    expect(screen.queryByRole('form')).toBeNull()
+    expect(screen.queryByLabelText('Name')).toBeNull()
+    expect(screen.queryByLabelText('When to use')).toBeNull()
+    expect(document.querySelectorAll('textarea')).toHaveLength(0)
   })
 
-  it('sends the prefixed name and chosen caps, then closes and reloads', async () => {
-    const client = await open()
-    fill()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'skill.load' }))
-    fireEvent.click(submit())
-    await waitFor(() => expect(client.createSkill).toHaveBeenCalledWith({ name: 'webterm-my-skill', description: 'Use when asked.', body: '1. Do it.', caps: ['skill.load'], audience: 'canvas' }))
-    expect(await screen.findByText('Draft webterm-my-skill saved. Review it below.')).toBeTruthy()
-    expect(screen.queryByRole('form', { name: 'New skill draft' })).toBeNull()
-    await waitFor(() => expect(client.listSkills).toHaveBeenCalledTimes(2))
+  it('offers Write with an agent in each section', async () => {
+    await mount()
+    expect(screen.getByRole('button', { name: 'Write with an agent (Central)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Write with an agent (Canvas)' })).toBeTruthy()
   })
 
-  it('shows lint issues as readable lines, never raw JSON, and keeps the text', async () => {
-    const client = fakeClient({ listSkills: vi.fn(async () => []), createSkill: vi.fn(async () => { throw new SkillCreateError(400, 'invalid', ['url', 'danger']) }) })
-    await open(client)
-    fill()
-    fireEvent.click(submit())
-    const alert = await screen.findByText('Fix these and try again:')
-    const box = alert.closest('[role="alert"]') as HTMLElement
-    expect(within(box).getByText('Remove links from the text.')).toBeTruthy()
-    expect(within(box).getByText('Remove shell commands from the text.')).toBeTruthy()
-    expect(document.body.textContent).not.toMatch(/[{}]|issues|http_|invalid\b/)
-    expect((screen.getByLabelText('Instructions (markdown)') as HTMLTextAreaElement).value).toBe('1. Do it.')
-    await waitFor(() => expect(submit().disabled).toBe(false))
+  it('shows the title first (the name when a skill has none), the kind badge, status and version', async () => {
+    render(<SkillLibrary client={withRows(row({ name: 'webterm-titled', title: 'Weekly status report', origin: 'central' }), row({ name: 'webterm-legacy', origin: 'central' }))} />)
+    const titled = (await screen.findByRole('button', { name: 'View webterm-titled 1' })).closest('li') as HTMLElement
+    expect(within(titled).getByText('Weekly status report')).toBeTruthy()
+    expect(within(titled).getByText('webterm-titled')).toBeTruthy()
+    expect(within(titled).getByText('Central')).toBeTruthy()
+    const legacy = screen.getByRole('button', { name: 'View webterm-legacy 1' }).closest('li') as HTMLElement
+    expect(within(legacy).getAllByText('webterm-legacy')).toHaveLength(1)
   })
 
-  it('maps a duplicate (409 limit) to a plain sentence', async () => {
-    const client = fakeClient({ listSkills: vi.fn(async () => []), createSkill: vi.fn(async () => { throw new SkillCreateError(409, 'limit', []) }) })
-    await open(client)
-    fill()
-    fireEvent.click(submit())
-    expect(await screen.findByText(/already waiting for review/)).toBeTruthy()
+  it('a user skill detail offers Ask the agent to revise (never an edit); a built-in is read only and offers a variant', async () => {
+    render(<SkillLibrary client={withRows(row({ name: 'webterm-mine', origin: 'central' }), row({ name: 'webterm-b', origin: 'builtin' }))} chat={{ createConversation: vi.fn(async () => ({}) as never) }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'View webterm-mine 1' }))
+    expect(screen.getByRole('button', { name: 'Ask the agent to revise webterm-mine' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'View webterm-b 1' }))
+    const detail = screen.getByRole('article', { name: 'webterm-b 1 details' })
+    expect(within(detail).getByText('Built-in, read only')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Ask the agent to revise/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Ask the agent for a variant webterm-b' })).toBeTruthy()
   })
 
-  it('disables the form while saving', async () => {
-    let finish = () => {}
-    const client = fakeClient({ listSkills: vi.fn(async () => []), createSkill: vi.fn(() => new Promise<void>((r) => { finish = r })) })
-    await open(client)
-    fill()
-    fireEvent.click(submit())
-    const busy = await screen.findByRole('button', { name: 'Saving…' })
-    expect((busy as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByLabelText('Name') as HTMLInputElement).disabled).toBe(true)
-    finish()
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull())
-  })
-
-  it('cancel closes the form without calling the server', async () => {
-    const client = await open()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('form', { name: 'New skill draft' })).toBeNull()
-    expect(client.createSkill).not.toHaveBeenCalled()
-  })
-})
-
-describe('createSkillRequest', () => {
-  it('turns a 400 body into a SkillCreateError with issue codes', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'invalid', issues: ['url'] }), { status: 400 })))
-    const err = await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' }).catch((e: unknown) => e)
-    expect(err).toBeInstanceOf(SkillCreateError)
-    expect(err).toMatchObject({ status: 400, code: 'invalid', issues: ['url'] })
-  })
-
-  it('posts JSON and resolves on 201', async () => {
-    const f = vi.fn(async () => new Response('{}', { status: 201 }))
-    vi.stubGlobal('fetch', f)
-    await createSkillRequest('/x', { name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' })
-    expect(f).toHaveBeenCalledWith('/x', expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'webterm-a', description: 'd', body: 'b', caps: [], audience: 'canvas' }) }))
+  it('the empty state explains how skills are written', async () => {
+    render(<SkillLibrary client={withRows()} />)
+    expect((await screen.findAllByText(/Skills are written with the agent: press Write with an agent/)).length).toBeGreaterThan(0)
   })
 })

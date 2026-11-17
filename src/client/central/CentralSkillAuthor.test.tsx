@@ -53,21 +53,28 @@ describe('Write / Edit with an agent (Central skills)', () => {
     expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author' })
   })
 
-  it('Edit on a central skill passes its name as the target', async () => {
+  it('Ask the agent to revise on a central skill passes its name as the target', async () => {
     const { chat } = library([row()])
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-rule 1' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Edit with an agent webterm-rule' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the agent to revise webterm-rule' }))
     await waitFor(() => expect(opened).toHaveBeenCalled())
     expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author', skillTarget: 'webterm-rule' })
   })
 
-  it('a built-in central skill gets the Duplicate hint instead of a button; a canvas skill gets no Central author button', async () => {
-    library([row({ origin: 'builtin', name: 'webterm-core', proposedBy: null }), row({ audience: 'canvas', name: 'webterm-howto' })])
+  it('a built-in skill has no revise button; its variant opens the author with the built-in as a reference target', async () => {
+    const { chat } = library([row({ origin: 'builtin', name: 'webterm-core', proposedBy: null })])
     fireEvent.click(await screen.findByRole('button', { name: 'View webterm-core 1' }))
-    expect(screen.queryByRole('button', { name: 'Edit with an agent webterm-core' })).toBeNull()
-    expect(screen.getByText(/Use Duplicate and edit first/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'View webterm-howto 1' }))
-    expect(screen.queryByRole('button', { name: 'Edit with an agent webterm-howto' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Ask the agent to revise webterm-core' })).toBeNull()
+    expect(screen.getByText(/Tell the agent to base the new skill on webterm-core/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the agent for a variant webterm-core' }))
+    await waitFor(() => expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author', skillTarget: 'webterm-core' }))
+  })
+
+  it('without a board a canvas skill is revised by the Central author too (it writes either kind)', async () => {
+    const { chat } = library([row({ audience: 'canvas', name: 'webterm-howto' })])
+    fireEvent.click(await screen.findByRole('button', { name: 'View webterm-howto 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the agent to revise webterm-howto' }))
+    await waitFor(() => expect(chat.createConversation).toHaveBeenCalledWith({ mode: 'skill-author', skillTarget: 'webterm-howto' }))
   })
 
   it('shows a failed start as an alert and the button works again', async () => {
@@ -83,10 +90,11 @@ describe('Write / Edit with an agent (Central skills)', () => {
 })
 
 describe('Drafts from Central', () => {
-  it('keeps only open drafts Central proposed for a Central skill', () => {
+  it('keeps only open drafts Central proposed, of either kind', () => {
     const mine = draft()
-    const rows = [mine, draft({ origin: 'agent', proposedBy: 'agent:n1', name: 'webterm-a' }), draft({ name: 'webterm-b', audience: 'canvas' }), draft({ name: 'webterm-c', status: 'rejected' }), row()]
-    expect(centralDraftsOf(rows)).toEqual([mine])
+    const canvasDraft = draft({ name: 'webterm-b', audience: 'canvas' })
+    const rows = [mine, draft({ origin: 'agent', proposedBy: 'agent:n1', name: 'webterm-a' }), canvasDraft, draft({ name: 'webterm-c', status: 'rejected' }), row()]
+    expect(centralDraftsOf(rows)).toEqual([mine, canvasDraft])
   })
 
   it('lists a draft with its diff, in the Central section, once (not again in the general review list)', async () => {
@@ -104,7 +112,6 @@ describe('Drafts from Central', () => {
     fireEvent.change(screen.getByLabelText(new RegExp(CONFIRM_PHRASE)), { target: { value: CONFIRM_PHRASE } })
     fireEvent.click(approve)
     await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-new-rule', '1', CONFIRM_PHRASE))
-    expect(client.approveSkillReviewed).not.toHaveBeenCalled()
   })
 
   it('Reject is one click', async () => {
@@ -113,13 +120,10 @@ describe('Drafts from Central', () => {
     await waitFor(() => expect(client.rejectSkill).toHaveBeenCalledWith('webterm-new-rule', '1'))
   })
 
-  it('Edit saves a new human version after rejecting the Central draft', async () => {
-    const { client } = library([draft()])
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit webterm-new-rule 1' }))
-    fireEvent.change(await screen.findByLabelText('Instructions (markdown)'), { target: { value: '1. Be briefer.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save new version' }))
-    await waitFor(() => expect(client.editSkill).toHaveBeenCalled())
-    expect(client.rejectSkill).toHaveBeenCalledWith('webterm-new-rule', '1')
+  it('has no Edit on a Central draft', async () => {
+    library([draft()])
+    await screen.findByRole('button', { name: 'Reject webterm-new-rule 1' })
+    expect(screen.queryByRole('button', { name: /^Edit/ })).toBeNull()
   })
 
   it('shows the empty line, then refreshes on the Refresh button and when an author chat finishes a turn (no polling)', async () => {

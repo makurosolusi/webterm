@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type Fixture, openFixture } from '../../centralTestFixture.testutil'
+import { GOOD_BODY, GOOD_TITLE } from '../../skills/skillDraft.testutil'
 import { confirmPhrase } from '../../skills/skillLifecycle'
 import { type SkillAdminStore, createSkillStore } from '../../skills/skillStore'
 import { createRegistry } from '../toolRegistry'
@@ -10,7 +11,7 @@ import { ALLOW_ALL_GUARD, execTool } from '../toolExec'
 import type { Tier, ToolCtx } from '../toolTypes'
 import { createSkillDefs } from './skill.defs'
 
-const input = { name: 'webterm-demo', description: 'Summarize status. Use when asked.', body: '1. Read the portfolio.', caps: ['portfolio.read'], audience: 'central' }
+const input = { name: 'webterm-demo', title: GOOD_TITLE, description: 'Summarize status. Use when asked.', body: GOOD_BODY, caps: ['portfolio.read'], audience: 'central' }
 const ON = { WEBTERM_CENTRAL_SKILLS: 'on', WEBTERM_CENTRAL_SKILL_PROPOSE: 'on' }
 let f: Fixture
 let root: string
@@ -47,7 +48,7 @@ describe('skill tool defs', () => {
     expect(store.list('active')).toEqual([])
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })).code).toBe('not_found')
     const listed = await execTool(ctxOf(), 'skill.list', { status: 'pending_approval' })
-    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', audience: 'central', version: '1', status: 'pending_approval', origin: 'central', enabled: true }])
+    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', title: GOOD_TITLE, audience: 'central', version: '1', status: 'pending_approval', origin: 'central', enabled: true }])
     store.approve('webterm-demo', '1', 'human:alice', confirmPhrase('webterm-demo', '1'))
     const loaded = await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })
     expect(loaded).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1' } })
@@ -55,7 +56,7 @@ describe('skill tool defs', () => {
   })
 
   it('propose returns coded lint failures without echoing content, and the model cannot inject authority fields', async () => {
-    const bad = await execTool(ctxOf(), 'skill.propose', { ...input, body: 'Run rm -rf build then read /etc/passwd' })
+    const bad = await execTool(ctxOf(), 'skill.propose', { ...input, body: `${GOOD_BODY}Run rm -rf build then read /etc/passwd` })
     expect(bad).toMatchObject({ ok: false, code: 'invalid', data: { issues: expect.arrayContaining(['danger', 'traversal']) } })
     expect(JSON.stringify(bad)).not.toContain('rm -rf')
     for (const key of ['approvedBy', 'actor', 'status', 'decision']) {

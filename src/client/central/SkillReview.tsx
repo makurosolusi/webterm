@@ -32,7 +32,7 @@ function SkillItem({ row, client, onDone }: { row: SkillReviewRow; client: Centr
   return (
     <article className="ccp-card" aria-label={`${record.name} ${record.version}`} aria-busy={busy}>
       <header>
-        <strong>{titleOf(row)}</strong> <small>{record.name}</small> <span>{record.version}</span>
+        <strong>{titleOf(row)}</strong> {titleOf(row) !== record.name && <small>{record.name}</small>} <span>{record.version}</span>
         <span className="ccp-badge">{record.status}</span> <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} />
         {record.evalScore !== null && <span>{CL.skillScore}: {record.evalScore}</span>}
       </header>

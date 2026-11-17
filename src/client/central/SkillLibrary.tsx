@@ -27,7 +27,7 @@ function LibraryRow({ row, selected, onSelect }: { row: SkillReviewRow; selected
   return (
     <li className="ccp-skill-row">
       <Button type="button" size="sm" variant="ghost" aria-pressed={selected} aria-label={`${CL.skillView} ${record.name} ${record.version}`} onClick={onSelect}>
-        <strong>{titleOf(row)}</strong> <small>{record.name}</small> <span>{record.version}</span>
+        <strong>{titleOf(row)}</strong> {titleOf(row) !== record.name && <small>{record.name}</small>} <span>{record.version}</span>
         <span className="ccp-badge">{record.origin}</span> <AudienceBadge audience={record.audience} /> <span className="ccp-badge">{record.status}</span>
         {record.enabled === false && <span className="ccp-badge">{CL.skillOff}</span>}
       </Button>
@@ -49,13 +49,13 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
   // Central's own drafts are reviewed in their Drafts panel, so the general review list does not repeat them.
   const inDrafts = new Set(centralDraftsOf(rows))
   const hasOpen = (d: SkillReviewRow): boolean => rows.some((r) => r.record.name === d.record.name && OPEN.includes(r.record.status))
-  // "Ask the agent ..." of the open detail: a built-in is read only and only offers a variant (the author gets no target, so it cannot touch the built-in).
+  // "Ask the agent ..." of the open detail: a built-in is read only and only offers a variant; its name goes to the author as a read-only reference and the server only lets it propose a NEW name.
   const reviseOf = (d: SkillReviewRow) => {
     const { name, origin, audience, status } = d.record
-    const blocked = status !== 'active' || hasOpen(d)
-    if (origin === 'builtin') return <><small>{CL.skillVariantHint(name)}</small> <CentralSkillAuthorButton key={`variant:${keyOf(d)}`} label={CL.skillAuthorVariant} kind={audience} {...(chat ? { chat } : {})} /></>
-    if (audience === 'canvas' && openSkillAuthor) return <Button type="button" size="sm" variant="secondary" disabled={blocked} onClick={() => setAuthorNode(openSkillAuthor(name))}>{CL.skillAuthorRevise}</Button>
-    return <CentralSkillAuthorButton key={`author:${keyOf(d)}`} target={name} label={CL.skillAuthorRevise} kind={audience} disabled={blocked} {...(chat ? { chat } : {})} />
+    const reason = status !== 'active' ? CL.skillReviseInactive : hasOpen(d) ? CL.skillEditOpenDraft : undefined
+    if (origin === 'builtin') return <><small>{CL.skillVariantHint(name)}</small> <CentralSkillAuthorButton key={`variant:${keyOf(d)}`} target={name} label={CL.skillAuthorVariant} kind={audience} {...(chat ? { chat } : {})} /></>
+    if (audience === 'canvas' && openSkillAuthor) return <><Button type="button" size="sm" variant="secondary" disabled={reason !== undefined} aria-describedby={reason ? 'skill-revise-reason' : undefined} onClick={() => setAuthorNode(openSkillAuthor(name))}>{CL.skillAuthorRevise}</Button>{reason && <small id="skill-revise-reason">{reason}</small>}</>
+    return <CentralSkillAuthorButton key={`author:${keyOf(d)}`} target={name} label={CL.skillAuthorRevise} kind={audience} {...(reason ? { disabledReason: reason } : {})} {...(chat ? { chat } : {})} />
   }
   const rest = rows.filter((r) => needsReview(r) && !inDrafts.has(r))
   return (
@@ -87,7 +87,7 @@ export default function SkillLibrary({ client = centralControlApi, chat }: { cli
               </ul>
             </section>
           ))}
-          {detail && <SkillDetail key={keyOf(detail)} row={detail} client={client} onClose={() => setSelected(null)} onChanged={list.reload} revise={reviseOf(detail)} hasOpenDraft={hasOpen(detail)} />}
+          {detail && <SkillDetail key={keyOf(detail)} row={detail} client={client} onClose={() => setSelected(null)} onChanged={list.reload} revise={reviseOf(detail)} />}
           {rest.length > 0 && <h4>{CL.skillsReviewHeading}</h4>}
           <SkillReviewList rows={rest} client={client} onDone={list.reload} />
         </>

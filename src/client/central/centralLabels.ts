@@ -96,6 +96,7 @@ export const CL = {
   skillEnabledOff: 'Off: Central cannot see or load this skill. Nothing else changes.',
   skillEnabledFailed: 'The switch was not changed.',
   skillEditOpenDraft: 'A version of this skill is already waiting for review. Approve or reject it first.',
+  skillReviseInactive: 'Only an active skill can be revised.',
   skillAuthorRevise: 'Ask the agent to revise',
   skillAuthorVariant: 'Ask the agent for a variant',
   skillVariantHint: (name: string) => `Built-in skills cannot be changed. Tell the agent to base the new skill on ${name}.`,

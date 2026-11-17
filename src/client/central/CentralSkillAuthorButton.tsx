@@ -2,7 +2,7 @@
 // Central chat (the target skill goes into the conversation, the server validates it) and opens the chat on it.
 // The author is a Central conversation, never a canvas node.
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import type { SkillAudience } from '../../server/central/contracts/skill.types'
 import { chatApi, chatErrorMessage } from '../chatApi'
 import { requestOpenConversation } from '../chat/chatFeed'
@@ -17,13 +17,15 @@ interface Props {
   kind?: SkillAudience
   /** The prominent style, for "Write with an agent" (the only way to start a skill). */
   primary?: boolean
-  /** True while the skill cannot be revised (inactive, or a version already waits for review). */
-  disabled?: boolean
+  /** Set while the skill cannot be revised: the button is disabled and this text says why. */
+  disabledReason?: string
   /** Test seam; defaults to the live chat API. */
   chat?: Pick<ChatClient, 'createConversation'>
 }
 
-export default function CentralSkillAuthorButton({ target, label, kind = 'central', primary = false, disabled = false, chat = chatApi }: Props) {
+export default function CentralSkillAuthorButton({ target, label, kind = 'central', primary = false, disabledReason, chat = chatApi }: Props) {
+  const reasonId = useId()
+  const disabled = disabledReason !== undefined
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const start = (): void => {
@@ -37,7 +39,8 @@ export default function CentralSkillAuthorButton({ target, label, kind = 'centra
   }
   return (
     <>
-      <Button type="button" size="sm" variant={primary ? 'default' : 'secondary'} disabled={busy || disabled} aria-busy={busy || undefined} aria-label={target ? `${label} ${target}` : `${label} (${CL.skillAudienceBadge[kind]})`} onClick={start}>{busy ? CL.authorOpening : label}</Button>
+      <Button type="button" size="sm" variant={primary ? 'default' : 'secondary'} disabled={busy || disabled} aria-describedby={disabled ? reasonId : undefined} aria-busy={busy || undefined} aria-label={target ? `${label} ${target}` : `${label} (${CL.skillAudienceBadge[kind]})`} onClick={start}>{busy ? CL.authorOpening : label}</Button>
+      {disabled && <small id={reasonId}>{disabledReason}</small>}
       {error && <span role="alert" className="ccp-error">{error}</span>}
     </>
   )
