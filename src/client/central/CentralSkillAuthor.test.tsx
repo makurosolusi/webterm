@@ -189,21 +189,21 @@ describe('the author chat', () => {
     return render(<TooltipProvider><ChatConversationView conversation={conversation} client={client} streamFactory={() => ({ close: () => {} })} commands={host} /></TooltipProvider>)
   }
 
-  it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Skills only chip in author mode', () => {
+  it('shows the role banner (purpose, tools limited, drafts need approval, target) and the Limited tools chip in author mode', () => {
     mount({ ...base, mode: 'skill-author', skillTarget: 'webterm-rule' })
     const banner = within(screen.getByRole('complementary', { name: 'Skill author' }))
     expect(banner.getByText(/kind, title, steps and checks before writing/)).toBeTruthy()
-    expect(banner.getByText(/limited to skills/)).toBeTruthy()
+    expect(banner.getByText(/Can list, read and draft skills and read public web pages \(read-only\)\. Cannot .*use the canvas, run agents, use memory/)).toBeTruthy()
     expect(banner.getByText(/need your approval in the Skills tab/)).toBeTruthy()
     expect(banner.getByText('Editing webterm-rule.')).toBeTruthy()
-    expect(screen.getByText('Skills only')).toBeTruthy()
+    expect(screen.getByText('Limited tools')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Permission mode/ })).toBeNull()
   })
 
   it('shows neither in an ordinary Central chat', () => {
     mount(base)
     expect(screen.queryByRole('complementary', { name: 'Skill author' })).toBeNull()
-    expect(screen.queryByText('Skills only')).toBeNull()
+    expect(screen.queryByText('Limited tools')).toBeNull()
     expect(screen.getByRole('button', { name: /^Permission mode/ })).toBeTruthy()
   })
 

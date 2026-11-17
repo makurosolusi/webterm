@@ -72,7 +72,7 @@ describe('role is server-side: no client priming', () => {
   it('the composer shows Locked and cannot switch the mode; a plain chat keeps its picker', () => {
     const { t } = mount('skill-author')
     expect(modeChip().textContent).toBe('Locked')
-    expect(modeChip().getAttribute('aria-label')).toMatch(/Locked.*only run `webterm skills`/)
+    expect(modeChip().getAttribute('aria-label')).toMatch(/Locked.*Can list, read and draft skills and read public web pages/)
     fireEvent.keyDown(modeChip(), { key: 'Enter' })
     fireEvent.click(modeChip())
     expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0)
