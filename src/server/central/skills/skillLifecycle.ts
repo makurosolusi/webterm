@@ -103,8 +103,8 @@ function pointActive(root: string, name: string, version: string): void {
 }
 
 /**
- * Human-only R3: needs a pending_approval version, an intact hash, a clean re-lint and the typed phrase. Every draft
- * is written by an agent or Central, so there is no one-click path (docs/decisions/skill-approval.md).
+ * Human-only R3: needs a pending_approval version, an intact hash and a clean re-lint. The human gate is the `human:*`
+ * actor (one click in the UI, no typed phrase; docs/decisions/skill-approval.md). The route passes the internal phrase.
  */
 export function approveSkill(ctx: SkillCtx, name: string, version: string, approvedBy: string, typedConfirm: string | undefined): SkillRecord {
   requireHuman(approvedBy)

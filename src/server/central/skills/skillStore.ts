@@ -41,7 +41,7 @@ export interface SkillAdminStore extends SkillStore {
   /** Stores the draft, then evaluates and submits it; resolves to its final state (`pending_approval` or `rejected`). */
   propose(input: SkillProposeInput, proposedBy: string): Promise<StoredSkill>
   rollback(name: string, by: string): SkillRecord
-  /** Needs a `human:` actor and the typed phrase from `confirmPhrase`; there is no other way to activate a draft. */
+  /** Needs a `human:` actor (the route passes `confirmPhrase`); there is no other way to activate a draft. */
   approve(name: string, version: string, approvedBy: string, typedConfirm?: string): SkillRecord
   /** Human-only on/off switch, independent of status; builtin skills can be switched too. */
   setEnabled(name: string, enabled: boolean, by: string): SkillToggle

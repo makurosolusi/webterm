@@ -4,12 +4,11 @@ import { lintSkill } from '../skills/skillLint'
 import { SKILL_AUTHOR_PROMPT } from './conversationMode'
 
 describe('central skill author web protocol', () => {
-  it('requires reading a mentioned URL first, honest failure, and the Sources status', () => {
+  it('requires reading a mentioned URL first, honest failure, and the Sources note', () => {
     const p = SKILL_AUTHOR_PROMPT
-    expect(p).toContain('you MUST call browser_read for it BEFORE the SPEC and say what you read')
-    expect(p).toContain('say so honestly and offer: paste the text here, or continue from general knowledge')
+    expect(p).toContain('you MUST call browser_read for it first, then write')
+    expect(p).toContain('say so in the report and write anyway')
     expect(p).toContain('"Written from general knowledge, not verified"')
-    expect(p).toContain('"Sources: <host>|none"')
     expect(p).toContain('"Sources: <host>, read <YYYY-MM-DD>"')
     expect(p).toContain('never claim it is unavailable without having tried')
   })

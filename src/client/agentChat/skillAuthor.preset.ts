@@ -7,7 +7,7 @@ import { renderCapabilityLine } from '../../shared/agentCapabilities'
 export const SKILL_AUTHOR_PRESET = 'skill-author'
 
 /** Role banner at the top of a skill-author chat. */
-export const SKILL_AUTHOR_BANNER = 'Skill author: walks you through purpose, title, steps and checks before writing; drafts need your approval in the Skills tab.'
+export const SKILL_AUTHOR_BANNER = 'Skill author: writes a complete draft straight from your request; drafts need your one-click approval in the Skills panel.'
 
 /** Why the permission mode chip reads "Locked" in a skill-author chat. */
 export const SKILL_AUTHOR_LOCK_REASON = `Locked by the Skill author role, whatever the mode. ${renderCapabilityLine('chat.skill-author')}`
@@ -30,4 +30,4 @@ export const SKILL_AUTHOR_EMPTY = {
 } as const
 
 /** Inline card shown once the author has proposed or edited a draft. */
-export const SKILL_AUTHOR_DRAFT = { text: 'Draft proposed - review in Control > Skills', open: 'Open Skills tab' } as const
+export const SKILL_AUTHOR_DRAFT = { text: 'Draft proposed - review in the Skills panel', open: 'Open Skills panel' } as const

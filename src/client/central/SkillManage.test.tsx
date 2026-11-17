@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import { fakeClient } from './centralFixtures.testutil'
 import type { SkillReviewRow } from './centralControlTypes'
 import SkillLibrary from './SkillLibrary'
@@ -70,12 +69,10 @@ describe('approval needs the typed phrase for every draft', () => {
     const client = fakeClient({ listSkills: vi.fn(async () => [pending(origin)]) })
     render(<SkillLibrary client={client} />)
     const btn = (await screen.findByRole('button', { name: `Approve skill webterm-${origin}-d 1` })) as HTMLButtonElement
-    expect(btn.disabled).toBe(true)
+    expect(btn.disabled).toBe(false)
     expect(screen.getByLabelText('Diff')).toBeTruthy()
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: CONFIRM_PHRASE } })
-    await waitFor(() => expect(btn.disabled).toBe(false))
     fireEvent.click(btn)
-    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith(`webterm-${origin}-d`, '1', CONFIRM_PHRASE))
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith(`webterm-${origin}-d`, '1'))
   })
 })
 

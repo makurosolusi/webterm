@@ -68,7 +68,7 @@ export function skillFailure(err: unknown): RouteResult {
 
 export type SkillAction = 'approve' | 'rollback' | 'reject'
 
-/** `POST /skills/:name/approve`, `/rollback` and `/reject`; all need a `human:*` actor. Approve needs the typed phrase, always. */
+/** `POST /skills/:name/approve`, `/rollback` and `/reject`; all need a `human:*` actor. Approve needs no phrase (a human click is the gate); a phrase that IS sent must still be exact. */
 export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw: unknown, actor: string): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   if (!actor.startsWith(HUMAN_PREFIX)) return fail(403, 'human_only')
@@ -77,7 +77,7 @@ export function skillAction(h: Ca2Handle, name: string, action: SkillAction, raw
     const { version, phrase } = bodyOf(raw)
     if (typeof version !== 'string') return fail(400, 'invalid_version')
     if (action === 'reject') { h.skills.reject(name, version, actor); return { status: 200, body: { status: 'done' } } }
-    if (phrase !== CONFIRM_PHRASE) return fail(400, 'confirm_phrase_mismatch')
+    if (phrase !== undefined && phrase !== CONFIRM_PHRASE) return fail(400, 'confirm_phrase_mismatch')
     h.skills.approve(name, version, actor, confirmPhrase(name, version))
     return { status: 200, body: { status: 'done' } }
   } catch (err) {

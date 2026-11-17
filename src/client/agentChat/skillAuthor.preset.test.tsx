@@ -64,7 +64,7 @@ describe('role is server-side: no client priming', () => {
     expect(note.textContent).toContain(SKILL_AUTHOR_HEADER)
     expect(note.textContent).toContain(SKILL_AUTHOR_BANNER) // sr-only: the full role for assistive tech
     expect(note.querySelector('.codicon-lock')).toBeTruthy()
-    expect(SKILL_AUTHOR_BANNER).toMatch(/purpose, title, steps and checks before writing.*approval in the Skills tab/)
+    expect(SKILL_AUTHOR_BANNER).toMatch(/complete draft straight from your request.*one-click approval in the Skills panel/)
     cleanup()
     mount()
     expect(screen.queryByRole('note', { name: 'Chat role' })).toBeNull()

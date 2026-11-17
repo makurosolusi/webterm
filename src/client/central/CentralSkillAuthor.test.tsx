@@ -4,7 +4,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
 import ChatConversationView from '../chat/chatConversation'
 import { conversationLabel, type ChatClient, type ChatConversation } from '../chat/chatTypes'
 import { InboxApiError } from '../inboxTypes'
@@ -98,13 +97,12 @@ describe('Drafts from Central', () => {
     expect(screen.getAllByText(/a new step/)).toHaveLength(1)
   })
 
-  it('approves with the typed phrase because the origin is central', async () => {
+  it('approves in one click (the human gate is the click itself)', async () => {
     const { client } = library([draft()])
     const approve = await screen.findByRole('button', { name: 'Approve skill webterm-new-rule 1' }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText(new RegExp(CONFIRM_PHRASE)), { target: { value: CONFIRM_PHRASE } })
+    expect(approve.disabled).toBe(false)
     fireEvent.click(approve)
-    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-new-rule', '1', CONFIRM_PHRASE))
+    await waitFor(() => expect(client.approveSkill).toHaveBeenCalledWith('webterm-new-rule', '1'))
   })
 
   it('Reject is one click', async () => {

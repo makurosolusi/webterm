@@ -159,7 +159,7 @@ export const centralControlApi: CentralControlClient = {
     return approvalId ? { status: 'needs_approval', approvalId } : ({ status: 'done' } satisfies AgentActionResult)
   },
   async listSkills(signal) { return compact(rowsOf(await request(SKILLS_PATH, { signal })).map(toSkill)) },
-  async approveSkill(name, version, phrase) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version, phrase }) },
+  async approveSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/approve`, { version }) },
   async rejectSkill(name, version) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/reject`, { version }) },
   async setSkillEnabled(name, enabled) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/${enabled ? 'enable' : 'disable'}`, {}) },
   async rollbackSkill(name) { await post(`${SKILLS_PATH}/${encodeURIComponent(name)}/rollback`, {}) },
