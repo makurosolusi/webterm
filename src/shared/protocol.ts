@@ -64,7 +64,8 @@ export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color',
 export interface CanvasMsg { t: 'canvas'; workspaceId: string; base: number; updatedAt: number; nodes: WsNode[]; bridges: BridgeLink[]; removed?: string[]; updated?: WsNode[]; unlinked?: string[]; groups?: TabGroup[]; name?: string }
 // Central asked the UI to show workspace `workspaceId` (and centre/reveal `nodeId` when given, or
 // with `fit` fit every node into view, the "View: Fit Canvas" command).
-export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?: boolean }
+// `zoom` (absolute) and `pan` (screen px) are Central's camera tools; `polite` = a tab drops the frame while its user is moving the canvas.
+export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?: boolean; zoom?: number; pan?: { dx: number; dy: number }; polite?: boolean }
 // Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
 export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
 // The workspace list changed on the server (Central's `workspace.create`): each window adds the boards it lacks.

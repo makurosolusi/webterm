@@ -28,8 +28,10 @@ export interface PresenceTracker {
    * One ping from a tab; `muted` = that browser's muted workspace ids (osNotify prefs); `nodeId` =
    * the canvas node the user is on in a focused window (null = none), `workspaceId` its board.
    */
-  note(input: { visible: boolean; muted?: readonly string[]; nodeId?: string | null; workspaceId?: string | null }): void
+  note(input: { visible: boolean; muted?: readonly string[]; nodeId?: string | null; workspaceId?: string | null; idleMs?: number }): void
   awayMs(): number
+  /** Ms since the human last moved the canvas, from the newest visible ping that said so (Infinity = no gesture reported); null = no tab pinged visible recently. */
+  userIdleMs(): number | null
   isMuted(workspaceId: string): boolean
   /** Node the user is looking at right now (fresh visible ping that named it), else null. */
   focusedNode(): { nodeId: string; workspaceId: string | null } | null
@@ -42,13 +44,17 @@ export function createPresenceTracker(now: () => number = Date.now): PresenceTra
   let muted = new Set<string>()
   // ponytail: last ping wins across tabs, like the mute list.
   let focus: { nodeId: string; workspaceId: string | null; at: number } | null = null
+  // ponytail: last visible ping wins across tabs; the newest gesture over all tabs only if several windows are used at once.
+  let interactAt: number | null = null
   return {
-    note({ visible, muted: list, nodeId, workspaceId }) {
+    note({ visible, muted: list, nodeId, workspaceId, idleMs }) {
       if (visible) lastVisibleAt = now()
+      if (visible && idleMs !== undefined) interactAt = now() - idleMs
       if (list) muted = new Set(list)
       if (nodeId !== undefined) focus = visible && nodeId ? { nodeId, workspaceId: workspaceId ?? null, at: now() } : null
     },
     awayMs: () => now() - lastVisibleAt,
+    userIdleMs: () => (now() - lastVisibleAt >= FOCUS_FRESH_MS ? null : interactAt === null ? Infinity : now() - interactAt),
     isMuted: (workspaceId) => muted.has(workspaceId),
     focusedNode: () => (focus && now() - focus.at < FOCUS_FRESH_MS ? { nodeId: focus.nodeId, workspaceId: focus.workspaceId } : null),
   }

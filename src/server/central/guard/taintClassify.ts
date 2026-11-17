@@ -7,7 +7,7 @@ import { noteTaintedAsk, originOf, taintedOrigins } from './taintStore'
 /** Effects on nodes, tasks, memory, schedule, channels, permissions or the web: data from the page could be steering them. */
 export const IMPACTFUL_TOOLS: readonly string[] = [
   'agent.spawn', 'agent.prompt', 'agent.relay', 'agent.close',
-  'canvas.open', 'canvas.close', 'canvas.type', 'canvas.edit',
+  'canvas.open', 'canvas.reopen', 'canvas.close', 'canvas.type', 'canvas.edit',
   'chat.send', 'chat.config', 'chat.mode', 'channel.bot.propose',
   'task.assign', 'task.create', 'task.update', 'task.cancel', 'permission.decide',
   'memory.remember', 'memory.update', 'memory.forget', 'memory.remember_user', 'state.update', 'reminder.set', 'reminder.cancel',
@@ -19,7 +19,7 @@ export const IMPACTFUL_TOOLS: readonly string[] = [
 /** Above R0 but harmless under taint: they only propose (a human still decides), start a read-only scan, or move the view. */
 export const SAFE_UNDER_TAINT: readonly string[] = [
   'approval.request', 'blackboard.propose', 'goal.propose', 'plan.propose', 'skill.propose',
-  'health.scan', 'health.analyze', 'canvas.show', 'canvas.group',
+  'health.scan', 'health.analyze', 'canvas.show', 'canvas.group', 'canvas.camera', 'workspace.switch',
 ]
 
 /** Browser tools whose url is an exfiltration channel (data can ride in the query): allowed only to an origin already read. */

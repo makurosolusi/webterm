@@ -60,6 +60,9 @@ export interface WorkspaceLifecycleDeps {
   rf: RefObject<ReactFlowInstance | null>
   /** "View: Fit Canvas" (`canvasViewport.onFit`), for the central agent's `canvas.show` with `fit`. */
   onFit: () => void
+  /** Zoom / pan for Central's `canvas.camera` (`canvasViewport`). */
+  onZoomTo?: (pct: number) => void
+  onPanBy?: (dx: number, dy: number) => void
   /** Board named by the URL at boot (`/w/:id`), see `useWorkspaceBoot`. */
   urlWorkspaceId?: string | null
 }
@@ -84,7 +87,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   const {
     workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
     setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-    activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, urlWorkspaceId,
+    activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, onZoomTo, onPanBy, urlWorkspaceId,
   } = deps
 
   const { boot, retryBoot } = useWorkspaceBoot({ applyWorkspace, setWorkspaces, setHydrated, setAuthRequired, urlWorkspaceId })
@@ -110,7 +113,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     else rf.current?.setCenter(node.position.x + 240, node.position.y + 160, { zoom: 1, duration: 400 })
     setBoard(false)
   }, [onSelect, workspaces])
-  useViewPush({ activeWsRef, onSelect, onFocus, onFit, setBoard }) // central agent's `canvas.show`
+  useViewPush({ activeWsRef, onSelect, onFocus, onFit, onZoomTo, onPanBy, setBoard }) // central agent's `canvas.show` / `canvas.camera` / `workspace.switch`
   useWorkspaceListPush({ activeWsRef, setActiveWs, setWorkspaces }) // central agent's `workspace.create` / `workspace.rename`
   useCanvasShot() // central agent's `canvas.screenshot`
 

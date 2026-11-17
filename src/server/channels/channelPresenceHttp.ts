@@ -1,5 +1,5 @@
 // Root-only routes for desktop -> Telegram forwarding (authorization happens before handleApi):
-//   POST /api/channels/presence               {visible: boolean, muted?: string[], nodeId?: string|null, workspaceId?: string|null} -> 204 (tab heartbeat)
+//   POST /api/channels/presence               {visible: boolean, muted?: string[], nodeId?: string|null, workspaceId?: string|null, idleMs?: number} -> 204 (tab heartbeat)
 //   GET  /api/channels/telegram/forwarding    -> {awayMinutes}
 //   PUT  /api/channels/telegram/forwarding    {awayMinutes: 0..1440} -> {awayMinutes} (0 = off)
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -32,6 +32,8 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown> |
 
 const isOptionalId = (v: unknown): boolean => v === undefined || v === null || (typeof v === 'string' && v.length > 0 && v.length <= 200)
 
+const isOptionalMs = (v: unknown): boolean => v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 86_400_000)
+
 function isMutedList(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= MAX_MUTED && value.every((id) => typeof id === 'string' && id.length <= 200)
 }
@@ -44,11 +46,12 @@ export function handleChannelPresenceApi(req: IncomingMessage, res: ServerRespon
     if (method !== 'POST') return methodNotAllowed(req, res, 'POST')
     void readJson(req).then((body) => {
       if (!body || typeof body['visible'] !== 'boolean' || (body['muted'] !== undefined && !isMutedList(body['muted']))
-        || !isOptionalId(body['nodeId']) || !isOptionalId(body['workspaceId'])) {
+        || !isOptionalId(body['nodeId']) || !isOptionalId(body['workspaceId']) || !isOptionalMs(body['idleMs'])) {
         return writeJson(res, 400, { ok: false, error: 'invalid_presence' })
       }
       deps.presence.note({
         visible: body['visible'],
+        ...(typeof body['idleMs'] === 'number' ? { idleMs: body['idleMs'] } : {}),
         ...(body['muted'] === undefined ? {} : { muted: body['muted'] as string[] }),
         ...(body['nodeId'] === undefined ? {} : { nodeId: body['nodeId'] as string | null, workspaceId: (body['workspaceId'] as string | null | undefined) ?? null }),
       })

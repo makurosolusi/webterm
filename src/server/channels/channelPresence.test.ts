@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { describe, expect, it } from 'vitest'
 
 import type { SenseEvent } from '../events/eventModel'
-import { createPresenceTracker, renderAgentNotice, startAgentForwarder } from './channelPresence'
+import { FOCUS_FRESH_MS, createPresenceTracker, renderAgentNotice, startAgentForwarder } from './channelPresence'
 import { FORWARDING_PATH, PRESENCE_PATH, handleChannelPresenceApi } from './channelPresenceHttp'
 import type { EnqueueReplyInput } from './channelStore'
 
@@ -159,5 +159,37 @@ describe('presence routes', () => {
     handleChannelPresenceApi(fakeReq('PUT', FORWARDING_PATH, JSON.stringify({ awayMinutes: -1 })), res, { presence, store })
     expect((await res.done).status).toBe(400)
     expect(handleChannelPresenceApi(fakeReq('GET', '/api/other'), fakeRes(), { presence, store })).toBe(false)
+  })
+})
+
+describe('user idle (Central camera rule)', () => {
+  it('derives idle from the newest visible ping; no report is Infinity; a stale or hidden tab is null', () => {
+    const clock = { t: 0 }
+    const p = createPresenceTracker(() => clock.t)
+    expect(p.userIdleMs()).toBe(Infinity) // boot counts as seen, nobody moved anything
+    clock.t = 1000
+    p.note({ visible: true, idleMs: 200 })
+    expect(p.userIdleMs()).toBe(200)
+    clock.t = 4000
+    expect(p.userIdleMs()).toBe(3200) // keeps counting between pings
+    p.note({ visible: false, idleMs: 0 }) // a hidden tab's claim is ignored
+    expect(p.userIdleMs()).toBe(3200)
+    clock.t = 1000 + FOCUS_FRESH_MS
+    expect(p.userIdleMs()).toBeNull() // no visible ping for too long: no window to move
+  })
+
+  it('the route accepts idleMs and rejects a negative or non-numeric one', async () => {
+    const clock = { t: 0 }
+    const presence = createPresenceTracker(() => clock.t)
+    const store = { forwardAwayMinutes: 3, setForwardAwayMinutes() {} }
+    let res = fakeRes()
+    handleChannelPresenceApi(fakeReq('POST', PRESENCE_PATH, JSON.stringify({ visible: true, idleMs: 0 })), res, { presence, store })
+    expect((await res.done).status).toBe(204)
+    expect(presence.userIdleMs()).toBe(0)
+    for (const idleMs of [-1, 'soon', null]) {
+      res = fakeRes()
+      handleChannelPresenceApi(fakeReq('POST', PRESENCE_PATH, JSON.stringify({ visible: true, idleMs })), res, { presence, store })
+      expect((await res.done).status).toBe(400)
+    }
   })
 })
