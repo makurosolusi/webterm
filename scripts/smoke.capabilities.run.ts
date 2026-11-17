@@ -56,15 +56,10 @@ export async function runCentral(s: SmokeServer, opts: { mode?: 'skill-author'; 
 const NODE_BASE = { x: 0, y: 0, agentId: 'claude', title: 'Agent Chat' } as const
 let workspaceId: string | undefined
 
-/**
- * One board for the whole run, plus its ledger project: Central's web read runs on a project, and projects are
- * synced from boards when the portfolio is read (what the Control panel does on load). Without it a fresh data dir
- * has no project and every Central web read is denied `no_project_for_web_read`, which is not what this smoke tests.
- */
+/** One board for the whole run (chat nodes live on a board). The ledger project is NOT pre-synced: Central's web read must create it itself. */
 export async function seedBoard(s: SmokeServer): Promise<void> {
   const created = await api<{ id: string }>(s, 'POST', '/api/workspaces', { name: 'capability-smoke', cwd: s.cwd })
   workspaceId = created.id
-  await api(s, 'GET', '/api/central/portfolio')
 }
 
 /** Adds one Agent Chat node to the seeded board and returns its id. */

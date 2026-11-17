@@ -1,8 +1,9 @@
 // Bun-only (bun:sqlite). A Central skill-author chat may call browser_read and ONLY it from the browser family: the
 // URL must be a public page, the model never picks the project or node, and every other browser tool stays denied.
-import { describe, expect, it } from 'bun:test'
+import { afterEach, describe, expect, it } from 'bun:test'
 import { obj, S } from '../capability/capability.schema'
 import { createChatConversation } from '../central/chat/turnPersistence'
+import { registerWorkspaceLookup } from '../central/workspaceLookup'
 import { createControlGuard } from '../central/guard/controlGuard'
 import { createRegistry } from '../central/tools/toolRegistry'
 import type { ToolDef } from '../central/tools/toolTypes'
@@ -57,5 +58,37 @@ describe('skill-author browser_read', () => {
     const { c, author } = setup(false)
     expect(await callCentralTool(c, author, 'browser_act', {})).toMatchObject({ outcome: 'denied', detail: 'tool_not_allowed_in_mode' })
     expect(await callCentralTool(c, author, 'browser_read', { url: 'https://bulma.io/' })).toMatchObject({ outcome: 'denied', detail: 'no_project_for_web_read' })
+  })
+
+  describe('board exists but the ledger has no project yet (fresh data dir, portfolio never read)', () => {
+    let off = () => {}
+    afterEach(() => off())
+    const boards = (...ids: string[]) => { off = registerWorkspaceLookup((id) => (ids.includes(id) ? { id, name: id } : null), () => ids.map((id) => ({ id, name: id }))) }
+
+    it('creates the project itself, once, and reads (regression: was denied no_project_for_web_read)', async () => {
+      seen.length = 0
+      boards('w-new')
+      const { c, author } = setup(false)
+      const count = () => (c.db.query('SELECT COUNT(*) AS n FROM project').get() as { n: number }).n
+      expect(count()).toBe(0)
+      const r1 = await callCentralTool(c, author, 'browser_read', { url: 'https://bulma.io/', projectId: 'evil' })
+      expect(r1.outcome).toBe('ok')
+      await callCentralTool(c, author, 'browser_read', { url: 'https://bulma.io/' })
+      expect(count()).toBe(1)
+      expect(seen.map((x) => x.projectId)).toEqual(['w-new', 'w-new'])
+    })
+
+    it('keeps the safety rules: browser_act denied, non-public refused, no board still denied with a next step', async () => {
+      seen.length = 0
+      boards('w-new')
+      const { c, author } = setup(false)
+      expect(await callCentralTool(c, author, 'browser_act', {})).toMatchObject({ outcome: 'denied', detail: 'tool_not_allowed_in_mode' })
+      expect(await callCentralTool(c, author, 'browser_read', { url: 'http://localhost/' })).toMatchObject({ outcome: 'denied', detail: 'url_not_public' })
+      off(); boards()
+      const none = await callCentralTool(c, author, 'browser_read', { url: 'https://bulma.io/' })
+      expect(none).toMatchObject({ outcome: 'denied', detail: 'no_project_for_web_read' })
+      expect(JSON.stringify(none)).toContain('create a board')
+      expect(seen).toEqual([])
+    })
   })
 })
