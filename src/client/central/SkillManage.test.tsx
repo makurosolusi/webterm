@@ -62,10 +62,10 @@ describe('revising goes through the agent', () => {
   })
 })
 
-describe('approval needs the typed phrase for every draft', () => {
+describe('approval is one click for every draft', () => {
   const pending = (origin: SkillReviewRow['record']['origin']) => row({ name: `webterm-${origin}-d`, status: 'pending_approval', origin })
 
-  it.each(['central', 'agent', 'human'] as const)('a %s draft shows the diff and keeps the typed phrase', async (origin) => {
+  it.each(['central', 'agent', 'human'] as const)('a %s draft shows the diff and approves in one click', async (origin) => {
     const client = fakeClient({ listSkills: vi.fn(async () => [pending(origin)]) })
     render(<SkillLibrary client={client} />)
     const btn = (await screen.findByRole('button', { name: `Approve skill webterm-${origin}-d 1` })) as HTMLButtonElement
