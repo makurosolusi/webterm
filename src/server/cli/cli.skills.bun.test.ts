@@ -236,7 +236,7 @@ describe('/api/tools identity for skills', () => {
     const ok = await post('skills.propose', { [NODE_TOKEN_HEADER]: token }, { name: 'webterm-http-demo', ...GOOD })
     expect(ok).toMatchObject({ status: 200, body: { receipt: { outcome: 'ok' } } })
     expect(draftsOf('webterm-http-demo')[0]?.proposedBy).toBe('agent:a1')
-    for (const headers of [{}, { [NODE_TOKEN_HEADER]: 'not-a-node-token' }]) {
+    for (const headers of [{} as Record<string, string>, { [NODE_TOKEN_HEADER]: 'not-a-node-token' }]) {
       const denied = await post('skills.propose', headers, { name: 'webterm-http-nope', ...GOOD })
       expect(denied).toMatchObject({ status: 403, body: { receipt: { outcome: 'denied', detail: 'not_an_agent' } } })
     }
