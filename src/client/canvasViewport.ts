@@ -38,6 +38,8 @@ export interface CanvasViewport {
   onZoomOut: () => void
   /** `pct` dalam persen, seperti yang dikirim Dock (100 = zoom 1). */
   onZoomTo: (pct: number) => void
+  /** Shift the view by screen pixels (Central's camera pan). */
+  onPanBy: (dx: number, dy: number) => void
   onBack: () => void
   onForward: () => void
   canBack: boolean
@@ -118,6 +120,14 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
     syncViewport(170)
   }, [rf, syncViewport])
 
+  const onPanBy = useCallback((dx: number, dy: number) => {
+    if (inTabs()) return
+    const v = rf.current?.getViewport()
+    if (!v) return
+    rf.current?.setViewport({ ...v, x: v.x + dx, y: v.y + dy }, { duration: 200 })
+    syncViewport(220)
+  }, [rf, syncViewport])
+
   // `bump` tanpa syarat, apa adanya seperti di App sebelum dipindah. Yang menggelapkan tombol Dock
   // adalah bump pada langkah SUKSES terakhir — di situlah `canUndo()` berubah jadi false. Langkah
   // yang GAGAL tidak menggeser pointer `history` (lihat `./history`), jadi di sana bump memang tidak
@@ -163,7 +173,7 @@ export function useCanvasViewport({ rf, viewportRef, scheduleSave }: CanvasViewp
   }, [viewportRef])
 
   return {
-    zoom, syncViewport, onMoveEnd, onFit, onZoomIn, onZoomOut, onZoomTo, onBack, onForward,
+    zoom, syncViewport, onMoveEnd, onFit, onZoomIn, onZoomOut, onZoomTo, onPanBy, onBack, onForward,
     canBack: vpHist.current.canUndo(),
     canForward: vpHist.current.canRedo(),
     resetViewport,

@@ -8,6 +8,7 @@ import { InboxApiError } from './inboxTypes'
 import { request } from './inboxTransport'
 import { closestNodeRoot } from './nodeRoot'
 import { getTabLayout } from './tabLayout.store'
+import { onUserActive, userIdleMs } from './userActivity'
 import { getConnection, streamPaused, subscribeConnection } from './ws.connection'
 
 /** Interval detak selama tab terlihat; jauh di bawah ambang "away" server (menit). */
@@ -37,7 +38,8 @@ function ping(): void {
   // Bukan `!== 'connected'`: selama percobaan pertama (`connecting`) detak tetap jalan, server bisa saja sudah hidup.
   if (streamPaused()) return
   const visible = document.visibilityState === 'visible'
-  const body = { visible, muted: readNotifyPrefs().muted, nodeId: visible ? focusedNodeId() : null }
+  const idle = userIdleMs() // Central's camera tools refuse while the human drives the canvas
+  const body = { visible, muted: readNotifyPrefs().muted, nodeId: visible ? focusedNodeId() : null, ...(Number.isFinite(idle) ? { idleMs: Math.round(idle) } : {}) }
   request<unknown>('/api/channels/presence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => { warned = false }, (err: unknown) => {
     // 404 = Telegram mati (rute tak terpasang): kondisi normal, bukan galat.
     if (err instanceof InboxApiError && err.status === 404) return
@@ -58,6 +60,13 @@ export function usePresencePing(enabled: boolean): void {
       lastFocusPing = Date.now()
       onVisibility()
     }
+    // A gesture pings at once (throttled): the server's "is the human driving?" answer must not be 30 s stale.
+    let lastActivePing = 0
+    const offActive = onUserActive(() => {
+      if (Date.now() - lastActivePing < FOCUS_PING_GAP_MS) return
+      lastActivePing = Date.now()
+      onVisibility()
+    })
     onVisibility()
     const timer = setInterval(onVisibility, PRESENCE_PING_MS)
     document.addEventListener('visibilitychange', onVisibility)
@@ -70,6 +79,7 @@ export function usePresencePing(enabled: boolean): void {
       if (c.phase === 'connected' && was !== 'connected') onVisibility()
     })
     return () => {
+      offActive()
       offConnection()
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)

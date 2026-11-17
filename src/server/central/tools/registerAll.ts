@@ -21,6 +21,9 @@ import { REMINDER_DEFS } from './defs/reminder.defs'
 import { STATE_DEFS } from './defs/state.defs'
 import { BLACKBOARD_DEFS } from '../../blackboard/blackboard.defs'
 import { createCanvasActDefs } from './defs/canvas.act.defs'
+import { createCanvasCameraDefs } from './defs/canvas.camera.def'
+import { createCanvasReopenDefs } from './defs/canvas.reopen.def'
+import { createWorkspaceSwitchDefs } from './defs/workspace.switch.def'
 import { createCanvasEditDefs } from './defs/canvas.edit.defs'
 import { createCanvasGroupDefs } from './defs/canvas.group.defs'
 import { createCanvasShotDefs } from './defs/canvas.shot.def'
@@ -58,6 +61,13 @@ const agentsOn = (env: Env): boolean => AGENT_MODES.includes((env[AGENTS_FLAG] ?
 // Loaded on first call, not at import: the board runtime opens webterm.db and `sessions` boots the PTY
 // supervisor, neither of which a module that merely registers tools (or its tests) should trigger.
 const chats = async () => (await import('../../agentChat/agentChat.runtime')).agentChatPort()
+const history = async () => (await (await import('../../sessionHistory.route')).sessionHistoryDeps()).db
+const viewUi = async () => {
+  const [{ db }, { broadcastUi }] = await Promise.all([import('../../db'), import('../../canvas/canvasPush.runtime')])
+  return { setActive: (id: string) => db.setActive(id), broadcast: broadcastUi }
+}
+/** Ms since the human last moved the canvas, from the presence ping (null = no visible tab). */
+const idleMs = async () => (await import('../../channels/channelPresence')).presence.userIdleMs()
 const nodeDefs = (): ToolDef[] => [
   ...createNodeReadDefs({
     chats,
@@ -65,13 +75,11 @@ const nodeDefs = (): ToolDef[] => [
     sessions: async () => (await import('../../sessions')).sessions,
     secrets: async () => (await import('../runtime/runtimeEvents')).brokerSecretValues(),
   }),
-  ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser') }),
-  ...createCanvasViewDefs({
-    ui: async () => {
-      const [{ db }, { broadcastUi }] = await Promise.all([import('../../db'), import('../../canvas/canvasPush.runtime')])
-      return { setActive: (id) => db.setActive(id), broadcast: broadcastUi }
-    },
-  }),
+  ...createCanvasActDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), browserOn: () => isEnabled('browser'), history }),
+  ...createCanvasReopenDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush(), history }),
+  ...createCanvasViewDefs({ ui: viewUi }),
+  ...createCanvasCameraDefs({ ui: viewUi, idleMs }),
+  ...createWorkspaceSwitchDefs({ ui: viewUi, idleMs }),
   ...createCanvasShotDefs(),
   ...createCanvasTypeDefs({ sessions: async () => (await import('../../sessions')).sessions }),
   ...createCanvasEditDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),

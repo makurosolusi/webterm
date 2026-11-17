@@ -25,7 +25,7 @@ import { resetNeedsYou, useNeedsYouCount, type UnifiedItem } from './chat/needsY
 
 const noop = () => {}
 const VP: CanvasViewport = {
-  zoom: 1, syncViewport: noop, onMoveEnd: noop, onFit: noop, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop,
+  zoom: 1, syncViewport: noop, onMoveEnd: noop, onFit: noop, onZoomIn: noop, onZoomOut: noop, onZoomTo: noop, onPanBy: noop,
   onBack: noop, onForward: noop, canBack: false, canForward: false, resetViewport: noop,
 }
 const PROBLEMS = { problems: [], errors: 0, warnings: 0, running: false }

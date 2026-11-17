@@ -105,7 +105,7 @@ export default function App() {
   // ditulis hook itu, bukan salinan yang sudah basi. Dideklarasikan SEBELUM `applyWorkspace`
   // karena pemasangan board memanggil `resetViewport`.
   const vp = useCanvasViewport({ rf, viewportRef, scheduleSave })
-  const { syncViewport, onMoveEnd, onFit, resetViewport } = vp
+  const { syncViewport, onMoveEnd, onFit, onZoomTo, onPanBy, resetViewport } = vp
 
   // Undo/redo layout node — tumpukan terpisah dari riwayat pandangan di atas. Lihat `./layoutHistory`.
   const { onUndo: onLayoutUndo, onRedo, canUndo: canLayoutUndo, canRedo, pushLayout, resetLayout } =
@@ -129,7 +129,7 @@ export default function App() {
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
       setWorkspaces, setActiveWs, setHydrated, setAuthRequired, setNodes, setEdges, setBoard, setPicker,
-      activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, urlWorkspaceId: route.workspaceId,
+      activeWsRef, nodesRef, edgesRef, cancelSave, rf, onFit, onZoomTo, onPanBy, urlWorkspaceId: route.workspaceId,
     })
   useWorkspaceUrlSync({ urlWorkspaceId: route.workspaceId, activeId, hydrated, workspaces, onSelect, goWorkspace: routeActions.goWorkspace })
 

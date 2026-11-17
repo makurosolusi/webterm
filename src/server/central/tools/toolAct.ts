@@ -21,7 +21,7 @@ const MAX_HOST = 253
 /** Tools whose success changes a node the user can see, with the past-tense verb the UI shows. `canvas.show` is absent: it already moves the camera. */
 export const ACT_TOOLS: Readonly<Record<string, string>> = {
   'agent.spawn': 'spawned', 'agent.prompt': 'prompted', 'agent.relay': 'queued', 'agent.close': 'closed',
-  'canvas.open': 'opened', 'canvas.type': 'typed', 'canvas.close': 'closed', 'canvas.edit': 'wired',
+  'canvas.open': 'opened', 'canvas.reopen': 'opened', 'canvas.camera': 'framed', 'canvas.type': 'typed', 'canvas.close': 'closed', 'canvas.edit': 'wired',
   browser_open: 'opened', browser_act: 'drove', browser_read: 'drove', 'chat.send': 'sent', 'permission.decide': 'answered', 'task.assign': 'assigned',
   'chat.config': 'configured', 'chat.mode': 'switched',
 }
@@ -34,6 +34,7 @@ const CENTRAL_STATE = "writes Central's own notes or schedule; no node is touche
 export const NO_ACT: Readonly<Record<string, string>> = {
   'canvas.show': 'already moves the camera to the node (t:view)',
   'canvas.group': 'layout only; the canvas push already moves the tabs',
+  'workspace.switch': 'switches the board the user sees; the view frame itself is the visible change',
   'workspace.create': BOARD_ONLY, 'workspace.rename': BOARD_ONLY,
   'task.create': BOARD_ONLY, 'task.update': BOARD_ONLY, 'task.cancel': BOARD_ONLY,
   'goal.propose': PROPOSAL, 'plan.propose': PROPOSAL, 'approval.request': PROPOSAL, 'skill.propose': PROPOSAL,
@@ -52,7 +53,7 @@ function nodesOf(tool: string, data: Record<string, unknown>): { nodeId: string;
   if (data['reused'] === true || data['already'] === true || data['alreadyOpen'] === true) return null
   const first = (v: unknown): unknown => (Array.isArray(v) ? v[0] : undefined)
   const id = (v: unknown): string => (typeof v === 'string' ? v : '') // '' fails isSafeNodeId
-  if (tool === 'canvas.open' || tool === 'canvas.close') return { nodeId: id(first(data['ids'])) }
+  if (tool === 'canvas.open' || tool === 'canvas.reopen' || tool === 'canvas.close') return { nodeId: id(first(data['ids'])) }
   if (tool === 'canvas.edit') {
     const pair = first(data['wired'])
     return Array.isArray(pair) ? { nodeId: id(pair[0]), nodeId2: id(pair[1]) } : null

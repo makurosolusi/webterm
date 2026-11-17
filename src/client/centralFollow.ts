@@ -9,11 +9,13 @@ import { closestNodeRoot } from './nodeRoot'
 import { rectOfNode, revealNode } from './nodeReveal'
 import { focusedNodeId } from './presencePing'
 import { getTabLayout } from './tabLayout.store'
+import { noteUserActive } from './userActivity'
+import { USER_ACTIVE_PAUSE_MS } from '../shared/canvasCamera'
 
 /** Least time the camera rests on one target before the next (counted from the end of the camera animation). */
 export const FOLLOW_DWELL_MS = 1500
 /** After a user canvas interaction Follow stays paused this long (guess: long enough to finish a gesture, short enough to resume). */
-export const FOLLOW_PAUSE_MS = 10_000
+export const FOLLOW_PAUSE_MS = USER_ACTIVE_PAUSE_MS
 /** Queued targets kept; beyond this the camera jumps to the newest and the rest count as "N more". */
 export const FOLLOW_QUEUE_MAX = 3
 /** Recheck interval while the queue is blocked (paused, held, hidden tab). */
@@ -143,6 +145,7 @@ export function createFollowController(d: FollowDeps) {
     userMoved(pointer?: 'down' | 'up'): void {
       if (pointer === 'up' && !pointerDown) return // a click outside the canvas is not driving it
       lastUser = now()
+      noteUserActive(pointer)
       if (pointer) pointerDown = pointer === 'down'
       pump()
     },

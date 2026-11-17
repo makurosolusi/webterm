@@ -65,6 +65,17 @@ describe('announceCentralAct', () => {
     ])
   })
 
+  it('announces a camera focus and a reopen on their node; fit, zoom, pan and a refusal name no node, so stay silent', () => {
+    const { s, frames } = sink()
+    announceCentralAct(ctx, 'canvas.camera', undefined, { ok: true, data: { applied: true, action: 'focus', nodeId: 'f1' } }, s)
+    announceCentralAct(ctx, 'canvas.camera', undefined, { ok: true, data: { applied: true, action: 'zoom', zoom: 1 } }, s)
+    announceCentralAct(ctx, 'canvas.camera', undefined, { ok: true, data: { applied: false, action: 'focus', reason: 'user_active' } }, s)
+    announceCentralAct(ctx, 'canvas.reopen', undefined, { ok: true, data: { ids: ['r1'], count: 1 } }, s)
+    announceCentralAct(ctx, 'canvas.reopen', undefined, { ok: true, data: { ids: [], count: 0, reopenable: [] } }, s)
+    vi.advanceTimersByTime(ACT_COALESCE_MS)
+    expect(frames.map((f) => [f.tool, f.verb, f.nodeId])).toEqual([['canvas.camera', 'framed', 'f1'], ['canvas.reopen', 'opened', 'r1']])
+  })
+
   it('bounds held entries: past the cap a call is sent at once', () => {
     const { s, frames } = sink()
     for (let i = 0; i < ACT_MAX_PENDING; i++) announceCentralAct(ctx, 'canvas.type', undefined, typed({ nodeId: `cap${i}` }), s)

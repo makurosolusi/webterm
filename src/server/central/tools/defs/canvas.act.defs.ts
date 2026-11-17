@@ -7,13 +7,16 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import type { Database } from 'bun:sqlite'
-import { agentConfig } from '../../../../shared/workspace'
+import { agentConfig, type BridgeLink, type WsNode } from '../../../../shared/workspace'
 import { buildAgentChatNode } from '../../../../shared/agentChat.node'
 import { parseBrowserUrl } from '../../../../shared/browser.url'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import type { CanvasNode, CanvasPush } from '../../../canvas/canvasPush'
 import { claudeLaunchLine, resolveClaudeLaunch } from '../../../claudeLauncher/claudeLauncher'
 import { allRows } from '../../../ledger/ledgerCore'
+import { createLogger } from '../../../logs'
+import type { HistoryDb } from '../../../sessionHistory.store'
+import { recordCentralClosed } from '../../centralClosed.store'
 import { AGENT_TERMINAL_STATES } from '../../contracts/agent.types'
 import { lookupWorkspace, projectWorkspace } from '../../workspaceLookup'
 import { isInsideRoot } from '../../../orchestrator/safePath'
@@ -30,7 +33,11 @@ export interface CanvasActDeps {
   canvas(): NodeCanvas | Promise<NodeCanvas>
   /** Live "Browser on canvas" Settings switch, read per call so turning it off refuses browser opens at once. */
   browserOn(): boolean
+  /** webterm.db handle: Central's own closes are remembered there so canvas.reopen can undo exactly those. Absent = not remembered. */
+  history?(): HistoryDb | Promise<HistoryDb>
 }
+
+const log = createLogger('central')
 
 const MAX_CLOSE = 50
 const MAX_OPEN = 5
@@ -156,8 +163,21 @@ export function createCanvasActDefs(deps: CanvasActDeps): ToolDef[] {
       const live = liveAgentNodes(ctx.db, String(projectId), ids)
       const agents = ids.filter((id) => live.has(id))
       if (agents.length) return fail('use_agent_close', { nodeIds: agents, hint: 'These are workers you spawned: close them with agent.close.' })
+      // Read BEFORE the removal: it drops the cables of the closed nodes, which a reopen restores.
+      const bridges = (lookupWorkspace(found.workspaceId) as { bridges?: BridgeLink[] } | null)?.bridges ?? []
       const res = (await deps.canvas()).remove({ workspaceId: found.workspaceId, nodeIds: ids })
       if (!res.ok) return fail(res.code)
+      if (deps.history) {
+        try {
+          const at = ctx.now()
+          recordCentralClosed(await deps.history(), res.removed.map((n) => ({
+            workspaceId: found.workspaceId, node: { ...n, ...(nameOf.get(n.id) ? { name: nameOf.get(n.id) } : {}) } as WsNode, closedAt: at, bridges: bridges.filter((b) => b.source === n.id || b.target === n.id),
+          })))
+        } catch (err) {
+          // The close already happened; only the Reopen record is lost, so say so in the log and carry on.
+          log.warn('central.close_record_failed', 'canvas.close could not record the closed nodes; canvas.reopen cannot bring them back', { workspaceId: found.workspaceId, cause: err instanceof Error ? err.message : String(err) })
+        }
+      }
       const closed = res.removed.map((n) => ({ id: n.id, name: nameOf.get(n.id) ?? null, kind: n.kind, title: n.title ? clip(n.title, MAX_TITLE) : null }))
       return { ok: true, data: { closed, count: closed.length, ids: closed.map((n) => n.id) } }
     },

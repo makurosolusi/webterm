@@ -12,7 +12,7 @@ function setVisibility(v: DocumentVisibilityState): void {
   visibility = v
   document.dispatchEvent(new Event('visibilitychange'))
 }
-const bodies = (): Array<{ visible: boolean; muted: string[]; nodeId: string | null }> =>
+const bodies = (): Array<{ visible: boolean; muted: string[]; nodeId: string | null; idleMs?: number }> =>
   fetchMock.mock.calls.map((c) => JSON.parse(String((c[1] as RequestInit).body)))
 
 beforeEach(() => {
@@ -123,4 +123,21 @@ test('the first connect attempt (`connecting`) does not pause pings; offline ski
   vi.advanceTimersByTime(PRESENCE_PING_MS * 3)
   expect(fetchMock).toHaveBeenCalledTimes(2)
   unmount()
+})
+
+test('reports how long ago the user moved the canvas, and pings at once (throttled) on a gesture', async () => {
+  const { noteUserActive, resetUserActivity } = await import('./userActivity')
+  resetUserActivity()
+  const { unmount } = renderHook(() => usePresencePing(true))
+  expect(bodies()[0]).not.toHaveProperty('idleMs') // no gesture yet: nothing claimed
+  vi.advanceTimersByTime(FOCUS_PING_GAP_MS)
+  noteUserActive()
+  expect(bodies().at(-1)?.idleMs).toBe(0)
+  const sent = fetchMock.mock.calls.length
+  noteUserActive() // inside the throttle gap
+  expect(fetchMock).toHaveBeenCalledTimes(sent)
+  vi.advanceTimersByTime(PRESENCE_PING_MS)
+  expect(bodies().at(-1)?.idleMs).toBeGreaterThanOrEqual(FOCUS_PING_GAP_MS)
+  unmount()
+  resetUserActivity()
 })

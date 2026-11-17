@@ -36,6 +36,16 @@ export function ensureSessionHistorySchema(db: HistoryDb): void {
     workspace_name TEXT NOT NULL,
     closed_at INTEGER NOT NULL,
     node TEXT NOT NULL
+  );
+  -- Nodes CENTRAL closed (canvas.close), kept apart from closed_history because the client rewrites that whole
+  -- list on every change and so cannot carry "who closed it". canvas.reopen reads only this table: a node the
+  -- human closed is never in it. Additive and idempotent; bounded by the store's per-workspace cap.
+  CREATE TABLE IF NOT EXISTS central_closed (
+    node_id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    closed_at INTEGER NOT NULL,
+    node TEXT NOT NULL,
+    bridges TEXT
   );`)
   // F3-d: the closed node's cables, so reopening after a reload brings its edges back. Nullable
   // (rows written before this column have none). SQLite has no ADD COLUMN IF NOT EXISTS, hence the
