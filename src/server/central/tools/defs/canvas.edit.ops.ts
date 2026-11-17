@@ -6,6 +6,7 @@ import { OPEN_GAP, type Size } from '../../../../shared/canvasPlace'
 import { isNodeName, withNodeNames } from '../../../../shared/nodeNames'
 import { classifyLink, isContextCapable, type BridgeLink } from '../../../../shared/workspace'
 import type { CanvasNode } from '../../../canvas/canvasPush'
+import { canSkillLink, MAX_ATTACHED_SKILLS } from '../../../../shared/skillPorts'
 import { isSafeId } from './read.shared'
 
 export const MAX_OPS = 50
@@ -20,7 +21,7 @@ const NODE_DEFAULT: Size = { width: 400, height: 300 }
 /** The minWidth/minHeight each node passes its NodeLayoutResizer (client/*Node.tsx, mcpapps/McpAppNode.tsx). */
 const MIN_SIZE: Record<string, Size> = {
   editor: { width: 320, height: 180 }, diff: { width: 420, height: 260 }, plan: { width: 420, height: 240 },
-  agentChat: { width: 280, height: 200 }, app: { width: 280, height: 200 },
+  agentChat: { width: 280, height: 200 }, app: { width: 280, height: 200 }, skill: { width: 220, height: 44 },
 }
 const MIN_DEFAULT: Size = { width: 240, height: 160 } // terminal, agent, files, browser
 /** Kinds with a collapse toggle (they pass `collapsed` to NodeLayoutResizer); collapsed, they cannot be resized. */
@@ -28,7 +29,7 @@ const COLLAPSIBLE = new Set(['terminal', 'agent', 'files', 'browser', 'agentChat
 const SIDES = ['right', 'left', 'below', 'above'] as const
 type Side = (typeof SIDES)[number]
 const LINK_HINT = 'A cable joins two Claude nodes, or an agent node with a browser, diff or plan node; a plan node also takes a diff node. '
-  + 'Terminal, files and editor nodes take no cable.'
+  + 'A skill node attaches only to a Claude agent or agent chat. Terminal, files and editor nodes take no cable.'
 
 export type Op =
   | { op: 'move'; node: string; x: number; y: number; beside?: undefined }
@@ -100,6 +101,8 @@ export const sizeOf = (n: CanvasNode): Size => ({ width: n.width ?? NODE_DEFAULT
 /** The client's `canLink` (client/floatingEdge.ts), on stored nodes: what a hand-drawn cable may join. */
 export function canLink(a: CanvasNode, b: CanvasNode): boolean {
   if (a.id === b.id) return false
+  const skill = canSkillLink(a, b)
+  if (skill !== undefined) return skill
   const count = (kind: string): number => (a.kind === kind ? 1 : 0) + (b.kind === kind ? 1 : 0)
   const other = (kind: string): CanvasNode => (a.kind === kind ? b : a)
   const plans = count('plan')
@@ -173,6 +176,12 @@ export function applyOps(board: Board, ops: Op[], id: (ref: string) => string): 
         board.bridges = board.bridges.filter((x) => !between(x, a.id, b.id))
       } else if (!canLink(a, b)) {
         return fail('link_not_allowed', { from: name(a), to: name(b), hint: LINK_HINT })
+      } else if (a.kind === 'skill' || b.kind === 'skill') {
+        // Skill cable: skill node = source (`skill-out`), agent = target (`skills-in`); the id is the same pattern as a drawn one.
+        const [skill, host] = a.kind === 'skill' ? [a, b] : [b, a]
+        const attached = board.bridges.filter((x) => x.kind === 'skill' && x.target === host.id).length
+        if (!has && attached >= MAX_ATTACHED_SKILLS) return fail('skill_limit', { to: name(host), max: MAX_ATTACHED_SKILLS, hint: 'Detach a skill from this agent first.' })
+        if (!has) board.bridges.push({ id: `bridge-${skill.id}-${host.id}`, source: skill.id, target: host.id, kind: 'skill' })
       } else if (!has) {
         // Same id and kind as a hand-drawn cable (client App.board.ts `onConnect`); an existing pair is a no-op (`bridgeExists`).
         board.bridges.push({ id: `bridge-${a.id}-${b.id}`, source: a.id, target: b.id, kind: 'context' })
