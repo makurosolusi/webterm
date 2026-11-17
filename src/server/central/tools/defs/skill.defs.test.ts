@@ -47,7 +47,7 @@ describe('skill tool defs', () => {
     expect(store.list('active')).toEqual([])
     expect((await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })).code).toBe('not_found')
     const listed = await execTool(ctxOf(), 'skill.list', { status: 'pending_approval' })
-    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', version: '1', status: 'pending_approval', origin: 'central' }])
+    expect(listed.data?.skills).toEqual([{ name: 'webterm-demo', version: '1', status: 'pending_approval', origin: 'central', enabled: true }])
     store.approve('webterm-demo', '1', 'human:alice', confirmPhrase('webterm-demo', '1'))
     const loaded = await execTool(ctxOf(), 'skill.load', { name: 'webterm-demo' })
     expect(loaded).toMatchObject({ ok: true, data: { name: 'webterm-demo', version: '1' } })

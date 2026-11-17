@@ -18,6 +18,10 @@ export function fakeClient(over: Partial<CentralControlClient> = {}): CentralCon
     rejectSkill: vi.fn(async () => undefined),
     rollbackSkill: vi.fn(async () => undefined),
     createSkill: vi.fn(async () => undefined),
+    approveSkillReviewed: vi.fn(async () => undefined),
+    setSkillEnabled: vi.fn(async () => undefined),
+    editSkill: vi.fn(async () => undefined),
+    forkSkill: vi.fn(async () => 'webterm-x-copy'),
     listMemory: vi.fn(async () => [
       { id: 'm1', scope: 'project' as const, trust: 'human' as const, kind: 'fact' as const, key: 'stack', value: 'bun + react', status: 'fact', sourceKind: 'human-edit', sourceRef: null, createdAt: 1, projectName: 'Webterm' },
       { id: 'm2', scope: 'user' as const, trust: 'agent' as const, kind: 'fact' as const, key: 'note', value: 'api_key=sk_live_abcdefghijklmnop1234', status: 'claim', sourceKind: 'central', sourceRef: 'central:global', createdAt: 1, projectName: '' },
