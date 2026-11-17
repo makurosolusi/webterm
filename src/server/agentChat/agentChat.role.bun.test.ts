@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
 import { buildAgentChatOptions } from './agentChat.options'
 import { lintSkill } from '../central/skills/skillLint'
+import { chatCapabilityBriefing } from './agentChat.capabilities'
 import { agentChatRoleFor, validSkillTarget } from './agentChat.role'
 import { agentChatOpenConfig } from './agentChat.pool'
 
@@ -70,9 +71,9 @@ describe('skill-author role prompt', () => {
     expect(lintSkill(text, { requireStructure: true }).issues).toEqual([])
   })
 
-  test('plain chat and unknown preset get no systemPrompt', () => {
-    expect(build().systemPrompt).toBe(undefined)
-    expect(build({ preset: 'something-else' }).systemPrompt).toBe(undefined)
+  test('plain chat and unknown preset get no role, only the chat.default capability briefing', () => {
+    expect(appendOf(build())).toBe(chatCapabilityBriefing(undefined, {}))
+    expect(appendOf(build({ preset: 'something-else' }))).toBe(chatCapabilityBriefing(undefined, {}))
     expect(agentChatRoleFor(undefined)).toBe(undefined)
   })
 

@@ -49,7 +49,7 @@ describe('centralQueryOptions', () => {
 
   // One page or one search is Central's own job (browser_read); chains go to the playbook; no parallel workers for one task.
   it('sends one page to browser_read and chained research to the playbook, and forbids duplicate workers', () => {
-    expect(CENTRAL_STEWARD_PROMPT).toContain('To read one page or answer one search, call browser_read yourself')
+    expect(CENTRAL_STEWARD_PROMPT).toContain('How: browser_read {"url"')
     expect(CENTRAL_STEWARD_PROMPT).toContain('use playbook.web_research')
     expect(CENTRAL_STEWARD_PROMPT).toContain('never start parallel workers for the same task')
   })

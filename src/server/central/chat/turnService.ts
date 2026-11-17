@@ -33,7 +33,7 @@ import { centralTurnModel, modelSwitchPending } from './conversationModelChoice'
 import { createLogger } from '../../logs'
 import { redactSecrets } from '../../redactSecrets'
 import { markSystemTurn, systemTurnsToday, withoutHumanLabel, type SystemTurnOrigin } from './turnOrigin'
-import { skillNoteForTurn } from './turnSkillNote'
+import { turnNotes } from './turnNotes'
 import { freshSessionPending, prepareRerun, type RerunInput } from './turnRerun'
 
 const log = createLogger('central')
@@ -145,10 +145,10 @@ export class TurnService {
       ...(switchModel ? { rotate: true } : {}),
     })
     const { history } = built
-    // A skill switched since the previous turn of this chat: the model hears it once, the transcript shows the same note.
-    const skillNote = conversation.mode === null ? skillNoteForTurn(this.db, conversation.id, clientMessageId, this.now) : null
-    if (skillNote?.message) this.record(conversation.id, 'message.created', { messageId: skillNote.message.id, seq: skillNote.message.seq, role: 'system', parts: skillNote.message.parts }, null, skillNote.message.id)
-    const noted = (p: string): string => (skillNote ? `${skillNote.text}\n\n${p}` : p)
+    // Skills or abilities changed since the previous turn of this chat: the model hears it once, the transcript shows the same note.
+    const notes = turnNotes(this.db, conversation, clientMessageId, this.now)
+    for (const m of notes.messages) this.record(conversation.id, 'message.created', { messageId: m.id, seq: m.seq, role: 'system', parts: m.parts }, null, m.id)
+    const noted = (p: string): string => (notes.text ? `${notes.text}\n\n${p}` : p)
     const prompt = noted(withFiles(origin ? withoutHumanLabel(built.prompt, text) : built.prompt, files))
     // Only the real assembler reports rotation; the legacy one never sets it.
     const rotate = (built as { rotateSession?: boolean }).rotateSession === true || switchModel

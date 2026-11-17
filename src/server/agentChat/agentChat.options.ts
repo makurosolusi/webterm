@@ -20,6 +20,7 @@ import { agentChatEnv } from './agentChat.env'
 import { agentChatSystemPrompt } from './agentChat.role'
 import { agentChatLockFor } from './agentChat.toolLock'
 import { attachedSkillsIndex } from './agentChat.skills'
+import { chatCapabilityBriefing } from './agentChat.capabilities'
 import type { AttachedSkill } from '../skillAttach'
 
 /** Same layers the terminal agent loads: CLAUDE.md, skills, hooks, permissions. */
@@ -101,12 +102,13 @@ export function buildAgentChatOptions(i: AgentChatOptionsInput): { options: Opti
     delete options.additionalDirectories
     options.extraArgs = { 'append-system-prompt-file': writeHouseRules(), 'disable-slash-commands': null, 'replay-user-messages': null }
   }
-  // Index goes after any role text; a locked preset keeps its lock (its `skills get` form is allowed) and gains only this text.
-  const index = attachedSkillsIndex(i.attachedSkills)
-  if (index) {
+  // Role text, then the registry briefing of a plain chat (what it may do: browser), then the attached-skill index; each
+  // part is stable between turns (the briefing changes only when a browser switch flips), so the prompt cache holds.
+  const extra = [chatCapabilityBriefing(i.preset, i.parentEnv ?? process.env), attachedSkillsIndex(i.attachedSkills)].filter((x): x is string => !!x)
+  if (extra.length) {
     const sp = options.systemPrompt
     const role = sp && typeof sp === 'object' && !Array.isArray(sp) && 'append' in sp ? sp.append : undefined
-    options.systemPrompt = { type: 'preset', preset: 'claude_code', append: role ? `${role}\n\n${index}` : index }
+    options.systemPrompt = { type: 'preset', preset: 'claude_code', append: [role, ...extra].filter(Boolean).join('\n\n') }
   }
   return { options, ...(launch.missingId ? { notice: missingProfileNotice(launch.profile.name).trim() } : {}) }
 }

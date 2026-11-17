@@ -48,6 +48,8 @@ export interface AgentChatPoolDeps {
   persist?(workspaceId: string, nodeId: string, patch: AgentChatNodePatch): void
   /** Canvas skills attached to the node now (production: attachedSkills over the stored board); absent = none. */
   attached?(t: AgentChatTarget): readonly AttachedSkill[]
+  /** Note for the next turn when this node's capability briefing changed since the last one it saw (production: capabilityNote over the ledger); absent = never. */
+  capabilityNote?(t: AgentChatTarget): { text: string; line: string } | undefined
   gate?: AgentChatBroker
   lock?: AgentChatLock
   maxLive?: number
@@ -212,7 +214,10 @@ export class AgentChatPool {
     const cur = this.deps.lookup(nodeId)
     const note = s.live() && cur ? skillTurnNote(this.announced.get(nodeId) ?? [], this.deps.attached?.(cur) ?? []) : undefined
     if (note && cur) this.announced.set(nodeId, this.deps.attached?.(cur) ?? [])
-    s.send(note ? `${note}\n\n${text}` : text, priority, images)
+    // A resumed session keeps the system prompt it started with, so a changed briefing is told in the turn itself (live or not).
+    const cap = cur ? this.deps.capabilityNote?.(cur) : undefined
+    if (cap) s.notify('info', cap.line)
+    s.send([note, cap?.text, text].filter(Boolean).join('\n\n'), priority, images)
     return { ok: true }
   }
 

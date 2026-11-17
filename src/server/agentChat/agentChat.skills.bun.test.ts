@@ -12,6 +12,7 @@ import { buildAgentChatOptions } from './agentChat.options'
 import { FakeQuery } from './agentChat.fakeQuery'
 import { AgentChatPool, type AgentChatTarget } from './agentChat.pool'
 import { agentChatRoleFor } from './agentChat.role'
+import { chatCapabilityBriefing } from './agentChat.capabilities'
 import { attachedSkillsIndex, skillTurnNote } from './agentChat.skills'
 
 const allow: CanUseTool = async (_n, input) => ({ behavior: 'allow', updatedInput: input })
@@ -33,9 +34,9 @@ describe('system prompt index', () => {
     expect(build({ attachedSkills: [sk('webterm-a')] }).systemPrompt).toMatchObject({ type: 'preset', preset: 'claude_code' })
   })
 
-  test('nothing attached: no system prompt override at all', () => {
-    expect(build({ attachedSkills: [] }).systemPrompt).toBe(undefined)
-    expect(build().systemPrompt).toBe(undefined)
+  test('nothing attached: only the capability briefing, no skills index', () => {
+    expect(appendOf(build({ attachedSkills: [] }))).toBe(chatCapabilityBriefing(undefined, {}))
+    expect(appendOf(build())).not.toContain('Skills attached to you')
     expect(attachedSkillsIndex(undefined)).toBe(undefined)
   })
 
