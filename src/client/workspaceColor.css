@@ -1,0 +1,104 @@
+/* Workspace identity colors: 12 named hues x 3 shades (soft/default/vivid). Every value holds >= 3:1
+   contrast (WCAG 1.4.11, non-text) against the worst tab/status surface of its theme: #2d2d2d dark,
+   #ececec light (workspaceColor.contrast.test.ts re-checks this). The id -> token map lives in
+   src/shared/workspaceColor.ts; do not hardcode these elsewhere. */
+:root {
+  --ws-red-soft: #c05c59;
+  --ws-red-default: #d84b46;
+  --ws-red-vivid: #f02019;
+  --ws-orange-soft: #aa6b41;
+  --ws-orange-default: #bd6428;
+  --ws-orange-vivid: #c9580d;
+  --ws-amber-soft: #947838;
+  --ws-amber-default: #a88124;
+  --ws-amber-vivid: #c08a0c;
+  --ws-lime-soft: #6f9438;
+  --ws-lime-default: #73a824;
+  --ws-lime-vivid: #78c00c;
+  --ws-green-soft: #38945a;
+  --ws-green-default: #24a854;
+  --ws-green-vivid: #0cc04e;
+  --ws-teal-soft: #389488;
+  --ws-teal-default: #24a897;
+  --ws-teal-vivid: #0cc0a8;
+  --ws-cyan-soft: #388594;
+  --ws-cyan-default: #2492a8;
+  --ws-cyan-vivid: #0ca2c0;
+  --ws-blue-soft: #4a7cba;
+  --ws-blue-default: #357dd4;
+  --ws-blue-vivid: #1477f0;
+  --ws-indigo-soft: #7272ca;
+  --ws-indigo-default: #7070e1;
+  --ws-indigo-vivid: #6a6af6;
+  --ws-violet-soft: #9367c5;
+  --ws-violet-default: #9a5fdd;
+  --ws-violet-vivid: #9e52f4;
+  --ws-pink-soft: #c0598c;
+  --ws-pink-default: #d63d8a;
+  --ws-pink-vivid: #eb0f7d;
+  --ws-slate-soft: #727b88;
+  --ws-slate-default: #6f7d90;
+  --ws-slate-vivid: #697c96;
+}
+:root[data-theme='light'] {
+  --ws-red-soft: #c46764;
+  --ws-red-default: #da5752;
+  --ws-red-vivid: #f23c36;
+  --ws-orange-soft: #b57245;
+  --ws-orange-default: #c6682a;
+  --ws-orange-vivid: #d35c0d;
+  --ws-amber-soft: #9b7e3b;
+  --ws-amber-default: #a47d23;
+  --ws-amber-vivid: #a8790b;
+  --ws-lime-soft: #6a8d35;
+  --ws-lime-default: #628f1e;
+  --ws-lime-vivid: #5a9009;
+  --ws-green-soft: #38945a;
+  --ws-green-default: #1f934a;
+  --ws-green-vivid: #09953c;
+  --ws-teal-soft: #379084;
+  --ws-teal-default: #1e8f80;
+  --ws-teal-vivid: #09907e;
+  --ws-cyan-soft: #3b8b9b;
+  --ws-cyan-default: #238fa4;
+  --ws-cyan-vivid: #0b8ea8;
+  --ws-blue-soft: #5584be;
+  --ws-blue-default: #3d82d6;
+  --ws-blue-vivid: #2782f1;
+  --ws-indigo-soft: #6b6bc7;
+  --ws-indigo-default: #5757db;
+  --ws-indigo-vivid: #3f3ff3;
+  --ws-violet-soft: #966bc7;
+  --ws-violet-default: #9557db;
+  --ws-violet-vivid: #933ff3;
+  --ws-pink-soft: #c36091;
+  --ws-pink-default: #da4e94;
+  --ws-pink-vivid: #f22c8f;
+  --ws-slate-soft: #7a8390;
+  --ws-slate-default: #758295;
+  --ws-slate-vivid: #72849c;
+}
+
+/* Identity marker on a workspace tab: a bar along the bottom edge (dimmer when inactive), and the
+   active tab's top border takes the color too. The status dot inside the tab keeps its own meaning. */
+.vscode-editor-tab[data-accent]::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--tab-accent); opacity: 0.55; pointer-events: none;
+}
+.vscode-editor-tab[data-accent][data-active='true']::after { height: 3px; opacity: 1; }
+.vscode-editor-tab[data-accent][data-active='true'] { border-top-color: var(--tab-accent); }
+
+/* Small color chip beside the active workspace's name (title bar, status bar). */
+.ws-chip { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 2px; background: var(--ws-chip, var(--ws-slate-default)); }
+
+/* Color picker dialog. */
+.ws-color-dialog { max-width: 420px; }
+.ws-color-hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.ws-color-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ws-swatch {
+  width: 26px; height: 26px; padding: 0; border: 2px solid transparent; border-radius: 6px;
+  background: var(--ws-swatch); cursor: pointer;
+}
+.ws-swatch[aria-checked='true'] { border-color: var(--vscode-foreground); box-shadow: 0 0 0 2px var(--vscode-editor-background) inset; }
+.ws-swatch:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.ws-color-actions { display: flex; justify-content: flex-end; gap: 8px; }

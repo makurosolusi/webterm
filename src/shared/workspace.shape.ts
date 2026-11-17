@@ -153,7 +153,10 @@ export interface Workspace {
   id: string
   name: string
   cwd?: string
+  /** Identity color: a palette hue id (workspaceColor.ts); every stored workspace has one. */
   color?: string
+  /** Shade of `color` (soft | default | vivid); absent = default. */
+  colorShade?: string
   viewport: Viewport
   nodes: WsNode[]
   bridges: BridgeLink[]   // edge context-link antar node

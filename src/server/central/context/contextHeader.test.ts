@@ -3,7 +3,7 @@ import { openFixture, seedPortfolio, type Fixture } from '../centralTestFixture.
 import { registerWorkspaceLookup, type WorkspaceRecord } from '../workspaceLookup'
 import { createWorkStore } from '../work/workStore'
 import { createHealthStore } from '../health/healthStore'
-import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace, registerApprovalSettings } from './contextHeader'
+import { HEADER_MAX_CHARS, buildStateHeader, registerActiveWorkspace, registerApprovalSettings, registerWorkspaceColors } from './contextHeader'
 
 let f: Fixture
 let workspaces: WorkspaceRecord[]
@@ -25,6 +25,17 @@ afterEach(() => { while (undo.length) undo.pop()!(); f.close() })
 
 type Header = { projects: unknown[]; viewing: { projectId: string; name: string } | null }
 const parse = (text: string): Header => JSON.parse(text.slice('State: '.length)) as Header
+
+describe('state header: workspace color', () => {
+  it('names the color of the viewed workspace and of each listed project', () => {
+    undo.push(registerWorkspaceColors(() => new Map([['w-p1', 'blue vivid'], ['ws-wibu', 'pink default']])))
+    active = 'w-p1'
+    const h = JSON.parse(buildStateHeader(f.db, 'central:global').slice('State: '.length)) as { viewing: { color?: string }; projects: Array<{ id: string; color?: string }> }
+    expect(h.viewing.color).toBe('blue vivid')
+    expect(h.projects.find((p) => p.id === 'p1')?.color).toBe('blue vivid')
+    expect(h.projects.find((p) => p.id === 'ws-wibu')?.color).toBe('pink default')
+  })
+})
 
 describe('state header: viewing', () => {
   it('names the project of the workspace the user is viewing, as the last key', () => {

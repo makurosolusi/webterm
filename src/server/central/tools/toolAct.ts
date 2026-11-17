@@ -35,6 +35,7 @@ export const NO_ACT: Readonly<Record<string, string>> = {
   'canvas.show': 'already moves the camera to the node (t:view)',
   'canvas.group': 'layout only; the canvas push already moves the tabs',
   'workspace.switch': 'switches the board the user sees; the view frame itself is the visible change',
+  'workspace.color': 'announces itself: windows show a notice with Undo (t:workspaceColor, by central) and a central.act record is written',
   'workspace.create': BOARD_ONLY, 'workspace.rename': BOARD_ONLY,
   'task.create': BOARD_ONLY, 'task.update': BOARD_ONLY, 'task.cancel': BOARD_ONLY,
   'goal.propose': PROPOSAL, 'plan.propose': PROPOSAL, 'approval.request': PROPOSAL, 'skill.propose': PROPOSAL,

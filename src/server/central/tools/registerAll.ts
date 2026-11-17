@@ -24,6 +24,7 @@ import { createCanvasActDefs } from './defs/canvas.act.defs'
 import { createCanvasCameraDefs } from './defs/canvas.camera.def'
 import { createCanvasReopenDefs } from './defs/canvas.reopen.def'
 import { createWorkspaceSwitchDefs } from './defs/workspace.switch.def'
+import { createWorkspaceColorDefs } from './defs/workspace.color.def'
 import { createCanvasEditDefs } from './defs/canvas.edit.defs'
 import { createCanvasGroupDefs } from './defs/canvas.group.defs'
 import { createCanvasShotDefs } from './defs/canvas.shot.def'
@@ -80,6 +81,13 @@ const nodeDefs = (): ToolDef[] => [
   ...createCanvasViewDefs({ ui: viewUi }),
   ...createCanvasCameraDefs({ ui: viewUi, idleMs }),
   ...createWorkspaceSwitchDefs({ ui: viewUi, idleMs }),
+  ...createWorkspaceColorDefs({
+    idleMs,
+    runtime: async () => {
+      const [{ db }, { broadcastUi }] = await Promise.all([import('../../db'), import('../../canvas/canvasPush.runtime')])
+      return { db, broadcast: broadcastUi }
+    },
+  }),
   ...createCanvasShotDefs(),
   ...createCanvasTypeDefs({ sessions: async () => (await import('../../sessions')).sessions }),
   ...createCanvasEditDefs({ canvas: async () => (await import('../../canvas/canvasPush.runtime')).getCanvasPush() }),

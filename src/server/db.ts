@@ -17,6 +17,9 @@ import { dbPath, warnPermsNotTightened } from './config'
 import { ensureAuditSchema } from './featureCapabilities.audit'
 import { defaultTabLayout } from '../shared/tabLayout.schema'
 import { ensureLayoutColumn, parseLayout, serializeLayout } from './db.layout'
+import { ensureColorColumns } from './db.color'
+import { pickWorkspaceColor, DEFAULT_WORKSPACE_SHADE, describeWorkspaceColor, isWorkspaceHue, backfillWorkspaceHue } from '../shared/workspaceColor'
+import type { WorkspaceHue, WorkspaceShade } from '../shared/workspaceColor'
 
 const DB_FILE_MODE = 0o600
 
@@ -43,6 +46,8 @@ export function openDb(path: string = dbPath()): Database {
     d.exec("ALTER TABLE workspace ADD COLUMN bridges TEXT NOT NULL DEFAULT '[]'")
   }
   ensureLayoutColumn(d)
+  ensureColorColumns(d)
+  new Db(d).backfillColors()
   // Keyset index for the paged summary list (Db.listSummaries). IF NOT EXISTS = idempotent on
   // every boot; building it on an existing table needs no backfill.
   d.exec('CREATE INDEX IF NOT EXISTS workspace_updated_id ON workspace (updated_at DESC, id DESC)')
@@ -55,6 +60,7 @@ interface Row {
   name: string
   cwd: string | null
   color: string | null
+  color_shade: string
   viewport: string
   nodes: string
   bridges: string
@@ -78,7 +84,7 @@ function parseColumn(raw: string | null | undefined, absent: string): unknown {
  */
 function toWorkspace(r: Row): Workspace {
   const { board, issues, preserved } = normalizeWorkspace({
-    name: r.name, cwd: r.cwd, color: r.color,
+    name: r.name, cwd: r.cwd, color: r.color, colorShade: r.color_shade,
     viewport: parseColumn(r.viewport, ''), nodes: parseColumn(r.nodes, ''), bridges: parseColumn(r.bridges, '[]'),
   })
   if (issues.length > 0) workspaceLog.repaired(r.id, issues)
@@ -130,12 +136,25 @@ export class Db {
     return row ? toWorkspace(row) : null
   }
 
-  create(name: string, cwd?: string, color?: string): Workspace {
+  /** Hue ids of every stored workspace (one per row, repeats kept): what `pickWorkspaceColor` avoids. */
+  usedHues(): string[] {
+    return (this.d.query('SELECT color FROM workspace').all() as { color: string | null }[]).flatMap((r) => (r.color ? [r.color] : []))
+  }
+
+  /** `<hue> <shade>` per workspace id ("blue vivid"): what Central's state header shows next to each workspace. */
+  colorMap(): Map<string, string> {
+    const rows = this.d.query('SELECT id, color, color_shade FROM workspace').all() as { id: string; color: string | null; color_shade: string }[]
+    return new Map(rows.flatMap((r) => (r.color ? [[r.id, describeWorkspaceColor(r.color, r.color_shade)] as [string, string]] : [])))
+  }
+
+  /** New workspace; without `color` it gets a random hue no other workspace uses (the single create point for every path). */
+  create(name: string, cwd?: string, color?: string, colorShade?: WorkspaceShade): Workspace {
     const ws: Workspace = {
       id: crypto.randomUUID(),
       name,
       cwd,
-      color,
+      color: color ?? pickWorkspaceColor(this.usedHues(), Math.random),
+      colorShade: colorShade ?? DEFAULT_WORKSPACE_SHADE,
       viewport: DEFAULT_VIEWPORT,
       nodes: [],
       bridges: [],
@@ -143,8 +162,8 @@ export class Db {
       updatedAt: Date.now(),
     }
     this.d.query(
-      'INSERT INTO workspace (id, name, cwd, color, viewport, nodes, bridges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), ws.updatedAt)
+      'INSERT INTO workspace (id, name, cwd, color, color_shade, viewport, nodes, bridges, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(ws.id, ws.name, ws.cwd ?? null, ws.color ?? null, ws.colorShade ?? DEFAULT_WORKSPACE_SHADE, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), ws.updatedAt)
     return ws
   }
 
@@ -186,13 +205,38 @@ export class Db {
   save(ws: Workspace, base?: number): SaveOutcome {
     return this.immediate(() => {
       const r = this.d.query(
-        `UPDATE workspace SET name=?1, cwd=?2, color=?3, viewport=?4, nodes=?5, bridges=?6,
-           layout=COALESCE(NULLIF(?7, ''), layout), updated_at=MAX(?8, updated_at + 1)
-         WHERE id=?9 AND (?10 IS NULL OR updated_at <= ?10)`
-      ).run(ws.name, ws.cwd ?? null, ws.color ?? null, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
+        `UPDATE workspace SET name=?1, cwd=?2, viewport=?3, nodes=?4, bridges=?5,
+           layout=COALESCE(NULLIF(?6, ''), layout), updated_at=MAX(?7, updated_at + 1)
+         WHERE id=?8 AND (?9 IS NULL OR updated_at <= ?9)`
+      ).run(ws.name, ws.cwd ?? null, JSON.stringify(ws.viewport), this.nodesColumn(ws.id, ws.nodes), JSON.stringify(ws.bridges), serializeLayout(ws.layout), Date.now(), ws.id, base ?? null)
       if (r.changes > 0) return 'saved'
       return this.d.query('SELECT 1 FROM workspace WHERE id = ?').get(ws.id) ? 'stale' : 'missing'
     })
+  }
+
+  /**
+   * Set a workspace's color. Colors are written ONLY here (and by `create`), never by a board save:
+   * a window holding an older copy of the board cannot revert a color another window or Central just
+   * chose. `updated_at` is left alone so nobody's unsent board save turns into a 409.
+   */
+  setColor(id: string, color: WorkspaceHue, shade: WorkspaceShade): boolean {
+    return this.immediate(() => {
+      const ws = this.get(id)
+      if (!ws) return false
+      // `nodes` rides along through nodesColumn like every other write (db.preserveNodes policy): unchanged, preserved ones kept.
+      return this.d.query('UPDATE workspace SET color=?1, color_shade=?2, nodes=?3 WHERE id=?4')
+        .run(color, shade, this.nodesColumn(id, ws.nodes), id).changes > 0
+    })
+  }
+
+  /**
+   * Migration step: every row whose `color` is not a palette hue (NULL, or legacy free text nothing in the UI wrote)
+   * gets a hue derived from its id, so an old workspace keeps one color on every boot instead of a random one per load.
+   * Idempotent: after the first run no row matches.
+   */
+  backfillColors(): void {
+    const rows = this.d.query('SELECT id, color FROM workspace').all() as { id: string; color: string | null }[]
+    for (const r of rows) if (!isWorkspaceHue(r.color)) this.setColor(r.id, backfillWorkspaceHue(r.id), DEFAULT_WORKSPACE_SHADE)
   }
 
   delete(id: string): void {

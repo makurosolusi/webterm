@@ -7,6 +7,7 @@ export interface WorkspaceSummary {
   name: string
   cwd?: string
   color?: string
+  colorShade?: string
   updatedAt: number
   nodes: Array<{ id: string; kind: string; name?: string; title?: string; agentId?: string }>
 }

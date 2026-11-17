@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { VscodeStatusBar } from '@/components/vscode/vscodeStatusBar'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import { Button } from '@/components/ui/button'
@@ -32,7 +32,10 @@ export function CanvasStatusBar(props: DockProps) {
 
   const left: VscodeStatusItem[] = []
   if (props.workspaceName) {
-    left.push({ id: 'workspace', label: props.workspaceName, tooltip: 'Active workspace' })
+    left.push({
+      id: 'workspace', label: props.workspaceName, tooltip: 'Active workspace',
+      icon: props.workspaceAccent ? <span className="ws-chip" aria-hidden style={{ '--ws-chip': props.workspaceAccent } as CSSProperties} /> : undefined,
+    })
   }
 
   // Claude link trouble: one item, only while degraded/offline/just recovered (see connectivity/). It is

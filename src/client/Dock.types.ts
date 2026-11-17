@@ -44,6 +44,8 @@ export interface DockProps {
   onToggleCleanView: () => void
   /** Nama workspace aktif untuk status bar; kosong di layar Welcome. */
   workspaceName?: string
+  /** CSS color of the active workspace's identity (a `var(--ws-*)` token) for the status bar chip. */
+  workspaceAccent?: string
   /** Ringkasan agent (`2 working`) — juga diumumkan lewat live region status bar. */
   agentSummary?: string
   onSave?: () => void

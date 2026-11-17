@@ -11,6 +11,7 @@ import { useTabLayout } from './tabLayout.store'
 import { toggleLayoutMode } from './tabLayout.commands'
 import { toggleChatView, useSideBar } from './secondarySideBar.store'
 import { SecondarySideBarToggle } from './App.secondarySideBar'
+import { workspaceColorVar } from '../shared/workspaceColor'
 import type { AppSideBar } from './sideBar/useAppSideBar'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
@@ -68,6 +69,7 @@ export default function AppDock({
       customAgents={settings.customAgents}
       agentLaunchCommands={settings.agentLaunchCommands}
       workspaceName={activeWs?.name}
+      workspaceAccent={activeWs ? workspaceColorVar(activeWs.color, activeWs.colorShade) : undefined}
       onOpenSettings={() => setShowSettings(true)}
     />
   )
@@ -79,6 +81,7 @@ export interface AppWorkspaceBarProps
   onNewProject: WorkspaceBarProps['onNewWorkspace']
   onRenameWorkspace: (id: string, name: string) => Promise<unknown>
   onDeleteWorkspace: (id: string) => Promise<unknown>
+  onSetWorkspaceColor: WorkspaceBarProps['onSetWorkspaceColor']
   onAddFiles: () => void
   omni: ReturnType<typeof useOmnibox>
   setShowSettings: (open: boolean) => void
@@ -87,7 +90,7 @@ export interface AppWorkspaceBarProps
 
 /** WorkspaceBar wired to App's workspace lifecycle and overlays. */
 export function AppWorkspaceBar({
-  liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onAddFiles, omni, setShowSettings, setShowHelp, ...pass
+  liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onAddFiles, omni, setShowSettings, setShowHelp, ...pass
 }: AppWorkspaceBarProps) {
   const layoutMode = useTabLayout().mode
   return (
@@ -96,6 +99,7 @@ export function AppWorkspaceBar({
       liveActiveNodes={liveNodes}
       onNewWorkspace={onNewProject}
       onRenameWorkspace={onRenameWorkspace}
+      onSetWorkspaceColor={onSetWorkspaceColor}
       onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
       onOpenSettings={() => setShowSettings(true)}
       onOpenHelp={() => setShowHelp(true)}

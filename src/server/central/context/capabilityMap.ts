@@ -27,6 +27,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['attach or detach a canvas skill on an agent (skill node cabled to its Skills port)', ['canvas.open', 'canvas.edit']],
   ['show the user something (fit, focus, zoom, pan; yields while they move the canvas)', ['canvas.camera']],
   ['switch the workspace the user sees (yields while they move the canvas)', ['workspace.switch']],
+  ['read or change the color that identifies a workspace (only when the user asks; yields while they move the canvas)', ['workspace.color']],
   ['undo your own canvas.close', ['canvas.reopen']],
   ['browse yourself', ['browser_act']],
   ['project health', ['health.scan']],

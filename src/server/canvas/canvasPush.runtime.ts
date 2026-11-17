@@ -3,7 +3,7 @@
 // and the teardown that ends a removed node's sessions/page (kept out of here so this module does
 // not pull the PTY and browser runtimes into everything that imports it).
 import type { ServerMsg } from '../../shared/protocol'
-import { registerActiveWorkspace, registerApprovalSettings } from '../central/context/contextHeader'
+import { registerActiveWorkspace, registerApprovalSettings, registerWorkspaceColors } from '../central/context/contextHeader'
 import { db } from '../db'
 import { createCanvasPush, type CanvasNode, type CanvasPush } from './canvasPush'
 
@@ -11,6 +11,7 @@ import { createCanvasPush, type CanvasNode, type CanvasPush } from './canvasPush
 // not in the ledger the header reads, so this module (loaded at boot by index.ts) wires the source.
 registerActiveWorkspace(() => db.getActive())
 registerApprovalSettings(() => db.getSettings())
+registerWorkspaceColors(() => db.colorMap())
 
 let broadcastFn: (msg: ServerMsg) => void = () => {}
 let teardownFn: (nodes: CanvasNode[]) => void = () => {}

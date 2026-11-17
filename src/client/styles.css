@@ -3,6 +3,7 @@
 @import './node-chrome.css';
 @import './node-chrome.kinds.css';
 @import './dock.css';
+@import './workspaceColor.css';
 
 :root {
   /* Satu triple yang jadi sumber SEMUA overlay di sheet ini: fill hover, teks redup. Di

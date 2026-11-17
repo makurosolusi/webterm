@@ -23,6 +23,8 @@ import { produceEdgeChange } from './events/producers.edge'
 import { normalizeTabLayout } from '../shared/tabLayout.schema'
 import { backgroundsDir } from './canvasBackground.store'
 import { dropWorkspaceBackground } from './canvasBackground.gc'
+import type { WorkspaceShade } from '../shared/workspaceColor'
+import { BAD_COLOR, BAD_SHADE, colorHttp, createColor } from './workspaceColor'
 import { closeRemovedAgentChats, closeWorkspaceAgentChats } from './agentChat/agentChat.pool'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
@@ -37,7 +39,6 @@ const BODY_READ_FAILED = { status: 400, body: { error: 'body_read_failed' } }
 
 const BAD_NAME = { status: 400, body: { error: 'name must be a non-empty string' } }
 const BAD_CWD = { status: 400, body: { error: 'cwd must be an existing directory' } }
-const BAD_COLOR = { status: 400, body: { error: 'color must be a string' } }
 const BAD_LIMIT = { status: 400, body: { error: 'limit must be an integer from 1 to 200' } }
 const BAD_CURSOR = { status: 400, body: { error: 'cursor is not valid' } }
 
@@ -54,24 +55,24 @@ async function isDirectory(cwd: string): Promise<boolean> {
 }
 
 /** The 400 for each create field `createFields` can refuse. */
-const BAD_FIELD = { name: BAD_NAME, cwd: BAD_CWD, color: BAD_COLOR } as const
+const BAD_FIELD = { name: BAD_NAME, cwd: BAD_CWD, color: BAD_COLOR, shade: BAD_SHADE } as const
 export type CreateRefusal = keyof typeof BAD_FIELD
 
 /** Create body -> fields, or the first bad field (values never echoed). */
-async function createFields(b: Record<string, unknown>): Promise<{ name: string; cwd?: string; color?: string } | { bad: CreateRefusal }> {
+async function createFields(b: Record<string, unknown>): Promise<{ name: string; cwd?: string; color?: string; colorShade?: WorkspaceShade } | { bad: CreateRefusal }> {
   const name = typeof b.name === 'string' ? b.name.trim() : ''
   if (!name) return { bad: 'name' }
   const cwd = b.cwd === undefined || b.cwd === null || b.cwd === '' ? undefined : b.cwd
   if (cwd !== undefined && (typeof cwd !== 'string' || !(await isDirectory(cwd)))) return { bad: 'cwd' }
-  if (b.color !== undefined && b.color !== null && typeof b.color !== 'string') return { bad: 'color' }
-  return { name, cwd, color: typeof b.color === 'string' ? b.color : undefined }
+  const c = createColor(b) // palette ids only; absent = the server picks an unused hue at create
+  return 'bad' in c ? c : { name, cwd, ...c }
 }
 
 /** The human create (POST `/api/workspaces`) without HTTP: validate, store, log, secrets guard. Central's `workspace.create` calls it too. */
 export async function createWorkspaceFrom(store: Db, b: Record<string, unknown>): Promise<{ ok: true; workspace: Workspace } | { ok: false; bad: CreateRefusal }> {
   const f = await createFields(b)
   if ('bad' in f) return { ok: false, bad: f.bad }
-  const created = guarded('create', undefined, () => store.create(f.name, f.cwd, f.color))
+  const created = guarded('create', undefined, () => store.create(f.name, f.cwd, f.color, f.colorShade))
   afterCommit('create log', created.id, () => workspaceLog.created(created))
   void guardWorkspaceRepos([created]) // secrets guard without a restart; never throws per repo
   return { ok: true, workspace: created }
@@ -171,6 +172,15 @@ export async function workspacesRoute(
       const r = await createWorkspaceFrom(store, b)
       return r.ok ? { status: 201, body: r.workspace } : BAD_FIELD[r.bad]
     }
+  }
+
+  // Own route, not the board PUT (an older board copy must not revert a color); PUT like other partial updates.
+  const colorMatch = path.match(/^\/api\/workspaces\/([^/]+)\/color$/)
+  if (colorMatch && method === 'PUT') {
+    const read = await bodyOrFailure(body)
+    if (!read.ok) return read.result
+    const b = parseObjectBody<Record<string, unknown>>(read.raw)
+    return b ? colorHttp(store, decodeURIComponent(colorMatch[1]), b) : BAD_JSON
   }
 
   const wsMatch = path.match(/^\/api\/workspaces\/([^/]+)$/)

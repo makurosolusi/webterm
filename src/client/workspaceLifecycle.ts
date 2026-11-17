@@ -31,6 +31,8 @@ import { confirmNodeClose } from './nodeCloseConfirm'
 import { useCanvasPush } from './workspaceCanvasPush'
 import { useViewPush } from './workspaceView.push'
 import { useWorkspaceListPush } from './workspaceList.push'
+import { useSetWorkspaceColor, useWorkspaceColorPush } from './workspaceColor.sync'
+import type { ColorChange } from './api'
 import { useCanvasShot } from './canvasShot'
 import type { Workspace } from '../shared/workspace'
 
@@ -73,6 +75,8 @@ export interface WorkspaceLifecycle {
   closeSession: (id: string) => Promise<void>
   onRenameWorkspace: (id: string, name: string) => Promise<void>
   onDeleteWorkspace: (id: string) => Promise<void>
+  /** Color picker: optimistic, rolled back and reported on failure. */
+  onSetWorkspaceColor: (id: string, change: ColorChange) => Promise<void>
   /** Rejects on failure (the create dialog shows it); every other action reports its own. */
   onCreateWorkspace: (name: string, cwd?: string) => Promise<void>
   /** No path: pick an existing folder. A path (just cloned/created): open it as a workspace. */
@@ -115,6 +119,8 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   }, [onSelect, workspaces])
   useViewPush({ activeWsRef, onSelect, onFocus, onFit, onZoomTo, onPanBy, setBoard }) // central agent's `canvas.show` / `canvas.camera` / `workspace.switch`
   useWorkspaceListPush({ activeWsRef, setActiveWs, setWorkspaces }) // central agent's `workspace.create` / `workspace.rename`
+  useWorkspaceColorPush({ activeWsRef, setActiveWs, setWorkspaces }) // a color changed in another window or by Central
+  const onSetWorkspaceColor = useSetWorkspaceColor({ activeWsRef, setActiveWs, setWorkspaces }, workspaces)
   useCanvasShot() // central agent's `canvas.screenshot`
 
   // Sidebar mendaftar sesi dari SEMUA workspace, jadi baris yang ditutup belum tentu ada di
@@ -215,8 +221,9 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
     closeSession: reported('close the session', closeSession),
     onRenameWorkspace: reported('rename workspace', onRenameWorkspace),
     onDeleteWorkspace: reported('delete workspace', onDeleteWorkspace),
+    onSetWorkspaceColor: reported('change workspace color', onSetWorkspaceColor),
     onCreateReported: reported('create workspace', onCreateWorkspace),
-  }), [onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onCreateWorkspace])
+  }), [onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onCreateWorkspace])
 
   const { onCreateReported } = safe
   const onNewProject = useCallback((path?: string) => {

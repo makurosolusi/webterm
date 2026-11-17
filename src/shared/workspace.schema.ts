@@ -9,10 +9,12 @@
 // node never turns into a deleted node (and a reaped terminal) on the next save.
 import { DEFAULT_VIEWPORT, validDiffNotes, validExpanded, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
+import { isWorkspaceHue, isWorkspaceShade } from './workspaceColor'
+
 const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true, skill: true }
 
 /** The persisted board fields of a workspace (identity, version and layout are handled elsewhere). */
-export interface WorkspaceBoard { name: string; cwd?: string; color?: string; viewport: Viewport; nodes: WsNode[]; bridges: BridgeLink[] }
+export interface WorkspaceBoard { name: string; cwd?: string; color?: string; colorShade?: string; viewport: Viewport; nodes: WsNode[]; bridges: BridgeLink[] }
 
 /** A stored node this build cannot read but must keep: an object with a non-empty string `id`, kept verbatim. */
 export type PreservedNode = Record<string, unknown> & { id: string }
@@ -94,7 +96,11 @@ export function normalizeWorkspace(raw: Record<string, unknown>): NormalizedWork
   const issues: string[] = []
   const name = typeof raw.name === 'string' ? raw.name.trim() : ''
   if (!name) issues.push('name must be a non-empty string')
-  for (const k of ['cwd', 'color'] as const) if (!optText(raw[k])) issues.push(`${k} must be a string`)
+  if (!optText(raw.cwd)) issues.push('cwd must be a string')
+  // Palette ids only (workspaceColor.ts). `color` is read-only on a board write (Db.save ignores it), but a
+  // body naming an id outside the palette is still a client bug worth a 400 rather than a silent drop.
+  if (raw.color != null && !isWorkspaceHue(raw.color)) issues.push('color must be a palette hue id')
+  if (raw.colorShade != null && !isWorkspaceShade(raw.colorShade)) issues.push('colorShade must be soft, default or vivid')
   const v = raw.viewport
   const viewport = obj(v) && finite(v.x) && finite(v.y) && finite(v.zoom) && v.zoom > 0 ? { x: v.x, y: v.y, zoom: v.zoom } : DEFAULT_VIEWPORT
   if (viewport === DEFAULT_VIEWPORT) issues.push('viewport must be {x, y, zoom} finite numbers with zoom > 0')
@@ -108,5 +114,5 @@ export function normalizeWorkspace(raw: Record<string, unknown>): NormalizedWork
     else issues.push(`bridges[${i}] must have non-empty string id, source and target`)
   })
   const str = (x: unknown) => (typeof x === 'string' ? x : undefined)
-  return { board: { name, cwd: str(raw.cwd), color: str(raw.color), viewport, nodes, bridges }, issues, preserved }
+  return { board: { name, cwd: str(raw.cwd), color: isWorkspaceHue(raw.color) ? raw.color : undefined, colorShade: isWorkspaceShade(raw.colorShade) ? raw.colorShade : undefined, viewport, nodes, bridges }, issues, preserved }
 }
