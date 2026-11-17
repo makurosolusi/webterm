@@ -13,6 +13,8 @@ import type { AgentChatData } from '../shared/agentChat.shape'
 import type { AgentChatPatch } from './agentChat/agentChatView'
 import { LazyPaneFallback } from './lazyPaneFallback'
 import { unwatchNode, watchNode } from './unread'
+import FindBar from './FindBar'
+import { useTranscriptFind } from './agentChat/transcriptFind'
 import { ClaudeViewToggle } from './agentChat/claudeViewSwitch'
 
 // The chat body (and its markdown/tool-card tree) loads with the first chat node; the chrome stays eager.
@@ -31,6 +33,18 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
   const comments = d.comments ?? []
   const expandedH = useRef(height ?? DEFAULT_H)
   // Reported by the view (its reducer holds the chat status); per node, gates "Open as terminal".
+  const [searchOpen, setSearchOpen] = useState(false)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const returnFocus = useRef<Element | null>(null)
+  const find = useTranscriptFind(bodyRef, searchOpen)
+  const toggleSearch = () => {
+    if (!searchOpen) returnFocus.current = document.activeElement
+    setSearchOpen((o) => !o)
+  }
+  const closeSearch = () => {
+    setSearchOpen(false)
+    ;(returnFocus.current as HTMLElement | null)?.focus?.()
+  }
   const [busy, setBusy] = useState(false)
   // Header slot the view portals its conversation history button into (not a composer control).
   const [headerHost, setHeaderHost] = useState<HTMLSpanElement | null>(null)
@@ -60,16 +74,17 @@ function AgentChatNode({ id, data, selected, height }: NodeProps) {
           comments={comments}
           extraHeader={<><span ref={setHeaderHost} className="agent-chat-head-slot nodrag" /><ClaudeViewToggle nodeId={id} view="chat" busy={busy} /></>}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
-          // No refresh or search in the chat shell yet; the buttons stay because NodeToolbar is shared.
+          // No refresh in the chat shell; the button stays because NodeToolbar is shared.
           onRefresh={() => undefined}
-          searchOpen={false} onToggleSearch={() => undefined}
+          searchOpen={searchOpen} onToggleSearch={toggleSearch}
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
-        <div className="node-body">
+        <div className="node-body" ref={bodyRef}>
           <Suspense fallback={<LazyPaneFallback />}>
             <AgentChatView nodeId={id} cwd={d.cwd} chatSessionId={d.chatSessionId} permissionMode={d.permissionMode} chatConfig={d.chatConfig} preset={d.preset} onNodeData={onNodeData} onBusy={setBusy} headerHost={headerHost} />
           </Suspense>
         </div>
+        {searchOpen && <FindBar onSearch={find.onSearch} onTermChange={find.onTerm} result={find.result} onClose={closeSearch} />}
         {/* Same cable handles as AgentNode: `agentId: 'claude'` makes it a context-link end (`canLink`). */}
         <Handle id="link-out" type="source" position={Position.Right} className="bridge-handle" />
         <Handle id="link-in" type="target" position={Position.Left} className="bridge-handle" />
