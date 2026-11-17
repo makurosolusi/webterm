@@ -10,7 +10,7 @@ describe('centralQueryOptions in skill-author mode', () => {
     const o = centralQueryOptions({ ...base, mode: 'skill-author' })
     expect(system(o)).toBe(SKILL_AUTHOR_PROMPT)
     expect(system(o)).not.toContain('webterm Central, the steward')
-    expect(o.allowedTools).toEqual(['mcp__webterm__skill_list', 'mcp__webterm__skill_load', 'mcp__webterm__skill_propose'])
+    expect(o.allowedTools).toEqual(['mcp__webterm__skill_list', 'mcp__webterm__skill_load', 'mcp__webterm__skill_propose', 'mcp__webterm__browser_read'])
     // Still the locked-down shell: no built-ins, deny-by-default, no prompts.
     expect(o).toMatchObject({ tools: [], strictMcpConfig: true, permissionMode: 'dontAsk', permissionPrompts: 'none', settingSources: [] })
   })
