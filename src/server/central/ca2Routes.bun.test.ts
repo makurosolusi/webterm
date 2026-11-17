@@ -183,7 +183,7 @@ describe('skills admin', () => {
     expect(await reject({})).toMatchObject({ status: 400, body: { error: 'invalid_version' } })
     expect(await reject({ version: '9' })).toMatchObject({ status: 404 })
     expect(await reject({ version: '1' })).toEqual({ status: 200, body: { status: 'done' } })
-    expect((await listed()).some((i) => i.record.name === SKILL.name)).toBe(false)
+    expect((await listed()).find((i) => i.record.name === SKILL.name)?.record).toMatchObject({ status: 'rejected', rejectReason: 'rejected_by_human' })
     expect((await h.skills?.propose(SKILL, 'central:c1'))?.version).toBe('2')
     expect(await reject({ version: '1' })).toMatchObject({ status: 403 })
   })
