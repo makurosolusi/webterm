@@ -6,9 +6,11 @@ import { findWorkspaceFor } from '../contextLinkRoute'
 import { db } from '../db'
 import { sessions } from '../sessions'
 import { PORT } from '../launchLine'
+import { activeCa2 } from '../central/ca2Active'
+import { attachedSkills, type AttachedSkill } from '../skillAttach'
 import { createLogger } from '../logs/logger'
 import { agentChatQueryOpener } from './agentChat.options'
-import { activeAgentChatPool, AgentChatPool, agentChatOpenConfig, setAgentChatPool, type AgentChatNodePatch } from './agentChat.pool'
+import { activeAgentChatPool, AgentChatPool, agentChatOpenConfig, setAgentChatPool, type AgentChatNodePatch, type AgentChatTarget } from './agentChat.pool'
 import { createAgentChatPort, type ChatPort } from './agentChat.port'
 
 const log = createLogger('agent-chat')
@@ -23,6 +25,9 @@ function persist(workspaceId: string, nodeId: string, patch: AgentChatNodePatch)
   }
 }
 
+/** Canvas skills cabled to the node in its stored board, resolved on the live library (none while Central skills are off). */
+const attached = (t: AgentChatTarget): AttachedSkill[] => attachedSkills(t.ws, t.node.id, activeCa2()?.skills ?? null)
+
 /** The pool of this server (created on first call). */
 export function agentChatPool(): AgentChatPool {
   const had = activeAgentChatPool()
@@ -34,8 +39,9 @@ export function agentChatPool(): AgentChatPool {
       return ws && node ? { ws, node } : undefined
     },
     opener: (t) => {
-      return agentChatQueryOpener(agentChatOpenConfig(t, { port: PORT, settings: db.getSettings() }))
+      return agentChatQueryOpener({ ...agentChatOpenConfig(t, { port: PORT, settings: db.getSettings() }), attachedSkills: attached(t) })
     },
+    attached,
     persist,
     onStatus: (nodeId, st) => sessions.setStatus(nodeId, st.status, undefined, st.reason),
   })

@@ -19,6 +19,8 @@ import { AgentChatLock } from './agentChat.lock'
 import { agentChatLadderPick } from './agentChat.ladder'
 import { nodeConfigOf, nodeModeOf, sameNodeConfig } from './agentChat.snapshot'
 import { recordEvent } from '../events/producers'
+import { skillTurnNote } from './agentChat.skills'
+import type { AttachedSkill } from '../skillAttach'
 import { chatNodeStatus, type ChatNodeStatus } from './agentChat.status'
 
 /** Recorded on every Agent Chat mode switch and every saved approval-level change (routes/settings.routes.ts). */
@@ -44,6 +46,8 @@ export interface AgentChatPoolDeps {
   opener(t: AgentChatTarget): AgentChatOpen
   /** Store what the session changed on the node (production: CanvasPush.update, so open UIs follow); absent = memory only. */
   persist?(workspaceId: string, nodeId: string, patch: AgentChatNodePatch): void
+  /** Canvas skills attached to the node now (production: attachedSkills over the stored board); absent = none. */
+  attached?(t: AgentChatTarget): readonly AttachedSkill[]
   gate?: AgentChatBroker
   lock?: AgentChatLock
   maxLive?: number
@@ -78,6 +82,8 @@ export class AgentChatPool {
   readonly gate: AgentChatBroker
   readonly lock: AgentChatLock
   private entries = new Map<string, Entry>()
+  /** Skill set last announced to each node (system prompt at open, or a turn note); per node, dropped on close. */
+  private announced = new Map<string, readonly AttachedSkill[]>()
 
   constructor(private readonly deps: AgentChatPoolDeps) {
     this.gate = deps.gate ?? new AgentChatBroker()
@@ -98,7 +104,11 @@ export class AgentChatPool {
     if (!t) return undefined
     const session = new AgentChatSession({
       nodeId,
-      open: (resume, canUseTool, abort, input) => this.deps.opener(this.deps.lookup(nodeId) ?? t)(resume, canUseTool, abort, input),
+      open: (resume, canUseTool, abort, input) => {
+        const cur = this.deps.lookup(nodeId) ?? t
+        this.announced.set(nodeId, this.deps.attached?.(cur) ?? []) // the opener puts the same set in the system prompt
+        return this.deps.opener(cur)(resume, canUseTool, abort, input)
+      },
       gate: this.gate,
       ladder: () => agentChatLadderPick((this.deps.lookup(nodeId) ?? t).ws.id, nodeId),
       onSessionId: (id) => {
@@ -198,7 +208,11 @@ export class AgentChatPool {
       return claim
     }
     if (!s.live() && !this.makeRoom(s)) s.notify('warn', AGENT_CHAT_OVER_CAP_NOTICE(this.deps.maxLive ?? AGENT_CHAT_MAX_LIVE))
-    s.send(text, priority, images)
+    // A live Query already holds the set announced at open; a (re)open announces the current one itself.
+    const cur = this.deps.lookup(nodeId)
+    const note = s.live() && cur ? skillTurnNote(this.announced.get(nodeId) ?? [], this.deps.attached?.(cur) ?? []) : undefined
+    if (note && cur) this.announced.set(nodeId, this.deps.attached?.(cur) ?? [])
+    s.send(note ? `${note}\n\n${text}` : text, priority, images)
     return { ok: true }
   }
 
@@ -259,6 +273,7 @@ export class AgentChatPool {
     const e = this.entries.get(nodeId)
     if (!e) return
     this.entries.delete(nodeId)
+    this.announced.delete(nodeId)
     e.off()
     e.session.close(reason)
     this.lock.release(nodeId)
