@@ -17,6 +17,8 @@ export interface AgentCtx {
   agentAllowed(nodeId: string): boolean
   /** Persetujuan manusia (P-10) untuk aksi konsekuensial lintas-origin; absen = ditolak. */
   approve?(req: ApprovalRequest): Promise<boolean>
+  /** Rebuild a `discarded` node's page at `url` through the MAX_LIVE gate (`lifecycle.attach`); throws `BlockedError('max_live')` when full. */
+  wake?(nodeId: string, url: string): Promise<void>
   sleep(ms: number): Promise<void>
   now(): number
   /** Console buffer of the host (verb `console`); absent = the verb answers `disabled`. */

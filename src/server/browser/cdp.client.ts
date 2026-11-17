@@ -52,6 +52,20 @@ export async function readBrowserProduct(cdp: CdpClient): Promise<string> {
 /** A command cut short because the connection died (`close()` or the socket went away), not because CDP refused it. */
 export class CdpClosedError extends Error {}
 
+/**
+ * A CDP command got no reply within the timeout (`method` names the phase, e.g. `Page.navigate`). `code` feeds latency telemetry.
+ * MITIGASI SEMENTARA: bounds and names a stall, it does not prevent it. Measured cause of the only stall reproduced: on macOS
+ * Chrome's first request waits 5-15 s on the "Safe Storage" keychain lookup when HOME has no login keychain (temp HOME);
+ * with the real HOME the same navigate takes ~15 ms. Remove this note if the stall is ever fixed at the source.
+ */
+export class CdpTimeoutError extends Error {
+  readonly code = 'cdp_timeout'
+  constructor(message: string, readonly method: string) {
+    super(message)
+    this.name = 'CdpTimeoutError'
+  }
+}
+
 /** CDP answered the command with an error reply; `code`/`cdpMessage` are CDP's own, `message` is the contextual text. */
 export class CdpCommandError extends Error {
   constructor(message: string, readonly method: string, readonly code: number, readonly cdpMessage: string) {
@@ -112,7 +126,7 @@ export class CdpClient {
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`cdp ${method} (#${id}) timed out after ${this.timeoutMs} ms`))
+        reject(new CdpTimeoutError(`cdp ${method} (#${id}) timed out after ${this.timeoutMs} ms`, method))
       }, this.timeoutMs)
       this.pending.set(id, { method, resolve: resolve as (v: unknown) => void, reject, timer })
       const frame = JSON.stringify({ id, method, params, sessionId })
