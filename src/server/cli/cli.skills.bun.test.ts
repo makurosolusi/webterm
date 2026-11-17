@@ -7,6 +7,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { CONFIRM_PHRASE } from '../../shared/approvalConfirm'
+import type { Workspace } from '../../shared/workspace'
 import { toolsRoute, type ToolsDeps } from '../capability/capability.http'
 import { createMemoryReceiptLog } from '../capability/capability.receipt'
 import { type Ca2Handle, bootCa2, setActiveCa2 } from '../central/ca2Boot'
@@ -36,6 +37,14 @@ let port: string
 let hdr: string
 let token: string
 let ledger: ReturnType<typeof openLedgerDb>
+/** The stored boards attachment is read from (the authenticated node is `a1`). */
+let board: Workspace[] = []
+
+/** Agent `a1` on a board with one skill node per name, cabled to its Skills port. */
+function attach(...names: string[]): void {
+  const skills = names.map((skill, i) => ({ id: `s${i}`, kind: 'skill' as const, x: 0, y: 0, skill }))
+  board = [{ id: 'w1', name: 'B', viewport: { x: 0, y: 0, zoom: 1 }, updatedAt: 1, nodes: [{ id: 'a1', kind: 'agent', x: 0, y: 0, agentId: 'claude' }, ...skills], bridges: skills.map((n, i) => ({ id: `b${i}`, source: n.id, target: 'a1', kind: 'skill' as const })) }]
+}
 
 function boot(skills: 'on' | 'off'): Ca2Handle {
   const registry = createRegistry()
@@ -48,7 +57,7 @@ function boot(skills: 'on' | 'off'): Ca2Handle {
 
 async function start(skills: 'on' | 'off' = 'on'): Promise<void> {
   h = boot(skills)
-  const deps: ToolsDeps = { dispatch: async () => undefined, workspaces: () => [], receipts: createMemoryReceiptLog(), seen: createSeenStore(join(root, 'seen')) }
+  const deps: ToolsDeps = { dispatch: async () => undefined, workspaces: () => board, receipts: createMemoryReceiptLog(), seen: createSeenStore(join(root, 'seen')) }
   server = createServer((req, res) => { void toolsRoute(req, res, new URL(req.url ?? '/', 'http://x'), deps) })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
   port = String((server.address() as AddressInfo).port)
@@ -58,6 +67,7 @@ beforeEach(() => {
   root = realpathSync(mkdtempSync(join(process.env.TMPDIR ?? '/tmp', 'wcli-skills-')))
   process.env.WEBTERM_DATA_DIR = join(root, 'data') // never ~/.webterm-server
   resetNodeTokenMemoryForTest()
+  board = []
   const path = join(root, 'ledger.db')
   ledger = openLedgerDb(path)
   setActiveLedgerRuntime({ mode: 'on', path, db: ledger, ledger: {} } as unknown as LedgerRuntime)
@@ -162,6 +172,7 @@ describe('webterm skills edit', () => {
   test('proposes a new version, keeping the active description and caps when only the body is given', async () => {
     await start()
     await activate('webterm-edit-demo')
+    attach('webterm-edit-demo')
     const r = await cli(['skills', 'edit', 'webterm-edit-demo', '--body-file', '-'], '1. Read the portfolio.\n2. Write three lines.')
     expect(r.code).toBe(0)
     expect(r.out).toContain('proposed webterm-edit-demo v2; a human must approve it in webterm')
@@ -187,6 +198,7 @@ describe('webterm skills list', () => {
   test('shows active skills and the caller own drafts; never another agent draft or a draft body', async () => {
     await start()
     await activate('webterm-listed')
+    attach('webterm-listed')
     await propose('webterm-mine')
     await h.skills?.propose({ name: 'webterm-theirs', description: 'Theirs. Use when asked.', body: 'SECRET-OTHER-BODY step one.', caps: [], audience: 'canvas' }, 'agent:a2')
     const out = (await cli(['skills', 'list'])).out
@@ -318,6 +330,7 @@ describe('audience over the CLI', () => {
     await start()
     h.skills?.installBuiltins()
     await activate('webterm-aud-canvas')
+    attach('webterm-aud-canvas', 'webterm-aud-rule', 'webterm-central-basics') // even cabled, a central skill is unreachable
     expect((await human('/api/central/skills', { name: 'webterm-aud-rule', ...GOOD, audience: 'central' }))?.status).toBe(201)
     expect((await human('/api/central/skills/webterm-aud-rule/approve', { version: '1', phrase: CONFIRM_PHRASE }))?.status).toBe(200)
     const items = JSON.parse((await cli(['skills', 'list'])).out).data.items as Array<{ name: string; audience: string }>
@@ -339,5 +352,52 @@ describe('audience over the CLI', () => {
     await activate('webterm-aud-edit')
     expect((await cli(['skills', 'edit', 'webterm-aud-edit', '--body-file', '-'], '1. Changed.')).code).toBe(0)
     expect(draftsOf('webterm-aud-edit')[0]).toMatchObject({ version: '2', audience: 'canvas' })
+  })
+})
+
+describe('attachment by skill-node cables (docs/decisions/skill-canvas-nodes.md)', () => {
+  test('an unattached canvas skill is 404 not_attached (CLI says which wire is missing, HTTP says the code); attached is served', async () => {
+    await start()
+    await activate('webterm-att-one')
+    const denied = await cli(['skills', 'get', 'webterm-att-one'])
+    expect(denied.code).toBe(2)
+    expect(denied.err).toContain('not attached to this node')
+    expect(denied.out).not.toContain('Write five lines')
+    const http = await fetch(`http://127.0.0.1:${port}/api/tools/skills.list`, { method: 'POST', headers: { [NODE_TOKEN_HEADER]: token }, body: JSON.stringify({ name: 'webterm-att-one' }) })
+    expect((await http.json() as { receipt: { detail: string } }).receipt.detail).toBe('not_attached')
+    expect(JSON.parse((await cli(['skills', 'list'])).out).data.items).toEqual([])
+    attach('webterm-att-one')
+    const ok = await cli(['skills', 'get', 'webterm-att-one'])
+    expect(ok.code).toBe(0)
+    expect(ok.out).toContain('Write five lines')
+    // Detach is immediate: the cable gone from the stored board denies the very next get.
+    board = [{ ...board[0], bridges: [] }]
+    const after = await cli(['skills', 'get', 'webterm-att-one'])
+    expect(after.code).toBe(2)
+    expect(after.out).not.toContain('Write five lines')
+  })
+
+  test('an attached skill that is switched off is Unavailable (never served); one gone from the library is simply unknown', async () => {
+    await start()
+    await activate('webterm-att-off')
+    attach('webterm-att-off', 'webterm-att-gone')
+    await human('/api/central/skills/webterm-att-off/disable', {})
+    const off = await cli(['skills', 'get', 'webterm-att-off'])
+    expect(off.code).toBe(2)
+    expect(off.err).toContain('switched off or gone')
+    expect(off.out).not.toContain('Write five lines')
+    expect((await cli(['skills', 'get', 'webterm-att-gone'])).code).toBe(2)
+    expect(JSON.parse((await cli(['skills', 'list'])).out).data.items).toEqual([])
+    await human('/api/central/skills/webterm-att-off/enable', {})
+    expect((await cli(['skills', 'get', 'webterm-att-off'])).code).toBe(0) // re-enabled: the same cable works again, nothing was deleted
+  })
+
+  test('a canvas agent has no path to attach: the only skill verbs are list/get/propose/edit and proposals never touch the board', async () => {
+    await start()
+    for (const verb of ['attach', 'detach', 'link', 'unlink']) expect((await cli(['skills', verb, 'webterm-x'])).code).toBe(2)
+    const before = JSON.stringify(board)
+    expect((await propose('webterm-att-draft')).code).toBe(0)
+    expect(JSON.stringify(board)).toBe(before)
+    expect(h.skills?.load('webterm-att-draft')).toBeNull() // a draft is not even active, let alone attached
   })
 })

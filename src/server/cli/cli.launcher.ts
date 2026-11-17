@@ -71,7 +71,7 @@ usage: webterm <command> [args]
                [--operation-id <id>]  replay-safe retry: same id + same call = same receipt
   whats-new [--since <v>] [--json]  capabilities added/removed/changed since the registry you last saw
   skills get <name> [--json]      a launcher guide (webterm-cli, ...) or an approved canvas skill
-  skills list [name]              approved canvas skills (procedures for agents like you) + your open drafts
+  skills list [name]              canvas skills the user attached to your node (skill nodes cabled to Skills) + your open drafts
                                   (a name adds its body)
   skills propose --name webterm-<slug> --description <text> [--audience canvas] [--caps a,b] [--body-file <path>|-]
                                   PROPOSE a new canvas skill (body from a file or stdin); a human must approve it.
@@ -173,8 +173,8 @@ ${cli} <command> [args]
 5. Report to Central any time: \`${cli} report "<text>" --done\` (your result), \`--blocked\`, \`--question\`, or
    \`--progress\` (the default). done/blocked/question move your task and wake Central at once; progress is recorded.
 6. Skills: there are two kinds, never shared: \`central\` (rules for Central itself; you never see them) and \`canvas\` (reusable
-   procedures for agents like you). \`${cli} skills list\` shows the approved canvas skills and \`${cli} skills get <name>\` prints one;
-   follow the ones that apply to your task. \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
+   procedures for agents like you). \`${cli} skills list\` shows the canvas skills the user attached to your node (a skill node cabled to your Skills port) and
+   \`${cli} skills get <name>\` prints one; follow the ones that apply to your task. \`${cli} skills propose --name webterm-<slug> --description "..." --body-file <path|->\`
    proposes a new skill and \`${cli} skills edit <name> --body-file <path|->\` a new version of an existing one. You can only
    propose: a human approves it in webterm, and only then does it become active. Bodies are plain instructions (max 4000 chars,
    no URLs, shell commands or secrets; lint rejects them and names only the issue code).

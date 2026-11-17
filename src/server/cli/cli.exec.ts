@@ -197,8 +197,12 @@ async function runSkill(deps: ToolsDeps, cap: CapabilitySpec, input: Args, princ
   const [{ activeCa2 }, { agentSkillList, agentSkillPropose }] = await Promise.all([import('../central/ca2Active'), import('../central/ca2Routes.agentSkill')]) // lazy: bun:sqlite stays out of vitest imports
   const h = activeCa2()
   if (!h) return { receipt: receipt('error', 'skills_off', { status: 503 }, 'Central skills are off; only the user can turn them on'), data: { error: 'skills_off' } }
+  // Attached = the skill nodes cabled to this node in the stored board, re-read on every call so a detach bites at once.
+  const { findWorkspaceFor } = await import('../contextLinkRoute')
+  const { attachedSkillNames } = await import('../skillAttach')
+  const ws = findWorkspaceFor([...(await boardOf(deps))], nodeId)
   const out = cap.name === SKILL_LIST_CAPABILITY
-    ? agentSkillList(h, nodeId, typeof input.name === 'string' ? input.name : undefined)
+    ? agentSkillList(h, nodeId, typeof input.name === 'string' ? input.name : undefined, ws ? attachedSkillNames(ws, nodeId) : [])
     : await agentSkillPropose(h, input, nodeId)
   if (out.status < 400) return { receipt: receipt('ok', 'ok', { status: out.status }), data: out.body }
   const code = (out.body as { error?: unknown } | null)?.error

@@ -9,6 +9,7 @@ import { FEATURE_OFF } from './ca2Routes.read'
 import { type SkillStatus, canvasSees, isSkillAudience } from './contracts/skill.types'
 import { badAudience } from './ca2Routes.act'
 import { SkillError } from './skills/skillIndex'
+import { skillState } from '../skillAttach'
 import { MAX_BODY_CHARS, MAX_CAPS, MAX_DESCRIPTION, MAX_SKILL_NAME, SKILL_NAME_RE } from './skills/skillLint'
 
 export const AGENT_ACTOR_PREFIX = 'agent:'
@@ -20,21 +21,26 @@ const fail = (status: number, error: string, extra: Record<string, unknown> = {}
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= max
 
 /**
- * Library as an agent sees it: enabled active skills whose audience is canvas (never a central one, built-ins
- * included) and the caller's own open drafts; `name` adds that skill's body when it is a canvas skill.
+ * Library as an agent sees it: the enabled active canvas skills ATTACHED to its node (`attached`, from the cables of the
+ * stored board, docs/decisions/skill-canvas-nodes.md) and the caller's own open drafts; never a central skill. `name`
+ * adds that skill's body: an unattached canvas skill is 404 `not_attached`, an attached one that is off or gone 404
+ * `unavailable`, anything else (central, unknown) 404 `not_found`. No `attached` = nothing attached.
  */
-export function agentSkillList(h: Ca2Handle, nodeId: string, name?: string): RouteResult {
+export function agentSkillList(h: Ca2Handle, nodeId: string, name?: string, attached: readonly string[] = []): RouteResult {
   if (!h.skills) return fail(FEATURE_OFF, 'skills_off')
   const described = h.skills.descriptions()
   const mine = `${AGENT_ACTOR_PREFIX}${nodeId}`
   const rows = [
-    ...h.skills.list('active', { limit: LIST_LIMIT }).filter((r) => r.enabled !== false && canvasSees(r.audience)),
+    ...h.skills.list('active', { limit: LIST_LIMIT }).filter((r) => r.enabled !== false && canvasSees(r.audience) && attached.includes(r.name)),
     ...OPEN_STATES.flatMap((s) => h.skills?.list(s, { limit: LIST_LIMIT }) ?? []).filter((r) => r.proposedBy === mine),
   ]
   const items = rows.map((r) => ({ name: r.name, version: r.version, status: r.status, origin: r.origin, audience: r.audience, description: r.status === 'active' ? described.get(r.name) ?? '' : '', caps: r.caps }))
   if (name === undefined) return { status: 200, body: { items } }
-  const current = h.skills.load(name)
-  if (!current || !canvasSees(current.record.audience)) return fail(404, 'not_found')
+  const state = skillState(h.skills, name)
+  if (state.state === 'missing') return fail(404, 'not_found')
+  if (!attached.includes(name)) return fail(404, state.state === 'active' ? 'not_attached' : 'not_found')
+  const current = state.state === 'active' ? h.skills.load(name) : null
+  if (!current) return fail(404, 'unavailable')
   return { status: 200, body: { items, skill: { name, version: current.record.version, audience: current.record.audience, description: described.get(name) ?? '', caps: current.record.caps, body: redactSecrets(current.body) } } }
 }
 

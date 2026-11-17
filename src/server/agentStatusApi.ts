@@ -15,6 +15,7 @@ import { stateVerified } from './hooks'
 import { buildLinkDoc } from './contextLink'
 import { nextHookContext } from './hookContext'
 import { linkedBrowsers, nextBrowserNotice, releaseCabledBrowsers } from './linkAwareness'
+import { skillNoticeFor } from './skillAwareness'
 import { nextAwareness } from './webtermAwareness'
 import { linkNoteTold } from './linkNoteDelivery'
 import { outboxHookContext } from './outbox/outboxRuntime'
@@ -115,6 +116,7 @@ export async function agentStatusRoute(
   const extras = awarenessExtras(node, event, ws)
   const peers = ws ? nextHookContext(node, event, buildLinkDoc(ws, node)) : null
   const browsers = ws ? nextBrowserNotice(node, event, linkedBrowsers(ws, node)) : null
+  const skills = ws ? skillNoticeFor(node, event, ws) : null
   // A queued link-note for the same wiring change must not follow this announcement.
   if (ws) linkNoteTold(node, event, ws)
   // Senses event goes AFTER setStatus/linkNoteTold (its subscribers read the status just written);
@@ -126,7 +128,7 @@ export async function agentStatusRoute(
   await checkpointBeforePrompt(event, ws, node)
   if (ws && deps.releaseBrowser) releaseCabledBrowsers(event, ws, node, deps.releaseBrowser)
   const mail = outboxHookContext(node, event)
-  const text = [aware, extras, peers?.additionalContext, browsers, mail].filter(Boolean).join('\n\n')
+  const text = [aware, extras, peers?.additionalContext, browsers, skills, mail].filter(Boolean).join('\n\n')
   const out: Record<string, unknown> = text && event ? { hookEventName: event, additionalContext: text } : {}
   // An oversize body lost its tool input, so no allow/deny decision is made on it: Claude asks as it would unhooked.
   if (event === 'PreToolUse' && !oversize) {
