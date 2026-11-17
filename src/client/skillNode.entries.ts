@@ -30,6 +30,6 @@ export function useSkillEntries(active: boolean, add: ((s: SkillRef, at: XYPosit
   const key = lib.status === 'ready' ? lib.skills : lib.status
   return useMemo(() => (active && add ? skillEntries(lib.status === 'ready' ? { status: 'ready', skills: lib.skills } : { status: lib.status }, add) : []),
     // `lib` is rebuilt every render; its content is captured by `key`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `lib` is a fresh object each render, so listing it would defeat the memo; `key` stands in for it until useCanvasSkills returns a stable reference
     [active, add, key])
 }
