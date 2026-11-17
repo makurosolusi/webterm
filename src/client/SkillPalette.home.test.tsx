@@ -3,7 +3,6 @@
 // detail with revise / add to canvas, drafts with their review card, the activity subscription, refresh, and the pointers.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CONFIRM_PHRASE } from '../shared/approvalConfirm'
 import { notifySkillAuthorActivity } from './agentChat/skillAuthor.events'
 import { SKILLS_OFF } from './central/centralControlApi'
 import { InboxApiError } from './inboxTypes'
@@ -128,14 +127,24 @@ describe('drafts', () => {
     expect(screen.getByLabelText('Diff').textContent).toContain('+ new step')
   })
 
-  it('approval needs the typed phrase, and goes through the same approve API', async () => {
+  it('approval is one click (no phrase field) through the same approve API, without a phrase', async () => {
     h.request.mockResolvedValue([...LIBRARY, DRAFT])
     mount()
     const approve = await screen.findByRole('button', { name: 'Approve skill webterm-new 1' }) as HTMLButtonElement
-    expect(approve.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText(/Type/i), { target: { value: CONFIRM_PHRASE } })
+    expect(approve.disabled).toBe(false)
+    expect(screen.queryByLabelText(/Type/i)).toBeNull()
     fireEvent.click(approve)
     await waitFor(() => expect(h.request.mock.calls.some(([p]) => String(p).includes('/webterm-new/approve'))).toBe(true))
+    const call = h.request.mock.calls.find(([p]) => String(p).includes('/webterm-new/approve'))
+    expect(JSON.stringify(call)).not.toContain('phrase')
+  })
+
+  it('Approve is disabled with a reason when lint fails', async () => {
+    h.request.mockResolvedValue([...LIBRARY, { ...DRAFT, lint: { ok: false, findings: ['structure: missing ## Steps'] } }])
+    mount()
+    const approve = await screen.findByRole('button', { name: 'Approve skill webterm-new 1' }) as HTMLButtonElement
+    expect(approve.disabled).toBe(true)
+    expect(screen.getByText('Approve is locked until the checks pass.')).toBeTruthy()
   })
 
   it('reloads when a canvas author chat finishes a turn, even with no draft yet', async () => {
