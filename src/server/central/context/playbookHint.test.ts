@@ -61,6 +61,27 @@ describe('playbookHintLine for a lone link', () => {
   })
 })
 
+describe('skill_authoring hint', () => {
+  it.each(['buatkan skill untuk ringkas status', 'create a new skill for release notes', 'ubah skill webterm-project-status', 'write a skill that triages PRs'])('"%s" asks to discuss first, never a ready call', (text) => {
+    expect(matchPlaybook(text)?.id).toBe('skill_authoring')
+    const line = playbookHintLine(text, () => true)
+    expect(line).toContain('first discuss it with the human')
+    expect(line).toContain('explicit go')
+    expect(line).not.toContain('Suggested playbook')
+  })
+  it.each(['fix the skill loader bug', 'add a feature to the skills tab', 'research skill marketplaces https://x.dev', 'review PR #3 about skills'])('does not hijack "%s"', (text) => {
+    expect(matchPlaybook(text)?.id).not.toBe('skill_authoring')
+  })
+  it('keeps the lone-link browser_read precedence and is silent when the tool is missing', () => {
+    expect(playbookHintLine('look at https://example.com/pricing', () => true)).toBe('Suggested tool: browser_read {"url":"https://example.com/pricing"}')
+    expect(playbookHintLine('buat skill baru', () => false)).toBe('')
+  })
+  it('the capability map names it with the spawn access', () => {
+    const map = renderCapabilityMap([{ name: 'playbook.skill_authoring', access: 'auto' }, { name: 'task.create', access: 'auto' }, { name: 'agent.spawn', access: 'asks' }])
+    expect(map).toContain('write a skill (after the human approves an outline): playbook.skill_authoring (asks)')
+  })
+})
+
 describe('playbookHintLine when the playbook tool is missing', () => {
   it('says workers are off instead of suggesting a tool Central cannot call', () => {
     const asked: string[] = []
