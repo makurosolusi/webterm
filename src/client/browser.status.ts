@@ -1,8 +1,8 @@
 // Teks status overlay node browser. Murni; hanya hostname yang pernah ditampilkan (tanpa URL berquery).
-import type { BlockReason, BrowserErrorCode, BrowserState } from '../shared/browser.contract'
+import type { BlockReason, BrowserErrorCode, BrowserState, LaunchReason } from '../shared/browser.contract'
 import { hostOnly } from '../shared/browser.url'
 
-export interface BrowserErr { code: BrowserErrorCode; hostname?: string }
+export interface BrowserErr { code: BrowserErrorCode; hostname?: string; /** Specific cause of a `launch_failed`. */ reason?: LaunchReason }
 
 const BLOCK_TEXT: Record<BlockReason, string> = {
   scheme: 'Only http and https pages can be opened.',
@@ -26,10 +26,11 @@ const ERROR_TEXT: Record<BrowserErrorCode, string> = {
   bad_request: 'The server rejected that input.',
   crashed: 'The page crashed. Reload to try again.',
   launch_failed: "The browser couldn't start. Try again.",
+  max_live: BLOCK_TEXT.max_live,
 }
 
 /** Kode galat yang tidak hilang sendiri (butuh tindakan operator/pengguna). */
-export const STICKY_ERRORS: ReadonlySet<BrowserErrorCode> = new Set(['no_binary', 'disabled', 'crashed', 'launch_failed'])
+export const STICKY_ERRORS: ReadonlySet<BrowserErrorCode> = new Set(['no_binary', 'disabled', 'crashed', 'launch_failed', 'max_live'])
 
 export interface BrowserNotice { tone: 'info' | 'error'; text: string }
 
@@ -79,8 +80,18 @@ const NET_ERRORS: Record<string, NetErrorText> = {
 }
 const CERT_ERROR = net('Your connection is not private', UNTRUSTED)
 const UNKNOWN = net("This page couldn't load", '')
-/** Chromium did not start (e.g. its profile is still held by a leftover process); Try again relaunches it. */
-const LAUNCH_FAILED = net("The browser couldn't start", 'Chromium stopped before it was ready. If this keeps happening, restart webterm.')
+/** Chromium did not start: what the server knows (`reason`) in words, and what Try again does about it. */
+const LAUNCH_HINT: Record<LaunchReason | 'unknown', string> = {
+  profile_locked: 'Another process is holding this browser profile. Try again closes a leftover Chromium of this server first; if it keeps failing, close the other process using the profile.',
+  bin_not_found: 'Chromium was not found on the server.',
+  spawn_error: 'The server could not start Chromium.',
+  debug_port_timeout: 'Chromium started but never became ready.',
+  crashed_on_start: 'Chromium exited right after it started.',
+  sandbox_unavailable: "Chromium's sandbox cannot start on this machine.",
+  connect_failed: 'The server started Chromium but could not connect to it.',
+  unknown: 'Chromium stopped before it was ready. If this keeps happening, restart webterm.',
+}
+const launchFailed = (reason?: LaunchReason): NetErrorText => net('Chromium could not start', LAUNCH_HINT[reason ?? 'unknown'])
 
 /**
  * Plate text for a Chromium net error name ("net::ERR_NAME_NOT_RESOLVED"); null for ERR_ABORTED (the user,
@@ -109,7 +120,7 @@ export function noticeAction(i: { state?: BrowserState; error?: BrowserErr; targ
   const code = i.state?.blocked ?? i.error?.code
   if (code === 'no_binary' || code === 'disabled') return { kind: 'offer' }
   // Same plate as a failed navigation: it covers the start page, which hid the old text notice.
-  if (code === 'launch_failed') return { kind: 'netError', code, ...LAUNCH_FAILED }
+  if (code === 'launch_failed') return { kind: 'netError', code: i.error?.reason ?? code, ...launchFailed(i.error?.reason) }
   const ne = !code && i.state?.netError
   const text = ne ? netErrorText(ne) : null
   if (ne && text) return { kind: 'netError', code: ne, host: i.state?.url ? hostOnly(i.state.url) : undefined, ...text }

@@ -36,6 +36,21 @@ afterEach(() => { vi.useRealTimers() })
 const make = () => createBrowserStream(() => new FakeWs() as unknown as WebSocket)
 
 describe('browser.stream', () => {
+  it('attach carries the profile the node was created on, also when the socket re-attaches after a resize and a reconnect', () => {
+    const s = make()
+    s.subscribe('a', listener())
+    s.attach('a', VP, 'bp-0123456789ab')
+    const ws = FakeWs.all[0]
+    ws.open()
+    expect(ws.msgs()).toEqual([{ t: 'attach', id: 'a', ...VP, profileId: 'bp-0123456789ab' }])
+    s.resize('a', { ...VP, w: 900 })
+    ws.close()
+    vi.advanceTimersByTime(60_000)
+    const ws2 = FakeWs.all[1]
+    ws2.open()
+    expect(ws2.msgs()).toEqual([{ t: 'attach', id: 'a', ...VP, w: 900, profileId: 'bp-0123456789ab' }])
+  })
+
   it('satu socket untuk semua node; attach dikirim setelah open; frame biner dan JSON dirutekan per id', () => {
     const s = make()
     const a = listener(), b = listener()

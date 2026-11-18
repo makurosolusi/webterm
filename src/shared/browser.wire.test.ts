@@ -61,6 +61,11 @@ describe('encodeFrame / decodeFrameHeader', () => {
 describe('parseClientMsg valid', () => {
   const ok = (m: unknown) => parseClientMsg(JSON.stringify(m))
 
+  it('attach carries an optional profileId (a string); any other type is refused', () => {
+    expect(ok({ t: 'attach', id: 'n', w: 800, h: 600, dpr: 1, profileId: 'bp-0123456789ab' })).toEqual({ t: 'attach', id: 'n', w: 800, h: 600, dpr: 1, profileId: 'bp-0123456789ab' })
+    expect(parseClientMsg({ t: 'attach', id: 'n', w: 800, h: 600, dpr: 1, profileId: 7 })).toBeNull()
+  })
+
   it('attach/resize/detach/ack/copy/takeover', () => {
     expect(ok({ t: 'attach', id: 'n', w: 800, h: 600, dpr: 2 })).toEqual({ t: 'attach', id: 'n', w: 800, h: 600, dpr: 2 })
     expect(ok({ t: 'resize', id: 'n', w: 1, h: 2, dpr: 1.5 })).toMatchObject({ t: 'resize' })

@@ -48,7 +48,7 @@ type Opened = { nodeId: string; url: string; note: string }
 const STATUS_BY_CODE: Record<BrowserErrorCode, number> = {
   lease_agent: 409, human_active: 409, stale_ref: 409,
   no_binary: 503, disabled: 403, blocked: 403, not_found: 404, too_large: 413, bad_request: 400, crashed: 502,
-  launch_failed: 503,
+  launch_failed: 503, max_live: 409,
 }
 
 const HUMAN_ACTIVE_MESSAGE = 'The user is using this browser right now. Retry shortly; after a couple of tries, tell the user.'
