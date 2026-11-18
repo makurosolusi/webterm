@@ -73,7 +73,11 @@ export type BlockReason =
   | 'scheme' | 'private_host' | 'dns_fail' | 'not_allowed_port' | 'no_binary' | 'disabled' | 'max_live'
 export type BrowserErrorCode =
   | 'lease_agent' | 'human_active' | 'stale_ref' | 'no_binary' | 'disabled'
-  | 'blocked' | 'not_found' | 'too_large' | 'bad_request' | 'crashed' | 'launch_failed'
+  | 'blocked' | 'not_found' | 'too_large' | 'bad_request' | 'crashed' | 'launch_failed' | 'max_live'
+
+/** Why Chromium could not start (server log + `error.reason` on the wire); never carries a path or a pid. */
+export const LAUNCH_REASONS = ['profile_locked', 'bin_not_found', 'spawn_error', 'debug_port_timeout', 'crashed_on_start', 'sandbox_unavailable', 'connect_failed'] as const
+export type LaunchReason = (typeof LAUNCH_REASONS)[number]
 
 /** Field baru `WsNode` (ditambahkan WS-11, bukan di sini). */
 export interface BrowserNodeFields { url?: string; agentControl?: boolean }
@@ -133,7 +137,8 @@ export type { BrowserInputEvent as InputEvent }
 type WithId<T> = T & { id: string }
 export interface ViewportMsg { w: number; h: number; dpr: number }
 export type ClientMsg =
-  | WithId<{ t: 'attach' } & ViewportMsg>
+  /** `profileId` = the profile the node was created on: the board may not be saved yet, so the server cannot read it there. */
+  | WithId<{ t: 'attach'; profileId?: string } & ViewportMsg>
   /** `tab` = size of that tab's pane (split view); absent = the whole node area. */
   | WithId<{ t: 'resize'; tab?: string } & ViewportMsg>
   | { t: 'detach'; id: string }
@@ -154,7 +159,7 @@ export type ServerMsg =
   | { t: 'dialog'; id: string; kind: (typeof DIALOG_KINDS)[number]; message: string; defaultPrompt?: string }
   | { t: 'cursor'; id: string; css: string }
   | { t: 'copy'; id: string; text: string }
-  | { t: 'error'; id: string; code: BrowserErrorCode; hostname?: string }
+  | { t: 'error'; id: string; code: BrowserErrorCode; hostname?: string; /** Specific cause of a `launch_failed`. */ reason?: LaunchReason }
   /** Legacy: popups are tabs now (`tab` events); the server no longer sends this and the UI integration removes the handler. */
   | { t: 'popup'; id: string; url: string }
   /** Whole tab list of the node (sent on attach). */

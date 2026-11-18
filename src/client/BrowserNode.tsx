@@ -32,6 +32,8 @@ import type { ConsoleSlot } from './BrowserConsole'
 import { useNodeHost } from './tabLayout.context'
 import { BrowserTabStrip } from './browserTabs/BrowserTabStrip'
 import { BrowserTabPanel, showsNewTabPage } from './browserTabs/BrowserTabPanel'
+import { BrowserNodeDown, DOWN_TEXT } from './browserTabs/BrowserNodeDown'
+import { COLLAPSED_H, DEFAULT_H, hideBrowserNode, hideCandidates, rememberHeight, takeHeight } from './browser.hide'
 import { browserTabDomId } from './browserTabs/BrowserTabItem'
 import { useBrowserTabs } from './browserTabs/useBrowserTabs'
 import type { TabMsg } from './browserTabs/useBrowserTabs'
@@ -45,8 +47,6 @@ import type { DropHint } from './browserSplit/browserSplit.drop'
 import './browser.css'
 import './browser.driven.css'
 
-const COLLAPSED_H = 40
-const DEFAULT_H = 400
 const DEFAULT_TITLE = 'Browser'
 /** Accumulated Ctrl+wheel delta (px) per zoom step: one mouse notch (~100) is a step, a trackpad pinch needs a deliberate spread. */
 const WHEEL_ZOOM_PX = 50
@@ -98,7 +98,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const lowZoom = useStore((s) => !inTab && !maximized && s.transform[2] < ZOOM_PAUSE_BELOW)
   // Popups are tabs of this node now (server side); the tab messages feed `useBrowserTabs` below.
   const tabMsg = useRef<(m: TabMsg) => void>(undefined)
-  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (m) => tabMsg.current?.(m))
+  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (m) => tabMsg.current?.(m), d.profileId)
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
   // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.
@@ -140,9 +140,12 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const recentTitle = state?.title ?? ''
   useEffect(() => { if (recentUrl) addRecent(recentUrl, recentTitle) }, [recentUrl, recentTitle])
 
+  // The MAX_LIVE gate refused this node: it has no page. Say so (plate) and never swallow input silently (nav below).
+  const down = session.error?.code === 'max_live' && state?.live !== 'live'
   const ctx: BrowserSlotCtx = {
     id, state, error: session.error, target: lastGo.current ?? d.url,
     nav: (action, url) => {
+      if (down) { tabs.notify(DOWN_TEXT.blockedNav, 'warning'); return }
       if (action === 'go' && url !== undefined) lastGo.current = url
       send({ t: 'nav', action, ...(url === undefined ? {} : { url }) })
     },
@@ -200,11 +203,11 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
     return () => { el.removeEventListener('keydown', onKey, true); el.removeEventListener('wheel', onWheel, { capture: true }) }
   }, [])
   const driven = state?.lease === 'agent'
-  const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked && !showsNewTabPage(tabs.view, tabs.active, tabs.standIn)
+  const showStart = !down && isBlankUrl(state?.url) && !d.url && !state?.blocked && !showsNewTabPage(tabs.view, tabs.active, tabs.standIn)
 
   const toggleCollapse = () => {
-    if (!collapsed) { expandedH.current = height ?? DEFAULT_H; rf.updateNode(id, { height: COLLAPSED_H }) }
-    else rf.updateNode(id, { height: expandedH.current })
+    if (!collapsed) { expandedH.current = height ?? DEFAULT_H; rememberHeight(id, expandedH.current); rf.updateNode(id, { height: COLLAPSED_H }) }
+    else rf.updateNode(id, { height: takeHeight(id) ?? expandedH.current })
     rf.updateNodeData(id, { collapsed: !collapsed })
   }
 
@@ -250,6 +253,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
             {!layout && dropHint && dropHint.paneTabId === tabs.active?.tabId && <div className="bp-drop" aria-hidden="true" style={zoneBox(dropHint.zone)} data-zone={dropHint.zone} />}
             {showStart && !layout && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
+            {down && <BrowserNodeDown others={hideCandidates(rf.getNodes(), id)} onHide={(other) => hideBrowserNode(rf, other)} onRetry={session.retry} answer={session.error ?? state} />}
           </div>
           {consoleDrawer.drawer}
         </div>

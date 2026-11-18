@@ -21,7 +21,8 @@ export interface BrowserListener {
 export interface BrowserStream {
   /** Daftarkan pendengar untuk satu node (satu per id; yang baru menggantikan). Mengembalikan unsubscribe + detach. */
   subscribe: (id: string, l: BrowserListener) => () => void
-  attach: (id: string, vp: ViewportMsg) => void
+  /** `profileId` = the profile the node was created on (see `ClientMsg` attach); kept for re-attaches after a reconnect. */
+  attach: (id: string, vp: ViewportMsg, profileId?: string) => void
   resize: (id: string, vp: ViewportMsg) => void
   detach: (id: string) => void
   send: (msg: ClientMsg) => void
@@ -38,7 +39,7 @@ const isServerMsg = (v: unknown): v is ServerMsg =>
 /** Bangun klien di atas pembuat socket (diinjeksi supaya test tak butuh server). */
 export function createBrowserStream(open: () => WebSocket): BrowserStream {
   const listeners = new Map<string, BrowserListener>()
-  const attached = new Map<string, ViewportMsg>()
+  const attached = new Map<string, ViewportMsg & { profileId?: string }>()
   let ws: WebSocket | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let attempt = 0 // reconnect gagal berturut-turut; direset oleh open
@@ -108,14 +109,16 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
         detach(id)
       }
     },
-    attach(id, vp) {
-      attached.set(id, vp)
+    attach(id, vp, profileId) {
+      const msg = { ...vp, ...(profileId ? { profileId } : {}) }
+      attached.set(id, msg)
       if (!ws) connect() // bila masih CONNECTING, onopen yang mengirim attach
-      else send({ t: 'attach', id, ...vp })
+      else send({ t: 'attach', id, ...msg })
     },
     resize(id, vp) {
-      if (!attached.has(id)) return
-      attached.set(id, vp)
+      const prev = attached.get(id)
+      if (!prev) return
+      attached.set(id, { ...vp, ...(prev.profileId ? { profileId: prev.profileId } : {}) })
       send({ t: 'resize', id, ...vp })
     },
     detach,

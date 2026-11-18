@@ -38,6 +38,8 @@ export interface BrowserSession {
   cursor: string
   connected: boolean
   send: (msg: WithoutId<ClientMsg>) => void
+  /** Ask the server to open this node again (after a refused attach or a failed launch); false = not attached yet (no size to send). */
+  retry: () => boolean
   closeDialog: () => void
   /** Latensi input->frame node ini (I1-d), dibaca chip. */
   latency: LatencyWindow
@@ -55,7 +57,7 @@ export interface PaneFrames { register(tabId: string, sink: PaneSink): () => voi
  * `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir.
  * `onTabMsg` = pesan tab dari server (`tabs`/`tab`/`tabNotice`); popup kini menjadi tab di server, bukan pesan `popup`.
  */
-export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream, onTabMsg?: (m: TabMsg) => void): BrowserSession {
+export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream, onTabMsg?: (m: TabMsg) => void, profileId?: string): BrowserSession {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewport = useRef<Viewport | null>(null)
@@ -82,6 +84,8 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   }), [])
   const tabMsgRef = useRef(onTabMsg)
   tabMsgRef.current = onTabMsg
+  const profileRef = useRef(profileId)
+  profileRef.current = profileId
 
   const arm = useCallback((clear: () => void) => {
     const t = setTimeout(() => { timers.current.delete(t); clear() }, NOTICE_MS)
@@ -151,7 +155,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       onMsg: (m) => {
         if (m.t === 'state') { setState(m); setError(undefined) }
         else if (m.t === 'error') {
-          setError({ code: m.code, hostname: m.hostname })
+          setError({ code: m.code, hostname: m.hostname, reason: m.reason })
           if (!STICKY_ERRORS.has(m.code)) arm(() => setError(undefined))
         } else if (m.t === 'dialog') setDialog(m)
         else if (isTabMsg(m)) tabMsgRef.current?.(m)
@@ -183,7 +187,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       viewport.current = { w, h }
       if (first) {
         attached.current = true
-        stream.attach(id, vpMsg({ w, h }))
+        stream.attach(id, vpMsg({ w, h }), profileRef.current)
         return
       }
       if (debounce) clearTimeout(debounce)
@@ -211,8 +215,14 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     if (wantsStamp(m)) (m as { ls?: number }).ls = clientNow() // dipantulkan server di frame pertama sesudahnya
     stream.send(m)
   }, [id, stream])
+  const retry = useCallback(() => {
+    const vp = viewport.current
+    if (!vp || !attached.current) return false
+    stream.attach(id, { ...vp, dpr: Math.min(window.devicePixelRatio || 1, DSF_MAX) }, profileRef.current)
+    return true
+  }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency, console: consoleView, panes,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

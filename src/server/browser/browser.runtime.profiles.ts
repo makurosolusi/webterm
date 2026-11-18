@@ -35,6 +35,11 @@ export interface ProfileWiring {
   ops: ProfileOpsDeps
   /** The one rule: UI switch not yet saved on the board > node's own `profileId` > the workspace's Default. */
   profileOf(nodeId: string, workspaceId: string): string
+  /**
+   * A viewer's claim that a node was created on `profileId`. Honoured only while the node is not on the saved board yet
+   * (the client saves 400 ms after creating it, the attach comes first) and only for a profile this board may use.
+   */
+  hint(nodeId: string, workspaceId: string, profileId: string): void
   /** Forget a removed node's pending switch. */
   forget(nodeId: string): void
   /** Tell every window the live set may have changed (cheap: windows refetch the list). */
@@ -69,6 +74,11 @@ export function createProfileWiring(d: ProfileWiringDeps): ProfileWiring {
   return {
     service, ops, profileOf, liveChanged: changed,
     bind: (host) => { hostRef = host },
+    hint(nodeId, workspaceId, profileId) {
+      if (override.has(nodeId) || nodeOf(nodeId) || !isBrowserProfileId(profileId)) return
+      const row = service.deps.store.get(profileId)
+      if (row && (row.workspaceId === null || row.workspaceId === workspaceId)) override.set(nodeId, profileId)
+    },
     forget: (id) => { override.delete(id) },
     async setNodeProfile(host, lifecycle, nodeId, profileId, by = 'human') {
       const row = isBrowserProfileId(profileId) ? service.deps.store.get(profileId) : null

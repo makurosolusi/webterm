@@ -1,7 +1,7 @@
 // Tabel target per node + operasi target tingkat rendah (buat/attach/riwayat/setup koneksi).
 // Tidak menyimpan kebijakan; `BrowserHost` yang memutuskan kapan memanggil.
 import { INPUT_LATENCY_STALE_MS } from '../../shared/browser.contract'
-import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency } from '../../shared/browser.contract'
+import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency, LaunchReason } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
 import type { DeviceSpec } from '../../shared/browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from '../../shared/browser.tabs'
@@ -12,7 +12,7 @@ import { metricsParams } from './browserHost.input'
 
 /** Galat host ber-kode; gateway memetakan `code` ke `{t:'error'}` (tanpa URL, hanya hostname). */
 export class BrowserError extends Error {
-  constructor(readonly code: BrowserErrorCode, message: string, readonly hostname?: string, cause?: unknown) {
+  constructor(readonly code: BrowserErrorCode, message: string, readonly hostname?: string, cause?: unknown, readonly reason?: LaunchReason) {
     super(message, cause === undefined ? undefined : { cause })
     this.name = 'BrowserError'
   }

@@ -69,12 +69,19 @@ describe('BrowserNoticeAction', () => {
   it('failed launch (no state yet) -> plate over the start page; Try again reloads, shows progress until the next answer', () => {
     const nav = vi.fn()
     const { rerender } = render(<BrowserNoticeAction error={{ code: 'launch_failed' }} nav={nav} />)
-    expect(screen.getByRole('alert').textContent).toContain("The browser couldn't start")
+    expect(screen.getByRole('alert').textContent).toContain('Chromium could not start')
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(nav).toHaveBeenCalledWith('reload')
     expect((screen.getByRole('button', { name: 'Trying again…' }) as HTMLButtonElement).disabled).toBe(true)
     rerender(<BrowserNoticeAction error={{ code: 'launch_failed' }} nav={nav} />) // a new error object = the retry failed again
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+
+  it('failed launch names the specific cause the server found', () => {
+    render(<BrowserNoticeAction error={{ code: 'launch_failed', reason: 'profile_locked' }} nav={vi.fn()} />)
+    const plate = screen.getByRole('alert')
+    expect(plate.textContent).toContain('holding this browser profile')
+    expect(plate.textContent).toContain('profile_locked')
   })
 
   it('halaman normal -> tidak merender apa pun', () => {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ENV_BROWSER } from '../../shared/browser.contract'
-import { BIN_CANDIDATES, chromiumCandidates, createChromiumPool, detectChromium, LaunchError, launchChromium, resolveBinary } from './chromium.launch'
+import { BIN_CANDIDATES, chromiumCandidates, createChromiumPool, detectChromium, LaunchError, launchChromium, launchReason, resolveBinary } from './chromium.launch'
 import type { ChildLike, LaunchDeps } from './chromium.launch'
 
 class FakeChild implements ChildLike {
@@ -15,6 +15,7 @@ class FakeChild implements ChildLike {
   once(ev: 'exit' | 'error', cb: (...a: unknown[]) => void) { (this.handlers[ev] ??= []).push(cb) }
   kill(sig?: NodeJS.Signals) { this.signals.push(sig ?? 'SIGTERM'); return true }
   exit() { for (const h of this.handlers.exit ?? []) h(1) }
+  fail(e: Error) { for (const h of this.handlers.error ?? []) h(e) }
   stderrWrite(s: string) { for (const d of this.data) d(s) }
 }
 
@@ -124,6 +125,22 @@ describe('launchChromium', () => {
     const child = new FakeChild()
     const deps: LaunchDeps = { spawn: () => { queueMicrotask(() => child.exit()); return child }, readFile: () => null, sleep: async () => { await Promise.resolve() } }
     await expect(launchChromium(opts(), deps)).rejects.toMatchObject({ code: 'launch_failed' })
+  })
+
+  it('names the specific cause of a failed launch (log + UI): crashed_on_start, debug_port_timeout, spawn_error', async () => {
+    const exits = new FakeChild()
+    const early: LaunchDeps = { spawn: () => { queueMicrotask(() => exits.exit()); return exits }, readFile: () => null, sleep: async () => { await Promise.resolve() } }
+    const e1 = await launchChromium(opts(), early).catch((e: unknown) => e)
+    expect(launchReason(e1)).toBe('crashed_on_start')
+    const hang = new FakeChild()
+    const e2 = await launchChromium(opts(), { spawn: () => hang, readFile: () => null, sleep: () => new Promise((r) => setTimeout(r, 5)), startTimeoutMs: 20 }).catch((e: unknown) => e)
+    expect(launchReason(e2)).toBe('debug_port_timeout')
+    const broken = new FakeChild()
+    const e3 = await launchChromium(opts(), { spawn: () => { queueMicrotask(() => broken.fail(new Error('ENOENT'))); return broken }, readFile: () => null, sleep: async () => { await Promise.resolve() } }).catch((e: unknown) => e)
+    expect(launchReason(e3)).toBe('spawn_error')
+    expect(launchReason(new LaunchError('profile_locked', 'held'))).toBe('profile_locked')
+    expect(launchReason(new LaunchError('no_binary', 'none'))).toBe('bin_not_found')
+    expect(launchReason(new Error('ws refused'))).toBe('connect_failed')
   })
 
   it('kills the child and fails when the port file never appears', async () => {

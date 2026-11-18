@@ -4,6 +4,7 @@ import { spawn as nodeSpawn } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { ENV_BROWSER } from '../../shared/browser.contract'
+import type { LaunchReason } from '../../shared/browser.contract'
 import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
 import { childEnv } from '../childEnv'
@@ -97,10 +98,23 @@ export function chromiumCandidates(
 }
 
 export class LaunchError extends Error {
-  constructor(readonly code: 'no_binary' | 'sandbox_unavailable' | 'launch_failed' | 'profile_locked', message: string, cause?: unknown) {
+  constructor(
+    readonly code: 'no_binary' | 'sandbox_unavailable' | 'launch_failed' | 'profile_locked', message: string, cause?: unknown,
+    /** Specific cause for the log and the UI; absent = derived from `code` by `launchReason`. */
+    readonly reason?: LaunchReason,
+  ) {
     super(message, cause === undefined ? undefined : { cause })
     this.name = 'LaunchError'
   }
+}
+
+const REASON_OF_CODE: Record<LaunchError['code'], LaunchReason> = {
+  no_binary: 'bin_not_found', sandbox_unavailable: 'sandbox_unavailable', profile_locked: 'profile_locked', launch_failed: 'crashed_on_start',
+}
+
+/** Specific cause of a failed launch; anything that is not a `LaunchError` (e.g. the CDP connect after launch) = `connect_failed`. */
+export function launchReason(err: unknown): LaunchReason {
+  return err instanceof LaunchError ? (err.reason ?? REASON_OF_CODE[err.code]) : 'connect_failed'
 }
 
 /** Path biner: override eksplisit (harus ada; TIDAK jatuh ke otomatis) -> kandidat pertama -> `LaunchError('no_binary')`. */
@@ -187,7 +201,7 @@ export async function launchChromium(
       }
       throw new LaunchError(sandbox ? 'sandbox_unavailable' : 'launch_failed',
         sandbox ? 'browser_sandbox_unavailable: Chromium sandbox cannot start (no automatic --no-sandbox)' : 'Chromium exited before DevTools was ready',
-        spawnError ?? undefined)
+        spawnError ?? undefined, spawnError ? 'spawn_error' : undefined)
     }
     const raw = read(portFile)
     const [port, path] = raw ? raw.split('\n') : []
@@ -197,7 +211,7 @@ export async function launchChromium(
     await sleep(POLL_MS)
   }
   kill()
-  throw new LaunchError('launch_failed', `Chromium did not publish ${ACTIVE_PORT_FILE} within the start timeout`)
+  throw new LaunchError('launch_failed', `Chromium did not publish ${ACTIVE_PORT_FILE} within the start timeout`, undefined, 'debug_port_timeout')
 }
 
 /** Antarmuka peluncur yang dipakai `BrowserHost`: URL debugger browser untuk satu profil (kunci = profileId). */

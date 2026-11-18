@@ -189,7 +189,8 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
   const view = useMemo<BrowserTabsState>(() => {
     if (state) return state
     const tab = pageTab(page)
-    return { tabs: [tab], activeTabId: tab.tabId, agentTabId: tab.tabId, closed: [] }
+    // No agent marker: nothing is attached to this node yet, so no agent can be "here" (the server's list sets it).
+    return { tabs: [tab], activeTabId: tab.tabId, agentTabId: null, closed: [] }
   }, [state, page])
   const active = view.tabs.find((t) => t.tabId === view.activeTabId)
   return { view, active, standIn: state === null, act, notify, onMsg, epoch, setLayout, createTab, setTabDevice }

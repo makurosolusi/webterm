@@ -1,7 +1,7 @@
 // Gateway WS biner /ws/browser (§4.4): satu socket per klien, banyak node. Handler murni `handleBrowserConnection`;
 // pemasangan ke `upgrade` (origin+token root, node-token ditolak) adalah tugas WS-11. Galat = {t:'error'}, socket tetap hidup.
 import { BlockedError, DSF_MAX, TEXT_MAX_BYTES } from '../../shared/browser.contract'
-import type { BrowserErrorCode, ClientMsg, LeaseView } from '../../shared/browser.contract'
+import type { BrowserErrorCode, ClientMsg, LaunchReason, LeaseView } from '../../shared/browser.contract'
 import { parseClientMsg } from '../../shared/browser.wire'
 import type { RawData, WebSocket } from 'ws'
 import { createLogger } from '../logs'
@@ -28,14 +28,18 @@ export interface GatewayDeps {
   workspaceId: string
   /** URL tersimpan node (`WsNode.url`) untuk memulihkan node yang discarded; opsional. */
   initialUrl?(nodeId: string): string | undefined
+  /** The profile a viewer says a node was created on (the board may not hold the node yet); the runtime validates it. */
+  hintProfile?(nodeId: string, workspaceId: string, profileId: string): void
+  /** A live slot may be free: attaches refused by the MAX_LIVE gate are retried (`BrowserLifecycle.onCapacity`). Returns the unsubscribe. */
+  onCapacity?(cb: () => void): () => void
 }
 
 const INPUT_TYPES = new Set<ClientMsg['t']>(['mouse', 'key', 'text', 'ime', 'touch', 'nav'])
 /** Input manusia murni (tanpa `nav`): dikirim fire-and-forget oleh host, tak perlu antre di belakang input lain. */
 const DIRECT_INPUT = new Set<ClientMsg['t']>(['mouse', 'key', 'text', 'ime', 'touch'])
-const errorCode = (e: unknown): { code: BrowserErrorCode; hostname?: string } =>
-  e instanceof BlockedError ? { code: 'blocked', hostname: e.hostname }
-    : e instanceof BrowserError ? { code: e.code, hostname: e.hostname }
+const errorCode = (e: unknown): { code: BrowserErrorCode; hostname?: string; reason?: LaunchReason } =>
+  e instanceof BlockedError ? (e.reason === 'max_live' ? { code: 'max_live' } : { code: 'blocked', hostname: e.hostname })
+    : e instanceof BrowserError ? { code: e.code, hostname: e.hostname, reason: e.reason }
       : { code: 'crashed' } // galat tak dikenal: jangan bocorkan pesan internal ke klien
 
 /** Cap for an error message written to the server log, so a pathological message cannot flood it. */
@@ -71,14 +75,16 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
   const sink = makeSink(ws)
   const viewer: Viewer = { sink }
   const attached = new Set<string>()
+  /** Attaches the MAX_LIVE gate refused: retried when a slot may be free, so the node wakes without the user asking again. */
+  const waiting = new Map<string, Extract<ClientMsg, { t: 'attach' }>>()
   const queues = new Map<string, SerialQueue>()
   let closed = false
 
   const fail = (id: string, err: unknown) => {
-    const { code, hostname } = errorCode(err)
+    const { code, hostname, reason } = errorCode(err)
     // Server-side log carries the message (+ one level of cause) so the root cause is visible; the client gets only the code.
     if (code === 'crashed' && !(err instanceof BrowserError)) log.error('browser.ws', 'unexpected gateway failure', { ids: { nodeId: id }, ...errorFields(err) })
-    sink.sendJson({ t: 'error', id, code, hostname })
+    sink.sendJson({ t: 'error', id, code, hostname, ...(reason ? { reason } : {}) })
   }
   const reject = (id: string, code: BrowserErrorCode) => sink.sendJson({ t: 'error', id, code })
 
@@ -96,6 +102,11 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     ws.ping()
   }, WS_HEARTBEAT_MS)
 
+  const offCapacity = deps.onCapacity?.(() => {
+    // Microtask: the slot is freed in the middle of another attach's eviction; let that finish first.
+    for (const m of [...waiting.values()]) queueMicrotask(() => { if (!closed && waiting.get(m.id) === m) dispatch(m) })
+  })
+
   const cleanup = () => {
     if (closed) return
     closed = true
@@ -105,11 +116,20 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     }
     attached.clear()
     queues.clear()
+    waiting.clear()
+    offCapacity?.()
   }
 
   async function attach(m: Extract<ClientMsg, { t: 'attach' }>): Promise<void> {
     const id = m.id
-    await host.open(id, deps.workspaceId, deps.initialUrl?.(id))
+    waiting.delete(id)
+    if (m.profileId) deps.hintProfile?.(id, deps.workspaceId, m.profileId)
+    try {
+      await host.open(id, deps.workspaceId, deps.initialUrl?.(id))
+    } catch (err) {
+      if (err instanceof BlockedError && err.reason === 'max_live' && !closed) waiting.set(id, m)
+      throw err
+    }
     await host.setViewport(id, m.w, m.h, Math.min(m.dpr, DSF_MAX))
     if (closed) return
     hub.join(id, viewer)
@@ -137,6 +157,7 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
         return
       case 'detach':
         attached.delete(id)
+        waiting.delete(id)
         await hub.leave(id, viewer)
         return
       case 'resize':

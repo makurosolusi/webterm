@@ -5,6 +5,7 @@ import type { BrowserInputEvent, BrowserState, Frame, Lease, LeaseView } from '.
 import { createViewerHub } from './browserWs.viewers'
 import type { GatewayHost, ViewerHub } from './browserWs.viewers'
 import { handleBrowserConnection } from './browserWs.gateway'
+import type { GatewayDeps } from './browserWs.gateway'
 import type { HostEvent } from './browserHost.targets'
 
 export const stateOf = (id: string, over: Partial<BrowserState> = {}): BrowserState =>
@@ -87,14 +88,15 @@ export interface Client {
   closed: Promise<number>
 }
 
-export async function makeRig(): Promise<Rig> {
+/** `extra` = optional gateway deps a test wants wired (hintProfile, onCapacity, ...). */
+export async function makeRig(extra: Partial<GatewayDeps> = {}): Promise<Rig> {
   const host = new FakeHost()
   const leases = new FakeLeases()
   const hub = createViewerHub(host, leases)
   const flag = { on: true }
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
   await new Promise<void>((r) => wss.once('listening', () => r()))
-  wss.on('connection', (ws) => handleBrowserConnection(ws, { host, leases, hub, enabled: () => flag.on, workspaceId: 'w1' }))
+  wss.on('connection', (ws) => handleBrowserConnection(ws, { host, leases, hub, enabled: () => flag.on, workspaceId: 'w1', ...extra }))
   const clients: WebSocket[] = []
   const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`
   return {
