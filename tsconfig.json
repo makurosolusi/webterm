@@ -15,7 +15,7 @@
       "@/*": ["./src/client/*"]
     }
   },
-  "include": ["src", "scripts/devFresh.ts", "scripts/devFresh.bun.test.ts", "scripts/releaseNative.ts", "scripts/releaseNative.bun.test.ts", "scripts/smoke.capabilities*.ts"],
+  "include": ["src", "scripts/devFresh.ts", "scripts/devFresh.bun.test.ts", "scripts/releaseNative.ts", "scripts/releaseNative.bun.test.ts", "scripts/smoke.capabilities*.ts", "scripts/test.*.ts", "scripts/testGuard.*.ts", "scripts/vitestGuard.ts", "scripts/bunTestGuard.ts"],
   // Electrobun glue: `electrobun/main` resolves only from the generated Hutch devkit (src/native/nativeApp.ts header), as does its
   // updater adapter. main.ts is excluded because its dynamic import of nativeApp.ts would pull the devkit in; its router is nativeRoute.ts.
   "exclude": ["src/native/main.ts", "src/native/nativeApp.ts", "src/native/updater.ts"]
