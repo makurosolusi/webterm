@@ -84,7 +84,8 @@ export default defineConfig({
   // the parent-relative server bun tests.
   test: {
     // Temp WEBTERM_DATA_DIR + HOME for the whole run (see the file's header).
-    globalSetup: [path.resolve(process.cwd(), 'src/testIsolation.setup.ts')],
+    // The guard goes first: it refuses a whole-suite run (no file filter) unless WEBTERM_FULL_TESTS=1.
+    globalSetup: [path.resolve(process.cwd(), 'scripts/vitestGuard.ts'), path.resolve(process.cwd(), 'src/testIsolation.setup.ts')],
     // Unmount + longer findBy timeout in jsdom files (see the file's header).
     setupFiles: [path.resolve(process.cwd(), 'src/testDom.setup.ts')],
     // Threads (still isolated per file) instead of the default forks: ~40% faster on this suite.

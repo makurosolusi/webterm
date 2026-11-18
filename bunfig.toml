@@ -1,4 +1,5 @@
 # Only `bun test` reads this section: a temp WEBTERM_DATA_DIR for every bun test run
-# (src/testIsolation.setup.ts). `build:binary` passes --no-compile-autoload-bunfig.
+# (src/testIsolation.setup.ts), and the guard that refuses a path-less / huge `bun test` unless
+# WEBTERM_FULL_TESTS=1 (scripts/bunTestGuard.ts). `build:binary` passes --no-compile-autoload-bunfig.
 [test]
-preload = ["./src/testIsolation.setup.ts"]
+preload = ["./scripts/bunTestGuard.ts", "./src/testIsolation.setup.ts"]
