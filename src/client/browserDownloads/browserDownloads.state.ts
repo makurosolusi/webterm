@@ -69,3 +69,6 @@ export function fileKind(name: string): FileKind {
 export type RowStatus = 'running' | 'done' | 'canceled' | 'failed' | 'missing'
 export const rowStatus = (i: Pick<DownloadItem, 'state'>): RowStatus =>
   i.state === 'inProgress' ? 'running' : i.state === 'completed' ? 'done' : i.state
+
+/** Chrome's rule: the toolbar button exists once this node has any download (running or in the list). */
+export const hasDownloads = (items: readonly DownloadItem[], nodeId: string): boolean => items.some((i) => i.nodeId === nodeId)

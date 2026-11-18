@@ -129,4 +129,6 @@
 .browser-toolbar__agent[data-driving] .browser-toolbar__agent-dot { background: var(--vscode-focusBorder, var(--accent)); box-shadow: 0 0 0 2px var(--vscode-editor-background, var(--bg)); }
 /* Narrow node: the agent toggle and in-field extras move to the ⋮ menu (which lists them); nothing is lost. */
 @container browser-toolbar (max-width: 300px) { .browser-toolbar__agent { display: none; } }
+/* Downloads outlasts the agent toggle but yields before the in-field extras; the ⋮ menu's Downloads row stays. */
+@container browser-toolbar (max-width: 260px) { .browser-toolbar .bdl[data-shown] { width: 0; overflow: hidden; visibility: hidden; } } /* not display:none: the collapsed box still anchors the list opened from ⋮ */
 @container browser-toolbar (max-width: 260px) { .browser-omnibox__extra { display: none; } }

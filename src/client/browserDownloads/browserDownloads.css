@@ -1,5 +1,9 @@
 /* Downloads control and list of a browser node. Size and font tokens from browserUi.css; colors are theme tokens only (dark and light). */
 .bdl { position: relative; }
+/* Chrome-style: the button appears once there is history. The wrapper animates its width so the address field does not jump. */
+.bdl[data-shown="true"] { width: var(--bui-hit); overflow: visible; }
+.bdl[data-shown="false"] { width: 0; overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) { .bdl { transition: width 150ms ease-out; } }
 .bdl [data-slot="icon-button"] { position: relative; }
 .bdl-ring { position: absolute; inset: 2px; width: calc(var(--bui-hit) - 4px); height: calc(var(--bui-hit) - 4px); pointer-events: none; transform: rotate(-90deg); }
 .bdl-ring circle { fill: none; stroke-width: 2; }
