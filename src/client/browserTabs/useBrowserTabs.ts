@@ -66,6 +66,7 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
   const [state, setStateRaw] = useState<BrowserTabsState | null>(null)
   const ref = useRef<BrowserTabsState | null>(null)
   const follow = useRef(true)
+  const activateSeq = useRef(0)
   const [epoch, setEpoch] = useState(0)
   const setState = useCallback((s: BrowserTabsState | null) => { ref.current = s; setStateRaw(s) }, [])
   const notify = useCallback((text: string, severity?: 'info' | 'warning' | 'error') => {
@@ -111,7 +112,11 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
     switch (a.type) {
       case 'activate':
         follow.current = false // the human chose: stop following the agent
-        if (cur.activeTabId !== a.tabId) commit(a, true, () => tabsApi.activate(nodeId, a.tabId))
+        if (cur.activeTabId !== a.tabId) {
+          // Two quick clicks send two requests; the older answer must not undo the newer choice (it would flip the tab back).
+          const n = ++activateSeq.current
+          commit(a, true, async () => { const r = await tabsApi.activate(nodeId, a.tabId); return n === activateSeq.current || !ref.current ? r : { ...r, state: ref.current } })
+        }
         return
       case 'close': commit(a, true, () => tabsApi.close(nodeId, a.tabId)); return
       case 'closeOthers': case 'closeToRight': {
