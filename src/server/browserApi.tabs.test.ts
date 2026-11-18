@@ -12,6 +12,8 @@ const rec = (name: string) => async (...a: unknown[]) => { calls.push(`${name} $
 const deps: TabsApiDeps = {
   get: (id) => (id === 'missing' ? null : view),
   newTab: rec('new'), activate: rec('activate'), close: rec('close'), move: rec('move'), duplicate: rec('dup'), popOut: rec('pop'), reopen: rec('reopen'),
+  setLayout: async (id, layout, focus) => { calls.push(`layout ${id} ${JSON.stringify(layout)} ${focus ?? ''}`); return view },
+  setDevice: async (id, tab, device) => { calls.push(`device ${id} ${tab} ${JSON.stringify(device)}`); return view },
 }
 const json = (v: unknown) => async () => JSON.stringify(v)
 const none = async () => ''
@@ -52,5 +54,25 @@ describe('tabs api', () => {
     expect(blocked).toMatchObject({ status: 403, body: { error: 'blocked', reason: 'private_host' } })
     expect((await call('POST', 'n1', [], none, boom(new BlockedError('max_live'))))?.status).toBe(409)
     expect((await call('POST', 'n1', [], none, boom(new BrowserError('not_found', 'x'))))?.status).toBe(404)
+  })
+
+  it('stores a split layout and a per-tab device, validating both', async () => {
+    calls.length = 0
+    const tree = { dir: 'h', ratio: 0.5, a: { id: 'tab-1' }, b: { id: 'tab-2' } }
+    expect((await call('PUT', 'n1', ['layout'], json({ layout: tree, focus: 'tab-2' })))?.status).toBe(200)
+    expect((await call('PUT', 'n1', ['layout'], json({ layout: null })))?.status).toBe(200)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({ preset: 'ipad-mini' })))?.status).toBe(200)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({ w: 390, h: 844 })))?.status).toBe(200)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({ preset: null })))?.status).toBe(200)
+    expect(calls).toEqual([
+      `layout n1 ${JSON.stringify(tree)} tab-2`, 'layout n1 null ',
+      'device n1 tab-1 {"id":"ipad-mini"}', 'device n1 tab-1 {"id":"custom","w":390,"h":844,"dpr":1}', 'device n1 tab-1 null',
+    ])
+    expect((await call('PUT', 'n1', ['layout'], json({ layout: { id: 'tab-1' } })))?.status).toBe(400) // one pane is not a split
+    expect((await call('PUT', 'n1', ['layout'], json({ layout: tree, focus: '../x' })))?.status).toBe(400)
+    expect((await call('GET', 'n1', ['layout']))?.status).toBe(405)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({ preset: 'nokia' })))?.status).toBe(400)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({ w: 5, h: 5 })))?.status).toBe(400)
+    expect((await call('POST', 'n1', ['tab-1', 'device'], json({})))?.status).toBe(400)
   })
 })
