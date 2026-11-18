@@ -10,6 +10,8 @@ import {
 import { BrowserApiError } from '../browser.api'
 import { showNotice } from '../workspaceSave.notice'
 import { tabsApi, type TabsView } from './browserTabs.api'
+import type { Pane } from '../../shared/workspace.shape'
+import type { DeviceChoice } from '../../shared/browser.devices'
 
 export type TabMsg = Extract<ServerMsg, { t: 'tabs' | 'tab' | 'tabNotice' }>
 export const isTabMsg = (m: ServerMsg): m is TabMsg => m.t === 'tabs' || m.t === 'tab' || m.t === 'tabNotice'
@@ -49,17 +51,26 @@ export interface BrowserTabsControl {
   notify: (text: string, severity?: 'info' | 'warning' | 'error') => void
   /** Feed for the session's WS listener. */
   onMsg: (m: TabMsg) => void
+  /** Counts the server's whole-list messages (every attach); a change = the server may have forgotten what is on screen. */
+  epoch: number
+  /** Split layout: shown at once (`save` false = a drag in progress, kept local); `focus` also moves the human's view. */
+  setLayout: (layout: Pane | null, o?: { focus?: string; save?: boolean }) => Promise<void>
+  /** A new tab (the server picks the id); resolves to it, or null when it was refused (a notice says why). */
+  createTab: (url?: string, afterTabId?: string) => Promise<BrowserTab | null>
+  /** One tab's own device (null = follow the pane size); applied at once, rolled back on failure. */
+  setTabDevice: (tabId: string, device: DeviceChoice | null) => Promise<void>
 }
 
 export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, send: (m: { t: 'nav'; action: 'reload' }) => void): BrowserTabsControl {
   const [state, setStateRaw] = useState<BrowserTabsState | null>(null)
   const ref = useRef<BrowserTabsState | null>(null)
   const follow = useRef(true)
+  const [epoch, setEpoch] = useState(0)
   const setState = useCallback((s: BrowserTabsState | null) => { ref.current = s; setStateRaw(s) }, [])
   const notify = useCallback((text: string, severity?: 'info' | 'warning' | 'error') => showNotice(noticeKey(nodeId), { severity: severity ?? (text === TAB_LIMIT_REASON ? 'warning' : 'info'), title: text }), [nodeId])
 
   const onMsg = useCallback((m: TabMsg) => {
-    if (m.t === 'tabs') setState(m.state)
+    if (m.t === 'tabs') { setState(m.state); setEpoch((n) => n + 1) }
     else if (m.t === 'tabNotice') notify(m.message, 'warning')
     else if (ref.current) {
       const next = applyTabEvent(ref.current, m.event)
@@ -124,11 +135,57 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
     }
   }, [nodeId, commit, notify, send])
 
+  const setLayout = useCallback(async (layout: Pane | null, o: { focus?: string; save?: boolean } = {}) => {
+    const prev = ref.current
+    if (!prev) return
+    const next = { ...prev, ...(o.focus ? { activeTabId: o.focus } : {}) }
+    if (layout) next.layout = layout
+    else delete next.layout
+    setState(next)
+    if (o.focus) follow.current = false
+    if (o.save === false) return
+    try {
+      setState((await tabsApi.layout(nodeId, layout, o.focus)).state)
+    } catch (e) {
+      setState(prev)
+      const f = failText('change the split', e)
+      notify(f.text, f.severity)
+    }
+  }, [nodeId, setState, notify])
+
+  const createTab = useCallback(async (url?: string, afterTabId?: string): Promise<BrowserTab | null> => {
+    const cur = ref.current
+    const full = cur ? canAddTab(cur) : { ok: true as const }
+    if (!full.ok) { notify(full.reason, 'warning'); return null }
+    try {
+      const r = await tabsApi.create(nodeId, { ...(url ? { url } : {}), ...(afterTabId ? { afterTabId } : {}) })
+      setState(r.state)
+      return r.tab ?? null
+    } catch (e) {
+      const f = failText('open a new tab', e)
+      notify(f.text, f.severity)
+      return null
+    }
+  }, [nodeId, setState, notify])
+
+  const setTabDevice = useCallback(async (tabId: string, device: DeviceChoice | null) => {
+    const prev = ref.current
+    if (!prev) return
+    setState({ ...prev, tabs: prev.tabs.map((t) => (t.tabId === tabId ? { ...t, device } : t)) })
+    try {
+      setState((await tabsApi.device(nodeId, tabId, device)).state)
+    } catch (e) {
+      setState(prev)
+      const f = failText('change the device', e)
+      notify(f.text, f.severity)
+    }
+  }, [nodeId, setState, notify])
+
   const view = useMemo<BrowserTabsState>(() => {
     if (state) return state
     const tab = pageTab(page)
     return { tabs: [tab], activeTabId: tab.tabId, agentTabId: tab.tabId, closed: [] }
   }, [state, page])
   const active = view.tabs.find((t) => t.tabId === view.activeTabId)
-  return { view, active, standIn: state === null, act, notify, onMsg }
+  return { view, active, standIn: state === null, act, notify, onMsg, epoch, setLayout, createTab, setTabDevice }
 }

@@ -1,6 +1,7 @@
 // Pointer drag for the tab strip: reorder inside the strip, or drop well below/above it to pop the tab out.
 // Pure geometry (`reorderTarget`) plus a hook that owns the window listeners for one drag at a time.
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { paneHitAt, type DropHint } from '../browserSplit/browserSplit.drop'
 
 /** Movement before a press becomes a drag; below it a press stays a click. */
 export const DRAG_THRESHOLD_PX = 4
@@ -30,12 +31,15 @@ interface Opts {
   tabElements: () => HTMLElement[]
   onReorder: (tabId: string, toIndex: number) => void
   onPopOut: (tabId: string) => void
+  /** Split view: the pane (and zone) under the pointer while dragging, null when none; a drop on it is `onPaneDrop`. */
+  onPaneHover?: (hit: DropHint | null) => void
+  onPaneDrop?: (tabId: string, hit: DropHint) => void
 }
 
-export function useTabDrag({ stripRef, tabIds, tabElements, onReorder, onPopOut }: Opts) {
+export function useTabDrag({ stripRef, tabIds, tabElements, onReorder, onPopOut, onPaneHover, onPaneDrop }: Opts) {
   const [view, setView] = useState<DragView | null>(null)
-  const latest = useRef({ tabIds, tabElements, onReorder, onPopOut })
-  latest.current = { tabIds, tabElements, onReorder, onPopOut }
+  const latest = useRef({ tabIds, tabElements, onReorder, onPopOut, onPaneHover, onPaneDrop })
+  latest.current = { tabIds, tabElements, onReorder, onPopOut, onPaneHover, onPaneDrop }
   const justDragged = useRef(false)
   const stop = useRef<(() => void) | null>(null)
   useEffect(() => () => stop.current?.(), [])
@@ -45,6 +49,7 @@ export function useTabDrag({ stripRef, tabIds, tabElements, onReorder, onPopOut 
     const x0 = e.clientX
     const y0 = e.clientY
     let current: DragView | null = null
+    let hover: DropHint | null = null
     const move = (ev: PointerEvent) => {
       if (!current && Math.hypot(ev.clientX - x0, ev.clientY - y0) < DRAG_THRESHOLD_PX) return
       const { tabIds: ids, tabElements: els } = latest.current
@@ -52,20 +57,28 @@ export function useTabDrag({ stripRef, tabIds, tabElements, onReorder, onPopOut 
       const slot = slotAt(els().map((el) => el.getBoundingClientRect()), ev.clientX)
       const box = stripRef.current?.getBoundingClientRect()
       const outside = box ? Math.max(box.top - ev.clientY, ev.clientY - box.bottom) : 0
-      current = { tabId, slot: slot === from || slot === from + 1 ? null : slot, popOut: outside > POP_OUT_DISTANCE_PX }
+      const hit = paneHitAt(ev.clientX, ev.clientY)
+      if (hit?.paneTabId !== hover?.paneTabId || hit?.zone !== hover?.zone) latest.current.onPaneHover?.(hit)
+      hover = hit
+      // Over a pane the drop splits/assigns: neither a reorder slot nor a pop-out applies.
+      current = { tabId, slot: hit || slot === from || slot === from + 1 ? null : slot, popOut: !hit && outside > POP_OUT_DISTANCE_PX }
       setView(current)
     }
     const finish = (commit: boolean) => {
       stop.current?.()
       stop.current = null
       const done = current
+      const dropped = hover
+      hover = null
+      if (dropped) latest.current.onPaneHover?.(null)
       setView(null)
       if (!done) return
       justDragged.current = true // the click that follows the release must not activate
       window.setTimeout(() => { justDragged.current = false }, 0)
       if (!commit) return
-      const { tabIds: ids, onReorder: reorder, onPopOut: popOut } = latest.current
-      if (done.popOut) popOut(tabId)
+      const { tabIds: ids, onReorder: reorder, onPopOut: popOut, onPaneDrop: paneDrop } = latest.current
+      if (dropped) paneDrop?.(tabId, dropped)
+      else if (done.popOut) popOut(tabId)
       else if (done.slot !== null) reorder(tabId, reorderTarget(ids.indexOf(tabId), done.slot))
     }
     const up = () => finish(true)

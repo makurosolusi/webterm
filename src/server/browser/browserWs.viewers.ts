@@ -27,6 +27,11 @@ export interface GatewayHost extends BrowserHostApi {
   setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
   /** Tab list of a node, sent to a viewer on attach (absent in hosts without tabs). */
   tabsState?(nodeId: string): BrowserTabsState | undefined
+  /** Split view: the tabs on screen (one per pane) + the focused one (only those stream), and one pane's size (absent in hosts without tabs). */
+  tabApi?: {
+    setView(nodeId: string, visible: string[], focus?: string): Promise<void>
+    setTabViewport(nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void>
+  }
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
 }
@@ -42,8 +47,8 @@ export interface ViewerSink {
 /** Satu koneksi klien; identitas objek dipakai sebagai kunci. */
 export interface Viewer { readonly sink: ViewerSink }
 
-/** Jatah kirim satu (klien,node) + satu frame terbaru yang belum terkirim. */
-interface Slot { gate: FrameGate; pending?: { seq: number; bytes: Uint8Array } }
+/** Jatah kirim satu (klien,node) + satu frame terbaru per tab (split view: tiap pane) yang belum terkirim; '' = tab fokus tanpa label. */
+interface Slot { gate: FrameGate; pending: Map<string, { seq: number; bytes: Uint8Array }> }
 
 interface NodeEntry {
   viewers: Map<Viewer, Slot>
@@ -102,7 +107,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     if (!e) return
     if (s.live === 'discarded') { // target hilang (crash/discard): screencast lama mati, ack lama tak berarti
       e.casting = false
-      for (const slot of e.viewers.values()) { slot.gate.clear(); slot.pending = undefined }
+      for (const slot of e.viewers.values()) { slot.gate.clear(); slot.pending.clear() }
     } else if (s.live === 'live' && e.viewers.size > 0 && !e.casting) {
       sync(s.id).catch((err) => log.warn('browser.ws', 'restart screencast failed', { ids: { nodeId: s.id }, error: errName(err) }))
     }
@@ -113,9 +118,9 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     host.ackFrame(nodeId, f.seq) // ack saat diterima: Chromium lanjut memproduksi tanpa menunggu klien
     const e = nodes.get(nodeId)
     if (!e || e.viewers.size === 0) return
-    const bytes = encodeFrame(nodeId, f.seq, f.jpeg, f.lat)
+    const bytes = encodeFrame(nodeId, f.seq, f.jpeg, f.lat, f.tabId)
     for (const [v, slot] of e.viewers) {
-      slot.pending = { seq: f.seq, bytes } // terbaru menimpa: klien lambat tetap melihat frame terakhir, bukan yang basi
+      slot.pending.set(f.tabId ?? '', { seq: f.seq, bytes }) // terbaru menimpa: klien lambat tetap melihat frame terakhir tiap pane, bukan yang basi
       flush(v, slot)
     }
   }
@@ -124,10 +129,11 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
   // ponytail: buffer penuh karena node LAIN di socket yang sama tidak memicu flush; frame tertunda node ini menunggu
   // frame/ack berikutnya. Upgrade: flush semua slot penonton dari callback tulis apa pun bila terlihat basi.
   function flush(v: Viewer, slot: Slot) {
-    const p = slot.pending
-    if (!p || slot.gate.admit(p.seq, v.sink.bufferedAmount) === 'drop') return
-    slot.pending = undefined
-    if (!v.sink.sendBinary(p.bytes, () => flush(v, slot))) slot.gate.ack(p.seq) // socket tertutup: frame dibuang
+    for (const [key, p] of slot.pending) {
+      if (slot.gate.admit(p.seq, v.sink.bufferedAmount) === 'drop') return
+      slot.pending.delete(key)
+      if (!v.sink.sendBinary(p.bytes, () => flush(v, slot))) slot.gate.ack(p.seq) // socket tertutup: frame dibuang
+    }
   }
 
   async function reconcile(nodeId: string) {
@@ -163,7 +169,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       if (!e) nodes.set(nodeId, (e = { viewers: new Map(), casting: false }))
       if (e.viewers.has(v)) return
       const first = e.viewers.size === 0
-      e.viewers.set(v, { gate: createFrameGate() })
+      e.viewers.set(v, { gate: createFrameGate(), pending: new Map() })
       subscribe()
       if (first) setVisible?.(nodeId, true)
     },
@@ -171,7 +177,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       const e = nodes.get(nodeId)
       const slot = e?.viewers.get(v)
       if (!e || !slot) return
-      slot.pending = undefined // callback `ws.send` yang masih jalan tak boleh mengirim frame node yang sudah dilepas
+      slot.pending.clear() // callback `ws.send` yang masih jalan tak boleh mengirim frame node yang sudah dilepas
       e.viewers.delete(v)
       if (e.viewers.size === 0) setVisible?.(nodeId, false)
       unsubscribeIfIdle()

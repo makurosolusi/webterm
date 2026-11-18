@@ -52,6 +52,23 @@ export interface NodeTabs {
   followAgent: boolean
   /** Page left over after the last tab was closed (the node shows it blank); the next new tab reuses it. */
   blank?: TabRt
+  /** Split-view runtime (browserHost.split.ts); created on first use. */
+  split?: SplitRt
+}
+
+/**
+ * What a split view adds to a node's tabs: the tabs on screen, a screencast per on-screen tab that is not the view
+ * (`side`, keyed by tab id), per-tab pane sizes, and what is already applied to each page (emulation, stream parameters).
+ */
+export interface SplitRt {
+  visible: string[]
+  side: Map<string, { sessionId: string }>
+  vp: Map<string, { w: number; h: number; dpr: number }>
+  applied: Map<string, string>
+  castKey: Map<string, string>
+  identity: Map<string, string>
+  touch: Set<string>
+  tail: Promise<unknown>
 }
 
 /** A background tab of a node (not the view). */
@@ -67,7 +84,7 @@ export interface NodeRec {
   state: BrowserState
   viewport: { w: number; h: number; dpr: number }
   /** `acks`: seq milik kita -> id ack screencast milik Chromium (dikirim hanya setelah `ackFrame`). */
-  cast?: { onFrame: (f: Frame) => void; seq: number; acks: Map<number, number> }
+  cast?: { onFrame: (f: Frame) => void; seq: number; acks: Map<number, number>; /** seq -> session of a frame from an on-screen tab that is not the view (ack goes there). */ sides?: Map<number, string> }
   touch: boolean
   /** Device mode (browserHost.device.ts): spec = emulated device, null = Responsive, undefined = not seeded from the board yet. */
   device?: DeviceSpec | null
@@ -184,7 +201,19 @@ export function pushFrame(rec: NodeRec, p: Record<string, unknown>): void {
   cast.acks.set(cast.seq, p.sessionId)
   const jpeg = Buffer.from(p.data, 'base64')
   const lat = rec.lat && frameLatency(rec, p.metadata, Date.now())
-  cast.onFrame(lat ? { seq: cast.seq, jpeg, lat } : { seq: cast.seq, jpeg })
+  // A split view tells the client which pane the frame belongs to; a single pane keeps the plain frame.
+  const tabId = (rec.tabs?.split?.visible.length ?? 0) > 1 ? rec.tabs?.state.activeTabId ?? undefined : undefined
+  cast.onFrame({ seq: cast.seq, jpeg, ...(lat ? { lat } : {}), ...(tabId ? { tabId } : {}) })
+}
+
+/** Frame of an on-screen tab that is not the view: same sequence as the view's frames (one ack space per node), tagged with its tab. */
+export function pushSideFrame(rec: NodeRec, tabId: string, sessionId: string, p: Record<string, unknown>): void {
+  const cast = rec.cast
+  if (!cast || typeof p.data !== 'string' || typeof p.sessionId !== 'number') return
+  cast.seq = (cast.seq + 1) >>> 0
+  cast.acks.set(cast.seq, p.sessionId)
+  ;(cast.sides ??= new Map()).set(cast.seq, sessionId)
+  cast.onFrame({ seq: cast.seq, jpeg: Buffer.from(p.data, 'base64'), tabId })
 }
 
 /** Catat input bercap waktu; yang pertama dalam satu ledakan dipertahankan (Orca typing-latency: ledakan = satu sampel). */

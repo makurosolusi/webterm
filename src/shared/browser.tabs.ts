@@ -1,5 +1,9 @@
 // Contract for tabs inside one browser node (one Chromium window, many tabs): types, validators and a pure
 // reducer shared by the client strip and (later) the server. No server/DB imports; ids are supplied by the caller.
+import { parseDeviceChoice } from './browser.devices'
+import type { DeviceChoice } from './browser.devices'
+import { assignTab, layoutAfterClose, layoutTabIds, validLayout } from './browser.layout'
+import type { Pane } from './workspace.shape'
 
 export const MAX_TABS_PER_NODE = 8
 export const MAX_CLOSED_HISTORY = 10
@@ -19,6 +23,8 @@ export interface BrowserTab {
   crashed: boolean
   /** UI hint only; the source of truth is `agentTabId`. */
   agent?: boolean
+  /** This tab's own device emulation (split panes size tabs independently); absent = follows the node's device mode. */
+  device?: DeviceChoice | null
 }
 
 export interface BrowserTabsState {
@@ -29,6 +35,8 @@ export interface BrowserTabsState {
   agentTabId: string | null
   /** Recently closed tabs, newest first, at most MAX_CLOSED_HISTORY (Ctrl+Shift+T). */
   closed: BrowserTab[]
+  /** Split layout (browser.layout.ts, leaf = tabId); absent = one pane showing `activeTabId`. */
+  layout?: Pane
 }
 
 export type BrowserTabAction =
@@ -53,10 +61,12 @@ export type BrowserTabEvent =
   | { type: 'tabClosed'; nodeId: string; tabId: string; remember?: boolean }
   | { type: 'tabMoved'; nodeId: string; tabId: string; toIndex: number }
   | { type: 'tabActivated'; nodeId: string; tabId: string; by: 'human' | 'agent' }
+  /** The split layout changed (null = back to one pane). */
+  | { type: 'layoutChanged'; nodeId: string; layout: Pane | null }
 
 /** What a node keeps on the board (`WsNode.tabs`): urls and titles only, no binary favicon; every tab restores discarded but the active one. */
-export interface PersistedTab { tabId: string; url: string; title: string; favicon?: string; openerTabId?: string }
-export interface PersistedTabs { tabs: PersistedTab[]; activeTabId: string | null; agentTabId: string | null }
+export interface PersistedTab { tabId: string; url: string; title: string; favicon?: string; openerTabId?: string; device?: DeviceChoice }
+export interface PersistedTabs { tabs: PersistedTab[]; activeTabId: string | null; agentTabId: string | null; layout?: Pane }
 
 export const MAX_FAVICON_URL_LENGTH = 512
 const FAVICON_URL = /^https?:\/\//i
@@ -77,15 +87,17 @@ export function validPersistedTabs(v: unknown): PersistedTabs | undefined {
     if (!url.ok) continue
     seen.add(o.tabId)
     const favicon = typeof o.favicon === 'string' && o.favicon.length <= MAX_FAVICON_URL_LENGTH && FAVICON_URL.test(o.favicon) ? o.favicon : undefined
+    const device = o.device === undefined ? null : parseDeviceChoice(o.device)
     tabs.push({
-      tabId: o.tabId, url: url.url, title: sanitizeTabTitle(o.title), ...(favicon ? { favicon } : {}),
+      tabId: o.tabId, url: url.url, title: sanitizeTabTitle(o.title), ...(favicon ? { favicon } : {}), ...(device ? { device } : {}),
       ...(typeof o.openerTabId === 'string' && o.openerTabId !== '' ? { openerTabId: o.openerTabId } : {}),
     })
   }
   if (tabs.length === 0) return undefined
   const pick = (id: unknown): string | null => (typeof id === 'string' && seen.has(id) ? id : null)
   const activeTabId = pick(raw.activeTabId) ?? tabs[0].tabId
-  return { tabs, activeTabId, agentTabId: pick(raw.agentTabId) ?? activeTabId }
+  const layout = validLayout(raw.layout, seen)
+  return { tabs, activeTabId, agentTabId: pick(raw.agentTabId) ?? activeTabId, ...(layout ? { layout } : {}) }
 }
 
 export const emptyTabsState = (): BrowserTabsState => ({ tabs: [], activeTabId: null, agentTabId: null, closed: [] })
@@ -167,7 +179,15 @@ function removeTabs(state: BrowserTabsState, ids: Set<string>, remember: boolean
   }
   const reset = (t: BrowserTab): BrowserTab => ({ ...t, loading: false, discarded: false, crashed: false })
   const closed = remember ? [...gone.map(reset).reverse(), ...state.closed].slice(0, MAX_CLOSED_HISTORY) : state.closed
-  return { tabs, activeTabId: survivor(state.activeTabId), agentTabId: survivor(state.agentTabId), closed }
+  let activeTabId = survivor(state.activeTabId)
+  let layout = state.layout
+  for (const t of gone) {
+    if (!layout || !layoutTabIds(layout).includes(t.tabId)) continue
+    const r = layoutAfterClose(layout, t.tabId, state.tabs.filter((x) => x.tabId === t.tabId || !ids.has(x.tabId)).map((x) => x.tabId))
+    layout = r.layout ?? undefined
+    if (t.tabId === state.activeTabId && r.focus) activeTabId = r.focus // the pane that lost its tab hands focus to whatever it shows now
+  }
+  return { tabs, activeTabId, agentTabId: survivor(state.agentTabId), closed, ...(layout ? { layout } : {}) }
 }
 
 /** Pure reducer for every tab action; refuses (returns the same state) when a rule such as the limit blocks it. */
@@ -202,7 +222,12 @@ export function reduceTabs(state: BrowserTabsState, a: BrowserTabAction): Browse
       const i = state.tabs.findIndex((t) => t.tabId === a.tabId)
       return i < 0 ? state : removeTabs(state, new Set(state.tabs.slice(i + 1).map((t) => t.tabId)), true)
     }
-    case 'activate': return find(a.tabId) && state.activeTabId !== a.tabId ? { ...state, activeTabId: a.tabId } : state
+    case 'activate': {
+      if (!find(a.tabId) || state.activeTabId === a.tabId) return state
+      // In a split, a tab that is not on screen takes over the focused pane; one that is just takes the focus.
+      const l = state.layout
+      return l && state.activeTabId && !layoutTabIds(l).includes(a.tabId) ? { ...state, activeTabId: a.tabId, layout: assignTab(l, state.activeTabId, a.tabId) } : { ...state, activeTabId: a.tabId }
+    }
     case 'reorder': {
       const tabs = reorderTabs(state.tabs, a.tabId, a.toIndex)
       return tabs === state.tabs ? state : { ...state, tabs }
@@ -221,6 +246,7 @@ export function applyTabEvent(state: BrowserTabsState, e: BrowserTabEvent): Brow
       const closed = e.reopenedFrom ? state.closed.filter((t) => t.tabId !== e.reopenedFrom) : state.closed
       return { ...state, tabs, closed, activeTabId: state.activeTabId ?? e.tab.tabId, agentTabId: state.agentTabId ?? e.tab.tabId }
     }
+    case 'layoutChanged': return e.layout ? { ...state, layout: e.layout } : { ...state, layout: undefined }
     case 'tabUpdated': return { ...state, tabs: state.tabs.map((t) => (t.tabId === e.tabId ? { ...t, ...e.patch } : t)) }
     case 'tabClosed': return removeTabs(state, new Set([e.tabId]), e.remember !== false)
     case 'tabMoved': {

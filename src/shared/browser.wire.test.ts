@@ -158,3 +158,29 @@ describe('parseClientMsg ditolak (null)', () => {
     expect(parseClientMsg('x'.repeat(TEXT_MAX_BYTES * 8 + 1))).toBeNull()
   })
 })
+
+describe('split view on the wire', () => {
+  it('frames carry the tab of their pane; a plain frame has none', () => {
+    const h = decodeFrameHeader(encodeFrame('n1', 7, jpeg, undefined, 'tab-b'))
+    expect(h).toMatchObject({ nodeId: 'n1', tabId: 'tab-b', seq: 7 })
+    expect(decodeFrameHeader(encodeFrame('n1', 7, jpeg))?.tabId).toBeUndefined()
+    const timed = decodeFrameHeader(encodeFrame('n1', 1, jpeg, { ls: 1, rxToDispatch: 2, dispatchToSwap: 3, swapToServer: 4 }, 'tab-b'))
+    expect(timed).toMatchObject({ nodeId: 'n1', tabId: 'tab-b' })
+    expect(timed?.lat?.swapToServer).toBe(4)
+    expect(() => encodeFrame('n\u001f1', 1, jpeg)).toThrow()
+  })
+
+  it('parses view, a tab-scoped resize and a tab-scoped input; rejects malformed ones', () => {
+    expect(parseClientMsg({ t: 'view', id: 'n', visible: ['a', 'b'], focus: 'b' })).toEqual({ t: 'view', id: 'n', visible: ['a', 'b'], focus: 'b' })
+    expect(parseClientMsg({ t: 'view', id: 'n', visible: [] })).toEqual({ t: 'view', id: 'n', visible: [] })
+    expect(parseClientMsg({ t: 'view', id: 'n', visible: ['a', 'b', 'c', 'd', 'e'] })).toBeNull()
+    expect(parseClientMsg({ t: 'view', id: 'n', visible: ['bad id'] })).toBeNull()
+    expect(parseClientMsg({ t: 'view', id: 'n', visible: 'a' })).toBeNull()
+    expect(parseClientMsg({ t: 'resize', id: 'n', w: 10, h: 10, dpr: 1, tab: 'a' })).toMatchObject({ t: 'resize', tab: 'a' })
+    expect(parseClientMsg({ t: 'resize', id: 'n', w: 10, h: 10, dpr: 1 })).not.toHaveProperty('tab')
+    expect(parseClientMsg({ t: 'resize', id: 'n', w: 10, h: 10, dpr: 1, tab: '../x' })).toBeNull()
+    expect(parseClientMsg({ t: 'mouse', id: 'n', type: 'down', x: 1, y: 1, tab: 'a' })).toMatchObject({ t: 'mouse', tab: 'a' })
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'x', tab: 7 })).toBeNull()
+    expect(parseClientMsg({ t: 'text', id: 'n', text: 'x' })).not.toHaveProperty('tab')
+  })
+})

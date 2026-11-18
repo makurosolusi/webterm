@@ -5,6 +5,10 @@ import { BlockedError } from '../shared/browser.contract'
 import { MAX_TAB_URL_LENGTH, TAB_LIMIT_REASON, validateTabUrl } from '../shared/browser.tabs'
 import type { BrowserTab, BrowserTabsState } from '../shared/browser.tabs'
 import { isSafeNodeId } from '../shared/workspace'
+import type { Pane } from '../shared/workspace.shape'
+import { validLayout } from '../shared/browser.layout'
+import { parseDeviceChoice } from '../shared/browser.devices'
+import type { DeviceChoice } from '../shared/browser.devices'
 import { BrowserError } from './browser/browserHost.targets'
 import { TabLimitError } from './browser/browserHost.tabs'
 import { fail, readObject } from './browserApi.cookies'
@@ -23,6 +27,17 @@ export interface TabsApiDeps {
   duplicate(nodeId: string, tabId: string): Promise<TabsView>
   popOut(nodeId: string, tabId: string): Promise<TabsView>
   reopen(nodeId: string): Promise<TabsView>
+  /** Split layout (null = one pane); `focus` also moves the human's view to that tab. */
+  setLayout(nodeId: string, layout: Pane | null, focus?: string): Promise<TabsView>
+  /** One tab's own device (null = follow the pane/node size). */
+  setDevice(nodeId: string, tabId: string, device: DeviceChoice | null): Promise<TabsView>
+}
+
+/** `{preset, landscape?}` | `{w, h, dpr?}` | `{preset: null}` -> the choice to store; undefined = invalid. */
+function deviceFromBody(o: Record<string, unknown>): DeviceChoice | null | undefined {
+  if ('preset' in o) return o.preset === null ? null : parseDeviceChoice({ id: o.preset, ...(o.landscape === undefined ? {} : { landscape: o.landscape }) })
+  if (o.w !== undefined || o.h !== undefined) return parseDeviceChoice({ id: 'custom', w: o.w, h: o.h, dpr: o.dpr ?? 1, ...(o.landscape === undefined ? {} : { landscape: o.landscape }) })
+  return undefined
 }
 
 const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -61,6 +76,15 @@ export async function tabsRoute(method: string, nodeId: string, rest: string[], 
     if (afterTabId !== undefined && (typeof afterTabId !== 'string' || !TAB_ID.test(afterTabId))) return fail(400, 'bad_request', { message: 'afterTabId is not a tab id' })
     return run(() => d.newTab(nodeId, { url: url as string | undefined, afterTabId: afterTabId as string | undefined }))
   }
+  if (a === 'layout' && b === undefined) {
+    if (method !== 'PUT' && method !== 'POST') return fail(405, 'method_not_allowed')
+    const read = await readObject(body)
+    if (!read.ok) return read.result
+    const { layout, focus } = read.value
+    if (layout !== null && validLayout(layout) === undefined) return fail(400, 'bad_request', { message: 'layout must be null or a pane tree of 2-4 distinct tabs' })
+    if (focus !== undefined && (typeof focus !== 'string' || !TAB_ID.test(focus))) return fail(400, 'bad_request', { message: 'focus is not a tab id' })
+    return run(() => d.setLayout(nodeId, layout as Pane | null, focus as string | undefined))
+  }
   if (a === 'reopen' && b === undefined) return method === 'POST' ? run(() => d.reopen(nodeId)) : fail(405, 'method_not_allowed')
   if (!TAB_ID.test(a)) return fail(400, 'bad_request')
   if (b === undefined) return method === 'DELETE' ? run(() => d.close(nodeId, a)) : fail(405, 'method_not_allowed')
@@ -69,6 +93,13 @@ export async function tabsRoute(method: string, nodeId: string, rest: string[], 
     case 'activate': return run(() => d.activate(nodeId, a))
     case 'duplicate': return run(() => d.duplicate(nodeId, a))
     case 'pop-out': return run(() => d.popOut(nodeId, a))
+    case 'device': {
+      const read = await readObject(body)
+      if (!read.ok) return read.result
+      const device = deviceFromBody(read.value)
+      if (device === undefined) return fail(400, 'bad_request', { message: 'device must be {preset}, {preset: null} or {w, h, dpr?} within range' })
+      return run(() => d.setDevice(nodeId, a, device))
+    }
     case 'move': {
       const read = await readObject(body)
       if (!read.ok) return read.result

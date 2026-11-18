@@ -13,6 +13,7 @@ import type { NodeRec } from './browserHost.targets'
 import { createKit } from './browserHost.tabs.kit'
 import type { TabsOps } from './browserHost.tabs.kit'
 import { createPopupSide } from './browserHost.tabs.popup'
+import { createSplit } from './browserHost.split'
 
 export { TabLimitError } from './browserHost.tabs.kit'
 export type { TabsOps } from './browserHost.tabs.kit'
@@ -23,13 +24,14 @@ export function createTabs(ops: TabsOps) {
   const kit = createKit(ops)
   const { tabsOf, find, must, emitTab, patchTab, setState, send, fire, closeTarget, spawn, load, idOf } = kit
   const { table } = ops
+  const split = createSplit(kit, { liveSession: (r, id) => liveSession(r, id), activate: (r, id) => moveCursors(r, { active: id }) })
 
   /** Fresh tab model for a node whose page is about to open: the board's saved list (all discarded but the active one) or empty. */
   function restore(rec: NodeRec): string | undefined {
     if (rec.tabs) return undefined
     const p = kit.initial(rec.nodeId)
     const tabs: BrowserTab[] = (p?.tabs ?? []).map((t) => ({ ...t, loading: false, discarded: t.tabId !== p?.activeTabId, crashed: false }))
-    rec.tabs = { state: { tabs, activeTabId: p?.activeTabId ?? null, agentTabId: p?.agentTabId ?? null, closed: [] }, rt: new Map(), followAgent: true }
+    rec.tabs = { state: { tabs, activeTabId: p?.activeTabId ?? null, agentTabId: p?.agentTabId ?? null, closed: [], ...(p?.layout ? { layout: p.layout } : {}) }, rt: new Map(), followAgent: true }
     return tabs.find((t) => t.tabId === p?.activeTabId)?.url
   }
 
@@ -74,6 +76,7 @@ export function createTabs(ops: TabsOps) {
     const t = rec.tabs
     if (!t) return
     kit.forgetTimers(rec)
+    split.clear(rec)
     for (const [id, rt] of t.rt) {
       if (rt.targetId && rt.targetId !== rec.targetId) { if (closeOthers) closeTarget(rec, rt); else table.bgUnbind(rt.targetId, rt.sessionId) }
       patchTab(rec, id, { discarded: true, loading: false })
@@ -123,6 +126,7 @@ export function createTabs(ops: TabsOps) {
     }
     ops.patch(rec, { url: to.url, title: to.title, loading: to.loading, canBack: false, canForward: false, netError: undefined, blocked: undefined, ...ops.shield.pageState(to.url) })
     void ops.refresh(rec)
+    split.swapped(rec, toTabId, fromTabId)
   }
 
   /** Move the cursors, emitting one `tabActivated` per cursor that changed; the human's move swaps the view. */
@@ -135,8 +139,10 @@ export function createTabs(ops: TabsOps) {
     if (to.active && to.active !== t.state.activeTabId) {
       const from = t.state.activeTabId
       await setView(rec, to.active, from, false)
+      split.followFocus(rec, to.active, from)
       kit.schedule(rec)
       emitTab(rec, { type: 'tabActivated', nodeId: rec.nodeId, tabId: to.active, by: 'human' })
+      await split.reconcile(rec)
     }
   }
 
@@ -205,7 +211,9 @@ export function createTabs(ops: TabsOps) {
     t.rt.delete(tabId)
     t.state = wasView && backTo ? { ...next, activeTabId: backTo } : next
     emitTab(rec, { type: 'tabClosed', nodeId: rec.nodeId, tabId, ...(remember ? {} : { remember: false }) })
+    if (prev.layout !== t.state.layout) split.noteLayout(rec, t.state.layout)
     kit.schedule(rec)
+    await split.reconcile(rec)
     return next
   }
 
@@ -261,8 +269,8 @@ export function createTabs(ops: TabsOps) {
 
   function forget(rec: NodeRec): void { kit.forgetTimers(rec); kit.forgetSaved(rec.nodeId) }
 
-  const popup = createPopupSide(kit, { create, liveSession })
-  return { restore, bindView, closedTab, pageClosed, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
+  const popup = createPopupSide(kit, { create, liveSession, sideFrame: split.sidePush })
+  return { split, restore, bindView, closedTab, pageClosed, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
 }
 
 export type TabManager = ReturnType<typeof createTabs>

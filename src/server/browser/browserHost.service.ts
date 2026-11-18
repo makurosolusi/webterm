@@ -118,17 +118,20 @@ export class BrowserHost implements BrowserHostApi {
     const rec = this.need(nodeId)
     rec.cast = { onFrame, seq: 0, acks: new Map() }
     await this.send(rec, CDP.startScreencast, screencastParams(castViewport(rec)))
+    if (rec.tabs?.split?.visible.length) await this.tabs.split.reconcile(rec) // start the other panes too
   }
 
   async stopScreencast(nodeId: string): Promise<void> {
     const rec = this.table.nodes.get(nodeId)
     if (!rec?.cast) return
+    await this.tabs.split.stopAll(rec)
     rec.cast = undefined
     if (rec.sessionId) await this.send(rec, CDP.stopScreencast)
   }
 
   ackFrame(nodeId: string, seq: number): void {
     const rec = this.table.nodes.get(nodeId)
+    if (rec?.cast?.sides?.has(seq)) { this.tabs.split.ackSide(rec, seq); return }
     const ackId = rec?.cast?.acks.get(seq)
     if (!rec || ackId === undefined) return // seq tak dikenal/basi: tidak ada yang di-ack
     rec.cast?.acks.delete(seq)
@@ -138,6 +141,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
+    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true

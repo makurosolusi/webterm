@@ -18,6 +18,8 @@ const PAGE_ALREADY_GONE = /no target with given id/i
 export interface PopupDeps {
   create(rec: NodeRec, o: { url: string; afterTabId?: string; openerTabId?: string; focusHuman: boolean; focusAgent: boolean; adopt: () => Promise<{ targetId: string; sessionId: string }> }): Promise<BrowserTab>
   liveSession(rec: NodeRec, tabId: string): Promise<string>
+  /** A frame of an on-screen tab that is not the view (split view). */
+  sideFrame(rec: NodeRec, tabId: string, sessionId: string, p: Record<string, unknown>): void
 }
 
 export function createPopupSide(kit: TabKit, deps: PopupDeps) {
@@ -110,6 +112,7 @@ export function createPopupSide(kit: TabKit, deps: PopupDeps) {
   function bgEvent(b: BgTab, method: string, p: Record<string, unknown>, sessionId: string): void {
     const { rec, tabId } = b
     switch (method) {
+      case CDP_EVENT.screencastFrame: return deps.sideFrame(rec, tabId, sessionId, p)
       case CDP_EVENT.frameStartedLoading: return patchTab(rec, tabId, { loading: true })
       case CDP_EVENT.frameStoppedLoading:
         patchTab(rec, tabId, { loading: false })

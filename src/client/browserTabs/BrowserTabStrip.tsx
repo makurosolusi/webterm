@@ -1,7 +1,7 @@
 // Tab strip of a browser node (Chrome/VS Code pattern). Fully controlled: state in, `onAction` out; no fetch or WS.
 // Tabs shrink from 220px to 96px, then the strip scrolls with chevrons and an All-tabs list. Not a native
 // control: tabs are role=tab divs, so the strip imports the VS Code menu layer like the other hybrid screens.
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { VscodeMenu, type VscodeMenuItem } from '@/components/vscode/vscodeMenu'
@@ -11,6 +11,7 @@ import {
 } from '../../shared/browser.tabs'
 import { BrowserTabItem } from './BrowserTabItem'
 import { useTabDrag } from './browserTabs.drag'
+import type { DropHint } from '../browserSplit/browserSplit.drop'
 import { focusTarget, tabKeyIntent } from './browserTabs.keys'
 import { allTabsItems, tabContextItems } from './browserTabs.menu'
 import { prefersReducedMotion, useTabOverflow } from './browserTabs.overflow'
@@ -25,11 +26,17 @@ export interface BrowserTabStripProps {
   makeId?: () => string
   /** DOM id of the tabpanel the tabs control (sets aria-controls). */
   panelId?: string
+  /** Rendered just before the New tab button (the node's Split menu). */
+  trailing?: ReactNode
+  /** Split view: "Split right/down" in the tab menu (`blocked` = why not) and dragging a tab onto a pane. */
+  split?: { run: (tabId: string, edge: 'right' | 'bottom') => void; blocked?: string }
+  onPaneHover?: (hit: DropHint | null) => void
+  onPaneDrop?: (tabId: string, hit: DropHint) => void
 }
 
 type OpenMenu = { kind: 'tab'; tabId: string; at: { x: number; y: number } } | { kind: 'all'; at: { x: number; y: number } }
 
-export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, panelId }: BrowserTabStripProps) {
+export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, panelId, trailing, split, onPaneHover, onPaneDrop }: BrowserTabStripProps) {
   const { tabs, activeTabId, agentTabId } = state
   const listRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -43,6 +50,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
     stripRef: rootRef, tabIds: tabs.map((t) => t.tabId), tabElements: tabEls,
     onReorder: (tabId, toIndex) => onAction({ type: 'reorder', tabId, toIndex }),
     onPopOut: (tabId) => onAction({ type: 'popOut', tabId }),
+    onPaneHover, onPaneDrop,
   })
 
   useEffect(() => { setFocusedId(activeTabId) }, [activeTabId])
@@ -93,7 +101,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
   const menuTab = menu?.kind === 'tab' ? tabs.find((t) => t.tabId === menu.tabId) : undefined
   const menuItems: VscodeMenuItem[] = menu?.kind === 'all'
     ? allTabsItems(state, (tabId) => onAction({ type: 'activate', tabId }))
-    : menuTab ? tabContextItems(menuTab, { state, run: onAction, copyUrl, makeId }) : []
+    : menuTab ? tabContextItems(menuTab, { state, run: onAction, copyUrl, makeId, split }) : []
   const dragIndex = drag.view ? tabs.findIndex((t) => t.tabId === drag.view?.tabId) : -1
 
   return (
@@ -136,6 +144,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
       {!add.ok && (
         <span className="bt-limit" role="status"><span aria-hidden="true">{tabs.length}/{MAX_TABS_PER_NODE}</span><span className="bt-sr">{add.reason}</span></span>
       )}
+      {trailing}
       <IconButton label="New tab" size="icon-xs" disabled={!add.ok} disabledReason={add.ok ? undefined : add.reason} onClick={() => newTab()}>
         <Plus aria-hidden="true" />
       </IconButton>

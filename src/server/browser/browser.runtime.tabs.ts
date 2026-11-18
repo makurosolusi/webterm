@@ -67,7 +67,7 @@ export function createTabsService(d: TabsWiringDeps): TabsApiDeps {
     if (!n || n.kind !== BROWSER_KIND) return null
     const saved = validPersistedTabs(n.tabs)
     if (!saved) return emptyTabsState()
-    return { tabs: saved.tabs.map((t) => ({ ...t, loading: false, discarded: true, crashed: false })), activeTabId: saved.activeTabId, agentTabId: saved.agentTabId, closed: [] }
+    return { tabs: saved.tabs.map((t) => ({ ...t, loading: false, discarded: true, crashed: false })), activeTabId: saved.activeTabId, agentTabId: saved.agentTabId, closed: [], ...(saved.layout ? { layout: saved.layout } : {}) }
   }
   const out = (id: string, tab?: BrowserTab, extra: Partial<TabsView> = {}): TabsView => ({ state: view(id) ?? emptyTabsState(), ...(tab ? { tab } : {}), ...extra })
   const act = async <T>(id: string, fn: () => Promise<T>): Promise<T> => { await ensureLive(id); return fn() }
@@ -79,6 +79,8 @@ export function createTabsService(d: TabsWiringDeps): TabsApiDeps {
     close: (id, tabId) => act(id, async () => { await d.host.tabApi.closeTab(id, tabId); return out(id) }),
     move: (id, tabId, to) => act(id, async () => { await d.host.tabApi.move(id, tabId, to); return out(id) }),
     duplicate: (id, tabId) => act(id, async () => out(id, await d.host.tabApi.duplicate(id, tabId))),
+    setLayout: (id, layout, focus) => act(id, async () => { await d.host.tabApi.setLayout(id, layout, focus); return out(id) }),
+    setDevice: (id, tabId, device) => act(id, async () => { await d.host.tabApi.setTabDevice(id, tabId, device); return out(id) }),
     reopen: (id) => act(id, async () => out(id, await d.host.tabApi.reopen(id))),
     /**
      * Tab -> its own node beside this one: same profile (cookies come with it), same url, a fresh page (a live page cannot

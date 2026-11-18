@@ -3,6 +3,8 @@
 import { BlockedError } from '../../shared/browser.contract'
 import type { BrowserInputEvent, BrowserState } from '../../shared/browser.contract'
 import type { BrowserTab, BrowserTabsState } from '../../shared/browser.tabs'
+import type { DeviceChoice } from '../../shared/browser.devices'
+import type { Pane } from '../../shared/workspace.shape'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { toCdpCommands } from './browserHost.input'
@@ -72,6 +74,11 @@ export function createTabApi(d: TabApiDeps) {
       const state = await d.tabs.remove(rec, tabId, false)
       return { url: t.url, title: t.title, state }
     }),
+    /** Split view (browserHost.split.ts): on-screen tabs + focus, a pane's size, a tab's own device, the layout. All run in the node's action queue. */
+    setView: (nodeId: string, visible: string[], focus?: string): Promise<void> => serial(nodeId, () => d.tabs.split.setVisible(d.table.nodes.get(nodeId), visible, focus)),
+    setTabViewport: (nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void> => serial(nodeId, () => d.tabs.split.resizeTab(d.table.nodes.get(nodeId), tabId, { w, h, dpr })),
+    setTabDevice: (nodeId: string, tabId: string, device: DeviceChoice | null) => action(nodeId, (rec) => d.tabs.split.setTabDevice(rec, tabId, device)),
+    setLayout: (nodeId: string, layout: Pane | null, focus?: string) => action(nodeId, (rec) => d.tabs.split.setLayout(rec, layout, focus)),
     /** Tab the human views / the agent works in; undefined = unknown node or no tabs. */
     viewTab: (nodeId: string): string | undefined => d.table.nodes.get(nodeId)?.tabs?.state.activeTabId ?? undefined,
     agentTab: (nodeId: string): string | undefined => d.table.nodes.get(nodeId)?.tabs?.state.agentTabId ?? undefined,

@@ -140,7 +140,11 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
         await hub.leave(id, viewer)
         return
       case 'resize':
-        await host.setViewport(id, m.w, m.h, Math.min(m.dpr, DSF_MAX))
+        if (m.tab) await host.tabApi?.setTabViewport(id, m.tab, m.w, m.h, Math.min(m.dpr, DSF_MAX))
+        else await host.setViewport(id, m.w, m.h, Math.min(m.dpr, DSF_MAX))
+        return
+      case 'view':
+        await host.tabApi?.setView(id, m.visible, m.focus)
         return
       case 'takeover':
         leases.takeover(id)

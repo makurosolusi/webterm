@@ -177,3 +177,30 @@ describe('applyTabEvent', () => {
     expect(applyTabEvent(base, { type: 'tabActivated', nodeId: 'n', tabId: 'zz', by: 'human' })).toBe(base)
   })
 })
+
+describe('tabs in a split layout', () => {
+  const split = (): BrowserTabsState => ({ ...make(['a', 'b', 'c', 'd'], 'b'), layout: { dir: 'h', ratio: 0.5, a: { id: 'a' }, b: { id: 'b' } } })
+  it('activating a hidden tab takes over the focused pane; a shown tab only takes the focus', () => {
+    const s = reduceTabs(split(), { type: 'activate', tabId: 'c' })
+    expect(s.activeTabId).toBe('c')
+    expect(s.layout).toEqual({ dir: 'h', ratio: 0.5, a: { id: 'a' }, b: { id: 'c' } })
+    const t = reduceTabs(split(), { type: 'activate', tabId: 'a' })
+    expect(t.layout).toEqual(split().layout)
+  })
+  it('closing a shown tab hands its pane to the nearest hidden tab and the focus with it', () => {
+    const s = reduceTabs(split(), { type: 'close', tabId: 'b' })
+    expect(ids(s)).toEqual(['a', 'c', 'd'])
+    expect(s.layout).toEqual({ dir: 'h', ratio: 0.5, a: { id: 'a' }, b: { id: 'c' } })
+    expect(s.activeTabId).toBe('c')
+  })
+  it('closing the other tabs collapses the split', () => {
+    const s = reduceTabs(split(), { type: 'closeOthers', tabId: 'b' })
+    expect(ids(s)).toEqual(['b'])
+    expect(s.layout).toBeUndefined()
+  })
+  it('applies layoutChanged events; null clears', () => {
+    const s = applyTabEvent(make(['a', 'b']), { type: 'layoutChanged', nodeId: 'n', layout: split().layout as never })
+    expect(s.layout).toBeDefined()
+    expect(applyTabEvent(s, { type: 'layoutChanged', nodeId: 'n', layout: null }).layout).toBeUndefined()
+  })
+})
