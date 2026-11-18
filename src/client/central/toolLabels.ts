@@ -66,6 +66,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'browser_status': { title: 'Check browsers', text: 'Lists the browser nodes of a project and the sites you are signed in to.' },
   'browser_read': { title: 'Read a web page', text: 'Opens one page in a browser node and reads it through an isolated reader, so only a short answer and its sources come back, never the page text.' },
   'browser_open': { title: 'Open a browser for an agent', text: 'Opens a browser node beside an agent you started and cables it to that agent, so it can use the page.' },
+  'browser_profile': { title: 'Browser profiles', text: 'Lists or creates browser profiles (separate logins).' },
   'skill.list': { title: 'List skills', text: 'Lists the skills Central has.' },
   'skill.load': { title: 'Use a skill', text: 'Loads an approved skill’s instructions.' },
   'skill.propose': { title: 'Suggest a skill', text: 'Writes a new skill for you to review. It is not used until you approve it.' },
