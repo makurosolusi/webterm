@@ -115,6 +115,8 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
     hub.join(id, viewer)
     const s = hub.stateMsg(id)
     if (s) sink.sendJson(s)
+    const tabs = hub.tabsMsg(id)
+    if (tabs) sink.sendJson(tabs)
     const c = host.console?.snapshot(id)
     if (c) sink.sendJson({ t: 'console', ...c })
     await hub.sync(id)

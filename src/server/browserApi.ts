@@ -7,6 +7,8 @@ import { isSafeNodeId } from '../shared/workspace'
 import { isSafeWorkspaceId } from './browser/profile.paths'
 import { cookieRoute, fail, readObject } from './browserApi.cookies'
 import { profileRoute } from './browserApi.profiles'
+import { tabsRoute } from './browserApi.tabs'
+import type { TabsApiDeps } from './browserApi.tabs'
 import type { ProfileApiDeps } from './browserApi.profiles'
 import { isBrowserProfileId } from '../shared/browser.profile'
 import type { ProfileResult } from './browser/browser.profiles.service'
@@ -27,6 +29,8 @@ export interface BrowserApiDeps extends Omit<CookieApiDeps, 'cookieImportEnabled
   profiles: Pick<ProfileApiDeps, 'profiles' | 'ops'>
   /** Move a browser node to another profile (its page reopens on the last URL in that profile's process). */
   setNodeProfile(nodeId: string, profileId: string): Promise<ProfileResult<{ profileId: string }>>
+  /** Tabs of a node (`/api/browser/:nodeId/tabs/*`); absent = the routes answer 404. */
+  tabs?: TabsApiDeps
 }
 
 /** Segmen path -> nilai terdekode, atau `null` bila bukan UTF-8 percent-encoding sah. */
@@ -95,6 +99,7 @@ export async function handleBrowserApi(
   if (kind === 'lease' && !rest.length && method === 'POST') {
     return isSafeNodeId(id) ? takeLease(id, body, d) : fail(400, 'bad_request')
   }
+  if (kind === 'tabs') return d.tabs ? ((await tabsRoute(method, id, rest, body, d.tabs)) ?? fail(404, 'not_found')) : fail(404, 'not_found')
   if (kind === 'cookies') {
     if (!isSafeWorkspaceId(id)) return fail(400, 'bad_request')
     const cookieDeps: CookieApiDeps = { ...d, cookieImportEnabled: () => d.status().cookieImportEnabled }
