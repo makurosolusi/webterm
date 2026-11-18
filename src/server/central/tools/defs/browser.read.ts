@@ -24,7 +24,7 @@ export type BrowserReadDeps = BrowserToolDeps & Required<Pick<BrowserToolDeps, '
 const KEYS = ['projectId', 'url', 'question', 'nodeId', 'tab']
 const WAIT_LOADED_MS = 8000
 const MESSAGES: Record<string, string> = {
-  browser_limit: 'Every live browser slot is in use. Hide or close a browser node, then retry.',
+  browser_limit: 'Every live browser slot is in use. Hide or close a browser node, then retry; the owner can raise the limit in Settings > Browser.',
   human_active: 'The user is using that browser right now. Retry shortly.',
 }
 

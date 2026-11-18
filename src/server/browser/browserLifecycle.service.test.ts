@@ -39,7 +39,7 @@ function make(maxLive = 3, discardMs = 5 * MIN) {
 describe('lifecycleConfig', () => {
   it('uses defaults, clamps and rejects junk', () => {
     expect(lifecycleConfig({})).toEqual({ maxLive: 3, discardMs: 300_000 })
-    expect(lifecycleConfig({ WEBTERM_BROWSER_MAX_LIVE: '99', WEBTERM_BROWSER_DISCARD_MS: '1000' })).toEqual({ maxLive: 8, discardMs: 1000 })
+    expect(lifecycleConfig({ WEBTERM_BROWSER_MAX_LIVE: '99', WEBTERM_BROWSER_DISCARD_MS: '1000' })).toEqual({ maxLive: 12, discardMs: 1000 })
     expect(lifecycleConfig({ WEBTERM_BROWSER_MAX_LIVE: '0', WEBTERM_BROWSER_DISCARD_MS: 'abc' })).toEqual({ maxLive: 1, discardMs: 300_000 })
   })
 })
@@ -160,5 +160,23 @@ describe('BrowserLifecycle MAX_LIVE', () => {
     host.open.mockRejectedValueOnce(new Error('boom'))
     await expect(lc.attach('a', 'w')).rejects.toThrow('boom')
     expect((await lc.attach('b', 'w')).ok).toBe(true)
+  })
+})
+
+describe('BrowserLifecycle dynamic MAX_LIVE', () => {
+  it('a raised limit gives a slot at once, a lowered one evicts hidden nodes only', async () => {
+    let limit = 2
+    const f = fakeHost()
+    const lc = new BrowserLifecycle({ host: f.host, maxLive: () => limit, discardMs: 5 * MIN, driven: () => false })
+    await lc.attach('a', 'w'); await lc.attach('b', 'w')
+    expect(await lc.attach('c', 'w')).toEqual({ ok: false, blocked: 'max_live' }) // both visible: nothing to evict
+    limit = 3
+    expect((await lc.attach('c', 'w')).ok).toBe(true)
+    limit = 1 // below the 3 active now
+    lc.setVisible('a', false); lc.setVisible('b', false) // c stays visible
+    expect((await lc.attach('d', 'w')).ok).toBe(false) // evicts a and b, then c is visible: no slot
+    expect(f.host.discard).toHaveBeenCalledTimes(2)
+    expect(f.host.discard).not.toHaveBeenCalledWith('c')
+    expect(lc.tier('c')).toBe('live')
   })
 })

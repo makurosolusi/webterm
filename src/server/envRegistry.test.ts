@@ -77,7 +77,10 @@ describe('env browser', () => {
   })
   it('batas angka mengikuti kontrak', () => {
     expect(specFor(ENV_BROWSER.maxLive)).toMatchObject({ min: MAX_LIVE_RANGE.min, max: MAX_LIVE_RANGE.max, default: String(DEFAULT_MAX_LIVE) })
-    expect(validateEnvValue(specFor(ENV_BROWSER.maxLive) as EnvSpec, '9').ok).toBe(false)
+    expect(validateEnvValue(specFor(ENV_BROWSER.maxLive) as EnvSpec, '13').ok).toBe(false)
+    for (const bad of ['0', 'NaN', '']) expect(validateEnvValue(specFor(ENV_BROWSER.maxLive) as EnvSpec, bad).ok, bad).toBe(false)
+    expect(validateEnvValue(specFor(ENV_BROWSER.maxLive) as EnvSpec, '12').ok).toBe(true)
+    expect(MAX_LIVE_RANGE.max).toBe(12)
     expect(validateEnvValue(specFor(ENV_BROWSER.bin) as EnvSpec, 'relatif/chromium').ok).toBe(false)
   })
   it('file definisi <= 100 baris (Rule 8 config)', () => {

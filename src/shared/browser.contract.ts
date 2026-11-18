@@ -64,7 +64,7 @@ export const ENV_BROWSER = {
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'
-export const MAX_LIVE_RANGE = { min: 1, max: 8 } as const
+export const MAX_LIVE_RANGE = { min: 1, max: 12 } as const
 
 // ---- §4.3 Tipe inti ----
 export type Lease = 'human' | 'agent'
