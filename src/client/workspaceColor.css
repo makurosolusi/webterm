@@ -79,14 +79,20 @@
   --ws-slate-vivid: #72849c;
 }
 
-/* Identity marker on a workspace tab: a bar along the bottom edge (dimmer when inactive), and the
-   active tab's top border takes the color too. The status dot inside the tab keeps its own meaning. */
-.vscode-editor-tab[data-accent]::after {
-  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
-  background: var(--tab-accent); opacity: 0.55; pointer-events: none;
+/* Identity marker on a workspace tab: the dot's fill (no bars or borders on the tab). Agent status is
+   a small corner badge ringed with the tab background (presence-avatar pattern), never the dot colour. */
+.ws-dot {
+  --ws-ring: var(--vscode-tab-inactiveBackground);
+  position: relative; display: block; flex: none; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ws-dot, var(--ws-slate-default));
 }
-.vscode-editor-tab[data-accent][data-active='true']::after { height: 3px; opacity: 1; }
-.vscode-editor-tab[data-accent][data-active='true'] { border-top-color: var(--tab-accent); }
+.vscode-editor-tab[data-active='true'] .ws-dot { --ws-ring: var(--vscode-tab-activeBackground); width: 12px; height: 12px; }
+.ws-dot__badge {
+  position: absolute; right: -3px; bottom: -3px; width: 6px; height: 6px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--ws-ring);
+}
+.ws-dot__badge--working { background: var(--state-working); }
+.ws-dot__badge--attention { background: var(--state-attention); }
 
 /* Small color chip beside the active workspace's name (title bar, status bar). */
 .ws-chip { display: inline-block; width: 9px; height: 9px; flex: none; border-radius: 2px; background: var(--ws-chip, var(--ws-slate-default)); }

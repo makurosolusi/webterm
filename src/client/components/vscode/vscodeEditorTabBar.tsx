@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
@@ -12,8 +12,8 @@ export interface VscodeEditorTab {
   /** Defaults to true; pass false for pinned/preview tabs. */
   closable?: boolean
   tooltip?: string
-  /** CSS color of the tab's identity marker (bottom bar; the active tab's top border too). Absent = none. */
-  accent?: string
+  /** Accessible name of the tab button; defaults to the label. */
+  ariaLabel?: string
   /** Replaces the tab button while set (inline rename); the tab keeps its slot in the strip. */
   editor?: ReactNode
 }
@@ -183,8 +183,6 @@ export function VscodeEditorTabBar({
             data-slot="vscode-editor-tab"
             data-active={active ? 'true' : 'false'}
             data-dirty={tab.dirty ? 'true' : 'false'}
-            data-accent={tab.accent ? 'true' : undefined}
-            style={tab.accent ? ({ '--tab-accent': tab.accent } as CSSProperties) : undefined}
             className="vscode-editor-tab"
           >
             {tab.editor ?? <IconTooltip label={tab.tooltip ?? tab.label}>
@@ -198,6 +196,7 @@ export function VscodeEditorTabBar({
                 data-slot="vscode-editor-tab-button"
                 className="vscode-editor-tab__button"
                 aria-selected={active}
+                aria-label={tab.ariaLabel}
                 tabIndex={focusable ? 0 : -1}
                 onClick={() => {
                   setFocusedId(tab.id)
