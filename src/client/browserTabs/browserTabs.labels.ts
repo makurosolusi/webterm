@@ -22,9 +22,11 @@ export const isAgentTab = (t: BrowserTab, agentTabId: string | null, agentActive
 
 export const isBlankTab = (t: BrowserTab): boolean => t.url === '' || t.url === BLANK_URL
 
-/** Title shown in the strip: the page title, else the host, else "New tab". */
+/** Title shown in the strip: the page title, else the host, else "New tab". A title that is just a URL (not yet set by the page) counts as no title. */
 export function tabTitle(t: BrowserTab): string {
-  return t.title.trim() || (isBlankTab(t) ? 'New tab' : hostOf(t.url) || t.url)
+  const title = t.title.trim()
+  if (title && !/^[a-z][a-z0-9+.-]*:\/\//i.test(title)) return title
+  return isBlankTab(t) ? 'New tab' : hostOf(t.url) || title || t.url
 }
 
 /** Status words in reading order, e.g. ['loading', 'agent working here']. */

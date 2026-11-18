@@ -117,6 +117,11 @@ describe('BrowserTabStrip tab visuals', () => {
     expect(tab('a').querySelector('[data-agent-marker]')).not.toBeNull()
   })
 
+  it('a tab whose title is just its URL shows the host', () => {
+    renderStrip(makeState([], { tabs: [makeTab('a', { title: 'https://www.google.com/search?q=x', url: 'https://www.google.com/search?q=x' })] }))
+    expect(tab('a').getAttribute('aria-label')).toBe('www.google.com')
+  })
+
   it('a node the human opened shows no marker, although agentTabId defaults to its first tab', () => {
     renderStrip(makeState(['a', 'b'])) // agentTabId = 'a', no lease
     expect(document.querySelector('[data-agent-marker]')).toBeNull()
