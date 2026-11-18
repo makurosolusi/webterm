@@ -12,8 +12,10 @@ export const MAX_ATTACHED_SKILLS = 8
 /** A description is cut to this many characters (one line) in the awareness index. */
 export const SKILL_DESCRIPTION_MAX = 160
 
-/** Collapsed card of a skill node (client SkillNode.tsx); also the size Central gives one it places. */
-export const SKILL_NODE_SIZE = { width: 260, height: 44 }
+/** Collapsed skill node = a round token of this size (client SkillToken.tsx); also the size Central gives one it places. */
+export const SKILL_NODE_SIZE = { width: 80, height: 80 }
+/** Expanded skill node (pill-radius card), the size it opens to until the user resizes it. */
+export const SKILL_CARD_SIZE = { width: 260, height: 124 }
 
 /** Just enough of a node to judge a cable. */
 export interface PortEnd { id: string; kind?: string; agentId?: string }

@@ -15,6 +15,7 @@ export const SN = {
   disabled: 'Disabled',
   active: 'Active',
   remove: 'Remove',
+  expand: 'Expand',
   removeAria: 'Remove skill node',
   nodeAria: (title: string, hosts: readonly string[], status: string) =>
     `Skill ${title}, ${hosts.length ? `attached to ${hosts.join(', ')}` : 'not attached'}, ${status}`,

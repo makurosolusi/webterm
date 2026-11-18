@@ -3,16 +3,19 @@
 import type { Node, Edge } from '@xyflow/react'
 import { isAgentChatPreset, validChatConfig } from '../shared/agentChat.shape'
 import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
-import { SKILLS_IN, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
+import { SKILLS_IN, SKILL_CARD_SIZE, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
+
+const isSkillToken = (n: WsNode): boolean => n.kind === 'skill' && n.collapsed !== false
 
 export function toFlow(n: WsNode): Node {
   return {
     id: n.id,
     type: n.kind,
     position: { x: n.x, y: n.y },
-    width: n.width ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.width : 400),
-    height: n.height ?? (n.kind === 'skill' ? SKILL_NODE_SIZE.height : 300),
+    // A collapsed skill is always the round token: boards saved when it was a 260x44 card load as a token (position kept).
+    width: isSkillToken(n) ? SKILL_NODE_SIZE.width : n.width ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.width : 400),
+    height: isSkillToken(n) ? SKILL_NODE_SIZE.height : n.height ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.height : 300),
     data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion },
   }
 }

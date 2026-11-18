@@ -9,22 +9,25 @@ import { IconTooltip } from '@/components/ui/icon-button'
 import { randomId } from './randomId'
 import { FALLBACK_AGENT_COLOR } from '../shared/workspace'
 import type { Comment } from '../shared/workspace'
-import { SKILL_OUT } from '../shared/skillPorts'
+import { SKILL_CARD_SIZE, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
+import { SkillGlyph } from './SkillGlyph'
+import { SkillToken } from './SkillToken'
 import { useCanvasSkills } from './skillNode.api'
-import { cardState, isUnavailable, isWarnStatus, statusOf, versionChanged } from './skillNode.model'
+import { cardState, isWarnStatus, statusOf, versionChanged } from './skillNode.model'
 import { setSkillStatus } from './skillNode.status'
 import { SN } from './skillNode.labels'
 import './skillNode.css'
+import './skillNode.shape.css'
 
-const COLLAPSED_H = 44
-const EXPANDED_H = 124
+const EXPANDED_SIZE = SKILL_CARD_SIZE
 
 /**
  * A canvas skill on the board: a REFERENCE to a library skill by name (`data.skill`), cabled to an agent's Skills
  * port to attach it. It follows the active version, shows Unavailable when the skill is off or gone, and never
- * copies the instructions (docs/decisions/skill-canvas-nodes.md). Collapsed by default: a one-line card.
+ * copies the instructions (docs/decisions/skill-canvas-nodes.md). Collapsed by default = a round token (SkillToken),
+ * expanded = a pill-radius card with the token's glyph as its avatar (docs/decisions/skill-node-shape.md).
  */
-function SkillNode({ id, data, selected, height }: NodeProps) {
+function SkillNode({ id, data, selected, width, height }: NodeProps) {
   const d = data as { skill?: string; seenVersion?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[] }
   const rf = useReactFlow()
   const library = useCanvasSkills()
@@ -32,7 +35,7 @@ function SkillNode({ id, data, selected, height }: NodeProps) {
   const collapsed = d.collapsed ?? true
   const swatch = d.color ?? FALLBACK_AGENT_COLOR
   const comments = d.comments ?? []
-  const expandedH = useRef(EXPANDED_H)
+  const expandedSize = useRef(EXPANDED_SIZE)
 
   // First sight of the active version records it, so only a LATER change reads as "Updated".
   useEffect(() => {
@@ -40,9 +43,9 @@ function SkillNode({ id, data, selected, height }: NodeProps) {
   }, [state, d.seenVersion, rf, id])
 
   const remove = () => { void rf.deleteElements({ nodes: [{ id }] }) }
-  const toggleCollapse =() => {
-    if (!collapsed) { expandedH.current = height ?? EXPANDED_H; rf.updateNode(id, { height: COLLAPSED_H }) }
-    else rf.updateNode(id, { height: expandedH.current })
+  const toggleCollapse = () => {
+    if (!collapsed) { expandedSize.current = { width: width ?? EXPANDED_SIZE.width, height: height ?? EXPANDED_SIZE.height }; rf.updateNode(id, SKILL_NODE_SIZE) }
+    else rf.updateNode(id, expandedSize.current)
     rf.updateNodeData(id, { collapsed: !collapsed })
   }
 
@@ -76,12 +79,18 @@ function SkillNode({ id, data, selected, height }: NodeProps) {
 
   return (
     <>
-      <NodeLayoutResizer collapsed={collapsed} minWidth={220} minHeight={COLLAPSED_H} color={swatch} />
+      <NodeLayoutResizer collapsed={collapsed} minWidth={220} minHeight={EXPANDED_SIZE.height} color={swatch} />
       <div role="group" aria-label={SN.nodeAria(title, hostNames ? hostNames.split('\n') : [], statusWord)}
-        className={`${termNodeClass({ selected: !!selected, collapsed })}${warn ? ' skill-node--unavailable' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+        className={collapsed ? 'skill-shape' : `${termNodeClass({ selected: !!selected })} skill-card${warn ? ' skill-node--unavailable' : ''}`} style={{ '--node-swatch': swatch } as CSSProperties}>
+        {collapsed ? (
+          <SkillToken title={title} slug={d.skill} status={status} version={state.kind === 'active' ? state.version : undefined}
+            attached={!!hostNames} statusWord={statusWord} onExpand={toggleCollapse} onRemove={remove}
+            updated={state.kind === 'active' && !!d.seenVersion && versionChanged(d.seenVersion, state.version)
+              ? { text: SN.updated(d.seenVersion, state.version), dismiss: () => rf.updateNodeData(id, { seenVersion: state.version }) } : undefined} />
+        ) : (<>
+        <SkillGlyph className="skill-card__avatar" />
         <NodeChrome
           title={title} name={d.name}
-          icon="book"
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
@@ -91,7 +100,6 @@ function SkillNode({ id, data, selected, height }: NodeProps) {
           closeLabel={SN.removeAria}
           onClose={remove}
         />
-        {!collapsed && (
           <div className="node-body skill-node__body">
             {d.skill && <code className="skill-node__slug">{d.skill}</code>}
             {state.kind === 'loading' && <p role="status">{SN.loading}</p>}
@@ -109,7 +117,7 @@ function SkillNode({ id, data, selected, height }: NodeProps) {
               </IconTooltip>
             )}
           </div>
-        )}
+        </>)}
       </div>
       {/* Typed `skill` output on top: the cable runs up into an agent's Skills port (SkillEdge). */}
       <Handle id={SKILL_OUT} type="source" position={Position.Top} className="bridge-handle skill-handle" aria-label={SN.skillOutAria} />

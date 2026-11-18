@@ -8,7 +8,7 @@ import type { Connection, Edge, Node } from '@xyflow/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useBoardActions } from './App.board'
 import { DEFAULT_SETTINGS } from '../shared/settings'
-import { MAX_ATTACHED_SKILLS, SKILL_OUT, SKILLS_IN } from '../shared/skillPorts'
+import { MAX_ATTACHED_SKILLS, SKILL_NODE_SIZE, SKILL_OUT, SKILLS_IN } from '../shared/skillPorts'
 import { toFlowEdge } from './store'
 import type { Workspace } from '../shared/workspace'
 
@@ -106,7 +106,7 @@ describe('addSkillNode with a target (drop on an agent, drop on the pane)', () =
     act(() => { r = actions.nodeActions.addSkillNode?.(REF, { at: { x: 900, y: 700 } }) })
     expect(r).toEqual({ status: 'added' })
     const added = state.nodes.find((n) => n.type === 'skill')!
-    expect(added.position.x).toBeCloseTo(900 - 130, 0) // the 260x44 card is centred on the point
+    expect(added.position.x).toBeCloseTo(900 - SKILL_NODE_SIZE.width / 2, 0) // the round token is centred on the point
     expect(state.edges).toEqual([])
   })
 
