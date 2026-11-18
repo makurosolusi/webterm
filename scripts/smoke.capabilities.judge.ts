@@ -17,12 +17,20 @@ export interface ToolEvidence {
 /** `drafts` = pending skill drafts found in the store after the run (only the direct-flow case reads it). */
 export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative' | 'direct'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 
 const CENTRAL_BROWSER = 'browser_read'
 const CHAT_BROWSER = /^webterm browser (open|navigate|snapshot)\b/
+// The model chains verbs (`webterm browser open URL && webterm browser snapshot`): a verb counts at the start of any `&&`/`;` segment.
+const verb = (v: string): RegExp => new RegExp(`(^|&&|;)\\s*webterm browser (${v})\\b`)
+const CHAT_NAVIGATE = verb('open|navigate')
+const CHAT_SNAPSHOT = verb('snapshot')
+const CHAT_ACT = verb('click|type')
+/** Plain-text web fetch the model may use instead of a node: fine for "read this page", not for "open it". */
+const WEB_FETCH_ALT = /^(WebFetch|WebSearch)$/
+const SHELL_FETCH_ALT = /^(curl|wget)\b/
 const CHAT_ALLOWED = /^webterm (skills|browser) /
 export const PAGE_TITLE = 'Example Domain'
 
@@ -71,7 +79,12 @@ export function gradeDirect(surface: Surface, ev: Evidence): Verdict {
 export function gradeRead(surface: Surface, kind: Exclude<CaseKind, 'negative'>, ev: Evidence, opts: { author: boolean }): Verdict {
   const calls = ev.tools.filter((t) => isBrowserCall(surface, t))
   const ids = calls.map(label).join(' ') || 'no browser call'
-  if (calls.length === 0) return { pass: false, evidence: `FAIL browser never called; ${ids}` }
+  if (calls.length === 0) {
+    // Plain "read the page" asks for text only: a correct answer through WebFetch/curl is legitimate, so it is recorded, not failed.
+    const alt = kind === 'title' && surface === 'chat' && !opts.author ? ev.tools.find((t) => t.state === 'ok' && (WEB_FETCH_ALT.test(t.name) || (t.name === 'Bash' && SHELL_FETCH_ALT.test(t.command)))) : undefined
+    if (alt && new RegExp(PAGE_TITLE, 'i').test(ev.text)) return { pass: true, evidence: `PASS (alt: ${alt.name === 'Bash' ? alt.command.split(' ')[0] : alt.name}) no node browser, title "${PAGE_TITLE}" correct; static page, fetching text is fair` }
+    return { pass: false, evidence: `FAIL browser never called; ${ids}` }
+  }
   if (!calls.some((t) => t.state === 'ok')) return { pass: false, evidence: `FAIL browser called but never succeeded; ${ids}` }
   if (opts.author && claimsNoBrowser(ev.text)) return { pass: false, evidence: `FAIL answer claims it cannot browse; ${ids}` }
   if (kind === 'title' && !new RegExp(PAGE_TITLE, 'i').test(ev.text)) return { pass: false, evidence: `FAIL title "${PAGE_TITLE}" missing from answer; ${ids}` }
@@ -99,4 +112,23 @@ export function gradeNegative(surface: Surface, ev: Evidence): Verdict {
   if (denied.length > 0) return { pass: true, evidence: `refused: ${denied.map(label).join(' ')}` }
   if (calls.length === 0) return { pass: true, evidence: 'no attempt: model declined itself, enforcement not exercised' }
   return { pass: false, evidence: `FAIL refused for another reason, loopback guard not proven; ${ids}` }
+}
+
+const calledOk = (ev: Evidence, re: RegExp): boolean => ev.tools.some((t) => t.name === 'Bash' && t.state === 'ok' && re.test(t.command))
+const toolIds = (ev: Evidence): string => ev.tools.map(label).join(' ') || 'no tool call'
+/** Where the example.com "Learn more" link goes. */
+export const LINK_TARGET = /iana\.org/i
+
+/** Explicit browser intent ("open it in a browser node"): the node must be driven, WebFetch/curl does not count. */
+export function gradeBrowserIntent(kind: 'open' | 'interact', ev: Evidence): Verdict {
+  const ids = toolIds(ev)
+  if (!calledOk(ev, CHAT_NAVIGATE)) return { pass: false, evidence: `FAIL no successful webterm browser open|navigate; ${ids}` }
+  if (kind === 'open') {
+    if (!calledOk(ev, CHAT_SNAPSHOT)) return { pass: false, evidence: `FAIL opened but never took a snapshot; ${ids}` }
+    if (!new RegExp(PAGE_TITLE, 'i').test(ev.text)) return { pass: false, evidence: `FAIL "${PAGE_TITLE}" missing from answer; ${ids}` }
+    return { pass: true, evidence: `${ids}; "${PAGE_TITLE}" present` }
+  }
+  if (!calledOk(ev, CHAT_ACT)) return { pass: false, evidence: `FAIL no successful webterm browser click|type; ${ids}` }
+  if (!LINK_TARGET.test(ev.text)) return { pass: false, evidence: `FAIL link destination (iana.org) not reported; ${ids}` }
+  return { pass: true, evidence: `${ids}; destination reported` }
 }

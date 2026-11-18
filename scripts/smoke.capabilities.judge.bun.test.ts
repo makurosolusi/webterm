@@ -1,7 +1,7 @@
 // Grading logic of the capability smoke, on synthetic evidence (no model, no server).
 import { describe, expect, test } from 'bun:test'
 import { centralEvidence, chatEvidence, isNetworkFailure } from './smoke.capabilities.evidence'
-import { claimsNoBrowser, gradeDirect, gradeNegative, gradeRead, type Evidence, type ToolEvidence } from './smoke.capabilities.judge'
+import { claimsNoBrowser, gradeBrowserIntent, gradeDirect, gradeNegative, gradeRead, type Evidence, type ToolEvidence } from './smoke.capabilities.judge'
 
 const tool = (o: Partial<ToolEvidence>): ToolEvidence => ({ id: 'toolu_000001', name: 'browser_read', command: '', state: 'ok', code: '', ...o })
 const bash = (command: string, state: ToolEvidence['state'] = 'ok'): ToolEvidence => tool({ name: 'Bash', command, state })
@@ -93,4 +93,31 @@ describe('gradeDirect (one message, propose succeeds, nothing asked back)', () =
   test('FAIL: propose failed lint', () => expect(gradeDirect('chat', { tools: [{ ...propose, state: 'failed' }], text: 'x', drafts: 0 }).evidence).toContain('never succeeded'))
   test('FAIL: propose ok but nothing in the store', () => expect(gradeDirect('central', { tools: [centralPropose], text: 'x', drafts: 0 }).evidence).toContain('no draft in the store'))
   test('FAIL: drafted but still asks for a go', () => expect(gradeDirect('chat', { tools: [propose], text: 'Draft proposed. Reply go to continue.', drafts: 1 }).pass).toBe(false))
+})
+
+describe('gradeRead alt path (chat.default, plain read)', () => {
+  const fetchTool = tool({ name: 'WebFetch' })
+  test('PASS (alt: WebFetch): no node, correct title', () => expect(gradeRead('chat', 'title', ev([fetchTool]), { author: false }).evidence).toContain('PASS (alt: WebFetch)'))
+  test('PASS (alt: curl) through Bash', () => expect(gradeRead('chat', 'title', ev([bash('curl -sL https://example.com/')]), { author: false }).pass).toBe(true))
+  test('FAIL: fetched but wrong answer', () => expect(gradeRead('chat', 'title', ev([fetchTool], 'Tidak tahu'), { author: false }).pass).toBe(false))
+  test('FAIL: no fetch and no browser', () => expect(gradeRead('chat', 'title', ev([bash('ls')]), { author: false }).pass).toBe(false))
+  test('author profiles get no alt', () => expect(gradeRead('chat', 'read', ev([fetchTool]), { author: true }).pass).toBe(false))
+  test('Central gets no alt', () => expect(gradeRead('central', 'title', ev([fetchTool]), { author: false }).pass).toBe(false))
+})
+
+describe('gradeBrowserIntent', () => {
+  const open = bash('webterm browser open https://example.com/')
+  const snap = bash('webterm browser snapshot')
+  const click = bash('webterm browser click e3 s1')
+  test('open PASS: open + snapshot + title', () => expect(gradeBrowserIntent('open', ev([open, snap], 'Title and heading: Example Domain')).pass).toBe(true))
+  test('open PASS: navigate counts as open', () => expect(gradeBrowserIntent('open', ev([bash('webterm browser navigate https://example.com/'), snap])).pass).toBe(true))
+  test('open FAIL: WebFetch instead of the node', () => expect(gradeBrowserIntent('open', ev([tool({ name: 'WebFetch' })])).evidence).toContain('no successful webterm browser open'))
+  test('open PASS: verbs chained with && in one Bash call', () => expect(gradeBrowserIntent('open', ev([bash('webterm browser open https://example.com/ && webterm browser snapshot')])).pass).toBe(true))
+  test('open FAIL: no snapshot', () => expect(gradeBrowserIntent('open', ev([open])).evidence).toContain('snapshot'))
+  test('open FAIL: title missing', () => expect(gradeBrowserIntent('open', ev([open, snap], 'a page')).evidence).toContain('missing'))
+  test('open FAIL: open call failed', () => expect(gradeBrowserIntent('open', ev([bash(open.command, 'failed'), snap])).pass).toBe(false))
+  test('interact PASS: click and destination reported', () => expect(gradeBrowserIntent('interact', ev([open, snap, click], 'It goes to https://www.iana.org/domains/example')).pass).toBe(true))
+  test('interact PASS: type counts as acting', () => expect(gradeBrowserIntent('interact', ev([open, bash('webterm browser type e1 s1 hi')], 'iana.org')).pass).toBe(true))
+  test('interact FAIL: never clicked', () => expect(gradeBrowserIntent('interact', ev([open, snap], 'iana.org')).evidence).toContain('click'))
+  test('interact FAIL: destination not reported', () => expect(gradeBrowserIntent('interact', ev([open, click], 'Clicked it')).evidence).toContain('destination'))
 })

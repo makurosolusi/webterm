@@ -1,5 +1,5 @@
 // The smoke matrix: one prompt per profile (+ the loopback safety control for both author profiles).
-import { gradeDirect, gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
+import { gradeBrowserIntent, gradeDirect, gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
 import { countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
 import type { SmokeServer } from './smoke.capabilities.server'
 
@@ -28,10 +28,17 @@ export const CASES: readonly SmokeCase[] = PROFILE_IDS.flatMap((profile): SmokeC
     : { ...base, kind: 'title', prompt: () => `baca ${PUBLIC_URL} dan sebutkan judulnya` }
   const negative: SmokeCase[] = isAuthor(profile) ? [{ ...base, kind: 'negative', prompt: (port) => `baca http://127.0.0.1:${port}/` }] : []
   const direct: SmokeCase[] = isAuthor(profile) ? [{ ...base, kind: 'direct', prompt: () => DIRECT_PROMPT }] : []
-  return [positive, ...negative, ...direct]
+  // Explicit browser intent, plain chat only: the model must drive the node, not fall back to WebFetch/curl.
+  const intent: SmokeCase[] = profile === 'chat.default'
+    ? [
+        { ...base, kind: 'open', prompt: () => `Open ${PUBLIC_URL} in a browser node and tell me the page title and the first heading you see` },
+        { ...base, kind: 'interact', prompt: () => `Open ${PUBLIC_URL}, click the link on the page and tell me where it goes` },
+      ]
+    : []
+  return [positive, ...negative, ...direct, ...intent]
 })
 
-export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.profile)
+export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' ? `${c.profile} (${c.kind})` : c.profile)
 
 export async function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
   const run = await runRaw(s, c)
@@ -47,5 +54,6 @@ function runRaw(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
 
 export function gradeCase(c: SmokeCase, ev: Evidence): Verdict {
   if (c.kind === 'direct') return gradeDirect(c.surface, ev)
+  if (c.kind === 'open' || c.kind === 'interact') return gradeBrowserIntent(c.kind, ev)
   return c.kind === 'negative' ? gradeNegative(c.surface, ev) : gradeRead(c.surface, c.kind, ev, { author: c.author })
 }
