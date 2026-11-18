@@ -111,7 +111,7 @@ describe('settings pickers per screen', () => {
     expect(onChange).toHaveBeenLastCalledWith({ canvasDots: false, snapToGrid: false })
     expect(select('Grid size').tagName).toBe('SELECT')
     expect(screen.queryByText('New node width')).toBeNull()
-    expect(screen.queryByText('Browser search engine')).toBeNull()
+    expect(screen.queryByText('Search engine')).toBeNull()
     expect([...document.querySelectorAll('[data-slot="settings-group"] .st-group-title')].map((h) => h.textContent)).toEqual(['Nodes', 'New projects'])
     // A hand-edited value outside the presets stays visible and selected.
     cleanup()

@@ -3,6 +3,7 @@
 // Port dari Orca (MIT) `src/shared/browser-url.ts` `normalizeBrowserNavigationUrl` + `looksLikeSearchQuery`,
 // dimodifikasi untuk guard webterm: TANPA cabang file:/path lokal, dan setiap hasil (termasuk URL
 // pencarian) tetap lewat `parseBrowserUrl` — jadi hanya http(s) tanpa userinfo yang pernah keluar.
+import { MAX_TAB_URL_LENGTH } from './browser.tabs'
 import { parseBrowserUrl, type ParsedBrowserUrl } from './browser.url'
 
 export type SearchEngine = 'google' | 'duckduckgo' | 'bing' | 'kagi'
@@ -82,6 +83,7 @@ function address(text: string): string | null {
   if (local) return local
   const domainPort = domainPortAddress(text)
   if (domainPort) return domainPort
+  if (text.startsWith('//')) return `https:${text}` // protocol-relative: host follows
   try {
     new URL(text)
     return text // skema eksplisit apa pun: http(s) lolos guard, selain itu (javascript:/file:/…) ditolak guard
@@ -104,7 +106,9 @@ function address(text: string): string | null {
 export function resolveOmniboxInput(raw: string, engine: SearchEngine = DEFAULT_SEARCH_ENGINE): ParsedBrowserUrl | null {
   const text = raw.trim()
   if (!text) return null
-  return parseBrowserUrl(address(text) ?? buildSearchUrl(text, engine))
+  const parsed = parseBrowserUrl(address(text) ?? buildSearchUrl(text, engine))
+  // Tabs reject URLs over MAX_TAB_URL_LENGTH, so refuse here with a clear reason instead of at the server.
+  return parsed.ok && parsed.url.length > MAX_TAB_URL_LENGTH ? { ok: false, reason: 'too_long' } : parsed
 }
 
 /**

@@ -122,7 +122,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('notifications', undefined, 'Mute a workspace', 'Right-click a workspace tab › Mute Notifications.', 'silence quiet'),
   // Features (the Spending report moved to the Control panel: MOVED below)
   ...CARDS,
-  e('capabilities', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
+  e('capabilities', 'browserSearchEngine', 'Search engine', 'Used when you type words instead of an address.', 'google duckduckgo bing'),
   e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
   e('browser', 'browser-limit', LIMIT_TEXT.label, LIMIT_TEXT.hint, 'browser limit max browsers active browsers maximum live pages memory ram more fewer increase decrease'),
   e('browser', 'browser-profiles', 'Browser profiles', 'Separate logins for each browser: create, rename, color, import cookies, duplicate, export or delete a profile.', 'profile profiles cookies login session account container import export duplicate'),

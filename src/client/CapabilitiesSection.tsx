@@ -77,8 +77,8 @@ export function CapabilitiesSection({ projectId, settings: s, onChange }: Capabi
           return (
             <SettingsGroup key={id} title={GROUP_TITLE[id]}>
               {card(view)}
-              <SelectField setting="browserSearchEngine" id="st-browserSearchEngine" label="Browser search engine" value={s.browserSearchEngine}
-                hint="Used by browser nodes when what you type in the address bar is not a web address."
+              <SelectField setting="browserSearchEngine" id="st-browserSearchEngine" label="Search engine" value={s.browserSearchEngine}
+                hint="Used when you type words instead of an address."
                 options={(Object.keys(SEARCH_ENGINES) as SearchEngine[]).map((e) => ({ value: e, label: SEARCH_ENGINES[e].label }))}
                 onChange={(v) => onChange({ browserSearchEngine: v })} />
             </SettingsGroup>

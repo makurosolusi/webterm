@@ -3,22 +3,11 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { BrowserNewTabPage, normalizeAddress } from './BrowserNewTabPage'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
+import { SettingsProvider } from '../useSettings'
+import { BrowserNewTabPage } from './BrowserNewTabPage'
 import { BrowserTabStateView } from './BrowserTabStates'
 import { makeTab } from './browserTabsHarness'
-
-describe('normalizeAddress', () => {
-  it.each([
-    ['example.com', 'https://example.com'],
-    ['https://a.test/x?y=1', 'https://a.test/x?y=1'],
-    ['localhost:3000/app', 'http://localhost:3000/app'],
-    ['  127.0.0.1:8700 ', 'http://127.0.0.1:8700'],
-  ])('%s -> %s', (input, url) => expect(normalizeAddress(input)).toEqual({ ok: true, url }))
-
-  it.each(['', '   ', 'hello world', 'plainword', 'javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,hi'])('rejects %j', (input) => {
-    expect(normalizeAddress(input)).toMatchObject({ ok: false })
-  })
-})
 
 describe('BrowserNewTabPage', () => {
   const setup = (over: Partial<React.ComponentProps<typeof BrowserNewTabPage>> = {}) => {
@@ -34,19 +23,67 @@ describe('BrowserNewTabPage', () => {
     expect(document.activeElement).toBe(field)
     fireEvent.change(field, { target: { value: 'example.org' } })
     fireEvent.click(screen.getByRole('button', { name: 'Go' }))
-    expect(onNavigate).toHaveBeenCalledWith('https://example.org')
+    expect(onNavigate).toHaveBeenCalledWith('https://example.org/')
   })
 
-  it('shows a clear error for a bad address and clears it on typing', () => {
-    const { onNavigate } = setup()
+  const type = (value: string) => {
     const field = screen.getByRole('textbox', { name: 'Web address' })
-    fireEvent.change(field, { target: { value: 'nonsense' } })
+    fireEvent.change(field, { target: { value } })
+    return field
+  }
+
+  it('turns plain words into a Google search, navigating exactly once', () => {
+    const { onNavigate } = setup()
+    type('google')
     fireEvent.click(screen.getByRole('button', { name: 'Go' }))
-    expect(screen.getByRole('alert').textContent).toContain('Enter a web address')
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+    expect(onNavigate).toHaveBeenCalledWith('https://www.google.com/search?q=google')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it.each([
+    ['example.com', 'https://example.com/'],
+    ['localhost:3000', 'http://localhost:3000/'],
+    ['foo bar', 'https://www.google.com/search?q=foo%20bar'],
+  ])('resolves %s', (input, url) => {
+    const { onNavigate } = setup()
+    fireEvent.submit(type(input))
+    expect(onNavigate).toHaveBeenCalledWith(url)
+  })
+
+  it('uses the engine from settings for the placeholder and the search url', () => {
+    const onNavigate = vi.fn()
+    render(<SettingsProvider value={{ ...DEFAULT_SETTINGS, browserSearchEngine: 'duckduckgo' }}><BrowserNewTabPage closed={[]} onNavigate={onNavigate} onReopen={vi.fn()} /></SettingsProvider>)
+    const field = screen.getByPlaceholderText('Search DuckDuckGo or enter a web address')
+    fireEvent.change(field, { target: { value: 'a b' } })
+    fireEvent.submit(field)
+    expect(onNavigate).toHaveBeenCalledWith('https://duckduckgo.com/?q=a%20b')
+  })
+
+  it('defaults the placeholder to Google', () => {
+    setup()
+    expect(screen.getByPlaceholderText('Search Google or enter a web address')).toBeTruthy()
+  })
+
+  it.each(['javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,hi', 'https://u:p@a.com/'])('refuses %s kindly without navigating or searching', (input) => {
+    const { onNavigate } = setup()
+    const field = type(input)
+    fireEvent.submit(field)
+    expect(screen.getByRole('alert').textContent).toContain('can\u2019t be opened')
     expect(field.getAttribute('aria-invalid')).toBe('true')
     expect(onNavigate).not.toHaveBeenCalled()
-    fireEvent.change(field, { target: { value: 'nonsense.' } })
+    fireEvent.change(field, { target: { value: 'ok' } })
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('does nothing for empty input: Go is disabled and Enter shows no error', () => {
+    const { onNavigate } = setup()
+    expect((screen.getByRole('button', { name: 'Go' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.submit(type('   '))
+    expect(onNavigate).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBeNull()
+    type('x')
+    expect((screen.getByRole('button', { name: 'Go' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('lists recently closed tabs and reopens the clicked one', () => {

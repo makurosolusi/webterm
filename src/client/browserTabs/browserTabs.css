@@ -63,15 +63,19 @@
   font: 13px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
   text-align: center; overflow: auto;
 }
-.bt-page h2 { margin: 0; font-size: 14px; font-weight: 600; }
-.bt-page p { margin: 0; max-width: 42ch; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-page h2 { margin: 0; font-size: 19px; font-weight: 600; }
+.bt-page p { margin: 0; max-width: 42ch; font-size: 13px; color: var(--vscode-descriptionForeground, var(--muted)); }
 .bt-page--error h2 { color: var(--vscode-errorForeground, var(--state-attention)); }
-.bt-address { display: flex; gap: 6px; width: min(480px, 100%); }
-.bt-form-error { color: var(--vscode-errorForeground, var(--state-attention)); font-size: 12px; }
+.bt-address { display: flex; gap: 8px; width: min(480px, 100%); }
+.bt-address-field { position: relative; flex: 1; min-width: 0; }
+.bt-address-icon { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--vscode-descriptionForeground, var(--muted)); pointer-events: none; }
+.bt-address-field input { height: 40px; padding-left: 36px; font-size: 14px; }
+.bt-address-go { flex: none; height: 40px; min-width: 56px; font-size: 14px; }
+.bt-form-error { color: var(--vscode-errorForeground, var(--state-attention)); font-size: 13px; }
 .bt-closed { width: min(480px, 100%); display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .bt-closed { padding: 0; list-style: none; }
-.bt-closed h3 { margin: 0 0 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
-.bt-closed-row { justify-content: flex-start; width: 100%; }
+.bt-closed h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-closed-row { justify-content: flex-start; width: 100%; min-height: 36px; font-size: 13px; }
 .bt-closed-host { margin-left: auto; color: var(--vscode-descriptionForeground, var(--muted)); }
 
 @media (prefers-reduced-motion: reduce) {
