@@ -26,7 +26,7 @@ describe('BrowserTabStrip ARIA', () => {
         makeTab('d', { title: '', url: 'about:blank' }), makeTab('e', { title: '', url: 'https://host.test/x' }),
       ],
       activeTabId: 'a', agentTabId: 'a',
-    }))
+    }), { agentActive: true })
     expect(tab('a').getAttribute('aria-label')).toBe('Title a, loading, agent working here')
     expect(tab('b').getAttribute('aria-label')).toBe('Title b, crashed')
     expect(tab('c').getAttribute('aria-label')).toBe('Title c, sleeping, reloads when opened')
@@ -107,14 +107,21 @@ describe('BrowserTabStrip tab visuals', () => {
   })
 
   it('marks the agent tab with a bot and nothing else', () => {
-    renderStrip(makeState(['a', 'b', 'c'], { agentTabId: 'c' }))
+    renderStrip(makeState(['a', 'b', 'c'], { agentTabId: 'c' }), { agentActive: true })
     expect(tabs().map((t) => t.querySelector('[data-agent-marker]') !== null)).toEqual([false, false, true])
     expect(tab('c').getAttribute('data-agent')).toBe('true')
   })
 
-  it('the agent flag on a tab also shows the marker', () => {
-    renderStrip(makeState([], { tabs: [makeTab('a', { agent: true }), makeTab('b')], activeTabId: 'a', agentTabId: null }))
+  it('the agent flag on a tab also shows the marker while the agent holds the browser', () => {
+    renderStrip(makeState([], { tabs: [makeTab('a', { agent: true }), makeTab('b')], activeTabId: 'a', agentTabId: null }), { agentActive: true })
     expect(tab('a').querySelector('[data-agent-marker]')).not.toBeNull()
+  })
+
+  it('a node the human opened shows no marker, although agentTabId defaults to its first tab', () => {
+    renderStrip(makeState(['a', 'b'])) // agentTabId = 'a', no lease
+    expect(document.querySelector('[data-agent-marker]')).toBeNull()
+    expect(tab('a').getAttribute('data-agent')).toBeNull()
+    expect(tab('a').getAttribute('aria-label')).toBe('Title a')
   })
 
   it('every tab has a close button with a named target', () => {

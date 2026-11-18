@@ -12,6 +12,14 @@ export function hostOf(url: string): string {
   }
 }
 
+/**
+ * "Agent here" marker rule: only while the agent actually holds the browser (lease = agent) AND the tab is the one it works
+ * in (`agentTabId`) or one it opened (`tab.agent`). `agentTabId` alone defaults to the first tab of every node, so on a
+ * node a human opened it said nothing true; the marker disappears the moment the lease is released.
+ */
+export const isAgentTab = (t: BrowserTab, agentTabId: string | null, agentActive: boolean): boolean =>
+  agentActive && (t.tabId === agentTabId || t.agent === true)
+
 export const isBlankTab = (t: BrowserTab): boolean => t.url === '' || t.url === BLANK_URL
 
 /** Title shown in the strip: the page title, else the host, else "New tab". */

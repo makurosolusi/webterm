@@ -2,34 +2,36 @@
 .bp-tree { position: absolute; inset: 0; background: var(--vscode-editorWidget-background, var(--panel)); overflow: hidden; }
 .bp {
   position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; box-sizing: border-box;
+  container: bp / inline-size; /* the header drops secondary items by the pane's own width, not the node's */
   background: var(--vscode-editor-background, var(--bg));
-  outline: 2px solid transparent; outline-offset: -2px;
+  outline: var(--bui-focus) solid transparent; outline-offset: calc(-1 * var(--bui-focus));
 }
 /* Focus = a 2px accent edge (also announced by aria-current). */
 .bp--focus { outline-color: var(--vscode-focusBorder, var(--accent)); }
 .bp--lift { opacity: .55; outline-style: dashed; outline-color: var(--vscode-focusBorder, var(--accent)); }
 .bp-grip { display: inline-flex; flex: none; align-items: center; height: 100%; margin-left: -4px; color: var(--vscode-descriptionForeground, var(--text)); cursor: grab; }
-.bp-grip svg { width: 14px; height: 14px; }
+.bp-grip svg { width: var(--bui-icon); height: var(--bui-icon); }
 .bp-head:hover .bp-grip { color: var(--vscode-foreground, var(--text)); }
 /* While a pane or tab is dragged: the page surfaces ignore the pointer (hit tests see the panes) and the cursor says "moving". */
 body[data-bp-dragging] .browser-surface { pointer-events: none; }
 body[data-bp-dragging], body[data-bp-dragging] * { cursor: grabbing !important; }
 .bp-ghost {
-  position: fixed; z-index: 1000; max-width: 220px; padding: 2px 8px; border-radius: 4px; pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 11px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
+  position: fixed; z-index: 1000; max-width: 220px; padding: 4px 8px; border-radius: 4px; pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: var(--bui-font-sm)/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
   border: 1px solid var(--vscode-focusBorder, var(--accent)); box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
 }
 .bp-head {
-  display: flex; align-items: center; gap: 2px; flex: none; height: 26px; padding: 0 2px 0 6px; box-sizing: border-box;
-  font: 11px/1.2 var(--font-ui); color: var(--vscode-foreground, var(--text));
+  display: flex; align-items: center; gap: var(--bui-gap); flex: none; height: var(--bui-pane-head-h); padding: 0 var(--bui-gap) 0 8px; box-sizing: border-box;
+  font: var(--bui-font)/1.2 var(--font-ui); color: var(--vscode-foreground, var(--text));
   background: var(--vscode-editorGroupHeader-tabsBackground, var(--panel)); border-bottom: 1px solid var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
   cursor: grab; user-select: none; touch-action: none;
 }
 .bp-head--focus { background: var(--vscode-tab-activeBackground, var(--panel)); }
-.bp-title { all: unset; display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; cursor: pointer; }
-.bp-title:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.bp-title { all: unset; display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 48px; height: 100%; cursor: pointer; }
+.bp-title:focus-visible { outline: var(--bui-focus) solid var(--vscode-focusBorder, var(--accent)); outline-offset: calc(-1 * var(--bui-focus)); }
+.bp-head :is(.bt-icon) { flex: none; }
 .bp-title__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bp-size { flex: none; padding: 0 4px; font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground, var(--text)); opacity: .85; }
+.bp-size { flex: none; padding: 0 var(--bui-gap); font-size: var(--bui-font-sm); font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground, var(--text)); opacity: .85; }
 .bp-body { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
 .bp-body .browser-surface { position: absolute; inset: 0; }
 
@@ -48,27 +50,31 @@ body[data-bp-dragging], body[data-bp-dragging] * { cursor: grabbing !important; 
 .bp-drop {
   position: absolute; z-index: 3; pointer-events: none; box-sizing: border-box;
   background: color-mix(in srgb, var(--vscode-focusBorder, var(--accent)) 22%, transparent);
-  border: 2px solid var(--vscode-focusBorder, var(--accent));
+  border: var(--bui-focus) solid var(--vscode-focusBorder, var(--accent));
 }
 @media (prefers-reduced-motion: no-preference) { .bp-drop { transition: all 80ms ease-out; } }
 .bp-drop { display: flex; align-items: center; justify-content: center; }
-.bp-drop__label { padding: 2px 8px; border-radius: 4px; font: 600 11px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel)); }
+.bp-drop__label { padding: 2px 8px; border-radius: 4px; font: 600 var(--bui-font-sm)/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel)); }
 
-/* Separators: 6px hit area centred on the border, a thin line that thickens on hover/focus/drag. */
-.bp-sep { position: absolute; z-index: 4; width: 6px; height: 6px; background: transparent; touch-action: none; outline: none; }
-.bp-sep--h { width: 6px; cursor: col-resize; }
-.bp-sep--v { height: 6px; cursor: row-resize; }
+/* Separators: 8px hit area centred on the border (BrowserSeparator HALF = 4), a 2px line that thickens on hover/focus/drag. */
+.bp-sep { position: absolute; z-index: 4; width: 8px; height: 8px; background: transparent; touch-action: none; outline: none; }
+.bp-sep--h { width: 8px; cursor: col-resize; }
+.bp-sep--v { height: 8px; cursor: row-resize; }
 .bp-sep::after { content: ''; position: absolute; background: var(--vscode-editorWidget-border, rgb(127 127 127 / 40%)); }
-.bp-sep--h::after { left: 2px; right: 2px; top: 0; bottom: 0; }
-.bp-sep--v::after { top: 2px; bottom: 2px; left: 0; right: 0; }
-.bp-sep:hover::after, .bp-sep:focus-visible::after, .bp-sep:active::after { background: var(--vscode-focusBorder, var(--accent)); left: 1px; right: 1px; }
-.bp-sep--v:hover::after, .bp-sep--v:focus-visible::after, .bp-sep--v:active::after { top: 1px; bottom: 1px; left: 0; right: 0; }
+.bp-sep--h::after { left: 3px; right: 3px; top: 0; bottom: 0; }
+.bp-sep--v::after { top: 3px; bottom: 3px; left: 0; right: 0; }
+.bp-sep:hover::after, .bp-sep:focus-visible::after, .bp-sep:active::after { background: var(--vscode-focusBorder, var(--accent)); left: 2px; right: 2px; }
+.bp-sep--v:hover::after, .bp-sep--v:focus-visible::after, .bp-sep--v:active::after { top: 2px; bottom: 2px; left: 0; right: 0; }
 
 .bp-small {
-  position: absolute; z-index: 5; left: 50%; bottom: 8px; transform: translateX(-50%); padding: 3px 8px; border-radius: 4px; pointer-events: none;
-  font: 11px/1.4 var(--font-ui); color: var(--vscode-editorWarning-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
+  position: absolute; z-index: 5; left: 50%; bottom: 8px; transform: translateX(-50%); padding: 4px 8px; border-radius: 4px; pointer-events: none;
+  font: var(--bui-font-sm)/1.4 var(--font-ui); color: var(--vscode-editorWarning-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
   border: 1px solid var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
 }
 
 /* Drop preview for the single-pane node (a tab dragged over the page). */
 .browser-body > .bp-drop { z-index: 6; }
+
+/* Narrow panes keep the title, device and Close; the size readout goes first, then the grip (the whole header is still the drag handle). */
+@container bp (max-width: 260px) { .bp-size { display: none; } }
+@container bp (max-width: 160px) { .bp-grip { display: none; } }

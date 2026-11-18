@@ -13,6 +13,7 @@ import { BrowserTabItem } from './BrowserTabItem'
 import { useTabDrag } from './browserTabs.drag'
 import type { DropHint } from '../browserSplit/browserSplit.drop'
 import { focusTarget, tabKeyIntent } from './browserTabs.keys'
+import { isAgentTab } from './browserTabs.labels'
 import { allTabsItems, tabContextItems } from './browserTabs.menu'
 import { prefersReducedMotion, useTabOverflow } from './browserTabs.overflow'
 import './browserTabs.css'
@@ -28,6 +29,8 @@ export interface BrowserTabStripProps {
   panelId?: string
   /** Rendered just before the New tab button (the node's Split menu). */
   trailing?: ReactNode
+  /** The agent holds the browser right now (lease); without it no tab shows the agent marker. */
+  agentActive?: boolean
   /** Split view: "Split right/down" in the tab menu (`blocked` = why not) and dragging a tab onto a pane. */
   split?: { run: (tabId: string, edge: 'right' | 'bottom') => void; blocked?: string }
   onPaneHover?: (hit: DropHint | null) => void
@@ -36,7 +39,7 @@ export interface BrowserTabStripProps {
 
 type OpenMenu = { kind: 'tab'; tabId: string; at: { x: number; y: number } } | { kind: 'all'; at: { x: number; y: number } }
 
-export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, panelId, trailing, split, onPaneHover, onPaneDrop }: BrowserTabStripProps) {
+export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, panelId, trailing, agentActive = false, split, onPaneHover, onPaneDrop }: BrowserTabStripProps) {
   const { tabs, activeTabId, agentTabId } = state
   const listRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -107,7 +110,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
   return (
     <div ref={rootRef} className="bt-strip nodrag nopan" data-popout-armed={drag.view?.popOut || undefined} onDoubleClick={onRootDoubleClick}>
       {overflow.overflowing && (
-        <IconButton label="Scroll tabs left" size="icon-xs" className="bt-chevron" disabled={!overflow.canLeft} onClick={() => overflow.scroll(-1)}>
+        <IconButton label="Scroll tabs left" size="icon-bui" className="bt-chevron" disabled={!overflow.canLeft} onClick={() => overflow.scroll(-1)}>
           <ChevronLeft aria-hidden="true" />
         </IconButton>
       )}
@@ -117,7 +120,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
             key={tab.tabId}
             tab={tab}
             active={tab.tabId === activeTabId}
-            isAgent={tab.tabId === agentTabId || tab.agent === true}
+            isAgent={isAgentTab(tab, agentTabId, agentActive)}
             focusable={tab.tabId === rovingId}
             panelId={panelId}
             dragging={drag.view?.tabId === tab.tabId}
@@ -131,13 +134,13 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
         ))}
       </div>
       {overflow.overflowing && (
-        <IconButton label="Scroll tabs right" size="icon-xs" className="bt-chevron" disabled={!overflow.canRight} onClick={() => overflow.scroll(1)}>
+        <IconButton label="Scroll tabs right" size="icon-bui" className="bt-chevron" disabled={!overflow.canRight} onClick={() => overflow.scroll(1)}>
           <ChevronRight aria-hidden="true" />
         </IconButton>
       )}
       <div className="bt-spacer" data-strip-empty />
       {overflow.overflowing && (
-        <IconButton label="All tabs" size="icon-xs" aria-haspopup="menu" onClick={(e) => setMenu({ kind: 'all', at: rectAnchor(e.currentTarget) })}>
+        <IconButton label="All tabs" size="icon-bui" aria-haspopup="menu" onClick={(e) => setMenu({ kind: 'all', at: rectAnchor(e.currentTarget) })}>
           <ChevronDown aria-hidden="true" />
         </IconButton>
       )}
@@ -145,7 +148,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
         <span className="bt-limit" role="status"><span aria-hidden="true">{tabs.length}/{MAX_TABS_PER_NODE}</span><span className="bt-sr">{add.reason}</span></span>
       )}
       {trailing}
-      <IconButton label="New tab" size="icon-xs" disabled={!add.ok} disabledReason={add.ok ? undefined : add.reason} onClick={() => newTab()}>
+      <IconButton label="New tab" size="icon-bui" disabled={!add.ok} disabledReason={add.ok ? undefined : add.reason} onClick={() => newTab()}>
         <Plus aria-hidden="true" />
       </IconButton>
       {menu && <VscodeMenu open anchor={menu.at} items={menuItems} onClose={() => setMenu(null)} ariaLabel={menu.kind === 'all' ? 'All tabs' : 'Tab actions'} />}

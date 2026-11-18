@@ -234,6 +234,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
         <div ref={bodyRef} className="node-body browser-node">
           <BrowserTabStrip
             state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId}
+            agentActive={driven}
             trailing={tabs.standIn ? undefined : <BrowserSplitMenu controls={split} />}
             split={splitMenu}
             onPaneHover={setDropHint} onPaneDrop={(tabId, hit) => { void split.dropTab(tabId, hit.paneTabId, hit.zone) }}
