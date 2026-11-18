@@ -26,6 +26,8 @@ const browserReadArgs: Record<string, JsonSchema> = {
   loaded: { type: 'boolean', const: true, description: 'wait: until the page finished loading.' },
   limit: { ...S.int(1, CONSOLE_BUFFER_MAX), description: 'console: newest entries to return (default 50).' },
   level: { ...S.oneOf(...CONSOLE_LEVELS), description: 'console: minimum level (default info).' },
+  all: { type: 'boolean', const: true, description: 'snapshot, screenshot: every tab the split layout shows, answered per tab.' },
+  layout: { type: 'boolean', const: true, description: 'screenshot: same as all (a named list of the visible tabs).' },
 }
 const browserActArgs: Record<string, JsonSchema> = {
   tab,
@@ -36,6 +38,12 @@ const browserActArgs: Record<string, JsonSchema> = {
   submit: { ...S.bool(), description: 'type: press Enter after typing.' },
   key: S.str(16, { description: 'press: key name (Enter, Tab, Escape, Backspace, Delete, a space, ArrowUp/Down/Left/Right, PageUp, PageDown, Home, End).' }),
   dy: { type: 'number', description: 'scroll: vertical pixels, non-zero (negative scrolls up).' },
+  spec: S.str(2400, { description: 'arrange: single <tab> | h|v <tab> <tab> [..] | grid <t1> <t2> <t3> <t4>; a tab is an id or new:<url>.' }),
+  on: { ...S.bool(), description: 'sync: turn sync mode on or off.' },
+  all: { type: 'boolean', const: true, description: 'navigate, scroll, click, type, reload, back, forward: run on every tab the layout shows, answered per tab.' },
+  name: S.str(200, { description: 'click/type with all: the accessible name of the element.' }),
+  role: S.str(30, { description: 'click/type with all: accessibility role (button, link, textbox...).' }),
+  nth: { ...S.int(1, 50), description: 'click/type with all: n-th element with that role and name (default 1).' },
 }
 
 const CONTROL = [
@@ -98,13 +106,13 @@ const CONTROL = [
     output: S.anyObj(),
   }),
   defineCapability({
-    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot, wait, console or the list of its tabs.',
+    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot, wait, console, its tabs or split layout.',
     tier: 'R0', scope: 'node', projections: ['control-http'], idempotent: true, route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.read')), ...browserReadArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
   defineCapability({
-    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, release, tabs; open = new node cabled to the caller.',
+    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, tabs, split layout, sync; open = new node.',
     tier: 'R1', scope: 'node', projections: ['control-http'], route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')), ...browserActArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
