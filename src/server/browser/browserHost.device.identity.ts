@@ -50,7 +50,7 @@ function metadataOf(meta: UaMetadata): object {
 }
 
 /** `Emulation.setUserAgentOverride` params of a device; empty UA = clear the override (desktop presets keep Chromium's own). */
-export function userAgentParams(d: DeviceSpec): object {
+export function userAgentParams(d: DeviceSpec): Record<string, unknown> {
   if (!d.ua) return { userAgent: '' }
   return { userAgent: d.uaMeta ? swapMajor(d.ua) : d.ua, ...(d.navPlatform ? { platform: d.navPlatform } : {}), ...(d.uaMeta ? { userAgentMetadata: metadataOf(d.uaMeta) } : {}) }
 }

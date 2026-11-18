@@ -5,7 +5,7 @@ import { learnEngine, parseProduct, setEngineForTest, userAgentParams } from './
 afterEach(() => setEngineForTest(undefined))
 
 interface Params { userAgent: string; platform?: string; userAgentMetadata?: { platform: string; mobile: boolean; brands: Array<{ brand: string; version: string }>; fullVersion: string; fullVersionList: Array<{ brand: string; version: string }> } }
-const paramsOf = (id: string): Params => userAgentParams(resolveDevice({ id })!) as Params
+const paramsOf = (id: string): Params => userAgentParams(resolveDevice({ id })!) as unknown as Params
 const OS_OF_UA: Array<[RegExp, string, string]> = [[/iPhone/, 'iPhone', ''], [/iPad/, 'iPad', ''], [/Android/, 'Linux armv81', 'Android'], [/Windows NT/, 'Win32', 'Windows']]
 
 describe('parseProduct', () => {

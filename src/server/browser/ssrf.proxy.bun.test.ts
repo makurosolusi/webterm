@@ -41,7 +41,7 @@ function raw(port: number, text: string, until?: string, then?: string): Promise
     const s = connect({ host: '127.0.0.1', port })
     let buf = ''
     let sent = false
-    s.on('data', (d) => {
+    s.on('data', (d: Buffer) => {
       buf += d.toString()
       if (then && !sent && buf.includes('\r\n\r\n')) { sent = true; s.write(then) }
       if (until && buf.includes(until)) s.destroy()
@@ -144,7 +144,7 @@ test('CONNECT is a blind byte pipe: a ClientHello-shaped binary arrives upstream
   const hello = Buffer.concat([Buffer.from([0x16, 0x03, 0x01, 0x0b, 0xb8, 0x01]), Buffer.from(Array.from({ length: 3000 }, (_, i) => (i * 37 + 11) & 0xff))])
   const reply = Buffer.concat([Buffer.from([0x16, 0x03, 0x03]), Buffer.from(Array.from({ length: 2000 }, (_, i) => (i * 91 + 5) & 0xff))])
   const upstreamGot: Buffer[] = []
-  const upstream = createTcp((s) => { s.on('data', (d) => { upstreamGot.push(d); if (Buffer.concat(upstreamGot).length >= hello.length) s.write(reply) }) })
+  const upstream = createTcp((s) => { s.on('data', (d: Buffer) => { upstreamGot.push(d); if (Buffer.concat(upstreamGot).length >= hello.length) s.write(reply) }) })
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r))
   closers.push(() => new Promise<void>((r) => { upstream.close(() => r()) }))
   const t = await setup(async () => [PUBLIC_IP], [], (upstream.address() as AddressInfo).port)
@@ -153,7 +153,7 @@ test('CONNECT is a blind byte pipe: a ClientHello-shaped binary arrives upstream
     const s = connect({ host: '127.0.0.1', port: t.proxy.port })
     let tunnelOpen = false
     let header = ''
-    s.on('data', (d) => {
+    s.on('data', (d: Buffer) => {
       if (!tunnelOpen) {
         header += d.toString('latin1')
         const end = header.indexOf('\r\n\r\n')
