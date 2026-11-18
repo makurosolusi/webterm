@@ -1,0 +1,113 @@
+# Full test suites run here, not on the dev machine (see docs/testing.md). The suites are opened with
+# WEBTERM_FULL_TESTS=1, the CI-only switch of the local full-suite guards. Actions are pinned to
+# commit SHAs (tag in the trailing comment); versions and sources are listed in docs/testing.md.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer run on the same ref makes the older one pointless.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # bash -eo pipefail: a failing test must not be hidden by `| tee`
+
+env:
+  WEBTERM_FULL_TESTS: '1'
+  # Unix-socket tests need a short TMPDIR (sun_path limit); created in each job.
+  TMPDIR: /tmp/st
+  # Matches the Bun the lockfile was produced with (bun.lock lockfileVersion 2).
+  BUN_VERSION: '1.4.2'
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: mkdir -p /tmp/st logs
+      - run: bun install --frozen-lockfile
+      - run: npm run typecheck 2>&1 | tee logs/typecheck.log
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-typecheck
+          path: logs/
+          if-no-files-found: ignore
+
+  vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: mkdir -p /tmp/st logs
+      - run: bun install --frozen-lockfile
+      - run: npm run test:all 2>&1 | tee logs/vitest.log
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-vitest
+          path: logs/
+          if-no-files-found: ignore
+
+  bun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: mkdir -p /tmp/st logs
+      - run: bun install --frozen-lockfile
+      # Same command as `npm run test:bun:all` minus the `*.real.bun.test.ts` pass: those drive a real
+      # headful Chromium, which a headless runner does not have. They stay a local/owner check.
+      - name: bun test (all except real-browser suites)
+        run: |
+          export HOME="$(mktemp -d /tmp/st/webterm-home.XXXXXX)"
+          bun test --no-env-file $(find src/server src/native scripts -name '*.bun.test.ts' ! -name '*.real.bun.test.ts' | sort) 2>&1 | tee "$GITHUB_WORKSPACE/logs/bun.log"
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: logs-bun
+          path: logs/
+          if-no-files-found: ignore

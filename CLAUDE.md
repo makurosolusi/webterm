@@ -37,12 +37,19 @@ Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodete
 ## Verifikasi (gerbang korektness)
 
 - `TMPDIR=/tmp/st npm run typecheck` — `tsc --noEmit`. Gate tercepat.
-- `TMPDIR=/tmp/st npm test` — vitest (`vitest run`, node-env default, test DOM per-file via pragma `/** @vitest-environment jsdom */`).
-- `TMPDIR=/tmp/st npm run test:bun` — semua `src/server/**/*.bun.test.ts` termasuk subfolder (round-trip PTY,
+- `TMPDIR=/tmp/st npm run test:all` (pemilik) — vitest (`vitest run`, node-env default, test DOM per-file via pragma `/** @vitest-environment jsdom */`).
+- `TMPDIR=/tmp/st npm run test:bun:all` (pemilik) — semua `src/server/**/*.bun.test.ts` termasuk subfolder (round-trip PTY,
   store SQLite, ledger, API workspace, operasi fs), lewat `find` karena `bun test` tidak mengenal glob
   `**` (argumennya filter substring). Penemuan otomatis, bukan daftar nama: daftar nama basi tanpa
   pernah merah.
-- Saat pengembangan pakai `npm run test:related` / `test:changed`; suite penuh hanya sebelum push. Batas worker default ada di `vite.config.ts` (`maxWorkers`, 2-4; override `--maxWorkers`).
+- **Tier harian = `typecheck` + `TMPDIR=/tmp/st npm run test:impacted`** (tes vitest terkait, tes bun yang
+  mengimpor file berubah, dan tier policy: tes pemindai `src/` dari `scripts/test.policy.manifest.ts`).
+  `test:related`/`test:changed` tetap ada tetapi vitest-saja; jangan andalkan keduanya.
+- **Suite penuh HANYA atas perintah eksplisit pemilik** (`npm run test:all` / `npm run test:bun:all`). `npm test`,
+  `npm run test:bun`, `vitest run` tanpa filter, dan `bun test` tanpa path menolak jalan (exit 2). Agent dilarang
+  menjalankan suite penuh dan dilarang menyetel `WEBTERM_FULL_TESTS=1` (hanya pemilik/CI). Suite penuh dijalankan
+  CI jarak jauh (`.github/workflows/test.yml`). Detail: `docs/testing.md`.
+- Tes pemindai baru wajib didaftarkan di `scripts/test.policy.manifest.ts` (tes manifes gagal bila tidak).
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas
   `sun_path`) → `EINVAL`. Jalankan dengan `TMPDIR=/tmp/st`.
 
