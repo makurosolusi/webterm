@@ -27,6 +27,10 @@ export interface GatewayHost extends BrowserHostApi {
   setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
   /** Tab list of a node, sent to a viewer on attach (absent in hosts without tabs). */
   tabsState?(nodeId: string): BrowserTabsState | undefined
+  /** Split view: the tabs on screen (one per pane) and the focused one; only those stream (absent in hosts without splits). */
+  setView?(nodeId: string, visible: string[], focus?: string): Promise<void>
+  /** Size of one tab's pane in a split view. */
+  setTabViewport?(nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void>
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
 }

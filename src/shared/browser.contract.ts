@@ -94,7 +94,7 @@ export interface BrowserState {
  */
 export interface FrameLatency { ls: number; rxToDispatch: number; dispatchToSwap: number; swapToServer: number }
 /** Satu frame screencast; `seq` uint32 diberi host dan dikembalikan klien lewat `ack`. */
-export interface Frame { seq: number; jpeg: Uint8Array; lat?: FrameLatency }
+export interface Frame { seq: number; jpeg: Uint8Array; lat?: FrameLatency; /** Tab the frame shows; absent = the node's focused (view) tab. */ tabId?: string }
 
 /** Dilempar `BrowserHostApi.navigate` bila penjaga navigasi menolak; hanya hostname, tanpa URL. */
 export class BlockedError extends Error {
@@ -127,17 +127,20 @@ export interface ImeInput { t: 'ime'; text: string; start: number; end: number }
 export interface TouchInput { t: 'touch'; type: (typeof TOUCH_TYPES)[number]; points: TouchPoint[] }
 /** Input manusia yang diteruskan ke `BrowserHostApi.input` (tanpa `id`). Alias `InputEvent` = nama di PLAN.
  * `ls` opsional = cap waktu kirim klien (epoch ms) untuk pengukur latensi; host memantulkannya di `Frame.lat`. */
-export type BrowserInputEvent = (MouseInput | KeyInput | TextInput | ImeInput | TouchInput) & { ls?: number }
+export type BrowserInputEvent = (MouseInput | KeyInput | TextInput | ImeInput | TouchInput) & { ls?: number; /** Tab (pane) the input is for; absent = the focused tab. */ tab?: string }
 export type { BrowserInputEvent as InputEvent }
 
 type WithId<T> = T & { id: string }
 export interface ViewportMsg { w: number; h: number; dpr: number }
 export type ClientMsg =
   | WithId<{ t: 'attach' } & ViewportMsg>
-  | WithId<{ t: 'resize' } & ViewportMsg>
+  /** `tab` = size of that tab's pane (split view); absent = the whole node area. */
+  | WithId<{ t: 'resize'; tab?: string } & ViewportMsg>
   | { t: 'detach'; id: string }
   | { t: 'ack'; id: string; seq: number }
   | WithId<BrowserInputEvent>
+  /** Tabs on screen (one per pane) and the focused one: only these stream, the others stop (split view). */
+  | { t: 'view'; id: string; visible: string[]; focus?: string }
   | { t: 'nav'; id: string; action: (typeof NAV_ACTIONS)[number]; url?: string }
   | { t: 'copy'; id: string }
   | { t: 'dialog'; id: string; accept: boolean; text?: string }

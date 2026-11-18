@@ -12,14 +12,17 @@ const dec = new TextDecoder('utf-8', { fatal: true })
 const HEADER_FIXED = 2 // type + idLen
 const SEQ_BYTES = 4
 const UINT32_MAX = 0xffff_ffff
+/** Frames of a split view carry `nodeId␟tabId` as their id; plain `nodeId` = the focused tab (unchanged for old clients). */
+export const TAB_SEP = '\u001f'
 const LAT_BYTES = 20 // ls f64 + tiga f32 (ms; presisi f32 lebih dari cukup untuk durasi)
 
 /**
  * Bangun frame server->klien: `[type][idLen][id utf8][seq u32 BE][lat?][jpeg]`; `lat` hanya pada FRAME_TYPE_TIMED.
  * Melempar bila id > 255 byte / seq bukan uint32.
  */
-export function encodeFrame(nodeId: string, seq: number, jpeg: Uint8Array, lat?: FrameLatency): Uint8Array {
-  const id = enc.encode(nodeId)
+export function encodeFrame(nodeId: string, seq: number, jpeg: Uint8Array, lat?: FrameLatency, tabId?: string): Uint8Array {
+  if (nodeId.includes(TAB_SEP)) throw new Error('encodeFrame: nodeId contains the tab separator')
+  const id = enc.encode(tabId ? `${nodeId}${TAB_SEP}${tabId}` : nodeId)
   if (id.length > ID_MAX_BYTES) throw new Error(`encodeFrame: nodeId ${id.length} bytes exceeds ${ID_MAX_BYTES}`)
   if (!Number.isInteger(seq) || seq < 0 || seq > UINT32_MAX) throw new Error(`encodeFrame: seq ${seq} is not a uint32`)
   const at = HEADER_FIXED + id.length + SEQ_BYTES
@@ -41,7 +44,7 @@ export function encodeFrame(nodeId: string, seq: number, jpeg: Uint8Array, lat?:
 }
 
 /** Baca header frame; `offset` = awal JPEG. null bila bukan frame / terpotong / id bukan utf8. */
-export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; seq: number; offset: number; lat?: FrameLatency } | null {
+export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; tabId?: string; seq: number; offset: number; lat?: FrameLatency } | null {
   const timed = buf[0] === FRAME_TYPE_TIMED
   if (buf.length < HEADER_FIXED || (buf[0] !== FRAME_TYPE && !timed)) return null
   const idEnd = HEADER_FIXED + buf[1]
@@ -55,10 +58,12 @@ export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; seq: numbe
   }
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   const seq = dv.getUint32(idEnd, false)
-  if (!timed) return { nodeId, seq, offset }
+  const sep = nodeId.indexOf(TAB_SEP)
+  const who = sep < 0 ? { nodeId } : { nodeId: nodeId.slice(0, sep), tabId: nodeId.slice(sep + 1) }
+  if (!timed) return { ...who, seq, offset }
   const at = idEnd + SEQ_BYTES
   const lat = { ls: dv.getFloat64(at, false), rxToDispatch: dv.getFloat32(at + 8, false), dispatchToSwap: dv.getFloat32(at + 12, false), swapToServer: dv.getFloat32(at + 16, false) }
-  return { nodeId, seq, offset, lat }
+  return { ...who, seq, offset, lat }
 }
 
 // ---- parseClientMsg: validasi ketat, null untuk apa pun yang janggal ----
@@ -72,6 +77,9 @@ const str = (v: unknown, max: number): v is string => typeof v === 'string' && b
 const oneOf = <T extends string>(v: unknown, set: readonly T[]): v is T => set.includes(v as T)
 const dim = (v: unknown): v is number => fin(v) && v > 0 && v <= VIEWPORT_MAX
 const KEY_FIELD_MAX = 64
+const VIEW_MAX = 4 // MAX_PANES (browser.layout.ts); the server clamps again
+const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/
+const tabId = (v: unknown): v is string => typeof v === 'string' && TAB_ID.test(v)
 const DPR_MAX_INPUT = 16 // clamp ke DSF_MAX dilakukan host; di sini hanya tolak nilai absurd
 
 function viewport(m: Obj) {
@@ -138,9 +146,19 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
   if (!isObj(m) || typeof m.t !== 'string' || !str(m.id, ID_MAX_BYTES) || m.id === '') return null
   const id = m.id
   switch (m.t) {
-    case 'attach': case 'resize': {
+    case 'attach': {
       const v = viewport(m)
-      return v ? { t: m.t, id, ...v } : null
+      return v ? { t: 'attach', id, ...v } : null
+    }
+    case 'resize': {
+      const v = viewport(m)
+      if (!v || (m.tab !== undefined && !tabId(m.tab))) return null
+      return { t: 'resize', id, ...v, ...(m.tab === undefined ? {} : { tab: m.tab as string }) }
+    }
+    case 'view': {
+      if (!Array.isArray(m.visible) || m.visible.length > VIEW_MAX || !m.visible.every(tabId)) return null
+      if (m.focus !== undefined && !tabId(m.focus)) return null
+      return { t: 'view', id, visible: m.visible as string[], ...(m.focus === undefined ? {} : { focus: m.focus as string }) }
     }
     case 'detach': case 'copy': case 'takeover':
       return { t: m.t, id }
@@ -165,8 +183,11 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       return str(m.text, TEXT_MAX_BYTES) ? { t: 'dialog', id, accept: m.accept, text: m.text } : null
     default: {
       const ev = parseInput(m.t, id, m)
-      if (!ev || m.ls === undefined) return ev
-      return fin(m.ls) && m.ls >= 0 ? { ...ev, ls: m.ls } as ClientMsg : null // cap waktu latensi klien (I1-d)
+      if (!ev) return ev
+      if (m.tab !== undefined && !tabId(m.tab)) return null
+      const tagged = m.tab === undefined ? ev : { ...ev, tab: m.tab as string } as ClientMsg
+      if (m.ls === undefined) return tagged
+      return fin(m.ls) && m.ls >= 0 ? { ...tagged, ls: m.ls } as ClientMsg : null // cap waktu latensi klien (I1-d)
     }
   }
 }

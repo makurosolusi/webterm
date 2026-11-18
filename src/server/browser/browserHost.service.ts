@@ -20,6 +20,7 @@ import type { TabManager } from './browserHost.tabs'
 import { createTabApi } from './browserHost.tabs.api'
 import type { TabApi } from './browserHost.tabs.api'
 import type { BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
+import type { Pane } from '../../shared/workspace.shape'
 import type { TargetLifecycle } from './browserHost.lifecycle'
 import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
@@ -108,7 +109,29 @@ export class BrowserHost implements BrowserHostApi {
 
   async setViewport(nodeId: string, w: number, h: number, dpr: number): Promise<void> {
     const rec = this.need(nodeId)
+    const own = rec.tabs?.state.activeTabId
+    if (own && rec.tabs?.split?.vp.has(own)) { rec.viewport = { w, h, dpr }; return } // the view has its own pane size; the node's only matters again after unsplitting
     return resizeViewport(rec, { w, h, dpr }, this.io(rec))
+  }
+
+  /** Split view: tabs on screen (one per pane) + the focused one; only those stream. */
+  setView(nodeId: string, visible: string[], focus?: string): Promise<void> {
+    return this.tabApi.run(nodeId, () => this.tabs.split.setVisible(this.need(nodeId), visible, focus))
+  }
+
+  /** Size of one tab's pane (split view); the page renders at it. */
+  setTabViewport(nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void> {
+    return this.tabApi.run(nodeId, () => this.tabs.split.resizeTab(this.need(nodeId), tabId, { w, h, dpr }))
+  }
+
+  /** One tab's own device emulation (null = follow the pane/node size). */
+  setTabDevice(nodeId: string, tabId: string, device: DeviceChoice | null): Promise<void> {
+    return this.tabApi.run(nodeId, () => this.tabs.split.setTabDevice(this.need(nodeId), tabId, device))
+  }
+
+  /** Store the split layout (null = one pane) and optionally move the focus. */
+  setLayout(nodeId: string, layout: Pane | null, focus?: string): Promise<void> {
+    return this.tabApi.run(nodeId, () => this.tabs.split.setLayout(this.need(nodeId), layout, focus))
   }
 
   /** Device mode (DevTools Device Toolbar): emulate a preset/custom device; null = follow the node size again. */
@@ -118,17 +141,20 @@ export class BrowserHost implements BrowserHostApi {
     const rec = this.need(nodeId)
     rec.cast = { onFrame, seq: 0, acks: new Map() }
     await this.send(rec, CDP.startScreencast, screencastParams(castViewport(rec)))
+    if (rec.tabs?.split?.visible.length) await this.tabs.split.reconcile(rec) // a viewer arrived on a split node: start the other panes too
   }
 
   async stopScreencast(nodeId: string): Promise<void> {
     const rec = this.table.nodes.get(nodeId)
     if (!rec?.cast) return
+    await this.tabs.split.stopAll(rec)
     rec.cast = undefined
     if (rec.sessionId) await this.send(rec, CDP.stopScreencast)
   }
 
   ackFrame(nodeId: string, seq: number): void {
     const rec = this.table.nodes.get(nodeId)
+    if (rec?.cast?.sides?.has(seq)) { this.tabs.split.ackSide(rec, seq); return }
     const ackId = rec?.cast?.acks.get(seq)
     if (!rec || ackId === undefined) return // seq tak dikenal/basi: tidak ada yang di-ack
     rec.cast?.acks.delete(seq)
@@ -138,6 +164,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
+    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.inputOnPane(rec, ev.tab, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -146,6 +173,15 @@ export class BrowserHost implements BrowserHostApi {
     // memprosesnya; await = burst trackpad telat detik). Urutan dijaga satu socket CDP; galat dilog `fire`.
     for (const c of toCdpCommands(ev)) this.fire(rec, c.method, c.params)
     if (ev.ls !== undefined) notePendingInput(rec, ev.ls, rx, Date.now())
+  }
+
+  /** Input for the pane of a tab that is not the focused one: straight to that page (never wakes a page for a stray input). */
+  private inputOnPane(rec: NodeRec, tabId: string, ev: BrowserInputEvent): void {
+    const sid = this.tabs.split.inputSession(rec, tabId)
+    if (!sid) return
+    const fireOn = (m: string, p?: object) => { this.cdpOf(rec).then((c) => c.send(m, p, sid)).catch(ignoreClosed(m, { nodeId: rec.nodeId, sessionId: sid })) }
+    if (ev.t === 'touch' && this.tabs.split.needsTouch(rec, tabId)) fireOn(CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
+    for (const c of toCdpCommands(ev)) fireOn(c.method, c.params)
   }
 
   /** Jalur CDP generik; hanya dipanggil lewat `cdpAllowlist` (WS-07). */

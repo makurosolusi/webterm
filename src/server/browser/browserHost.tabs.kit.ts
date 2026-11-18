@@ -75,8 +75,8 @@ export function createKit(ops: TabsOps) {
   const notice = (rec: NodeRec, message: string): void => ops.emit({ k: 'tabNotice', nodeId: rec.nodeId, message })
 
   const toPersisted = (s: BrowserTabsState): PersistedTabs | null => s.tabs.length === 0 ? null : {
-    tabs: s.tabs.map((t) => ({ tabId: t.tabId, url: t.url, title: t.title, ...(t.favicon ? { favicon: t.favicon } : {}), ...(t.openerTabId ? { openerTabId: t.openerTabId } : {}) })),
-    activeTabId: s.activeTabId, agentTabId: s.agentTabId,
+    tabs: s.tabs.map((t) => ({ tabId: t.tabId, url: t.url, title: t.title, ...(t.favicon ? { favicon: t.favicon } : {}), ...(t.openerTabId ? { openerTabId: t.openerTabId } : {}), ...(t.device ? { device: t.device } : {}) })),
+    activeTabId: s.activeTabId, agentTabId: s.agentTabId, ...(s.layout ? { layout: s.layout } : {}),
   }
   const flush = (rec: NodeRec): void => {
     const h = saveTimers.get(rec.nodeId)
@@ -102,7 +102,7 @@ export function createKit(ops: TabsOps) {
     if (changed.length === 0) return
     t.state = { ...t.state, tabs: t.state.tabs.map((x) => (x.tabId === tabId ? { ...x, ...patch } : x)) }
     emitTab(rec, { type: 'tabUpdated', nodeId: rec.nodeId, tabId, patch: Object.fromEntries(changed.map((k) => [k, patch[k]])) })
-    if (changed.some((k) => k === 'url' || k === 'title' || k === 'favicon')) schedule(rec)
+    if (changed.some((k) => k === 'url' || k === 'title' || k === 'favicon' || k === 'device')) schedule(rec)
   }
   const setState = (rec: NodeRec, next: BrowserTabsState): void => { tabsOf(rec).state = next; schedule(rec) }
 
@@ -163,6 +163,7 @@ export function createKit(ops: TabsOps) {
       const t = rec.tabs
       const tab = t && find(t, tabId)
       if (!t || !tab || !t.rt.get(tabId)?.targetId || t.state.activeTabId === tabId) return
+      if (t.split?.visible.includes(tabId)) { armDiscard(rec, tabId); return } // on screen in a split pane: not idle
       // The agent's working tab and tabs still loading are not idle; look again later.
       // A tab with a live popup is the popup's `window.opener` (OAuth waits for its postMessage): discarding it would break the login.
       const hasPopup = t.state.tabs.some((x) => x.openerTabId === tabId && t.rt.get(x.tabId)?.targetId)
