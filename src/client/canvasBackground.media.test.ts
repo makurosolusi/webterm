@@ -61,6 +61,8 @@ describe('file look before upload', () => {
 })
 
 describe('probeVideoFile (fake video element: jsdom cannot play video)', () => {
+  /** Invoke the handler the probe installed on the fake element. */
+  const fire = (v: Partial<HTMLVideoElement>, handler: 'onloadedmetadata' | 'onerror'): void => { (v[handler] as ((e: Event) => void) | null | undefined)?.(new Event('x')) }
   const deps = (video: Partial<HTMLVideoElement>): ProbeDeps => ({
     createVideo: () => Object.assign(video, { removeAttribute: vi.fn(), load: vi.fn() }) as HTMLVideoElement,
     createObjectUrl: () => 'blob:x',
@@ -70,18 +72,18 @@ describe('probeVideoFile (fake video element: jsdom cannot play video)', () => {
     const video: Partial<HTMLVideoElement> = { videoWidth: 1280, videoHeight: 720, duration: 8 }
     const d = deps(video)
     const p = probeVideoFile(new Blob(['x']), d)
-    video.onloadedmetadata?.(new Event('loadedmetadata'))
+    fire(video, 'onloadedmetadata')
     expect(await p).toEqual({ width: 1280, height: 720, duration: 8 })
     expect(d.revokeObjectUrl).toHaveBeenCalledWith('blob:x')
   })
   it('resolves null on a media error, on zero width (audio only) and on timeout', async () => {
     const a: Partial<HTMLVideoElement> = {}
     const pa = probeVideoFile(new Blob(['x']), deps(a))
-    a.onerror?.(new Event('error'))
+    fire(a, 'onerror')
     expect(await pa).toBeNull()
     const b: Partial<HTMLVideoElement> = { videoWidth: 0, videoHeight: 0, duration: 3 }
     const pb = probeVideoFile(new Blob(['x']), deps(b))
-    b.onloadedmetadata?.(new Event('loadedmetadata'))
+    fire(b, 'onloadedmetadata')
     expect(await pb).toBeNull()
     expect(await probeVideoFile(new Blob(['x']), deps({}), 5)).toBeNull()
   })
