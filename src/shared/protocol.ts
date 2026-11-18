@@ -69,7 +69,8 @@ export interface ViewMsg { t: 'view'; workspaceId: string; nodeId?: string; fit?
 // Central asked for a screenshot: the visible UI tab captures its view and POSTs it to /api/canvas-shot/<reqId>.
 export interface ShotMsg { t: 'shot'; reqId: string; maxWidth: number }
 // The workspace list changed on the server (Central's `workspace.create`): each window adds the boards it lacks.
-export interface WorkspacesMsg { t: 'workspaces' }
+// `order` (reorder from any window, `PUT /api/workspaces/order`) = the full new id order; absent = a create (just add what is missing).
+export interface WorkspacesMsg { t: 'workspaces'; order?: string[] }
 // A workspace's identity color changed (picker in any window, or Central's `workspace.color`): every window recolors its tab.
 // `by: 'central'` = Central's `workspace.color` did it: the window shows a notice naming the change, with Undo to `previous`.
 export interface WorkspaceColorMsg { t: 'workspaceColor'; workspaceId: string; color: string; shade: string; by?: 'central'; name?: string; previous?: { color: string; shade: string } }

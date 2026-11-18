@@ -231,7 +231,7 @@ export function createCanvasPush(deps: CanvasPushDeps): CanvasPush {
     db.list().find((w) => w.nodes.some((n) => n.id === nodeId)) ?? null
 
   const workspaceForCwd = (cwd: string): Workspace | null => {
-    const all = db.list() // newest first
+    const all = db.list() // display order
     const dir = resolveFsPath(cwd)
     let best: { ws: Workspace; len: number } | null = null
     for (const ws of all) {

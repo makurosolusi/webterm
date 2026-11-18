@@ -8,7 +8,7 @@ export const SUMMARY_LIMIT = { min: 1, max: 200, default: 50 } as const
 /** The list-row view of a board: no viewport, layout, bridges or node geometry. */
 export function toSummary(ws: Workspace): WorkspaceSummary {
   return {
-    id: ws.id, name: ws.name, cwd: ws.cwd, color: ws.color, colorShade: ws.colorShade, updatedAt: ws.updatedAt,
+    id: ws.id, name: ws.name, cwd: ws.cwd, color: ws.color, colorShade: ws.colorShade, updatedAt: ws.updatedAt, position: ws.position ?? 0,
     nodes: ws.nodes.map((n) => ({ id: n.id, kind: n.kind, name: n.name, title: n.title, agentId: n.agentId })),
   }
 }

@@ -165,6 +165,8 @@ export interface Workspace {
   bridges: BridgeLink[]   // edge context-link antar node
   /** Tab-mode view of this workspace (tabLayout.schema.ts). Server always returns one; a PUT that omits it keeps the stored one. */
   layout?: TabLayout
+  /** Display order (0-based, ascending, dense). Set by the server on every read; the board save never writes it (`PUT /api/workspaces/order` does). */
+  position?: number
   updatedAt: number
 }
 
