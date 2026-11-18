@@ -75,7 +75,7 @@ export class BrowserLifecycle {
     if (this.disposed) throw new Error(`lifecycle disposed: attach ${nodeId}`)
     if (!(await this.admit(nodeId))) {
       // Without this line a node refused by the gate left no trace at all: it looked like a node that never tried to launch.
-      log.warn('browser.attach_refused', 'node refused: the live browser limit is reached', { ids: { nodeId, workspaceId }, reason: 'max_live', live: this.queue.size, maxLive: this.deps.maxLive })
+      log.warn('browser.attach_refused', 'node refused: the live browser limit is reached', { ids: { nodeId, workspaceId }, reason: 'max_live', live: this.queue.size, maxLive: this.limit() })
       return { ok: false, blocked: 'max_live' }
     }
     try {
@@ -132,10 +132,15 @@ export class BrowserLifecycle {
     return run
   }
 
+  /** The live limit now: `maxLive` may be a getter (hot-applied setting), so it is read per use, never cached. */
+  private limit(): number {
+    const { maxLive } = this.deps
+    return typeof maxLive === 'function' ? maxLive() : maxLive
+  }
+
   private async admitNow(nodeId: string): Promise<boolean> {
     if (this.queue.get(nodeId)) { this.queue.setVisible(nodeId, true, this.now()); this.cancel(nodeId); return true }
-    const { maxLive } = this.deps
-    const limit = typeof maxLive === 'function' ? maxLive() : maxLive
+    const limit = this.limit()
     // A lowered limit can leave several nodes over it: evict hidden ones (never a visible/driven/loading one) until one slot is free.
     while (this.queue.size >= limit) {
       const victim = this.queue.oldestHidden((id) => !this.deps.host.isLoading(id) && !this.deps.driven(id))
