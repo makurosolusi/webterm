@@ -1,5 +1,6 @@
 // Tab strip of a browser node (Chrome/VS Code pattern). Fully controlled: state in, `onAction` out; no fetch or WS.
-// Tabs shrink from 220px to 96px, then the strip scrolls with chevrons and an All-tabs list. Not a native
+// Tabs shrink from 220px to 96px, then the strip scrolls with chevrons and an All-tabs list. The New tab button sits
+// right after the tab list (Chrome/Edge): it follows the last tab and stays visible at the list's edge on overflow. Not a native
 // control: tabs are role=tab divs, so the strip imports the VS Code menu layer like the other hybrid screens.
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
@@ -27,7 +28,7 @@ export interface BrowserTabStripProps {
   makeId?: () => string
   /** DOM id of the tabpanel the tabs control (sets aria-controls). */
   panelId?: string
-  /** Rendered just before the New tab button (the node's Split menu). */
+  /** Rendered in the right-hand controls, after the spacer (the node's Split menu and Sync). */
   trailing?: ReactNode
   /** The agent holds the browser right now (lease); without it no tab shows the agent marker. */
   agentActive?: boolean
@@ -133,6 +134,9 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
           />
         ))}
       </div>
+      <IconButton label="New tab" size="icon-bui" className="bt-new" disabled={!add.ok} disabledReason={add.ok ? undefined : add.reason} onClick={() => newTab()}>
+        <Plus aria-hidden="true" />
+      </IconButton>
       {overflow.overflowing && (
         <IconButton label="Scroll tabs right" size="icon-bui" className="bt-chevron" disabled={!overflow.canRight} onClick={() => overflow.scroll(1)}>
           <ChevronRight aria-hidden="true" />
@@ -148,9 +152,6 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
         <span className="bt-limit" role="status"><span aria-hidden="true">{tabs.length}/{MAX_TABS_PER_NODE}</span><span className="bt-sr">{add.reason}</span></span>
       )}
       {trailing}
-      <IconButton label="New tab" size="icon-bui" disabled={!add.ok} disabledReason={add.ok ? undefined : add.reason} onClick={() => newTab()}>
-        <Plus aria-hidden="true" />
-      </IconButton>
       {menu && <VscodeMenu open anchor={menu.at} items={menuItems} onClose={() => setMenu(null)} ariaLabel={menu.kind === 'all' ? 'All tabs' : 'Tab actions'} />}
     </div>
   )

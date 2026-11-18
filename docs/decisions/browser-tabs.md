@@ -237,3 +237,12 @@ kini untuk semua tab yang tampil di pane, bukan hanya tab aktif; layout dan devi
 P5 QC: sinkron, verb agent `layout`/`sync`/`--all` ada di `browser-qc.md`; compare overlay belum.
 Belum diverifikasi tanpa browser: tampilan nyata strip, perilaku overflow dan drag dengan layout sungguhan, kontras
 warna di tema terang/gelap/kontras tinggi.
+
+## Penempatan tombol New tab
+Gejala: "+" menempel di ujung kanan strip, jauh dari tab terakhir dan berdampingan dengan Split/Sync. Keputusan (pola
+Chrome/Edge): "+" kini saudara langsung SESUDAH `role=tablist` (bukan di dalamnya, jadi tablist hanya berisi tab dan roving
+tabindex/panah/Home/End tak berubah), sebelum chevron kanan, spacer, All tabs, dan `trailing`. Daftar tab `flex: 0 1 auto`,
+jadi "+" mengikuti tab terakhir; saat overflow daftar menyusut ke ruang tersedia dan "+" (di luar scroller, `flex: none`)
+otomatis menetap di tepi kanannya, tanpa `position: sticky`. Batas 8 tab, Ctrl+T, dan dobel-klik area kosong tak berubah;
+"+" bukan target drop urutan (drag hanya membaca `[role=tab]`). Tes: `BrowserTabStrip.newtab.test.tsx`.
+Belum diverifikasi tanpa browser: tampilan nyata di tema terang/gelap dan lebar sempit.
