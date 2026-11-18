@@ -86,3 +86,19 @@ test('startup prune tolerates a missing backgrounds dir', async () => {
   expect(res).toEqual({ overrides: 1, files: 0 })
   expect(db.getSettings().canvasBackgroundByWorkspace).toEqual({})
 })
+
+test('startup prune recognizes video ids: orphan mp4/webm and crash-left .part go, a referenced mp4 stays', async () => {
+  const db = new Db(openDb(':memory:'))
+  const dir = freshDir()
+  const keep = '11111111-1111-4111-8111-111111111111.mp4'
+  const orphanMp4 = '22222222-2222-4222-8222-222222222222.mp4'
+  const orphanWebm = '33333333-3333-4333-8333-333333333333.webm'
+  const partial = '44444444-4444-4444-8444-444444444444.part'
+  await fs.mkdir(dir, { recursive: true })
+  for (const n of [keep, orphanMp4, orphanWebm, partial]) await fs.writeFile(join(dir, n), 'x')
+  db.saveSettings({ canvasBackground: img(keep) })
+
+  const res = await pruneCanvasBackgrounds(db, new Set(), dir)
+  expect(res).toEqual({ overrides: 0, files: 3 })
+  expect(await files(dir)).toEqual([keep])
+})

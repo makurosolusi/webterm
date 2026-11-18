@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, mergeSettings } from './settings'
 import {
-  CANVAS_BG_RANGES, DEFAULT_CANVAS_BACKGROUND, normalizeCanvasBackground, normalizeWorkspaceBackgrounds,
+  CANVAS_BG_RANGES, CANVAS_IMAGE_ID_RE, DEFAULT_CANVAS_BACKGROUND, isAnimatedWebp, isCanvasVideoId, MAX_CANVAS_IMAGE_BYTES, MAX_CANVAS_VIDEO_BYTES, normalizeCanvasBackground, normalizeWorkspaceBackgrounds,
   referencedImageIds, resolveCanvasBackground, WORKSPACE_BACKGROUNDS_LIMITS,
 } from './canvasBackground.schema'
 
@@ -65,5 +65,30 @@ describe('canvas background schema', () => {
       canvasBackgroundByWorkspace: { w1: { ...DEFAULT_CANVAS_BACKGROUND, imageId: '' } },
     }
     expect([...referencedImageIds(s)]).toEqual([IMG])
+  })
+
+  it('playback: defaults to focused and rejects unknown values', () => {
+    expect(DEFAULT_CANVAS_BACKGROUND.playback).toBe('focused')
+    expect(normalizeCanvasBackground({ playback: 'off' }).playback).toBe('off')
+    expect(normalizeCanvasBackground({ playback: 'always' }).playback).toBe('always')
+    expect(normalizeCanvasBackground({ playback: 'sometimes' }).playback).toBe('focused')
+    expect(normalizeCanvasBackground({ imageAnimated: 1 }).imageAnimated).toBe(false)
+    expect(normalizeCanvasBackground({ imageAnimated: true }).imageAnimated).toBe(true)
+  })
+
+  it('accepts video ids and keeps the caps (image 25 MB, video 100 MB)', () => {
+    const uuid = '0f8b1c2a-1111-4222-8333-444455556666'
+    for (const ext of ['png', 'jpg', 'webp', 'gif', 'mp4', 'webm']) expect(CANVAS_IMAGE_ID_RE.test(`${uuid}.${ext}`)).toBe(true)
+    expect(CANVAS_IMAGE_ID_RE.test(`${uuid}.mov`)).toBe(false)
+    expect(isCanvasVideoId(`${uuid}.mp4`) && isCanvasVideoId(`${uuid}.webm`) && !isCanvasVideoId(`${uuid}.webp`)).toBe(true)
+    expect([MAX_CANVAS_IMAGE_BYTES, MAX_CANVAS_VIDEO_BYTES]).toEqual([25 * 1024 * 1024, 100 * 1024 * 1024])
+  })
+
+  it('isAnimatedWebp reads the VP8X animation flag', () => {
+    const head = new Uint8Array(30)
+    head.set([0x52, 0x49, 0x46, 0x46], 0); head.set([0x57, 0x45, 0x42, 0x50], 8); head.set([0x56, 0x50, 0x38, 0x58], 12)
+    expect(isAnimatedWebp(head)).toBe(false)
+    head[20] = 0x02
+    expect(isAnimatedWebp(head)).toBe(true)
   })
 })

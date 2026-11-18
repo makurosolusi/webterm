@@ -8,6 +8,8 @@
 
 export type CanvasBackgroundMode = 'default' | 'color' | 'gradient' | 'image'
 export type CanvasImageFit = 'cover' | 'contain' | 'tile'
+/** When moving media (video, animated WebP/GIF) plays: always, only while the window is focused, never. */
+export type CanvasPlayback = 'always' | 'focused' | 'off'
 
 /** Two-stop linear gradient; `angle` in CSS degrees. */
 export interface CanvasGradient {
@@ -32,10 +34,15 @@ export interface CanvasBackground {
   /** Paint the gradient over the image (at `IMAGE_GRADIENT_OVERLAY_OPACITY`). */
   imageGradientOverlay: boolean
   imageFit: CanvasImageFit
+  /** True when the stored file moves (video, animated WebP, GIF); set by the server from the sniffed bytes. */
+  imageAnimated: boolean
+  /** Playback of moving media; ignored for still images. */
+  playback: CanvasPlayback
 }
 
 export const CANVAS_BG_MODES: readonly CanvasBackgroundMode[] = ['default', 'color', 'gradient', 'image']
 export const CANVAS_IMAGE_FITS: readonly CanvasImageFit[] = ['cover', 'contain', 'tile']
+export const CANVAS_PLAYBACKS: readonly CanvasPlayback[] = ['always', 'focused', 'off']
 
 /** Slider ranges; UI, normalizer and tests all read this table. */
 export const CANVAS_BG_RANGES = {
@@ -50,10 +57,29 @@ export const CANVAS_BG_RANGES = {
 export const IMAGE_GRADIENT_OVERLAY_OPACITY = 0.5
 
 /** Upload file name: server-generated uuid + whitelisted extension. Never a client name. */
-export const CANVAS_IMAGE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|gif)$/
+export const CANVAS_IMAGE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp|gif|mp4|webm)$/
 
-/** Upload cap for a wallpaper image (server enforces it; the UI pre-checks it). */
-export const MAX_CANVAS_IMAGE_BYTES = 10 * 1024 * 1024
+/** Upload cap for a wallpaper image, animated WebP/GIF included (server enforces it; the UI pre-checks it). */
+export const MAX_CANVAS_IMAGE_BYTES = 25 * 1024 * 1024
+/** Upload cap for a wallpaper video (MP4 / WebM). */
+export const MAX_CANVAS_VIDEO_BYTES = 100 * 1024 * 1024
+
+/** True when the stored file id is a video (the id's extension is server-chosen from the sniffed bytes). */
+export const isCanvasVideoId = (id: string): boolean => id.endsWith('.mp4') || id.endsWith('.webm')
+
+/** First bytes the sniffer needs: the RIFF/VP8X header, an MP4 brand or the WebM DocType. */
+export const CANVAS_SNIFF_BYTES = 64
+
+const RIFF_WEBP_VP8X = 12
+const VP8X_FLAGS_OFFSET = 20
+const VP8X_ANIMATION_FLAG = 0x02
+
+/** True for a WebP whose VP8X header sets the animation flag (so the browser plays it as a clip). */
+export function isAnimatedWebp(head: Uint8Array): boolean {
+  if (head.length <= VP8X_FLAGS_OFFSET) return false
+  const tag = (at: number): string => String.fromCharCode(head[at], head[at + 1], head[at + 2], head[at + 3])
+  return tag(0) === 'RIFF' && tag(8) === 'WEBP' && tag(RIFF_WEBP_VP8X) === 'VP8X' && (head[VP8X_FLAGS_OFFSET] & VP8X_ANIMATION_FLAG) !== 0
+}
 
 /** Caps on the per-workspace map: it travels inside the 64 KiB settings PUT body. */
 export const WORKSPACE_BACKGROUNDS_LIMITS = { entries: 100, idLength: 128 }
@@ -69,6 +95,9 @@ export const DEFAULT_CANVAS_BACKGROUND: CanvasBackground = {
   imageDim: 40,
   imageGradientOverlay: false,
   imageFit: 'cover',
+  imageAnimated: false,
+  // Focused: a wallpaper that keeps moving in a window nobody is looking at only burns battery.
+  playback: 'focused',
 }
 
 type RangeKey = keyof typeof CANVAS_BG_RANGES
@@ -103,6 +132,8 @@ export function normalizeCanvasBackground(v: unknown): CanvasBackground {
     imageDim: clampCanvasBg('imageDim', s.imageDim, d.imageDim),
     imageGradientOverlay: typeof s.imageGradientOverlay === 'boolean' ? s.imageGradientOverlay : d.imageGradientOverlay,
     imageFit: oneOf(s.imageFit, CANVAS_IMAGE_FITS, d.imageFit),
+    imageAnimated: typeof s.imageAnimated === 'boolean' ? s.imageAnimated : d.imageAnimated,
+    playback: oneOf(s.playback, CANVAS_PLAYBACKS, d.playback),
   }
 }
 

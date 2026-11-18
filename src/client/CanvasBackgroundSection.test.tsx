@@ -97,7 +97,7 @@ describe('CanvasBackgroundSection', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<Host initial={{ canvasBackground: bg({ mode: 'image' }) }} />)
     const file = new File([new Uint8Array([0x89, 0x50])], 'me.png', { type: 'image/png' })
-    fireEvent.change(screen.getByLabelText('Image'), { target: { files: [file] } })
+    fireEvent.change(screen.getByLabelText('Image or video'), { target: { files: [file] } })
     await waitFor(() => expect(latest.canvasBackground.imageId).toBe(IMG))
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url.startsWith('/api/canvas-background/image')).toBe(true)
@@ -107,7 +107,7 @@ describe('CanvasBackgroundSection', () => {
   it('upload rejected by the server shows the reason', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 415 })))
     render(<Host initial={{ canvasBackground: bg({ mode: 'image' }) }} />)
-    fireEvent.change(screen.getByLabelText('Image'), { target: { files: [new File(['x'], 'x.png')] } })
+    fireEvent.change(screen.getByLabelText('Image or video'), { target: { files: [new File(['x'], 'x.png')] } })
     expect((await screen.findByRole('alert')).textContent).toContain('Unsupported file')
   })
 

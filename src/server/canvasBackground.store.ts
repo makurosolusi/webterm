@@ -1,34 +1,18 @@
-// Canvas wallpaper image files: `<dataDir>/backgrounds/<uuid>.<ext>`. The file name is always
-// server-generated (uuid + extension from the sniffed format); the client's file name is never
-// used, so no path a client sends can reach the filesystem except through `CANVAS_IMAGE_ID_RE`.
 import { randomUUID } from 'node:crypto'
-import { promises as fs } from 'node:fs'
+import { createWriteStream, promises as fs } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
-import { CANVAS_IMAGE_ID_RE } from '../shared/canvasBackground.schema'
-export { MAX_CANVAS_IMAGE_BYTES } from '../shared/canvasBackground.schema'
+import {
+  CANVAS_IMAGE_ID_RE, CANVAS_SNIFF_BYTES, MAX_CANVAS_IMAGE_BYTES, MAX_CANVAS_VIDEO_BYTES,
+} from '../shared/canvasBackground.schema'
 import { dataDir } from './config'
+import { isVideoExt, sniffMedia, type CanvasImageExt } from './canvasBackground.sniff'
 
-export type CanvasImageExt = 'png' | 'jpg' | 'webp' | 'gif'
+export { MAX_CANVAS_IMAGE_BYTES, MAX_CANVAS_VIDEO_BYTES } from '../shared/canvasBackground.schema'
+export { CANVAS_IMAGE_TYPES, sniffImage, sniffMedia, sniffVideo, type CanvasImageExt } from './canvasBackground.sniff'
 
-/** Content-Type served for each stored extension. */
-export const CANVAS_IMAGE_TYPES: Record<CanvasImageExt, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  webp: 'image/webp',
-  gif: 'image/gif',
-}
-
-const ascii = (buf: Buffer, start: number, text: string): boolean => buf.subarray(start, start + text.length).toString('latin1') === text
-
-/** Image format from magic bytes, or null when the bytes are not png/jpeg/webp/gif. */
-export function sniffImage(buf: Buffer): CanvasImageExt | null {
-  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png'
-  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg'
-  if (buf.length >= 6 && (ascii(buf, 0, 'GIF87a') || ascii(buf, 0, 'GIF89a'))) return 'gif'
-  if (buf.length >= 12 && ascii(buf, 0, 'RIFF') && ascii(buf, 8, 'WEBP')) return 'webp'
-  return null
-}
+/** In-flight upload file (`<uuid>.part`); renamed to `<uuid>.<ext>` once complete, swept at boot if a crash left it. */
+export const CANVAS_PARTIAL_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.part$/
 
 /** Directory holding the wallpaper files (created on demand, owner-only like the data dir). */
 export function backgroundsDir(): string {
@@ -49,18 +33,6 @@ export async function deleteCanvasImage(dir: string, id: string): Promise<void> 
   await fs.rm(join(dir, id), { force: true })
 }
 
-/** Bytes + content type for a stored id, or null when the id is invalid or the file is gone. */
-export async function readCanvasImage(dir: string, id: string): Promise<{ bytes: Buffer; type: string } | null> {
-  if (!CANVAS_IMAGE_ID_RE.test(id)) return null
-  const ext = id.slice(id.lastIndexOf('.') + 1) as CanvasImageExt
-  try {
-    return { bytes: await fs.readFile(join(dir, id)), type: CANVAS_IMAGE_TYPES[ext] }
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw new Error(`read canvas image ${id} failed: ${(err as Error).message}`, { cause: err })
-  }
-}
-
 /** Read a binary request body up to `max` bytes; drains and reports `too_large` past the cap. */
 export async function readBinaryBody(req: IncomingMessage, max: number): Promise<Buffer | 'too_large'> {
   const declared = Number(req.headers['content-length'])
@@ -77,5 +49,82 @@ export async function readBinaryBody(req: IncomingMessage, max: number): Promise
     })
     req.on('end', () => resolve(total > max ? 'too_large' : Buffer.concat(chunks)))
     req.on('error', (err) => reject(new Error(`read canvas image upload failed: ${err.message}`, { cause: err })))
+  })
+}
+
+export type UploadResult =
+  | { ok: true; id: string; ext: CanvasImageExt; animated: boolean; bytes: number }
+  | { ok: false; error: 'too_large' | 'unsupported' | 'aborted' }
+
+/**
+ * Stream an upload to `<dir>/<uuid>.part` (never held in memory), sniff the first bytes, enforce the
+ * per-type cap while streaming (images `MAX_CANVAS_IMAGE_BYTES`, video `MAX_CANVAS_VIDEO_BYTES`), then
+ * rename atomically to `<uuid>.<ext>`. Any rejection removes the partial file; the rest of the body is
+ * drained so the 413/415 reaches the client instead of a reset socket.
+ */
+export async function streamCanvasUpload(req: IncomingMessage, dir: string): Promise<UploadResult> {
+  const declared = Number(req.headers['content-length'])
+  if (Number.isFinite(declared) && declared > MAX_CANVAS_VIDEO_BYTES) { req.resume(); return { ok: false, error: 'too_large' } }
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 })
+  const uuid = randomUUID()
+  const partial = join(dir, `${uuid}.part`)
+  const out = createWriteStream(partial, { mode: 0o600, flags: 'wx' })
+  /** Close the partial file and remove it; waits for `close` because a destroy before `open` would recreate it. */
+  const discard = async (): Promise<void> => {
+    if (!out.closed) await new Promise<void>((done) => { out.once('close', () => done()); out.destroy() })
+    await fs.rm(partial, { force: true })
+  }
+  return new Promise<UploadResult>((resolve, reject) => {
+    let total = 0
+    let head = Buffer.alloc(0)
+    let media: ReturnType<typeof sniffMedia> | undefined
+    let rejected: 'too_large' | 'unsupported' | null = null
+    let settled = false
+    const settle = (result: UploadResult | Error): void => {
+      if (settled) return
+      settled = true
+      if (result instanceof Error) reject(result)
+      else resolve(result)
+    }
+    const discardThen = (result: UploadResult | Error): void => {
+      discard().then(() => settle(result), (err: unknown) => settle(new Error(`stream canvas upload ${uuid}: cleanup failed: ${(err as Error).message}`, { cause: err })))
+    }
+    const fail = (err: unknown, what: string): void => discardThen(new Error(`stream canvas upload ${uuid}: ${what}: ${(err as Error).message}`, { cause: err }))
+    out.on('error', (err) => fail(err, 'write failed'))
+    req.on('error', (err) => fail(err, 'read failed'))
+    req.on('data', (chunk: Buffer | string) => {
+      if (rejected || settled) return
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
+      total += buf.length
+      if (head.length < CANVAS_SNIFF_BYTES) {
+        head = Buffer.concat([head, buf.subarray(0, CANVAS_SNIFF_BYTES - head.length)])
+        if (head.length >= CANVAS_SNIFF_BYTES) {
+          media = sniffMedia(head)
+          if (!media) { rejected = 'unsupported'; return } // stop writing; the body is still drained here
+        }
+      }
+      const cap = media && !isVideoExt(media.ext) ? MAX_CANVAS_IMAGE_BYTES : MAX_CANVAS_VIDEO_BYTES
+      if (total > cap) { rejected = 'too_large'; return }
+      if (!out.write(buf)) { req.pause(); out.once('drain', () => req.resume()) }
+    })
+    req.on('close', () => {
+      if (!req.complete && !settled) discardThen({ ok: false, error: 'aborted' })
+    })
+    req.on('end', () => {
+      if (settled) return
+      if (!rejected) {
+        media ??= sniffMedia(head) // body shorter than the sniff window
+        if (!media) rejected = 'unsupported'
+      }
+      if (rejected || !media) { discardThen({ ok: false, error: rejected ?? 'unsupported' }); return }
+      const found = media
+      out.end(() => {
+        const id = `${uuid}.${found.ext}`
+        fs.rename(partial, join(dir, id)).then(
+          () => settle({ ok: true, id, ext: found.ext, animated: found.animated, bytes: total }),
+          (err: unknown) => fail(err, 'rename failed'),
+        )
+      })
+    })
   })
 }

@@ -75,7 +75,7 @@ export function CanvasBackgroundSection({ settings: s, onChange, projectId }: Pr
         )}
         <Field label="Preview" block>
           <div className="cbg-preview" data-testid="canvas-background-preview">
-            <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
+            <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} onVideoLoaded={wallpaper.onVideoLoaded} onVideoError={wallpaper.onVideoError} />
             <div className="cbg-preview__dots" style={{ backgroundImage: `radial-gradient(${wallpaper.dotColor} 1.2px, transparent 1.2px)` }} />
             <div className="cbg-preview__node">Preview</div>
           </div>
@@ -91,7 +91,7 @@ export function CanvasBackgroundSection({ settings: s, onChange, projectId }: Pr
           <ImageControls bg={bg} onChange={set}
             onUpload={async (file) => fromServer(await uploadCanvasImage(file, ws))}
             onRemove={async () => fromServer(await removeCanvasImage(ws))}
-            missing={wallpaper.imageStatus === 'missing'}
+            missing={wallpaper.imageStatus === 'missing'} videoFailed={wallpaper.videoFailed}
             lowContrast={needsContrastWarning(bg, wallpaper.imageLuminance)} />
         )}
         {error && <p className="cbg-notice cbg-notice--error" role="alert">{error}</p>}
