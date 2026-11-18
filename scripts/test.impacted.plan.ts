@@ -1,7 +1,7 @@
 // Turns "which files changed" into "which tests to run" for `npm run test:impacted`. Pure: the file
 // system is injected, so scripts/test.impacted.plan.bun.test.ts can drive it with a tiny fixture.
 import { posix } from 'node:path'
-import { buildReverseGraph, dependentsOf } from './test.impacted.graph'
+import { buildReverseGraph, dependentsOf, dependentsWithin } from './test.impacted.graph'
 import { POLICY_MANIFEST, type PolicyDomain } from './test.policy.manifest'
 
 export type PlanFs = {
@@ -15,6 +15,8 @@ export type PlanFs = {
 export type Plan = {
   /** Vitest test files to run directly (changed tests). */
   vitestTests: string[]
+  /** Unchanged vitest tests our own import graph reaches (dynamic imports, barrels, mocked paths that `vitest related` misses). */
+  vitestGraph: string[]
   /** Changed source files to hand to `vitest related`. */
   vitestRelated: string[]
   /** bun test files, `.real.` excluded. */
@@ -30,6 +32,9 @@ export const isRealBunTest = (f: string): boolean => /\.real\.bun\.test\.ts$/.te
 /** vitest only discovers tests under these trees (vite.config.ts `include`). */
 const isVitestTest = (f: string): boolean => isTest(f) && !isBunTest(f) && /^src\/(client|server|shared)\//.test(f)
 const isSourceFile = (f: string): boolean => /\.(tsx?|json)$/.test(f) && !isTest(f)
+
+/** Import hops followed for the vitest graph complement; deeper hubs (App, canvas) would drag in dozens of DOM suites. */
+export const VITEST_GRAPH_DEPTH = 3
 
 /** Build/test infrastructure: a change here can break any guard, so every policy domain runs. */
 const INFRA = /^(package\.json|bun\.lock|bunfig\.toml|vite\.config\.ts|tsconfig[^/]*\.json|electrobun\.config\.ts|components\.json|scripts\/|\.github\/|src\/test[^/]*\.setup\.ts)/
@@ -81,9 +86,12 @@ export function buildPlan(changedAll: string[], fs: PlanFs, opts: { policy: bool
   const bunSet = new Set([...impacted.filter((f) => isBunTest(f) && !isRealBunTest(f)), ...changedTests.filter((f) => isBunTest(f) && !isRealBunTest(f))])
 
   const notPolicy = (f: string): boolean => !policyFiles.has(f)
+  const changedSet = new Set(changedTests)
+  const graphTests = sorted([...dependentsWithin(changedSources, reverse, VITEST_GRAPH_DEPTH)].filter((f) => isVitestTest(f) && !changedSet.has(f))).filter(notPolicy)
   const policyList = sorted(policyFiles)
   return {
     vitestTests: sorted(changedTests.filter(isVitestTest).filter(notPolicy)),
+    vitestGraph: graphTests,
     vitestRelated: sorted(changedSources.filter((f) => /^src\/(client|server|shared)\//.test(f) && /\.tsx?$/.test(f))),
     bun: sorted(bunSet).filter(notPolicy),
     bunReal: sorted(changedTests.filter(isRealBunTest)),
