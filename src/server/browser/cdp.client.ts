@@ -27,6 +27,8 @@ export const CDP = {
   // Shields: intersep request (tahap Request) di halaman + iframe OOPIF yang di-auto-attach.
   setAutoAttach: 'Target.setAutoAttach', fetchEnable: 'Fetch.enable', continueRequest: 'Fetch.continueRequest',
   failRequest: 'Fetch.failRequest', fulfillRequest: 'Fetch.fulfillRequest',
+  // Favicons (browserHost.favicon.ts): read the page's <link> icons, then fetch the bytes in the profile's own network stack.
+  getFrameTree: 'Page.getFrameTree', addBinding: 'Runtime.addBinding', loadNetworkResource: 'Network.loadNetworkResource', ioRead: 'IO.read', ioClose: 'IO.close',
   runtimeEnable: 'Runtime.enable', logEnable: 'Log.enable', releaseObjectGroup: 'Runtime.releaseObjectGroup', // console panel
 } as const
 
@@ -40,6 +42,7 @@ export const CDP_EVENT = {
   dialogOpening: 'Page.javascriptDialogOpening',
   downloadWillBegin: 'Browser.downloadWillBegin', downloadProgress: 'Browser.downloadProgress', // downloads (browserHost.downloads.ts)
   requestPaused: 'Fetch.requestPaused', attachedToTarget: 'Target.attachedToTarget', detachedFromTarget: 'Target.detachedFromTarget',
+  bindingCalled: 'Runtime.bindingCalled', // favicon <link> changed (browserHost.favicon.ts)
   consoleApiCalled: 'Runtime.consoleAPICalled', exceptionThrown: 'Runtime.exceptionThrown', logEntryAdded: 'Log.entryAdded', // console panel
 } as const
 

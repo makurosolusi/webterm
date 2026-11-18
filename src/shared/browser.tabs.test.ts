@@ -32,6 +32,8 @@ describe('validators', () => {
     expect(isBrowserTab(tab('a', { favicon: 'x' }))).toBe(true)
     expect(isBrowserTab({ ...tab('a'), loading: 'yes' })).toBe(false)
     expect(isBrowserTab({ ...tab('a'), favicon: 1 })).toBe(false)
+    expect(isBrowserTab(tab('a', { faviconData: 'data:image/png;base64,AA==' }))).toBe(true)
+    expect(isBrowserTab({ ...tab('a'), faviconData: 5 })).toBe(false)
     expect(isBrowserTab({ ...tab(''), tabId: '' })).toBe(false)
     expect(isBrowserTab(null)).toBe(false)
   })

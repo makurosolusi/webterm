@@ -15,6 +15,7 @@ import { createKit } from './browserHost.tabs.kit'
 import type { TabsOps } from './browserHost.tabs.kit'
 import { createPopupSide } from './browserHost.tabs.popup'
 import { createSplit } from './browserHost.split'
+import { createFavicons } from './browserHost.favicon'
 
 export { TabLimitError } from './browserHost.tabs.kit'
 export type { TabsOps } from './browserHost.tabs.kit'
@@ -25,6 +26,11 @@ export function createTabs(ops: TabsOps) {
   const kit = createKit(ops)
   const { tabsOf, find, must, emitTab, patchTab, setState, send, fire, closeTarget, spawn, load, idOf } = kit
   const { table } = ops
+  const favicons = createFavicons({
+    guard: ops.guard, setTimer: kit.setTimer, clearTimer: kit.clearTimer, send: kit.send, patch: patchTab,
+    tab: (rec, id) => (rec.tabs ? find(rec.tabs, id) : undefined),
+    sessionOf: (rec, id) => (rec.tabs?.state.activeTabId === id ? rec.sessionId : rec.tabs?.rt.get(id)?.sessionId),
+  })
   const split = createSplit(kit, { liveSession: (r, id) => liveSession(r, id), activate: (r, id) => moveCursors(r, { active: id }) })
 
   /** Fresh tab model for a node whose page is about to open: the board's saved list (all discarded but the active one) or empty. */
@@ -59,7 +65,9 @@ export function createTabs(ops: TabsOps) {
     if (part.url) patch.url = part.url
     if (part.title !== undefined) patch.title = sanitizeTabTitle(part.title)
     if (part.loading !== undefined) patch.loading = part.loading
+    const wasLoading = rec.tabs.state.tabs.find((x) => x.tabId === id)?.loading
     patchTab(rec, id, patch)
+    if (wasLoading && part.loading === false) favicons.loaded(rec, id) // a load ended (not just a tab switch that restates loading:false)
   }
 
   /** The view target is gone (crash/detach): its tab is marked crashed; the node and the other tabs carry on. */
@@ -77,6 +85,7 @@ export function createTabs(ops: TabsOps) {
     const t = rec.tabs
     if (!t) return
     kit.forgetTimers(rec)
+    favicons.dropNode(rec)
     split.clear(rec)
     for (const [id, rt] of t.rt) {
       if (rt.targetId && rt.targetId !== rec.targetId) { if (closeOthers) closeTarget(rec, rt); else table.bgUnbind(rt.targetId, rt.sessionId) }
@@ -210,6 +219,7 @@ export function createTabs(ops: TabsOps) {
       ops.patch(rec, { url: '', title: '', loading: false, canBack: false, canForward: false, netError: undefined })
     } else closeTarget(rec, rt)
     t.rt.delete(tabId)
+    favicons.dropTab(rec, tabId)
     t.state = wasView && backTo ? { ...next, activeTabId: backTo } : next
     emitTab(rec, { type: 'tabClosed', nodeId: rec.nodeId, tabId, ...(remember ? {} : { remember: false }) })
     if (prev.layout !== t.state.layout) split.noteLayout(rec, t.state.layout)
@@ -268,10 +278,13 @@ export function createTabs(ops: TabsOps) {
     await moveCursors(rec, { agent: tabId, ...(t.followAgent ? { active: tabId } : {}) })
   }
 
-  function forget(rec: NodeRec): void { kit.forgetTimers(rec); kit.forgetSaved(rec.nodeId) }
+  function forget(rec: NodeRec): void { kit.forgetTimers(rec); favicons.dropNode(rec); kit.forgetSaved(rec.nodeId) }
 
-  const popup = createPopupSide(kit, { create, liveSession, sideFrame: split.sidePush })
-  return { split, restore, bindView, closedTab, pageClosed, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
+  /** `Runtime.bindingCalled` on the view page: the active tab's icon links changed. */
+  function binding(rec: NodeRec, p: Record<string, unknown>): void { const id = rec.tabs?.state.activeTabId; if (id) favicons.binding(rec, id, p) }
+
+  const popup = createPopupSide(kit, { favicons, create, liveSession, sideFrame: split.sidePush })
+  return { split, binding, restore, bindView, closedTab, pageClosed, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
 }
 
 export type TabManager = ReturnType<typeof createTabs>

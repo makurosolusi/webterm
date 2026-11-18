@@ -269,3 +269,9 @@ dan seksi "Recently closed" kosong yang berisik. Acuan: NTP Chrome/Edge/Arc, dis
 - **Sengaja tidak ada:** layanan favicon/saran pihak ketiga, berita/rekomendasi, pelacakan, logo merek baru.
 - **Belum:** daftar saran kustom (ikon + judul + host, `aria-activedescendant`) menggantikan datalist; tampilan nyata (terang/gelap,
   lebar sempit) belum diamati. Tes: `BrowserNewTabPage.test.tsx`, `BrowserToolbar.blank.test.tsx`, `BrowserNode.tabs.test.tsx`.
+
+## Favicon tab
+Gejala: ikon tab selalu globe. Akar: model punya `favicon` tetapi server tidak pernah mengisinya. Kini server membaca
+ikon halaman, mengambil byte lewat Chromium profil yang sama, dan mengirimnya sebagai data URI (`BrowserTab.faviconData`,
+hanya runtime); `favicon` tetap URL http(s) untuk board. Strip, All tabs, dan header pane memakai `BrowserTabIcon`; baris
+judul node tidak. Detail, model ancaman, dan batas: `browser-favicons.md`.

@@ -9,6 +9,7 @@ import { CDP, CDP_EVENT } from './cdp.client'
 import { blockOf, isInternalUrl, readHistory } from './browserHost.targets'
 import type { BgTab, NodeRec } from './browserHost.targets'
 import type { TabKit } from './browserHost.tabs.kit'
+import type { Favicons } from './browserHost.favicon'
 
 const log = createLogger('browser.tabs')
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -16,6 +17,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const PAGE_ALREADY_GONE = /no target with given id/i
 
 export interface PopupDeps {
+  favicons: Favicons
   create(rec: NodeRec, o: { url: string; afterTabId?: string; openerTabId?: string; focusHuman: boolean; focusAgent: boolean; adopt: () => Promise<{ targetId: string; sessionId: string }> }): Promise<BrowserTab>
   liveSession(rec: NodeRec, tabId: string): Promise<string>
   /** A frame of an on-screen tab that is not the view (split view). */
@@ -117,7 +119,9 @@ export function createPopupSide(kit: TabKit, deps: PopupDeps) {
       case CDP_EVENT.frameStoppedLoading:
         patchTab(rec, tabId, { loading: false })
         void titleOf(b, sessionId)
+        deps.favicons.loaded(rec, tabId)
         return
+      case CDP_EVENT.bindingCalled: return deps.favicons.binding(rec, tabId, p)
       case CDP_EVENT.navigatedWithinDocument:
         if (typeof p.url === 'string') patchTab(rec, tabId, { url: p.url })
         return
