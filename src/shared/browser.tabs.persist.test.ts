@@ -29,3 +29,22 @@ describe('persisted tabs', () => {
     expect(board('garbage').tabs).toBeUndefined()
   })
 })
+
+describe('persisted layout and per-tab device', () => {
+  const two = { dir: 'h', ratio: 0.5, a: { id: 't0' }, b: { id: 't1' } }
+  it('keeps a layout whose tabs exist and a valid device; drops a layout over vanished tabs and a bad device', () => {
+    const v = validPersistedTabs({ tabs: [{ ...tab(0), device: { id: 'custom', w: 390, h: 844, dpr: 2 } }, { ...tab(1), device: { id: 'nokia' } }], activeTabId: 't0', agentTabId: 't0', layout: two })!
+    expect(v.layout).toEqual(two)
+    expect(v.tabs[0].device).toEqual({ id: 'custom', w: 390, h: 844, dpr: 2 })
+    expect(v.tabs[1].device).toBeUndefined()
+    const gone = validPersistedTabs({ tabs: [tab(0), tab(2)], activeTabId: 't0', agentTabId: 't0', layout: two })!
+    expect(gone.layout).toBeUndefined() // t1 does not exist: one pane left = no split
+  })
+  it('a board without layout/device reads as before, and a layout survives normalizeWorkspace', () => {
+    const v = validPersistedTabs({ tabs: [tab(0)], activeTabId: 't0', agentTabId: 't0' })!
+    expect(v).not.toHaveProperty('layout')
+    expect(v.tabs[0]).not.toHaveProperty('device')
+    const board = normalizeWorkspace({ name: 'w', viewport: { x: 0, y: 0, zoom: 1 }, nodes: [{ id: 'b', kind: 'browser', x: 0, y: 0, tabs: { tabs: [tab(0), tab(1)], activeTabId: 't0', agentTabId: 't0', layout: two } }] }).board.nodes[0]
+    expect(board.tabs?.layout).toEqual(two)
+  })
+})
