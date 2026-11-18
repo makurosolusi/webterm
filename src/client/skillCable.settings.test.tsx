@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 // Settings › Skill cable color / size: the pickers, the preview, search, and what SkillEdge draws from them.
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { ReactFlowProvider } from '@xyflow/react'
+import { ReactFlowProvider, type EdgeProps } from '@xyflow/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import SkillEdge from './SkillEdge'
@@ -91,7 +91,7 @@ describe('SkillEdge reads the choice', () => {
   const renderEdge = (extra: Record<string, unknown> = {}) => {
     render(
       <ReactFlowProvider>
-        <svg><SkillEdge {...({ id: 'e1', source: 'sk', target: 'ag', sourceX: 0, sourceY: 0, targetX: 100, targetY: 100, sourcePosition: 'top', targetPosition: 'bottom', interactionWidth: 24, ...extra } as never)} /></svg>
+        <svg><SkillEdge {...({ id: 'e1', source: 'sk', target: 'ag', sourceX: 0, sourceY: 0, targetX: 100, targetY: 100, sourcePosition: 'top', targetPosition: 'bottom', interactionWidth: 24, ...extra } as unknown as EdgeProps)} /></svg>
       </ReactFlowProvider>,
     )
     return document.querySelector('.skill-edge-path') as SVGPathElement
