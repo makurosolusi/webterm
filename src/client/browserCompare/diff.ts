@@ -17,7 +17,7 @@ export interface DiffResult {
   percent: number
 }
 
-export const makePixels = (width: number, height: number, data = new Uint8ClampedArray(width * height * 4)): Pixels => ({ width, height, data })
+export const makePixels = (width: number, height: number, data: Uint8ClampedArray = new Uint8ClampedArray(width * height * 4)): Pixels => ({ width, height, data })
 
 /** Nearest-neighbour copy of `src` scaled by `k` into the top-left of a transparent `w x h` image. */
 function place(src: Pixels, k: number, w: number, h: number): Pixels {

@@ -1,6 +1,7 @@
 // "Split" button of the node header: split the focused pane right/down, one-tap layouts (2 columns, 2 rows, 2x2) and the
 // QC shortcut "Open this page in 3 sizes". Rows that cannot run say why (pane limit, node too small) instead of hiding.
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { CompareHost } from '../browserCompare/CompareHost'
 import { Columns2 } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { VscodeMenu } from '@/components/vscode/vscodeMenu'
@@ -11,7 +12,7 @@ import { MAX_PANES } from '../../shared/browser.layout'
 import type { SplitControls } from './useBrowserSplit'
 
 /** Rows of the split menu; shared with tests. */
-export function splitMenuItems(c: SplitControls): VscodeMenuItem[] {
+export function splitMenuItems(c: SplitControls, onCompare?: () => void): VscodeMenuItem[] {
   const target = c.focusId
   const right = target ? c.canSplitAt(target, 'right') : { ok: false as const, reason: 'No page to split' }
   const down = target ? c.canSplitAt(target, 'bottom') : { ok: false as const, reason: 'No page to split' }
@@ -26,22 +27,26 @@ export function splitMenuItems(c: SplitControls): VscodeMenuItem[] {
     row('grid', `2 × 2 grid (${MAX_PANES} panes)`, () => { void c.preset('grid') }),
     { type: 'separator' },
     row('sizes', 'Open this page in 3 sizes', () => { void c.openInSizes() }),
+    ...(onCompare ? [row('compare', 'Compare panes…', onCompare, c.shown.length < 2 ? 'Split the view to compare panes' : undefined)] : []),
     ...(c.layout ? [{ type: 'separator' } as const, row('unsplit', 'Unsplit (one pane)', () => { void c.unsplit() })] : []),
   ]
 }
 
 export function BrowserSplitMenu({ controls }: { controls: SplitControls }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  const [compare, setCompare] = useState<Element | null>(null)
+  const button = useRef<Element | null>(null)
   const panes = controls.shown.length
   return (
     <>
       <IconButton
         label={`Split view (${panes}/${MAX_PANES} panes)`} size="icon-xs" aria-haspopup="menu" aria-expanded={at !== null} data-split-button
-        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: r.left, y: r.bottom }) }}
+        onClick={(e) => { button.current = e.currentTarget; const r = e.currentTarget.getBoundingClientRect(); setAt({ x: r.left, y: r.bottom }) }}
       >
         <Columns2 aria-hidden="true" />
       </IconButton>
-      {at && <VscodeMenu open anchor={at} items={splitMenuItems(controls)} onClose={() => setAt(null)} ariaLabel="Split view" />}
+      {at && <VscodeMenu open anchor={at} items={splitMenuItems(controls, () => setCompare(button.current))} onClose={() => setAt(null)} ariaLabel="Split view" />}
+      {compare && <CompareHost anchor={compare} onWake={controls.reload} onClose={() => setCompare(null)} />}
     </>
   )
 }
