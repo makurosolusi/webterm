@@ -40,6 +40,7 @@ import type { TabMsg } from './browserTabs/useBrowserTabs'
 import { useBrowserTabShortcuts } from './browserTabs/useBrowserTabShortcuts'
 import { BrowserPaneTree } from './browserSplit/BrowserPaneTree'
 import { BrowserSplitMenu } from './browserSplit/BrowserSplitMenu'
+import { BrowserSyncToggle } from './browserSplit/BrowserSyncToggle'
 import { useBrowserSplit } from './browserSplit/useBrowserSplit'
 import { useBrowserSplitShortcuts } from './browserSplit/useBrowserSplitShortcuts'
 import { zoneBox } from './browserSplit/browserSplit.drop'
@@ -234,7 +235,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
         <div ref={bodyRef} className="node-body browser-node">
           <BrowserTabStrip
             state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId}
-            trailing={tabs.standIn ? undefined : <BrowserSplitMenu controls={split} />}
+            trailing={tabs.standIn ? undefined : <><BrowserSplitMenu controls={split} /><BrowserSyncToggle nodeId={id} sync={session.sync} panes={split.shown.length} /></>}
             split={splitMenu}
             onPaneHover={setDropHint} onPaneDrop={(tabId, hit) => { void split.dropTab(tabId, hit.paneTabId, hit.zone) }}
           />

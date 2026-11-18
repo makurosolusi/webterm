@@ -10,6 +10,7 @@ import { isBlankTab, tabTitle } from '../browserTabs/browserTabs.labels'
 import { BrowserNewTabPage } from '../browserTabs/BrowserNewTabPage'
 import { useDeviceSession, deviceStyle } from '../browser.device'
 import { BrowserPaneHeader } from './BrowserPaneHeader'
+import { BrowserSyncMiss } from './BrowserSyncMiss'
 import { usePaneSession } from './usePaneSession'
 import { zoneBox, zoneLabel } from './browserSplit.drop'
 import type { DragKind, DropZone } from './browserSplit.drop'
@@ -66,6 +67,7 @@ export function BrowserPane({ tab, state, session, controls, style, focused, dro
       <div ref={pane.hostRef} className={`bp-body${device ? ' bp-body--device' : ''}`} style={deviceStyle(device)}>
         <BrowserInput session={surface} />
         {tab.loading && <div className="browser-loading" role="progressbar" aria-label="Loading" />}
+        <BrowserSyncMiss sync={session.sync} tabId={tab.tabId} />
         {blank && (
           <div className="bt-overlay">
             <BrowserNewTabPage
