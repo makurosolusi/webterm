@@ -161,7 +161,7 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       if (m.focus !== undefined && !tabId(m.focus)) return null
       return { t: 'view', id, visible: m.visible as string[], ...(m.focus === undefined ? {} : { focus: m.focus as string }) }
     }
-    case 'detach': case 'copy': case 'takeover':
+    case 'detach': case 'copy': case 'takeover': case 'challengeDone':
       return { t: m.t, id }
     case 'ack':
       return int(m.seq, 0, UINT32_MAX) ? { t: 'ack', id, seq: m.seq } : null

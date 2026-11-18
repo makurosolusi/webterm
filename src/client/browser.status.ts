@@ -27,6 +27,7 @@ const ERROR_TEXT: Record<BrowserErrorCode, string> = {
   crashed: 'The page crashed. Reload to try again.',
   launch_failed: "The browser couldn't start. Try again.",
   max_live: BLOCK_TEXT.max_live,
+  human_verification_required: 'This site needs a human check. Complete it in the browser.',
 }
 
 /** Kode galat yang tidak hilang sendiri (butuh tindakan operator/pengguna). */

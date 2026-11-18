@@ -5,6 +5,7 @@ import type { ConsoleClientMsg, ConsoleLevel, ConsoleServerMsg } from './browser
 import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
+import type { BrowserChallenge } from './browser.challenge'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -73,7 +74,7 @@ export type BlockReason =
   | 'scheme' | 'private_host' | 'dns_fail' | 'not_allowed_port' | 'no_binary' | 'disabled' | 'max_live'
 export type BrowserErrorCode =
   | 'lease_agent' | 'human_active' | 'stale_ref' | 'no_binary' | 'disabled'
-  | 'blocked' | 'not_found' | 'too_large' | 'bad_request' | 'crashed' | 'launch_failed' | 'max_live'
+  | 'blocked' | 'not_found' | 'too_large' | 'bad_request' | 'crashed' | 'launch_failed' | 'max_live' | 'human_verification_required'
 
 /** Why Chromium could not start (server log + `error.reason` on the wire); never carries a path or a pid. */
 export const LAUNCH_REASONS = ['profile_locked', 'bin_not_found', 'spawn_error', 'debug_port_timeout', 'crashed_on_start', 'sandbox_unavailable', 'connect_failed'] as const
@@ -89,6 +90,8 @@ export interface BrowserState {
   shieldsOff?: boolean; blockedAds?: number; blockedPopups?: number
   /** Chromium net error name of the last failed main-frame navigation (e.g. "net::ERR_NAME_NOT_RESOLVED"); cleared on the next page that loads. */
   netError?: string
+  /** The page is an "are you human?" check (Google /sorry, captcha, Cloudflare): agents are paused until the user continues. */
+  challenge?: BrowserChallenge
 }
 
 /**
@@ -150,6 +153,8 @@ export type ClientMsg =
   | { t: 'copy'; id: string }
   | { t: 'dialog'; id: string; accept: boolean; text?: string }
   | { t: 'takeover'; id: string }
+  /** "I'm done": the user finished the human check; the node stops showing it and agents may continue. */
+  | { t: 'challengeDone'; id: string }
   | { t: 'shields'; id: string; on: boolean }
   | { t: 'device'; id: string; device: DeviceChoice | null } // device mode (browser.devices.ts); null = Responsive
   | ConsoleClientMsg
