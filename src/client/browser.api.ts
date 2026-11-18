@@ -1,7 +1,7 @@
 // REST client for /api/browser/* (PLAN/BROWSER-CANVAS-b.md §4.5). Same credential as api.ts
 // (the `wt_ui` session cookie). No response carries a cookie value; request bodies and response bodies are
 // never echoed into errors.
-import { BROWSER_REST_PREFIX, ENV_BROWSER } from '../shared/browser.contract'
+import { BROWSER_REST_PREFIX, ENV_BROWSER, MAX_LIVE_RANGE } from '../shared/browser.contract'
 import type {
   BrowserStatusResp, CookieCommitReq, CookieCommitResp, CookieDomainInfo, CookiePreviewReq, CookiePreviewResp,
 } from '../shared/browser.contract'
@@ -83,4 +83,15 @@ export async function allowBrowserHosts(entries: string[]): Promise<void> {
   const cur = st.entries.find((e) => e.key === ENV_BROWSER.allowHosts)?.value ?? ''
   const merged = [...new Set([...cur.split(/[\s,]+/).filter(Boolean), ...entries])].join(',')
   await call('PUT', ENV_SETTINGS_PATH, { set: { [ENV_BROWSER.allowHosts]: merged }, unset: [] })
+}
+
+/**
+ * Raise the active-browser limit one step (to at most `MAX_LIVE_RANGE.max`) through the same env PUT Settings uses; the
+ * runtime reads it on every open, so it applies at once. Returns the new limit, or null when `current` is already the maximum.
+ */
+export async function raiseBrowserLimit(current: number): Promise<number | null> {
+  if (current >= MAX_LIVE_RANGE.max) return null
+  const next = current + 1
+  await call('PUT', ENV_SETTINGS_PATH, { set: { [ENV_BROWSER.maxLive]: String(next) }, unset: [] })
+  return next
 }

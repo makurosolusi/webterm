@@ -13,7 +13,7 @@ import { closeProfileSpawn, useProfileSpawn } from './browserProfile.spawn'
 import type { ProfileSpawner, SpawnRequest } from './browserProfile.spawn'
 import { PROFILE_TEXT as T } from './browserProfile.text'
 import { useActiveWorkspaceId } from './activeWorkspace.context'
-import { showNotice } from './workspaceSave.notice'
+import { showLimitNotice } from './browserLimit.notice'
 
 const NOTICE_KEY = 'webterm-browser-profile-spawn'
 
@@ -45,15 +45,18 @@ function SpawnBody({ request, spawner }: { request: SpawnRequest; spawner: Profi
 
   const toggle = (id: string, on: boolean): void => setPicked((prev) => { const n = new Set(prev ?? ticked); if (on) n.add(id); else n.delete(id); return n })
 
+  // Opens what fits; the rest is reported with "Raise limit" / "Settings", and "Try again" opens only the ones still missing.
+  const openList = (list: readonly BrowserProfile[], total: number, already: number): Promise<void> =>
+    freeSlots().then(({ free, max }) => {
+      const opened = spawner.openMany(list, free)
+      if (opened < list.length) {
+        const title = already + opened === 0 ? T.openedNone(max) : T.openedSome(already + opened, total, max)
+        void showLimitNotice(NOTICE_KEY, 'warning', title, { max, retry: () => { void openList(list.slice(opened), total, already + opened) } })
+      }
+    })
   const openEach = (): void => {
     setBusy(true)
-    freeSlots().then(({ free, max }) => {
-      const opened = spawner.openMany(chosen, free)
-      if (opened < chosen.length) {
-        showNotice(NOTICE_KEY, { severity: 'warning', title: opened === 0 ? T.openedNone(max) : T.openedSome(opened, chosen.length, max) })
-      }
-      closeProfileSpawn()
-    }).finally(() => setBusy(false))
+    openList(chosen, chosen.length, 0).then(closeProfileSpawn).finally(() => setBusy(false))
   }
 
   return (

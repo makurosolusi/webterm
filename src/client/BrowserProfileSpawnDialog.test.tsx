@@ -107,6 +107,7 @@ describe('Open a browser for each profile…', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open 4 browsers' }))
     await waitFor(() => expect(made).toHaveLength(2))
     expect(notices.show.mock.calls[0][1]).toMatchObject({ severity: 'warning', title: 'Opened 2 of 4. The limit is 8 active browsers; hide one to open the rest.' })
+    expect(notices.show.mock.calls[0][1].actions.map((a: { label: string }) => a.label)).toEqual(['Raise limit to 9', 'Settings']) // actionable toast
     made.length = 0; notices.show.mockReset(); server.live = 8
     act(() => { openProfileSpawn('each') })
     fireEvent.click(await screen.findByRole('button', { name: 'Open 4 browsers' }))
