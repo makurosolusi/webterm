@@ -2,7 +2,8 @@
 // through `rec.cast` as before; every other on-screen tab gets its own screencast ("side"), at a low frame rate, tagged
 // with its tab id. Also per-tab pane sizes and device emulation, and the layout itself (kept in step with tab closes).
 // Everything off screen stops streaming. MAX_LIVE still counts nodes, not panes: a 4-pane node streams four pages.
-import { DSF_MAX } from '../../shared/browser.contract'
+import { DSF_MAX, TOUCH_POINTS_MAX } from '../../shared/browser.contract'
+import type { BrowserInputEvent } from '../../shared/browser.contract'
 import { resolveDevice } from '../../shared/browser.devices'
 import type { DeviceChoice, DeviceSpec } from '../../shared/browser.devices'
 import { MAX_PANES, assignTab, layoutTabIds, validLayout } from '../../shared/browser.layout'
@@ -10,7 +11,7 @@ import type { Pane } from '../../shared/workspace.shape'
 import { createLogger } from '../logs'
 import { CDP } from './cdp.client'
 import { deviceCommands, responsiveCommands } from './browserHost.device'
-import { screencastParams } from './browserHost.input'
+import { screencastParams, toCdpCommands } from './browserHost.input'
 import { BrowserError, pushSideFrame } from './browserHost.targets'
 import type { NodeRec, SplitRt } from './browserHost.targets'
 import type { TabKit } from './browserHost.tabs.kit'
@@ -133,7 +134,8 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
   }
 
   /** The viewer's tabs on screen (one per pane) and the focused one. */
-  async function setVisible(rec: NodeRec, visible: string[], focus?: string): Promise<void> {
+  async function setVisible(rec: NodeRec | undefined, visible: string[], focus?: string): Promise<void> {
+    if (!rec?.sessionId || !rec.tabs) return // a node without a page (crashed, discarded) has nothing on screen to stream
     const t = tabsOf(rec)
     const shown = [...new Set(visible)].filter((id) => find(t, id)).slice(0, MAX_PANES)
     rtOf(rec).visible = shown
@@ -166,7 +168,8 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
   }
 
   /** A tab's page size in its pane (CSS px); only meaningful in a split. */
-  async function resizeTab(rec: NodeRec, tabId: string, vp: { w: number; h: number; dpr: number }): Promise<void> {
+  async function resizeTab(rec: NodeRec | undefined, tabId: string, vp: { w: number; h: number; dpr: number }): Promise<void> {
+    if (!rec?.sessionId || !rec.tabs) return
     must(rec, tabId)
     const s = rtOf(rec)
     const cur = s.vp.get(tabId)
@@ -234,17 +237,17 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
     s.side.clear(); s.castKey.clear(); s.applied.clear(); s.identity.clear(); s.touch.clear()
   }
 
-  /** The tab's page for input: the view's, or an on-screen/live background one (never woken for a stray input). */
-  const inputSession = (rec: NodeRec, tabId: string): string | undefined => sessionOf(rec, tabId)
-  const needsTouch = (rec: NodeRec, tabId: string): boolean => {
+  /** Input for the pane of a tab that is not the focused one: straight to its page (never woken for a stray input). */
+  function input(rec: NodeRec, tabId: string, ev: BrowserInputEvent): void {
+    const sid = sessionOf(rec, tabId)
+    if (!sid) return
     const s = rtOf(rec)
-    if (s.touch.has(tabId)) return false
-    s.touch.add(tabId)
-    return true
+    if (ev.t === 'touch' && !s.touch.has(tabId)) { s.touch.add(tabId); fire(rec, sid, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX }) }
+    for (const c of toCdpCommands(ev)) fire(rec, sid, c.method, c.params)
   }
   const isShown = (rec: NodeRec, tabId: string): boolean => !!rec.tabs?.split?.visible.includes(tabId)
 
-  return { reconcile, setVisible, resizeTab, setTabDevice, setLayout, applyLayout, noteLayout, followFocus, sidePush, ackSide, swapped, stopAll, clear, inputSession, needsTouch, isShown, rtOf }
+  return { reconcile, setVisible, resizeTab, setTabDevice, setLayout, applyLayout, noteLayout, followFocus, sidePush, ackSide, swapped, stopAll, clear, input, isShown, rtOf }
 }
 
 export type SplitSide = ReturnType<typeof createSplit>

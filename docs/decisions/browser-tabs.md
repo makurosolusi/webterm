@@ -190,7 +190,8 @@ Code: `browser.agentTabs.verbs.ts` (`withTabs`: verbs `tabs`/`tab`, `--tab`, `st
 
 
 ## Menyusul
-P1 server (model tab, popup -> tab, screencast hanya tab aktif, persistensi); P2b integrasi ke `BrowserNode`
-setelah profil ter-merge; P3 agent (verb `tabs`/`tab`, `--tab`, `newTab`); P4 split pane; P5 QC (sinkron, bandingkan).
+P1-P3 (server, integrasi `BrowserNode`, verb agent) sudah ada. P4 split pane sudah ada: lihat `browser-split.md` (screencast
+kini untuk semua tab yang tampil di pane, bukan hanya tab aktif; layout dan device per tab ikut daftar tab yang dipersist).
+P5 QC (sinkron, bandingkan) dan verb agent `layout` belum.
 Belum diverifikasi tanpa browser: tampilan nyata strip, perilaku overflow dan drag dengan layout sungguhan, kontras
 warna di tema terang/gelap/kontras tinggi.

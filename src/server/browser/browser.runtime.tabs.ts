@@ -79,8 +79,8 @@ export function createTabsService(d: TabsWiringDeps): TabsApiDeps {
     close: (id, tabId) => act(id, async () => { await d.host.tabApi.closeTab(id, tabId); return out(id) }),
     move: (id, tabId, to) => act(id, async () => { await d.host.tabApi.move(id, tabId, to); return out(id) }),
     duplicate: (id, tabId) => act(id, async () => out(id, await d.host.tabApi.duplicate(id, tabId))),
-    setLayout: (id, layout, focus) => act(id, async () => { await d.host.setLayout(id, layout, focus); return out(id) }),
-    setDevice: (id, tabId, device) => act(id, async () => { await d.host.setTabDevice(id, tabId, device); return out(id) }),
+    setLayout: (id, layout, focus) => act(id, async () => { await d.host.tabApi.setLayout(id, layout, focus); return out(id) }),
+    setDevice: (id, tabId, device) => act(id, async () => { await d.host.tabApi.setTabDevice(id, tabId, device); return out(id) }),
     reopen: (id) => act(id, async () => out(id, await d.host.tabApi.reopen(id))),
     /**
      * Tab -> its own node beside this one: same profile (cookies come with it), same url, a fresh page (a live page cannot

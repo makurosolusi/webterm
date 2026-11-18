@@ -57,7 +57,7 @@ async function restartCast(rec: NodeRec, io: DeviceIo, before: string): Promise<
 export async function resizeViewport(rec: NodeRec, vp: NodeRec['viewport'], io: DeviceIo): Promise<void> {
   const before = castKey(rec)
   rec.viewport = vp
-  if (rec.device) return
+  if (rec.device || rec.tabs?.split?.vp.has(rec.tabs.state.activeTabId ?? '')) return // a device, or the view's own pane size, wins over the node's
   await io.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr))
   io.fire(CDP.setVisibleSize, { width: Math.round(vp.w), height: Math.round(vp.h) }) // Orca ...-device-metrics.ts:45-54
   await restartCast(rec, io, before)

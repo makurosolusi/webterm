@@ -55,9 +55,11 @@ export class FakeHost implements GatewayHost {
   devices: Array<[string, unknown]> = []
   async setDevice(id: string, device: unknown) { this.devices.push([id, device]) }
   views: Array<[string, string[], string | undefined]> = []
-  async setView(id: string, visible: string[], focus?: string) { this.views.push([id, visible, focus]) }
   tabViewports: Array<[string, string, number, number, number]> = []
-  async setTabViewport(id: string, tab: string, w: number, h: number, dpr: number) { this.tabViewports.push([id, tab, w, h, dpr]) }
+  tabApi = {
+    setView: async (id: string, visible: string[], focus?: string) => { this.views.push([id, visible, focus]) },
+    setTabViewport: async (id: string, tab: string, w: number, h: number, dpr: number) => { this.tabViewports.push([id, tab, w, h, dpr]) },
+  }
   /** Dorong state baru ke langganan (seperti host nyata). */
   setState(s: BrowserState) { this.states.set(s.id, s); for (const cb of [...this.stateCbs]) cb({ ...s }) }
   emitFrame(id: string, seq: number, tabId?: string) { this.frames.get(id)?.({ seq, jpeg: new Uint8Array([0xff, 0xd8, seq]), ...(tabId ? { tabId } : {}) }) }

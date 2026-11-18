@@ -33,7 +33,7 @@ describe('real Chromium: split view', () => {
     await until('second tab loaded', async () => (await evalIn<boolean>(rig as Rig, NODE, b, '!!document.getElementById("k")')) || undefined)
     const r = rig
     await r.host.startScreencast(NODE, (f: Frame) => { frames.set(f.tabId ?? '', (frames.get(f.tabId ?? '') ?? 0) + 1); r.host.ackFrame(NODE, f.seq) })
-    await r.host.setLayout(NODE, splitPane(null, a, b, 'right'), a)
+    await r.host.tabApi.setLayout(NODE, splitPane(null, a, b, 'right'), a)
     expect(tabsOf(r, NODE).activeTabId).toBe(a)
   }, TEST_TIMEOUT_MS)
 
@@ -44,8 +44,8 @@ describe('real Chromium: split view', () => {
 
   test('device per tab: the pages report different widths', async () => {
     const r = rig as Rig
-    await r.host.setTabDevice(NODE, a, { id: 'custom', w: 390, h: 844, dpr: 1 })
-    await r.host.setTabDevice(NODE, b, { id: 'custom', w: 1280, h: 800, dpr: 1 })
+    await r.host.tabApi.setTabDevice(NODE, a, { id: 'custom', w: 390, h: 844, dpr: 1 })
+    await r.host.tabApi.setTabDevice(NODE, b, { id: 'custom', w: 1280, h: 800, dpr: 1 })
     await until('tab a is 390 wide', async () => (await evalIn<number>(r, NODE, a, 'window.innerWidth')) === 390 || undefined)
     expect(await evalIn<number>(r, NODE, b, 'window.innerWidth')).toBe(1280)
     expect(await evalIn<number>(r, NODE, a, 'window.innerHeight')).toBe(844)
@@ -64,7 +64,7 @@ describe('real Chromium: split view', () => {
 
   test('a pane that leaves the screen stops streaming', async () => {
     const r = rig as Rig
-    await r.host.setView(NODE, [a], a)
+    await r.host.tabApi.setView(NODE, [a], a)
     await new Promise((res) => setTimeout(res, 600)) // frames already in flight
     const settled = frames.get(b) ?? 0
     await new Promise((res) => setTimeout(res, 1_200))
