@@ -240,7 +240,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           {renderToolbar?.(ctx)}
           {!layout && <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />}
           <div
-            className="browser-body" role="tabpanel" id={panelId} data-pane-tab={layout ? undefined : tabs.active?.tabId}
+            className="browser-body nodrag nopan" role="tabpanel" id={panelId} data-pane-tab={layout ? undefined : tabs.active?.tabId}
             aria-labelledby={tabs.active ? browserTabDomId(tabs.active.tabId) : undefined} aria-label={tabs.active ? undefined : 'New tab'}
           >
             <div className={device && !layout ? 'browser-zoom browser-zoom--device' : 'browser-zoom'} style={{ '--browser-zoom': zoom, ...(layout ? {} : deviceStyle(device)) } as CSSProperties}>

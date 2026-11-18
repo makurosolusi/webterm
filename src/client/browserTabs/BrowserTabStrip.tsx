@@ -105,7 +105,7 @@ export function BrowserTabStrip({ state, onAction, onNotice, makeId = newTabId, 
   const dragIndex = drag.view ? tabs.findIndex((t) => t.tabId === drag.view?.tabId) : -1
 
   return (
-    <div ref={rootRef} className="bt-strip" data-popout-armed={drag.view?.popOut || undefined} onDoubleClick={onRootDoubleClick}>
+    <div ref={rootRef} className="bt-strip nodrag nopan" data-popout-armed={drag.view?.popOut || undefined} onDoubleClick={onRootDoubleClick}>
       {overflow.overflowing && (
         <IconButton label="Scroll tabs left" size="icon-xs" className="bt-chevron" disabled={!overflow.canLeft} onClick={() => overflow.scroll(-1)}>
           <ChevronLeft aria-hidden="true" />
