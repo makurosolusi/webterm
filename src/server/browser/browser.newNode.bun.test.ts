@@ -13,6 +13,7 @@ import type { BrowserProfile } from '../../shared/browser.profile'
 import type { Workspace } from '../../shared/workspace'
 import { createFileSecretStore } from '../envSecrets.store'
 import { logBus } from '../logs'
+import { LaunchError } from './chromium.launch'
 import { startBrowserRuntime } from './browser.runtime'
 import type { BrowserRuntime } from './browser.state'
 import { offlineAdblock, startFakeCdp } from './fakeCdp.testkit'
@@ -21,18 +22,24 @@ import type { FakeCdp } from './fakeCdp.testkit'
 const cleanup: Array<() => Promise<void> | void> = []
 afterEach(async () => { for (const c of cleanup.splice(0).reverse()) await c() })
 
-interface Rig { rt: BrowserRuntime; fake: FakeCdp; acquired: string[]; connect(): Promise<Client> }
+interface Rig { rt: BrowserRuntime; fake: FakeCdp; board: Workspace; acquired: string[]; connect(): Promise<Client> }
 interface Client { json: Array<Record<string, unknown>>; send(m: unknown): void }
 
-async function boot(env: Record<string, string> = {}): Promise<Rig> {
+async function boot(env: Record<string, string> = {}, acquireFails: () => Error | null = () => null): Promise<Rig> {
   const dir = mkdtempSync(join(tmpdir(), 'wt-newnode-'))
   const fake = await startFakeCdp()
   const board: Workspace = { id: 'w1', name: 'Alpha', cwd: '/', viewport: { x: 0, y: 0, zoom: 1 }, bridges: [], updatedAt: 0, nodes: [] }
   const acquired: string[] = []
   const rt = await startBrowserRuntime({
     env: { [ENV_BROWSER.enabled]: 'on', ...env }, webtermPort: 8700, dataRoot: dir, secrets: createFileSecretStore(join(dir, 'secrets')), workspaces: () => [board],
-    launcher: { acquire: async (id) => { acquired.push(id); return fake.url }, shutdown: () => undefined, isLive: () => false },
+    launcher: { acquire: async (id) => { acquired.push(id); const e = acquireFails(); if (e) throw e; return fake.url }, shutdown: () => undefined, isLive: () => false },
     adblock: offlineAdblock(),
+    canvas: { // test-only board writer: what Central's openProject adds is on the (saved) board at once
+      add(input) { board.nodes.push(...input.nodes); return { ok: true, updatedAt: 1, nodes: input.nodes } },
+      remove: () => ({ ok: false, code: 'node_not_found' }),
+      update: () => ({ ok: true, updatedAt: 1, nodes: [], bridges: [], unlinked: [] }),
+      workspaceOfNode: (id) => (board.nodes.some((n) => n.id === id) ? board : null),
+    },
   })
   if (!rt) throw new Error('runtime did not start')
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
@@ -46,7 +53,7 @@ async function boot(env: Record<string, string> = {}): Promise<Rig> {
   })
   const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`
   return {
-    rt, fake, acquired,
+    rt, fake, board, acquired,
     async connect() {
       const ws = new WebSocket(url)
       socks.push(ws)
@@ -110,6 +117,54 @@ describe('a new node on a profile', () => {
     c.send({ t: 'mouse', id: 'new4', type: 'down', x: 10, y: 10, button: 'left', clickCount: 1 })
     await wait(() => r.fake.calls.some((x) => x.method === 'Input.dispatchMouseEvent'), 'Input.dispatchMouseEvent')
     expect(c.json.filter((m) => m.t === 'error')).toEqual([])
+  })
+})
+
+describe('the other ways to get a node on a profile', () => {
+  test('Central/agent open with a profile (openProject): the page starts on that profile and a viewer attaches to a live node', async () => {
+    const r = await boot()
+    const p = await make(r, 'Work')
+    const opened = await r.rt.openProject('w1', 'proj1', 'Work')
+    expect(opened).toMatchObject({ ok: true })
+    expect(r.acquired[0]).toBe(p.id)
+    const c = await r.connect()
+    c.send(attach('proj1')) // the board holds the node (with its profileId), so no hint is needed
+    await wait(() => has(c, 'proj1', 'state'), 'state')
+    expect(r.acquired.every((id) => id === p.id)).toBe(true)
+    expect(c.json.filter((m) => m.t === 'error')).toEqual([])
+  })
+
+  test('moving a live node to another profile (POST /:nodeId/profile) reopens it there and nav still works', async () => {
+    const r = await boot()
+    const p = await make(r, 'Work')
+    r.board.nodes.push({ id: 'mv1', kind: 'browser', x: 0, y: 0 }) // saved on the board (the chip only moves saved nodes)
+    const c = await r.connect()
+    c.send(attach('mv1'))
+    await wait(() => has(c, 'mv1', 'state'), 'state')
+    expect(r.acquired[0]).toBe('w1')
+    await r.rt.api('POST', '/api/browser/mv1/profile', async () => JSON.stringify({ profileId: p.id }))
+    await wait(() => r.acquired.includes(p.id), 'process on the new profile')
+    c.send({ t: 'nav', id: 'mv1', action: 'go', url: 'https://example.com/' })
+    await wait(() => r.fake.calls.some((x) => x.method === 'Page.navigate' && String(x.params.url).startsWith('https://example.com')), 'Page.navigate')
+    expect(c.json.filter((m) => m.t === 'error')).toEqual([])
+  })
+})
+
+describe('a launch that fails (profile locked by a leftover process)', () => {
+  test('the viewer gets launch_failed with the reason, the log names it, and Try again (a second attach) opens the node once the lock is gone', async () => {
+    let locked = true
+    const r = await boot({}, () => (locked ? new LaunchError('profile_locked', 'Chromium profile is still locked by another process (pid 1)') : null))
+    const p = await make(r, 'Work')
+    logBus.clear()
+    const c = await r.connect()
+    c.send(attach('lk1', { profileId: p.id }))
+    await wait(() => has(c, 'lk1', 'error', 'launch_failed'), 'launch_failed')
+    expect(c.json.find((m) => m.t === 'error')).toMatchObject({ reason: 'profile_locked' })
+    const warn = logBus.snapshot().find((e) => e.event === 'browser.launch_failed')
+    expect(warn).toMatchObject({ ids: { nodeId: 'lk1', profileId: p.id }, data: { reason: 'profile_locked' } })
+    locked = false
+    c.send(attach('lk1', { profileId: p.id })) // what the plate's Try again sends
+    await wait(() => has(c, 'lk1', 'state'), 'state after retry')
   })
 })
 
