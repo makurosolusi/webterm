@@ -12,7 +12,9 @@ const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
   Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
 
 /** Verbs that act on the node's page and so accept `--tab <id>`. */
-const PAGE_VERBS = 'status|snapshot|screenshot|wait|console|navigate|click|type|press|scroll'
+const PAGE_VERBS = 'status|snapshot|screenshot|wait|console|navigate|click|type|press|scroll|reload|back|forward'
+/** Page verbs that accept `--all`: one run per tab of the split layout, answered per tab. */
+const ALL_VERBS = 'navigate|snapshot|screenshot|scroll|click|type|reload|back|forward'
 
 /** `handoff` stays accepted for sessions that already know it, but is no longer advertised: act verbs take control themselves. */
 const advertised = (cap: 'browser.read' | 'browser.act'): string => verbsOf(cap).split('|').filter((v) => v !== 'handoff').join('|')
@@ -22,13 +24,13 @@ export const ESC_FN = `esc() { printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 
 
 /** `webterm browser <verb> [args] [--node <id>]`; the server picks the cabled browser at call time. */
 export const BROWSER_COMMAND = `cmd_browser() {
-usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | tab new [url]|switch <id>|close <id> | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB} | <page verb> --tab <id>" >&2; exit 2; }
+usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | tab new [url]|switch <id>|close <id> | layout get | layout set single|h|v|grid <tab|new:url>... | sync on|off | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB} | <page verb> --tab <id> | <navigate|snapshot|screenshot|scroll|reload|back|forward|click|type> --all [--text <name> --role <r> --nth <n>] | screenshot --layout" >&2; exit 2; }
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
 PORT="\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}"
 [ "$#" -gt 0 ] || usage
 verb="$1"; shift
-node=""; profile=""; tab=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
+node=""; profile=""; tab=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""; more=""; all=0; lay=0; name=""; role=""; nth=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --node) [ "$#" -ge 2 ] || usage; node="$2"; shift 2 ;;
@@ -38,15 +40,22 @@ while [ "$#" -gt 0 ]; do
     --ref) [ "$#" -ge 2 ] || usage; wref="$2"; shift 2 ;;
     --submit) submit=1; shift ;;
     --loaded) loaded=1; shift ;;
-    *) n=$((n + 1)); case "$n" in 1) p1="$1" ;; 2) p2="$1" ;; 3) p3="$1" ;; *) usage ;; esac; shift ;;
+    --all) all=1; shift ;;
+    --layout) lay=1; shift ;;
+    --text) [ "$#" -ge 2 ] || usage; name="$2"; shift 2 ;;
+    --role) [ "$#" -ge 2 ] || usage; role="$2"; shift 2 ;;
+    --nth) [ "$#" -ge 2 ] || usage; nth="$2"; shift 2 ;;
+    *) n=$((n + 1)); case "$n" in 1) p1="$1" ;; 2) p2="$1" ;; 3) p3="$1" ;; *) { [ "$verb" = layout ] && [ "$n" -le 6 ]; } || usage; more="$more $1" ;; esac; shift ;;
   esac
 done
 case "$node" in *[!A-Za-z0-9_.:-]*) echo "bad node id" >&2; exit 2 ;; esac
 case "$tab" in *[!A-Za-z0-9_-]*) echo "bad tab id" >&2; exit 2 ;; esac
 num() { case "$1" in ""|*[!0-9.-]*) echo "numeric argument expected: $1" >&2; exit 2 ;; esac; }
 [ -z "$ms" ] || num "$ms"
+[ -z "$nth" ] || num "$nth"
 case "$verb" in scroll) num "$p1" ;; screenshot|console) [ -z "$p1" ] || num "$p1" ;; esac
 case "$verb" in ${verbsOf('browser.read')}|${verbsOf('browser.act')}|${BROWSER_PROFILES_VERB}) ;; *) usage ;; esac
+if [ "$verb" = layout ]; then case "$p1" in get|"") ;; set) verb=arrange ;; *) usage ;; esac; fi
 if [ -n "$profile" ]; then case "$verb" in open|navigate) ;; *) echo "--profile only applies to open and navigate" >&2; exit 2 ;; esac; fi
 body="{}"
 case "$verb" in
@@ -68,12 +77,19 @@ case "$verb" in
     [ -z "$p1" ] || { body="$body\${sep}\\"url\\":\\"$(esc "$p1")\\""; sep=","; }
     [ -z "$profile" ] || body="$body\${sep}\\"profile\\":\\"$(esc "$profile")\\""
     body="$body}" ;;
-  click) [ -n "$p2" ] || usage; body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\"}" ;;
+  click) if [ "$all" = 1 ]; then body="{}"; else [ -n "$p2" ] || usage; body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\"}"; fi ;;
   type)
-    [ -n "$p3" ] || usage
-    body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\",\\"text\\":\\"$(esc "$p3")\\""
+    if [ "$all" = 1 ]; then
+      [ -n "$p1" ] || usage
+      body="{\\"text\\":\\"$(esc "$p1")\\""
+    else
+      [ -n "$p3" ] || usage
+      body="{\\"ref\\":\\"$(esc "$p1")\\",\\"snapId\\":\\"$(esc "$p2")\\",\\"text\\":\\"$(esc "$p3")\\""
+    fi
     [ "$submit" = 0 ] || body="$body,\\"submit\\":true"
     body="$body}" ;;
+  arrange) [ -n "$p2" ] || usage; body="{\\"spec\\":\\"$(esc "$p2\${p3:+ $p3}$more")\\"}" ;;
+  sync) case "$p1" in on) body="{\\"on\\":true}" ;; off) body="{\\"on\\":false}" ;; *) usage ;; esac ;;
   press) [ -n "$p1" ] || usage; body="{\\"key\\":\\"$(esc "$p1")\\"}" ;;
   tab)
     case "$p1" in
@@ -83,10 +99,20 @@ case "$verb" in
     esac ;;
   scroll) [ -n "$p1" ] || usage; body="{\\"dy\\":$p1}" ;;
 esac
+addf() { if [ "$body" = "{}" ]; then body="{$1}"; else body="\${body%?},$1}"; fi; }
 if [ -n "$tab" ]; then
   case "$verb" in ${PAGE_VERBS}) ;; *) echo "--tab only applies to page verbs (not open, tab, tabs, release)" >&2; exit 2 ;; esac
-  if [ "$body" = "{}" ]; then body="{\\"tab\\":\\"$tab\\"}"; else body="\${body%?},\\"tab\\":\\"$tab\\"}"; fi
+  addf "\\"tab\\":\\"$tab\\""
 fi
+if [ "$all" = 1 ]; then
+  case "$verb" in ${ALL_VERBS}) ;; *) echo "--all only applies to navigate, snapshot, screenshot, scroll, reload, back, forward, click and type" >&2; exit 2 ;; esac
+  addf "\\"all\\":true"
+elif [ -n "$name$role$nth" ]; then echo "--text, --role and --nth go with --all" >&2; exit 2; fi
+if [ "$lay" = 1 ]; then [ "$verb" = screenshot ] || { echo "--layout only applies to screenshot" >&2; exit 2; }; addf "\\"layout\\":true"; fi
+[ -z "$name" ] || addf "\\"name\\":\\"$(esc "$name")\\""
+[ -z "$role" ] || addf "\\"role\\":\\"$(esc "$role")\\""
+[ -z "$nth" ] || addf "\\"nth\\":$nth"
+if [ "$all" = 1 ] && { [ "$verb" = click ] || [ "$verb" = type ]; } && [ -z "$name" ]; then echo "$verb --all needs --text \\"<element name>\\" (refs belong to one tab)" >&2; exit 2; fi
 url="http://127.0.0.1:$PORT${BROWSER_CONTROL_PREFIX}/\${node:+$node/}$verb"
 if { [ "$verb" = status ] && [ -z "$tab" ]; } || [ "$verb" = ${BROWSER_PROFILES_VERB} ]; then method=GET; else method=POST; fi
 curl -sS -H "@$hdr" -X "$method" \\
