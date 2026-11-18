@@ -9,6 +9,7 @@ import type { BrowserLauncher } from './chromium.launch'
 import { restoreDevice, type DeviceIo } from './browserHost.device'
 import type { ShieldRouter } from './browserHost.shield'
 import type { ConsoleLog } from './browserHost.console'
+import type { TabManager } from './browserHost.tabs'
 import { blockOf, BrowserError, createPageTarget, newRec, setupConnection } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec, TargetTable } from './browserHost.targets'
 
@@ -28,6 +29,8 @@ export interface LifecycleOps {
   route: CdpHandler
   patch(rec: NodeRec, part: Partial<BrowserState>): void
   emit(e: HostEvent): void
+  /** Tab model hooks (browserHost.tabs.ts). */
+  tabs: Pick<TabManager, 'restore' | 'bindView' | 'viewLost' | 'dropAll'>
   io(rec: NodeRec): DeviceIo
   goto(rec: NodeRec, url: string): Promise<void>
 }
@@ -55,6 +58,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     if (!rec.sessionId) return
     ops.shield.forget(rec)
     table.unbind(rec)
+    ops.tabs.viewLost(rec) // the tab is marked crashed; the node's other tabs live on
     ops.patch(rec, { live: 'discarded', loading: false })
     ops.emit({ k: 'error', nodeId: rec.nodeId, code: 'crashed' })
     log.warn('browser.crash', 'browser target lost', { ids: { nodeId: rec.nodeId } })
@@ -63,7 +67,11 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
   const onConnClosed = (profileId: string, err: Error): void => {
     conns.delete(profileId)
     log.warn('browser.conn', 'cdp connection closed', { ids: { profileId }, error: err.message })
-    for (const rec of table.nodes.values()) if (rec.profileId === profileId) crash(rec)
+    for (const rec of table.nodes.values()) {
+      if (rec.profileId !== profileId) continue
+      ops.tabs.dropAll(rec, false) // the whole process is gone: every tab page with it
+      crash(rec)
+    }
   }
 
   const connection = (profileId: string): Promise<CdpClient> => {
@@ -98,7 +106,8 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     rec.workspaceId = workspaceId
     const profileId = ops.profileOf?.(nodeId, workspaceId) ?? workspaceId
     rec.profileId = profileId
-    const target = url ?? rec.state.url
+    const target = url ?? (rec.state.url || ops.tabs.restore(rec) || '')
+    ops.tabs.restore(rec)
     const blocked = target ? blockOf(ops.guard, target) : null
     let cdp: CdpClient
     try {
@@ -114,6 +123,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     }
     const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
     table.bind(rec, targetId, sessionId)
+    ops.tabs.bindView(rec)
     await restoreDevice(rec, () => ops.initialDevice?.(nodeId), ops.io(rec))
     await ops.shield.enable(cdp, sessionId)
     await ops.console.enable(cdp, sessionId)
@@ -137,6 +147,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
       const targetId = rec.targetId as string
       const cdp = await conns.get(rec.profileId)
       ops.shield.forget(rec)
+      ops.tabs.dropAll(rec, true) // background tab pages close with the node's page; every tab stays listed, discarded
       table.unbind(rec) // unbind dulu: targetDestroyed berikutnya bukan crash
       ops.patch(rec, { live: 'discarded', loading: false })
       try {

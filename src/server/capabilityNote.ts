@@ -18,17 +18,18 @@ export interface CapabilityNote {
 
 /**
  * Compares the briefing hash of `profile` (with `off` abilities) to the one recorded for `scope`, then records the current one.
+ * `live` = runtime facts appended to the briefing (the browser profile names): a change in them also triggers the note.
  * First sight of a scope only records. Undefined = nothing to say.
  */
-export function capabilityNote(ctx: LedgerContext, scope: string, profile: ProfileId, off: ReadonlySet<CapabilityId> = new Set()): CapabilityNote | undefined {
-  const hash = capabilityHash(profile, off)
+export function capabilityNote(ctx: LedgerContext, scope: string, profile: ProfileId, off: ReadonlySet<CapabilityId> = new Set(), live = ''): CapabilityNote | undefined {
+  const hash = capabilityHash(profile, off, live)
   const last = getRow(ctx.db, 'SELECT payload_json FROM event WHERE kind = ? AND correlation_id = ? ORDER BY seq DESC LIMIT 1', CAPABILITY_SEEN_KIND, scope)
   const seen = last ? (JSON.parse(String(last.payload_json)) as { hash?: unknown }).hash : undefined
   if (seen === hash) return undefined
   appendEvent(ctx, { actor: ACTOR, kind: CAPABILITY_SEEN_KIND, correlationId: scope, payload: { profile, hash } })
   if (seen === undefined) return undefined
-  const line = `[webterm] Capabilities updated: ${renderCapabilityLine(profile, off)}`
-  return { line, text: `${line}\n${renderCapabilityBriefing(profile, off)}` }
+  const line = `[webterm] Capabilities updated: ${renderCapabilityLine(profile, off)}${live ? ` ${live}` : ''}`
+  return { line, text: `${line}\n${renderCapabilityBriefing(profile, off)}${live ? `\n${live}` : ''}` }
 }
 
 /** Newest-first recorded hashes of a scope (tests, diagnostics). */

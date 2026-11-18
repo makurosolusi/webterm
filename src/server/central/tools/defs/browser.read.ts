@@ -36,9 +36,10 @@ const shapeOk = (input: ToolInput): boolean => Object.keys(input).every((k) => K
  * First browser node on the board (board order, so the oldest) that the shared classifier calls idle: Central-owned only,
  * never the user's. A stale cable to a finished agent is left in place: that agent can still be reused by a playbook.
  */
-function idleNode(deps: BrowserToolDeps, db: ToolCtx['db'], workspaceId: string, nodeIds: readonly string[]): string | undefined {
+export function idleNode(deps: BrowserToolDeps, db: ToolCtx['db'], workspaceId: string, nodeIds: readonly string[], profileId: string = workspaceId): string | undefined {
   const ports = idlePortsOf(deps, db)
-  return nodeIds.find((id) => classifyBrowserNode(ports, workspaceId, id).idle)
+  // Same profile only: a read without a profile means the board's Default (id = workspace id), never a browser signed in as someone else.
+  return nodeIds.find((id) => classifyBrowserNode(ports, workspaceId, id, profileId).idle)
 }
 
 /** Timing verdict of a control reply: status 200 = ok, else the failure code. */

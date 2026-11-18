@@ -56,7 +56,7 @@ export interface FsDirtyMsg { t: 'fsdirty'; dir: string }
 // and kind/agentId/sessionId/cmd when a Claude node switches between its chat and terminal views).
 // `unlinked` = cable ids the server removed.
 /** The fields of an `updated` node a window takes from the push (server `canvasPush.update`). */
-export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks', 'chatSessionId', 'chatConfig', 'permissionMode', 'kind', 'agentId', 'sessionId', 'cmd'] as const
+export const CANVAS_PATCH_KEYS = ['x', 'y', 'width', 'height', 'title', 'color', 'collapsed', 'hideLinks', 'chatSessionId', 'chatConfig', 'permissionMode', 'kind', 'agentId', 'sessionId', 'cmd', 'tabs'] as const
 // `groups` = the board's whole Layers group list after a server edit (`canvasPush.groups`); the UI
 // takes it as is and re-packs members into its own tab `order`.
 // `name` = the board's new name (Central's `workspace.rename`); versioned like every push, so an unsent

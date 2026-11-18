@@ -15,6 +15,11 @@ import type { ShieldRouter } from './browserHost.shield'
 import type { ShieldPolicy } from './adblock.shields'
 import { createConsoleLog } from './browserHost.console'
 import { createTargetLifecycle } from './browserHost.lifecycle'
+import { createTabs } from './browserHost.tabs'
+import type { TabManager } from './browserHost.tabs'
+import { createTabApi } from './browserHost.tabs.api'
+import type { TabApi } from './browserHost.tabs.api'
+import type { BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
 import type { TargetLifecycle } from './browserHost.lifecycle'
 import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
@@ -35,6 +40,10 @@ export interface HostDeps {
   profileOf?: (nodeId: string, workspaceId: string) => string // profile of a node: its own `profileId` or the workspace's Default (browser.profile.ts)
   initialDevice?: (nodeId: string) => unknown // device saved on the board (`WsNode.device`): seeds a node seen first time
   now?: () => number
+  initialTabs?: (nodeId: string) => unknown // tab list saved on the board (`WsNode.tabs`): seeds a node's tabs the first time its page opens
+  persistTabs?: (nodeId: string, tabs: PersistedTabs | null) => void // write a node's tab list to the board (the host debounces)
+  agentDriving?: (nodeId: string) => boolean // an agent holds the node's lease: popups its clicks open count as the agent's
+  tabDiscardMs?: number // idle time before a background tab is discarded
 }
 
 
@@ -47,22 +56,32 @@ export class BrowserHost implements BrowserHostApi {
   private readonly route: CdpHandler
   private readonly shield: ShieldRouter
   private readonly life: TargetLifecycle
+  private readonly tabs: TabManager
+  /** Tabs of a node (list, actions, per-tab CDP for the agent); see browserHost.tabs.api.ts. */
+  readonly tabApi: TabApi
   readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
     const patch = (r: NodeRec, p: Partial<BrowserState>) => this.patch(r, p)
     const emit = (e: HostEvent) => this.emit(e)
     this.shield = createShieldRouter({ table: this.table, policy: deps.shields, patch, emit, now: deps.now })
+    this.tabs = createTabs({
+      table: this.table, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch, emit, io: (r) => this.io(r), shield: this.shield, console: this.console,
+      refresh: (r) => this.refresh(r), initialTabs: deps.initialTabs, persist: deps.persistTabs, agentDriving: deps.agentDriving, discardMs: deps.tabDiscardMs,
+    })
+    this.tabApi = createTabApi({ table: this.table, tabs: this.tabs, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch })
     this.route = createEventRouter({
       table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.life.crash(r),
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
       closeTarget: async (r, targetId) => { await (await this.cdpOf(r)).send(CDP.closeTarget, { targetId }) },
-      popup: (r, url) => this.shield.popup(r, url), pageState: (url) => this.shield.pageState(url),
+      popup: (r, url) => this.shield.popupAllowed(r, url), adopt: (r, o, t, u) => this.tabApi.run(r.nodeId, () => this.tabs.adoptPopup(r, o, t, u)),
+      bgEvent: (b, m, p, sid) => this.tabs.bgEvent(b, m, p, sid), bgTitle: (b, t) => this.tabs.bgTitle(b, t), bgGone: (b) => this.tabs.bgGone(b),
+      pageState: (url) => this.shield.pageState(url),
       detached: (p) => this.shield.detached(p),
     })
     this.life = createTargetLifecycle({
       table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
-      shield: this.shield, console: this.console, route: this.route, patch, emit,
+      shield: this.shield, console: this.console, route: this.route, tabs: this.tabs, patch, emit,
       io: (r) => this.io(r), goto: (r, url) => this.goto(r, url),
     })
   }
@@ -130,6 +149,9 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   discard(nodeId: string): Promise<void> { return this.life.discard(nodeId) }
+
+  /** Tab list of a node (for the gateway's attach message); undefined = no tabs yet. */
+  tabsState(nodeId: string): BrowserTabsState | undefined { return this.tabApi.state(nodeId) }
 
   /** Workspace that owns a known node (also a discarded one); undefined = unknown to the host. */
   workspaceOf(nodeId: string): string | undefined { return this.table.nodes.get(nodeId)?.workspaceId }
@@ -243,6 +265,7 @@ export class BrowserHost implements BrowserHostApi {
     const next = mergeState(rec.state, part)
     if (!next) return
     rec.state = next
+    this.tabs.viewPatched(rec, part)
     for (const cb of this.stateCbs) this.safe(() => cb({ ...next }))
   }
 

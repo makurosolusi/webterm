@@ -3,6 +3,7 @@ import type { Database } from 'bun:sqlite'
 import type { AgentOfNode, IdlePorts } from '../browser/browser.idle'
 import { getRow } from '../ledger/ledgerCore'
 import { AGENT_TERMINAL_STATES } from './contracts/agent.types'
+import { resolveProfileId } from '../../shared/browser.profile'
 import { lookupWorkspace } from './workspaceLookup'
 
 /** A board as the classifier reads it; both `workspace` records and the canvas push board fit. */
@@ -26,6 +27,13 @@ export function boardPorts(boardOf: (workspaceId: string) => BoardLike | null): 
 
 /** The registered workspace store as a board source. */
 export const storedBoards = (): Pick<IdlePorts, 'bridgesOf' | 'hasNode'> => boardPorts((id) => lookupWorkspace(id) as BoardLike | null)
+
+/** Profile a browser node runs in per the STORED board (`resolveProfileId`): its own `profileId`, else the workspace's Default (id = workspace id). A switch the UI has not saved yet is not seen here. */
+export function storedProfileOf(workspaceId: string, nodeId: string): string {
+  const nodes = (lookupWorkspace(workspaceId) as BoardLike | null)?.nodes
+  const node = Array.isArray(nodes) ? (nodes.find((n) => (n as { id?: unknown } | null)?.id === nodeId) as { profileId?: string } | undefined) : undefined
+  return resolveProfileId(workspaceId, node)
+}
 
 /** The newest agent that ran on `nodeId`; `active` = not terminal and not `candidate_done` (a finished worker no longer drives its browser). */
 export function ledgerAgentOfNode(db: Database): IdlePorts['agentOfNode'] {

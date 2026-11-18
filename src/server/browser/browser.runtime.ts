@@ -26,6 +26,7 @@ import { BrowserLifecycle, lifecycleConfig } from './browserLifecycle.service'
 import { createViewerHub } from './browserWs.viewers'
 import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
+import { agentTabHost, withNewTab } from './browser.agentTabs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { openProjectBrowser } from './browser.projectOpen'
@@ -43,6 +44,7 @@ import type { CanvasPush } from '../canvas/canvasPush'
 import type { BrowserProfileStore } from '../db.browserProfile'
 import type { BrowserProfilesMsg } from '../../shared/protocol'
 import { createProfileWiring } from './browser.runtime.profiles'
+import { createTabsService, tabPersister } from './browser.runtime.tabs'
 import { setActiveProfiles } from './browser.profiles.service'
 
 const log = createLogger('browser.runtime')
@@ -67,7 +69,7 @@ export interface RuntimeDeps {
   /** Test: mesin filter tanpa jaringan (produksi: daftar prebuilt, cache di `<dataRoot>/browser/adblock`). */
   adblock?: Adblock
   /** Test: board writer for the agent verb `open` (production: the shared `getCanvasPush()`). */
-  canvas?: Pick<CanvasPush, 'add' | 'workspaceOfNode'>
+  canvas?: Pick<CanvasPush, 'add' | 'remove' | 'update' | 'workspaceOfNode'>
   /** Browser profile registry (production: `db.browserProfiles()`); absent = in memory (tests). */
   profiles?: BrowserProfileStore
   /** Push a frame to every open window (profile list/live changes); absent = nobody to tell. */
@@ -110,10 +112,14 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   if (swept.failed.length) log.warn('browser.vault', 'Some cookie vault blobs are unreadable', { checked: swept.checked, failed: swept.failed.length })
   const live = new Set<string>()
   const profiles = createProfileWiring({ workspaces: d.workspaces, dataRoot: d.dataRoot, launcher, vault, store: d.profiles, broadcast: d.broadcast, liveNodes: () => live })
-  const host = new BrowserHost({ launcher, profileOf: profiles.profileOf, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
-  profiles.bind(host)
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
+  const canvasPush = async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush()
+  const host = new BrowserHost({
+    launcher, profileOf: profiles.profileOf, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
+    initialTabs: (id) => nodeOf(id)?.tabs, persistTabs: tabPersister(canvasPush), agentDriving: (id) => leases.isDriven(id), tabDiscardMs: cfg.discardMs,
+  })
+  profiles.bind(host)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
   const gwHost = adaptGatewayHost(host, lifecycle)
   const hub = createViewerHub(gwHost, leases, (id, v) => lifecycle.setVisible(id, v))
@@ -127,7 +133,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentEnv = () => agentControlOn(env)
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
-  const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
+  const verbs = withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console }), host)
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
   host.onState((s: BrowserState) => {
@@ -146,6 +152,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     setAgentControl: (id: string, on: boolean) => { agentOverride.set(id, on) },
     profiles: { profiles: profiles.service, ops: profiles.ops },
     setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
+    tabs: createTabsService({ host, lifecycle, gwHost, hub, workspaces: d.workspaces, canvas: canvasPush, profileOf: profiles.profileOf }),
   }
   // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
   const design = new DesignMode({
@@ -155,7 +162,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   host.onState((s) => { if (s.live === 'discarded') design.forget(s.id) }) // page gone = its injected script is gone too
   d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
-  const openDeps: AgentOpenDeps = { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId), profiles: { resolve: (r, w) => profiles.service.resolve(r, w), list: (w) => profiles.service.list(w) }, profileOfNode: profiles.profileOf }
+  const openDeps: AgentOpenDeps = { canvas: canvasPush, start: (id, workspaceId) => gwHost.open(id, workspaceId), profiles: { resolve: (r, w) => profiles.service.resolve(r, w), list: (w) => profiles.service.list(w) }, profileOfNode: profiles.profileOf }
   return {
     status,
     state: (id) => host.state(id),

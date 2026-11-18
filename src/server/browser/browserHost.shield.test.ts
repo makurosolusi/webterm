@@ -33,6 +33,7 @@ async function openShielded(opts: { policy?: ShieldPolicy; now?: () => number } 
   await rig.host.open('n1', 'w1', 'https://games.test/')
   return { events, state: () => rig.host.state('n1') as BrowserState }
 }
+const tabsCreated = (events: HostEvent[]) => events.filter((e) => e.k === 'tab' && e.event.type === 'tabCreated')
 const popup = (id: string, url: string) => rig.fake.emit(CDP_EVENT.targetCreated, { targetInfo: { targetId: id, type: 'page', title: '', url, openerId: 'T1' } })
 const paused = (requestId: string, url: string, resourceType: string, sessionId = SID, frameId = 'F-sub') =>
   rig.fake.emit(CDP_EVENT.requestPaused, { requestId, request: { url }, resourceType, frameId }, sessionId)
@@ -43,7 +44,7 @@ describe('popups', () => {
     popup('P1', 'https://ads.test/landing')
     await waitFor(() => state().blockedPopups === 1, 'popup counted')
     await waitFor(() => callsOf(CDP.closeTarget).length === 1, 'popup closed')
-    expect(events.filter((e) => e.k === 'popup')).toEqual([])
+    expect(tabsCreated(events)).toEqual([])
     expect(state().url).toBe('https://games.test/')
   })
 
@@ -53,18 +54,18 @@ describe('popups', () => {
     for (let i = 0; i < POPUP_BURST_MAX + 2; i++) popup(`P${i}`, `https://news.test/${i}`)
     await waitFor(() => (state().blockedPopups ?? 0) === 2, 'flood counted')
     // The count is host-side and synchronous; each close reaches the fake CDP over its socket later.
-    await waitFor(() => callsOf(CDP.closeTarget).length === POPUP_BURST_MAX + 2, 'every popup closed')
-    expect(events.filter((e) => e.k === 'popup')).toHaveLength(POPUP_BURST_MAX)
-    expect(callsOf(CDP.closeTarget)).toHaveLength(POPUP_BURST_MAX + 2)
+    await waitFor(() => tabsCreated(events).length === POPUP_BURST_MAX, 'allowed popups became tabs')
+    await waitFor(() => callsOf(CDP.closeTarget).length === 2, 'flooding popups closed')
+    expect(callsOf(CDP.closeTarget)).toHaveLength(2) // adopted popups are kept; only the 2 over the burst cap are closed
     t += POPUP_BURST_WINDOW_MS
     popup('Q1', 'https://news.test/later')
-    await waitFor(() => events.filter((e) => e.k === 'popup').length === POPUP_BURST_MAX + 1, 'allowed again')
+    await waitFor(() => tabsCreated(events).length === POPUP_BURST_MAX + 1, 'allowed again')
   })
 
   it('without an adblock policy, popups still never navigate the opener', async () => {
     const { events } = await openShielded({ policy: undefined })
     popup('P1', 'https://ads.test/landing')
-    await waitFor(() => events.some((e) => e.k === 'popup'), 'popup event')
+    await waitFor(() => tabsCreated(events).length === 1, 'popup tab')
     expect(callsOf(CDP.navigate).map((c) => c.params.url)).toEqual(['https://games.test/'])
     expect(callsOf(CDP.fetchEnable)).toHaveLength(0)
   })

@@ -49,6 +49,16 @@ capture starts at the first read, so reload the page with \`navigate\` to see me
 Act verbs: \`open [url]\`, \`navigate <url>\`, \`click <ref> <snapId>\`, \`type <ref> <snapId> <text> [--submit]\`,
 \`press <key>\`, \`scroll <dy>\`, \`release\` (give control back to the user early).
 
+## Profiles (separate logins)
+
+A browser node runs in a PROFILE: its own cookies and logins, kept between sessions. Nodes on the same profile share one
+session; different profiles never share anything. \`profiles\` lists the names you can use. \`open --profile <name> [url]\`
+(or \`navigate --profile <name> <url>\` when you have no browser yet) opens a browser on that profile, so the user's
+accounts are already signed in: ask for the account's profile instead of logging in and out. The name is not case
+sensitive; an unknown name answers with the list. No \`--profile\` = this board's Default. A browser you already have
+is reused only when it runs the SAME profile, so you are never handed the wrong account. You cannot create profiles
+here or touch their cookies: only the user manages those in the UI.
+
 Act verbs take control of the browser automatically and control returns to the user when your turn ends.
 Do not ask the user to hand over the browser or to confirm routine browsing. Run one browser verb per shell command.
 

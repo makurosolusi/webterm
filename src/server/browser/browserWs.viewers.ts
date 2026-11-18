@@ -9,6 +9,7 @@ import { createFrameGate } from './browserWs.backpressure'
 import type { FrameGate } from './browserWs.backpressure'
 import type { HostEvent } from './browserHost.targets'
 import type { DeviceChoice } from '../../shared/browser.devices'
+import type { BrowserTabsState } from '../../shared/browser.tabs'
 import type { ConsoleLog } from './browserHost.console'
 
 const log = createLogger('browser.ws')
@@ -24,6 +25,8 @@ export interface GatewayHost extends BrowserHostApi {
   setShields(nodeId: string, on: boolean): Promise<void>
   /** Device mode (browser.devices.ts); null = Responsive. */
   setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
+  /** Tab list of a node, sent to a viewer on attach (absent in hosts without tabs). */
+  tabsState?(nodeId: string): BrowserTabsState | undefined
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
 }
@@ -57,6 +60,8 @@ export interface ViewerHub {
   /** Siarkan state terkini node (dipanggil juga oleh pengubah lease di luar host). */
   refreshState(nodeId: string): void
   stateMsg(nodeId: string): ServerMsg | null
+  /** Whole tab list message of a node, or null when the host keeps none. */
+  tabsMsg(nodeId: string): ServerMsg | null
   /** Jumlah penonton node (uji/diagnosis). */
   count(nodeId: string): number
 }
@@ -71,7 +76,6 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
   const broadcast = (nodeId: string, msg: ServerMsg) => {
     for (const v of nodes.get(nodeId)?.viewers.keys() ?? []) v.sink.sendJson(msg)
   }
-  const firstViewer = (nodeId: string): Viewer | undefined => nodes.get(nodeId)?.viewers.keys().next().value
   const stateMsg = (nodeId: string) => { const s = host.state(nodeId); return s ? withLease(s) : null }
 
   function subscribe() {
@@ -80,7 +84,8 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       host.onState((s) => onState(s)),
       host.onEvent((e) => {
         if (e.k === 'dialog') broadcast(e.nodeId, { t: 'dialog', id: e.nodeId, kind: e.kind, message: e.message, defaultPrompt: e.defaultPrompt })
-        else if (e.k === 'popup') firstViewer(e.nodeId)?.sink.sendJson({ t: 'popup', id: e.nodeId, url: e.url }) // satu klien saja: tiap klien yang menerima akan membuat node
+        else if (e.k === 'tab') broadcast(e.nodeId, { t: 'tab', id: e.nodeId, event: e.event })
+        else if (e.k === 'tabNotice') broadcast(e.nodeId, { t: 'tabNotice', id: e.nodeId, message: e.message })
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })
       }),
       ...(host.console ? [host.console.onDelta((d) => broadcast(d.id, { t: 'console', ...d }))] : []),
@@ -182,6 +187,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       if (m) broadcast(nodeId, m)
     },
     stateMsg,
+    tabsMsg: (nodeId) => { const s = host.tabsState?.(nodeId); return s ? { t: 'tabs', id: nodeId, state: s } : null },
     count: (nodeId) => nodes.get(nodeId)?.viewers.size ?? 0,
   }
 }

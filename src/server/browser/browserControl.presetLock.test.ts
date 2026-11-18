@@ -61,6 +61,24 @@ describe('skill-author browser lock (server side, from the stored preset)', () =
   })
 })
 
+describe('skill-author cannot use browser profiles (server side)', () => {
+  it('403 profile_not_allowed_for_preset for open and navigate that name a profile, whatever the URL', async () => {
+    for (const verb of ['open', 'navigate']) {
+      expect(await run('author', verb, { url: 'https://bulma.io', profile: 'work' })).toMatchObject({ status: 403, body: { error: 'profile_not_allowed_for_preset' } })
+    }
+    expect(calls).toEqual([])
+  })
+
+  it('403 on the `profiles` listing verb; a plain node gets past the lock to the unavailable-profiles answer', async () => {
+    const list = (who: string) => handleBrowserControl(
+      { method: 'GET', path: '/api/control/browser/profiles', headers: { [TOKEN_HEADER]: nodeToken(who) }, body: undefined },
+      { capabilities: { verify: () => undefined, allows: () => false }, verbs: {} as AgentVerbs, agentAllowed: () => true, linked: (r, w) => resolveLinkedBrowser([board], r, w), presetOf: (id) => board.nodes.find((n) => n.id === id)?.preset },
+    )
+    expect(await list('author')).toMatchObject({ status: 403, body: { error: 'verb_not_allowed_for_preset' } })
+    expect(await list('plain')).toMatchObject({ status: 503, body: { error: 'open_unavailable' } })
+  })
+})
+
 describe('isPublicWebUrl', () => {
   it('accepts public http(s) and rejects everything else', () => {
     expect(isPublicWebUrl('https://example.com/a?b=1')).toBe(true)

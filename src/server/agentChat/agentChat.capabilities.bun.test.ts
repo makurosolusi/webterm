@@ -11,6 +11,8 @@ import { openFixture, type Fixture } from '../central/centralTestFixture.testuti
 import { AgentChatPool, type AgentChatTarget } from './agentChat.pool'
 import { buildAgentChatOptions } from './agentChat.options'
 import { chatCapabilityNote } from './agentChat.capabilities'
+import { setActiveProfiles } from '../browser/browser.profiles.service'
+import { makeRig, ws } from '../browser/browser.profiles.testkit'
 
 const allow: CanUseTool = async (_n, input) => ({ behavior: 'allow', updatedInput: input })
 const configDir = mkdtempSync(join(tmpdir(), 'agent-chat-cap-')) // test-only: never the real ~/.claude
@@ -65,7 +67,7 @@ describe('Capabilities updated note per node', () => {
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     const note = chatCapabilityNote(ctx(), 'n-1', undefined, base)
-    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only) and drive web pages.')
+    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only), drive web pages and use browser profiles (separate logins).')
     expect(note?.text).toContain('NOT AVAILABLE RIGHT NOW')
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, base)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)?.text).toContain('You CAN open')
@@ -94,5 +96,48 @@ describe('Capabilities updated note per node', () => {
     note = undefined
     pool.send('n-1', 'again')
     expect(sent[1]).toBe('again')
+  })
+})
+
+describe('browser profiles in a plain chat', () => {
+  let fx: Fixture
+  beforeEach(() => { fx = openFixture() })
+  afterEach(() => { setActiveProfiles(null); fx.close() })
+  const ctx = (): { db: Fixture['db']; now: () => number } => ({ db: fx.db, now: () => 1_700_000_000_000 })
+  const names = (n: number): ReturnType<typeof makeRig> => {
+    const rig = makeRig([ws('w', 'W')])
+    setActiveProfiles(rig.svc)
+    for (let i = 0; i < n; i++) rig.svc.create({ name: `acct-${i}` })
+    return rig
+  }
+
+  test('the briefing explains profiles and the opening prompt names the live ones, custom first, at most 10 with "+N more"', () => {
+    names(12)
+    const text = append()
+    expect(text).toContain('PROFILES')
+    expect(text).toContain('`webterm browser open --profile <name> [<url>]`')
+    const line = text.split('\n').find((l) => l.startsWith('Browser profiles:')) ?? ''
+    expect(line).toContain('"acct-0"')
+    expect(line).not.toContain('Default (W)') // the Default only fills spare room
+    expect(line).toContain('+3 more') // 13 profiles, 10 shown
+  })
+
+  test('no profile list while the browser is off; a profile made mid-session reaches the node as a Capabilities updated note', () => {
+    const rig = names(1)
+    expect(append({ parentEnv: base })).not.toContain('Browser profiles:')
+    expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined) // first sight: records
+    expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
+    rig.svc.create({ name: 'personal' })
+    const note = chatCapabilityNote(ctx(), 'n-1', undefined, on)
+    expect(note?.line).toContain('"personal"')
+    expect(note?.text).toContain('WHAT YOU CAN DO')
+    expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
+  })
+
+  test('a locked skill-author chat is never told about profiles', () => {
+    names(2)
+    const text = append({ preset: 'skill-author' })
+    expect(text).not.toContain('Browser profiles:')
+    expect(text).toContain('Use or create browser profiles') // listed under CANNOT
   })
 })

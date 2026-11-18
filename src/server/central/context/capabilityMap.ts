@@ -4,6 +4,8 @@
 // so it rides in the volatile prompt tail next to the state header, never in the cached steward prompt.
 // ca2Boot registers the source; the assembler only reads it, so this module stays free of the boot graph.
 import { renderCapabilityProse, type CapabilityId } from '../../../shared/agentCapabilities'
+import { renderProfileNames } from '../../../shared/browser.profile.names'
+import { listProfiles } from '../../browser/browser.profiles.service'
 import { createLogger } from '../../logs'
 import { PLAYBOOKS, playbookTool } from '../playbooks/playbook.defs'
 
@@ -30,6 +32,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['read or change the color that identifies a workspace (only when the user asks; yields while they move the canvas)', ['workspace.color']],
   ['undo your own canvas.close', ['canvas.reopen']],
   ['browse yourself', ['browser_act']],
+  ['open a browser on a profile (separate logins) or create one', ['browser_open', 'browser_profile']],
   ['project health', ['health.scan']],
   ['remember', ['memory.remember']],
   // Delegated work reports by itself (a check-in); reminders are only for what time alone can tell.
@@ -46,6 +49,7 @@ export function stewardOffAbilities(tools: readonly MapTool[]): Set<CapabilityId
     if (t.access !== 'off') continue
     if (t.name === 'browser_read') off.add('web.read')
     if (t.name === 'browser_act') off.add('web.drive')
+    if (t.name === 'browser_profile') off.add('web.profiles')
   }
   return off
 }
@@ -87,8 +91,14 @@ export function currentTools(): readonly MapTool[] {
   }
 }
 
-/** The current map line, '' when Central is not armed. */
-export const capabilityMapLine = (tools: readonly MapTool[] = currentTools()): string => renderCapabilityMap(tools)
+/**
+ * The current map line, '' when Central is not armed. It ends with the LIVE browser profile names (volatile tail, so a profile
+ * made mid-conversation shows on the next turn, no note needed) while the profile tool is usable.
+ */
+export function capabilityMapLine(tools: readonly MapTool[] = currentTools()): string {
+  const map = renderCapabilityMap(tools)
+  return [map, map && toolUsable(tools, 'browser_profile') ? renderProfileNames(listProfiles()) : ''].filter((p) => p !== '').join(' ')
+}
 
 /** True when `name` is registered and switched on for this turn. */
 export const toolUsable = (tools: readonly MapTool[], name: string): boolean => tools.some((t) => t.name === name && t.access !== 'off')

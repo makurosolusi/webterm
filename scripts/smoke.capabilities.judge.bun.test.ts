@@ -121,3 +121,21 @@ describe('gradeBrowserIntent', () => {
   test('interact FAIL: never clicked', () => expect(gradeBrowserIntent('interact', ev([open, snap], 'iana.org')).evidence).toContain('click'))
   test('interact FAIL: destination not reported', () => expect(gradeBrowserIntent('interact', ev([open, click], 'Clicked it')).evidence).toContain('destination'))
 })
+
+import { gradeProfile, gradeProfileDenied } from './smoke.capabilities.profile'
+describe('profile grading', () => {
+  const t = (name: string, over: Record<string, unknown> = {}) => ({ id: 'tool-123456', name, command: '', state: 'ok', code: '', ...over }) as never
+  test('steward needs browser_open with profile work and the answer naming it', () => {
+    expect(gradeProfile('central', { tools: [t('mcp__webterm__browser_open', { profile: 'work' })], text: 'It uses the work profile.' }).pass).toBe(true)
+    expect(gradeProfile('central', { tools: [t('mcp__webterm__browser_open', { profile: 'personal' })], text: 'work' }).pass).toBe(false)
+    expect(gradeProfile('central', { tools: [t('mcp__webterm__browser_open', { profile: 'work' })], text: 'done' }).pass).toBe(false)
+  })
+  test('chat needs the --profile work command to succeed', () => {
+    expect(gradeProfile('chat', { tools: [t('Bash', { command: 'webterm browser open --profile work https://example.com' })], text: 'work' }).pass).toBe(true)
+    expect(gradeProfile('chat', { tools: [t('Bash', { command: 'webterm browser open https://example.com' })], text: 'work' }).pass).toBe(false)
+  })
+  test('author control fails only when a profile call succeeds', () => {
+    expect(gradeProfileDenied({ tools: [t('Bash', { command: 'webterm browser open --profile work', state: 'denied' })], text: '' }).pass).toBe(true)
+    expect(gradeProfileDenied({ tools: [t('Bash', { command: 'webterm browser profiles' })], text: '' }).pass).toBe(false)
+  })
+})

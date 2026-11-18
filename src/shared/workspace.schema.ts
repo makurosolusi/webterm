@@ -7,6 +7,7 @@
 // newer build's kind, a broken shape) but that has an id is PRESERVED: hidden from the board, and
 // carried through every later write of the row (`withPreservedNodes`), so a downgrade or one bad
 // node never turns into a deleted node (and a reaped terminal) on the next save.
+import { validPersistedTabs } from './browser.tabs'
 import { DEFAULT_VIEWPORT, validDiffNotes, validExpanded, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
 import { isWorkspaceHue, isWorkspaceShade } from './workspaceColor'
@@ -47,6 +48,11 @@ function cleanNode(n: Record<string, unknown>): WsNode {
   if (n.viewAs !== undefined && n.viewAs !== 'text') delete node.viewAs
   if (n.skill !== undefined && typeof n.skill !== 'string') delete node.skill
   if (n.seenVersion !== undefined && typeof n.seenVersion !== 'string') delete node.seenVersion
+  if (n.tabs !== undefined) {
+    const tabs = validPersistedTabs(n.tabs)
+    if (tabs) node.tabs = tabs
+    else delete node.tabs
+  }
   if (n.plan !== undefined) {
     const plan = validPlanData(n.plan)
     if (plan) node.plan = plan

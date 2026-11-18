@@ -172,6 +172,30 @@ describe('old shims are aliases that still work', () => {
     expect(r.argv.join('\n')).not.toContain(TOK)
   })
 
+  it('webterm browser open --profile <name> [url] sends the profile in the body (navigate too); `profiles` is a GET', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    const open = run(['browser', 'open', '--profile', 'work', 'https://example.com'], env)
+    expect(open.status).toBe(0)
+    expect(open.argv).toContain('http://127.0.0.1:8700/api/control/browser/open')
+    expect(open.argv).toContain('{"url":"https://example.com","profile":"work"}')
+    expect(run(['browser', 'open', '--profile', 'Sales Team'], env).argv).toContain('{"profile":"Sales Team"}')
+    expect(run(['browser', 'open', 'https://example.com'], env).argv).toContain('{"url":"https://example.com"}')
+    expect(run(['browser', 'open'], env).argv).toContain('{}')
+    expect(run(['browser', 'navigate', '--profile', 'work', 'https://example.com'], env).argv).toContain('{"url":"https://example.com","profile":"work"}')
+    const list = run(['browser', 'profiles'], env)
+    expect(list.argv).toContain('http://127.0.0.1:8700/api/control/browser/profiles')
+    expect(list.argv).toEqual(expect.arrayContaining(['-X', 'GET']))
+  })
+
+  it('--profile is refused for any verb but open and navigate, and needs a value', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    expect(run(['browser', 'snapshot', '--profile', 'work'], env).status).toBe(2)
+    expect(run(['browser', 'open', '--profile'], env).status).toBe(2)
+    expect(run(['browser', 'snapshot', '--profile', 'work'], env).argv).toEqual([]) // no request left the machine
+  })
+
   it('context.sh <verb> reaches the context-link route through the CLI', () => {
     installWebtermCli(home())
     const shim = join(root, 'context.sh')

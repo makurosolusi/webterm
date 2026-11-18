@@ -82,6 +82,7 @@ usage: webterm <command> [args]
                                   tell Central now where your work stands (default --progress);
                                   done/blocked/question move your task and wake Central
   browser <verb> [args]           drive the browser node wired to this node (alias: webterm-browser)
+  browser open --profile <name>   open it on a browser profile (own logins); \`browser profiles\` lists the names
   context <verb> [--node X]       read a linked node's context (alias: context.sh)
   eval run [--model fake|real]    replay promoted eval cases (user rejections) against Central
 EOF

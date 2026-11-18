@@ -4,6 +4,7 @@ import { INPUT_LATENCY_STALE_MS } from '../../shared/browser.contract'
 import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
 import type { DeviceSpec } from '../../shared/browser.devices'
+import type { BrowserTabEvent, BrowserTabsState } from '../../shared/browser.tabs'
 import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromium.flags'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
@@ -27,14 +28,34 @@ export class TargetGoneError extends BrowserError {
 
 /**
  * Event di luar `BrowserHostApi`: dialog JS (jawab lewat `answerDialog`), galat tingkat node (mis. crash), dan
- * popup sah yang harus dibuka klien sebagai node browser baru di sebelah pembukanya.
+ * tab (daftar tab node berubah / ditolak). Popup sah menjadi tab baru di node pembukanya (`browserHost.tabs.popup.ts`).
  */
 export type HostEvent =
   | { k: 'dialog'; nodeId: string; kind: 'alert' | 'confirm' | 'prompt' | 'beforeunload'; message: string; defaultPrompt?: string }
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
-  | { k: 'popup'; nodeId: string; url: string }
+  | { k: 'tab'; nodeId: string; event: BrowserTabEvent }
+  | { k: 'tabNotice'; nodeId: string; message: string }
 
 export { DEFAULT_VIEWPORT }
+
+/** Runtime ids of one tab's CDP target; absent = the tab is discarded or crashed (no page). */
+export interface TabRt { targetId?: string; sessionId?: string }
+
+/**
+ * Tab model of one node. Invariant while the node is live: `rec.targetId/sessionId` are the target of `state.activeTabId`
+ * (the human's view, the only one that streams); every other live tab sits in `table` as a background tab.
+ */
+export interface NodeTabs {
+  state: BrowserTabsState
+  rt: Map<string, TabRt>
+  /** True until the human picks a tab themselves: tabs an agent-driven click opens then move the human's view too. */
+  followAgent: boolean
+  /** Page left over after the last tab was closed (the node shows it blank); the next new tab reuses it. */
+  blank?: TabRt
+}
+
+/** A background tab of a node (not the view). */
+export interface BgTab { rec: NodeRec; tabId: string }
 
 export interface NodeRec {
   nodeId: string
@@ -52,6 +73,8 @@ export interface NodeRec {
   device?: DeviceSpec | null
   /** Input bercap waktu PERTAMA yang belum terjawab frame (I1-d); `rx`/`dispatched` = jam server, ms epoch. */
   lat?: { ls: number; rx: number; dispatched: number }
+  /** Tabs of the node (browserHost.tabs.ts); set when the node's page first opens. */
+  tabs?: NodeTabs
 }
 
 export function newRec(nodeId: string, workspaceId: string, url: string, profileId: string = workspaceId): NodeRec {
@@ -81,6 +104,28 @@ export class TargetTable {
   }
   session(id: string | undefined): NodeRec | undefined { return id ? this.bySession.get(id) : undefined }
   target(id: unknown): NodeRec | undefined { return typeof id === 'string' ? this.byTarget.get(id) : undefined }
+
+  private readonly bgSessions = new Map<string, BgTab>()
+  private readonly bgTargets = new Map<string, BgTab>()
+  /** Register a live tab that is not the view. */
+  bgBind(rec: NodeRec, tabId: string, targetId: string, sessionId: string): void {
+    const b = { rec, tabId }
+    this.bgTargets.set(targetId, b)
+    this.bgSessions.set(sessionId, b)
+  }
+  bgUnbind(targetId: string | undefined, sessionId: string | undefined): void {
+    if (targetId) this.bgTargets.delete(targetId)
+    if (sessionId) this.bgSessions.delete(sessionId)
+  }
+  bgSession(id: string | undefined): BgTab | undefined { return id ? this.bgSessions.get(id) : undefined }
+  bgTarget(id: unknown): BgTab | undefined { return typeof id === 'string' ? this.bgTargets.get(id) : undefined }
+  /** Point the node's view at another target (the old one is unbound from the view only; the caller decides its fate). */
+  rebind(rec: NodeRec, targetId: string, sessionId: string): void {
+    if (rec.targetId) this.byTarget.delete(rec.targetId)
+    if (rec.sessionId) this.bySession.delete(rec.sessionId)
+    this.bgUnbind(targetId, sessionId)
+    this.bind(rec, targetId, sessionId)
+  }
 }
 
 /** Setup sekali per koneksi browser: temukan target (popup) dan tolak download + izin perangkat. */
@@ -175,12 +220,16 @@ const NO_URL = /^(about|chrome-error):/i
 /** Halaman internal Chromium: tidak dicek penjaga dan tidak menimpa URL terakhir yang baik. */
 export const isInternalUrl = (u: string): boolean => NO_URL.test(u)
 
-/** Info target dari Chromium: kenali popup (`window.open`) milik node; `url` kosong = belum siap. */
-export function popupOf(table: TargetTable, popups: Map<string, NodeRec>, created: boolean, info: { targetId: string; type: string; url: string; openerId?: string }): { opener: NodeRec; url: string } | null {
-  if (info.type !== 'page' || table.target(info.targetId)) return null
-  const opener = (created && table.target(info.openerId)) || popups.get(info.targetId)
-  if (!opener) return null
-  if (!info.url || isInternalUrl(info.url)) { popups.set(info.targetId, opener); return null } // URL belum ada; tunggu info berikutnya
+/** A popup waiting for its first url: its opener node and the opener's target (to find the opener tab). */
+export interface PendingPopup { opener: NodeRec; openerId?: string }
+
+/** Info target dari Chromium: kenali popup (`window.open`) milik node (dari tab depan maupun latar); `url` kosong = belum siap. */
+export function popupOf(table: TargetTable, popups: Map<string, PendingPopup>, created: boolean, info: { targetId: string; type: string; url: string; openerId?: string }): { opener: NodeRec; openerId?: string; url: string } | null {
+  if (info.type !== 'page' || table.target(info.targetId) || table.bgTarget(info.targetId)) return null
+  const known = (created && (table.target(info.openerId) ?? table.bgTarget(info.openerId)?.rec)) || undefined
+  const pending: PendingPopup | undefined = known ? { opener: known, openerId: info.openerId } : popups.get(info.targetId)
+  if (!pending) return null
+  if (!info.url || isInternalUrl(info.url)) { popups.set(info.targetId, pending); return null } // URL belum ada; tunggu info berikutnya
   popups.delete(info.targetId)
-  return { opener, url: info.url }
+  return { ...pending, url: info.url }
 }

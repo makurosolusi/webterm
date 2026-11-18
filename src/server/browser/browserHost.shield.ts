@@ -1,6 +1,6 @@
 // Shields di atas CDP: intersep request halaman + iframe OOPIF (Fetch, tahap Request, putusan sinkron dari mesin
 // filter) dan kebijakan popup. Popup TIDAK lagi menavigasi node pembuka: URL yang diblokir daftar filter ditutup
-// diam-diam dan dihitung; sisanya diumumkan sebagai node baru (event `popup`), dibatasi per pembuka.
+// diam-diam dan dihitung; sisanya jadi tab baru di node pembuka (`browserHost.tabs.popup.ts`), dibatasi per pembuka.
 import type { BrowserState } from '../../shared/browser.contract'
 import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
@@ -13,7 +13,7 @@ import type { HostEvent, NodeRec, TargetTable } from './browserHost.targets'
 
 const log = createLogger('browser.shields')
 
-/** Popup sah maksimum yang dibuka jadi node baru per node pembuka dalam satu jendela waktu. */
+/** Popup sah maksimum yang diterima (jadi tab) per node pembuka dalam satu jendela waktu. */
 export const POPUP_BURST_MAX = 3
 /** Jendela waktu batas popup per pembuka. */
 export const POPUP_BURST_WINDOW_MS = 10_000
@@ -39,8 +39,8 @@ export interface ShieldRouter {
   /** `Target.attachedToTarget` (iframe OOPIF): ikut diintersep lalu dilanjutkan. */
   attached(cdp: CdpClient, p: Record<string, unknown>, parentSession: string | undefined): void
   detached(p: Record<string, unknown>): void
-  /** Popup dari `opener` dengan URL pertamanya (target popup sudah ditutup pemanggil). */
-  popup(opener: NodeRec, url: string): void
+  /** Popup dari `opener` dengan URL pertamanya: true = boleh jadi tab; false = diblokir dan dihitung (pemanggil menutup targetnya). */
+  popupAllowed(opener: NodeRec, url: string): boolean
   /** Bagian state Shields untuk halaman baru di `url` (hitungan mulai dari nol). */
   pageState(url: string): Partial<BrowserState>
   /** Sakelar Shields untuk host halaman `rec` (dipersist kebijakan); semua node di host itu ikut diperbarui. */
@@ -121,15 +121,15 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
 
     detached(p) { if (typeof p.sessionId === 'string') frames.delete(p.sessionId) },
 
-    popup(opener, url) {
+    popupAllowed(opener, url) {
       const nodeId = opener.nodeId
       const filtered = !!policy && shielded(opener) && policy.check(url, opener.state.url, 'main_frame').block
       if (filtered || !allowBurst(nodeId)) {
         ops.patch(opener, { blockedPopups: (opener.state.blockedPopups ?? 0) + 1 })
         log.info('shields.popup', 'popup blocked', { ids: { nodeId }, host: hostOnly(url), reason: filtered ? 'filter' : 'burst' })
-        return
+        return false
       }
-      ops.emit({ k: 'popup', nodeId, url })
+      return true
     },
 
     pageState(url) {
