@@ -121,7 +121,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     initialTabs: (id) => nodeOf(id)?.tabs, persistTabs: tabPersister(canvasPush), agentDriving: (id) => leases.isDriven(id), tabDiscardMs: cfg.discardMs,
   })
   profiles.bind(host)
-  const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
+  const lifecycle = new BrowserLifecycle({ ...cfg, maxLive: () => lifecycleConfig(env).maxLive, host, driven: (id) => leases.isDriven(id), now })
   const gwHost = adaptGatewayHost(host, lifecycle)
   const hub = createViewerHub(gwHost, leases, (id, v) => lifecycle.setVisible(id, v))
   const unLease = leases.onChange((id) => hub.refreshState(id)) // lease agent berubah: UI ikut tahu
@@ -147,7 +147,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     const now = [...new Set([...live].map((id) => host.profileOf(id)))].sort().join()
     if (now !== liveProfiles) { liveProfiles = now; profiles.liveChanged() } // the set of profiles with a running process changed
   })
-  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env) })
+  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: lifecycleConfig(env).maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },

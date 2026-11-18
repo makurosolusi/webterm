@@ -26,6 +26,13 @@ The process pool is keyed by profile id, not workspace id.
 `MAX_LIVE` is unchanged: it still counts live **pages** (nodes) through the single `lifecycle.attach` gate, which is
 stricter than counting processes (a page needs a process). Switching profile cannot get around it.
 
+**The limit is a setting (range 1 to 12, default 3).** Settings > Browser > "Active browsers limit" writes
+`WEBTERM_BROWSER_MAX_LIVE` through the same env PUT as other registry rows. The runtime reads it on every `attach` (a getter,
+not a value captured at start), so a change applies without restart. Raising gives slots at once. Lowering below the active
+count never kills a visible, loading or driven browser: `admit` evicts the oldest hidden ones until a slot is free, and idle
+discard handles the rest. Limit toasts (profile spawn, tab open) carry "Raise limit to N+1" and "Settings"; Central cannot
+change the limit (its `browser_limit` receipt tells it the owner can).
+
 ## Migration (no data moves)
 
 Every workspace gets a Default profile row with `id = workspaceId`, named `Default (<workspace name>)` (made unique with a

@@ -9,6 +9,7 @@ import {
 } from '../../shared/browser.tabs'
 import { BrowserApiError } from '../browser.api'
 import { showNotice } from '../workspaceSave.notice'
+import { showLimitNotice } from '../browserLimit.notice'
 import { tabsApi, type TabsView } from './browserTabs.api'
 import type { Pane } from '../../shared/workspace.shape'
 import type { DeviceChoice } from '../../shared/browser.devices'
@@ -67,7 +68,11 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
   const follow = useRef(true)
   const [epoch, setEpoch] = useState(0)
   const setState = useCallback((s: BrowserTabsState | null) => { ref.current = s; setStateRaw(s) }, [])
-  const notify = useCallback((text: string, severity?: 'info' | 'warning' | 'error') => showNotice(noticeKey(nodeId), { severity: severity ?? (text === TAB_LIMIT_REASON ? 'warning' : 'info'), title: text }), [nodeId])
+  const notify = useCallback((text: string, severity?: 'info' | 'warning' | 'error') => {
+    const sev = severity ?? (text === TAB_LIMIT_REASON ? 'warning' : 'info')
+    if (text === MAX_LIVE_TEXT) void showLimitNotice(noticeKey(nodeId), sev, text) // the active-browser limit: offer to raise it
+    else showNotice(noticeKey(nodeId), { severity: sev, title: text })
+  }, [nodeId])
 
   const onMsg = useCallback((m: TabMsg) => {
     if (m.t === 'tabs') { setState(m.state); setEpoch((n) => n + 1) }

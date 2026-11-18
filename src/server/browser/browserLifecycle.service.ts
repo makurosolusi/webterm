@@ -15,7 +15,7 @@ export const DISCARD_RETRY_MS = 60_000
 
 export interface LifecycleConfig { maxLive: number; discardMs: number }
 
-/** Baca MAX_LIVE (di-clamp 1..8) dan DISCARD_MS dari env; nilai rusak = default. */
+/** Baca MAX_LIVE (di-clamp ke MAX_LIVE_RANGE) dan DISCARD_MS dari env; nilai rusak = default. */
 export function lifecycleConfig(env: Record<string, string | undefined>): LifecycleConfig {
   const maxLive = Number.parseInt(env[ENV_BROWSER.maxLive] ?? '', 10)
   const discardMs = Number(env[ENV_BROWSER.discardMs]?.trim() || Number.NaN)
@@ -25,7 +25,9 @@ export function lifecycleConfig(env: Record<string, string | undefined>): Lifecy
   }
 }
 
-export interface LifecycleDeps extends LifecycleConfig {
+export interface LifecycleDeps extends Omit<LifecycleConfig, 'maxLive'> {
+  /** Batas node hidup; fungsi = dibaca tiap attach, jadi pengaturan berlaku seketika tanpa restart. */
+  maxLive: number | (() => number)
   host: BrowserHostApi
   /** Lease agent aktif (WS-07): node `driven` tidak boleh di-discard. */
   driven: (nodeId: string) => boolean
@@ -115,7 +117,10 @@ export class BrowserLifecycle {
 
   private async admitNow(nodeId: string): Promise<boolean> {
     if (this.queue.get(nodeId)) { this.queue.setVisible(nodeId, true, this.now()); this.cancel(nodeId); return true }
-    if (this.queue.size >= this.deps.maxLive) {
+    const { maxLive } = this.deps
+    const limit = typeof maxLive === 'function' ? maxLive() : maxLive
+    // A lowered limit can leave several nodes over it: evict hidden ones (never a visible/driven/loading one) until one slot is free.
+    while (this.queue.size >= limit) {
       const victim = this.queue.oldestHidden((id) => !this.deps.host.isLoading(id) && !this.deps.driven(id))
       if (victim === undefined || !(await this.evict(victim))) return false
     }

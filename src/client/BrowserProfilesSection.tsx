@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import BrowserProfileCreateDialog from './BrowserProfileCreateDialog'
+import { BrowserLimitField } from './BrowserLimitField'
 import BrowserProfileRow from './BrowserProfileRow'
 import { useBrowserStatus } from './browser.feature'
 import { useProfileList } from './browserProfile.list'
@@ -23,12 +24,15 @@ export function BrowserProfilesSection({ workspaceId = '' }: { workspaceId?: str
   else body = <ul role="list" aria-label={T.groupTitle} className="m-0 flex list-none flex-col divide-y p-0">{profiles.map((p) => <BrowserProfileRow key={p.id} profile={p} onChanged={reload} />)}</ul>
 
   return (
-    <div className="flex flex-col" data-testid="browser-profiles-section" data-field="browser-profiles">
+    <div className="flex flex-col">
+      <SettingsGroup title="Limits"><BrowserLimitField /></SettingsGroup>
+      <div className="flex flex-col" data-testid="browser-profiles-section" data-field="browser-profiles">
       <SettingsGroup title={T.groupTitle} description={`${T.sectionHint} ${T.sharedSession}`}>
         {body}
         {status && <div className="flex justify-end p-2"><Button size="sm" onClick={() => setCreating(true)}>{T.newProfile}</Button></div>}
       </SettingsGroup>
       {creating && <BrowserProfileCreateDialog onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload() }} />}
+      </div>
     </div>
   )
 }

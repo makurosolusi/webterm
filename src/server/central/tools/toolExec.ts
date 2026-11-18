@@ -68,6 +68,7 @@ const NEXT: Record<string, string> = {
   approval_rejected: 'the human rejected this; do not retry it, tell them',
   approval_expired: 'the approval card expired unanswered and the agent was cancelled; tell the human, and spawn again with a new requestId only if it is still wanted',
   tier_denied: 'propose it instead; a human approves higher tiers',
+  browser_limit: 'every live browser slot is in use (browser_status shows live and maxLive); close or hide a browser node and retry, or tell the human they can raise the limit in Settings > Browser (you cannot change it)',
   profile_not_found: 'browser_profile {"action":"list"} shows the browser profiles that exist',
 }
 /** `approval_required` next step by the card's ledger status, so the model never points at a dead card. */

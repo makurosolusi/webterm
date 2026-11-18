@@ -7,6 +7,7 @@
 import { CAPABILITIES, type CapabilityId } from '../shared/featureCapabilities'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
+import { LIMIT_TEXT } from './BrowserLimitField'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
 import { CLAUDE_TEXT } from './ClaudeSettingsSection'
@@ -123,6 +124,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   ...CARDS,
   e('capabilities', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
   e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
+  e('browser', 'browser-limit', LIMIT_TEXT.label, LIMIT_TEXT.hint, 'browser limit max browsers active browsers maximum live pages memory ram more fewer increase decrease'),
   e('browser', 'browser-profiles', 'Browser profiles', 'Separate logins for each browser: create, rename, color, import cookies, duplicate, export or delete a profile.', 'profile profiles cookies login session account container import export duplicate'),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),
   // Health (HealthSection.tsx)
