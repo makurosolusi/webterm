@@ -3,7 +3,7 @@
 import type { DropEdge } from '../../shared/browser.layout'
 
 export type DropZone = DropEdge | 'center'
-export interface DropHint { paneTabId: string; zone: DropZone }
+export interface DropHint { paneTabId: string; zone: DropZone; kind?: DragKind }
 
 /** Share of a pane's width/height, per side, that counts as an edge zone. */
 export const EDGE_SHARE = 0.25
@@ -37,4 +37,13 @@ export function zoneBox(zone: DropZone): { left: string; top: string; width: str
     case 'bottom': return { left: '0%', top: '50%', width: '100%', height: '50%' }
     case 'center': return { left: '0%', top: '0%', width: '100%', height: '100%' }
   }
+}
+
+/** What a drag is carrying: a tab from the strip, or a whole pane by its header. */
+export type DragKind = 'tab' | 'pane'
+
+/** Label drawn in the zone preview, so the outcome is readable before the pointer is released. */
+export function zoneLabel(zone: DropZone, kind: DragKind): string {
+  if (zone === 'center') return kind === 'pane' ? 'Swap' : 'Show here'
+  return kind === 'pane' ? `Move to ${zone}` : `Split ${zone}`
 }

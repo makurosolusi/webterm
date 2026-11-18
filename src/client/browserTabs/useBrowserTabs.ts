@@ -19,6 +19,8 @@ export const isTabMsg = (m: ServerMsg): m is TabMsg => m.t === 'tabs' || m.t ===
 
 /** Id of the single stand-in tab shown until the server has sent the node's tab list. */
 export const PAGE_TAB_ID = '__page'
+/** Pause before the one automatic retry of a failed tab activation. */
+const ACTIVATE_RETRY_MS = 150
 const MAX_LIVE_TEXT = 'Too many browsers are active. Hide one first.'
 
 const noticeKey = (nodeId: string): string => `webterm-browser-tabs-${nodeId}`
@@ -66,6 +68,7 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
   const [state, setStateRaw] = useState<BrowserTabsState | null>(null)
   const ref = useRef<BrowserTabsState | null>(null)
   const follow = useRef(true)
+  const activateSeq = useRef(0)
   const [epoch, setEpoch] = useState(0)
   const setState = useCallback((s: BrowserTabsState | null) => { ref.current = s; setStateRaw(s) }, [])
   const notify = useCallback((text: string, severity?: 'info' | 'warning' | 'error') => {
@@ -111,7 +114,21 @@ export function useBrowserTabs(nodeId: string, page: BrowserState | undefined, s
     switch (a.type) {
       case 'activate':
         follow.current = false // the human chose: stop following the agent
-        if (cur.activeTabId !== a.tabId) commit(a, true, () => tabsApi.activate(nodeId, a.tabId))
+        if (cur.activeTabId !== a.tabId) {
+          // The click takes effect at once. Two quick clicks send two requests: only the newest answer counts (an older one
+          // would flip the tab back). A failed request is retried once (the server can fail transiently while it moves the
+          // screencast); when it still fails the user's choice stays on screen and only then is it reported.
+          const n = ++activateSeq.current
+          setState(reduceTabs(cur, a))
+          const ask = () => tabsApi.activate(nodeId, a.tabId)
+          const retry = async (): Promise<TabsView> => {
+            try { return await ask() } catch { await new Promise((r) => setTimeout(r, ACTIVATE_RETRY_MS)); return ask() }
+          }
+          retry().then(
+            (r) => { if (n === activateSeq.current) setState(r.state) },
+            (e: unknown) => { if (n === activateSeq.current) { const f = failText(VERB.activate, e); notify(f.text, f.severity) } },
+          )
+        }
         return
       case 'close': commit(a, true, () => tabsApi.close(nodeId, a.tabId)); return
       case 'closeOthers': case 'closeToRight': {

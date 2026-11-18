@@ -1,7 +1,6 @@
 // The panes of a split browser node: a FLAT list keyed by tab id (like PaneView for terminals: splitting only changes
 // `style`, so no pane's canvas is remounted), plus a separator per split and the swap-by-dragging-a-header gesture.
-import { useRef, useState } from 'react'
-import type { PointerEvent } from 'react'
+import { useRef } from 'react'
 import { MIN_PANE_PX } from '../../shared/browser.layout'
 import type { BrowserTabsState } from '../../shared/browser.tabs'
 import type { Pane } from '../../shared/workspace.shape'
@@ -10,6 +9,8 @@ import { paneLayout } from '../paneTree'
 import { BrowserPane } from './BrowserPane'
 import { BrowserSeparator } from './BrowserSeparator'
 import type { DropHint } from './browserSplit.drop'
+import { usePaneDrag } from './usePaneDrag'
+import { tabTitle } from '../browserTabs/browserTabs.labels'
 import type { SplitControls } from './useBrowserSplit'
 
 export interface BrowserPaneTreeProps {
@@ -22,39 +23,20 @@ export interface BrowserPaneTreeProps {
 }
 
 const pct = (n: number) => `${n}%`
-const GRIP_THRESHOLD_PX = 4
 const SMALL_NODE_NOTICE = 'Enlarge the node to see every pane'
 
 export function BrowserPaneTree({ layout, state, session, controls, dropHint }: BrowserPaneTreeProps) {
   const { panes, dividers } = paneLayout(layout)
   const hostRef = useRef<HTMLDivElement>(null)
-  const [over, setOver] = useState<string | null>(null)
   const tooSmall = controls.stage.w > 0 && panes.some((p) => (controls.stage.w * p.width) / 100 < MIN_PANE_PX || (controls.stage.h * p.height) / 100 < MIN_PANE_PX)
 
-  /** Drag a pane header onto another pane to swap them; a press that does not move stays a click. */
-  const grip = (e: PointerEvent, tabId: string) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return
-    const x0 = e.clientX, y0 = e.clientY
-    let target: string | null = null
-    let moved = false
-    const move = (ev: globalThis.PointerEvent) => {
-      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < GRIP_THRESHOLD_PX) return
-      moved = true
-      const hit = document.elementFromPoint?.(ev.clientX, ev.clientY)?.closest<HTMLElement>('[data-pane-tab]')?.dataset.paneTab ?? null
-      target = hit && hit !== tabId ? hit : null
-      setOver(target)
-    }
-    const end = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-      window.removeEventListener('pointercancel', end)
-      setOver(null)
-      if (moved && target) void controls.swap(tabId, target)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end)
-    window.addEventListener('pointercancel', end)
-  }
+  const drag = usePaneDrag({
+    allowed: controls.canMovePane,
+    onDrop: (tabId, target, zone) => { void controls.movePane(tabId, target, zone) },
+  })
+  const dragged = drag.view
+  const hint = dragged ? dragged.hit : dropHint
+  const dragTab = dragged ? state.tabs.find((t) => t.tabId === dragged.tabId) : undefined
 
   return (
     <div ref={hostRef} className="bp-tree" role="group" aria-label="Browser panes">
@@ -66,9 +48,11 @@ export function BrowserPaneTree({ layout, state, session, controls, dropHint }: 
             key={p.id} tab={tab} state={state} session={session} controls={controls}
             style={{ left: pct(p.left), top: pct(p.top), width: pct(p.width), height: pct(p.height) }}
             focused={p.id === state.activeTabId}
-            dropZone={dropHint?.paneTabId === p.id ? dropHint.zone : undefined}
-            swapTarget={over === p.id}
-            onGrip={grip}
+            dropZone={hint?.paneTabId === p.id ? hint.zone : undefined}
+            dropKind={dragged?.hit ? 'pane' : 'tab'}
+            lifted={dragged?.tabId === p.id}
+            onGrip={drag.begin}
+            wasDragged={drag.wasDragged}
           />
         )
       })}
@@ -83,6 +67,8 @@ export function BrowserPaneTree({ layout, state, session, controls, dropHint }: 
           />
         )
       })}
+      {dragged && dragTab && <div className="bp-ghost" aria-hidden="true" style={{ left: dragged.x + 12, top: dragged.y + 12 }}>{tabTitle(dragTab)}</div>}
+      <div className="bt-sr" role="status" aria-live="polite" data-testid="pane-announce">{controls.announcement}</div>
       {tooSmall && <div className="bp-small" role="status">{SMALL_NODE_NOTICE}</div>}
     </div>
   )

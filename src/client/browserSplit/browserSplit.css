@@ -7,7 +7,18 @@
 }
 /* Focus = a 2px accent edge (also announced by aria-current). */
 .bp--focus { outline-color: var(--vscode-focusBorder, var(--accent)); }
-.bp--swap { outline-color: var(--vscode-list-dropBackground, var(--accent)); outline-style: dashed; }
+.bp--lift { opacity: .55; outline-style: dashed; outline-color: var(--vscode-focusBorder, var(--accent)); }
+.bp-grip { display: inline-flex; flex: none; align-items: center; height: 100%; margin-left: -4px; color: var(--vscode-descriptionForeground, var(--text)); cursor: grab; }
+.bp-grip svg { width: 14px; height: 14px; }
+.bp-head:hover .bp-grip { color: var(--vscode-foreground, var(--text)); }
+/* While a pane or tab is dragged: the page surfaces ignore the pointer (hit tests see the panes) and the cursor says "moving". */
+body[data-bp-dragging] .browser-surface { pointer-events: none; }
+body[data-bp-dragging], body[data-bp-dragging] * { cursor: grabbing !important; }
+.bp-ghost {
+  position: fixed; z-index: 1000; max-width: 220px; padding: 2px 8px; border-radius: 4px; pointer-events: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 11px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
+  border: 1px solid var(--vscode-focusBorder, var(--accent)); box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+}
 .bp-head {
   display: flex; align-items: center; gap: 2px; flex: none; height: 26px; padding: 0 2px 0 6px; box-sizing: border-box;
   font: 11px/1.2 var(--font-ui); color: var(--vscode-foreground, var(--text));
@@ -40,6 +51,8 @@
   border: 2px solid var(--vscode-focusBorder, var(--accent));
 }
 @media (prefers-reduced-motion: no-preference) { .bp-drop { transition: all 80ms ease-out; } }
+.bp-drop { display: flex; align-items: center; justify-content: center; }
+.bp-drop__label { padding: 2px 8px; border-radius: 4px; font: 600 11px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel)); }
 
 /* Separators: 6px hit area centred on the border, a thin line that thickens on hover/focus/drag. */
 .bp-sep { position: absolute; z-index: 4; width: 6px; height: 6px; background: transparent; touch-action: none; outline: none; }

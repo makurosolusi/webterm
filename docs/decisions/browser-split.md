@@ -63,6 +63,31 @@ antar tab. Pola yang sudah dikenal: editor group VS Code (seret tab ke tepi), De
 - Node terlalu kecil: opsi split nonaktif dengan alasan "Enlarge the node to split"; pane yang sudah ada menyusut dan muncul
   "Enlarge the node to see every pane". Reduced-motion: transisi pratinjau hanya bila tidak diminta mengurangi gerakan.
 
+## Klik berulang dan seret pane (fix/split-pane-click-and-dnd)
+- **Akar "klik berkali-kali":** React Flow memasang d3-drag pada node dengan `nodeClickDistance` 0: gerak pointer 1 px saja antara
+  pointerdown dan pointerup membuat d3-drag menelan `click` berikutnya, kecuali target ada di dalam elemen `nodrag`. Strip tab dan
+  `.browser-body` (overlay pane, halaman tab baru, tombol Reload/Wake) tidak ber-`nodrag`; header pane dan permukaan stream sudah.
+  Bukti: `browserTabs/BrowserTabStrip.click.test.tsx` (ReactFlow sungguhan) merah untuk goyangan 1 dan 3 px sebelum perbaikan.
+  Perbaikan: `nodrag nopan` pada `.bt-strip` dan `.browser-body` (satu tempat per area interaktif; elemen baru di dalamnya ikut aman).
+- **Aktivasi tab/pane:** klik berefek seketika (optimistik). Jawaban lama tidak boleh membalik klik yang lebih baru (`activateSeq`),
+  galat server (mis. 500 sementara saat screencast dipindah) diulang sekali setelah 150 ms, dan bila tetap gagal pilihan pengguna
+  dipertahankan dan baru dilaporkan satu kali; `tabs`/`tab` dari server merekonsiliasi sesudahnya.
+- **Satu mesin seret:** `browserSplit.dnd.ts` (`trackDrag`) dipakai seret tab strip dan seret pane: ambang 4 px (di bawahnya tetap klik),
+  Escape dan `pointercancel` = batal (dulu cancel meng-commit), flag `data-bp-dragging` di `<body>` membuat `.browser-surface`
+  `pointer-events:none` sehingga halaman/stream tidak menelan peristiwa seret dan hit test melihat pane. Dipilih pointer events,
+  bukan HTML5 DnD: HTML5 tidak memberi kontrol pointercancel/Escape/ghost dan tak menembak di atas canvas. Deviasi dari ide
+  "overlay": permukaan dimatikan lewat CSS, bukan elemen overlay, karena hit test `elementFromPoint` harus tetap menemukan pane.
+- **Zona drop satu set** (`browserSplit.drop.ts`, `paneHitAt`): seperempat tepi = sisi itu, tengah = pusat; rect nyata dari
+  `getBoundingClientRect` (nisbi terhadap elemen, jadi zoom canvas ikut benar). Label pratinjau: pane "Swap"/"Move to left|right|top|bottom",
+  tab "Show here"/"Split left|...". Zona tidak valid (diri sendiri, tak cukup ruang di tepi) tidak disorot.
+- **Seret pane** (`usePaneDrag`, header, termasuk tombol judul; tombol device/close tidak): tengah = `swapPanes`, tepi = `movePane`
+  (reducer murni di `browser.layout.ts`: pane dilepas dari tempatnya, split kosong runtuh, lalu `splitPane` 50/50 di sisi target;
+  tidak terhitung batas 4 karena pane pergi dulu). Pane terseret redup + ghost judul; Esc/drop di luar = batal. Disimpan lewat
+  `setLayout` (satu panggilan per drop; debounce hanya relevan untuk resize separator, yang sudah ada).
+- **Keyboard:** fokus di header lalu Alt+Shift+Panah = tukar dengan tetangga di arah itu; menu konteks header: "Move pane
+  left/right/up/down" (nonaktif tanpa tetangga) dan "Swap with <judul>". Wilayah `role=status aria-live=polite` mengumumkan hasil
+  ("Pane 1 moved to the left", "Pane 1 moved to the left of pane 2", "Pane 1 swapped with pane 2").
+
 ## Kompatibilitas
 - Board lama (tanpa `layout`/`device`) = satu pane, perilaku sama; frame tanpa `tabId`; klien tanpa split tak terpengaruh.
 - Pesan klien baru ditolak sebagai `bad_request` oleh server lama (dan sebaliknya server baru menerima klien lama).

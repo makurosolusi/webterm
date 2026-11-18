@@ -135,7 +135,8 @@ describe('swapping panes by their headers', () => {
     const grip = a.querySelector('[data-pane-grip]') as HTMLElement
     fireEvent.pointerDown(grip, { button: 0, clientX: 5, clientY: 5, pointerId: 1 })
     fireEvent.pointerMove(window, { clientX: 300, clientY: 80, pointerId: 1 })
-    expect(b.className).toContain('bp--swap')
+    expect(b.querySelector<HTMLElement>('.bp-drop')?.dataset.zone).toBe('center')
+    expect(b.querySelector('.bp-drop__label')?.textContent).toBe('Swap')
     fireEvent.pointerUp(window, { pointerId: 1 })
     await waitFor(() => expect(h.api.layout).toHaveBeenCalled())
     expect(lastLayout()[1]).toEqual(cols('b', 'a'))
@@ -156,6 +157,6 @@ describe('swapping panes by their headers', () => {
     const btn = within(screen.getByRole('group', { name: 'Pane: Title a' })).getByRole('button', { name: 'Close pane' })
     fireEvent.pointerDown(btn, { button: 0, clientX: 5, clientY: 5, pointerId: 1 })
     fireEvent.pointerMove(window, { clientX: 300, clientY: 80, pointerId: 1 })
-    expect(document.querySelector('.bp--swap')).toBeNull()
+    expect(document.querySelector('.bp-drop')).toBeNull()
   })
 })

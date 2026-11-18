@@ -6,7 +6,7 @@ import type { RefObject } from 'react'
 import { MAX_TABS_PER_NODE, TAB_LIMIT_REASON } from '../../shared/browser.tabs'
 import type { BrowserTabsState } from '../../shared/browser.tabs'
 import {
-  MIN_PANE_PX, assignTab, canSplit, closePane, focusPane, layoutTabIds, normalizeLayout, resizePane, splitPane, swapPanes,
+  MIN_PANE_PX, assignTab, canSplit, closePane, focusPane, layoutTabIds, movePane, normalizeLayout, resizePane, splitPane, swapPanes,
 } from '../../shared/browser.layout'
 import type { Direction, DropEdge } from '../../shared/browser.layout'
 import type { DeviceChoice } from '../../shared/browser.devices'
@@ -43,12 +43,25 @@ export interface SplitControls {
   unsplit(): Promise<void>
   assign(paneTabId: string, tabId: string): Promise<void>
   swap(a: string, b: string): Promise<void>
+  /** Drag-and-drop landing: `center` swaps, an edge moves the pane beside `target`. */
+  movePane(tabId: string, target: string, zone: DropZone): Promise<void>
+  /** Whether dropping `tabId` on `zone` of `target` is possible (room left for an edge move). */
+  canMovePane(tabId: string, target: string, zone: DropZone): boolean
+  /** Keyboard move: swap with the neighbouring pane in `dir` (Alt+Shift+Arrow, context menu). Returns whether a pane moved. */
+  moveDir(tabId: string, dir: Direction): Promise<boolean>
+  /** Neighbouring pane (tab id) of `tabId` in `dir`, null at the edge of the layout. */
+  neighbour(tabId: string, dir: Direction): string | null
+  /** Last move, worded for the aria-live region. */
+  announcement: string
   resize(path: string, ratio: number): void
   commitResize(): Promise<void>
   resetRatio(path: string): Promise<void>
   setDevice(tabId: string, d: DeviceChoice | null): Promise<void>
   navigateIn(tabId: string, url: string): Promise<void>
 }
+
+/** 1-based reading-order number of the pane showing `tabId` (what the aria-live line calls it). */
+const paneNo = (l: Pane, tabId: string): number => layoutTabIds(l).indexOf(tabId) + 1
 
 /** Pixel size of the pane showing `tabId` inside a stage of `stage`. */
 function paneSize(layout: Pane | null, tabId: string, stage: Stage): Stage {
@@ -69,6 +82,7 @@ export function useBrowserSplit(tabs: BrowserTabsControl, session: BrowserSessio
   const focusId = view.activeTabId
   const shown = useMemo(() => (layout ? layoutTabIds(layout) : focusId ? [focusId] : []), [layout, focusId])
   const [stage, setStage] = useState<Stage>({ w: 0, h: 0 })
+  const [announcement, setAnnouncement] = useState('')
   const latest = useRef({ tabs, layout, focusId, shown, stage, view, session })
   latest.current = { tabs, layout, focusId, shown, stage, view, session }
 
@@ -208,6 +222,37 @@ export function useBrowserSplit(tabs: BrowserTabsControl, session: BrowserSessio
     if (l) await save(swapPanes(l, a, b))
   }, [save])
 
+  const canMovePane = useCallback((tabId: string, target: string, zone: DropZone) => {
+    const { layout: l, stage: s } = latest.current
+    if (!l || tabId === target) return false
+    if (zone === 'center') return true
+    const size = paneSize(l, target, s)
+    const room = zone === 'left' || zone === 'right' ? size.w : size.h
+    return s.w <= 0 || room >= 2 * MIN_PANE_PX + SEPARATOR_PX
+  }, [])
+  const movePaneTo = useCallback(async (tabId: string, target: string, zone: DropZone) => {
+    const { layout: l } = latest.current
+    if (!l || !canMovePane(tabId, target, zone)) return
+    const next = movePane(l, tabId, target, zone)
+    if (next === l) return
+    setAnnouncement(zone === 'center' ? `Pane ${paneNo(l, tabId)} swapped with pane ${paneNo(l, target)}` : `Pane ${paneNo(next, tabId)} moved to the ${zone} of pane ${paneNo(next, target)}`)
+    await save(next)
+  }, [canMovePane, save])
+  const neighbour = useCallback((tabId: string, dir: Direction): string | null => {
+    const l = latest.current.layout
+    const to = l ? focusPane(l, tabId, dir) : tabId
+    return to === tabId ? null : to
+  }, [])
+  const moveDir = useCallback(async (tabId: string, dir: Direction): Promise<boolean> => {
+    const { layout: l } = latest.current
+    const to = neighbour(tabId, dir)
+    if (!l || !to) { setAnnouncement(`Pane cannot move ${dir === 'up' || dir === 'down' ? dir : `to the ${dir}`}`); return false }
+    const next = swapPanes(l, tabId, to)
+    setAnnouncement(`Pane ${paneNo(next, tabId)} moved ${dir === 'up' || dir === 'down' ? dir : `to the ${dir}`}`)
+    await save(next)
+    return true
+  }, [neighbour, save])
+
   // The layout being dragged: React has not re-rendered between two pointer events, so the latest value lives here.
   const draft = useRef<Pane | null>(null)
   const resize = useCallback((path: string, ratio: number) => {
@@ -233,5 +278,5 @@ export function useBrowserSplit(tabs: BrowserTabsControl, session: BrowserSessio
     send({ t: 'nav', action: 'go', url })
   }, [send])
 
-  return { layout, shown, focusId, stage, canSplitAt, split, preset, openInSizes, dropTab, focus, reload, moveFocus, closePane: closeOne, unsplit, assign, swap, resize, commitResize, resetRatio, setDevice, navigateIn }
+  return { layout, shown, focusId, stage, canSplitAt, split, preset, openInSizes, dropTab, focus, reload, moveFocus, closePane: closeOne, unsplit, assign, swap, movePane: movePaneTo, canMovePane, moveDir, neighbour, announcement, resize, commitResize, resetRatio, setDevice, navigateIn }
 }
