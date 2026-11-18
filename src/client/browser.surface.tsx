@@ -110,6 +110,7 @@ export default function BrowserSurface({ session }: { session: BrowserSession })
           aria-label="Browser keyboard input"
           className="absolute top-0 left-0 size-px min-h-0 resize-none border-0 p-0 opacity-0 pointer-events-none"
           tabIndex={-1}
+          data-tab-shortcuts // the page's own keyboard sink, not a text field: tab shortcuts (Ctrl/Cmd+T, W, ...) must reach the node
         />
       </div>
       {session.state?.loading && <div className="browser-loading" role="progressbar" aria-label="Loading" />}

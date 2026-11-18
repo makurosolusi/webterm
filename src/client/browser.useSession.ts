@@ -18,6 +18,7 @@ import type { ResizeFilter } from './browser.stream.fit'
 import type { BrowserStream } from './browser.stream'
 import { applyConsoleDelta, EMPTY_CONSOLE } from '../shared/browser.console'
 import type { ConsoleView } from '../shared/browser.console'
+import { isTabMsg, type TabMsg } from './browserTabs/useBrowserTabs'
 
 export type BrowserDialog = Extract<ServerMsg, { t: 'dialog' }>
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
@@ -46,9 +47,9 @@ export interface BrowserSession {
 
 /**
  * `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir.
- * `onPopup` = halaman membuka popup sah (server sudah menyaring iklan) yang harus jadi node baru.
+ * `onTabMsg` = pesan tab dari server (`tabs`/`tab`/`tabNotice`); popup kini menjadi tab di server, bukan pesan `popup`.
  */
-export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream, onPopup?: (url: string) => void): BrowserSession {
+export function useBrowserSession(id: string, paused: boolean, stream: BrowserStream = browserStream, onTabMsg?: (m: TabMsg) => void): BrowserSession {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewport = useRef<Viewport | null>(null)
@@ -66,8 +67,8 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [connected, setConnected] = useState(true)
   const [latency] = useState(createLatencyWindow)
   const [consoleView, setConsoleView] = useState<ConsoleView>(EMPTY_CONSOLE)
-  const popupRef = useRef(onPopup)
-  popupRef.current = onPopup
+  const tabMsgRef = useRef(onTabMsg)
+  tabMsgRef.current = onTabMsg
 
   const arm = useCallback((clear: () => void) => {
     const t = setTimeout(() => { timers.current.delete(t); clear() }, NOTICE_MS)
@@ -126,7 +127,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
           setError({ code: m.code, hostname: m.hostname })
           if (!STICKY_ERRORS.has(m.code)) arm(() => setError(undefined))
         } else if (m.t === 'dialog') setDialog(m)
-        else if (m.t === 'popup') popupRef.current?.(m.url)
+        else if (isTabMsg(m)) tabMsgRef.current?.(m)
         else if (m.t === 'console') setConsoleView((v) => applyConsoleDelta(v, m))
         else if (m.t === 'cursor') setCursor(CURSOR_SAFE.test(m.css) ? m.css : 'default')
         else if (m.t === 'copy') {

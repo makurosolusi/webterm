@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-// Popup sah dari server -> callback node baru; chip Shields: hitungan, tooltip, sakelar per situs.
+// Pesan tab dari server -> callback tab (popup lama diabaikan); chip Shields: hitungan, tooltip, sakelar per situs.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserState } from '../shared/browser.contract'
@@ -15,17 +15,20 @@ const state = (over: Partial<BrowserState> = {}): BrowserState => ({
 })
 
 describe('useBrowserSession popup', () => {
-  it('hands a server popup url to onPopup (the node opens it as a new browser node)', () => {
+  it('ignores a legacy popup message (popups are tabs now) and hands tab messages to onTabMsg', () => {
     let listener: BrowserListener | null = null
     const stream: BrowserStream = {
       subscribe: (_id, l) => { listener = l; return () => undefined },
       attach: () => undefined, resize: () => undefined, detach: () => undefined, send: () => undefined, reset: () => undefined,
     }
-    const onPopup = vi.fn()
-    function Probe() { useBrowserSession('b1', true, stream, onPopup); return null }
+    const onTabMsg = vi.fn()
+    function Probe() { useBrowserSession('b1', true, stream, onTabMsg); return null }
     render(<Probe />)
     act(() => listener?.onMsg({ t: 'popup', id: 'b1', url: 'https://news.test/a' }))
-    expect(onPopup).toHaveBeenCalledWith('https://news.test/a')
+    expect(onTabMsg).not.toHaveBeenCalled()
+    const notice = { t: 'tabNotice' as const, id: 'b1', message: 'Tab limit (8) reached' }
+    act(() => listener?.onMsg(notice))
+    expect(onTabMsg).toHaveBeenCalledWith(notice)
   })
 })
 
