@@ -36,7 +36,7 @@ export function buildSteps(plan: Plan, root: string, opts: { typecheck: boolean;
       steps.push({ section, label: `${label} (${part.length})`, cmd: opts.bunPath, args: ['test', '--no-env-file', ...part], env: realHome ? {} : { HOME: '@tmp-home' }, files: part })
     }
   }
-  addVitest('vitest', 'run', plan.vitestTests)
+  addVitest('vitest', 'run', [...new Set([...plan.vitestTests, ...plan.vitestGraph])].sort())
   addVitest('vitest', 'related', plan.vitestRelated)
   addBun('bun', 'bun test', plan.bun, false)
   // Real-Chromium suites need the real HOME (see src/testIsolation.setup.ts).
