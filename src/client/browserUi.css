@@ -11,6 +11,12 @@
   --bui-gap: 4px;
   --bui-radius: 6px;
   --bui-focus: 2px;
+  /* Tab strip and pane header (Chrome tab 34-36px; pane header >= 32px). Close button 24px (WCAG 2.5.8 minimum). */
+  --bui-tab-h: 36px;
+  --bui-tab-min-w: 112px;
+  --bui-tab-max-w: 220px;
+  --bui-pane-head-h: 32px;
+  --bui-close: 24px;
 }
 /* Codicons inside browser controls render at the icon token, whatever the surrounding text size. */
 .browser-toolbar .codicon, .browser-console .codicon, .browser-device-header .codicon { font-size: var(--bui-icon); }

@@ -61,3 +61,19 @@ export function dependentsOf(changed: string[], reverse: Map<string, Set<string>
   for (const c of changed) seen.delete(c)
   return seen
 }
+
+/** Like `dependentsOf` but stops after `maxDepth` import hops (BFS): keeps the weak-machine plan small on hub files. */
+export function dependentsWithin(changed: string[], reverse: Map<string, Set<string>>, maxDepth: number): Set<string> {
+  const seen = new Set(changed)
+  let frontier = [...changed]
+  const out = new Set<string>()
+  for (let d = 0; d < maxDepth && frontier.length; d++) {
+    const next: string[] = []
+    for (const f of frontier) for (const dep of reverse.get(f) ?? []) {
+      if (seen.has(dep)) continue
+      seen.add(dep); out.add(dep); next.push(dep)
+    }
+    frontier = next
+  }
+  return out
+}

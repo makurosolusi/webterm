@@ -6,6 +6,7 @@ import { resolveDevice } from '../../shared/browser.devices'
 import type { DeviceChoice, DeviceSpec } from '../../shared/browser.devices'
 import { CDP } from './cdp.client'
 import { restartStream } from './browserHost.cast'
+import { learnEngine, userAgentParams } from './browserHost.device.identity'
 import { metricsParams, screencastParams } from './browserHost.input'
 import type { CdpCommand } from './browserHost.input'
 import type { NodeRec } from './browserHost.targets'
@@ -31,7 +32,7 @@ export function deviceCommands(d: DeviceSpec): CdpCommand[] {
     { method: CDP.setTouchEmulation, params: d.touch ? { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX } : { enabled: false } },
     { method: CDP.setEmitTouch, params: d.touch ? { enabled: true, configuration: d.mobile ? 'mobile' : 'desktop' } : { enabled: false } },
     // Empty user agent = clear the override (desktop presets keep Chromium's own UA).
-    { method: CDP.setUserAgent, params: d.ua ? { userAgent: d.ua, ...(d.uaMeta ? { userAgentMetadata: d.uaMeta } : {}) } : { userAgent: '' } },
+    { method: CDP.setUserAgent, params: userAgentParams(d) },
   ]
 }
 
@@ -69,6 +70,7 @@ export async function setDevice(rec: NodeRec, choice: DeviceChoice | null, io: D
   const was = rec.device ?? null
   if (JSON.stringify(was) === JSON.stringify(next)) return
   const before = castKey(rec)
+  if (next?.ua) await learnEngine(io.send)
   rec.device = next
   for (const c of next ? deviceCommands(next) : responsiveCommands(rec.viewport)) await io.send(c.method, c.params)
   rec.touch = next?.touch ?? false
@@ -84,6 +86,7 @@ export async function setDevice(rec: NodeRec, choice: DeviceChoice | null, io: D
 export async function restoreDevice(rec: NodeRec, seed: () => unknown, io: DeviceIo): Promise<void> {
   if (rec.device === undefined) rec.device = resolveDevice(seed())
   if (!rec.device) return
+  if (rec.device.ua) await learnEngine(io.send)
   for (const c of deviceCommands(rec.device)) await io.send(c.method, c.params)
   rec.touch = rec.device.touch
 }

@@ -172,6 +172,9 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
         leases.takeover(id)
         hub.refreshState(id)
         return
+      case 'challengeDone':
+        host.dismissChallenge(id)
+        return
       case 'copy':
         sink.sendJson({ t: 'copy', id, text: await host.selectionText(id) })
         return

@@ -16,6 +16,8 @@ export interface DevicePreset {
   id: string; name: string; w: number; h: number; dpr: number; mobile: boolean; touch: boolean
   /** Absent = keep Chromium's own user agent (desktop presets). */
   ua?: string; uaMeta?: UaMetadata
+  /** `navigator.platform` of that device (DevTools sets it with the UA); absent = the host's own. */
+  navPlatform?: string
 }
 
 // Frozen OS tokens, as the real browsers send them (Safari 26 pins iOS 18_7; Chrome's reduced UA pins Android 10; K).
@@ -24,21 +26,22 @@ const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleW
 const IPAD_UA = 'Mozilla/5.0 (iPad; CPU OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'
 const ANDROID_UA = `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME} Mobile Safari/537.36`
 const WINDOWS_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME} Safari/537.36`
+const ANDROID_PLATFORM = 'Linux armv81'
 const android = (model: string): UaMetadata => ({ platform: 'Android', platformVersion: '16.0.0', architecture: '', model, mobile: true })
-const iphone = (id: string, name: string, w: number, h: number, dpr: number): DevicePreset => ({ id, name, w, h, dpr, mobile: true, touch: true, ua: IPHONE_UA })
-const ipad = (id: string, name: string, w: number, h: number): DevicePreset => ({ id, name, w, h, dpr: 2, mobile: true, touch: true, ua: IPAD_UA })
+const iphone = (id: string, name: string, w: number, h: number, dpr: number): DevicePreset => ({ id, name, w, h, dpr, mobile: true, touch: true, ua: IPHONE_UA, navPlatform: 'iPhone' })
+const ipad = (id: string, name: string, w: number, h: number): DevicePreset => ({ id, name, w, h, dpr: 2, mobile: true, touch: true, ua: IPAD_UA, navPlatform: 'iPad' })
 
 /** Presets in picker order; sizes are CSS px in portrait (Chrome DevTools values). Responsive is `null`, not a preset. */
 export const DEVICE_PRESETS: readonly DevicePreset[] = [
   iphone('iphone-se', 'iPhone SE', 375, 667, 2),
   iphone('iphone-15-pro', 'iPhone 15 Pro', 393, 852, 3),
   iphone('iphone-15-pro-max', 'iPhone 15 Pro Max', 430, 932, 3),
-  { id: 'pixel-8', name: 'Pixel 8', w: 412, h: 915, dpr: 2.625, mobile: true, touch: true, ua: ANDROID_UA, uaMeta: android('Pixel 8') },
-  { id: 'galaxy-s23', name: 'Samsung Galaxy S23', w: 360, h: 780, dpr: 3, mobile: true, touch: true, ua: ANDROID_UA, uaMeta: android('SM-S911B') },
+  { id: 'pixel-8', name: 'Pixel 8', w: 412, h: 915, dpr: 2.625, mobile: true, touch: true, ua: ANDROID_UA, navPlatform: ANDROID_PLATFORM, uaMeta: android('Pixel 8') },
+  { id: 'galaxy-s23', name: 'Samsung Galaxy S23', w: 360, h: 780, dpr: 3, mobile: true, touch: true, ua: ANDROID_UA, navPlatform: ANDROID_PLATFORM, uaMeta: android('SM-S911B') },
   ipad('ipad-mini', 'iPad Mini', 768, 1024),
   ipad('ipad-air', 'iPad Air', 820, 1180),
   ipad('ipad-pro-12', 'iPad Pro 12.9"', 1024, 1366),
-  { id: 'surface-pro', name: 'Surface Pro', w: 912, h: 1368, dpr: 2, mobile: false, touch: true, ua: WINDOWS_UA, uaMeta: { platform: 'Windows', platformVersion: '15.0.0', architecture: 'x86', model: '', mobile: false } },
+  { id: 'surface-pro', name: 'Surface Pro', w: 912, h: 1368, dpr: 2, mobile: false, touch: true, ua: WINDOWS_UA, navPlatform: 'Win32', uaMeta: { platform: 'Windows', platformVersion: '15.0.0', architecture: 'x86', model: '', mobile: false } },
   { id: 'desktop-1440', name: 'Desktop 1440', w: 1440, h: 900, dpr: 1, mobile: false, touch: false },
   { id: 'desktop-1920', name: 'Desktop 1920', w: 1920, h: 1080, dpr: 1, mobile: false, touch: false },
 ]

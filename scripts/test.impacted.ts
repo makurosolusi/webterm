@@ -62,6 +62,7 @@ export function printPlan(changed: string[], plan: Plan, policyOn: boolean): voi
   const { policy } = plan
   console.log(`changed files: ${changed.length}`)
   console.log(`vitest: ${plan.vitestTests.length} changed test file(s) + related to ${plan.vitestRelated.length} changed source file(s)`)
+  console.log(`        added by import graph: ${plan.vitestGraph.length}`)
   console.log(`bun:    ${plan.bun.length} impacted file(s)${plan.bunReal.length ? ` + ${plan.bunReal.length} real-browser file(s) (changed themselves)` : ''}`)
   if (!policyOn) console.log('policy: skipped (--no-policy)')
   else if (!policy.reasons.length) console.log('policy: nothing triggered by these changes')

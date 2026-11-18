@@ -33,6 +33,7 @@ import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { openProjectBrowser } from './browser.projectOpen'
 import { handleBrowserControl } from './browserControl.handler'
+import { pauseLeaseOnChallenge } from './browserControl.challenge'
 import { handleBrowserApi } from '../browserApi'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
 import { adaptGatewayHost, agentControlOn, cookieImportOn, wakeDiscarded } from './browser.runtime.parts'
@@ -139,6 +140,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const verbs = withLayout(withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep }), { host, leases, agentAllowed, sleep })
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
+  pauseLeaseOnChallenge(host, leases) // a human check is the user's to do; the agent verbs are refused meanwhile (handleBrowserControl)
   host.onState((s: BrowserState) => {
     if (s.live === 'live') {
       live.add(s.id)
@@ -185,7 +187,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     api: async (method, pathname, body, search) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps, search),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
-      open: openDeps, presetOf: (id) => nodeOf(id)?.preset,
+      open: openDeps, presetOf: (id) => nodeOf(id)?.preset, challengeOf: (id) => host.state(id)?.challenge,
     }),
     openFor: (requesterId, nodeId, profile) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled', profile),
     openProject: async (workspaceId, nodeId, profile) => {

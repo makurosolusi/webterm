@@ -90,12 +90,12 @@ export function BrowserPaneHeader({ tab, tabs, shown, focused, size, onPick, onD
       </IconTooltip>
       <span className="bp-size" aria-label="Page size" data-testid="pane-size">{sizeIndicator(device, size)}</span>
       <IconButton
-        label={deviceButtonLabel(device)} size="icon-xs" aria-haspopup="menu" aria-pressed={!!spec} data-pane-device
+        label={deviceButtonLabel(device)} size="icon-bui" aria-haspopup="menu" aria-pressed={!!spec} data-pane-device
         onClick={(e) => setOpen({ kind: 'device', at: anchor(e.currentTarget) })}
       >
         <Smartphone aria-hidden="true" />
       </IconButton>
-      <IconButton label="Close pane" size="icon-xs" onClick={onClose}><X aria-hidden="true" /></IconButton>
+      <IconButton label="Close pane" size="icon-bui" onClick={onClose}><X aria-hidden="true" /></IconButton>
       {open && <VscodeMenu open anchor={open.at} items={items} onClose={() => setOpen(null)} ariaLabel={open.kind === 'tabs' ? 'Tab in this pane' : open.kind === 'move' ? 'Move pane' : 'Device for this pane'} />}
     </div>
   )

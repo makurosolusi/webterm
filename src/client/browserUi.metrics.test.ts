@@ -4,8 +4,8 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const ROOT = __dirname
-const SKIP_DIRS = new Set(['browserSplit']) // owned by the split/pane work, audited in a second pass
-const SKIP_FILE = /(\.test\.|BrowserTabStrip|BrowserTabItem|browserTabs\.css|BrowserNewTabPage|\.fake\.)/
+// No exemption list: only tests and fakes are not UI. Tab strip, pane header, separators and state views are scanned like the rest.
+const SKIP_FILE = /(\.test\.|\.fake\.)/
 const BROWSER_FILE = /^(browser|Browser)/
 
 function collect(dir: string, inBrowserDir: boolean): string[] {
@@ -13,8 +13,7 @@ function collect(dir: string, inBrowserDir: boolean): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name)
     if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name)) continue
-      if (dir === ROOT && !/^(browser|browserTabs)$/.test(e.name)) continue
+      if (dir === ROOT && !/^(browser|browserTabs|browserSplit)$/.test(e.name)) continue
       out.push(...collect(p, true))
     } else if (/\.(tsx|css)$/.test(e.name) && !SKIP_FILE.test(e.name) && (inBrowserDir || BROWSER_FILE.test(e.name))) out.push(p)
   }
@@ -27,7 +26,7 @@ const name = (f: string) => relative(ROOT, f)
 describe('browser UI metrics', () => {
   it('scans the browser surface', () => {
     const names = FILES.map(name)
-    expect(names).toEqual(expect.arrayContaining(['BrowserToolbar.tsx', 'browser.css', 'BrowserConsole.tsx', 'browser/design/DesignModeBar.tsx']))
+    expect(names).toEqual(expect.arrayContaining(['BrowserToolbar.tsx', 'browser.css', 'BrowserConsole.tsx', 'browser/design/DesignModeBar.tsx', 'browserTabs/BrowserTabStrip.tsx', 'browserTabs/browserTabs.css', 'browserSplit/BrowserPaneHeader.tsx', 'browserSplit/browserSplit.css']))
   })
 
   it('has no font-size below 12px', () => {
@@ -57,5 +56,23 @@ describe('browser UI metrics', () => {
     for (const k of ['icon', 'hit', 'font', 'font-sm', 'omnibox-h', 'gap']) expect(used).toContain(`--bui-${k}`)
     // The tokens are not redefined elsewhere.
     expect(FILES.filter((f) => !f.endsWith('browserUi.css') && /--bui-hit:\s*\d/.test(src(f)))).toEqual([])
+  })
+
+  it('sets fonts in the strip, pane header and state views from tokens (no literal px only 14px+ page-level inputs may be literal)', () => {
+    const bad: string[] = []
+    for (const f of FILES.filter((x) => /browserTabs|browserSplit/.test(x) && x.endsWith('.css'))) {
+      src(f).split('\n').forEach((line, i) => {
+        for (const m of line.matchAll(/(?:font-size:\s*|font:\s*(?:[0-9]{3}\s+)?)(\d+(?:\.\d+)?)px/g)) if (Number(m[1]) < 14) bad.push(`${name(f)}:${i + 1} ${m[0]}`)
+      })
+    }
+    expect(bad).toEqual([])
+  })
+
+  it('has no hit target below 24px in the strip and pane header controls (icon buttons use icon-bui)', () => {
+    const sizes: string[] = []
+    for (const f of FILES.filter((x) => /browserTabs|browserSplit/.test(x) && x.endsWith('.tsx'))) {
+      src(f).split('\n').forEach((line, i) => { for (const m of line.matchAll(/size="([a-z-]+)"/g)) if (!['icon-bui', 'bui'].includes(m[1])) sizes.push(`${name(f)}:${i + 1} ${m[0]}`) })
+    }
+    expect(sizes).toEqual([])
   })
 })

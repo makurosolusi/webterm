@@ -4,6 +4,7 @@
 // validated summary only: the page text never enters the tool result, the audit or a log (Dual-LLM pattern; the
 // result is `tainted` so a later step can raise the tier of an action that follows it).
 import { URL_MAX_CHARS } from '../../../../shared/browser.contract'
+import { HUMAN_VERIFICATION_NEXT } from '../../../../shared/browser.challenge'
 import { AGENT_TAB_ID_RE } from '../../../../shared/browser.agentTabs'
 import { hostOnly, parseBrowserUrl } from '../../../../shared/browser.url'
 import { isSafeNodeId } from '../../../../shared/workspace'
@@ -26,6 +27,7 @@ const WAIT_LOADED_MS = 8000
 const MESSAGES: Record<string, string> = {
   browser_limit: 'Every live browser slot is in use. Hide or close a browser node, then retry; the owner can raise the limit in Settings > Browser.',
   human_active: 'The user is using that browser right now. Retry shortly.',
+  human_verification_required: `The page asks for a human check. ${HUMAN_VERIFICATION_NEXT}`,
 }
 
 const shapeOk = (input: ToolInput): boolean => Object.keys(input).every((k) => KEYS.includes(k))

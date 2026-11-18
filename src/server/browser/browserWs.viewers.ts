@@ -23,6 +23,8 @@ export interface GatewayHost extends BrowserHostApi {
   selectionText(nodeId: string): Promise<string>
   /** Sakelar Shields situs halaman node (persist per host) lalu muat ulang. */
   setShields(nodeId: string, on: boolean): Promise<void>
+  /** The user finished a human check on the node ("I'm done"). */
+  dismissChallenge(nodeId: string): void
   /** Device mode (browser.devices.ts); null = Responsive. */
   setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
   /** Tab list of a node, sent to a viewer on attach (absent in hosts without tabs). */

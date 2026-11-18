@@ -58,7 +58,7 @@ export function BrowserTabItem(p: BrowserTabItemProps) {
         {p.isAgent && <Bot className="bt-agent" data-agent-marker aria-hidden="true" />}
         <IconButton
           label={`Close ${title}`}
-          size="icon-xs"
+          size="icon-bui"
           className="bt-close"
           data-tab-close
           tabIndex={-1}

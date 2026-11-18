@@ -38,6 +38,31 @@ describe('import graph', () => {
   })
 })
 
+describe('vitest import-graph complement', () => {
+  const src: Record<string, string> = {
+    'src/client/A.tsx': 'export const A = 1',
+    'src/client/B.tsx': "export const load = () => import('./A')",
+    'src/client/B.test.tsx': "import { load } from './B'",
+    'src/client/deep.test.tsx': "import './h4'",
+    'src/client/h1.ts': "export * from './A'",
+    'src/client/h2.ts': "export * from './h1'",
+    'src/client/h3.ts': "export * from './h2'",
+    'src/client/h4.ts': "export * from './h3'",
+  }
+  const fs: PlanFs = { files: Object.keys(src), read: (f) => src[f] ?? '', exists: (f) => f in src }
+
+  test('a test importing B, which imports A dynamically, is selected when A changes', () => {
+    expect(buildPlan(['src/client/A.tsx'], fs, { policy: false }).vitestGraph).toContain('src/client/B.test.tsx')
+  })
+
+  test('hops beyond the depth cap are not followed, and a changed test is not listed twice', () => {
+    const plan = buildPlan(['src/client/A.tsx', 'src/client/B.test.tsx'], fs, { policy: false })
+    expect(plan.vitestGraph).not.toContain('src/client/deep.test.tsx')
+    expect(plan.vitestGraph).not.toContain('src/client/B.test.tsx')
+    expect(plan.vitestTests).toEqual(['src/client/B.test.tsx'])
+  })
+})
+
 describe('buildPlan', () => {
   test('a leaf change selects importing bun tests, never .real. files, nor unrelated ones', () => {
     const plan = buildPlan(['src/server/a.ts'], fixture(), { policy: false })
@@ -107,7 +132,7 @@ describe('steps and logs', () => {
   })
 
   test('large lists are chunked below the guard limit', () => {
-    const many = { ...plan, vitestTests: Array.from({ length: 95 }, (_, i) => `src/client/f${i}.test.ts`), vitestRelated: [], bun: [], bunReal: [] }
+    const many = { ...plan, vitestTests: Array.from({ length: 95 }, (_, i) => `src/client/f${i}.test.ts`), vitestGraph: [], vitestRelated: [], bun: [], bunReal: [] }
     const sizes = buildSteps(many, '/repo', { typecheck: false, bunPath: 'bun' }).map((s) => s.files.length)
     expect(sizes).toEqual([40, 40, 15])
   })

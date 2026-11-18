@@ -25,7 +25,7 @@ describe('device mode', () => {
     expect(last(CDP.setDeviceMetrics)).toEqual({ width: 393, height: 852, deviceScaleFactor: 3, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } })
     expect(last(CDP.setTouchEmulation)).toEqual({ enabled: true, maxTouchPoints: 10 })
     expect(last(CDP.setEmitTouch)).toEqual({ enabled: true, configuration: 'mobile' })
-    expect(last(CDP.setUserAgent)).toEqual({ userAgent: IPHONE.ua })
+    expect(last(CDP.setUserAgent)).toEqual({ userAgent: IPHONE.ua, platform: 'iPhone' })
     const after = rig.fake.calls.slice(before).map((c) => c.method)
     expect(after.at(-1)).toBe(CDP.reload)
   })

@@ -153,7 +153,13 @@ describe('events and follow-the-agent', () => {
     fireEvent.click(tabEl('c'))
     tabEvent({ type: 'tabActivated', nodeId: 'b1', tabId: 'a', by: 'agent' })
     expect(selected()).toEqual(['c'])
+    // The server's agentTabId follows the agent, but a human-held node shows no marker (the lease decides).
+    expect(tabEl('a').querySelector('[data-agent-marker]')).toBeNull()
+    msg({ t: 'state', id: 'b1', url: 'https://old.test/', title: 'Old page', loading: false, canBack: false, canForward: false, lease: 'agent', live: 'live' })
     expect(tabEl('a').querySelector('[data-agent-marker]')).not.toBeNull()
+    expect(tabEl('b').querySelector('[data-agent-marker]')).toBeNull()
+    msg({ t: 'state', id: 'b1', url: 'https://old.test/', title: 'Old page', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' })
+    expect(tabEl('a').querySelector('[data-agent-marker]')).toBeNull() // lease released: marker gone
   })
 
   it('applies created and updated events', () => {
@@ -203,8 +209,13 @@ describe('limits', () => {
     mount()
     tabsMsg(view(['a']))
     h.api.create.mockRejectedValue(new BrowserApiError('x', 409, 'max_live'))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ enabled: true, binFound: true, live: 3, maxLive: 3, agentEnabled: true, cookieImportEnabled: true }))))
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
-    await waitFor(() => expect(h.showNotice).toHaveBeenCalledWith(expect.any(String), { severity: 'warning', title: 'Too many browsers are active. Hide one first.' }))
+    // The limit toast reads the current limit (status endpoint) to offer "Raise limit to N+1" beside "Settings".
+    await waitFor(() => expect(h.showNotice).toHaveBeenCalledOnce())
+    const [, notice] = h.showNotice.mock.calls[0] as [string, { severity: string; title: string; actions: { label: string }[] }]
+    expect(notice).toMatchObject({ severity: 'warning', title: 'Too many browsers are active. Hide one first.' })
+    expect(notice.actions.map((a) => a.label)).toEqual(['Raise limit to 4', 'Settings'])
   })
 })
 
@@ -265,7 +276,7 @@ describe('active tab owns the page', () => {
     tabsMsg(view(['a', 'b'], { tabs: [makeTab('a'), makeTab('b', { url: 'about:blank', title: '' })], activeTabId: 'b' }))
     fireEvent.change(screen.getByLabelText('Web address'), { target: { value: 'example.com' } })
     fireEvent.click(screen.getByRole('button', { name: 'Go' }))
-    expect(wsSent('nav')).toEqual([{ t: 'nav', id: 'b1', action: 'go', url: 'https://example.com' }])
+    expect(wsSent('nav')).toEqual([{ t: 'nav', id: 'b1', action: 'go', url: 'https://example.com/' }]) // resolveOmniboxInput yields the canonical URL
   })
 
   it('a crashed active tab shows Reload, which reloads through the node channel', () => {

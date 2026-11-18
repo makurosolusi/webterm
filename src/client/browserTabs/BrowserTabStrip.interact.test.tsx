@@ -190,11 +190,24 @@ describe('drag to reorder', () => {
 
 describe('styles', () => {
   const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'browserTabs.css'), 'utf8')
-  it('sizes tabs 96-220px and honours reduced motion', () => {
-    expect(css).toMatch(/min-width:\s*96px/)
-    expect(css).toMatch(/max-width:\s*220px/)
+  it('sizes tabs from the --bui tokens (Chrome: 36px row, 112-220px tabs) and honours reduced motion', () => {
+    const ui = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'browserUi.css'), 'utf8')
+    expect(ui).toMatch(/--bui-tab-h:\s*36px/)
+    expect(ui).toMatch(/--bui-tab-min-w:\s*112px/)
+    expect(ui).toMatch(/--bui-tab-max-w:\s*220px/)
+    expect(css).toMatch(/min-width:\s*var\(--bui-tab-min-w\)/)
+    expect(css).toMatch(/max-width:\s*var\(--bui-tab-max-w\)/)
+    expect(css).toMatch(/\.bt-strip \{[^}]*height: var\(--bui-tab-h\)/)
+    expect(css).toMatch(/\.bt-tab \{[^}]*font: var\(--bui-font\)/)
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.bt-spinner[\s\S]*bt-pulse/)
-    expect(css).toMatch(/\.bt-close \{[^}]*width: 24px; height: 24px/)
+    // 16px icon inside a 24px close target; tab icon and agent marker use the icon token.
+    expect(css).toMatch(/\.bt-close \{[^}]*width: var\(--bui-close\); height: var\(--bui-close\)/)
+    expect(css).toMatch(/\.bt-icon \{[^}]*width: var\(--bui-icon\)/)
+    expect(css).toMatch(/\.bt-agent \{[^}]*width: var\(--bui-icon\)/)
+    expect(ui).toMatch(/--bui-close:\s*24px/)
+  })
+  it('focus is a 2px token outline on tabs', () => {
+    expect(css).toMatch(/\.bt-tab:focus-visible \{[^}]*outline: var\(--bui-focus\)/)
   })
   it('uses theme tokens only: no hex colours', () => {
     expect(css.match(/#[0-9a-fA-F]{3,8}\b/g)).toBeNull()

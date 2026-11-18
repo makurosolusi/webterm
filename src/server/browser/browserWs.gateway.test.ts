@@ -139,6 +139,15 @@ describe('input, lease and errors', () => {
     expect(rig.leases.noted).toEqual(['n1'])
   })
 
+  it('challengeDone (the user finished a human check) reaches the host even while an agent holds the lease', async () => {
+    rig = await makeRig()
+    const c = await attached()
+    rig.leases.holders.set('n1', 'agent')
+    c.send({ t: 'challengeDone', id: 'n1' })
+    await wait(() => rig.host.dismissed.length === 1, 'dismissed')
+    expect(rig.host.dismissed).toEqual(['n1'])
+  })
+
   it('forwards input in order and clamps dpr to DSF_MAX', async () => {
     rig = await makeRig()
     const c = await rig.connect()

@@ -1,6 +1,7 @@
 import { ReactFlow, Background, BackgroundVariant, MiniMap } from '@xyflow/react'
 import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance, OnMoveEnd } from '@xyflow/react'
 import { useMemo, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
+import { NODE_CLICK_DISTANCE } from './canvas.clickDistance'
 import ContextEdge from './ContextEdge'
 import SkillEdge from './SkillEdge'
 import { skillCableVars } from './skillCable.style'
@@ -124,6 +125,7 @@ export default function BoardCanvas({
       fitView={false}
       minZoom={0.01}
       maxZoom={2}
+      nodeClickDistance={NODE_CLICK_DISTANCE}
       snapToGrid={settings.snapToGrid}
       snapGrid={[gridSize, gridSize]}
       panOnDrag={!locked}

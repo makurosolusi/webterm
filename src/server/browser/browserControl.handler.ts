@@ -22,6 +22,8 @@ import { openAgentBrowser, openedNote } from './browser.agentOpen'
 import type { AgentOpenDeps } from './browser.agentOpen'
 import { presetBrowserDenial } from './browser.presetLock'
 import { AgentTabError } from './browser.agentTabs.verbs'
+import { challengeRefusal } from './browserControl.challenge'
+import type { BrowserChallenge } from '../../shared/browser.challenge'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -39,6 +41,8 @@ export interface BrowserControlDeps {
   open?: AgentOpenDeps
   /** Stored `preset` of a canvas node (read from the DB-backed board, never from the client); set = read-only public-web lock. */
   presetOf?(nodeId: string): string | undefined
+  /** The human check a node's page shows right now (state.challenge); agent verbs pause while it is set. */
+  challengeOf?(nodeId: string): BrowserChallenge | undefined
 }
 
 type NodeVerb = Exclude<BrowserVerb, 'open'>
@@ -48,7 +52,7 @@ type Opened = { nodeId: string; url: string; note: string }
 const STATUS_BY_CODE: Record<BrowserErrorCode, number> = {
   lease_agent: 409, human_active: 409, stale_ref: 409,
   no_binary: 503, disabled: 403, blocked: 403, not_found: 404, too_large: 413, bad_request: 400, crashed: 502,
-  launch_failed: 503, max_live: 409,
+  launch_failed: 503, max_live: 409, human_verification_required: 409,
 }
 
 const HUMAN_ACTIVE_MESSAGE = 'The user is using this browser right now. Retry shortly; after a couple of tries, tell the user.'
@@ -167,6 +171,8 @@ async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, pr
     return fail(403, 'disabled', { message: 'Agent control is off for this browser node (toolbar checkbox or Settings). Only the user can turn it on; do not retry.' })
   }
 
+  const paused = challengeRefusal(nodeId, v, deps.challengeOf?.(nodeId))
+  if (paused) return paused
   try {
     const data = await deps.verbs[v](nodeId, asObject(body))
     return { status: 200, body: controlOk(data) }
