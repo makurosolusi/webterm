@@ -9,6 +9,8 @@ import type { Pane } from '../shared/workspace.shape'
 import { validLayout } from '../shared/browser.layout'
 import { parseDeviceChoice } from '../shared/browser.devices'
 import type { DeviceChoice } from '../shared/browser.devices'
+import { createLogger } from './logs'
+import { CdpCommandError } from './browser/cdp.client'
 import { BrowserError } from './browser/browserHost.targets'
 import { TabLimitError } from './browser/browserHost.tabs'
 import { fail, readObject } from './browserApi.cookies'
@@ -43,6 +45,8 @@ function deviceFromBody(o: Record<string, unknown>): DeviceChoice | null | undef
 const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/
 const STATUS_BY_CODE: Record<string, number> = { not_found: 404, bad_request: 400, crashed: 502, launch_failed: 503, no_binary: 503, disabled: 403, blocked: 403 }
 
+const log = createLogger('browser.api')
+
 /** Galat aksi tab -> respons; galat tak dikenal dilempar ulang (500 oleh rute induk). */
 function mapError(err: unknown): BrowserApiResult {
   if (err instanceof TabLimitError) return fail(409, 'tab_limit', { message: TAB_LIMIT_REASON })
@@ -50,6 +54,10 @@ function mapError(err: unknown): BrowserApiResult {
     return err.reason === 'max_live' ? fail(409, 'max_live') : fail(403, 'blocked', { reason: err.reason, ...(err.hostname ? { hostname: err.hostname } : {}) })
   }
   if (err instanceof BrowserError) return fail(STATUS_BY_CODE[err.code] ?? 500, err.code, err.code === 'bad_request' ? { message: err.message } : {})
+  if (err instanceof CdpCommandError) {
+    log.error('browser.api', 'tab action failed in the browser', { error: err.message })
+    return fail(502, 'crashed') // Chromium refused the command: a bad gateway, not a server bug
+  }
   throw err
 }
 

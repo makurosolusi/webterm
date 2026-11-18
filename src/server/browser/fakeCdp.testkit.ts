@@ -86,5 +86,14 @@ export async function makeHostRig(guard: NavGuard & { navigated: string[] } = st
   return { fake, host, guard, async stop() { await host.dispose(); await fake.close() } }
 }
 
+/** Chromium's screencast rules per session: start twice = -32000 "already active"; stop while idle = "not active". Returns the sessions streaming now. */
+export function strictScreencast(fake: FakeCdp): Set<string> {
+  const active = new Set<string>()
+  const err = (message: string) => ({ __error: { code: -32000, message } })
+  fake.handle('Page.startScreencast', (_p, sid) => { if (active.has(sid ?? '')) return err('Screencast is already active'); active.add(sid ?? ''); return {} })
+  fake.handle('Page.stopScreencast', (_p, sid) => { if (!active.delete(sid ?? '')) return err('Screencast is not active'); return {} })
+  return active
+}
+
 /** Mesin filter tanpa jaringan untuk test runtime: tak pernah memblokir, `load` tak mengunduh. Hanya untuk test. */
 export const offlineAdblock = (): Adblock => ({ check: () => ({ block: false }), load: async () => undefined, ready: () => false })

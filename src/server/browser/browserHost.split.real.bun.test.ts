@@ -62,6 +62,18 @@ describe('real Chromium: split view', () => {
     expect(tabsOf(r, NODE).activeTabId).toBe(a)
   }, TEST_TIMEOUT_MS)
 
+  test('rapid, repeated and concurrent activations + identical view resends: no CDP error, frames keep flowing per tab', async () => {
+    const r = rig as Rig
+    await r.host.tabApi.setView(NODE, [a, b], a)
+    for (let i = 0; i < 10; i++) await r.host.tabApi.activate(NODE, i % 2 ? a : b, 'human') // each swap promotes a side-pane stream
+    await Promise.all([r.host.tabApi.activate(NODE, a, 'human'), r.host.tabApi.activate(NODE, a, 'human'), r.host.tabApi.setView(NODE, [a, b], a), r.host.tabApi.setView(NODE, [a, b], a)])
+    await r.host.tabApi.activate(NODE, a, 'human')
+    expect(tabsOf(r, NODE).activeTabId).toBe(a)
+    const before = { a: frames.get(a) ?? 0, b: frames.get(b) ?? 0 }
+    await until('both panes stream again', () => ((frames.get(a) ?? 0) > before.a && (frames.get(b) ?? 0) > before.b) || undefined, 20_000)
+    expect(frames.has('')).toBe(false)
+  }, TEST_TIMEOUT_MS)
+
   test('a pane that leaves the screen stops streaming', async () => {
     const r = rig as Rig
     await r.host.tabApi.setView(NODE, [a], a)

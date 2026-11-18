@@ -5,6 +5,7 @@ import { TOUCH_POINTS_MAX } from '../../shared/browser.contract'
 import { resolveDevice } from '../../shared/browser.devices'
 import type { DeviceChoice, DeviceSpec } from '../../shared/browser.devices'
 import { CDP } from './cdp.client'
+import { restartStream } from './browserHost.cast'
 import { metricsParams, screencastParams } from './browserHost.input'
 import type { CdpCommand } from './browserHost.input'
 import type { NodeRec } from './browserHost.targets'
@@ -49,8 +50,7 @@ const castKey = (rec: NodeRec) => JSON.stringify(screencastParams(castViewport(r
 /** Frame bounds follow the rendered size: restart a running screencast when they changed (DevTools ScreencastView: stop/start). */
 async function restartCast(rec: NodeRec, io: DeviceIo, before: string): Promise<void> {
   if (!rec.cast || castKey(rec) === before) return
-  await io.send(CDP.stopScreencast)
-  await io.send(CDP.startScreencast, screencastParams(castViewport(rec)))
+  await restartStream((m, p) => io.send(m, p), screencastParams(castViewport(rec)), `node ${rec.nodeId}`)
 }
 
 /** Node resized: remember the size; it reaches the page only in Responsive mode. */

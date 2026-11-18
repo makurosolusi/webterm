@@ -8,6 +8,7 @@ import { CDP, ignoreClosed, isTargetGone } from './cdp.client'
 import type { CdpClient, CdpHandler } from './cdp.client'
 import type { BrowserLauncher } from './chromium.launch'
 import { screencastParams, toCdpCommands } from './browserHost.input'
+import { startCast, stopCast } from './browserHost.cast'
 import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
@@ -114,19 +115,24 @@ export class BrowserHost implements BrowserHostApi {
   /** Device mode (DevTools Device Toolbar): emulate a preset/custom device; null = follow the node size again. */
   async setDevice(nodeId: string, device: DeviceChoice | null): Promise<void> { const rec = this.need(nodeId); return setDevice(rec, device, this.io(rec)) }
 
-  async startScreencast(nodeId: string, onFrame: (f: Frame) => void): Promise<void> {
-    const rec = this.need(nodeId)
-    rec.cast = { onFrame, seq: 0, acks: new Map() }
-    await this.send(rec, CDP.startScreencast, screencastParams(castViewport(rec)))
-    if (rec.tabs?.split?.visible.length) await this.tabs.split.reconcile(rec) // start the other panes too
+  /** Start/stop run in the node's tab action queue, so a viewer joining cannot interleave with a tab switch (one view session at a time). */
+  startScreencast(nodeId: string, onFrame: (f: Frame) => void): Promise<void> {
+    return this.tabApi.run(nodeId, async () => {
+      const rec = this.need(nodeId)
+      rec.cast = { onFrame, seq: 0, acks: new Map() }
+      await startCast((m, p) => this.send(rec, m, p), screencastParams(castViewport(rec)), `node ${nodeId}`)
+      if (rec.tabs?.split?.visible.length) await this.tabs.split.reconcile(rec) // start the other panes too
+    })
   }
 
-  async stopScreencast(nodeId: string): Promise<void> {
-    const rec = this.table.nodes.get(nodeId)
-    if (!rec?.cast) return
-    await this.tabs.split.stopAll(rec)
-    rec.cast = undefined
-    if (rec.sessionId) await this.send(rec, CDP.stopScreencast)
+  stopScreencast(nodeId: string): Promise<void> {
+    return this.tabApi.run(nodeId, async () => {
+      const rec = this.table.nodes.get(nodeId)
+      if (!rec?.cast) return
+      await this.tabs.split.stopAll(rec)
+      rec.cast = undefined
+      if (rec.sessionId) await stopCast((m, p) => this.send(rec, m, p), `node ${nodeId}`)
+    })
   }
 
   ackFrame(nodeId: string, seq: number): void {
