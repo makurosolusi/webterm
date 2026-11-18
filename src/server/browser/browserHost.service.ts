@@ -6,26 +6,27 @@ import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
 import { CDP, ignoreClosed, isTargetGone } from './cdp.client'
 import type { CdpClient, CdpHandler } from './cdp.client'
-import type { BrowserLauncher } from './chromium.launch'
 import { screencastParams, toCdpCommands } from './browserHost.input'
 import { startCast, stopCast } from './browserHost.cast'
 import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
-import type { ShieldPolicy } from './adblock.shields'
+import type { HostDeps } from './browserHost.deps'
 import { createConsoleLog } from './browserHost.console'
 import { createChallengeTracker } from './browserHost.challenge'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
 import { createTabApi } from './browserHost.tabs.api'
+import { gotoPage, selectedText, stepPage } from './browserHost.page'
+import type { PageIo } from './browserHost.page'
 import { createSync } from './browserHost.sync'
 import type { NodeSync } from './browserHost.sync'
 import type { TabApi } from './browserHost.tabs.api'
-import type { BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
+import type { BrowserTabsState } from '../../shared/browser.tabs'
 import type { TargetLifecycle } from './browserHost.lifecycle'
-import { blockOf, BrowserError, isAbortedNav, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
+import { blockOf, BrowserError, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
 export { BrowserError, TargetGoneError } from './browserHost.targets'
@@ -34,26 +35,12 @@ export type { HostEvent, NavGuard } from './browserHost.targets'
 const log = createLogger('browser.host')
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export interface HostDeps {
-  launcher: BrowserLauncher
-  guard: NavGuard
-  /** Default `CdpClient.connect`; test menyuntik server CDP tiruan. */
-  connect?: (wsUrl: string) => Promise<CdpClient>
-  /** Shields (blokir iklan/pelacak + sakelar per situs); tanpa ini hanya batas popup yang berlaku. */
-  shields?: ShieldPolicy
-  profileOf?: (nodeId: string, workspaceId: string) => string // profile of a node: its own `profileId` or the workspace's Default (browser.profile.ts)
-  initialDevice?: (nodeId: string) => unknown // device saved on the board (`WsNode.device`): seeds a node seen first time
-  now?: () => number
-  initialTabs?: (nodeId: string) => unknown // tab list saved on the board (`WsNode.tabs`): seeds a node's tabs the first time its page opens
-  persistTabs?: (nodeId: string, tabs: PersistedTabs | null) => void // write a node's tab list to the board (the host debounces)
-  agentDriving?: (nodeId: string) => boolean // an agent holds the node's lease: popups its clicks open count as the agent's
-  tabDiscardMs?: number // idle time before a background tab is discarded
-}
+export type { HostDeps } from './browserHost.deps'
 
 
-const TUNNEL_FAILED = /ERR_TUNNEL_CONNECTION_FAILED$/
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
+  private readonly pageIo: PageIo = { send: (r, m, p) => this.send(r, m, p), cdpOf: (r) => this.cdpOf(r) }
   private readonly challenges = createChallengeTracker()
   private readonly stateCbs = new Set<(s: BrowserState) => void>()
   private readonly eventCbs = new Set<(e: HostEvent) => void>()
@@ -222,12 +209,7 @@ export class BrowserHost implements BrowserHostApi {
     }
     const lost = this.table.nodes.get(nodeId)
     if (action === 'reload' && lost && !lost.sessionId) { await this.open(nodeId, lost.workspaceId, lost.state.url || undefined); return } // halaman crash: Reload memulihkan (Chrome "Aw, Snap")
-    const rec = this.need(nodeId)
-    if (action === 'reload') { await this.send(rec, CDP.reload); return }
-    if (action === 'stop') { await this.send(rec, CDP.stopLoading); return }
-    const h = await readHistory(await this.cdpOf(rec), rec.sessionId as string)
-    const entryId = action === 'back' ? h.entryIds.prev : h.entryIds.next
-    if (entryId !== undefined) await this.send(rec, CDP.navigateToHistoryEntry, { entryId })
+    await stepPage(this.pageIo, this.need(nodeId), action)
   }
 
   /** Sakelar Shields untuk situs halaman node ini (dipersist per host), lalu muat ulang seperti Brave. */
@@ -242,8 +224,7 @@ export class BrowserHost implements BrowserHostApi {
 
   /** Teks seleksi halaman (untuk aksi `copy`). */
   async selectionText(nodeId: string): Promise<string> {
-    const r = await this.send<{ result?: { value?: unknown } }>(this.need(nodeId), CDP.evaluate, { expression: 'String(window.getSelection())', returnByValue: true })
-    return typeof r.result?.value === 'string' ? r.result.value : ''
+    return selectedText(this.pageIo, this.need(nodeId))
   }
 
   /** Tutup semua koneksi CDP (proses Chromium dimatikan oleh `launcher.shutdown()`). */
@@ -284,16 +265,7 @@ export class BrowserHost implements BrowserHostApi {
     this.send(rec, method, params).catch(ignoreClosed(method, { nodeId: rec.nodeId, sessionId: rec.sessionId }))
   }
 
-  private async goto(rec: NodeRec, url: string): Promise<void> {
-    const r = await this.send<{ errorText?: string }>(rec, CDP.navigate, { url })
-    if (!r.errorText) return
-    log.warn('browser.nav', 'navigation failed', { ids: { nodeId: rec.nodeId }, host: hostOnly(url), error: r.errorText })
-    // ERR_ABORTED = stopped by the user, a download or a 204: no error page to explain. The address bar keeps the failed URL, like Chrome.
-    if (isAbortedNav(r.errorText)) return
-    // https through the egress proxy: its refusal of CONNECT reaches Chromium only as a tunnel failure; name the DNS case.
-    const dns = TUNNEL_FAILED.test(r.errorText) && this.deps.guard.onFrameNavigated(url) === 'dns_fail'
-    this.patch(rec, { url, netError: dns ? 'net::ERR_NAME_NOT_RESOLVED' : r.errorText, loading: false })
-  }
+  private goto(rec: NodeRec, url: string): Promise<void> { return gotoPage(this.pageIo, this.deps.guard, (r, p) => this.patch(r, p), rec, url) }
 
   private patch(rec: NodeRec, raw: Partial<BrowserState>): void {
     const part = this.challenges.apply(rec.state, raw)
