@@ -35,6 +35,7 @@ const PAGES: Record<string, string> = {
   '/popup-slow': `<title>slow</title>${TICKER}<script>setTimeout(()=>{window.opener.postMessage('${TOKEN}','*');window.close()},1200)</script>`,
   '/stay': STAY,
   '/b': `<title>B</title>${TICKER}`,
+  '/click': `<title>idle</title>${TICKER}<button id=k style="position:fixed;left:0;top:0;width:200px;height:100px" onclick="document.title='clicked'">k</button>`,
   '/blank-target': `<title>bt</title>${TICKER}<a id=l target=_blank href=/b>b</a>`,
 }
 
