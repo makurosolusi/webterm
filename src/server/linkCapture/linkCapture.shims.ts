@@ -10,6 +10,7 @@ import { ESC_FN } from '../cli/cli.commands'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { LINK_BYPASS_ENV, LINK_HEADERS_ENV, LINK_OPEN_PATH, OPENER_SHIMS, OPEN_COMMAND } from './linkCapture.config'
 import { shellDir, shellIntegrationFiles } from './linkCapture.shell'
+import { DEFAULT_PORT } from '../serverConfig'
 
 /** Marker in every generated file: the real-opener search skips anything that carries it (never exec a shim). */
 export const SHIM_MARKER = 'webterm-open shim'
@@ -59,7 +60,7 @@ fi
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then hdr="\${${LINK_HEADERS_ENV}:-}"; fi
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then real "$@"; fi
-API="http://127.0.0.1:\${WEBTERM_PORT:-8700}${LINK_OPEN_PATH}"
+API="http://127.0.0.1:\${WEBTERM_PORT:-${DEFAULT_PORT}}${LINK_OPEN_PATH}"
 for u in "$@"; do
   isurl "$u" || continue
   resp=$(curl -sS --max-time 90 -H "@$hdr" -H 'content-type: application/json' --data-binary "{\\"url\\":\\"$(esc "$u")\\"}" -w '\\n%{http_code}' "$API" 2>/dev/null) || fail "the webterm server did not answer" "$u"

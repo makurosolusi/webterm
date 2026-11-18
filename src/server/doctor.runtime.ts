@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { AGENT_SANDBOX_ENV, agentSandboxOn, claudeSandboxSupported } from './agentSandbox'
 import { binaryOnPath } from './binaryOnPath'
 import { skipHomeInstalls } from './cli/cli.launcher'
+import { installLinkCapture } from './linkCapture/linkCapture.shims'
 import { BROWSER_SKILL_NAME, browserShimPath, buildBrowserShim, buildBrowserSkillBody, installBrowserAgentShim } from './browserAgentShim'
 import { probeClaudeLaunch } from './claudeLauncher/claudeLaunch.probe'
 import { claudeChildEnv } from './central/runtime/claudeOptions'
@@ -85,6 +86,7 @@ export function doctorDeps(i: DoctorRuntimeInput): DoctorDeps {
     readFile: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } }, // absent = stale, reported by the check
     installGenerated: () => {
       installContextLink()
+      installLinkCapture()
       writeHouseRules()
       if (isEnabled('browser', env)) installBrowserAgentShim()
     },
