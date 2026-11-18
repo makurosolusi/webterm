@@ -62,7 +62,7 @@ export function BrowserNewTabPage({ closed, onNavigate, onReopen, reopenBlockedR
         {closed.length === 0 && <p>No recently closed tabs</p>}
         {reopenBlockedReason && closed.length > 0 && <p role="status">{reopenBlockedReason}</p>}
         {closed.map((t) => (
-          <Button key={t.tabId} variant="ghost" size="sm" className="bt-closed-row" disabled={!!reopenBlockedReason} onClick={() => onReopen(t.tabId)}>
+          <Button key={t.tabId} variant="ghost" size="bui" className="bt-closed-row" disabled={!!reopenBlockedReason} onClick={() => onReopen(t.tabId)}>
             <span>{tabTitle(t)}</span>
             <span className="bt-closed-host">{hostOf(t.url)}</span>
           </Button>
