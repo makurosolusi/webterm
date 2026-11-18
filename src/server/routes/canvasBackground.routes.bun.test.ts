@@ -47,7 +47,7 @@ test('rejects non-image bytes by magic, even when they claim to be an image', as
   expect(await files()).toEqual([])
 })
 
-test('rejects bodies over the 10 MB cap with 413 and stores nothing', async () => {
+test('rejects bodies over the image cap (25 MB) with 413 and stores nothing', async () => {
   const big = Buffer.concat([PNG, Buffer.alloc(MAX_CANVAS_IMAGE_BYTES)])
   const res = await upload(big)
   expect(res.status).toBe(413)

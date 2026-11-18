@@ -69,24 +69,27 @@ export async function streamCanvasUpload(req: IncomingMessage, dir: string): Pro
   const uuid = randomUUID()
   const partial = join(dir, `${uuid}.part`)
   const out = createWriteStream(partial, { mode: 0o600, flags: 'wx' })
+  /** Close the partial file and remove it; waits for `close` because a destroy before `open` would recreate it. */
+  const discard = async (): Promise<void> => {
+    if (!out.closed) await new Promise<void>((done) => { out.once('close', () => done()); out.destroy() })
+    await fs.rm(partial, { force: true })
+  }
   return new Promise<UploadResult>((resolve, reject) => {
     let total = 0
     let head = Buffer.alloc(0)
     let media: ReturnType<typeof sniffMedia> | undefined
     let rejected: 'too_large' | 'unsupported' | null = null
     let settled = false
-    const fail = (err: unknown, what: string): void => {
+    const settle = (result: UploadResult | Error): void => {
       if (settled) return
       settled = true
-      out.destroy()
-      void fs.rm(partial, { force: true })
-      reject(new Error(`stream canvas upload ${uuid}: ${what}: ${(err as Error).message}`, { cause: err }))
+      if (result instanceof Error) reject(result)
+      else resolve(result)
     }
-    const abort = (error: 'too_large' | 'unsupported'): void => {
-      rejected = error
-      out.destroy() // stop writing; the body is still drained by the 'data' listener
-      void fs.rm(partial, { force: true })
+    const discardThen = (result: UploadResult | Error): void => {
+      discard().then(() => settle(result), (err: unknown) => settle(new Error(`stream canvas upload ${uuid}: cleanup failed: ${(err as Error).message}`, { cause: err })))
     }
+    const fail = (err: unknown, what: string): void => discardThen(new Error(`stream canvas upload ${uuid}: ${what}: ${(err as Error).message}`, { cause: err }))
     out.on('error', (err) => fail(err, 'write failed'))
     req.on('error', (err) => fail(err, 'read failed'))
     req.on('data', (chunk: Buffer | string) => {
@@ -97,31 +100,28 @@ export async function streamCanvasUpload(req: IncomingMessage, dir: string): Pro
         head = Buffer.concat([head, buf.subarray(0, CANVAS_SNIFF_BYTES - head.length)])
         if (head.length >= CANVAS_SNIFF_BYTES) {
           media = sniffMedia(head)
-          if (!media) return abort('unsupported')
+          if (!media) { rejected = 'unsupported'; return } // stop writing; the body is still drained here
         }
       }
       const cap = media && !isVideoExt(media.ext) ? MAX_CANVAS_IMAGE_BYTES : MAX_CANVAS_VIDEO_BYTES
-      if (total > cap) return abort('too_large')
+      if (total > cap) { rejected = 'too_large'; return }
       if (!out.write(buf)) { req.pause(); out.once('drain', () => req.resume()) }
     })
     req.on('close', () => {
-      if (req.complete || settled || rejected) return
-      settled = true
-      out.destroy()
-      void fs.rm(partial, { force: true })
-      resolve({ ok: false, error: 'aborted' })
+      if (!req.complete && !settled) discardThen({ ok: false, error: 'aborted' })
     })
     req.on('end', () => {
       if (settled) return
-      if (rejected) { settled = true; resolve({ ok: false, error: rejected }); return }
-      media ??= sniffMedia(head) // body shorter than the sniff window
-      if (!media) { abort('unsupported'); settled = true; resolve({ ok: false, error: 'unsupported' }); return }
+      if (!rejected) {
+        media ??= sniffMedia(head) // body shorter than the sniff window
+        if (!media) rejected = 'unsupported'
+      }
+      if (rejected || !media) { discardThen({ ok: false, error: rejected ?? 'unsupported' }); return }
       const found = media
       out.end(() => {
-        if (settled) return
         const id = `${uuid}.${found.ext}`
         fs.rename(partial, join(dir, id)).then(
-          () => { settled = true; resolve({ ok: true, id, ext: found.ext, animated: found.animated, bytes: total }) },
+          () => settle({ ok: true, id, ext: found.ext, animated: found.animated, bytes: total }),
           (err: unknown) => fail(err, 'rename failed'),
         )
       })
