@@ -14,7 +14,7 @@ import type { ColorChange } from './api'
 interface RadioItem { id: string; label: string; swatch: string }
 
 /** ARIA radio group: arrows move AND select (wrapping), only the checked item is in the tab order. */
-function RadioRow({ label, items, value, onPick }: { label: string; items: RadioItem[]; value: string; onPick: (id: string) => void }) {
+export function RadioRow({ label, items, value, onPick }: { label: string; items: RadioItem[]; value: string; onPick: (id: string) => void }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([])
   const onKey = (e: KeyboardEvent, index: number): void => {
     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
@@ -36,7 +36,7 @@ function RadioRow({ label, items, value, onPick }: { label: string; items: Radio
             role="radio"
             aria-checked={item.id === value}
             aria-label={item.label}
-            tabIndex={item.id === value ? 0 : -1}
+            tabIndex={item.id === value || (i === 0 && !items.some((x) => x.id === value)) ? 0 : -1}
             className="ws-swatch"
             style={{ '--ws-swatch': item.swatch } as CSSProperties}
             onClick={() => onPick(item.id)}

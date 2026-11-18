@@ -68,20 +68,23 @@ export const setNodeBrowserProfile = (nodeId: string, profileId: string) =>
  */
 export function useBrowserProfiles(opts: { workspaceId?: string; subscribe?: (cb: () => void) => () => void } = {}): {
   profiles: BrowserProfile[]; error: BrowserApiError | null; reload: () => void
+  /** True once a load answered (ok or failed): tells "still loading" from "empty". */
+  loaded: boolean
 } {
   const { workspaceId, subscribe } = opts
   const [profiles, setProfiles] = useState<BrowserProfile[]>([])
   const [error, setError] = useState<BrowserApiError | null>(null)
   const [tick, setTick] = useState(0)
+  const [loaded, setLoaded] = useState(false)
   const reload = useCallback(() => setTick((n) => n + 1), [])
   useEffect(() => (subscribe ? subscribe(reload) : undefined), [subscribe, reload])
   useEffect(() => {
     let live = true
     listBrowserProfiles(workspaceId).then(
-      (r) => { if (live) { setProfiles(r.profiles); setError(null) } },
-      (e: unknown) => { if (live) setError(e instanceof BrowserApiError ? e : new BrowserApiError(String(e), 0, 'network')) },
+      (r) => { if (live) { setProfiles(r.profiles); setError(null); setLoaded(true) } },
+      (e: unknown) => { if (live) { setError(e instanceof BrowserApiError ? e : new BrowserApiError(String(e), 0, 'network')); setLoaded(true) } },
     )
     return () => { live = false }
   }, [workspaceId, tick])
-  return { profiles, error, reload }
+  return { profiles, error, reload, loaded }
 }

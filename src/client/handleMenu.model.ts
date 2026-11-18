@@ -9,6 +9,7 @@ import { BROWSER_KIND } from '../shared/browser.contract'
 import type { AgentId } from '../shared/workspace'
 import { SKILL_KIND, SKILL_OUT, SKILLS_IN } from '../shared/skillPorts'
 import type { SkillRef } from './skillNode.add'
+import type { SpawnMode } from './browserProfile.spawn'
 
 /** source = the right handle (spawns a target); target = the left handle (spawns a source). */
 export type HandleSide = 'source' | 'target'
@@ -29,6 +30,8 @@ export interface HandleSpawners {
   addAgent: (cmd: string, agentId: AgentId, at: XYPosition) => void
   /** Absent = browser capability off. */
   addBrowser?: (at: XYPosition) => void
+  /** Opens the profile dialog (pick one / one per profile) for a browser spawned at `at`; absent = browser off. */
+  openBrowserProfiles?: (mode: SpawnMode, at: XYPosition) => void
   addDiff?: (at: XYPosition) => void
   /** Absent = Claude disabled in settings. */
   addAgentChat?: (at: XYPosition) => void
@@ -41,6 +44,8 @@ export interface HandleSpawners {
 export const HANDLE_GROUP = 'Nodes'
 export const OFF_HINTS: Record<string, string> = {
   browser: 'Browser is turned off',
+  'browser-profile': 'Browser is turned off',
+  'browser-each': 'Browser is turned off',
   diff: 'Diff is unavailable',
   agentChat: 'Claude is disabled in Settings',
 }
@@ -61,7 +66,7 @@ export interface HandleEntry {
 /** What a pane-menu row key spawns, for the cable-ability check; null = not a spawnable node. */
 function endOf(key: string): LinkEnd | null {
   if (key === 'terminal' || key === 'files') return { id: 'new', kind: key }
-  if (key === 'browser') return { id: 'new', kind: BROWSER_KIND }
+  if (key === 'browser' || key === 'browser-profile' || key === 'browser-each') return { id: 'new', kind: BROWSER_KIND }
   if (key === 'diff') return { id: 'new', kind: DIFF_KIND }
   if (key === 'agentChat') return { id: 'new', kind: 'agentChat', agentId: 'claude' }
   if (key.startsWith('agent:')) return { id: 'new', kind: 'agent', agentId: key.slice(6) as AgentId }
@@ -76,6 +81,8 @@ function paneItems(s: HandleSpawners, ctx: CanvasMenuContext, at: XYPosition): C
     addFiles: () => s.addFiles(at),
     addAgent: (cmd, id) => s.addAgent(cmd, id, at),
     addBrowser: () => (s.addBrowser ?? noop)(at),
+    addBrowserWithProfile: () => s.openBrowserProfiles?.('one', at),
+    addBrowserForEachProfile: () => s.openBrowserProfiles?.('each', at),
     addDiff: () => (s.addDiff ?? noop)(at),
     addAgentChat: () => (s.addAgentChat ?? noop)(at),
     fitView: noop,
@@ -89,7 +96,7 @@ function paneItems(s: HandleSpawners, ctx: CanvasMenuContext, at: XYPosition): C
  */
 export function buildHandleEntries(s: HandleSpawners, ctx: CanvasMenuContext, from: HandleOrigin): HandleEntry[] {
   if (offersSkills(from)) return [] // the Skills input lists library skills (useSkillEntries), not node kinds
-  const off: Record<string, boolean> = { browser: !s.addBrowser, diff: !s.addDiff, agentChat: !s.addAgentChat }
+  const off: Record<string, boolean> = { browser: !s.addBrowser, 'browser-profile': !s.openBrowserProfiles, 'browser-each': !s.openBrowserProfiles, diff: !s.addDiff, agentChat: !s.addAgentChat }
   const origin: LinkEnd = { id: 'origin', kind: from.kind, agentId: from.agentId }
   return paneItems(s, ctx, { x: 0, y: 0 }).flatMap((item) => {
     const end = endOf(item.key)

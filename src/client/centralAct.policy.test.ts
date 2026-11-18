@@ -17,6 +17,7 @@ const CAMERA_ALLOWLIST: Readonly<Record<string, string>> = {
   'layersPanel.tsx': 'click a row in Layers',
   'canvasMenu.pane.tsx': 'pane context menu: Fit',
   'canvasMenu.model.ts': 'pane context menu model',
+  'browserProfile.spawn.ts': 'Open a browser for each profile: fit the new grid into view (user-triggered dialog)',
 }
 const CAMERA = /\b(?:setCenter|fitView|setViewport|fitBounds)\s*\(/
 

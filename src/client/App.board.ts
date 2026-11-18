@@ -21,6 +21,7 @@ import { useAgentChatAdd, useSkillAuthorAdd } from './agentChat.add'
 import { useBrowserOpen } from './useBrowserOpen'
 import { connectWorkspaceLayout } from './App.tabs'
 import { bridgesToRestore, type ClosedHistory } from './closedHistory'
+import { openProfileSpawn, useBrowserProfileSpawn } from './browserProfile.spawn'
 import { agentConfig, DEFAULT_VIEWPORT } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 import type { AgentId, BridgeLink, Viewport, Workspace, WsNode } from '../shared/workspace'
@@ -207,6 +208,7 @@ export function useBoardActions({
   const onAddAgentChat = useAgentChatAdd(addFlowNode, settings) // undefined = Claude disabled in settings
   const openSkillAuthor = useSkillAuthorAdd(addFlowNode, settings)
   const defaultSize = useMemo(() => ({ width: settings.defaultNodeWidth, height: settings.defaultNodeHeight }), [settings.defaultNodeWidth, settings.defaultNodeHeight])
+  useBrowserProfileSpawn({ enabled: onAddBrowser !== undefined, addFlowNode, nodesRef, rf, defaultSize })
   const openBrowserAt = useBrowserOpen({ enabled: onAddBrowser !== undefined, addFlowNode, rf, nodesRef, setNodes, defaultSize })
 
   // SENGAJA tanpa `sessionId`: node agent lahir TANPA session id, dan `AgentNode` mencetaknya sendiri
@@ -257,6 +259,7 @@ export function useBoardActions({
     addFiles: onAddFiles,
     addAgent: (cmd, id, at) => onAddAgent(cmd, id, undefined, at),
     addBrowser: onAddBrowser,
+    openBrowserProfiles: onAddBrowser && openProfileSpawn,
     addDiff: onAddDiff,
     addAgentChat: onAddAgentChat,
     addSkill: (skill, at) => { onAddSkill(skill, at) },

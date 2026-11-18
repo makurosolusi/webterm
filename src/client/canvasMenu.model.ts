@@ -13,6 +13,7 @@
 import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
+import { PROFILE_TEXT } from './browserProfile.text'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
 export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'skill' | 'select-all' | 'fit'
@@ -24,6 +25,8 @@ export const MENU_LABELS = {
   agentChat: 'New Agent Chat',
   files: 'New File Manager',
   browser: 'New Browser',
+  browserProfile: PROFILE_TEXT.withProfile,
+  browserEach: PROFILE_TEXT.forEach,
   diff: 'Diff (working changes)',
   skill: 'Skill…',
   selectAll: 'Select All',
@@ -64,6 +67,9 @@ export interface CanvasMenuHandlers {
   addFiles: () => void
   /** Pemanggil (canvasMenu.pane) selalu memberi handler ini: saat kemampuan mati, kliknya memunculkan tawaran menyalakan. */
   addBrowser?: () => void
+  /** "Browser with profile…" / "Open a browser for each profile…": open the profile dialog; absent = browser off, no row. */
+  addBrowserWithProfile?: () => void
+  addBrowserForEachProfile?: () => void
   /** Diff node on the workspace cwd; absent = no row. */
   addDiff?: () => void
   /** Claude chat node (no terminal); absent = Claude disabled, no row. */
@@ -143,6 +149,8 @@ export function buildCanvasMenuRows(
   // menu lengkap, yang isinya (open file…/new file…) butuh dialog file yang webterm belum punya.
   rows.push({ key: 'files', label: MENU_LABELS.files, icon: 'files', onClick: handlers.addFiles })
   if (handlers.addBrowser) rows.push({ key: 'browser', label: MENU_LABELS.browser, icon: 'browser', onClick: handlers.addBrowser })
+  if (handlers.addBrowserWithProfile) rows.push({ key: 'browser-profile', label: MENU_LABELS.browserProfile, icon: 'browser', onClick: handlers.addBrowserWithProfile })
+  if (handlers.addBrowserForEachProfile) rows.push({ key: 'browser-each', label: MENU_LABELS.browserEach, icon: 'browser', onClick: handlers.addBrowserForEachProfile })
   if (handlers.addDiff) rows.push({ key: 'diff', label: MENU_LABELS.diff, icon: 'diff', onClick: handlers.addDiff })
   if (handlers.addSkill) rows.push({ key: 'skill', label: MENU_LABELS.skill, icon: 'skill', onClick: handlers.addSkill })
 

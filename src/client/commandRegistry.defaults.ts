@@ -4,6 +4,8 @@
 // View); `SURFACE_COMMANDS` are rebindable but dispatched by their own surface through
 // `commandMatches`. Both live here so the overlay is generated from one list and conflicts are
 // checked against them.
+import { openProfileSpawn } from './browserProfile.spawn'
+import { PROFILE_TEXT } from './browserProfile.text'
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
 import { openSetup } from './setup/setup.open'
@@ -85,7 +87,11 @@ export function appCommands(d: AppCommandDeps): Command[] {
     { id: 'workbench.setup', label: 'Setup: Open', run: () => openSetup() },
     { id: 'terminal.new', label: 'Terminal: New Terminal', defaultKey: 'Ctrl+Shift+`', run: d.newTerminal },
     { id: 'files.new', label: 'Explorer: New Files Node', run: d.newFiles },
-    ...(d.newBrowser ? [{ id: 'browser.new', label: 'Browser: New Browser Node', run: d.newBrowser }] : []),
+    ...(d.newBrowser ? [
+      { id: 'browser.new', label: 'Browser: New Browser Node', run: d.newBrowser },
+      { id: 'browser.newWithProfile', label: `Browser: ${PROFILE_TEXT.withProfile}`, run: () => openProfileSpawn('one') },
+      { id: 'browser.openForEachProfile', label: `Browser: ${PROFILE_TEXT.forEach}`, run: () => openProfileSpawn('each') },
+    ] : []),
     ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },

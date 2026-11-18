@@ -23,6 +23,7 @@ import type { Settings } from '../shared/settings'
 import type { SettingsPatch } from '../shared/settings.patch'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { ClaudeSettingsSection } from './ClaudeSettingsSection'
+import { BrowserProfilesSection } from './BrowserProfilesSection'
 import { CapabilitiesSection } from './CapabilitiesSection'
 import { CentralSettingsSection } from './CentralSettingsSection'
 import type { CentralLinkTarget } from './centralSettings.registry'
@@ -77,6 +78,7 @@ const SECTION_BODY: Record<SectionId, (c: SectionCtx) => React.JSX.Element> = {
   central: (c) => <CentralSettingsSection settings={c.s} onChange={c.onChange} onNavigate={c.navigate} />,
   rules: (c) => <RulesSection workspaceId={c.projectId} workspaces={c.workspaces} />,
   capabilities: (c) => <CapabilitiesSection projectId={c.projectId} settings={c.s} onChange={c.onChange} />,
+  browser: (c) => <BrowserProfilesSection workspaceId={c.projectId} />,
   account: () => <AccountSection />,
   health: () => <HealthSection />,
   developer: () => <DeveloperSection />,
