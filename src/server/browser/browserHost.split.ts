@@ -11,6 +11,7 @@ import type { Pane } from '../../shared/workspace.shape'
 import { createLogger } from '../logs'
 import { CDP } from './cdp.client'
 import { deviceCommands, responsiveCommands } from './browserHost.device'
+import { restartStream } from './browserHost.cast'
 import { screencastParams, toCdpCommands } from './browserHost.input'
 import { BrowserError, pushSideFrame } from './browserHost.targets'
 import type { NodeRec, SplitRt } from './browserHost.targets'
@@ -85,7 +86,7 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
     const c = s.side.get(tabId)
     s.side.delete(tabId)
     s.castKey.delete(tabId)
-    if (c) fire(rec, c.sessionId, CDP.stopScreencast)
+    if (c) await kit.stopStream(rec, c.sessionId)
   }
 
   async function run(rec: NodeRec, extra: string[]): Promise<void> {
@@ -112,7 +113,7 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
       if (!rec.cast || !shown.includes(id)) continue
       const focus = id === active
       if (focus && !inSplit && overrideKey(rec, id) === '') {
-        if (s.castKey.delete(id)) await send(rec, sid, CDP.stopScreencast).then(() => send(rec, sid, CDP.startScreencast, screencastParams(rec.device ? { w: rec.device.w, h: rec.device.h, dpr: rec.device.dpr } : rec.viewport)))
+        if (s.castKey.delete(id)) await restartStream((m, p) => send(rec, sid, m, p ?? {}), screencastParams(rec.device ? { w: rec.device.w, h: rec.device.h, dpr: rec.device.dpr } : rec.viewport), `tab ${id}`)
         continue
       }
       const params = castParams(rec, id, focus, crowded)
@@ -120,8 +121,7 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
       if (s.castKey.get(id) === key && (focus || s.side.has(id))) continue
       s.castKey.set(id, key)
       if (!focus) s.side.set(id, { sessionId: sid })
-      await send(rec, sid, CDP.stopScreencast) // restart with the new size/rate (a first start finds nothing to stop)
-      await send(rec, sid, CDP.startScreencast, params)
+      await restartStream((m, p) => send(rec, sid, m, p ?? {}), params, `tab ${id}`) // new size/rate (a first start finds nothing to stop)
     }
   }
 

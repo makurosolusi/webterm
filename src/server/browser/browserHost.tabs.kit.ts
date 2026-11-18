@@ -5,6 +5,7 @@ import type { BrowserState } from '../../shared/browser.contract'
 import { BLANK_URL, MAX_TABS_PER_NODE, sanitizeTabTitle, TAB_LIMIT_REASON, validPersistedTabs } from '../../shared/browser.tabs'
 import type { BrowserTab, BrowserTabEvent, BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
 import { createLogger } from '../logs'
+import { stopCast } from './browserHost.cast'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { deviceCommands } from './browserHost.device'
@@ -113,6 +114,12 @@ export function createKit(ops: TabsOps) {
     if (!sid) return
     send(rec, sid, method, params).catch((err) => log.warn('browser.tabs.cdp', 'tab command failed', { ids: { nodeId: rec.nodeId }, method, error: errMsg(err) }))
   }
+  /** Stop a tab page's stream and wait for it; a page that is not streaming, or is already gone, is not an error. */
+  const stopStream = async (rec: NodeRec, sid: string): Promise<void> => {
+    try { await stopCast((m, p) => send(rec, sid, m, p ?? {}), `node ${rec.nodeId}`) } catch (err) {
+      log.warn('browser.tabs.cdp', 'stopping a tab stream failed', { ids: { nodeId: rec.nodeId }, error: errMsg(err) })
+    }
+  }
   const closeTarget = (rec: NodeRec, rt: TabRt | undefined): void => {
     if (!rt?.targetId) return
     ops.table.bgUnbind(rt.targetId, rt.sessionId)
@@ -180,7 +187,7 @@ export function createKit(ops: TabsOps) {
   const forgetSaved = (nodeId: string): void => { lastSaved.delete(nodeId) }
   const title = sanitizeTabTitle
 
-  return { ops, idOf, tabsOf, find, must, emitTab, notice, flush, schedule, patchTab, setState, send, fire, closeTarget, emulate, spawn, load, cancelDiscard, armDiscard, discardTab, forgetTimers, canAdd, initial, forgetSaved, title }
+  return { ops, idOf, tabsOf, find, must, emitTab, notice, flush, schedule, patchTab, setState, send, fire, stopStream, closeTarget, emulate, spawn, load, cancelDiscard, armDiscard, discardTab, forgetTimers, canAdd, initial, forgetSaved, title }
 }
 
 export type TabKit = ReturnType<typeof createKit>

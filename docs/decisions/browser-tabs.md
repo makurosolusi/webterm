@@ -217,6 +217,20 @@ Not verified without a real browser: how the plate looks in both themes, the col
 timing of the wake after hiding.
 
 
+## Streaming idempoten dan serial
+Gejala: `POST .../tabs/:id/activate` 500 dan `unexpected gateway failure` dengan `Page.startScreencast ... Screencast is already
+active (-32000)`. Akar: dua pemilik stream yang tak saling tahu. Di split, tab non-fokus sudah di-stream sebagai "side" pane;
+saat diaktifkan, `setView` (`browserHost.tabs.ts`) memulai screencast view pada target yang SAMA, dan Chromium menolak start
+kedua. Stop lama juga fire-and-forget (tak ditunggu), dan start/stop dari gateway (`startScreencast`/`stopScreencast`) tak
+lewat antrean aksi tab sehingga bisa menyela pergantian tab. Klik yang gagal 500 memang tampak "tertelan" di klien.
+
+Keputusan: Chromium adalah sumber kebenaran, jadi tidak ada salinan state "sedang stream" yang bisa melenceng.
+`browserHost.cast.ts` (`startCast`/`stopCast`/`restartStream`) dipakai SEMUA pemanggil: "already active" saat start = restart
+(ukuran/rate baru berlaku), "not active" saat stop = sukses (log debug), galat lain tetap dilempar. `setView` menunggu stop
+view lama. `host.startScreencast/stopScreencast` berjalan di antrean aksi per node (`tabApi.run`). Endpoint tab memetakan
+`CdpCommandError` ke 502 (bukan 500). Tes: `browserHost.cast.test.ts` (fake CDP ketat: `strictScreencast`) dan kasus nyata di
+`browserHost.split.real.bun.test.ts`.
+
 ## Menyusul
 P1-P3 (server, integrasi `BrowserNode`, verb agent) sudah ada. P4 split pane sudah ada: lihat `browser-split.md` (screencast
 kini untuk semua tab yang tampil di pane, bukan hanya tab aktif; layout dan device per tab ikut daftar tab yang dipersist).

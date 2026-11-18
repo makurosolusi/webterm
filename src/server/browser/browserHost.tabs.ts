@@ -6,6 +6,7 @@ import type { BrowserState } from '../../shared/browser.contract'
 import { BLANK_URL, reduceTabs, sanitizeTabTitle, validateTabUrl } from '../../shared/browser.tabs'
 import type { BrowserTab, BrowserTabsState } from '../../shared/browser.tabs'
 import { CDP } from './cdp.client'
+import { startCast } from './browserHost.cast'
 import { screencastParams } from './browserHost.input'
 import { castViewport } from './browserHost.device'
 import { blockOf, BrowserError } from './browserHost.targets'
@@ -110,7 +111,7 @@ export function createTabs(ops: TabsOps) {
     const page = t.rt.get(toTabId) as { targetId: string; sessionId: string }
     const old = { targetId: rec.targetId, sessionId: rec.sessionId }
     const cast = rec.cast
-    if (cast && old.sessionId) fire(rec, old.sessionId, CDP.stopScreencast)
+    if (cast && old.sessionId) await kit.stopStream(rec, old.sessionId) // awaited: the page keeps no stream behind the view
     table.rebind(rec, page.targetId, sid)
     if (old.targetId && old.sessionId) {
       if (closeOld || fromTabId === null) { closeTarget(rec, old); if (fromTabId) t.rt.delete(fromTabId) }
@@ -122,7 +123,7 @@ export function createTabs(ops: TabsOps) {
     await kit.emulate(rec, sid)
     if (cast) {
       rec.cast = { ...cast, acks: new Map() }
-      await send(rec, sid, CDP.startScreencast, screencastParams(castViewport(rec)))
+      await startCast((m, p) => send(rec, sid, m, p ?? {}), screencastParams(castViewport(rec)), `tab ${toTabId}`) // the target may already stream as a side pane
     }
     ops.patch(rec, { url: to.url, title: to.title, loading: to.loading, canBack: false, canForward: false, netError: undefined, blocked: undefined, ...ops.shield.pageState(to.url) })
     void ops.refresh(rec)
