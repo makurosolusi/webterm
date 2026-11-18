@@ -107,6 +107,13 @@ export const validateAccounts = (raw: unknown): ProfileAccount[] =>
 /** Accounts that count as "somebody is signed in" (a dot on the chip). */
 export const signedInAccounts = (a: readonly ProfileAccount[] | undefined): ProfileAccount[] => (a ?? []).filter((x) => x.state === 'signed_in')
 
+/** What an agent sees of an account: provider, state, name and MASKED email only (no avatar, no time); the name is clipped, it is third-party text. */
+export const AGENT_NAME_MAX = 40
+export const agentAccountView = (a: ProfileAccount): Pick<ProfileAccount, 'provider' | 'state' | 'displayName' | 'emailMasked'> => ({
+  provider: a.provider, state: a.state,
+  ...(a.displayName ? { displayName: a.displayName.slice(0, AGENT_NAME_MAX) } : {}), ...(a.emailMasked ? { emailMasked: a.emailMasked } : {}),
+})
+
 /** One short text per account for agent output: "Google: Bip (b***@gmail.com)" or "Google: signed out". */
 export function describeAccount(a: ProfileAccount): string {
   const who = [a.displayName, a.emailMasked ? `(${a.emailMasked})` : ''].filter(Boolean).join(' ')

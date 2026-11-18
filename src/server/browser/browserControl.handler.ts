@@ -3,6 +3,7 @@
 // token node sesi agent PTY — target lalu diselesaikan SAAT PANGGILAN dari kabel node itu (`browser.linkedTarget.ts`).
 import { BROWSER_CONTROL_PREFIX, BROWSER_PROFILES_VERB, BROWSER_VERB_CAP, BlockedError } from '../../shared/browser.contract'
 import type { BrowserErrorCode, BrowserVerb } from '../../shared/browser.contract'
+import { agentAccountView } from '../../shared/browser.accounts'
 import { isSafeNodeId } from '../../shared/workspace'
 import { asObject, headerValue } from '../control/controlTypes'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
@@ -123,7 +124,7 @@ async function profilesVerb(req: ControlRequest, deps: BrowserControlDeps): Prom
   if (!profiles) return fail(503, 'open_unavailable', { message: 'Browser profiles are not available on this server.' })
   const ws = (await deps.open!.canvas()).workspaceOfNode(requester)
   if (!ws) return fail(404, 'not_on_board', { message: 'This session is not a node on any webterm board.' })
-  const list = profiles.list(ws.id).map((p) => ({ name: p.name, color: p.color, live: p.live }))
+  const list = profiles.list(ws.id).map((p) => ({ name: p.name, color: p.color, live: p.live, ...(p.accounts?.length ? { accounts: p.accounts.map(agentAccountView) } : {}) }))
   return { status: 200, body: controlOk({ profiles: list, note: 'Open a browser on one with `webterm browser open --profile <name> [url]`; no --profile = this board\'s Default.' }) }
 }
 
