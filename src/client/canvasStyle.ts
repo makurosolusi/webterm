@@ -17,8 +17,12 @@ const STATUS_COLOR: Record<AgentStatus, string> = {
   stopped: MINIMAP_NODE_NEUTRAL,
 }
 
-/** Warna satu node di MiniMap: status agent berwarna (selesai = netral), selain itu netral. */
+/** A skill node keeps its own accent (and a round shape, SkillAwareMiniMapNode) on the mini-map so it is told apart at any zoom. */
+export const MINIMAP_SKILL_ACCENT = 'var(--skill-accent)'
+
+/** Warna satu node di MiniMap: status agent berwarna (selesai = netral), skill beraksen khas, selain itu netral. */
 export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>): string {
+  if (n.type === 'skill') return MINIMAP_SKILL_ACCENT
   const s = statuses[n.id]
   return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }

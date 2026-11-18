@@ -29,8 +29,7 @@ const show = (load: CanvasSkillsLoad, data: Record<string, unknown> = { skill: '
   render(<Canvas data={data} />)
 }
 const ready = (over: Partial<{ version: string; enabled: boolean; description: string }> = {}): CanvasSkillsLoad => ({ status: 'ready', skills: [{ name: 'webterm-release', version: '2', enabled: true, description: 'Ship a release.', ...over }] })
-const byTitle = (t: string): Element => { const el = document.querySelector(`[data-title="${t}"]`); if (!el) throw new Error(`no header button "${t}"`); return el }
-const expand = () => fireEvent.click(byTitle('Expand'))
+const expand = () => fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
 const dataOf = () => latest[0].data as Record<string, unknown>
 
 describe('SkillNode', () => {
@@ -89,7 +88,7 @@ describe('SkillNode', () => {
   it('active: green dot + version, the description is clamped to one line with the full text in a tooltip trigger, aria-label says active', async () => {
     show(ready({ description: 'Ship a release.' }))
     await waitFor(() => expect(screen.getByText('v2')).toBeTruthy())
-    expect(document.querySelector('.skill-node__dot')).toBeTruthy()
+    expect(document.querySelector('.skill-token__mark--active .codicon-check')).toBeTruthy() // status as an icon on the rim
     expect(screen.getByRole('group', { name: /^Skill webterm-release/ }).getAttribute('aria-label')).toBe('Skill webterm-release, not attached, Active')
     expect(screen.queryByText('Disabled')).toBeNull()
     expand()
@@ -122,7 +121,7 @@ describe('SkillNode', () => {
   it('removes itself through the node chrome', async () => {
     show(ready())
     await waitFor(() => expect(screen.getByText('webterm-release')).toBeTruthy())
-    fireEvent.click(byTitle('Remove skill node'))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove skill node' }))
     await waitFor(() => expect(latest).toHaveLength(0))
   })
 })

@@ -4,6 +4,7 @@ import { useMemo, type CSSProperties, type DragEvent, type MouseEvent as ReactMo
 import ContextEdge from './ContextEdge'
 import SkillEdge from './SkillEdge'
 import { skillCableVars } from './skillCable.style'
+import { SkillAwareMiniMapNode } from './skillMiniMapNode'
 import { isValidConnection } from './floatingEdge'
 import { connectionLineStyle, withTouchedAccent } from './canvasStyle'
 import './canvas-ui.css'
@@ -142,7 +143,7 @@ export default function BoardCanvas({
       {/* Chips on touched nodes + the one tray notice (centralAct.layer.tsx). */}
       <CentralActMount rf={rf} nodes={nodes} workspaceId={workspaceId ?? null} />
       <MiniMap
-        className="minimap-dock" pannable zoomable nodeColor={withTouchedAccent(nodeColor, touchedIds)}
+        className="minimap-dock" nodeComponent={SkillAwareMiniMapNode} pannable zoomable nodeColor={withTouchedAccent(nodeColor, touchedIds)}
         // `p` sudah koordinat flow: viewBox minimap digambar di ruang itu, jadi tak perlu dikonversi.
         // `setCenter` tanpa `zoom` jatuh ke maxZoom, bukan zoom sekarang — klik cuma boleh
         // memindahkan titik pandang, jadi zoom berjalan diteruskan eksplisit.
