@@ -1,7 +1,7 @@
 // The smoke matrix: one prompt per profile (+ the loopback safety control for both author profiles).
 import { gradeBrowserIntent, gradeDirect, gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
 import { gradeProfile, gradeProfileDenied, PROFILE_PROMPT_CENTRAL, PROFILE_PROMPT_CHAT } from './smoke.capabilities.profile'
-import { browserNodeIds, countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
+import { browserNodeIds, clearBrowserNodes, countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
 import type { SmokeServer } from './smoke.capabilities.server'
 import { gradeTabDenied, gradeTabMulti, gradeTabOpen, tabDeniedPrompt, tabMultiPrompt, tabOpenPrompt, tabsSite } from './smoke.capabilities.tabs'
 
@@ -51,6 +51,7 @@ export const CASES: readonly SmokeCase[] = PROFILE_IDS.flatMap((profile): SmokeC
 export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' || c.kind === 'profile' || c.kind === 'profile-denied' || c.kind === 'tab-open' || c.kind === 'tab-multi' || c.kind === 'tab-denied' ? `${c.profile} (${c.kind})` : c.profile)
 
 export async function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
+  if (c.kind.startsWith('tab-')) await clearBrowserNodes(s)
   const before = c.kind.startsWith('tab-') ? await browserNodeIds(s) : []
   const run = await runRaw(s, c)
   if (c.kind === 'direct') return { ...run, evidence: { ...run.evidence, drafts: await countDrafts(s) } }

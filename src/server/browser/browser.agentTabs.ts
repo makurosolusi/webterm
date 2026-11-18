@@ -6,7 +6,9 @@ import type { BrowserHost } from './browserHost.service'
 import type { BaseVerbs } from './browserAgent.verbs.ctx'
 
 /** How long a click waits for a popup tab to appear before it reports none. */
-export const NEW_TAB_WAIT_MS = 300
+// 300 ms was too short with a real Chromium (smoke: the popup tab appeared after the click had already answered, so the model
+// read the old tab); a click with no popup pays this once.
+export const NEW_TAB_WAIT_MS = 1000
 
 /** Host the verbs use: per-tab when the agent's tab is not the human's view. */
 export function agentTabHost(host: BrowserHost): BrowserHostApi {

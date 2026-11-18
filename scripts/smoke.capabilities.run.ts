@@ -78,6 +78,13 @@ export async function browserNodeIds(s: SmokeServer): Promise<string[]> {
   return ws.nodes.filter((n) => n.kind === 'browser').map((n) => n.id)
 }
 
+/** Removes every browser node from the seeded board, so a tab case starts with no leftover tabs from an earlier case. */
+export async function clearBrowserNodes(s: SmokeServer): Promise<void> {
+  if (!workspaceId) throw new Error('seedBoard must run before clearBrowserNodes')
+  const ws = await api<{ nodes: Array<{ kind: string }> }>(s, 'GET', `/api/workspaces/${workspaceId}`)
+  await api(s, 'PUT', `/api/workspaces/${workspaceId}`, { ...ws, nodes: ws.nodes.filter((n) => n.kind !== 'browser') })
+}
+
 /** Adds one Agent Chat node to the seeded board and returns its id. */
 async function addChatNode(s: SmokeServer, preset: string | undefined): Promise<string> {
   if (!workspaceId) throw new Error('seedBoard must run before the first chat case')
