@@ -248,3 +248,23 @@ Owner decisions (2026-11-19): all five recommendations approved (`Mod+Shift+H` k
   - Deviation: the menu button sits at the start of the tab row (this section's T1 plan), not yet at the top of the rail; T3 moves it.
 - **Waiting**: T2a (workspace tiles in the rail), T2b (persisted workspace order, server), T3 (menu button, Account and layout toggle into the rail, Show labels, native scan test).
 - **Not observed**: no real browser was used; the reveal timings, the compact row at narrow widths and the hairline are verified by tests and source scans only (see "Not verifiable without a screen").
+
+### T2b: persisted workspace order (server, branch `feature/workspace-order`)
+
+**How the order worked before (traced).** The server listed `ORDER BY updated_at DESC` (`Db.list`). The client (`workspaceLifecycle.boot.ts`) takes that array as the tab order and only maps over it afterwards: a save replaces an entry in place, so tabs did not move inside one session. A workspace made through `workspaceLifecycle` is appended (`[...prev, ws]`), the new-workspace dialog in `App.workbench.tsx` prepends it, and a Central create is appended by `addNewWorkspaces`. After a reload every edited board jumped to the front, because saving bumps `updated_at`. That is the instability a manual order cannot have, so the persisted order ignores `updated_at` completely.
+
+**Decision.** A new workspace always goes to the END (the dialog's prepend disagrees with the other two paths and with the rail's "tiles in order, then +"; T2a should append too). `updated_at` and board saves never move a workspace; only `PUT /api/workspaces/order` does. Deleting closes the gap.
+
+**Storage deviates from the brief.** The order is NOT a `position` column on `workspace`; it is a side table `workspace_position (workspace_id PK, position INTEGER NOT NULL)` (`db.order.ts`). Reason: `db.preserveNodes.bun.test.ts` requires the number of `UPDATE|INSERT INTO workspace` statements in `db.ts` to equal the number of `nodesColumn` calls, so a batch reorder as `UPDATE workspace` cannot exist without loosening that policy. The side table also means a reorder rewrites no board row and cannot move `updated_at` (so it never turns another window's unsent save into a 409). Reads join it (`db.row.ts`: `SELECT_WS`/`ORDER_WS`).
+
+**Migration (Rule 4).** `openDb` runs `ensureOrderTable` (`CREATE TABLE/INDEX IF NOT EXISTS`) before the color backfill, then `backfillOrder`: in one `BEGIN IMMEDIATE` it drops rows of vanished workspaces and inserts a position for every workspace lacking one, after the existing ones, in the order users saw until now (`updated_at DESC, id DESC`). Nothing but missing rows is ever written, so a second boot is a no-op and a crash between the steps is repaired by the next boot. Test `db.order.bun.test.ts` boots a legacy file DB twice and reorders in between.
+
+**API contract.**
+- `GET /api/workspaces` is `position ASC`; every workspace and every summary carries `position` (0-based, dense, ascending). The summary PAGES (`?summary=1`) keep their `updated_at DESC` keyset because they are a recency view; only the `position` field was added.
+- `PUT /api/workspaces/order` body `{ "ids": string[] }` = the complete order. 400 `{ error: "bad_order", reason }` with reason `shape | duplicate | unknown | missing`. Validation and the single batch upsert run in one write transaction; a refusal changes nothing. Success answers the ordered list. A workspace created between the client's read and its PUT is `missing` (400): refetch and retry.
+- WS: the existing `{ t:'workspaces' }` (Central create) now carries `order?: string[]` after a reorder. The current client listener ignores the field and only adds missing boards, so T2a must apply `order` to follow other devices.
+- Types: `src/shared/workspace.order.ts`; client call `putWorkspaceOrder(ids)` in `src/client/workspaceOrder.api.ts`.
+- Central/agent tools: only `workspace.create` makes workspaces and goes through `Db.create`, so it appends. No tool reorders; none added.
+- Server fallbacks that took `list()[0]` (`canvasPush` workspace-for-cwd with no active board) now get the first workspace in display order instead of the most recently saved one.
+
+**Not done / debt.** The client does not use any of this yet (T2a). Positions are not pushed on delete (relative order is unchanged, so other windows need nothing).

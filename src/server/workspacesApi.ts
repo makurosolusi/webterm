@@ -25,6 +25,7 @@ import { backgroundsDir } from './canvasBackground.store'
 import { dropWorkspaceBackground } from './canvasBackground.gc'
 import type { WorkspaceShade } from '../shared/workspaceColor'
 import { BAD_COLOR, BAD_SHADE, colorHttp, createColor } from './workspaceColor'
+import { orderHttp } from './workspaceOrder'
 import { closeRemovedAgentChats, closeWorkspaceAgentChats } from './agentChat/agentChat.pool'
 
 /** Status + body JSON untuk dijawab pemanggil (`body` absen = 204-style, tanpa isi), atau `null`
@@ -172,6 +173,14 @@ export async function workspacesRoute(
       const r = await createWorkspaceFrom(store, b)
       return r.ok ? { status: 201, body: r.workspace } : BAD_FIELD[r.bad]
     }
+  }
+
+  // Before the `:id` routes below, which would read `order` as a board id.
+  if (path === '/api/workspaces/order' && method === 'PUT') {
+    const read = await bodyOrFailure(body)
+    if (!read.ok) return read.result
+    const b = parseObjectBody<Record<string, unknown>>(read.raw)
+    return b ? orderHttp(store, b) : BAD_JSON
   }
 
   // Own route, not the board PUT (an older board copy must not revert a color); PUT like other partial updates.

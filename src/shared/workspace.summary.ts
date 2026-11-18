@@ -9,6 +9,8 @@ export interface WorkspaceSummary {
   color?: string
   colorShade?: string
   updatedAt: number
+  /** Display order, same value as `Workspace.position`. The summary PAGES stay `updatedAt DESC` (a recency view). */
+  position: number
   nodes: Array<{ id: string; kind: string; name?: string; title?: string; agentId?: string }>
 }
 
