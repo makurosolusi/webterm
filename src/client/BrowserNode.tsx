@@ -5,7 +5,7 @@ import { NodeLayoutResizer } from './nodeResize/NodeLayoutResizer'
 import type { NodeProps } from '@xyflow/react'
 import { NAV_ACTIONS, ZOOM_PAUSE_BELOW } from '../shared/browser.contract'
 import type { BrowserState } from '../shared/browser.contract'
-import { hostOnly } from '../shared/browser.url'
+import { browserHeaderLabels } from './browser.header'
 import type { BrowserErr } from './browser.status'
 import type { Comment } from '../shared/workspace'
 import NodeChrome, { termNodeClass } from './NodeChrome'
@@ -204,6 +204,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
     return () => { el.removeEventListener('keydown', onKey, true); el.removeEventListener('wheel', onWheel, { capture: true }) }
   }, [])
   const driven = state?.lease === 'agent'
+  const header = browserHeaderLabels({ userTitle: d.title, pageTitle: state?.title, url: state?.url, fallback: DEFAULT_TITLE })
   const showStart = !down && isBlankUrl(state?.url) && !d.url && !state?.blocked && !showsNewTabPage(tabs.view, tabs.active, tabs.standIn)
 
   const toggleCollapse = () => {
@@ -217,9 +218,9 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
       <NodeLayoutResizer collapsed={collapsed} minWidth={240} minHeight={160} color={swatch} />
       <div className={termNodeClass({ selected: !!selected, collapsed }) + (driven ? ' browser-node--driven' : '')} style={{ '--node-swatch': swatch } as CSSProperties}>
         <NodeChrome
-          title={d.title || state?.title || DEFAULT_TITLE} name={d.name}
+          title={header.title} titleHint={header.hint} name={d.name}
           icon="globe"
-          description={state?.url ? hostOnly(state.url) : ''}
+          description={header.description}
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
@@ -234,6 +235,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
         <div ref={bodyRef} className="node-body browser-node">
           <BrowserTabStrip
             state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId}
+            agentActive={driven}
             trailing={tabs.standIn ? undefined : <BrowserSplitMenu controls={split} />}
             split={splitMenu}
             onPaneHover={setDropHint} onPaneDrop={(tabId, hit) => { void split.dropTab(tabId, hit.paneTabId, hit.zone) }}

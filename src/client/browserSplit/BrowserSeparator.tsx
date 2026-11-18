@@ -9,7 +9,7 @@ import type { DividerRect } from '../paneTree'
 const SMALL_STEP = 0.02
 const LARGE_STEP = 0.1
 /** Half the separator's thickness (`.bp-sep` in browserSplit.css), so it sits exactly on the border. */
-const HALF = 3
+const HALF = 4
 
 export interface BrowserSeparatorProps {
   divider: DividerRect

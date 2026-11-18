@@ -1,7 +1,7 @@
 /* Browser node tab strip, new-tab page and tab state views. Theme tokens only (--vscode-*, falling back to the
    app's --panel/--text/--muted/--accent); dark/light follow the active theme. */
 .bt-strip {
-  display: flex; align-items: center; gap: 2px; min-width: 0; height: 32px; padding: 0 4px;
+  display: flex; align-items: center; gap: var(--bui-gap); min-width: 0; height: var(--bui-tab-h); padding: 0 var(--bui-gap);
   background: var(--vscode-editorGroupHeader-tabsBackground, var(--panel));
   border-bottom: 1px solid var(--vscode-tab-border, transparent);
 }
@@ -14,10 +14,10 @@
 .bt-chevron { flex: none; }
 
 .bt-tab {
-  position: relative; display: flex; align-items: center; gap: 6px;
-  /* Chrome sizing: share the row up to 220px, shrink to 96px, then the list scrolls. */
-  flex: 1 1 220px; min-width: 96px; max-width: 220px; height: 100%; padding: 0 4px 0 8px;
-  font: 12px/1 var(--font-ui); cursor: default; user-select: none; touch-action: none;
+  position: relative; display: flex; align-items: center; gap: 8px;
+  /* Chrome sizing: share the row up to the max, shrink to the min, then the list scrolls. */
+  flex: 1 1 var(--bui-tab-max-w); min-width: var(--bui-tab-min-w); max-width: var(--bui-tab-max-w); height: 100%; padding: 0 var(--bui-gap) 0 12px;
+  font: var(--bui-font)/1 var(--font-ui); cursor: default; user-select: none; touch-action: none;
   color: var(--vscode-tab-inactiveForeground, var(--muted));
   background: var(--vscode-tab-inactiveBackground, transparent);
   border-right: 1px solid var(--vscode-tab-border, transparent);
@@ -26,33 +26,33 @@
 .bt-tab:hover { background: var(--vscode-tab-hoverBackground, var(--vscode-toolbar-hoverBackground, rgb(127 127 127 / 15%))); }
 .bt-tab[aria-selected="true"] { color: var(--vscode-tab-activeForeground, var(--text)); background: var(--vscode-tab-activeBackground, var(--panel)); }
 .bt-tab[aria-selected="true"]::before {
-  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: var(--bui-focus);
   background: var(--vscode-tab-activeBorderTop, var(--vscode-focusBorder, var(--accent)));
 }
-.bt-tab:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.bt-tab:focus-visible { outline: var(--bui-focus) solid var(--vscode-focusBorder, var(--accent)); outline-offset: calc(-1 * var(--bui-focus)); }
 .bt-tab[data-dragging] { opacity: 0.6; }
 .bt-tab[data-drop="before"]::after, .bt-tab[data-drop="after"]::after {
-  content: ""; position: absolute; top: 4px; bottom: 4px; width: 2px; background: var(--vscode-focusBorder, var(--accent));
+  content: ""; position: absolute; top: 4px; bottom: 4px; width: var(--bui-focus); background: var(--vscode-focusBorder, var(--accent));
 }
 .bt-tab[data-drop="before"]::after { left: -1px; }
 .bt-tab[data-drop="after"]::after { right: -1px; }
 .bt-strip[data-popout-armed] { outline: 1px dashed var(--vscode-focusBorder, var(--accent)); outline-offset: -2px; }
 
 .bt-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bt-icon { flex: none; width: 14px; height: 14px; }
+.bt-icon { flex: none; width: var(--bui-icon); height: var(--bui-icon); }
 .bt-favicon { object-fit: contain; border-radius: 2px; }
 .bt-icon--dim { opacity: 0.55; }
 .bt-icon--crashed { color: var(--vscode-errorForeground, var(--state-attention)); }
 .bt-tab[data-state="discarded"] .bt-title { opacity: 0.7; }
-.bt-agent { flex: none; width: 12px; height: 12px; color: var(--vscode-textLink-foreground, var(--accent)); }
+.bt-agent { flex: none; width: var(--bui-icon); height: var(--bui-icon); color: var(--vscode-textLink-foreground, var(--accent)); }
 .bt-spinner { animation: bt-spin 0.9s linear infinite; }
 @keyframes bt-spin { to { transform: rotate(360deg); } }
 
-/* Close: >=24px hit target, shown on hover, on the active tab and on keyboard focus. */
-.bt-close { flex: none; width: 24px; height: 24px; min-height: 24px; opacity: 0; }
+/* Close: 16px icon in a 24px hit target (the tab itself is the 36px row), shown on hover, on the active tab and on keyboard focus. */
+.bt-close { flex: none; width: var(--bui-close); height: var(--bui-close); min-height: var(--bui-close); opacity: 0; }
 .bt-tab:hover .bt-close, .bt-tab[aria-selected="true"] .bt-close, .bt-tab:focus-within .bt-close, .bt-close:focus-visible { opacity: 1; }
 
-.bt-limit { flex: none; padding: 0 4px; font: 11px/1 var(--font-ui); color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-limit { flex: none; padding: 0 4px; font: var(--bui-font-sm)/1 var(--font-ui); color: var(--vscode-descriptionForeground, var(--muted)); }
 .bt-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* New-tab page and state views */
@@ -60,22 +60,22 @@
 .bt-overlay { position: absolute; inset: 0; z-index: 1; }
 .bt-page {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; padding: 24px;
-  font: 13px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
+  font: var(--bui-font)/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
   text-align: center; overflow: auto;
 }
 .bt-page h2 { margin: 0; font-size: 19px; font-weight: 600; }
-.bt-page p { margin: 0; max-width: 42ch; font-size: 13px; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-page p { margin: 0; max-width: 42ch; font-size: var(--bui-font); color: var(--vscode-descriptionForeground, var(--muted)); }
 .bt-page--error h2 { color: var(--vscode-errorForeground, var(--state-attention)); }
 .bt-address { display: flex; gap: 8px; width: min(480px, 100%); }
 .bt-address-field { position: relative; flex: 1; min-width: 0; }
-.bt-address-icon { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--vscode-descriptionForeground, var(--muted)); pointer-events: none; }
+.bt-address-icon { position: absolute; left: 12px; top: 50%; width: var(--bui-icon); height: var(--bui-icon); transform: translateY(-50%); color: var(--vscode-descriptionForeground, var(--muted)); pointer-events: none; }
 .bt-address-field input { height: 40px; padding-left: 36px; font-size: 14px; }
 .bt-address-go { flex: none; height: 40px; min-width: 56px; font-size: 14px; }
-.bt-form-error { color: var(--vscode-errorForeground, var(--state-attention)); font-size: 13px; }
+.bt-form-error { color: var(--vscode-errorForeground, var(--state-attention)); font-size: var(--bui-font); }
 .bt-closed { width: min(480px, 100%); display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .bt-closed { padding: 0; list-style: none; }
-.bt-closed h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
-.bt-closed-row { justify-content: flex-start; width: 100%; min-height: 36px; font-size: 13px; }
+.bt-closed h3 { margin: 0 0 var(--bui-gap); font-size: var(--bui-font-sm); font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-closed-row { justify-content: flex-start; width: 100%; min-height: var(--bui-tab-h); font-size: var(--bui-font); }
 .bt-closed-host { margin-left: auto; color: var(--vscode-descriptionForeground, var(--muted)); }
 
 @media (prefers-reduced-motion: reduce) {
