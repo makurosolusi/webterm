@@ -98,6 +98,25 @@ describe('on-screen tabs stream, the rest do not', () => {
   })
 })
 
+describe('robustness', () => {
+  it('a view or pane size for a node without a page is a quiet no-op, not an error', async () => {
+    rig = await makeHostRig(stubGuard())
+    await expect(rig.host.setView('ghost', ['x'], 'x')).resolves.toBeUndefined()
+    await expect(rig.host.setTabViewport('ghost', 'x', 100, 100, 1)).resolves.toBeUndefined()
+  })
+
+  it('a crashed pane is not rebuilt behind the user: it stays crashed until Reload', async () => {
+    const { a, c } = await open()
+    await rig.host.setView('n1', [a, c], c)
+    rig.fake.emit(CDP_EVENT.targetCrashed, { targetId: 'T1' })
+    await waitFor(() => tabs().tabs.find((t) => t.tabId === a)?.crashed === true, 'a crashed')
+    const spawned = callsOf(CDP.createTarget).length
+    await rig.host.setView('n1', [a, c], c)
+    expect(callsOf(CDP.createTarget)).toHaveLength(spawned)
+    expect(tabs().tabs.find((t) => t.tabId === a)?.crashed).toBe(true)
+  })
+})
+
 describe('input goes to the pane it was made in', () => {
   const click = (tab: string) => ({ t: 'mouse' as const, type: 'down' as const, x: 5, y: 6, button: 'left' as const, buttons: 1, clickCount: 1, mods: 0, dx: 0, dy: 0, tab })
   it('a mouse event with another tab id reaches that page and not the view', async () => {

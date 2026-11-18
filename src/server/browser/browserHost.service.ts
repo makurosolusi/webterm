@@ -116,12 +116,18 @@ export class BrowserHost implements BrowserHostApi {
 
   /** Split view: tabs on screen (one per pane) + the focused one; only those stream. */
   setView(nodeId: string, visible: string[], focus?: string): Promise<void> {
-    return this.tabApi.run(nodeId, () => this.tabs.split.setVisible(this.need(nodeId), visible, focus))
+    return this.tabApi.run(nodeId, async () => {
+      const rec = this.table.nodes.get(nodeId)
+      if (rec?.sessionId && rec.tabs) await this.tabs.split.setVisible(rec, visible, focus) // a node without a page (crashed, discarded) has nothing on screen to stream
+    })
   }
 
   /** Size of one tab's pane (split view); the page renders at it. */
   setTabViewport(nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void> {
-    return this.tabApi.run(nodeId, () => this.tabs.split.resizeTab(this.need(nodeId), tabId, { w, h, dpr }))
+    return this.tabApi.run(nodeId, async () => {
+      const rec = this.table.nodes.get(nodeId)
+      if (rec?.sessionId && rec.tabs) await this.tabs.split.resizeTab(rec, tabId, { w, h, dpr })
+    })
   }
 
   /** One tab's own device emulation (null = follow the pane/node size). */

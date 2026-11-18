@@ -95,11 +95,15 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
     const shown = s.visible.filter((id) => find(t, id))
     const crowded = shown.length > 2
     const inSplit = shown.length > 1
-    for (const id of [...s.side.keys()]) if (!rec.cast || !shown.includes(id) || id === active) await stopSide(rec, id)
+    for (const id of [...s.side.keys()]) {
+      const gone = !find(t, id) || find(t, id)?.crashed || !t.rt.get(id)?.sessionId // its page is gone: nothing to stop
+      if (gone) { s.side.delete(id); s.castKey.delete(id) } else if (!rec.cast || !shown.includes(id) || id === active) await stopSide(rec, id)
+    }
     const targets = new Set([...shown, ...extra, ...s.applied.keys()])
     for (const id of targets) {
       const tab = find(t, id)
       if (!tab) { s.applied.delete(id); continue }
+      if (tab.crashed && id !== active) continue // a crashed pane waits for its Reload; it is not rebuilt behind the user's back
       const live = id === active || t.rt.get(id)?.sessionId
       if (!live && !shown.includes(id)) continue // off screen and no page: it takes its emulation when it wakes (the node's `emulate` plus this on show)
       const sid = id === active ? rec.sessionId : await deps.liveSession(rec, id)

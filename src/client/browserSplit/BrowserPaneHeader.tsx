@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { PointerEvent } from 'react'
 import { Smartphone, X } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
+import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import { VscodeMenu } from '@/components/vscode/vscodeMenu'
 import type { VscodeMenuItem } from '@/components/vscode/vscodeMenu'
 import { resolveDevice } from '../../shared/browser.devices'
@@ -50,13 +50,12 @@ export function BrowserPaneHeader({ tab, tabs, shown, focused, size, onPick, onD
 
   return (
     <div className={`bp-head nodrag${focused ? ' bp-head--focus' : ''}`} onPointerDown={onGrip} data-pane-grip>
-      <button
-        type="button" className="bp-title" aria-haspopup="menu" aria-expanded={open?.kind === 'tabs'} title={tabTooltip(tab)}
-        onClick={(e) => setOpen({ kind: 'tabs', at: anchor(e.currentTarget) })}
-      >
-        <BrowserTabIcon tab={tab} />
-        <span className="bp-title__text">{tabTitle(tab)}</span>
-      </button>
+      <IconTooltip label={tabTooltip(tab)}>
+        <button type="button" className="bp-title" aria-haspopup="menu" aria-expanded={open?.kind === 'tabs'} onClick={(e) => setOpen({ kind: 'tabs', at: anchor(e.currentTarget) })}>
+          <BrowserTabIcon tab={tab} />
+          <span className="bp-title__text">{tabTitle(tab)}</span>
+        </button>
+      </IconTooltip>
       <span className="bp-size" aria-label="Page size" data-testid="pane-size">{sizeIndicator(device, size)}</span>
       <IconButton
         label={deviceButtonLabel(device)} size="icon-xs" aria-haspopup="menu" aria-pressed={!!spec} data-pane-device
