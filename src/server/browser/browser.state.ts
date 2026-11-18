@@ -16,11 +16,11 @@ export interface BrowserRuntime {
   /** Layani satu socket `/ws/browser` milik workspace tertentu. */
   gateway(ws: WebSocket, workspaceId: string): void
   /** `/api/browser/*`; null = bukan prefix itu. */
-  api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
+  api(method: string, pathname: string, body: () => Promise<string>, search?: URLSearchParams): Promise<BrowserApiResult | null>
   /** Server-side `open` for a canvas agent: browser node `nodeId` beside `requesterId`, cabled to it, page started (Central playbooks). */
-  openFor?(requesterId: string, nodeId: string): Promise<AgentOpened>
+  openFor?(requesterId: string, nodeId: string, profile?: string): Promise<AgentOpened>
   /** Adds a standalone browser node (no agent, no cable) to a workspace and starts its page; Central's `browser_read`. */
-  openProject?(workspaceId: string, nodeId: string): Promise<ProjectOpened>
+  openProject?(workspaceId: string, nodeId: string, profile?: string): Promise<ProjectOpened>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
   /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */

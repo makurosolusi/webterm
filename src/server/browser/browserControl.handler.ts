@@ -107,12 +107,14 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
 /** `open`, or `navigate` with no cabled browser: add a cabled browser node, then navigate it through the normal gates. */
 async function openThenNavigate(body: unknown, requester: string, deps: BrowserControlDeps & Required<Pick<BrowserControlDeps, 'linked'>>, needUrl: boolean): Promise<ControlResult> {
   const raw = asObject(body).url
+  const profile = asObject(body).profile
+  if (profile !== undefined && (typeof profile !== 'string' || profile.trim() === '')) return fail(400, 'bad_request', { message: 'profile must be a profile name or id.' })
   const url = raw === undefined && !needUrl ? undefined : parseBrowserUrl(raw)
   if (url && !url.ok) return fail(400, 'bad_request', { message: 'url must be an absolute http or https URL.' })
   if (!deps.open) return fail(503, 'open_unavailable', { message: 'This server cannot open browser nodes for agents. Ask the user to add one and cable it to this node.' })
   let made: Awaited<ReturnType<typeof openAgentBrowser>>
   try {
-    made = await openAgentBrowser(deps.open, requester, deps.agentAllowed)
+    made = await openAgentBrowser(deps.open, requester, deps.agentAllowed, undefined, profile)
   } catch (err) {
     return mapError(err, requester)
   }
@@ -120,7 +122,7 @@ async function openThenNavigate(body: unknown, requester: string, deps: BrowserC
     if ('result' in made) return made.result
     return withOpened(mapError(made.startError, made.nodeId), { nodeId: made.nodeId, url: url?.url ?? '', note: openedNote(made.nodeId, false) })
   }
-  const opened = { nodeId: made.nodeId, url: url?.url ?? made.url, note: openedNote(made.nodeId, true) }
+  const opened = { nodeId: made.nodeId, url: url?.url ?? made.url, note: openedNote(made.nodeId, true, 'profile' in made ? made.profile : undefined) }
   if (!url) return { status: 200, body: controlOk(opened) }
   const target = deps.linked(requester, made.nodeId)
   if (!target.ok) return withOpened(target.result, opened)

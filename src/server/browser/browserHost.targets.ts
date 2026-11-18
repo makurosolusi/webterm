@@ -39,6 +39,8 @@ export { DEFAULT_VIEWPORT }
 export interface NodeRec {
   nodeId: string
   workspaceId: string
+  /** Profile (= Chromium process + session) the node's page lives in; see `resolveProfileId`. */
+  profileId: string
   targetId?: string
   sessionId?: string
   state: BrowserState
@@ -52,9 +54,9 @@ export interface NodeRec {
   lat?: { ls: number; rx: number; dispatched: number }
 }
 
-export function newRec(nodeId: string, workspaceId: string, url: string): NodeRec {
+export function newRec(nodeId: string, workspaceId: string, url: string, profileId: string = workspaceId): NodeRec {
   return {
-    nodeId, workspaceId, touch: false, viewport: { ...DEFAULT_VIEWPORT },
+    nodeId, workspaceId, profileId, touch: false, viewport: { ...DEFAULT_VIEWPORT },
     state: { id: nodeId, url, title: '', loading: false, canBack: false, canForward: false, lease: 'human', live: 'discarded' },
   }
 }

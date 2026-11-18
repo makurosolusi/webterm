@@ -18,6 +18,8 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export interface LifecycleOps {
   table: TargetTable
   launcher: BrowserLauncher
+  /** Profile of a node (the single `resolveProfileId` rule, applied to the live board); default = the workspace's Default profile. */
+  profileOf?: (nodeId: string, workspaceId: string) => string
   guard: NavGuard
   connect?: (wsUrl: string) => Promise<CdpClient>
   initialDevice?: (nodeId: string) => unknown
@@ -58,23 +60,23 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     log.warn('browser.crash', 'browser target lost', { ids: { nodeId: rec.nodeId } })
   }
 
-  const onConnClosed = (workspaceId: string, err: Error): void => {
-    conns.delete(workspaceId)
-    log.warn('browser.conn', 'cdp connection closed', { ids: { workspaceId }, error: err.message })
-    for (const rec of table.nodes.values()) if (rec.workspaceId === workspaceId) crash(rec)
+  const onConnClosed = (profileId: string, err: Error): void => {
+    conns.delete(profileId)
+    log.warn('browser.conn', 'cdp connection closed', { ids: { profileId }, error: err.message })
+    for (const rec of table.nodes.values()) if (rec.profileId === profileId) crash(rec)
   }
 
-  const connection = (workspaceId: string): Promise<CdpClient> => {
-    let p = conns.get(workspaceId)
+  const connection = (profileId: string): Promise<CdpClient> => {
+    let p = conns.get(profileId)
     if (!p) {
       p = (async () => {
-        const wsUrl = await ops.launcher.acquire(workspaceId)
+        const wsUrl = await ops.launcher.acquire(profileId)
         const cdp = await (ops.connect ?? ((u: string) => CdpClient.connect(u)))(wsUrl)
         cdp.on('*', ops.route)
         cdp.on('*', ops.console.route)
         cdp.on(CDP_EVENT.requestPaused, (p, sid) => ops.shield.paused(cdp, p, sid))
         cdp.on(CDP_EVENT.attachedToTarget, (p, sid) => ops.shield.attached(cdp, p, sid))
-        cdp.onClose((err) => onConnClosed(workspaceId, err))
+        cdp.onClose((err) => onConnClosed(profileId, err))
         try {
           await setupConnection(cdp)
         } catch (err) {
@@ -83,8 +85,8 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
         }
         return cdp
       })()
-      conns.set(workspaceId, p)
-      p.catch(() => conns.delete(workspaceId)) // lemparan tetap sampai ke pemanggil connection()
+      conns.set(profileId, p)
+      p.catch(() => conns.delete(profileId)) // lemparan tetap sampai ke pemanggil connection()
     }
     return p
   }
@@ -94,17 +96,19 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
     if (rec?.sessionId) return { ...rec.state }
     if (!rec) table.nodes.set(nodeId, (rec = newRec(nodeId, workspaceId, url ?? '')))
     rec.workspaceId = workspaceId
+    const profileId = ops.profileOf?.(nodeId, workspaceId) ?? workspaceId
+    rec.profileId = profileId
     const target = url ?? rec.state.url
     const blocked = target ? blockOf(ops.guard, target) : null
     let cdp: CdpClient
     try {
-      cdp = await connection(workspaceId)
+      cdp = await connection(profileId)
     } catch (err) {
       const noBin = err instanceof LaunchError && err.code === 'no_binary'
       if (noBin) ops.patch(rec, { blocked: 'no_binary' })
       // Without this line a failed launch left only a stream of info "chromium exited" in the log.
       else log.warn('browser.launch_failed', 'browser could not start for this node', {
-        ids: { workspaceId, nodeId }, code: err instanceof LaunchError ? err.code : err instanceof Error ? err.name : typeof err,
+        ids: { workspaceId, profileId, nodeId }, code: err instanceof LaunchError ? err.code : err instanceof Error ? err.name : typeof err,
       })
       throw new BrowserError(noBin ? 'no_binary' : 'launch_failed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err)
     }
@@ -131,7 +135,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
       const rec = table.nodes.get(nodeId)
       if (!rec?.sessionId) return
       const targetId = rec.targetId as string
-      const cdp = await conns.get(rec.workspaceId)
+      const cdp = await conns.get(rec.profileId)
       ops.shield.forget(rec)
       table.unbind(rec) // unbind dulu: targetDestroyed berikutnya bukan crash
       ops.patch(rec, { live: 'discarded', loading: false })
@@ -142,7 +146,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
       }
     },
     async cdpOf(rec) {
-      const cdp = await conns.get(rec.workspaceId)
+      const cdp = await conns.get(rec.profileId)
       if (!cdp || cdp.closed) throw new BrowserError('crashed', `node ${rec.nodeId}: browser connection is gone`)
       return cdp
     },

@@ -18,6 +18,8 @@ import { ensureAuditSchema } from './featureCapabilities.audit'
 import { defaultTabLayout } from '../shared/tabLayout.schema'
 import { ensureLayoutColumn, parseLayout, serializeLayout } from './db.layout'
 import { ensureColorColumns } from './db.color'
+import { createBrowserProfileStore, ensureBrowserProfileTable } from './db.browserProfile'
+import type { BrowserProfileStore } from './db.browserProfile'
 import { pickWorkspaceColor, DEFAULT_WORKSPACE_SHADE, describeWorkspaceColor, isWorkspaceHue, backfillWorkspaceHue } from '../shared/workspaceColor'
 import type { WorkspaceHue, WorkspaceShade } from '../shared/workspaceColor'
 
@@ -52,6 +54,7 @@ export function openDb(path: string = dbPath()): Database {
   // every boot; building it on an existing table needs no backfill.
   d.exec('CREATE INDEX IF NOT EXISTS workspace_updated_id ON workspace (updated_at DESC, id DESC)')
   ensureAuditSchema(d)
+  ensureBrowserProfileTable(d)
   return d
 }
 
@@ -287,6 +290,9 @@ export class Db {
     ).run(JSON.stringify(next.doc))
     return next.settings
   }
+
+  /** Browser profile registry (own table `browser_profile`). */
+  browserProfiles(): BrowserProfileStore { return createBrowserProfileStore(this.d) }
 
   /** Shutdown only (index.ts exit hook): later calls on this store throw. Cast like ledgerRuntime.ts: the local bun:sqlite type omits close. */
   close(): void { (this.d as unknown as { close(): void }).close() }

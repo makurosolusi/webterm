@@ -40,6 +40,10 @@ import { DesignMode } from './design/design.service'
 import { designRoute } from './design/design.route'
 import { OUTBOX_BODY_MAX_CHARS } from '../outbox/outbox.route'
 import type { CanvasPush } from '../canvas/canvasPush'
+import type { BrowserProfileStore } from '../db.browserProfile'
+import type { BrowserProfilesMsg } from '../../shared/protocol'
+import { createProfileWiring } from './browser.runtime.profiles'
+import { setActiveProfiles } from './browser.profiles.service'
 
 const log = createLogger('browser.runtime')
 const SWEEP_MS = 10_000
@@ -64,6 +68,10 @@ export interface RuntimeDeps {
   adblock?: Adblock
   /** Test: board writer for the agent verb `open` (production: the shared `getCanvasPush()`). */
   canvas?: Pick<CanvasPush, 'add' | 'workspaceOfNode'>
+  /** Browser profile registry (production: `db.browserProfiles()`); absent = in memory (tests). */
+  profiles?: BrowserProfileStore
+  /** Push a frame to every open window (profile list/live changes); absent = nobody to tell. */
+  broadcast?: (msg: BrowserProfilesMsg) => void
 }
 
 export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntime | null> {
@@ -96,7 +104,14 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const adblockTimer = setInterval(() => { void adblock.load() }, ADBLOCK_REFRESH_MS)
   adblockTimer.unref()
   const shields = createShieldPolicy(adblock, adblockDir)
-  const host = new BrowserHost({ launcher, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
+  const ttl = Number(env[ENV_BROWSER.cookieTtlDays])
+  const vault = createCookieVault({ secrets: d.secrets, baseDir: d.dataRoot, ttlDays: ttl > 0 ? ttl : DEFAULT_COOKIE_TTL_DAYS, now })
+  const swept = vault.sweepAll()
+  if (swept.failed.length) log.warn('browser.vault', 'Some cookie vault blobs are unreadable', { checked: swept.checked, failed: swept.failed.length })
+  const live = new Set<string>()
+  const profiles = createProfileWiring({ workspaces: d.workspaces, dataRoot: d.dataRoot, launcher, vault, store: d.profiles, broadcast: d.broadcast, liveNodes: () => live })
+  const host = new BrowserHost({ launcher, profileOf: profiles.profileOf, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device })
+  profiles.bind(host)
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const lifecycle = new BrowserLifecycle({ ...cfg, host, driven: (id) => leases.isDriven(id), now })
@@ -106,11 +121,6 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const sweep = setInterval(() => { for (const id of leases.sweep()) leases.release(id) }, SWEEP_MS)
   sweep.unref()
 
-  const ttl = Number(env[ENV_BROWSER.cookieTtlDays])
-  const vault = createCookieVault({ secrets: d.secrets, baseDir: d.dataRoot, ttlDays: ttl > 0 ? ttl : DEFAULT_COOKIE_TTL_DAYS, now })
-  const swept = vault.sweepAll()
-  if (swept.failed.length) log.warn('browser.vault', 'Some cookie vault blobs are unreadable', { checked: swept.checked, failed: swept.failed.length })
-
   const nodeOf = (id: string) => d.workspaces().flatMap((w) => w.nodes).find((n) => n.id === id)
   const agentOverride = new Map<string, boolean>() // toggle terbaru dari UI menang atas snapshot board yang belum tersimpan
   // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
@@ -118,20 +128,24 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
   const verbs = createAgentVerbs({ host, leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console })
-  const live = new Set<string>()
-  const versionProbe = createVersionProbe({ acquire: (w) => launcher.acquire(w), connect: d.connect })
+  const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
+  let liveProfiles = ''
   host.onState((s: BrowserState) => {
     if (s.live === 'live') {
       live.add(s.id)
       const ws = d.workspaces().find((w) => w.nodes.some((n) => n.id === s.id))
-      if (ws) versionProbe.probe(ws.id)
+      if (ws) versionProbe.probe(host.profileOf(s.id) ?? ws.id) // the probed process must be one a node already runs, never a fresh Default
     } else if (live.delete(s.id) && live.size === 0) versionProbe.reset() // tak ada browser hidup: restart berikutnya baca ulang
+    const now = [...new Set([...live].map((id) => host.profileOf(id)))].sort().join()
+    if (now !== liveProfiles) { liveProfiles = now; profiles.liveChanged() } // the set of profiles with a running process changed
   })
   const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: cfg.maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
     setAgentControl: (id: string, on: boolean) => { agentOverride.set(id, on) },
+    profiles: { profiles: profiles.service, ops: profiles.ops },
+    setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
   }
   // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
   const design = new DesignMode({
@@ -141,7 +155,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   host.onState((s) => { if (s.live === 'discarded') design.forget(s.id) }) // page gone = its injected script is gone too
   d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
-  const openDeps: AgentOpenDeps = { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId) }
+  const openDeps: AgentOpenDeps = { canvas: async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush(), start: (id, workspaceId) => gwHost.open(id, workspaceId), profiles: { resolve: (r, w) => profiles.service.resolve(r, w), list: (w) => profiles.service.list(w) }, profileOfNode: profiles.profileOf }
   return {
     status,
     state: (id) => host.state(id),
@@ -151,19 +165,25 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       lifecycle.forget(id)
       leases.release(id)
       agentOverride.delete(id)
+      profiles.forget(id)
       await host.discard(id)
     },
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
-    api: async (method, pathname, body) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps),
+    api: async (method, pathname, body, search) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps, search),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
       open: openDeps, presetOf: (id) => nodeOf(id)?.preset,
     }),
-    openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled'),
-    openProject: (workspaceId, nodeId) => openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId),
+    openFor: (requesterId, nodeId, profile) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled', profile),
+    openProject: async (workspaceId, nodeId, profile) => {
+      const wanted = profile === undefined ? undefined : profiles.service.resolve(profile, workspaceId)
+      if (profile !== undefined && !wanted) return { ok: false, code: 'profile_not_found' }
+      return openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId, wanted?.id)
+    },
     async shutdown() {
       if (down) return
       down = true
+      setActiveProfiles(null)
       clearInterval(sweep); clearInterval(adblockTimer); unLease(); lifecycle.dispose(); versionProbe.reset()
       // Tutup halaman satu per satu dulu: stop dari Settings tak boleh meninggalkan tab yatim di Chromium.
       await Promise.all([...live].map((id) => host.discard(id).catch((e) => log.warn('browser.stop', 'page close failed', { error: e instanceof Error ? e.name : typeof e }))))

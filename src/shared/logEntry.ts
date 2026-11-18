@@ -18,7 +18,7 @@ export interface LogEntry {
   event: string
   /** Short human sentence, already redacted. */
   message: string
-  ids?: { workspaceId?: string; nodeId?: string; sessionId?: string; requestId?: string }
+  ids?: { workspaceId?: string; profileId?: string; nodeId?: string; sessionId?: string; requestId?: string }
   /** Small structured fields, already passed through redactValue. */
   data?: Record<string, unknown>
 }

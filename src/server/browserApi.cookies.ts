@@ -15,7 +15,7 @@ import { createLogger } from './logs'
 const log = createLogger('browser.cookies')
 
 /** Status + body JSON (`body` absen = 204 tanpa isi). */
-export type BrowserApiResult = { status: number; body?: unknown }
+export type BrowserApiResult = { status: number; body?: unknown; headers?: Record<string, string> }
 
 /** Batas getter body untuk rute browser: konten <= COOKIE_BODY_MAX_BYTES, dilipat ganda oleh escape JSON + amplop. */
 export const BROWSER_BODY_MAX_BYTES = COOKIE_BODY_MAX_BYTES * 2 + 4096

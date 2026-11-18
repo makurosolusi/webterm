@@ -32,6 +32,7 @@ export interface HostDeps {
   connect?: (wsUrl: string) => Promise<CdpClient>
   /** Shields (blokir iklan/pelacak + sakelar per situs); tanpa ini hanya batas popup yang berlaku. */
   shields?: ShieldPolicy
+  profileOf?: (nodeId: string, workspaceId: string) => string // profile of a node: its own `profileId` or the workspace's Default (browser.profile.ts)
   initialDevice?: (nodeId: string) => unknown // device saved on the board (`WsNode.device`): seeds a node seen first time
   now?: () => number
 }
@@ -60,7 +61,7 @@ export class BrowserHost implements BrowserHostApi {
       detached: (p) => this.shield.detached(p),
     })
     this.life = createTargetLifecycle({
-      table: this.table, launcher: deps.launcher, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
+      table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
       shield: this.shield, console: this.console, route: this.route, patch, emit,
       io: (r) => this.io(r), goto: (r, url) => this.goto(r, url),
     })
@@ -132,6 +133,9 @@ export class BrowserHost implements BrowserHostApi {
 
   /** Workspace that owns a known node (also a discarded one); undefined = unknown to the host. */
   workspaceOf(nodeId: string): string | undefined { return this.table.nodes.get(nodeId)?.workspaceId }
+
+  /** Profile a known node's page runs in; undefined = unknown to the host. */
+  profileOf(nodeId: string): string | undefined { return this.table.nodes.get(nodeId)?.profileId }
 
   state(nodeId: string): BrowserState | undefined {
     const rec = this.table.nodes.get(nodeId)
