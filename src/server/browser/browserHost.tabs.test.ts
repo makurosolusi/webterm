@@ -107,6 +107,43 @@ describe('popups', () => {
     expect(callsOf(CDP.closeTarget)).toHaveLength(0)
   })
 
+  it('a popup that closes itself (window.close) removes its tab, returns the view to the opener, and is not a node crash', async () => {
+    const ev = await open()
+    const [opener] = tabsOf().tabs
+    await add('https://other.test/') // the view sits on this tab; the popup below is the opener's, so it lands between them
+    await rig.host.tabApi.activate('n1', opener.tabId, 'human')
+    popup('P1', 'https://oauth.test/')
+    await waitFor(() => tabsOf().tabs.length === 3 && tabsOf().activeTabId === tabsOf().tabs[1].tabId, 'popup is the view')
+    rig.fake.emit(CDP_EVENT.targetDestroyed, { targetId: 'P1' })
+    rig.fake.emit(CDP_EVENT.detachedFromTarget, { sessionId: 'S-P1', targetId: 'P1' }) // Chromium sends both
+    await waitFor(() => tabsOf().tabs.length === 2, 'popup tab gone')
+    expect(tabsOf().activeTabId).toBe(opener.tabId) // Chrome returns to the opener, not to the right neighbour
+    expect(tabsOf().closed).toEqual([])
+    expect(rig.host.state('n1')?.live).toBe('live')
+    expect(ev.some((e) => e.k === 'error')).toBe(false)
+  })
+
+  it('a background tab whose page closes itself leaves the list; a crash of it still only marks it crashed', async () => {
+    await open()
+    await add('https://b.test/')
+    await add('https://c.test/')
+    rig.fake.emit(CDP_EVENT.targetDestroyed, { targetId: 'T1' })
+    await waitFor(() => tabsOf().tabs.length === 2, 'background tab gone')
+    expect(urls()).toEqual(['https://b.test/', 'https://c.test/'])
+    expect(rig.host.state('n1')?.live).toBe('live')
+  })
+
+  it('a popup that is already gone when we attach (instant OAuth close) is dropped silently: no notice, no tab', async () => {
+    const ev = await open()
+    rig.fake.handle(CDP.attachToTarget, () => ({ __error: { code: -32602, message: 'No target with given id found' } }))
+    popup('P1', 'https://oauth.test/')
+    await waitFor(() => callsOf(CDP.attachToTarget).some((c) => c.params.targetId === 'P1'), 'attach tried')
+    await new Promise((r) => setTimeout(r, 100))
+    expect(noticeOf(ev)).toEqual([])
+    expect(tabsOf().tabs).toHaveLength(1)
+    expect(callsOf(CDP.closeTarget)).toHaveLength(0)
+  })
+
   it('at the limit the popup is closed, the opener tab loads the url, and a notice says why', async () => {
     const ev = await open()
     for (let i = 0; i < 7; i++) await add(`https://t${i}.test/`)
@@ -151,11 +188,23 @@ describe('streaming and discard', () => {
     const a = tabsOf().tabs[0].tabId
     await add('https://b.test/')
     await waitFor(() => tabsOf().tabs.find((t) => t.tabId === a)?.discarded === true, 'discard')
-    expect(callsOf(CDP.closeTarget).some((c) => c.params.targetId === 'T1')).toBe(true)
+    await waitFor(() => callsOf(CDP.closeTarget).some((c) => c.params.targetId === 'T1'), 'page closed') // sent right after the tab is marked discarded
     expect(tabsOf().tabs).toHaveLength(2)
     await rig.host.tabApi.activate('n1', a, 'human')
     expect(tabsOf().tabs.find((t) => t.tabId === a)?.discarded).toBe(false)
     expect(callsOf(CDP.navigate).at(-1)?.params.url).toBe('https://a.test/')
+  })
+
+  it('an opener with a live popup is not discarded (the popup needs its window.opener); once the popup is gone it is', async () => {
+    await open({ tabDiscardMs: 20 })
+    const a = tabsOf().tabs[0].tabId
+    popup('P1', 'https://oauth.test/')
+    await waitFor(() => tabsOf().tabs.length === 2, 'popup tab')
+    await new Promise((r) => setTimeout(r, 150))
+    expect(tabsOf().tabs.find((t) => t.tabId === a)?.discarded).toBe(false)
+    await rig.host.tabApi.closeTab('n1', tabsOf().tabs[1].tabId)
+    await rig.host.tabApi.newTab('n1', { url: 'https://c.test/', by: 'human' })
+    await waitFor(() => tabsOf().tabs.find((t) => t.tabId === a)?.discarded === true, 'discard after the popup is gone')
   })
 
   it('a crashed background tab is marked crashed and the node stays live', async () => {

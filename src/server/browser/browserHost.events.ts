@@ -24,6 +24,8 @@ export interface RouterOps {
   popup(opener: NodeRec, url: string): boolean
   /** Popup yang lolos Shields menjadi tab di node pembuka (halamannya diadopsi, bukan dibuat ulang). */
   adopt(opener: NodeRec, openerTargetId: string | undefined, targetId: string, url: string): Promise<void>
+  /** A tab's page closed itself (window.close()) while the node has other tabs: the tab is removed, not crashed. False = not a tab close. */
+  closed(rec: NodeRec, targetId: string): boolean
   /** Tab latar: event sesi, judul, dan hilangnya halaman (tidak menjatuhkan node). */
   bgEvent(b: BgTab, method: string, p: Record<string, unknown>, sessionId: string): void
   bgTitle(b: BgTab, title: string): void
@@ -120,17 +122,24 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
         return
       case CDP_EVENT.inspectorCrashed: return rec && ops.crash(rec)
       case CDP_EVENT.targetCrashed: return crashTarget(p.targetId)
-      case CDP_EVENT.targetDestroyed:
+      case CDP_EVENT.targetDestroyed: {
         popups.delete(String(p.targetId))
+        const owner = table.target(p.targetId) ?? table.bgTarget(p.targetId)?.rec
+        if (owner && typeof p.targetId === 'string' && ops.closed(owner, p.targetId)) return
         return crashTarget(p.targetId)
+      }
       case CDP_EVENT.targetCreated: return onTargetInfo(p, true)
       case CDP_EVENT.targetInfoChanged: return onTargetInfo(p, false)
       case CDP_EVENT.detachedFromTarget: {
         // Sesi UTAMA node lepas (target ditukar/ditutup tanpa `discard`) = target hilang; `discard` unbind lebih dulu.
         const gone = typeof p.sessionId === 'string' ? p.sessionId : undefined
         const main = table.session(gone)
+        const b = main ? undefined : table.bgSession(gone)
+        const owner = main ?? b?.rec
+        const tid = main ? main.targetId : b?.rec.tabs?.rt.get(b.tabId)?.targetId
+        if (owner && tid && ops.closed(owner, tid)) return ops.detached(p)
         if (main) ops.crash(main)
-        else { const b = table.bgSession(gone); if (b) ops.bgGone(b) }
+        else if (b) ops.bgGone(b)
         return ops.detached(p)
       }
     }

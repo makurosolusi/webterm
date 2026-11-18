@@ -75,6 +75,11 @@ export class BrowserHost implements BrowserHostApi {
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
       closeTarget: async (r, targetId) => { await (await this.cdpOf(r)).send(CDP.closeTarget, { targetId }) },
       popup: (r, url) => this.shield.popupAllowed(r, url), adopt: (r, o, t, u) => this.tabApi.run(r.nodeId, () => this.tabs.adoptPopup(r, o, t, u)),
+      closed: (r, t) => {
+        if (!this.tabs.closedTab(r, t)) return false
+        this.tabApi.run(r.nodeId, () => this.tabs.pageClosed(r, t)).catch((err) => log.warn('browser.tabs', 'removing the tab of a closed page failed', { ids: { nodeId: r.nodeId }, error: errMsg(err) }))
+        return true
+      },
       bgEvent: (b, m, p, sid) => this.tabs.bgEvent(b, m, p, sid), bgTitle: (b, t) => this.tabs.bgTitle(b, t), bgGone: (b) => this.tabs.bgGone(b),
       pageState: (url) => this.shield.pageState(url),
       detached: (p) => this.shield.detached(p),

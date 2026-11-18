@@ -12,6 +12,8 @@ import type { TabKit } from './browserHost.tabs.kit'
 
 const log = createLogger('browser.tabs')
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
+/** Chromium's answer when a popup closed itself (OAuth: postMessage + window.close()) before it could be attached. */
+const PAGE_ALREADY_GONE = /no target with given id/i
 
 export interface PopupDeps {
   create(rec: NodeRec, o: { url: string; afterTabId?: string; openerTabId?: string; focusHuman: boolean; focusAgent: boolean; adopt: () => Promise<{ targetId: string; sessionId: string }> }): Promise<BrowserTab>
@@ -76,6 +78,7 @@ export function createPopupSide(kit: TabKit, deps: PopupDeps) {
         },
       })
     } catch (err) {
+      if (PAGE_ALREADY_GONE.test(errMsg(err))) { log.info('browser.popup', 'popup closed itself before it became a tab', { ids: { nodeId: rec.nodeId }, host: hostOnly(url) }); return }
       closePage(rec, targetId)
       log.warn('browser.popup', 'adopting a popup as a tab failed', { ids: { nodeId: rec.nodeId }, host: hostOnly(url), error: errMsg(err) })
       notice(rec, 'A popup could not be opened as a tab')

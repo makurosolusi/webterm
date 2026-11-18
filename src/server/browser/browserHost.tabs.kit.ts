@@ -164,7 +164,9 @@ export function createKit(ops: TabsOps) {
       const tab = t && find(t, tabId)
       if (!t || !tab || !t.rt.get(tabId)?.targetId || t.state.activeTabId === tabId) return
       // The agent's working tab and tabs still loading are not idle; look again later.
-      if ((tab.loading || (ops.agentDriving?.(rec.nodeId) && t.state.agentTabId === tabId))) { armDiscard(rec, tabId); return }
+      // A tab with a live popup is the popup's `window.opener` (OAuth waits for its postMessage): discarding it would break the login.
+      const hasPopup = t.state.tabs.some((x) => x.openerTabId === tabId && t.rt.get(x.tabId)?.targetId)
+      if ((tab.loading || hasPopup || (ops.agentDriving?.(rec.nodeId) && t.state.agentTabId === tabId))) { armDiscard(rec, tabId); return }
       discardTab(rec, tabId)
     }, ops.discardMs ?? DEFAULT_DISCARD_MS))
   }
