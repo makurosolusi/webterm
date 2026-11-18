@@ -9,10 +9,7 @@ import BrowserFavicon from './browser.favicon'
 import BrowserShortcuts from './BrowserShortcuts'
 import { DEFAULT_SEARCH_ENGINE, resolveOmniboxInput, SEARCH_ENGINES, toSearchEngine, type SearchEngine } from '../shared/browser.omnibox'
 import { START_TEXT } from './browser.uxText'
-
-/** The node's toolbar address field (`data-browser-omnibox`, also the ⌘L target), or null when the node has no toolbar. */
-const omniboxOf = (el: HTMLElement): HTMLInputElement | null =>
-  el.closest('.browser-node')?.querySelector<HTMLInputElement>('[data-browser-omnibox]') ?? null
+import { omniboxOf } from './browser.omniboxDom'
 
 /**
  * Chrome's fakebox: focus and typing move to the real omnibox, so the node has ONE address input. The omnibox is a

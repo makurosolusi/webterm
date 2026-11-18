@@ -271,12 +271,13 @@ describe('active tab owns the page', () => {
     expect(h.api.activate).toHaveBeenLastCalledWith('b1', 'c')
   })
 
-  it('a blank tab beside others opens the new-tab page; submitting navigates that tab', () => {
+  it('a blank tab beside others opens the new-tab page (no second address input); a shortcut navigates that tab', () => {
     mount()
     tabsMsg(view(['a', 'b'], { tabs: [makeTab('a'), makeTab('b', { url: 'about:blank', title: '' })], activeTabId: 'b' }))
-    fireEvent.change(screen.getByLabelText('Web address'), { target: { value: 'example.com' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Go' }))
-    expect(wsSent('nav')).toEqual([{ t: 'nav', id: 'b1', action: 'go', url: 'https://example.com/' }]) // resolveOmniboxInput yields the canonical URL
+    expect(screen.queryByLabelText('Web address')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Go' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open GitHub' }))
+    expect(wsSent('nav')).toEqual([{ t: 'nav', id: 'b1', action: 'go', url: 'https://github.com/' }])
   })
 
   it('a crashed active tab shows Reload, which reloads through the node channel', () => {

@@ -29,7 +29,7 @@ const pick = (name: string) => {
 }
 
 describe('BrowserToolbar', () => {
-  it('shows the current url, navigates on Enter and has no Go button', () => {
+  it('shows the current url, navigates on Enter and has no Go button until the text is edited', () => {
     const { nav } = setup()
     expect(address().value).toBe('https://a.com/')
     expect(address().hasAttribute('data-browser-omnibox')).toBe(true)

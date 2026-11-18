@@ -9,6 +9,10 @@ export const TOOLBAR_TEXT = {
   stop: 'Stop loading',
   urlLabel: 'Address',
   urlPlaceholder: 'Search or enter address',
+  /** Chrome's omnibox hint, shown while the page is blank (new tab). */
+  urlPlaceholderEngine: (engine: string) => `Search ${engine} or enter a web address`,
+  go: 'Go',
+  goTip: 'Go to this address (Enter)',
   agentControl: 'Let agents drive',
   agentControlHint: 'On by default: terminal agents cabled to this browser can control it right away. Uncheck to turn this off.',
   agentPill: 'Agents',
