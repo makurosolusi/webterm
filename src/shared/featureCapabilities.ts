@@ -78,6 +78,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
     subs: [
       { key: 'WEBTERM_BROWSER_AGENT', label: 'Let agents drive the browser', defaultOn: true, dangerous: true },
       { key: 'WEBTERM_BROWSER_CAPTURE_LINKS', label: 'Open links from terminals in the canvas browser (off: your machine browser)', defaultOn: true },
+      { key: 'WEBTERM_BROWSER_DOWNLOADS_AUTO', label: 'Keep downloads in the webterm folder automatically (off: ask Keep or Discard first)', defaultOn: true },
     ],
   },
   files: {

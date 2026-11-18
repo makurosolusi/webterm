@@ -2,7 +2,7 @@
 // Nama kunci & default berasal dari `browser.contract.ts`. SEMUA fitur mati tanpa
 // `WEBTERM_BROWSER=on` (impor cookie menyala otomatis bersama browser): tidak ada proses Chromium, proxy, rute, maupun jalur `/ws/browser`.
 import { DEFAULT_COOKIE_TTL_DAYS, DEFAULT_DISCARD_MS, DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../../shared/browser.contract'
-import { enumOf, flag, num, text, type EnvSpec } from '../envRegistry.types'
+import { flag, num, text, type EnvSpec } from '../envRegistry.types'
 
 const GROUP = 'browser'
 // Semua 'hot': runtime browser hidup-mati lewat hook kemampuan `browser` (browser.activate.ts), tanpa restart.
@@ -56,14 +56,13 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     description: 'On: a link a terminal or agent opens (sign-in pages from login commands, open, xdg-open, BROWSER) appears as a tab in a Browser node on the canvas, one is added next to the terminal if none is wired. ' +
       'Off: links open in your machine browser. Applies to terminals started after the change; running ones keep their setting until restarted.',
   }, 'on'),
-  enumOf(ENV_BROWSER.downloads, GROUP, ['save', 'ask'], 'save', {
+  flag(ENV_BROWSER.downloadsAuto, GROUP, {
     ...B,
-    audience: 'user',
     requires: [BROWSER_ON],
-    label: 'Downloads',
-    description: 'Files a page downloads are saved in the webterm folder for that browser profile (never your Downloads folder); use "Save a copy" in the node to take one out. ' +
-      '"Ask before saving" keeps each finished file pending until you choose Keep or Discard in the node\'s downloads list. Applies to new downloads.',
-  }),
+    label: 'Keep downloads automatically',
+    description: 'On: files a page downloads are saved in the webterm folder of that browser profile (never your Downloads folder); "Save a copy" in the node takes one out. ' +
+      'Off: each finished file waits for Keep or Discard in the node\'s downloads list. Applies to new downloads.',
+  }, 'on'),
   text(ENV_BROWSER.allowHosts, GROUP, {
     ...B,
     requires: [BROWSER_ON],

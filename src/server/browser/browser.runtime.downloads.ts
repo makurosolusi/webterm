@@ -2,14 +2,15 @@
 // of expired files. Kept out of browser.runtime.ts so that file stays an assembly line.
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import type { Workspace } from '../../shared/workspace'
+import { flagOr } from '../envFlag'
 import { createDownloadStore } from './browser.downloads.store'
 import type { HostDownloadsDeps, DownloadMode } from './browserHost.downloads'
 
 /** How often expired downloads are removed (retention itself is `DOWNLOAD_RETENTION_MS`). */
 const SWEEP_EVERY_MS = 3600_000
 
-/** "Ask before saving" only when Settings says `ask`; anything else (unset, junk) is the default, save. */
-export const downloadModeOf = (env: Record<string, string | undefined>): DownloadMode => (env[ENV_BROWSER.downloads] === 'ask' ? 'ask' : 'save')
+/** "Ask before keeping" only when the Settings switch is explicitly off; unset or junk is the default, save. */
+export const downloadModeOf = (env: Record<string, string | undefined>): DownloadMode => (flagOr(env[ENV_BROWSER.downloadsAuto], true) ? 'save' : 'ask')
 
 export interface DownloadWiring { deps: HostDownloadsDeps; stop(): void }
 

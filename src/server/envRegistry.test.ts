@@ -19,8 +19,8 @@ describe('ENV_REGISTRY', () => {
     expect(isBootstrapOnly(ENV_SETTINGS_SWITCH)).toBe(true)
     expect(BOOTSTRAP_ONLY_KEYS).toContain('WEBTERM_TELEGRAM_API_BASE')
   })
-  it('jumlah entri 56; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
-    expect(ENV_REGISTRY).toHaveLength(56)
+  it('jumlah entri 57; kunci pensiun tak di state tapi override lama tetap tersimpan saat update lain', () => {
+    expect(ENV_REGISTRY).toHaveLength(57)
     const retired = ['WEBTERM_CENTRAL_TOOL_BRIDGE', 'WEBTERM_KNOWLEDGE_GRAPHIFY', 'WEBTERM_EMBED_URL', 'WEBTERM_EMBED_MODEL', 'WEBTERM_CENTRAL_MAX_STEPS', 'WEBTERM_CENTRAL_TURN_TOKENS', 'WEBTERM_CHANNELS', 'WEBTERM_CENTRAL_TELEGRAM', 'WEBTERM_CENTRAL_TOOLS', 'WEBTERM_CENTRAL_PLANNER', 'WEBTERM_CENTRAL_CHAT']
     const s = setupEnv({}, JSON.stringify({ WEBTERM_CENTRAL_TOOL_BRIDGE: 'opencode', WEBTERM_EMBED_URL: 'http://x.invalid', WEBTERM_CENTRAL_MAX_STEPS: '3', WEBTERM_CENTRAL_TURN_TOKENS: '1000', WEBTERM_CENTRAL_TOOLS: 'write' }))
     expect(s.svc.state({ root: true }).entries.filter((e) => retired.includes(e.key))).toEqual([])

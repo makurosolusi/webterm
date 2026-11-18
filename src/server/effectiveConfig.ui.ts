@@ -27,6 +27,7 @@ const SUB_NAME: Readonly<Record<string, string>> = {
   WEBTERM_RUN_REQUIRE_APPROVAL: 'Ask before a worker runs',
   WEBTERM_BROWSER_AGENT: 'Let agents control the browser',
   WEBTERM_BROWSER_CAPTURE_LINKS: 'Open terminal links in the canvas browser',
+  WEBTERM_BROWSER_DOWNLOADS_AUTO: 'Keep downloads automatically',
 }
 
 /** Keys that have a direct UI control, mapped to where it lives. */

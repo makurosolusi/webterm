@@ -17,7 +17,7 @@ const ALL_KEYS = [...PRIMARY, ...SUBS, ...DERIVED]
 
 describe('registry: tak ada kunci katalog yang butuh restart', () => {
   it('semua kunci primer, sub-opsi, dan turunan ada di registry', () => {
-    expect(ALL_KEYS.length).toBe(7 + 6 + DERIVED.length)
+    expect(ALL_KEYS.length).toBe(7 + 7 + DERIVED.length)
     expect(ALL_KEYS.filter((k) => specFor(k) === undefined)).toEqual([])
   })
 
