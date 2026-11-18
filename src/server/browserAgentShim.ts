@@ -49,6 +49,7 @@ capture starts at the first read, so reload the page with \`navigate\` to see me
 Act verbs: \`open [url]\`, \`navigate <url>\`, \`click <ref> <snapId>\`, \`type <ref> <snapId> <text> [--submit]\`,
 \`press <key>\`, \`scroll <dy>\`, \`tab new|switch|close\`, \`release\` (give control back to the user early).
 Tabs: \`tabs\` (read), \`--tab <id>\` on any page verb (see Tabs below).
+Panes: \`layout get|set\`, \`sync on|off\`, \`reload|back|forward\`, \`--all\` (see Split panes below).
 
 ## Profiles (separate logins)
 
@@ -71,6 +72,20 @@ Your working tab is separate from the tab the user is looking at, so you can wor
 A snapshot lists the tabs when there are several. Its refs belong to the tab it was taken in: after switching tabs a
 \`stale_tab_ref\` error means take a new snapshot of the tab you are on (the error says which). A full node answers
 \`tab_limit\`: close a tab first. Tabs share the node's profile (logins).
+
+## Split panes (compare pages in one node)
+
+A browser node can show up to 4 tabs side by side (panes, one tab each). You still address TABS, never panes.
+\`layout get\` reads the arrangement (a tree like \`h(t1, t2)\`, each pane's tab, size and device, and whether sync is on).
+\`layout set <shape> <tab>...\` arranges it: \`single <tab>\`, \`h <tab> <tab> [..]\` (columns), \`v <tab> <tab> [..]\` (rows),
+\`grid <t1> <t2> <t3> <t4>\` (2x2); a tab is an id from \`tabs\` or \`new:<url>\`, which opens it first. At most 4 panes and 8 tabs.
+\`--all\` runs ONE action on every tab of the layout and answers a result PER TAB (a tab that fails does not fail the others):
+\`navigate <url> --all\`, \`snapshot --all\`, \`screenshot --all\` (or \`screenshot --layout\`: every visible tab as a named list),
+\`scroll <dy> --all\`, \`reload|back|forward --all\`, and \`click --all --text "<element name>" [--role button] [--nth 2]\` or
+\`type <text> --all --text "<field name>" [--submit]\`, which find the element by its role and accessible name in each tab (a tab
+without it answers \`no_match\`); refs are never shared between tabs, so \`--all\` has no ref form. \`reload\`, \`back\` and \`forward\`
+also work on one tab (\`--tab <id>\`). \`sync on|off\` mirrors what the USER does in one pane into the others (not your own commands:
+use \`--all\`). To compare two pages: \`layout set h new:<url-a> new:<url-b>\`, then \`snapshot --all\`.
 
 Act verbs take control of the browser automatically and control returns to the user when your turn ends.
 Do not ask the user to hand over the browser or to confirm routine browsing. Run one browser verb per shell command.
