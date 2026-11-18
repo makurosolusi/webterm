@@ -364,3 +364,9 @@
 .st-seg-option:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
 .st-seg-option:disabled { opacity: 0.4; }
 .st-seg-glyph { font-family: var(--vscode-editor-font-family, var(--font-mono)); line-height: 1; }
+
+/* Skill cable color / size rows (SettingsSkillCable.tsx): named swatch radios that wrap, plus the line preview. */
+.st-skill-cable-colors { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.st-skill-cable-colors .st-seg { flex-wrap: wrap; }
+.st-skill-cable-chip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--vscode-foreground, currentColor); }
+.st-skill-cable-preview { display: block; }

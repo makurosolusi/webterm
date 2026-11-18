@@ -7,6 +7,7 @@ import { Field, SelectField, ToggleField } from './SettingsFields'
 import { SettingsAdvanced, SettingsGroup, SettingsSegmented, type SegmentedOption } from './SettingsControls'
 import { NumberSelectField } from './SettingsPickerFields'
 import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS } from './settingsPresets'
+import { SkillCableFields } from './SettingsSkillCable'
 import { Swatch } from './CanvasBackgroundControls'
 import { EDGE_STROKE } from './canvasStyle'
 import './canvasBackground.css'
@@ -82,6 +83,7 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         <CableColorField value={s.edgeColor} onChange={(edgeColor) => onChange({ edgeColor })} />
         <NumberSelectField setting="edgeWidth" id="st-edgeWidth" label="Cable thickness" value={s.edgeWidth} options={EDGE_WIDTH_OPTIONS}
           onChange={(v) => onChange({ edgeWidth: v })} />
+        <SkillCableFields settings={s} onChange={onChange} />
       </SettingsAdvanced>
     </>
   )

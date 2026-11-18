@@ -37,6 +37,7 @@ export { SETUP_STEPS, type SetupStep, type SetupStepState, type SetupState } fro
 
 // `CustomAgent` (BYO CLI) hidup di `customAgent.schema.ts`; `baseAgent` membuatnya MEWARISI
 // kapabilitas harness builtin lewat `capabilityAgentId` (tanpa itu hanya spawn + judul terminal).
+import { SKILL_CABLE_COLOR_DEFAULT, SKILL_CABLE_SIZE_DEFAULT, isSkillCableColor, isSkillCableSize, type SkillCableSize } from './settings.skillCable'
 export type { CustomAgent, CustomAgentLaunch } from './customAgent.schema'
 
 /** Quick move & resize modifier: `cmdCtrl` = ⌘⌃ (Ctrl+Alt off macOS), `cmdShift` = ⌘⇧ (Ctrl+Shift). */
@@ -66,6 +67,10 @@ export interface Settings extends TerminalSettings, AgentSettings {
   edgeColor: string
   /** Cable thickness in px (`SETTING_RANGES.edgeWidth`). */
   edgeWidth: number
+  /** Skill cable color: `'default'` = accent, else a palette hue id (`settings.skillCable.ts`). Normalized on load. */
+  skillCableColor: string
+  /** Skill cable size id (`thin` | `normal` | `thick` | `xthick`). Normalized on load. */
+  skillCableSize: SkillCableSize
   /** Canvas wallpaper (default / color / gradient / image). See `canvasBackground.schema.ts`. */
   canvasBackground: CanvasBackground
   /** Per-workspace wallpaper overrides by workspace id; absent = same as global. */
@@ -163,6 +168,8 @@ export const DEFAULT_SETTINGS: Settings = {
   appTheme: 'auto',
   edgeColor: 'default',
   edgeWidth: 2,
+  skillCableColor: SKILL_CABLE_COLOR_DEFAULT,
+  skillCableSize: SKILL_CABLE_SIZE_DEFAULT,
   canvasBackground: DEFAULT_CANVAS_BACKGROUND,
   canvasBackgroundByWorkspace: {},
   openMarkdownPreview: true,
@@ -237,6 +244,8 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.permissionRouting = permissionRoutingOf(out.permissionRouting)
   if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
   if (out.edgeColor !== 'default' && !HEX_COLOR.test(out.edgeColor)) out.edgeColor = DEFAULT_SETTINGS.edgeColor
+  if (!isSkillCableColor(out.skillCableColor)) out.skillCableColor = DEFAULT_SETTINGS.skillCableColor
+  if (!isSkillCableSize(out.skillCableSize)) out.skillCableSize = DEFAULT_SETTINGS.skillCableSize
   Object.assign(out, seedClaudeProfiles(src, out.agentLaunchCommands.claude))
   const agents = normalizeCustomAgents(src.customAgents, 'load')
   out.customAgents = agents.agents

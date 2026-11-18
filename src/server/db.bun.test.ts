@@ -62,6 +62,15 @@ test('saveSettings persists a patch and leaves untouched keys at their default',
   expect(db.getSettings().gridSize).toBe(DEFAULT_SETTINGS.gridSize)
 })
 
+test('skill cable color and size persist, and an unknown value reads back as the default', () => {
+  const db = freshDb()
+  expect(db.getSettings()).toMatchObject({ skillCableColor: 'default', skillCableSize: 'normal' })
+  db.saveSettings({ skillCableColor: 'teal', skillCableSize: 'thick' })
+  expect(db.getSettings()).toMatchObject({ skillCableColor: 'teal', skillCableSize: 'thick' })
+  db.saveSettings({ skillCableColor: '#ff0000', skillCableSize: 'huge' as never })
+  expect(db.getSettings()).toMatchObject({ skillCableColor: 'default', skillCableSize: 'normal' })
+})
+
 test('a second patch merges over the first instead of replacing it', () => {
   const db = freshDb()
   db.saveSettings({ fontSize: 17 })
