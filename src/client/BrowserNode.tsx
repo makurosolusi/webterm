@@ -36,6 +36,12 @@ import { browserTabDomId } from './browserTabs/BrowserTabItem'
 import { useBrowserTabs } from './browserTabs/useBrowserTabs'
 import type { TabMsg } from './browserTabs/useBrowserTabs'
 import { useBrowserTabShortcuts } from './browserTabs/useBrowserTabShortcuts'
+import { BrowserPaneTree } from './browserSplit/BrowserPaneTree'
+import { BrowserSplitMenu } from './browserSplit/BrowserSplitMenu'
+import { useBrowserSplit } from './browserSplit/useBrowserSplit'
+import { useBrowserSplitShortcuts } from './browserSplit/useBrowserSplitShortcuts'
+import { zoneBox } from './browserSplit/browserSplit.drop'
+import type { DropHint } from './browserSplit/browserSplit.drop'
 import './browser.css'
 import './browser.driven.css'
 
@@ -108,6 +114,13 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const tabs = useBrowserTabs(id, state, send)
   tabMsg.current = tabs.onMsg
   useBrowserTabShortcuts({ containerRef: bodyRef, state: tabs.view, onAction: tabs.act, onNotice: tabs.notify })
+  const split = useBrowserSplit(tabs, session, send, session.hostRef)
+  const [dropHint, setDropHint] = useState<DropHint | null>(null)
+  useBrowserSplitShortcuts({ containerRef: bodyRef, onSplitRight: () => { void split.split('right') }, onFocus: split.moveFocus })
+  const layout = tabs.view.layout
+  const focusId = split.focusId
+  const room = focusId ? split.canSplitAt(focusId, 'right') : undefined
+  const splitMenu = tabs.standIn || !focusId ? undefined : { run: (tabId: string, edge: 'right' | 'bottom') => { void split.dropTab(tabId, focusId, edge) }, blocked: room && !room.ok ? room.reason : undefined }
   const panelId = `bt-panel-${id}`
   const lastGo = useRef<string | undefined>(undefined)
   const device = resolveDevice(d.device)
@@ -215,15 +228,27 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
         <div ref={bodyRef} className="node-body browser-node">
-          <BrowserTabStrip state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId} />
+          <BrowserTabStrip
+            state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId}
+            trailing={tabs.standIn ? undefined : <BrowserSplitMenu controls={split} />}
+            split={splitMenu}
+            onPaneHover={setDropHint} onPaneDrop={(tabId, hit) => { void split.dropTab(tabId, hit.paneTabId, hit.zone) }}
+          />
           {renderToolbar?.(ctx)}
-          <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />
-          <div className="browser-body" role="tabpanel" id={panelId} aria-labelledby={tabs.active ? browserTabDomId(tabs.active.tabId) : undefined} aria-label={tabs.active ? undefined : 'New tab'}>
-            <div className={device ? 'browser-zoom browser-zoom--device' : 'browser-zoom'} style={{ '--browser-zoom': zoom, ...deviceStyle(device) } as CSSProperties}>
-              <BrowserSurface session={surfaceSession} />
+          {!layout && <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />}
+          <div
+            className="browser-body" role="tabpanel" id={panelId} data-pane-tab={layout ? undefined : tabs.active?.tabId}
+            aria-labelledby={tabs.active ? browserTabDomId(tabs.active.tabId) : undefined} aria-label={tabs.active ? undefined : 'New tab'}
+          >
+            <div className={device && !layout ? 'browser-zoom browser-zoom--device' : 'browser-zoom'} style={{ '--browser-zoom': zoom, ...(layout ? {} : deviceStyle(device)) } as CSSProperties}>
+              <BrowserSurface
+                session={layout ? session : surfaceSession}
+                panes={layout ? <BrowserPaneTree layout={layout} state={tabs.view} session={session} controls={split} dropHint={dropHint} /> : undefined}
+              />
             </div>
-            <BrowserTabPanel view={tabs.view} active={tabs.active} standIn={tabs.standIn} act={tabs.act} go={(url) => ctx.nav('go', url)} />
-            {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
+            {!layout && <BrowserTabPanel view={tabs.view} active={tabs.active} standIn={tabs.standIn} act={tabs.act} go={(url) => ctx.nav('go', url)} />}
+            {!layout && dropHint && dropHint.paneTabId === tabs.active?.tabId && <div className="bp-drop" aria-hidden="true" style={zoneBox(dropHint.zone)} data-zone={dropHint.zone} />}
+            {showStart && !layout && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
           </div>
           {consoleDrawer.drawer}

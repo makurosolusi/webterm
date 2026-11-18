@@ -13,7 +13,7 @@ const WS_OPEN = 1 // WebSocket.readyState OPEN (protokol)
 
 export interface BrowserListener {
   /** `lat` hanya pada frame pertama sesudah input bercap waktu (I1-d). */
-  onFrame: (seq: number, jpeg: Uint8Array, lat?: FrameLatency) => void
+  onFrame: (seq: number, jpeg: Uint8Array, lat?: FrameLatency, tabId?: string) => void
   onMsg: (msg: ServerMsg) => void
   onConnection: (up: boolean) => void
 }
@@ -59,7 +59,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
     } else if (data instanceof ArrayBuffer) {
       const bytes = new Uint8Array(data)
       const h = decodeFrameHeader(bytes)
-      if (h) listeners.get(h.nodeId)?.onFrame(h.seq, bytes.subarray(h.offset), h.lat)
+      if (h) listeners.get(h.nodeId)?.onFrame(h.seq, bytes.subarray(h.offset), h.lat, h.tabId)
     }
   }
 

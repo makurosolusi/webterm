@@ -1,0 +1,61 @@
+/* Split panes of a browser node. Only theme tokens (--vscode-*, --accent ...), no new colours. */
+.bp-tree { position: absolute; inset: 0; background: var(--vscode-editorWidget-background, var(--panel)); overflow: hidden; }
+.bp {
+  position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; box-sizing: border-box;
+  background: var(--vscode-editor-background, var(--bg));
+  outline: 2px solid transparent; outline-offset: -2px;
+}
+/* Focus = a 2px accent edge (also announced by aria-current). */
+.bp--focus { outline-color: var(--vscode-focusBorder, var(--accent)); }
+.bp--swap { outline-color: var(--vscode-list-dropBackground, var(--accent)); outline-style: dashed; }
+.bp-head {
+  display: flex; align-items: center; gap: 2px; flex: none; height: 26px; padding: 0 2px 0 6px; box-sizing: border-box;
+  font: 11px/1.2 var(--font-ui); color: var(--vscode-foreground, var(--text));
+  background: var(--vscode-editorGroupHeader-tabsBackground, var(--panel)); border-bottom: 1px solid var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
+  cursor: grab; user-select: none; touch-action: none;
+}
+.bp-head--focus { background: var(--vscode-tab-activeBackground, var(--panel)); }
+.bp-title { all: unset; display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; height: 100%; cursor: pointer; }
+.bp-title:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+.bp-title__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-size { flex: none; padding: 0 4px; font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground, var(--text)); opacity: .85; }
+.bp-body { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.bp-body .browser-surface { position: absolute; inset: 0; }
+
+/* Device in a pane: the frame keeps the device aspect, centred (same recipe as the node-level device mode). */
+.bp-body--device { container-type: size; background: var(--vscode-editorWidget-background, var(--panel)); }
+.bp-body--device .browser-surface { display: flex; align-items: center; justify-content: center; }
+.bp-body--device .browser-canvas {
+  flex: none;
+  width: min(100cqw, 100cqh * var(--device-w) / var(--device-h));
+  height: min(100cqh, 100cqw * var(--device-h) / var(--device-w));
+  background: var(--vscode-editor-background, var(--bg));
+  box-shadow: 0 0 0 1px var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
+}
+
+/* Drop preview of a dragged tab (VS Code editor group overlay). */
+.bp-drop {
+  position: absolute; z-index: 3; pointer-events: none; box-sizing: border-box;
+  background: color-mix(in srgb, var(--vscode-focusBorder, var(--accent)) 22%, transparent);
+  border: 2px solid var(--vscode-focusBorder, var(--accent));
+}
+@media (prefers-reduced-motion: no-preference) { .bp-drop { transition: all 80ms ease-out; } }
+
+/* Separators: 6px hit area centred on the border, a thin line that thickens on hover/focus/drag. */
+.bp-sep { position: absolute; z-index: 4; width: 6px; height: 6px; background: transparent; touch-action: none; outline: none; }
+.bp-sep--h { width: 6px; cursor: col-resize; }
+.bp-sep--v { height: 6px; cursor: row-resize; }
+.bp-sep::after { content: ''; position: absolute; background: var(--vscode-editorWidget-border, rgb(127 127 127 / 40%)); }
+.bp-sep--h::after { left: 2px; right: 2px; top: 0; bottom: 0; }
+.bp-sep--v::after { top: 2px; bottom: 2px; left: 0; right: 0; }
+.bp-sep:hover::after, .bp-sep:focus-visible::after, .bp-sep:active::after { background: var(--vscode-focusBorder, var(--accent)); left: 1px; right: 1px; }
+.bp-sep--v:hover::after, .bp-sep--v:focus-visible::after, .bp-sep--v:active::after { top: 1px; bottom: 1px; left: 0; right: 0; }
+
+.bp-small {
+  position: absolute; z-index: 5; left: 50%; bottom: 8px; transform: translateX(-50%); padding: 3px 8px; border-radius: 4px; pointer-events: none;
+  font: 11px/1.4 var(--font-ui); color: var(--vscode-editorWarning-foreground, var(--text)); background: var(--vscode-editorWidget-background, var(--panel));
+  border: 1px solid var(--vscode-editorWidget-border, rgb(127 127 127 / 30%));
+}
+
+/* Drop preview for the single-pane node (a tab dragged over the page). */
+.browser-body > .bp-drop { z-index: 6; }

@@ -2,7 +2,7 @@
 // menggambar frame lalu `ack`, dan menampung state/galat/dialog/kursor dari server.
 // Hanya frame TERBARU yang digambar (decode bisa selesai tak berurutan), dan setelah resize frame transisi
 // berukuran lama dibuang sampai frame yang cocok tiba (Orca browser-screencast-stream.ts:114-127).
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { DSF_MAX, RESIZE_DEBOUNCE_MS } from '../shared/browser.contract'
 import type { BrowserState, ClientMsg, FrameLatency, ServerMsg } from '../shared/browser.contract'
@@ -43,7 +43,13 @@ export interface BrowserSession {
   latency: LatencyWindow
   /** Page console of this node (deltas from the server buffer). */
   console: ConsoleView
+  /** Split view: where frames of a pane's tab are drawn (returns the unsubscribe). Frames of a tab without a pane are dropped. */
+  panes: PaneFrames
 }
+
+/** Draws a decoded frame; the session closes the bitmap afterwards. */
+export type PaneSink = (bmp: ImageBitmap) => void
+export interface PaneFrames { register(tabId: string, sink: PaneSink): () => void }
 
 /**
  * `paused` = lepas dari server (zoom kecil / collapse); kanvas tetap menampilkan frame terakhir.
@@ -67,6 +73,13 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [connected, setConnected] = useState(true)
   const [latency] = useState(createLatencyWindow)
   const [consoleView, setConsoleView] = useState<ConsoleView>(EMPTY_CONSOLE)
+  const paneSinks = useRef(new Map<string, PaneSink>())
+  const panes = useMemo<PaneFrames>(() => ({
+    register(tabId, sink) {
+      paneSinks.current.set(tabId, sink)
+      return () => { if (paneSinks.current.get(tabId) === sink) paneSinks.current.delete(tabId) }
+    },
+  }), [])
   const tabMsgRef = useRef(onTabMsg)
   tabMsgRef.current = onTabMsg
 
@@ -96,6 +109,20 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   }, [draw])
 
   useEffect(() => {
+    // A frame tagged with a tab belongs to a split pane: draw it there (no resize filter: each pane has its own size) or drop a stale one.
+    const paintPane = async (seq: number, jpeg: Uint8Array, tabId: string) => {
+      const sink = paneSinks.current.get(tabId)
+      if (sink) {
+        try {
+          const bmp = await createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' }))
+          sink(bmp)
+          bmp.close()
+        } catch (err) {
+          flash(`Frame decode failed: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      if (attached.current) stream.send({ t: 'ack', id, seq })
+    }
     const paint = async (seq: number, jpeg: Uint8Array, lat?: FrameLatency) => {
       const rxAt = lat ? clientNow() : 0
       const n = ++order.current.arrived
@@ -119,7 +146,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       if (attached.current) stream.send({ t: 'ack', id, seq })
     }
     const unsub = stream.subscribe(id, {
-      onFrame: (seq, jpeg, lat) => { void paint(seq, jpeg, lat) },
+      onFrame: (seq, jpeg, lat, tabId) => { void (tabId ? paintPane(seq, jpeg, tabId) : paint(seq, jpeg, lat)) },
       onConnection: setConnected,
       onMsg: (m) => {
         if (m.t === 'state') { setState(m); setError(undefined) }
@@ -185,7 +212,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     stream.send(m)
   }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency, console: consoleView,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, latency, console: consoleView, panes,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

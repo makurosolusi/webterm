@@ -3,7 +3,7 @@
 // ketikan di input dialog ikut diteruskan ke halaman. Kelas `nodrag nowheel nopan nokey` membuat React Flow tidak mencuri
 // drag/wheel/keyboard. Seluruh isi halaman asing hanya hadir sebagai piksel di canvas.
 import { useEffect, useMemo, useRef } from 'react'
-import type { ClipboardEvent, CompositionEvent, KeyboardEvent, PointerEvent } from 'react'
+import type { ClipboardEvent, CompositionEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import type { TouchPoint } from '../shared/browser.contract'
 import { Textarea } from '@/components/ui/textarea'
 import BrowserDialogView from './browser.dialog'
@@ -15,8 +15,9 @@ import InputLatencyChip from './browser/latency/InputLatencyChip'
 
 const TOUCH_KIND = { down: 'start', move: 'move', up: 'end', cancel: 'cancel' } as const
 
-export default function BrowserSurface({ session }: { session: BrowserSession }) {
-  const { hostRef, canvasRef, viewport } = session
+/** The interactive canvas of one page (the node's, or one split pane's): pointer, wheel, keys, IME and paste become messages. */
+export function BrowserInput({ session }: { session: BrowserSession }) {
+  const { canvasRef, viewport } = session
   const rawSend = session.send
   const sendRef = useRef(rawSend)
   sendRef.current = rawSend
@@ -82,38 +83,44 @@ export default function BrowserSurface({ session }: { session: BrowserSession })
     if (imeRef.current) imeRef.current.value = ''
   }
 
+  return (
+    <div
+      ref={surfaceRef}
+      className="browser-surface nodrag nowheel nopan nokey"
+      tabIndex={0}
+      style={{ touchAction: 'none' }}
+      onFocus={(e) => { if (e.target === e.currentTarget) imeRef.current?.focus({ preventScroll: true }) }}
+      onContextMenu={(e) => e.preventDefault()}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); pointer('down', e) }}
+      onPointerMove={(e) => pointer('move', e)}
+      onPointerUp={(e) => pointer('up', e)}
+      onPointerCancel={(e) => pointer('cancel', e)}
+      onKeyDown={onKey('down')}
+      onKeyUp={onKey('up')}
+      onPaste={onPaste}
+      onCompositionUpdate={onCompositionUpdate}
+      onCompositionEnd={onCompositionEnd}
+    >
+      <canvas ref={canvasRef} className="browser-canvas" style={{ cursor: session.cursor }} aria-label="Browser view" />
+      <Textarea
+        ref={imeRef}
+        aria-label="Browser keyboard input"
+        className="absolute top-0 left-0 size-px min-h-0 resize-none border-0 p-0 opacity-0 pointer-events-none"
+        tabIndex={-1}
+        data-tab-shortcuts // the page's own keyboard sink, not a text field: tab shortcuts (Ctrl/Cmd+T, W, ...) must reach the node
+      />
+    </div>
+  )
+}
+
+/** The node's stage: the interactive page (or, in a split, the pane tree given as `panes`) plus the status, notice and dialog layers. */
+export default function BrowserSurface({ session, panes }: { session: BrowserSession; panes?: ReactNode }) {
   const notice = browserNotice({ state: session.state, error: session.error, connected: session.connected })
   const note = session.localNotice || notice?.text
-
   return (
-    <div ref={hostRef} className="browser-stage">
-      <div
-        ref={surfaceRef}
-        className="browser-surface nodrag nowheel nopan nokey"
-        tabIndex={0}
-        style={{ touchAction: 'none' }}
-        onFocus={(e) => { if (e.target === e.currentTarget) imeRef.current?.focus({ preventScroll: true }) }}
-        onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); pointer('down', e) }}
-        onPointerMove={(e) => pointer('move', e)}
-        onPointerUp={(e) => pointer('up', e)}
-        onPointerCancel={(e) => pointer('cancel', e)}
-        onKeyDown={onKey('down')}
-        onKeyUp={onKey('up')}
-        onPaste={onPaste}
-        onCompositionUpdate={onCompositionUpdate}
-        onCompositionEnd={onCompositionEnd}
-      >
-        <canvas ref={canvasRef} className="browser-canvas" style={{ cursor: session.cursor }} aria-label="Browser view" />
-        <Textarea
-          ref={imeRef}
-          aria-label="Browser keyboard input"
-          className="absolute top-0 left-0 size-px min-h-0 resize-none border-0 p-0 opacity-0 pointer-events-none"
-          tabIndex={-1}
-          data-tab-shortcuts // the page's own keyboard sink, not a text field: tab shortcuts (Ctrl/Cmd+T, W, ...) must reach the node
-        />
-      </div>
-      {session.state?.loading && <div className="browser-loading" role="progressbar" aria-label="Loading" />}
+    <div ref={session.hostRef} className="browser-stage">
+      {panes ?? <BrowserInput session={session} />}
+      {!panes && session.state?.loading && <div className="browser-loading" role="progressbar" aria-label="Loading" />}
       <InputLatencyChip window={session.latency} />
       {note && <div className={`browser-notice browser-notice--${session.localNotice ? 'error' : notice?.tone}`} role="status">{note}</div>}
       {session.dialog && (
@@ -121,7 +128,7 @@ export default function BrowserSurface({ session }: { session: BrowserSession })
           <BrowserDialogView
             key={session.dialog.id + session.dialog.message}
             dialog={session.dialog}
-            onAnswer={(accept, text) => { send({ t: 'dialog', accept, ...(text === undefined ? {} : { text }) }); session.closeDialog() }}
+            onAnswer={(accept, text) => { session.send({ t: 'dialog', accept, ...(text === undefined ? {} : { text }) }); session.closeDialog() }}
           />
         </div>
       )}

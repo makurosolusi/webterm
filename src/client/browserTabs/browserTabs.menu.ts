@@ -11,6 +11,8 @@ export interface TabMenuDeps {
   run: (a: BrowserTabAction) => void
   copyUrl: (url: string) => void
   makeId: () => string
+  /** Split view: show this tab in a new pane beside the focused one; `blocked` = why that cannot run now. */
+  split?: { run: (tabId: string, edge: 'right' | 'bottom') => void; blocked?: string }
 }
 
 /** Context menu of one tab (Chrome order: new/duplicate/reload, close group, node-level actions, copy). */
@@ -33,11 +35,18 @@ export function tabContextItems(tab: BrowserTab, d: TabMenuDeps): VscodeMenuItem
     { type: 'item', id: 'close-right', label: 'Close to the right', disabled: index === state.tabs.length - 1,
       title: index === state.tabs.length - 1 ? 'No tabs to the right' : undefined,
       onSelect: () => run({ type: 'closeToRight', tabId: tab.tabId }) },
+    ...(d.split ? splitItems(tab.tabId, d.split) : []),
     { type: 'separator' },
     { type: 'item', id: 'pop-out', label: 'Pop out to its own node', disabled: onlyTab, title: onlyTab ? 'This is the only tab in the node' : undefined,
       onSelect: () => run({ type: 'popOut', tabId: tab.tabId }) },
     { type: 'item', id: 'copy-url', label: 'Copy URL', disabled: isBlankTab(tab), onSelect: () => d.copyUrl(tab.url) },
   ]
+}
+
+function splitItems(tabId: string, split: NonNullable<TabMenuDeps['split']>): VscodeMenuItem[] {
+  const row = (id: string, label: string, edge: 'right' | 'bottom', keybinding?: string): VscodeMenuItem =>
+    ({ type: 'item', id, label, keybinding, disabled: split.blocked !== undefined, title: split.blocked, onSelect: () => split.run(tabId, edge) })
+  return [{ type: 'separator' }, row('split-right', 'Split right', 'right', chordLabel('Mod+\\', isMacPlatform())), row('split-down', 'Split down', 'bottom')]
 }
 
 /** All-tabs dropdown: one row per tab, the active one checked. */
