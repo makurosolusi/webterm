@@ -20,6 +20,9 @@ const rule = (css: string, selector: string): string => {
 
 const bar = src('WorkspaceBar.tsx')
 const css = src('styles.css')
+const dot = src('WorkspaceTabDot.tsx')
+const wsCss = src('workspaceColor.css')
+const tabBar = src('components/vscode/vscodeEditorTabBar.tsx')
 
 describe('title bar & editor tabs memakai primitif VS Code', () => {
   it('title bar merender `VscodeMenuBar` dan tab strip `VscodeEditorTabBar`', () => {
@@ -102,21 +105,26 @@ describe('rename & hapus workspace tetap terjangkau', () => {
 
 describe('status dot tetap milik workspace', () => {
   it('dot dipetakan dari `workspaceTabDot`, bukan dari keterpilihan', () => {
-    expect(bar).toContain('workspaceTabDot(g)')
-    expect(bar).toContain('tab__dot tab__dot--')
+    expect(bar).toContain('workspaceTabFields(g')
+    expect(dot).toContain('workspaceTabDot(group)')
+    expect(dot).toContain('ws-dot__badge ws-dot__badge--')
     // Tidak ada lagi kelas tab aktif buatan sendiri.
     expect(bar).not.toContain('tab--active')
   })
 
-  it('setiap jenis dot tetap punya warna dari token status', () => {
-    for (const [state, token] of [
-      ['idle', '--state-queued'],
-      ['working', '--state-working'],
-      ['attention', '--state-attention'],
-    ]) {
-      expect(css).toContain(`.tab__dot--${state} { background: var(${token}); }`)
-    }
-    expect(css).toContain('.tab__dot--neutral {')
+  it('lencana status memakai token status; titik memakai token warna workspace, bukan status', () => {
+    expect(wsCss).toContain('.ws-dot__badge--working { background: var(--state-working); }')
+    expect(wsCss).toContain('.ws-dot__badge--attention { background: var(--state-attention); }')
+    expect(wsCss).toContain('background: var(--ws-dot, var(--ws-slate-default))')
+    expect(css).not.toContain('.tab__dot')
+  })
+
+  it('tab tidak punya penanda garis warna (bar bawah, border-top aksen, data-accent)', () => {
+    expect(wsCss).not.toMatch(/vscode-editor-tab\[data-accent/)
+    expect(wsCss).not.toContain('--tab-accent')
+    expect(tabBar).not.toContain('data-accent')
+    expect(tabBar).not.toContain('tab-accent')
+    expect(bar).not.toContain('accent:')
   })
 })
 

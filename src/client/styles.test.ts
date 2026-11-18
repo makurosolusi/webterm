@@ -182,12 +182,6 @@ describe('styles.css — token sheet', () => {
     const actions = tokens.slice(tokens.indexOf('.app-tabs__actions {'), tokens.indexOf('.app-tabs__action {'))
     expect(actions).toContain('flex: none')
   })
-
-  it('gives every tab dot kind a colour, neutral included', () => {
-    for (const kind of ['neutral', 'idle', 'working', 'attention']) {
-      expect(tokens).toContain(`.tab__dot--${kind} {`)
-    }
-  })
 })
 
 describe('node-chrome.css', () => {

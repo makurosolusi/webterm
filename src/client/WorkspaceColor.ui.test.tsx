@@ -19,7 +19,7 @@ beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.st
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('tab identity marker', () => {
-  it('sets each tab accent to its workspace color token and opens the picker from the tab menu', () => {
+  it('fills each tab dot with its workspace color token (active and inactive), no line marker, and opens the picker from the tab menu', () => {
     const onSetWorkspaceColor = vi.fn()
     render(
       <WorkspaceBar
@@ -28,8 +28,13 @@ describe('tab identity marker', () => {
         onSetWorkspaceColor={onSetWorkspaceColor}
       />,
     )
-    const accents = [...document.querySelectorAll<HTMLElement>('.vscode-editor-tab[data-accent]')].map((el) => el.style.getPropertyValue('--tab-accent'))
-    expect(accents).toEqual(['var(--ws-teal-vivid)', 'var(--ws-pink-default)'])
+    const dots = [...document.querySelectorAll<HTMLElement>('.vscode-editor-tab .ws-dot')].map((el) => el.style.getPropertyValue('--ws-dot'))
+    expect(dots).toEqual(['var(--ws-teal-vivid)', 'var(--ws-pink-default)'])
+    expect(document.querySelectorAll('.vscode-editor-tab[data-accent]').length).toBe(0)
+    expect(document.querySelectorAll('[style*="--tab-accent"]').length).toBe(0)
+    // Unknown / no status for both tabs: no badge. Combined aria-label names workspace and color.
+    expect(document.querySelectorAll('.ws-dot__badge').length).toBe(0)
+    expect(screen.getByRole('tab', { name: 'Workspace noc, color pink' })).toBeTruthy()
     fireEvent.contextMenu(screen.getByRole('tab', { name: /noc/ }), { clientX: 10, clientY: 10 })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Color…' }))
     fireEvent.click(screen.getByRole('radio', { name: 'Blue' }))

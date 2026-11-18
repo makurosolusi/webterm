@@ -16,7 +16,7 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
-import { workspaceTabDot, workspaceTabTitle } from './workspaceTabs'
+import { workspaceTabFields } from './WorkspaceTabDot'
 import { deleteWorkspaceMessage } from './workspaceMenu'
 import { WorkspaceTabRename } from './WorkspaceTabRename'
 import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
@@ -187,11 +187,9 @@ export default function WorkspaceBar({
   const tabs: VscodeEditorTab[] = groups.map((g) => {
     const wt = worktrees[g.projectId]
     return {
-      accent: accentOf(g.projectId),
       id: g.projectId,
       label: g.projectName,
-      tooltip: wt?.managed ? `${workspaceTabTitle(g)}\n${worktreeSummary(wt)}` : workspaceTabTitle(g),
-      icon: <span className={`tab__dot tab__dot--${workspaceTabDot(g)}`} aria-hidden />,
+      ...workspaceTabFields(g, workspaces.find((x) => x.id === g.projectId), wt?.managed ? worktreeSummary(wt) : undefined),
       dirty: wt?.managed === true && (wt.dirtyCount ?? 0) > 0,
       editor: editingId === g.projectId
         ? <WorkspaceTabRename initial={g.projectName} onCommit={(name) => onRenameWorkspace(g.projectId, name)} onClose={() => setEditingId(null)} />
