@@ -19,8 +19,6 @@ import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
 import { createTabApi } from './browserHost.tabs.api'
-import { createHostDownloads } from './browserHost.downloads'
-import type { HostDownloads } from './browserHost.downloads'
 import { gotoPage, selectedText, stepPage } from './browserHost.page'
 import type { PageIo } from './browserHost.page'
 import { createSync } from './browserHost.sync'
@@ -39,7 +37,6 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export type { HostDeps } from './browserHost.deps'
 
-
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
   private readonly pageIo: PageIo = { send: (r, m, p) => this.send(r, m, p), cdpOf: (r) => this.cdpOf(r) }
@@ -55,8 +52,6 @@ export class BrowserHost implements BrowserHostApi {
   readonly tabApi: TabApi
   /** Sync mode: a human action in one pane repeated in the others (browserHost.sync.ts). */
   readonly sync: NodeSync
-  /** Downloads of the nodes (list, cancel, remove, export path); undefined = downloads are denied. */
-  readonly downloads?: HostDownloads
   readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
@@ -83,15 +78,14 @@ export class BrowserHost implements BrowserHostApi {
       pageState: (url) => this.shield.pageState(url),
       detached: (p) => this.shield.detached(p),
     })
-    this.downloads = deps.downloads && createHostDownloads(deps.downloads, this.table, emit, deps.now)
     this.life = createTargetLifecycle({
-      downloads: this.downloads,
-      table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
+      table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice, downloads: deps.downloads, now: deps.now,
       shield: this.shield, console: this.console, route: this.route, tabs: this.tabs, patch, emit,
       io: (r) => this.io(r), goto: (r, url) => this.goto(r, url),
     })
   }
 
+  get downloads() { return this.life.downloads } // list/cancel/remove/export of the nodes' downloads; undefined = denied (browserHost.downloads.ts)
   // ---- BrowserHostApi ----
   open(nodeId: string, workspaceId: string, url?: string): Promise<BrowserState> { return this.life.open(nodeId, workspaceId, url) }
 

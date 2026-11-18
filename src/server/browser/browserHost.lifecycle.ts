@@ -9,7 +9,8 @@ import type { BrowserLauncher } from './chromium.launch'
 import { restoreDevice, type DeviceIo } from './browserHost.device'
 import type { ShieldRouter } from './browserHost.shield'
 import type { ConsoleLog } from './browserHost.console'
-import type { HostDownloads } from './browserHost.downloads'
+import { createHostDownloads } from './browserHost.downloads'
+import type { HostDownloads, HostDownloadsDeps } from './browserHost.downloads'
 import type { TabManager } from './browserHost.tabs'
 import { blockOf, BrowserError, createPageTarget, newRec, setupConnection } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec, TargetTable } from './browserHost.targets'
@@ -34,8 +35,9 @@ export interface LifecycleOps {
   tabs: Pick<TabManager, 'restore' | 'bindView' | 'viewLost' | 'dropAll'>
   io(rec: NodeRec): DeviceIo
   goto(rec: NodeRec, url: string): Promise<void>
-  /** Downloads of the host (browserHost.downloads.ts); absent = downloads are denied on every connection. */
-  downloads?: HostDownloads
+  /** Downloads wiring (browserHost.downloads.ts); absent = downloads are denied on every connection. */
+  downloads?: HostDownloadsDeps
+  now?: () => number
 }
 
 export interface TargetLifecycle {
@@ -47,6 +49,8 @@ export interface TargetLifecycle {
   crash(rec: NodeRec): void
   /** Koneksi CDP hidup milik workspace node; `crashed` bila sudah putus. */
   cdpOf(rec: NodeRec): Promise<CdpClient>
+  /** Downloads of the host (undefined without wiring). */
+  readonly downloads?: HostDownloads
   /** Tutup semua koneksi CDP (proses Chromium dimatikan oleh `launcher.shutdown()`). */
   dispose(): Promise<void>
 }
@@ -54,6 +58,7 @@ export interface TargetLifecycle {
 /** Pembuat pengelola koneksi CDP + target node untuk satu host. */
 export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
   const { table } = ops
+  const downloads = ops.downloads && createHostDownloads(ops.downloads, table, ops.emit, ops.now)
   const conns = new Map<string, Promise<CdpClient>>()
   const opening = new Map<string, Promise<BrowserState>>()
 
@@ -70,7 +75,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
   const onConnClosed = (profileId: string, err: Error): void => {
     conns.delete(profileId)
     log.warn('browser.conn', 'cdp connection closed', { ids: { profileId }, error: err.message })
-    ops.downloads?.connectionLost(profileId)
+    downloads?.connectionLost(profileId)
     for (const rec of table.nodes.values()) {
       if (rec.profileId !== profileId) continue
       ops.tabs.dropAll(rec, false) // the whole process is gone: every tab page with it
@@ -90,8 +95,8 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
         cdp.on(CDP_EVENT.attachedToTarget, (p, sid) => ops.shield.attached(cdp, p, sid))
         cdp.onClose((err) => onConnClosed(profileId, err))
         try {
-          ops.downloads?.attach(profileId, cdp)
-          await setupConnection(cdp, ops.downloads?.folder(profileId))
+          downloads?.attach(profileId, cdp)
+          await setupConnection(cdp, downloads?.folder(profileId))
         } catch (err) {
           cdp.close()
           throw err
@@ -141,7 +146,7 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
   }
 
   return {
-    crash,
+    crash, downloads,
     open(nodeId, workspaceId, url) {
       const inflight = opening.get(nodeId)
       if (inflight) return inflight
