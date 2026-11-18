@@ -19,7 +19,7 @@ beforeAll(() => installCanvasDom())
 afterEach(() => { cleanup(); onAction.mockReset() })
 
 /** A mouse event as the browser makes it: d3-drag reads `event.view` (the window it listens on), which jsdom's constructor refuses to take. */
-export function mouse(type: 'mousedown' | 'mousemove' | 'mouseup' | 'click', target: EventTarget, x: number) {
+export function mouse(type: 'mousedown' | 'mousemove' | 'mouseup' | 'click', target: Element | Window, x: number) {
   const ev = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: 10 })
   Object.defineProperty(ev, 'view', { value: window })
   fireEvent(target, ev)

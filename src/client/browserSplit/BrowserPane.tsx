@@ -11,8 +11,8 @@ import { BrowserNewTabPage } from '../browserTabs/BrowserNewTabPage'
 import { useDeviceSession, deviceStyle } from '../browser.device'
 import { BrowserPaneHeader } from './BrowserPaneHeader'
 import { usePaneSession } from './usePaneSession'
-import { zoneBox } from './browserSplit.drop'
-import type { DropZone } from './browserSplit.drop'
+import { zoneBox, zoneLabel } from './browserSplit.drop'
+import type { DragKind, DropZone } from './browserSplit.drop'
 import type { SplitControls } from './useBrowserSplit'
 import './browserSplit.css'
 
@@ -23,14 +23,16 @@ export interface BrowserPaneProps {
   controls: SplitControls
   style: CSSProperties
   focused: boolean
-  /** Zone being previewed while a tab is dragged over this pane. */
+  /** Zone being previewed while a tab or a pane is dragged over this pane, and which of the two it is. */
   dropZone?: DropZone
-  /** This pane is the target of a pane-swap drag. */
-  swapTarget?: boolean
+  dropKind?: DragKind
+  /** This pane is the one being dragged (drawn lifted). */
+  lifted?: boolean
   onGrip: (e: PointerEvent, tabId: string) => void
+  wasDragged: () => boolean
 }
 
-export function BrowserPane({ tab, state, session, controls, style, focused, dropZone, swapTarget, onGrip }: BrowserPaneProps) {
+export function BrowserPane({ tab, state, session, controls, style, focused, dropZone, dropKind = 'tab', lifted, onGrip, wasDragged }: BrowserPaneProps) {
   const device = resolveDevice(tab.device)
   const pane = usePaneSession(session, tab.tabId, !device)
   const surface = useDeviceSession(pane, device)
@@ -40,7 +42,7 @@ export function BrowserPane({ tab, state, session, controls, style, focused, dro
 
   return (
     <div
-      className={`bp${focused ? ' bp--focus' : ''}${swapTarget ? ' bp--swap' : ''}`}
+      className={`bp${focused ? ' bp--focus' : ''}${lifted ? ' bp--lift' : ''}`}
       style={style}
       role="group"
       aria-label={`Pane: ${tabTitle(tab)}`}
@@ -54,6 +56,12 @@ export function BrowserPane({ tab, state, session, controls, style, focused, dro
         onDevice={(d) => { void controls.setDevice(tab.tabId, d) }}
         onClose={() => { void controls.closePane(tab.tabId) }}
         onGrip={(e) => onGrip(e, tab.tabId)}
+        moves={{
+          can: (dir) => controls.neighbour(tab.tabId, dir) !== null,
+          run: (dir) => { void controls.moveDir(tab.tabId, dir) },
+          swapWith: (id) => { void controls.movePane(tab.tabId, id, 'center') },
+          wasDragged,
+        }}
       />
       <div ref={pane.hostRef} className={`bp-body${device ? ' bp-body--device' : ''}`} style={deviceStyle(device)}>
         <BrowserInput session={surface} />
@@ -68,7 +76,11 @@ export function BrowserPane({ tab, state, session, controls, style, focused, dro
           </div>
         )}
         {(tab.crashed || tab.discarded) && <div className="bt-overlay"><BrowserTabStateView tab={tab} onReload={reload} onWake={wake} /></div>}
-        {dropZone && <div className="bp-drop" aria-hidden="true" style={zoneBox(dropZone)} data-zone={dropZone} />}
+        {dropZone && (
+          <div className="bp-drop" aria-hidden="true" style={zoneBox(dropZone)} data-zone={dropZone} data-kind={dropKind}>
+            <span className="bp-drop__label">{zoneLabel(dropZone, dropKind)}</span>
+          </div>
+        )}
       </div>
     </div>
   )
