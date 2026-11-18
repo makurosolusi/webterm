@@ -9,7 +9,7 @@
 .browser-loading, .browser-notice { position: absolute; pointer-events: none; }
 .browser-loading { top: 0; left: 0; right: 0; height: 2px; background: var(--vscode-progressBar-background, var(--accent)); }
 .browser-notice {
-  left: 8px; right: 8px; bottom: 8px; padding: 4px 8px; font: 12px/1.4 var(--font-ui);
+  left: 8px; right: 8px; bottom: 8px; padding: 6px 10px; font: var(--bui-font)/1.4 var(--font-ui);
   background: var(--vscode-editorWidget-background, var(--bg));
   color: var(--vscode-foreground, var(--text));
   border: 1px solid var(--vscode-editorWidget-border, transparent); border-radius: 4px;
@@ -18,7 +18,7 @@
 
 .browser-dialog-layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 40%); }
 .browser-dialog {
-  display: flex; flex-direction: column; gap: 8px; width: min(360px, 90%); padding: 12px;
+  display: flex; flex-direction: column; gap: 8px; width: min(360px, 90%); padding: 16px;
   font: 13px/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text));
   background: var(--vscode-editorWidget-background, var(--bg)); border-radius: 6px;
 }
@@ -58,7 +58,7 @@
 .browser-start-tile:focus-visible, .browser-start-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
 /* Hover "⋮" on a tile (Chrome NTP): visible on hover/focus only; right-click opens the same menu. */
 .browser-start-tile-menu {
-  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px;
+  position: absolute; top: 0; right: 0; width: var(--bui-hit); height: var(--bui-hit); padding: 0; border: 0; border-radius: 4px;
   background: transparent; color: inherit; cursor: pointer; opacity: 0;
 }
 .browser-start-cell:hover .browser-start-tile-menu, .browser-start-tile-menu:focus-visible { opacity: .8; }
@@ -72,7 +72,7 @@
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%;
   background: var(--vscode-badge-background, #616161); color: #fff; font-weight: 600; font-size: 15px;
 }
-.browser-start-favicon .browser-favicon__letter { font-size: 9px; }
+.browser-start-favicon .browser-favicon__letter { font-size: 12px; }
 .browser-favicon__img { width: 20px; height: 20px; object-fit: contain; }
 .browser-start-favicon .browser-favicon__img { width: 16px; height: 16px; }
 [data-favicon="loading"] > .browser-favicon__img { visibility: hidden; }
@@ -80,14 +80,14 @@
 .browser-start-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .browser-start-section { width: 100%; max-width: 480px; margin: 0 auto; }
 /* Same inline inset as the rows (item padding 8px): the heading starts where each row's favicon does. */
-.browser-start-heading { margin: 0 0 4px; padding: 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; opacity: 0.7; }
+.browser-start-heading { margin: 0 0 4px; padding: 0 8px; font-size: var(--bui-font-sm); font-weight: 600; text-transform: uppercase; opacity: 0.8; }
 .browser-start-item { gap: 8px; width: 100%; padding: 6px 8px; text-align: left; }
 .browser-start-text { display: flex; flex-direction: column; min-width: 0; }
 .browser-start-title, .browser-start-host { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.browser-start-host { font-size: 11px; opacity: 0.7; }
+.browser-start-host { font-size: var(--bui-font-sm); opacity: 0.8; }
 
 /* Console drawer (BrowserConsole.tsx): fixed ~35% of the node, Chrome DevTools-like rows. */
-.browser-console { flex: 0 0 35%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--vscode-panel-border, #444); background: var(--vscode-panel-background, var(--vscode-editor-background)); font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: 12px; }
+.browser-console { flex: 0 0 35%; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--vscode-panel-border, #444); background: var(--vscode-panel-background, var(--vscode-editor-background)); font-family: var(--vscode-editor-font-family, ui-monospace, monospace); font-size: var(--bui-font-sm); }
 .browser-console__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); font-family: var(--vscode-font-family, sans-serif); }
 .browser-console__list { flex: 1; min-height: 0; overflow: auto; }
 .browser-console__row { display: flex; align-items: flex-start; gap: 4px; padding: 1px 6px; border-bottom: 1px solid var(--vscode-editorGroup-border, rgba(128,128,128,.2)); }
@@ -104,19 +104,19 @@
 /* Toolbar (BrowserToolbar.tsx): one row like Chrome / VS Code Simple Browser. The address field is a pill holding the
    site-info icon, the input, the zoom pill and the Shields chip. Container queries on the toolbar width (the node, not the
    window) drop forward first, then the in-field extras; the ⋮ menu still reaches both. */
-.browser-toolbar { container: browser-toolbar / inline-size; display: flex; flex-direction: column; gap: 2px; padding: 4px; }
-.browser-toolbar__row { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; min-width: 0; }
+.browser-toolbar { container: browser-toolbar / inline-size; display: flex; flex-direction: column; gap: var(--bui-gap); padding: var(--bui-gap); }
+.browser-toolbar__row { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--bui-gap); min-width: 0; }
 .browser-toolbar__row > * { flex: none; }
 .browser-omnibox {
-  flex: 1 1 auto !important; min-width: 0; display: flex; align-items: center; gap: 2px; height: 25px; padding: 0 2px 0 6px;
-  border: 1px solid var(--vscode-input-border, transparent); border-radius: 12px; background: var(--vscode-input-background, var(--bg));
+  flex: 1 1 auto !important; min-width: 0; display: flex; align-items: center; gap: var(--bui-gap); height: var(--bui-omnibox-h); padding: 0 var(--bui-gap) 0 10px;
+  border: 1px solid var(--vscode-input-border, transparent); border-radius: calc(var(--bui-omnibox-h) / 2); background: var(--vscode-input-background, var(--bg));
 }
 .browser-omnibox:focus-within { border-color: var(--vscode-focusBorder, var(--accent)); }
-.browser-omnibox__site { flex: none; font-size: 14px; opacity: .8; border-radius: 3px; outline: none; }
+.browser-omnibox__site { flex: none; font-size: var(--bui-icon); opacity: .8; border-radius: 3px; outline: none; }
 .browser-omnibox__site:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); }
 .browser-omnibox__site[data-site-info="insecure"] { color: var(--vscode-editorWarning-foreground, #cca700); opacity: 1; }
 /* The input sits inside the pill: the pill draws the border and focus ring. */
-.browser-omnibox .browser-omnibox__input { flex: 1; height: 23px; border: 0; background: transparent; outline: none; }
+.browser-omnibox .browser-omnibox__input { flex: 1; height: calc(var(--bui-omnibox-h) - 2px); font-size: var(--bui-font); border: 0; background: transparent; outline: none; }
 /* History suggestions come from the native datalist; Chrome's omnibox shows no dropdown arrow, so hide it. */
 .browser-omnibox__input::-webkit-calendar-picker-indicator { display: none !important; }
 .browser-omnibox__extra { flex: none; }
@@ -125,6 +125,8 @@
 /* Agents toggle: icon only; a dot in the corner says agents may drive, a filled accent says one is driving now. */
 .browser-toolbar__agent { position: relative; }
 .browser-toolbar__agent[aria-pressed="false"] { opacity: .6; }
-.browser-toolbar__agent-dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-charts-green, #89d185); pointer-events: none; }
+.browser-toolbar__agent-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--vscode-charts-green, #89d185); pointer-events: none; }
 .browser-toolbar__agent[data-driving] .browser-toolbar__agent-dot { background: var(--vscode-focusBorder, var(--accent)); box-shadow: 0 0 0 2px var(--vscode-editor-background, var(--bg)); }
+/* Narrow node: the agent toggle and in-field extras move to the ⋮ menu (which lists them); nothing is lost. */
+@container browser-toolbar (max-width: 300px) { .browser-toolbar__agent { display: none; } }
 @container browser-toolbar (max-width: 260px) { .browser-omnibox__extra { display: none; } }

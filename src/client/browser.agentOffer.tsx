@@ -11,7 +11,7 @@ export default function BrowserAgentOffer({ enable }: { enable: () => Promise<vo
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   if (!asking) {
-    return <Button size="xs" variant="ghost" className="whitespace-nowrap" onClick={() => { setAsking(true); setFailed(false) }}>{T.offer}</Button>
+    return <Button size="bui" variant="ghost" className="whitespace-nowrap" onClick={() => { setAsking(true); setFailed(false) }}>{T.offer}</Button>
   }
   const confirm = (): void => {
     setBusy(true)
@@ -21,8 +21,8 @@ export default function BrowserAgentOffer({ enable }: { enable: () => Promise<vo
     <div role="alertdialog" aria-label={T.offer} className="flex basis-full flex-col gap-1 text-xs">
       <p className="m-0">{T.warning}</p>
       <div className="flex gap-1">
-        <Button size="xs" variant="destructive" disabled={busy} onClick={confirm}>{busy ? T.busy : T.confirm}</Button>
-        <Button size="xs" variant="ghost" disabled={busy} onClick={() => setAsking(false)}>{T.cancel}</Button>
+        <Button size="bui" variant="destructive" disabled={busy} onClick={confirm}>{busy ? T.busy : T.confirm}</Button>
+        <Button size="bui" variant="ghost" disabled={busy} onClick={() => setAsking(false)}>{T.cancel}</Button>
       </div>
       {failed && <p role="alert" className="m-0 text-(--vscode-errorForeground)">{T.failed}</p>}
     </div>

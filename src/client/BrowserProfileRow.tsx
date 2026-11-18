@@ -70,14 +70,14 @@ export default function BrowserProfileRow({ profile: p, onChanged }: { profile: 
               onChange={(e) => { setDraft(e.target.value); setError(null) }}
               onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); setMode(null); setError(null) } }}
             />
-            <Button type="submit" size="xs" disabled={busy}>{T.save}</Button>
+            <Button type="submit" size="bui" disabled={busy}>{T.save}</Button>
           </form>
         ) : (
           <span className="flex-1 truncate font-medium" title={p.name}>{p.name}</span>
         )}
         {isDefault && <span className="rounded border px-1 text-xs">{T.isDefault}</span>}
         {p.live && <span className="rounded border px-1 text-xs text-(--vscode-charts-green)">{T.live}</span>}
-        <IconButton size="icon-xs" label={T.rowMenu(p.name)} aria-haspopup="menu" aria-expanded={menu !== null} disabled={busy}
+        <IconButton size="icon-bui" label={T.rowMenu(p.name)} aria-haspopup="menu" aria-expanded={menu !== null} disabled={busy}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu(menu ? null : { x: r.right - 180, y: r.bottom }) }}>
           <span className="codicon codicon-kebab-vertical" aria-hidden="true" />
         </IconButton>
@@ -90,7 +90,7 @@ export default function BrowserProfileRow({ profile: p, onChanged }: { profile: 
           <DialogContent showCloseButton={false}>
             <DialogHeader><DialogTitle>{T.colorLabel}: {p.name}</DialogTitle></DialogHeader>
             <ProfileColorPicker value={{ color: p.color, shade: p.shade }} onChange={(c) => run(updateBrowserProfile(p.id, c))} />
-            <div className="flex justify-end"><Button size="xs" onClick={() => setMode(null)}>Done</Button></div>
+            <div className="flex justify-end"><Button size="bui" onClick={() => setMode(null)}>Done</Button></div>
           </DialogContent>
         </Dialog>
       )}

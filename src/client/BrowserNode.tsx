@@ -44,6 +44,7 @@ import { useBrowserSplit } from './browserSplit/useBrowserSplit'
 import { useBrowserSplitShortcuts } from './browserSplit/useBrowserSplitShortcuts'
 import { zoneBox } from './browserSplit/browserSplit.drop'
 import type { DropHint } from './browserSplit/browserSplit.drop'
+import './browserUi.css'
 import './browser.css'
 import './browser.driven.css'
 

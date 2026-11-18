@@ -37,15 +37,15 @@ export function BrowserNodeDown({ others, onHide, onRetry, answer }: BrowserNode
         <h2>{DOWN_TEXT.title}</h2>
         <p>{maxLive ? DOWN_TEXT.limit(maxLive) : DOWN_TEXT.limitUnknown}</p>
         <div className="bt-address">
-          <Button size="sm" variant="secondary" aria-expanded={listing} onClick={() => setListing((v) => !v)}>{DOWN_TEXT.hide}</Button>
-          <Button size="sm" disabled={busy} onClick={() => setBusy(onRetry())}>{busy ? DOWN_TEXT.retrying : DOWN_TEXT.retry}</Button>
+          <Button size="bui" variant="secondary" aria-expanded={listing} onClick={() => setListing((v) => !v)}>{DOWN_TEXT.hide}</Button>
+          <Button size="bui" disabled={busy} onClick={() => setBusy(onRetry())}>{busy ? DOWN_TEXT.retrying : DOWN_TEXT.retry}</Button>
         </div>
         {listing && (others.length === 0
           ? <p>{DOWN_TEXT.none}</p>
           : (
             <ul className="bt-closed" aria-label="Active browsers">
               {others.map((o) => (
-                <li key={o.id}><Button size="sm" variant="ghost" className="bt-closed-row" onClick={() => { onHide(o.id); setListing(false) }}>{o.label}</Button></li>
+                <li key={o.id}><Button size="bui" variant="ghost" className="bt-closed-row" onClick={() => { onHide(o.id); setListing(false) }}>{o.label}</Button></li>
               ))}
             </ul>
           ))}

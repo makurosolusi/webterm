@@ -42,15 +42,15 @@ export function BrowserDevicePopover({ anchor, value, onChange, onClose }: Brows
 
   return (
     <VscodePopover anchor={anchor} open onOpenChange={(o) => { if (!o) onClose() }} ariaLabel={T.picker} className="browser-device-pop">
-      <Button size="xs" variant="ghost" aria-pressed={current === null} onClick={() => pick(null)}>{T.responsive}</Button>
+      <Button size="bui" variant="ghost" aria-pressed={current === null} onClick={() => pick(null)}>{T.responsive}</Button>
       {DEVICE_PRESETS.map((p) => (
-        <Button key={p.id} size="xs" variant="ghost" aria-pressed={current?.id === p.id} onClick={() => pick({ id: p.id, ...landscape })}>
+        <Button key={p.id} size="bui" variant="ghost" aria-pressed={current?.id === p.id} onClick={() => pick({ id: p.id, ...landscape })}>
           <span>{p.name}</span><span className="tabular-nums opacity-70">{p.w}×{p.h}</span>
         </Button>
       ))}
       <form className="browser-device-custom" aria-label={T.custom} onSubmit={applyCustom}>
         {field('w', T.width)}{field('h', T.height)}{field('dpr', T.dpr)}
-        <Button type="submit" size="xs" variant="secondary" className="col-span-3">{T.custom}: {T.apply}</Button>
+        <Button type="submit" size="bui" variant="secondary" className="col-span-3">{T.custom}: {T.apply}</Button>
         {error && <p role="alert" className="col-span-3 m-0 text-xs text-(--vscode-errorForeground)">{T.invalid(DEVICE_DIM_MIN, DEVICE_DIM_MAX, DEVICE_DPR_MIN, DEVICE_DPR_MAX)}</p>}
       </form>
     </VscodePopover>
@@ -65,7 +65,7 @@ export default function BrowserDevicePicker({ value, onChange }: BrowserDevicePi
   return (
     <span ref={anchor} className="inline-flex">
       <IconButton
-        size="icon-xs" label={T.button} aria-pressed={current !== null} aria-expanded={open}
+        size="icon-bui" label={T.button} aria-pressed={current !== null} aria-expanded={open}
         tooltip={current ? T.tipOn(current.name) : T.tipOff}
         onClick={() => setOpen((o) => !o)}
       >

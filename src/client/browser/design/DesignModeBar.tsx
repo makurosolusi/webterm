@@ -55,11 +55,11 @@ export default function DesignModeBar({ nodeId, design }: { nodeId: string; desi
         <span className="codicon codicon-inspect" aria-hidden="true" />
         <span className="text-xs font-semibold">{DESIGN_TEXT.toggleOn}</span>
         <span className="min-w-0 flex-1 truncate text-xs opacity-70">{DESIGN_TEXT.hint}</span>
-        <IconButton size="icon-xs" label={DESIGN_TEXT.exit} tooltip={DESIGN_TEXT.toggleHintOn} disabled={busy} disabledReason={DESIGN_TEXT.busyReason} aria-busy={design.busy} onClick={exit}>{icon('close')}</IconButton>
+        <IconButton size="icon-bui" label={DESIGN_TEXT.exit} tooltip={DESIGN_TEXT.toggleHintOn} disabled={busy} disabledReason={DESIGN_TEXT.busyReason} aria-busy={design.busy} onClick={exit}>{icon('close')}</IconButton>
       </div>
       <div className="flex items-start gap-1">
         <Textarea aria-label={DESIGN_TEXT.comment} placeholder={DESIGN_TEXT.placeholder} value={comment} maxLength={COMMENT_MAX} rows={1} onChange={(e) => setComment(e.target.value)} />
-        <ActionButton size="xs" variant="secondary" disabled={design.busy} action={send} busyLabel={DESIGN_TEXT.sending}>{DESIGN_TEXT.send}</ActionButton>
+        <ActionButton size="bui" variant="secondary" disabled={design.busy} action={send} busyLabel={DESIGN_TEXT.sending}>{DESIGN_TEXT.send}</ActionButton>
       </div>
       <ActionResult action={send} />
       {design.error && <p role="alert" className="m-0 text-xs text-(--vscode-errorForeground)">{design.error}</p>}

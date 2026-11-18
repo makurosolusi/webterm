@@ -25,6 +25,9 @@ const buttonVariants = cva(
         xs: "min-h-5 gap-1 px-2 py-0.5 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "min-h-[26px] gap-1 px-2 py-1 has-[>svg]:px-1.5",
         lg: "min-h-7 px-[14px] py-1.5 has-[>svg]:px-3",
+        // Browser UI (browserUi.css tokens): 28px hit target, 13px text, 16px icon. Use these, not xs/icon-xs, in browser controls.
+        bui: "min-h-(--bui-hit) gap-1.5 px-2.5 py-1 text-[length:var(--bui-font)] has-[>svg]:px-2",
+        "icon-bui": "size-(--bui-hit) rounded-(--vscode-cornerRadius-small) text-[length:var(--bui-icon)] [&_svg:not([class*='size-'])]:size-(--bui-icon)",
         icon: "size-6 rounded-(--vscode-cornerRadius-small)",
         "icon-xs": "size-5 rounded-(--vscode-cornerRadius-small) [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-[22px] rounded-(--vscode-cornerRadius-small)",

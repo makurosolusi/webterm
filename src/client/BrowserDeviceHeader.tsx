@@ -11,7 +11,7 @@ export default function BrowserDeviceHeader({ device, onRotate }: { device: Devi
   return (
     <div className="browser-device-header nodrag">
       <span>{deviceLabel(device)}</span>
-      <IconButton size="icon-xs" label={DEVICE_TEXT.rotate} tooltip={DEVICE_TEXT.rotateTip} aria-pressed={device.landscape} onClick={onRotate}>
+      <IconButton size="icon-bui" label={DEVICE_TEXT.rotate} tooltip={DEVICE_TEXT.rotateTip} aria-pressed={device.landscape} onClick={onRotate}>
         <span className="codicon codicon-sync" aria-hidden="true" />
       </IconButton>
     </div>

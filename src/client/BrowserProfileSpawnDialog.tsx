@@ -67,7 +67,7 @@ function SpawnBody({ request, spawner }: { request: SpawnRequest; spawner: Profi
       </DialogHeader>
       {error && (
         <p role="alert" className="m-0 flex items-center gap-2 text-xs text-(--vscode-errorForeground)">
-          {T.listFailed}<Button size="xs" variant="outline" onClick={reload}>{T.retry}</Button>
+          {T.listFailed}<Button size="bui" variant="outline" onClick={reload}>{T.retry}</Button>
         </p>
       )}
       {!error && profiles.length === 0 && <p role="status" className="m-0 text-sm">{T.noProfiles}</p>}

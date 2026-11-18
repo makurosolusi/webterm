@@ -13,7 +13,7 @@ export default function BrowserLeaseChip({ lease, onTakeover }: { lease?: Lease;
       className="nodrag absolute top-2 right-2 z-20 flex items-center gap-2 rounded px-2 py-1 text-xs bg-(--vscode-editorWidget-background) text-(--vscode-foreground) border border-(--browser-driven-tint,var(--vscode-editorWidget-border))"
     >
       <span>{CHIP_TEXT.driving} ·</span>
-      <Button size="xs" variant="destructive" aria-label={CHIP_TEXT.stopLabel} onClick={onTakeover}>
+      <Button size="bui" variant="destructive" aria-label={CHIP_TEXT.stopLabel} onClick={onTakeover}>
         {CHIP_TEXT.stop}
       </Button>
     </div>

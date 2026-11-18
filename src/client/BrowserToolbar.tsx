@@ -101,13 +101,13 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
   return (
     <div role="toolbar" aria-label={TOOLBAR_TEXT.group} className="browser-toolbar nodrag">
       <div className="browser-toolbar__row">
-        <IconButton size="icon-xs" label={TOOLBAR_TEXT.back} tooltip={TIP.back} disabledReason={TIP.backOff} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</IconButton>
+        <IconButton size="icon-bui" label={TOOLBAR_TEXT.back} tooltip={TIP.back} disabledReason={TIP.backOff} disabled={!state?.canBack} onClick={() => nav('back')}>{icon('arrow-left')}</IconButton>
         <span className="browser-toolbar__forward inline-flex">
-          <IconButton size="icon-xs" label={TOOLBAR_TEXT.forward} tooltip={TIP.forward} disabledReason={TIP.forwardOff} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</IconButton>
+          <IconButton size="icon-bui" label={TOOLBAR_TEXT.forward} tooltip={TIP.forward} disabledReason={TIP.forwardOff} disabled={!state?.canForward} onClick={() => nav('forward')}>{icon('arrow-right')}</IconButton>
         </span>
         {state?.loading
-          ? <IconButton size="icon-xs" label={TOOLBAR_TEXT.stop} tooltip={TIP.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</IconButton>
-          : <IconButton size="icon-xs" label={TOOLBAR_TEXT.reload} tooltip={TIP.reload} onClick={() => nav('reload')}>{icon('refresh')}</IconButton>}
+          ? <IconButton size="icon-bui" label={TOOLBAR_TEXT.stop} tooltip={TIP.stop} onClick={() => nav('stop')}>{icon('debug-stop')}</IconButton>
+          : <IconButton size="icon-bui" label={TOOLBAR_TEXT.reload} tooltip={TIP.reload} onClick={() => nav('reload')}>{icon('refresh')}</IconButton>}
         {/* Every button inside this form is type="button": Enter's implicit submission would otherwise click the
             first one (reset zoom / flip Shields) instead of navigating. */}
         <form className="browser-omnibox" onSubmit={submit}>
@@ -128,14 +128,14 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
           </datalist>
           {onZoom && zoom !== 1 && (
             <span className="browser-omnibox__extra inline-flex">
-              <IconButton type="button" size="xs" variant="secondary" className="tabular-nums" label={ZOOM_TEXT.pill(pct)} tooltip={ZOOM_TEXT.pillTip(pct)} onClick={resetZoom}>{pct}</IconButton>
+              <IconButton type="button" size="bui" variant="secondary" className="tabular-nums" label={ZOOM_TEXT.pill(pct)} tooltip={ZOOM_TEXT.pillTip(pct)} onClick={resetZoom}>{pct}</IconButton>
             </span>
           )}
           {onShields && <span className="browser-omnibox__extra inline-flex"><BrowserShieldsChip state={state} onToggle={onShields} /></span>}
         </form>
         {showConsole && (
           <IconButton
-            size="xs" variant={consoleSlot.open ? 'secondary' : 'ghost'} aria-pressed={consoleSlot.open} className="browser-toolbar__errors"
+            size="bui" variant={consoleSlot.open ? 'secondary' : 'ghost'} aria-pressed={consoleSlot.open} className="browser-toolbar__errors"
             label={errors > 0 ? CONSOLE_TEXT.errors(errors) : CONSOLE_TEXT.toggle} commandId={CONSOLE_COMMAND_ID}
             tooltip={`${errors > 0 ? CONSOLE_TEXT.errors(errors) : CONSOLE_TEXT.toggle}: ${consoleSlot.open ? CONSOLE_TEXT.toggleHintOn : CONSOLE_TEXT.toggleHintOff}`}
             onClick={consoleSlot.toggle}
@@ -144,7 +144,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
         {/* Agent-control toggle, icon only (the label ate omnibox width): the dot = agents may drive, accent = driving now. */}
         {agentEnabled && (
           <IconButton
-            size="icon-xs" variant="ghost" aria-pressed={agentControl} className="browser-toolbar__agent" data-driving={driving || undefined}
+            size="icon-bui" variant="ghost" aria-pressed={agentControl} className="browser-toolbar__agent" data-driving={driving || undefined}
             label={TOOLBAR_TEXT.agentPill}
             tooltip={driving ? TOOLBAR_TEXT.agentPillDriving : agentControl ? TOOLBAR_TEXT.agentPillHint : TOOLBAR_TEXT.agentPillHintOff}
             onClick={() => onAgentControl(!agentControl)}

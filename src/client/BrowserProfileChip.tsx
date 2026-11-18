@@ -64,7 +64,7 @@ export default function BrowserProfileChip({ nodeId, profileId }: { nodeId: stri
     <span className="nodrag inline-flex" data-browser-profile={current?.id}>
       <IconTooltip label={current ? T.chipTip(current.name, nodes) : T.sharedSession}>
         <Button
-          type="button" size="xs" variant="ghost" className="max-w-36 gap-1 px-1" disabled={busy}
+          type="button" size="bui" variant="ghost" className="max-w-36 gap-1 px-1" disabled={busy}
           aria-label={busy ? T.moving : T.chipLabel(name)} aria-haspopup="menu" aria-expanded={menuAt !== null} aria-busy={busy}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.left, y: r.bottom }) }}
         >

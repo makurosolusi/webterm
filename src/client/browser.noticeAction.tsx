@@ -19,11 +19,11 @@ export interface NoticeActionProps {
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
 }
 
-const BOX = 'nodrag nowheel absolute bottom-12 left-2 z-10 flex max-w-80 flex-col gap-1 rounded p-2 text-xs ' +
+const BOX = 'nodrag nowheel absolute bottom-12 left-2 z-10 flex max-w-80 flex-col gap-2 rounded-(--bui-radius) p-3 text-[length:var(--bui-font)] ' +
   'bg-(--vscode-editorWidget-background) text-(--vscode-foreground) border border-(--vscode-editorWidget-border)'
 
 // Plate over the stream: Chromium's own error page is another product's chrome with no way back.
-const PLATE = 'nodrag nowheel absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 p-4 text-center text-xs ' +
+const PLATE = 'nodrag nowheel absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-4 text-center text-[length:var(--bui-font)] ' +
   'bg-(--vscode-editor-background) text-(--vscode-foreground)'
 const TRY_AGAIN = 'Try again'
 const RETRYING = 'Trying again…'
@@ -44,7 +44,7 @@ export default function BrowserNoticeAction({ state, error, target, nav }: Notic
         {action.hint && <p className="m-0 opacity-80">{action.hint}</p>}
         <p className="m-0 font-mono opacity-60">{action.code}</p>
         {action.retryable && (
-          <Button size="xs" variant="secondary" disabled={busy} onClick={() => { setBusy(true); nav('reload') }}>{busy ? RETRYING : TRY_AGAIN}</Button>
+          <Button size="bui" variant="secondary" disabled={busy} onClick={() => { setBusy(true); nav('reload') }}>{busy ? RETRYING : TRY_AGAIN}</Button>
         )}
       </div>
     )
@@ -54,7 +54,7 @@ export default function BrowserNoticeAction({ state, error, target, nav }: Notic
       <div className={BOX}>
         {open
           ? <CapabilityOffer id="browser" onDone={() => { setOpen(false); resetBrowserStatusCache() }} />
-          : <Button size="xs" variant="secondary" className="self-start" onClick={() => setOpen(true)}>{T.offer}</Button>}
+          : <Button size="bui" variant="secondary" className="self-start" onClick={() => setOpen(true)}>{T.offer}</Button>}
       </div>
     )
   }
@@ -68,7 +68,7 @@ export default function BrowserNoticeAction({ state, error, target, nav }: Notic
   return (
     <div className={BOX}>
       <p className="m-0 opacity-80">{T.allowHint}</p>
-      <Button size="xs" variant="secondary" className="self-start" disabled={busy} onClick={allow}>{T.allow(action.hostPort)}</Button>
+      <Button size="bui" variant="secondary" className="self-start" disabled={busy} onClick={allow}>{T.allow(action.hostPort)}</Button>
       {failed && <p role="alert" className="m-0 text-(--vscode-errorForeground)">{T.allowFailed}</p>}
     </div>
   )
