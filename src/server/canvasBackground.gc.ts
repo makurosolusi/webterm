@@ -3,9 +3,10 @@
 // that workspace's override) and once at server start (prune overrides of vanished workspaces
 // and orphan files left by crashes or older versions).
 import { promises as fs } from 'node:fs'
+import { join } from 'node:path'
 import type { Settings } from '../shared/settings'
 import { CANVAS_IMAGE_ID_RE, referencedImageIds } from '../shared/canvasBackground.schema'
-import { backgroundsDir, deleteCanvasImage } from './canvasBackground.store'
+import { backgroundsDir, CANVAS_PARTIAL_RE, deleteCanvasImage } from './canvasBackground.store'
 import { createLogger } from './logs'
 import type { SettingsStore } from './settingsApi'
 
@@ -57,5 +58,9 @@ export async function pruneCanvasBackgrounds(store: SettingsStore, workspaceIds:
   const referenced = referencedImageIds(settings)
   const orphans = names.filter((n) => CANVAS_IMAGE_ID_RE.test(n) && !referenced.has(n))
   for (const n of orphans) await deleteCanvasImage(dir, n)
-  return { overrides: stale.length, files: orphans.length }
+  // `.part` = an upload a crash interrupted (a live upload is renamed within the same request, and
+  // boot runs before clients reconnect). Not an image id, so deleteCanvasImage would ignore it.
+  const partials = names.filter((n) => CANVAS_PARTIAL_RE.test(n))
+  for (const n of partials) await fs.rm(join(dir, n), { force: true })
+  return { overrides: stale.length, files: orphans.length + partials.length }
 }
