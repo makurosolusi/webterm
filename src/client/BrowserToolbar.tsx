@@ -8,7 +8,7 @@ import type { FormEvent } from 'react'
 import { IconButton, IconTooltip } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import type { BrowserState, NAV_ACTIONS } from '../shared/browser.contract'
-import { resolveOmniboxInput, type SearchEngine } from '../shared/browser.omnibox'
+import { resolveOmniboxInput, SEARCH_ENGINES, toSearchEngine, type SearchEngine } from '../shared/browser.omnibox'
 import { ZOOM_STEP, zoomLabel } from './browser.zoom'
 import { SITE_INFO_TEXT, TOOLBAR_TEXT, TOOLBAR_TIP as TIP, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 import { loadRecent } from './browser.recent'
@@ -65,10 +65,13 @@ export function siteInfoKind(url: string): keyof typeof SITE_INFO_TEXT {
   return 'other'
 }
 
+const fieldText = (url: string | undefined): string => (isBlankUrl(url) ? '' : (url ?? ''))
+
 /** Address bar + navigation + overflow menu of one browser node. */
 export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, onZoomReset, searchEngine, onShields, device, onDevice, console: consoleSlot, downloads, design, menuItems }: BrowserToolbarProps) {
   const [dlOpen, setDlOpen] = useState(false)
-  const [draft, setDraft] = useState(state?.url ?? '')
+  // about:blank is never text in the field: a blank page shows the placeholder (Chrome's new-tab omnibox).
+  const [draft, setDraft] = useState(fieldText(state?.url))
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const stateUrl = state?.url ?? ''
@@ -77,7 +80,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
   const recent = useMemo(() => loadRecent(), [stateUrl])
 
   // Follow page navigation (a new URL from the server replaces typing that was not submitted).
-  useEffect(() => { setDraft(stateUrl); setError(null); setNotice(null) }, [stateUrl])
+  useEffect(() => { setDraft(fieldText(stateUrl)); setError(null); setNotice(null) }, [stateUrl])
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -96,6 +99,7 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
     for (let i = 0; i < Math.abs(n); i++) onZoom(n > 0 ? -1 : 1)
   }
 
+  const blank = isBlankUrl(stateUrl)
   const site = SITE_INFO_TEXT[siteInfoKind(stateUrl)]
   const pct = zoomLabel(zoom)
   const errors = consoleSlot?.errors ?? 0
@@ -123,12 +127,15 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
           <Input
             data-browser-omnibox
             type="text" inputMode="url" spellCheck={false} autoComplete="off" list={listId}
-            aria-label={TOOLBAR_TEXT.urlLabel} placeholder={TOOLBAR_TEXT.urlPlaceholder}
+            aria-label={TOOLBAR_TEXT.urlLabel} placeholder={blank ? TOOLBAR_TEXT.urlPlaceholderEngine(SEARCH_ENGINES[toSearchEngine(searchEngine)].label) : TOOLBAR_TEXT.urlPlaceholder}
             aria-invalid={error !== null} aria-describedby={error ? 'browser-url-error' : undefined}
             className="browser-omnibox__input"
             value={draft}
             onChange={(e) => { setDraft(e.target.value); setError(null) }}
           />
+          {draft.trim() && draft !== fieldText(stateUrl) && (
+            <IconButton type="submit" size="icon-bui" variant="ghost" className="browser-omnibox__go" label={TOOLBAR_TEXT.go} tooltip={TOOLBAR_TEXT.goTip}>{icon('arrow-right')}</IconButton>
+          )}
           <datalist id={listId}>
             {recent.map((r) => <option key={r.url} value={r.url}>{r.title || r.host}</option>)}
           </datalist>

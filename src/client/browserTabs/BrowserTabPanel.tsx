@@ -29,6 +29,7 @@ export function BrowserTabPanel({ view, active, standIn, act, go }: BrowserTabPa
     return (
       <div className="bt-overlay">
         <BrowserNewTabPage
+          key={active?.tabId ?? 'none'} autoFocus={!active?.agent && active?.tabId !== view.agentTabId}
           closed={view.closed} onNavigate={active ? go : (url) => act({ type: 'new', newTabId: '', url })}
           onReopen={(fromTabId) => act({ type: 'reopenClosed', newTabId: '', fromTabId })}
           reopenBlockedReason={full.ok ? undefined : full.reason}

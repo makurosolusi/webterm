@@ -66,17 +66,29 @@
 .bt-page h2 { margin: 0; font-size: 19px; font-weight: 600; }
 .bt-page p { margin: 0; max-width: 42ch; font-size: var(--bui-font); color: var(--vscode-descriptionForeground, var(--muted)); }
 .bt-page--error h2 { color: var(--vscode-errorForeground, var(--state-attention)); }
-.bt-address { display: flex; gap: 8px; width: min(480px, 100%); }
-.bt-address-field { position: relative; flex: 1; min-width: 0; }
-.bt-address-icon { position: absolute; left: 12px; top: 50%; width: var(--bui-icon); height: var(--bui-icon); transform: translateY(-50%); color: var(--vscode-descriptionForeground, var(--muted)); pointer-events: none; }
-.bt-address-field input { height: 40px; padding-left: 36px; font-size: 14px; }
-.bt-address-go { flex: none; height: 40px; min-width: 56px; font-size: 14px; }
 .bt-form-error { color: var(--vscode-errorForeground, var(--state-attention)); font-size: var(--bui-font); }
-.bt-closed { width: min(480px, 100%); display: flex; flex-direction: column; gap: 2px; text-align: left; }
-.bt-closed { padding: 0; list-style: none; }
-.bt-closed h3 { margin: 0 0 var(--bui-gap); font-size: var(--bui-font-sm); font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
+/* New-tab page: a bit above centre like Chrome's NTP, content capped so wide nodes do not stretch the fakebox. */
+.bt-newtab {
+  container: bt-newtab / inline-size; height: 100%; padding: 12vh 16px 24px; overflow: auto;
+  font: var(--bui-font)/1.4 var(--font-ui); color: var(--vscode-foreground, var(--text)); background: var(--vscode-editor-background, var(--bg));
+}
+.bt-newtab-inner { display: flex; flex-direction: column; gap: 20px; width: min(640px, 100%); margin: 0 auto; }
+.bt-newtab ul { list-style: none; margin: 0; padding: 0; }
+.bt-newtab .browser-start-grid { max-width: none; margin: 0; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+@container bt-newtab (max-width: 420px) { .bt-newtab .browser-start-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container bt-newtab (max-height: 260px) { .bt-newtab { padding-top: 12px; } }
+/* Search pill: a button, not an input; the toolbar's omnibox is the only address field of the node. */
+.bt-fakebox { justify-content: flex-start; gap: 10px; width: 100%; height: 44px; padding: 0 16px; border-radius: 9999px; font-size: var(--bui-font); color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-fakebox > span { overflow: hidden; text-overflow: ellipsis; }
+.bt-fakebox-icon { flex: none; width: var(--bui-icon); height: var(--bui-icon); }
+.bt-closed { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.bt-closed h3 { margin: 0 0 var(--bui-gap); padding: 0 8px; font-size: var(--bui-font-sm); font-weight: 600; text-transform: uppercase; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-closed-note { margin: 0 0 var(--bui-gap); padding: 0 8px; font-size: var(--bui-font-sm); color: var(--vscode-descriptionForeground, var(--muted)); }
 .bt-closed-row { justify-content: flex-start; width: 100%; min-height: var(--bui-tab-h); font-size: var(--bui-font); }
-.bt-closed-host { margin-left: auto; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-closed-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bt-closed-host { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--vscode-descriptionForeground, var(--muted)); }
+.bt-closed-action { flex: none; color: var(--vscode-textLink-foreground, var(--accent)); }
+@container bt-newtab (max-width: 420px) { .bt-closed-host { display: none; } .bt-closed-title { flex: 1; text-align: left; } }
 
 @media (prefers-reduced-motion: reduce) {
   .bt-list { scroll-behavior: auto; }

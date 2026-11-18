@@ -246,3 +246,26 @@ jadi "+" mengikuti tab terakhir; saat overflow daftar menyusut ke ruang tersedia
 otomatis menetap di tepi kanannya, tanpa `position: sticky`. Batas 8 tab, Ctrl+T, dan dobel-klik area kosong tak berubah;
 "+" bukan target drop urutan (drag hanya membaca `[role=tab]`). Tes: `BrowserTabStrip.newtab.test.tsx`.
 Belum diverifikasi tanpa browser: tampilan nyata di tema terang/gelap dan lebar sempit.
+
+## Halaman New tab (satu omnibox)
+
+Keluhan: dua kolom input sekaligus (toolbar menampilkan `about:blank`, halaman punya kolom sendiri), tombol "Go" yang tampak mati,
+dan seksi "Recently closed" kosong yang berisik. Acuan: NTP Chrome/Edge/Arc, disesuaikan untuk node di canvas.
+
+- **Satu input, bukan dua tersinkron.** Kolom di halaman dihapus; yang ada hanya "fakebox" berupa `Button` pil (44px) berisi hint
+  `Search <engine> or enter a web address` (engine dari `browserSearchEngine`). Klik memfokuskan omnibox toolbar. Alasan: Chrome
+  melakukan hal yang sama (fakebox menyerahkan fokus ke omnibox), dua input yang disinkronkan perlu state bersama dan tetap
+  membingungkan pembaca layar (dua kolom bernama sama), dan seluruh logika alamat/galat/riwayat sudah ada di toolbar. Helper
+  `browser.omniboxDom.ts` dipakai bersama `BrowserStartPage`.
+- **Omnibox toolbar pada halaman kosong:** nilai kosong (`about:blank` tidak pernah tampil sebagai teks), placeholder hint engine,
+  panah "Go" (submit, 28px, tooltip) hanya muncul saat teks diedit dan berbeda dari URL halaman, Enter tetap jalur utama.
+  Keputusan URL vs pencarian tetap satu jalur: `resolveOmniboxInput`; galat (`URL_ERROR_TEXT`) inline `role=alert`.
+  Saran memakai `<datalist>` bawaan (riwayat `browser.recent`): semantik combobox, panah, Esc, Enter ditangani browser.
+- **Fokus otomatis hanya untuk manusia:** halaman memfokuskan omnibox saat muncul bila tab bukan milik agent
+  (`agent`/`agentTabId`) dan fokus sedang bebas atau sudah di dalam node ini; tidak pernah mencuri fokus dari terminal/node lain.
+- **Isi:** grid pintasan (`BrowserShortcuts`: favicon dari mekanisme yang ada, fallback huruf, tambah/ubah/hapus lewat menu),
+  "Recently closed" maks 5 baris dengan label "Reopen", hanya bila ada isi; diblokir batas 8 tab menampilkan alasan `role=status`.
+  Judul "New tab" hanya heading `sr-only`. Lebar maks 640px, sedikit di atas tengah; node <=420px: grid 2 kolom, host disembunyikan.
+- **Sengaja tidak ada:** layanan favicon/saran pihak ketiga, berita/rekomendasi, pelacakan, logo merek baru.
+- **Belum:** daftar saran kustom (ikon + judul + host, `aria-activedescendant`) menggantikan datalist; tampilan nyata (terang/gelap,
+  lebar sempit) belum diamati. Tes: `BrowserNewTabPage.test.tsx`, `BrowserToolbar.blank.test.tsx`, `BrowserNode.tabs.test.tsx`.
