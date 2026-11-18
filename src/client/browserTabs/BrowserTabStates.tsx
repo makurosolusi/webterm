@@ -13,7 +13,7 @@ export function BrowserTabCrashed({ onReload }: { onReload: () => void }) {
       <TriangleAlert aria-hidden="true" />
       <h2>This tab crashed</h2>
       <p>The page stopped responding. Reload to try again; other tabs are not affected.</p>
-      <Button size="sm" onClick={onReload}>Reload</Button>
+      <Button size="bui" onClick={onReload}>Reload</Button>
     </section>
   )
 }
@@ -32,7 +32,7 @@ export function BrowserTabNavError({ error, url, onRetry }: { error: NavErrorInf
       {error.offline ? <WifiOff aria-hidden="true" /> : <TriangleAlert aria-hidden="true" />}
       <h2>{error.offline ? 'You are offline' : host ? `Could not load ${host}` : 'Could not load the page'}</h2>
       <p>{error.message}</p>
-      <Button size="sm" onClick={onRetry}>Retry</Button>
+      <Button size="bui" onClick={onRetry}>Retry</Button>
     </section>
   )
 }

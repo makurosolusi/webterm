@@ -91,7 +91,7 @@ export default function BrowserToolbarMenu(p: BrowserToolbarMenuProps) {
   return (
     <span ref={btn} className="inline-flex">
       <IconButton
-        size="icon-xs" label={TOOLBAR_TEXT.more} tooltip={TOOLBAR_TIP.more} aria-haspopup="menu" aria-expanded={menuAt !== null}
+        size="icon-bui" label={TOOLBAR_TEXT.more} tooltip={TOOLBAR_TIP.more} aria-haspopup="menu" aria-expanded={menuAt !== null}
         onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.right - 200, y: r.bottom }) }}
       >{icon('kebab-vertical')}</IconButton>
       {menuAt && <VscodeMenu open anchor={menuAt} items={items} minWidth={200} onClose={() => setMenuAt(null)} ariaLabel={TOOLBAR_TEXT.menu} />}

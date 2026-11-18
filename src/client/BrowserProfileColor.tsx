@@ -25,7 +25,7 @@ export default function ProfileColorPicker({ value, onChange }: { value: Profile
         onPick={(s) => onChange({ color: hue ?? swatchHue, shade: s })}
       />
       <div>
-        <Button type="button" size="xs" variant="outline" onClick={() => onChange({ color: WORKSPACE_HUES[Math.floor(Math.random() * WORKSPACE_HUES.length)], shade })}>{T.random}</Button>
+        <Button type="button" size="bui" variant="outline" onClick={() => onChange({ color: WORKSPACE_HUES[Math.floor(Math.random() * WORKSPACE_HUES.length)], shade })}>{T.random}</Button>
       </div>
     </div>
   )

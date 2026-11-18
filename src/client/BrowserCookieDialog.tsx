@@ -100,7 +100,7 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
             <p className="m-0">{T.guide.optionB}</p>
             <div className="flex items-center gap-2">
               <code aria-label={T.guide.commandLabel} className="flex-1 break-all select-all">{T.guide.command}</code>
-              <Button size="xs" variant="outline" onClick={() => void writeClipboard(T.guide.command).then(setCopied)}>{copied ? T.guide.copied : T.guide.copy}</Button>
+              <Button size="bui" variant="outline" onClick={() => void writeClipboard(T.guide.command).then(setCopied)}>{copied ? T.guide.copied : T.guide.copy}</Button>
             </div>
             <p className="m-0">{T.guide.formatHint}</p>
             <p className="m-0 text-(--vscode-errorForeground)">{T.guide.warning}</p>
@@ -147,8 +147,8 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
               </label>
             ))}
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="secondary" size="xs" disabled={busy} onClick={() => { setPreview(null); setPicked(new Set()) }}>{T.cancel}</Button>
-              <Button size="xs" disabled={busy || picked.size === 0} onClick={commit}>{busy ? T.importing : T.import}</Button>
+              <Button variant="secondary" size="bui" disabled={busy} onClick={() => { setPreview(null); setPicked(new Set()) }}>{T.cancel}</Button>
+              <Button size="bui" disabled={busy || picked.size === 0} onClick={commit}>{busy ? T.importing : T.import}</Button>
             </div>
           </fieldset>
         )}
@@ -160,13 +160,13 @@ export default function BrowserCookieDialog({ cookieImportEnabled, workspaceId, 
           {stored?.map((d) => (
             <div key={d.domain} className="flex items-center gap-2">
               <span className="flex-1">{d.domain} · {T.cookieCount(d.count)}</span>
-              <Button size="xs" variant="outline" disabled={busy} aria-label={T.removeLabel(d.domain)} onClick={() => remove(d.domain)}>×</Button>
+              <Button size="bui" variant="outline" disabled={busy} aria-label={T.removeLabel(d.domain)} onClick={() => remove(d.domain)}>×</Button>
             </div>
           ))}
-          {!!stored?.length && <Button size="xs" variant="outline" disabled={busy} onClick={() => remove()}>{T.removeAll}</Button>}
+          {!!stored?.length && <Button size="bui" variant="outline" disabled={busy} onClick={() => remove()}>{T.removeAll}</Button>}
         </section>
 
-        <div className="flex justify-end"><Button size="xs" variant="secondary" onClick={onClose}>{T.close}</Button></div>
+        <div className="flex justify-end"><Button size="bui" variant="secondary" onClick={onClose}>{T.close}</Button></div>
       </DialogContent>
     </Dialog>
   )

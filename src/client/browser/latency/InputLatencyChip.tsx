@@ -53,7 +53,7 @@ export default function InputLatencyChip({ window: w, now = clientNow }: { windo
         label={`Input to frame: p50 ${ms(sum.p50)}, p95 ${ms(sum.p95)} (budget ${LATENCY_BUDGET_MS.good}/${LATENCY_BUDGET_MS.warn} ms). Click to ${open ? 'hide' : 'show'} the per-stage breakdown`}
       >
         <Button
-          size="xs"
+          size="bui"
           variant="outline"
           data-tone={sum.tone}
           aria-expanded={open}

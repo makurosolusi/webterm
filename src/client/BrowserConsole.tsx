@@ -108,11 +108,11 @@ export default function BrowserConsole({ view, send, lease, hint, onReload }: Br
   return (
     <section aria-label={CONSOLE_TEXT.region} className="browser-console nodrag nowheel">
       <div className="browser-console__bar">
-        <IconButton size="icon-xs" label={CONSOLE_TEXT.clear} onClick={() => send({ t: 'console', op: 'clear' })}><span className="codicon codicon-clear-all" aria-hidden="true" /></IconButton>
-        <Input className="h-5 w-32 text-xs" aria-label={CONSOLE_TEXT.filter} placeholder={CONSOLE_TEXT.filter} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+        <IconButton size="icon-bui" label={CONSOLE_TEXT.clear} onClick={() => send({ t: 'console', op: 'clear' })}><span className="codicon codicon-clear-all" aria-hidden="true" /></IconButton>
+        <Input className="h-7 w-36 text-[length:var(--bui-font)]" aria-label={CONSOLE_TEXT.filter} placeholder={CONSOLE_TEXT.filter} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
         <div role="group" aria-label={CONSOLE_TEXT.levels} className="flex items-center gap-0.5">
           {FILTERS.map((f) => (
-            <Button key={f} size="xs" variant={level === f ? 'secondary' : 'ghost'} aria-pressed={level === f} onClick={() => setLevel(f)}>{CONSOLE_TEXT[f]}</Button>
+            <Button key={f} size="bui" variant={level === f ? 'secondary' : 'ghost'} aria-pressed={level === f} onClick={() => setLevel(f)}>{CONSOLE_TEXT[f]}</Button>
           ))}
         </div>
         <Label className="text-xs"><Checkbox checked={verbose} onCheckedChange={(c) => setVerbose(c === true)} />{CONSOLE_TEXT.verbose}</Label>
@@ -121,7 +121,7 @@ export default function BrowserConsole({ view, send, lease, hint, onReload }: Br
       {hint && (
         <div role="status" className="browser-console__hint">
           <span>{CONSOLE_TEXT.captureStarted}</span>
-          {onReload && <Button size="xs" variant="ghost" onClick={onReload}>{CONSOLE_TEXT.reload}</Button>}
+          {onReload && <Button size="bui" variant="ghost" onClick={onReload}>{CONSOLE_TEXT.reload}</Button>}
         </div>
       )}
       <div ref={list} role="list" className="browser-console__list" onScroll={onScroll}>
@@ -133,7 +133,7 @@ export default function BrowserConsole({ view, send, lease, hint, onReload }: Br
       <div className="browser-console__prompt">
         <span className="codicon codicon-chevron-right" aria-hidden="true" />
         <Input
-          className="h-5 flex-1 font-mono text-xs" spellCheck={false} autoComplete="off"
+          className="h-7 flex-1 font-mono text-[length:var(--bui-font)]" spellCheck={false} autoComplete="off"
           aria-label={CONSOLE_TEXT.prompt} placeholder={agent ? CONSOLE_TEXT.agentDriving : CONSOLE_TEXT.promptHint}
           disabled={agent} value={expr} onChange={(e) => setExpr(e.target.value)} onKeyDown={onPrompt}
         />
@@ -146,7 +146,7 @@ export default function BrowserConsole({ view, send, lease, hint, onReload }: Br
 export function BrowserConsoleToggle({ open, errors, toggle }: ConsoleSlot) {
   return (
     <IconButton
-      size="xs" variant={open ? 'secondary' : 'ghost'} aria-pressed={open} label={CONSOLE_TEXT.toggle} commandId={CONSOLE_COMMAND_ID}
+      size="bui" variant={open ? 'secondary' : 'ghost'} aria-pressed={open} label={CONSOLE_TEXT.toggle} commandId={CONSOLE_COMMAND_ID}
       tooltip={open ? CONSOLE_TEXT.toggleHintOn : CONSOLE_TEXT.toggleHintOff} onClick={toggle}
     >
       <span className="codicon codicon-debug-console" aria-hidden="true" />

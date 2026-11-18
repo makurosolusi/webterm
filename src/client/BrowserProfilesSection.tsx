@@ -29,7 +29,7 @@ export function BrowserProfilesSection({ workspaceId = '' }: { workspaceId?: str
       <div className="flex flex-col" data-testid="browser-profiles-section" data-field="browser-profiles">
       <SettingsGroup title={T.groupTitle} description={`${T.sectionHint} ${T.sharedSession}`}>
         {body}
-        {status && <div className="flex justify-end p-2"><Button size="sm" onClick={() => setCreating(true)}>{T.newProfile}</Button></div>}
+        {status && <div className="flex justify-end p-2"><Button size="bui" onClick={() => setCreating(true)}>{T.newProfile}</Button></div>}
       </SettingsGroup>
       {creating && <BrowserProfileCreateDialog onClose={() => setCreating(false)} onCreated={() => { setCreating(false); reload() }} />}
       </div>

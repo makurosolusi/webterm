@@ -95,8 +95,8 @@ export default function BrowserProfileCookieDialog({ profile, onClose, onChanged
               </label>
             ))}
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="secondary" size="xs" disabled={busy} onClick={() => { setPreview(null); setPicked(new Set()) }}>{C.cancel}</Button>
-              <Button size="xs" disabled={busy || picked.size === 0} onClick={commit}>{busy ? C.importing : C.import}</Button>
+              <Button variant="secondary" size="bui" disabled={busy} onClick={() => { setPreview(null); setPicked(new Set()) }}>{C.cancel}</Button>
+              <Button size="bui" disabled={busy || picked.size === 0} onClick={commit}>{busy ? C.importing : C.import}</Button>
             </div>
           </fieldset>
         )}
@@ -107,12 +107,12 @@ export default function BrowserProfileCookieDialog({ profile, onClose, onChanged
           {stored?.map((d) => (
             <div key={d.domain} className="flex items-center gap-2">
               <span className="flex-1">{d.domain} · {C.cookieCount(d.count)}</span>
-              <Button size="xs" variant="outline" disabled={busy} aria-label={C.removeLabel(d.domain)} onClick={() => remove(d.domain)}>×</Button>
+              <Button size="bui" variant="outline" disabled={busy} aria-label={C.removeLabel(d.domain)} onClick={() => remove(d.domain)}>×</Button>
             </div>
           ))}
-          {!!stored?.length && <Button size="xs" variant="outline" disabled={busy} onClick={() => remove()}>{C.removeAll}</Button>}
+          {!!stored?.length && <Button size="bui" variant="outline" disabled={busy} onClick={() => remove()}>{C.removeAll}</Button>}
         </section>
-        <div className="flex justify-end"><Button size="xs" variant="secondary" onClick={onClose}>{C.close}</Button></div>
+        <div className="flex justify-end"><Button size="bui" variant="secondary" onClick={onClose}>{C.close}</Button></div>
       </DialogContent>
     </Dialog>
   )

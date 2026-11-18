@@ -1,0 +1,20 @@
+/* Browser UI metrics: the single source for icon, hit-target and text sizes of every browser control (toolbar,
+   dialogs, popovers, notices, console, design bar). Values follow Chrome/VS Code/WCAG 2.2 (target >= 24px, we use 28px;
+   body text 13px, secondary 12px, nothing below 12px). browserUi.metrics.test.ts fails on px sizes that bypass these. */
+:root {
+  --bui-icon: 16px;
+  --bui-hit: 28px;
+  --bui-font: 13px;
+  --bui-font-sm: 12px;
+  --bui-toolbar-h: 36px;
+  --bui-omnibox-h: 28px;
+  --bui-gap: 4px;
+  --bui-radius: 6px;
+  --bui-focus: 2px;
+}
+/* Codicons inside browser controls render at the icon token, whatever the surrounding text size. */
+.browser-toolbar .codicon, .browser-console .codicon, .browser-device-header .codicon { font-size: var(--bui-icon); }
+/* Visible 2px keyboard focus on browser controls (WCAG 2.4.11/2.4.13). */
+.browser-toolbar :is(button, input, [tabindex]):focus-visible,
+.browser-console :is(button, input, [tabindex]):focus-visible,
+.browser-device-header button:focus-visible { outline: var(--bui-focus) solid var(--vscode-focusBorder, var(--accent)); outline-offset: 1px; }
