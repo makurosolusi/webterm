@@ -2,6 +2,7 @@
 // WS lain MENGIMPOR dari sini, tidak menyalin literal. Perubahan kontrak = permintaan ke orkestrator.
 // Murni deklarasi: tanpa import client/server, tanpa side effect saat import.
 import type { ConsoleClientMsg, ConsoleLevel, ConsoleServerMsg } from './browser.console'
+import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 
@@ -208,38 +209,49 @@ export const BROWSER_VERB_CAP = {
   status: 'browser.read', snapshot: 'browser.read', screenshot: 'browser.read', wait: 'browser.read', console: 'browser.read',
   open: 'browser.act', navigate: 'browser.act', click: 'browser.act', type: 'browser.act', press: 'browser.act',
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
+  // Tabs of one node: `tabs` lists, `tab` creates / switches / closes (`new` takes a URL, so it is an act).
+  tabs: 'browser.read', tab: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
 export type BrowserVerb = keyof typeof BROWSER_VERB_CAP
 /** CLI-only read verb (`webterm browser profiles`): lists the profile names this board can use. Not a page verb, so not in `BROWSER_VERB_CAP`; locked presets never get it. */
 export const BROWSER_PROFILES_VERB = 'profiles'
 
+/** Every page verb (not open/handoff/release/tabs/tab) may carry `tab`: act in that tab of the node, which also becomes the agent's working tab. */
+export interface TabArg { tab?: string }
 /** Body request per verb; `ref` berformat `e12`, `snapId` dari `snapshot` terakhir. */
 export interface VerbBodies {
-  status: Record<string, never>; snapshot: Record<string, never>
-  screenshot: { maxWidth?: number }
-  wait: { ms?: number; selectorRef?: string; loaded?: true }
-  console: { limit?: number; level?: ConsoleLevel }
+  status: TabArg; snapshot: TabArg
+  screenshot: { maxWidth?: number } & TabArg
+  wait: { ms?: number; selectorRef?: string; loaded?: true } & TabArg
+  console: { limit?: number; level?: ConsoleLevel } & TabArg
   /** Only on the node-token path: a new browser node beside the caller, cabled to it; `url` = navigate it at once. */
   open: { url?: string }
-  navigate: { url: string }
-  click: { ref: string; snapId: string }
-  type: { ref: string; snapId: string; text: string; submit?: boolean }
-  press: { key: string }
-  scroll: { dy: number }
+  navigate: { url: string } & TabArg
+  click: { ref: string; snapId: string } & TabArg
+  type: { ref: string; snapId: string; text: string; submit?: boolean } & TabArg
+  press: { key: string } & TabArg
+  scroll: { dy: number } & TabArg
+  tabs: Record<string, never>
+  /** `new` = optional url; `switch` and `close` need `tab`. */
+  tab: { action: 'new' | 'switch' | 'close'; url?: string; tab?: string }
   handoff: Record<string, never>; release: Record<string, never>
 }
 export interface VerbData {
   status: BrowserState
-  snapshot: { snapId: string; content: string; truncated: boolean; url: string }
+  snapshot: { snapId: string; content: string; truncated: boolean; url: string; tab?: string }
   screenshot: { mime: 'image/jpeg'; base64: string }
   open: { nodeId: string; url: string; note: string }
   /** Node-token `navigate` with no cabled browser opens one first and also returns the `open` fields. */
   navigate: { ok: true } & Partial<VerbData['open']>
-  wait: { ok: true }; click: { ok: true; newTab?: string }; type: { ok: true }
+  wait: { ok: true }; click: { ok: true; newTab?: string; note?: string }; type: { ok: true }
   console: { content: string; count: number; dropped: number; note?: string }
   press: { ok: true }; scroll: { ok: true }
+  tabs: TabsData
+  tab: TabsData & { tab?: AgentTabView; note: string }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }
 }
+/** Tab list a verb answers with: the node's tabs, the agent's working tab and the per-node limit. */
+export interface TabsData { tabs: AgentTabView[]; agentTab: string | null; max: number }
 /** Semua respons kontrol sukses; konten halaman selalu tak tepercaya. */
 export interface ControlOk<T> { ok: true; data: T; provenance: 'untrusted-web' }

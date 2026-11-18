@@ -47,7 +47,8 @@ Read verbs: \`status\`, \`snapshot\`, \`screenshot [maxWidth]\`, \`wait [--ms N]
 \`console [limit] [error|warning|info|verbose]\` (newest page console entries at or above that level; default 50, info;
 capture starts at the first read, so reload the page with \`navigate\` to see messages from page load).
 Act verbs: \`open [url]\`, \`navigate <url>\`, \`click <ref> <snapId>\`, \`type <ref> <snapId> <text> [--submit]\`,
-\`press <key>\`, \`scroll <dy>\`, \`release\` (give control back to the user early).
+\`press <key>\`, \`scroll <dy>\`, \`tab new|switch|close\`, \`release\` (give control back to the user early).
+Tabs: \`tabs\` (read), \`--tab <id>\` on any page verb (see Tabs below).
 
 ## Profiles (separate logins)
 
@@ -58,6 +59,18 @@ accounts are already signed in: ask for the account's profile instead of logging
 sensitive; an unknown name answers with the list. No \`--profile\` = this board's Default. A browser you already have
 is reused only when it runs the SAME profile, so you are never handed the wrong account. You cannot create profiles
 here or touch their cookies: only the user manages those in the UI.
+
+## Tabs (one browser node, many pages)
+
+A browser node holds TABS (at most 8). Open many pages in ONE node instead of adding nodes: \`tab new [url]\` opens a
+tab and moves you to it, \`tabs\` lists them (id, title, host, which one is yours, loading/discarded/crashed),
+\`tab switch <id>\` changes your working tab, \`tab close <id>\` closes one. Add \`--tab <id>\` to any page verb
+(\`snapshot\`, \`click\`, \`screenshot\`, \`navigate\`, ...) to act in that tab; it also becomes your working tab.
+A \`click\` on a link that opens a new tab answers \`newTab: <id>\` and moves you to it: \`snapshot\` next to read it.
+Your working tab is separate from the tab the user is looking at, so you can work in the background.
+A snapshot lists the tabs when there are several. Its refs belong to the tab it was taken in: after switching tabs a
+\`stale_tab_ref\` error means take a new snapshot of the tab you are on (the error says which). A full node answers
+\`tab_limit\`: close a tab first. Tabs share the node's profile (logins).
 
 Act verbs take control of the browser automatically and control returns to the user when your turn ends.
 Do not ask the user to hand over the browser or to confirm routine browsing. Run one browser verb per shell command.

@@ -21,6 +21,7 @@ import { parseBrowserUrl } from '../../shared/browser.url'
 import { openAgentBrowser, openedNote } from './browser.agentOpen'
 import type { AgentOpenDeps } from './browser.agentOpen'
 import { presetBrowserDenial } from './browser.presetLock'
+import { AgentTabError } from './browser.agentTabs.verbs'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -57,6 +58,7 @@ const fail = (status: number, error: string, extra: object = {}): ControlResult 
 /** Petakan galat verb ke respons; galat tak dikenal dilog (hanya nama, tanpa URL/pesan halaman) dan jadi 500. */
 function mapError(err: unknown, nodeId: string): ControlResult {
   if (err instanceof BlockedError) return fail(403, 'blocked', { reason: err.reason, ...(err.hostname ? { hostname: err.hostname } : {}) })
+  if (err instanceof AgentTabError) return fail(err.status, err.wire, { message: err.message, next: err.next })
   if (err instanceof BrowserError) return fail(STATUS_BY_CODE[err.code], err.code, { ...(err.hostname ? { hostname: err.hostname } : {}), ...(err.code === 'human_active' ? { message: HUMAN_ACTIVE_MESSAGE } : {}) })
   // Page did not answer in time (e.g. a stalled first navigation): tell the agent to retry, not "internal".
   if (err instanceof CdpTimeoutError) return fail(504, 'timeout', { message: 'The page did not respond in time. Retry once; if it repeats, tell the user.' })
@@ -92,7 +94,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   if (!requester || !linked) return fail(401, 'unauthorized')
   const principal = `node:${requester}`
   if (deps.presetOf?.(requester)) {
-    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url, asObject(req.body).profile)
+    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url, asObject(req.body).profile, asObject(req.body).tab)
     if (denied) return denied
   }
   if (asked !== 'open') {

@@ -1,13 +1,13 @@
 // Verb agent (PLAN b §4.6): satu fungsi per verb, semua body divalidasi (batas kepercayaan), semua akses CDP lewat
 // `callAllowed`. Dibagi `.read` (status/snapshot/screenshot/wait) dan `.act` (navigate/click/type/press/scroll).
-import type { AgentCtx, AgentVerbs } from './browserAgent.verbs.ctx'
+import type { AgentCtx, BaseVerbs } from './browserAgent.verbs.ctx'
 import { stateOf } from './browserAgent.verbs.ctx'
 import { actVerbs } from './browserAgent.verbs.act'
 import { readVerbs } from './browserAgent.verbs.read'
 import { consoleVerbs } from './browserAgent.verbs.console'
 import { timed } from './browserAgent.latency'
 
-export type { AgentCtx, AgentVerbs, ApprovalRequest } from './browserAgent.verbs.ctx'
+export type { AgentCtx, AgentVerbs, ApprovalRequest, BaseVerbs } from './browserAgent.verbs.ctx'
 
 const urlOf = (body: unknown): string | undefined => {
   const u = (body as { url?: unknown } | null | undefined)?.url
@@ -15,16 +15,16 @@ const urlOf = (body: unknown): string | undefined => {
 }
 
 /** Single timing point: every verb runs through `timed` (latency buffer; host only, never the body). */
-function timedVerbs(verbs: AgentVerbs): AgentVerbs {
+function timedVerbs(verbs: BaseVerbs): BaseVerbs {
   const out: Record<string, unknown> = {}
   for (const [name, fn] of Object.entries(verbs) as [string, (nodeId: string, body: unknown) => Promise<unknown>][]) {
     out[name] = (nodeId: string, body: unknown) => timed(name, () => fn(nodeId, body), { url: urlOf(body) })
   }
-  return out as AgentVerbs
+  return out as BaseVerbs
 }
 
 /** Rakit seluruh verb: read + act + handoff/release (lease). */
-export function createAgentVerbs(ctx: AgentCtx): AgentVerbs {
+export function createAgentVerbs(ctx: AgentCtx): BaseVerbs {
   return timedVerbs({
     ...readVerbs(ctx),
     ...consoleVerbs(ctx),

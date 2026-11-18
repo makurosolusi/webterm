@@ -27,6 +27,7 @@ import { createViewerHub } from './browserWs.viewers'
 import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
 import { agentTabHost, withNewTab } from './browser.agentTabs'
+import { withTabs } from './browser.agentTabs.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { openProjectBrowser } from './browser.projectOpen'
@@ -133,7 +134,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentEnv = () => agentControlOn(env)
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
-  const verbs = withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now, console: host.console }), host)
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+  const verbs = withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep })
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
   host.onState((s: BrowserState) => {
@@ -166,6 +168,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   return {
     status,
     state: (id) => host.state(id),
+    tabs: (id) => host.tabsState(id),
     listDomains: (workspaceId) => vault.listDomains(workspaceId),
     releaseLease: (id) => leases.release(id),
     async closeNode(id) {

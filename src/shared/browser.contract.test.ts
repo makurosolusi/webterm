@@ -16,7 +16,7 @@ describe('browser.contract', () => {
     const caps = Object.values(BROWSER_CAPS)
     for (const cap of Object.values(BROWSER_VERB_CAP)) expect(caps).toContain(cap)
     expect(Object.keys(BROWSER_VERB_CAP).sort()).toEqual(
-      ['click', 'console', 'handoff', 'navigate', 'open', 'press', 'release', 'screenshot', 'scroll', 'snapshot', 'status', 'type', 'wait'])
+      ['click', 'console', 'handoff', 'navigate', 'open', 'press', 'release', 'screenshot', 'scroll', 'snapshot', 'status', 'tab', 'tabs', 'type', 'wait'])
     expect(BROWSER_VERB_CAP.snapshot).toBe('browser.read')
     expect(BROWSER_VERB_CAP.click).toBe('browser.act')
   })

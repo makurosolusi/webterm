@@ -32,6 +32,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['read or change the color that identifies a workspace (only when the user asks; yields while they move the canvas)', ['workspace.color']],
   ['undo your own canvas.close', ['canvas.reopen']],
   ['browse yourself', ['browser_act']],
+  ['work in several tabs of one browser node (open, switch, close)', ['browser_tab']],
   ['open a browser on a profile (separate logins) or create one', ['browser_open', 'browser_profile']],
   ['project health', ['health.scan']],
   ['remember', ['memory.remember']],
@@ -50,6 +51,7 @@ export function stewardOffAbilities(tools: readonly MapTool[]): Set<CapabilityId
     if (t.name === 'browser_read') off.add('web.read')
     if (t.name === 'browser_act') off.add('web.drive')
     if (t.name === 'browser_profile') off.add('web.profiles')
+    if (t.name === 'browser_tab') off.add('web.tabs')
   }
   return off
 }
