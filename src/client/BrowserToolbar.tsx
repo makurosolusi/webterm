@@ -13,6 +13,9 @@ import { ZOOM_STEP, zoomLabel } from './browser.zoom'
 import { SITE_INFO_TEXT, TOOLBAR_TEXT, TOOLBAR_TIP as TIP, URL_ERROR_TEXT, ZOOM_TEXT } from './browser.uxText'
 import { loadRecent } from './browser.recent'
 import BrowserShieldsChip from './BrowserShieldsChip'
+import BrowserDownloads from './browserDownloads/BrowserDownloads'
+import { hasDownloads } from './browserDownloads/browserDownloads.state'
+import type { DownloadItem } from '../shared/browser.downloads'
 import BrowserToolbarMenu from './BrowserToolbarMenu'
 import type { DeviceChoice } from '../shared/browser.devices'
 import { CONSOLE_COMMAND_ID, CONSOLE_TEXT } from './BrowserConsole'
@@ -44,6 +47,8 @@ export interface BrowserToolbarProps {
   onDevice?: (device: DeviceChoice | null) => void
   /** Console drawer toggle; the error badge shows only when given and there are errors. */
   console?: ConsoleSlot
+  /** Downloads of this node: the toolbar button (right, before ⋮) shows once there is any; the ⋮ menu's Downloads row always opens the list. */
+  downloads?: { nodeId: string; items: readonly DownloadItem[] }
   /** Design Mode state (menu toggle shown only when given). */
   design?: DesignMode
   /** Extra page/browser rows at the end of the ⋮ menu (e.g. Import Cookies). */
@@ -61,7 +66,8 @@ export function siteInfoKind(url: string): keyof typeof SITE_INFO_TEXT {
 }
 
 /** Address bar + navigation + overflow menu of one browser node. */
-export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, onZoomReset, searchEngine, onShields, device, onDevice, console: consoleSlot, design, menuItems }: BrowserToolbarProps) {
+export default function BrowserToolbar({ state, nav, agentControl, agentEnabled, onAgentControl, onEnableAgent, zoom = 1, onZoom, onZoomReset, searchEngine, onShields, device, onDevice, console: consoleSlot, downloads, design, menuItems }: BrowserToolbarProps) {
+  const [dlOpen, setDlOpen] = useState(false)
   const [draft, setDraft] = useState(state?.url ?? '')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -150,7 +156,9 @@ export default function BrowserToolbar({ state, nav, agentControl, agentEnabled,
             onClick={() => onAgentControl(!agentControl)}
           >{icon('robot')}{agentControl && <span className="browser-toolbar__agent-dot" aria-hidden="true" />}</IconButton>
         )}
+        {downloads && <BrowserDownloads nodeId={downloads.nodeId} items={downloads.items} showButton={hasDownloads(downloads.items, downloads.nodeId)} open={dlOpen} onOpenChange={setDlOpen} />}
         <BrowserToolbarMenu
+          onDownloads={downloads ? () => setDlOpen(true) : undefined}
           state={state} zoom={zoom} onZoom={onZoom} onZoomReset={resetZoom} device={device} onDevice={onDevice} onShields={onShields} design={design}
           agentControl={agentControl} agentEnabled={agentEnabled} onAgentControl={onAgentControl} onEnableAgent={onEnableAgent} console={consoleSlot} onError={setNotice} extraItems={menuItems}
         />

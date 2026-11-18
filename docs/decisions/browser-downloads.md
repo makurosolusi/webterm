@@ -75,3 +75,12 @@ leave only when the person says so.
 - **Unverified against a real Chromium in this change.** `allowAndName` naming and the event shapes follow the CDP
   reference and are exercised against a fake CDP server only; a real download smoke test is still to run.
 - **Resume after a restart** and parallel-download limits are not implemented; an interrupted download is shown as failed.
+
+## Placement
+
+The Downloads control lives in the address toolbar, not the node title row (Chrome/Edge/Arc): on the right, after the
+omnibox and the Shields / console / Agents controls and immediately before the ⋮ menu. It appears once the node has any
+download (running or in the list) and its width animates in (no animation under reduced motion), so the address field does
+not jump. With no history the button is hidden and the ⋮ menu "Downloads" row opens the same list, anchored at the same
+spot. In a narrow node (container width <= 260px) the button collapses and the ⋮ row stays the way in. The popover is
+right-aligned to the anchor and clamped to the window.

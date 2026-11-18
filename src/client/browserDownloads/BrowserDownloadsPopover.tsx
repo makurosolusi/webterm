@@ -1,4 +1,4 @@
-// The downloads list of a node as a non-modal dialog under its header button (WAI-ARIA: role=dialog, labelled, Esc closes and
+// The downloads list of a node as a non-modal dialog under its toolbar button (WAI-ARIA: role=dialog, labelled, Esc closes and
 // focus returns to the button, a press outside closes, Tab stays natural). Rendered in a portal so canvas zoom and the node's
 // own clipping never cut it; placed from the button's rectangle and clamped to the window.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -19,7 +19,7 @@ export interface BrowserDownloadsPopoverProps {
   nodeId: string
   items: readonly DownloadItem[]
   speeds: SpeedMap
-  /** The header button: placement anchor, excluded from "press outside", and where focus returns. */
+  /** The toolbar button (or its collapsed wrapper when hidden): placement anchor, excluded from "press outside", and where focus returns. */
   anchor: HTMLElement
   id: string
   onClose: () => void
@@ -40,7 +40,7 @@ export function BrowserDownloadsPopover({ nodeId, items, speeds, anchor, id, onC
 
   useLayoutEffect(() => { ref.current?.focus() }, [])
   useEffect(() => {
-    const dismiss = (returnFocus: boolean) => { close.current(); if (returnFocus) anchor.focus() }
+    const dismiss = (returnFocus: boolean) => { close.current(); if (returnFocus) (anchor.querySelector<HTMLElement>('button') ?? anchor).focus() }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); dismiss(true) } }
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node

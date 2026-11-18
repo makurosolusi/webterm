@@ -8,12 +8,12 @@ import type { BrowserState } from '../shared/browser.contract'
 import { browserHeaderLabels } from './browser.header'
 import type { BrowserErr } from './browser.status'
 import type { Comment } from '../shared/workspace'
+import type { DownloadItem } from '../shared/browser.downloads'
 import NodeChrome, { termNodeClass } from './NodeChrome'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
 import BrowserProfileChip from './BrowserProfileChip'
-import BrowserDownloads from './browserDownloads/BrowserDownloads'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
@@ -78,6 +78,8 @@ export interface BrowserSlotCtx {
   setDevice: (device: DeviceChoice | null) => void
   /** Console drawer toggle + error badge count. */
   console?: ConsoleSlot
+  /** Downloads of this node (shown by the toolbar's Downloads button). */
+  downloads: DownloadItem[]
 }
 
 export interface BrowserNodeProps extends NodeProps {
@@ -159,7 +161,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
     setShields: (on) => send({ t: 'shields', on }),
     device: d.device, setDevice: (dev) => { rf.updateNodeData(id, { device: dev ?? undefined }); send({ t: 'device', device: dev }) },
     zoom, stepZoom: (dir) => setZoom(stepZoom(zoomRef.current, dir)), resetZoom: () => setZoom(ZOOM_DEFAULT),
-    console: consoleDrawer.slot,
+    console: consoleDrawer.slot, downloads: session.downloads,
   }
   // d.url terisi = niat navigasi menunggu `useGoto`; jangan kedipkan halaman awal di antaranya. Diblokir: biarkan notice terlihat.
   // Browser-level shortcuts (browser.keys.ts): handled here, never forwarded to the page.
@@ -230,7 +232,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           // Profile chip: in the canvas header and, in tab mode, among the tab's actions (both render `extraHeader`).
-          extraHeader={<><BrowserDownloads nodeId={id} items={session.downloads} /><BrowserProfileChip nodeId={id} profileId={d.profileId} /></>}
+          extraHeader={<BrowserProfileChip nodeId={id} profileId={d.profileId} />}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;

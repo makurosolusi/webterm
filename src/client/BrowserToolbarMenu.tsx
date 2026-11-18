@@ -16,6 +16,7 @@ import { AGENT_OFFER_TEXT, TOOLBAR_MENU_TEXT as M, TOOLBAR_TEXT, TOOLBAR_TIP, ZO
 import type { DesignMode } from './browser/design/useDesignMode'
 import { CONSOLE_TEXT } from './BrowserConsole'
 import type { ConsoleSlot } from './BrowserConsole'
+import { DL_TEXT } from './browserDownloads/browserDownloads.text'
 
 export interface BrowserToolbarMenuProps {
   state?: BrowserState
@@ -31,6 +32,8 @@ export interface BrowserToolbarMenuProps {
   onAgentControl: (enabled: boolean) => void
   onEnableAgent?: () => Promise<void>
   console?: ConsoleSlot
+  /** Opens the downloads list (row shown only when given); the only way in while the toolbar button is hidden. */
+  onDownloads?: () => void
   /** Reports a failed action (e.g. clipboard) in the toolbar's alert line. */
   onError: (message: string) => void
   /** Rows appended after a separator (browser-wide actions such as Import Cookies). */
@@ -74,6 +77,7 @@ export default function BrowserToolbarMenu(p: BrowserToolbarMenuProps) {
     const c = p.console
     items.push({ type: 'item', id: 'console', label: CONSOLE_TEXT.toggle, checked: c.open, keybinding: CONSOLE_KEY, onSelect: c.toggle })
   }
+  if (p.onDownloads) items.push({ type: 'item', id: 'downloads', label: DL_TEXT.button, icon: icon('download'), onSelect: p.onDownloads })
   if (items.length && items[items.length - 1].type !== 'separator') items.push({ type: 'separator' })
   items.push(
     { type: 'item', id: 'copy-url', label: M.copyUrl, icon: icon('copy'), disabled: !url, onSelect: () => {
