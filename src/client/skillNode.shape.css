@@ -1,0 +1,83 @@
+/* Shape of the skill node (SkillToken.tsx, SkillGlyph.tsx, SkillNode.tsx): a ROUND token when collapsed, a pill-radius
+   card when expanded. Shape + accent are the whole point: no other node is round or purple (docs/decisions/skill-node-shape.md).
+   --skill-accent reuses the theme's charts-purple (the hex is only the fallback, like fileIcon.css). */
+:root { --skill-accent: var(--vscode-charts-purple, #b180d7); }
+:root[data-theme='light'] { --skill-accent: var(--vscode-charts-purple, #652d90); }
+
+/* React Flow's node wrapper is a square box: make it invisible so only the circle (and its ring) is drawn. */
+.react-flow__node-skill { background: transparent; border: 0; box-shadow: none; outline: none; border-radius: 50%; }
+.react-flow__node-skill:focus, .react-flow__node-skill:focus-visible { outline: none; box-shadow: none; }
+.react-flow__node-skill:has(.skill-card) { border-radius: 20px; }
+
+.skill-shape, .skill-token { width: 100%; height: 100%; position: relative; }
+.skill-token__ring {
+  position: relative; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%; display: grid; place-items: center;
+  border: 3px solid var(--skill-accent); background: color-mix(in srgb, var(--skill-accent) 14%, var(--panel));
+  transition: border-width 0.12s, box-shadow 0.12s, transform 0.12s; animation: skill-pop 0.16s ease-out;
+}
+.skill-glyph { display: grid; place-items: center; border-radius: 50%; color: var(--skill-accent); }
+.skill-token__ring .skill-glyph { font-size: 34px; }
+.skill-token__ring .skill-glyph .codicon { font-size: 34px; }
+
+/* Rim marks: status (icon, never colour alone) bottom-right, version top-right, "Updated" pulse top-left. */
+.skill-token__mark {
+  position: absolute; right: -2px; bottom: -2px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel); border: 2px solid var(--panel); box-sizing: content-box; margin: -2px;
+}
+.skill-token__mark .codicon { font-size: 14px; }
+.skill-token__mark--active { color: var(--state-success); }
+.skill-token__mark--disabled { color: var(--muted); }
+.skill-token__mark--unavailable { color: var(--state-warning); }
+.skill-token__version {
+  position: absolute; top: -4px; right: -8px; font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 7px;
+  background: var(--skill-accent); color: var(--panel); font-weight: 600;
+}
+.skill-token__pulse {
+  position: absolute; top: 0; left: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--state-warning);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--state-warning) 60%, transparent); animation: skill-pulse 1.6s ease-out infinite;
+}
+
+/* Attached = full ring; not attached / disabled = dashed; unavailable = warning ring; disabled dims. */
+.skill-token--detached .skill-token__ring, .skill-token--disabled .skill-token__ring { border-style: dashed; }
+.skill-token--disabled .skill-token__ring { border-color: var(--muted); }
+.skill-token--disabled .skill-glyph { color: var(--muted); }
+.skill-token--unavailable .skill-token__ring { border-color: var(--state-warning); }
+.skill-token--unavailable .skill-glyph { color: var(--state-warning); }
+
+/* Interaction: the selection ring follows the circle (box-shadow on the round element), never the square node box. */
+.skill-token:hover .skill-token__ring { border-width: 4px; }
+.react-flow__node-skill.selected .skill-token__ring { box-shadow: 0 0 0 2px var(--panel), 0 0 0 5px var(--vscode-focusBorder, var(--accent)); }
+.react-flow__node-skill:focus-visible .skill-token__ring { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--vscode-focusBorder, var(--accent)); }
+.react-flow__node-skill.dragging .skill-token__ring { transform: scale(1.06); cursor: grabbing; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
+
+/* Label under the circle: title (2 lines, ellipsis, full text in the tooltip); slug only on hover / selection. */
+.skill-token__label {
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: 132px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+}
+.skill-token__title {
+  font-size: 12px; line-height: 15px; color: var(--vscode-descriptionForeground, var(--muted)); overflow: hidden; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; border-radius: 3px; transition: color 0.12s;
+}
+.skill-token__title:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.skill-token:hover .skill-token__title, .react-flow__node-skill.selected .skill-token__title { color: var(--text); }
+.skill-token__slug { font-size: 10px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transition: opacity 0.12s; }
+.skill-token:hover .skill-token__slug, .react-flow__node-skill.selected .skill-token__slug { opacity: 1; }
+.skill-token__actions { position: absolute; top: 0; left: calc(100% + 6px); display: flex; flex-direction: column; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+.skill-token:hover .skill-token__actions, .react-flow__node-skill.selected .skill-token__actions, .skill-token__actions:focus-within { opacity: 1; }
+
+/* Expanded: pill-radius card; the token's glyph becomes a round avatar on its top-left corner. */
+.skill-card { position: relative; border-radius: 20px; animation: skill-pop 0.16s ease-out; }
+.skill-card .node-header { padding-left: 34px; }
+.skill-card__avatar {
+  position: absolute; z-index: 1; left: 6px; top: 4px; width: 26px; height: 26px; border: 2px solid var(--skill-accent);
+  background: color-mix(in srgb, var(--skill-accent) 14%, var(--panel)); box-sizing: border-box;
+}
+.skill-card__avatar .codicon { font-size: 14px; }
+.react-flow__node-skill.selected .skill-card { box-shadow: 0 0 0 2px var(--vscode-focusBorder, var(--accent)); }
+
+@keyframes skill-pop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+@keyframes skill-pulse { to { box-shadow: 0 0 0 8px transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .skill-token__ring, .skill-card, .skill-token__pulse { animation: none; transition: none; }
+}
