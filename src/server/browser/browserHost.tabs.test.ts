@@ -11,7 +11,7 @@ const callsOf = (m: string) => rig.fake.calls.filter((c) => c.method === m)
 const tabsOf = () => rig.host.tabsState('n1')!
 const urls = () => tabsOf().tabs.map((t) => t.url)
 
-async function open(extra: Parameters<typeof makeHostRig>[2] = {}, url = 'https://a.test/') {
+async function open(extra: Parameters<typeof makeHostRig>[1] = {}, url = 'https://a.test/') {
   rig = await makeHostRig(stubGuard(['evil.test']), extra)
   const events: HostEvent[] = []
   rig.host.onEvent((e) => events.push(e))

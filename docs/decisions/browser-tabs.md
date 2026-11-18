@@ -51,6 +51,43 @@ Deviasi dari spesifikasi: aksi `closeOthers`, `closeToRight`, `reload` ditambahk
 WAI-ARIA Authoring Practices "Tabs" (manual activation); Chrome (ukuran tab, tetangga kanan lalu kiri, tab
 terakhir, Ctrl+Shift+T, middle-click); VS Code editor tabs (aktivasi manual, ikon tutup, tooltip).
 
+## Server (P1)
+Code: `src/server/browser/browserHost.tabs*.ts` (model + CDP effects), `browser.runtime.tabs.ts` (API service, pop-out,
+board save), `browserApi.tabs.ts` (routes), `browser.agentTabs.ts` (agent routing), contract additions in
+`src/shared/browser.tabs.ts` (`PersistedTabs`, `validPersistedTabs`, events `tabMoved`, `remember`, `reopenedFrom`).
+
+- **View slot.** `rec.targetId/sessionId` always belong to the human's active tab and are the only page that streams. Other
+  live tabs are background targets (`TargetTable.bg*`). Activating a tab swaps the slot: `stopScreencast` on the old page,
+  `startScreencast` on the new one. Each tab is its own offscreen Chromium window (CDP cannot put a target into another
+  window); the node still shows one stream.
+- **Popup -> tab.** The popup page is attached (adopted), not closed and recreated, so `window.opener`/`postMessage` OAuth
+  keep working. It is placed after its opener tab. Shields (filter + burst cap) and the navigation guard run first; a blocked
+  popup is closed with a `tabNotice`. At 8 tabs the popup is closed, its URL loads in the opener tab and the notice
+  "Tab limit (8) reached; ..." is sent. Deviation: CDP has no user-gesture flag, so "from the human's visible tab" stands in
+  for a gesture (it becomes the view); from the agent's tab while the agent holds the lease it moves the agent cursor.
+- **Cursors.** `activate(by:'human')` moves the view and turns "follow agent" off for the session. A tab an agent action
+  opens moves `agentTabId`, and the view too only while follow is on (decision: follow until the human picks a tab; no 5 s timer).
+- **Discard.** A background tab idle for the node's discard delay (`WEBTERM_BROWSER_DISCARD_MS`) is closed in Chromium but
+  stays listed (`discarded`); the active tab, loading tabs and the agent's tab while the agent drives are skipped. Waking
+  rebuilds the page at its URL. Node-level discard/MAX_LIVE is unchanged and counts nodes (pages of one node share a slot);
+  a crashed background tab is only marked `crashed`.
+- **Persistence.** `WsNode.tabs` (`PersistedTabs`: url, title, http favicon URL, order, both cursors), written debounced
+  (1.5 s) through `canvas.update` (no new SQL in db.ts). On open, the active tab loads and the rest are `discarded`; a node
+  without `tabs` is one tab. Closed history is runtime only.
+- **Pop-out.** Adds a browser node beside the source on the same profile with the tab URL, opens it through the MAX_LIVE gate
+  first (full gate = nothing changes), then removes the tab without remembering it. A live page cannot move between windows
+  over CDP, so scroll/form state is not carried.
+- **Agent.** Verbs run on `agentTabId` (`agentTabHost`); one-tab nodes are unchanged. `click` returns `newTab` when it opened one.
+
+### Endpoints (`/api/browser/:nodeId/tabs`, same auth as other browser routes; every answer is `{ state, tab?, newNodeId? }`)
+`GET` list - `POST` {url?, afterTabId?} - `POST /:tabId/activate` - `DELETE /:tabId` - `POST /:tabId/move` {toIndex} -
+`POST /:tabId/duplicate` - `POST /:tabId/pop-out` - `POST /reopen`. Errors: 400 bad id/url, 403 blocked (SSRF), 404, 409 `tab_limit` or `max_live`.
+WS (`/ws/browser`): `{t:'tabs', id, state}` on attach, `{t:'tab', id, event}` (fold with `applyTabEvent`), `{t:'tabNotice', id, message}`.
+The old `{t:'popup'}` is no longer sent.
+
+Not verified without a real Chromium: that an adopted popup keeps `window.opener` live, real OAuth round trips, and that
+screencast resumes on a swapped page.
+
 ## Menyusul
 P1 server (model tab, popup -> tab, screencast hanya tab aktif, persistensi); P2b integrasi ke `BrowserNode`
 setelah profil ter-merge; P3 agent (verb `tabs`/`tab`, `--tab`, `newTab`); P4 split pane; P5 QC (sinkron, bandingkan).
