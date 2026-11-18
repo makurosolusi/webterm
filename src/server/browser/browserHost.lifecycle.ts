@@ -4,7 +4,7 @@ import type { BrowserState } from '../../shared/browser.contract'
 import { createLogger } from '../logs'
 import { CDP, CDP_EVENT, CdpClient } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
-import { LaunchError } from './chromium.launch'
+import { LaunchError, launchReason } from './chromium.launch'
 import type { BrowserLauncher } from './chromium.launch'
 import { restoreDevice, type DeviceIo } from './browserHost.device'
 import type { ShieldRouter } from './browserHost.shield'
@@ -114,12 +114,15 @@ export function createTargetLifecycle(ops: LifecycleOps): TargetLifecycle {
       cdp = await connection(profileId)
     } catch (err) {
       const noBin = err instanceof LaunchError && err.code === 'no_binary'
+      const reason = launchReason(err)
       if (noBin) ops.patch(rec, { blocked: 'no_binary' })
-      // Without this line a failed launch left only a stream of info "chromium exited" in the log.
+      // Without this line a failed launch left only a stream of info "chromium exited" in the log. `reason` says WHY
+      // (profile locked, binary missing, ...); the message is ours (LaunchError), never a raw error that may hold paths.
       else log.warn('browser.launch_failed', 'browser could not start for this node', {
         ids: { workspaceId, profileId, nodeId }, code: err instanceof LaunchError ? err.code : err instanceof Error ? err.name : typeof err,
+        reason, detail: err instanceof LaunchError ? err.message : undefined,
       })
-      throw new BrowserError(noBin ? 'no_binary' : 'launch_failed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err)
+      throw new BrowserError(noBin ? 'no_binary' : 'launch_failed', `open node ${nodeId} failed: ${errMsg(err)}`, undefined, err, reason)
     }
     const { targetId, sessionId } = await createPageTarget(cdp, rec.viewport)
     table.bind(rec, targetId, sessionId)

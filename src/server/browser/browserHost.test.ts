@@ -87,7 +87,8 @@ describe('open', () => {
     const host = new BrowserHost({ guard: stubGuard(), launcher: { acquire, shutdown: () => undefined } })
     await expect(host.open('n9', 'w1')).rejects.toMatchObject({ name: 'BrowserError', code: 'launch_failed' })
     const warn = logBus.snapshot().find((e) => e.event === 'browser.launch_failed')
-    expect(warn).toMatchObject({ level: 'warn', ids: { workspaceId: 'w1', nodeId: 'n9' }, data: { code: 'profile_locked' } })
+    expect(warn).toMatchObject({ level: 'warn', ids: { workspaceId: 'w1', nodeId: 'n9' }, data: { code: 'profile_locked', reason: 'profile_locked' } })
+    expect(warn?.data?.detail).toBe('held') // our own LaunchError text, never a raw error that may hold paths
     await host.navAction('n9', 'reload')
     expect(host.state('n9')?.live).toBe('live')
     await host.dispose()

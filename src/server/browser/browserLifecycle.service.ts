@@ -46,6 +46,7 @@ export class BrowserLifecycle {
   private readonly retryMs: number
   private readonly unsub: () => void
   private gate: Promise<unknown> = Promise.resolve()
+  private readonly capacityCbs = new Set<() => void>()
   private disposed = false
 
   constructor(private readonly deps: LifecycleDeps) {
@@ -70,7 +71,11 @@ export class BrowserLifecycle {
   /** Buka node untuk penonton: patuhi MAX_LIVE; node discarded dipulihkan dari url terakhir (atau `url`). */
   async attach(nodeId: string, workspaceId: string, url?: string): Promise<AttachResult> {
     if (this.disposed) throw new Error(`lifecycle disposed: attach ${nodeId}`)
-    if (!(await this.admit(nodeId))) return { ok: false, blocked: 'max_live' }
+    if (!(await this.admit(nodeId))) {
+      // Without this line a node refused by the gate left no trace at all: it looked like a node that never tried to launch.
+      log.warn('browser.attach_refused', 'node refused: the live browser limit is reached', { ids: { nodeId, workspaceId }, reason: 'max_live', live: this.queue.size, maxLive: this.deps.maxLive })
+      return { ok: false, blocked: 'max_live' }
+    }
     try {
       const last = this.deps.host.state(nodeId)?.url
       return { ok: true, state: await this.deps.host.open(nodeId, workspaceId, url ?? (last || undefined)) }
@@ -80,12 +85,19 @@ export class BrowserLifecycle {
     }
   }
 
+  /** A live slot may be free now (a node was forgotten or hidden): waiting attaches retry. Returns the unsubscribe. */
+  onCapacity(cb: () => void): () => void {
+    this.capacityCbs.add(cb)
+    return () => { this.capacityCbs.delete(cb) }
+  }
+
   /** Gateway melaporkan node terlihat/tersembunyi. Tersembunyi = paused (stopScreencast) + timer discard. */
   setVisible(nodeId: string, visible: boolean): void {
     if (this.disposed) return
     const e = this.queue.setVisible(nodeId, visible, this.now())
     if (!e) return
     if (visible) { this.cancel(nodeId); return }
+    this.freed() // a hidden node can be evicted by the next attach
     if (this.timers.has(nodeId)) return // sudah tersembunyi, timer jalan
     this.deps.host.stopScreencast(nodeId).catch((err) => log.warn('browser.pause', 'stopScreencast failed', { ids: { nodeId }, error: errMsg(err) }))
     this.arm(nodeId, this.deps.discardMs)
@@ -94,13 +106,18 @@ export class BrowserLifecycle {
   /** Lepas node dari pelacakan tanpa menyentuh host (node dihapus / target hilang). */
   forget(nodeId: string): void {
     this.cancel(nodeId)
-    this.queue.remove(nodeId)
+    if (this.queue.get(nodeId)) { this.queue.remove(nodeId); this.freed() }
+  }
+
+  private freed(): void {
+    for (const cb of [...this.capacityCbs]) cb()
   }
 
   /** Hentikan semua timer dan langganan; tidak ada timer tersisa. */
   dispose(): void {
     this.disposed = true
     this.unsub()
+    this.capacityCbs.clear()
     for (const id of [...this.timers.keys()]) this.cancel(id)
     for (const id of this.queue.ids()) this.queue.remove(id)
   }

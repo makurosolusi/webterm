@@ -178,7 +178,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       profiles.forget(id)
       await host.discard(id)
     },
-    gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url }),
+    gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url, hintProfile: profiles.hint, onCapacity: (cb) => lifecycle.onCapacity(cb) }),
     api: async (method, pathname, body, search) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps, search),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),

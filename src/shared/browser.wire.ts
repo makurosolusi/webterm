@@ -148,7 +148,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
   switch (m.t) {
     case 'attach': {
       const v = viewport(m)
-      return v ? { t: 'attach', id, ...v } : null
+      if (!v || (m.profileId !== undefined && !str(m.profileId, ID_MAX_BYTES))) return null
+      return { t: 'attach', id, ...v, ...(m.profileId === undefined ? {} : { profileId: m.profileId as string }) }
     }
     case 'resize': {
       const v = viewport(m)
