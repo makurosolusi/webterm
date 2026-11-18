@@ -13,6 +13,7 @@ import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
 import BrowserProfileChip from './BrowserProfileChip'
+import BrowserDownloads from './browserDownloads/BrowserDownloads'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
@@ -229,7 +230,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           // Profile chip: in the canvas header and, in tab mode, among the tab's actions (both render `extraHeader`).
-          extraHeader={<BrowserProfileChip nodeId={id} profileId={d.profileId} />}
+          extraHeader={<><BrowserDownloads nodeId={id} items={session.downloads} /><BrowserProfileChip nodeId={id} profileId={d.profileId} /></>}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;
