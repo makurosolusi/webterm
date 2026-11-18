@@ -56,7 +56,7 @@ describe('SettingsPanel layout', () => {
     const search = screen.getByRole('searchbox', { name: 'Search settings' })
     expect(search.closest('.st-sidebar')).toBe(nav().closest('.st-sidebar')) // one column, not a bar over both
     // Developer is hidden outside developer mode (./developerMode). Memory, Automations and Spending moved to the Control panel.
-    const labels = ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Features', 'About this machine']
+    const labels = ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications', 'Claude', 'Central', 'Rules & secrets', 'Account', 'Browser', 'Features', 'About this machine']
     expect(within(nav()).getAllByRole('button').map((b) => b.textContent)).toEqual(labels) // the title only, one line
     expect(labels.map((name) => within(nav()).getByRole('button', { name }))).toHaveLength(labels.length)
 
@@ -82,7 +82,7 @@ describe('SettingsPanel layout', () => {
     expect(byGroup).toEqual([
       ['Appearance', 'Terminal', 'Keyboard Shortcuts', 'Canvas', 'Notifications'],
       ['Claude', 'Central', 'Rules & secrets'],
-      ['Account', 'Features', 'About this machine'],
+      ['Account', 'Browser', 'Features', 'About this machine'],
     ])
     expect(within(nav()).getByRole('group', { name: 'Account & system' })).toBe(groups[2])
     expect(SETTINGS_GROUPS).toEqual(['General', 'Agents', 'Account & system'])

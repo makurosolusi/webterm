@@ -16,7 +16,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'central', group: 'Agents', label: 'Central', icon: 'comment-discussion', description: 'What it may do, check-ins, spend limit' },
   { id: 'rules', group: 'Agents', label: 'Rules & secrets', icon: 'shield', description: 'What agents may do, and their secrets' },
   { id: 'account', group: 'Account & system', label: 'Account', icon: 'person', description: 'Username, password, signed-in devices' },
-  { id: 'browser', group: 'Account & system', label: 'Browser', icon: 'globe', description: 'Profiles: separate logins for each browser' },
+  { id: 'browser', group: 'Account & system', label: 'Browser', icon: 'globe', description: 'Separate logins for each browser' },
   { id: 'capabilities', group: 'Account & system', label: 'Features', icon: 'extensions', description: 'Turn on the browser, files and Telegram' },
   // Machine diagnostics, not the Control panel's code Health; the id stays `health` for old links.
   { id: 'health', group: 'Account & system', label: 'About this machine', icon: 'info', description: 'Checks, data folder, developer tools' },
