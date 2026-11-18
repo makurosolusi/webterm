@@ -1,6 +1,7 @@
 // Menu rows for the tab context menu and the All-tabs list. Pure: callers pass what a row does.
 import type { VscodeMenuItem } from '@/components/vscode/vscodeMenu'
 import { canAddTab, type BrowserTab, type BrowserTabAction, type BrowserTabsState } from '../../shared/browser.tabs'
+import { chordLabel } from '@/commandRegistry'
 import { isMacPlatform } from '@/terminalKeys'
 import { isBlankTab, tabTitle } from './browserTabs.labels'
 
@@ -26,7 +27,7 @@ export function tabContextItems(tab: BrowserTab, d: TabMenuDeps): VscodeMenuItem
       onSelect: () => run({ type: 'duplicate', tabId: tab.tabId, newTabId: d.makeId() }) },
     { type: 'item', id: 'reload', label: 'Reload', disabled: isBlankTab(tab), onSelect: () => run({ type: 'reload', tabId: tab.tabId }) },
     { type: 'separator' },
-    { type: 'item', id: 'close', label: 'Close', keybinding: isMacPlatform() ? '⌘W' : 'Ctrl+W', onSelect: () => run({ type: 'close', tabId: tab.tabId }) },
+    { type: 'item', id: 'close', label: 'Close', keybinding: chordLabel('Mod+W', isMacPlatform()), onSelect: () => run({ type: 'close', tabId: tab.tabId }) },
     { type: 'item', id: 'close-others', label: 'Close others', disabled: onlyTab, title: onlyTab ? 'No other tabs' : undefined,
       onSelect: () => run({ type: 'closeOthers', tabId: tab.tabId }) },
     { type: 'item', id: 'close-right', label: 'Close to the right', disabled: index === state.tabs.length - 1,
