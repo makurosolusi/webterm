@@ -71,6 +71,13 @@ export async function seedBoard(s: SmokeServer): Promise<void> {
   for (const name of ['work', 'personal']) await api(s, 'POST', '/api/browser/profiles', { name, workspaceId })
 }
 
+/** Ids of the browser nodes on the seeded board right now. */
+export async function browserNodeIds(s: SmokeServer): Promise<string[]> {
+  if (!workspaceId) throw new Error('seedBoard must run before browserNodeIds')
+  const ws = await api<{ nodes: Array<{ id: string; kind: string }> }>(s, 'GET', `/api/workspaces/${workspaceId}`)
+  return ws.nodes.filter((n) => n.kind === 'browser').map((n) => n.id)
+}
+
 /** Adds one Agent Chat node to the seeded board and returns its id. */
 async function addChatNode(s: SmokeServer, preset: string | undefined): Promise<string> {
   if (!workspaceId) throw new Error('seedBoard must run before the first chat case')
@@ -116,7 +123,7 @@ export async function runChat(s: SmokeServer, opts: { preset?: 'skill-author'; p
     if (e.t === 'permission' && typeof e.requestId === 'string' && !answered.has(e.requestId)) {
       answered.add(e.requestId)
       const cmd = String((e.input as { command?: unknown } | null)?.command ?? '')
-      const allow = e.toolName === 'Bash' && /^webterm (browser (open|navigate|snapshot|profiles)|skills (list|propose|get))\b/.test(cmd)
+      const allow = e.toolName === 'Bash' && /^webterm (browser (open|navigate|snapshot|profiles|click|type|press|scroll|screenshot|wait|status|tabs?)|skills (list|propose|get))\b/.test(cmd)
       const body = allow ? { requestId: e.requestId, behavior: 'allow' } : { requestId: e.requestId, behavior: 'deny', message: 'smoke: not part of the browser capability' }
       void api(s, 'POST', `/api/agent-chat/${nodeId}/permission`, body).catch(() => undefined) // 409 = already settled
     }

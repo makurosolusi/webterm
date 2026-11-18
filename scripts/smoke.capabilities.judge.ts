@@ -15,11 +15,14 @@ export interface ToolEvidence {
   profile?: string
   /** Short machine reason: Central receipt `detail` (`url_not_public`), chat result text head. */
   code: string
+  /** Chat: head of the tool result text (enough to see `newTab`); absent for Central. */
+  output?: string
 }
 /** `drafts` = pending skill drafts found in the store after the run (only the direct-flow case reads it). */
-export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number }
+/** `newBrowserNodes` = browser nodes the run added to the board (only the tab cases read it). */
+export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number; newBrowserNodes?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied' | 'tab-open' | 'tab-multi' | 'tab-denied'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 
