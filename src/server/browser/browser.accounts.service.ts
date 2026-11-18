@@ -32,6 +32,8 @@ export interface AccountsDeps {
 }
 
 export interface AccountsService {
+  /** The Settings switch (the list tells clients so they can hide the whole feature). */
+  enabled(): boolean
   /** Last known accounts (memory, else disk); [] while the setting is off. */
   get(profileId: string): ProfileAccount[]
   /** Ask for a check; honours the TTL (a `sessionChange` honours only the floor). Never throws, never waits for the result. */
@@ -130,6 +132,7 @@ export function createAccountsService(d: AccountsDeps): AccountsService {
   }
 
   return {
+    enabled: () => d.enabled(),
     get: (id) => (d.enabled() ? read(id) : []),
     trigger(id, why, opts) {
       log.debug('browser.accounts.trigger', 'account check requested', { ids: { profileId: id }, reason: why })

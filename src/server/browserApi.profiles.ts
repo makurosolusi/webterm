@@ -73,7 +73,7 @@ async function cookies(method: string, id: string, rest: string[], search: URLSe
 export async function profileRoute(method: string, rest: string[], search: URLSearchParams, body: Body, d: ProfileApiDeps): Promise<BrowserApiResult | null> {
   const [id, kind, ...more] = rest
   if (id === undefined) {
-    if (method === 'GET') return { status: 200, body: { profiles: d.profiles.list(search.get('workspaceId') ?? undefined) } }
+    if (method === 'GET') return { status: 200, body: { profiles: d.profiles.list(search.get('workspaceId') ?? undefined), ...(d.accounts ? { accountsEnabled: d.accounts.enabled() } : {}) } }
     if (method !== 'POST') return null
     const read = await readObject(body)
     if (!read.ok) return read.result

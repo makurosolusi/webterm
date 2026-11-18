@@ -15,6 +15,7 @@ let rig: Rig
 let d: BrowserApiDeps
 let asked: Array<{ id: string; respectTtl?: boolean }>
 let known: ProfileAccount[]
+let on = true
 
 const status = (): BrowserStatusResp => ({ enabled: true, binFound: true, live: 0, maxLive: 3, agentEnabled: true, cookieImportEnabled: true })
 const api = (method: string, path: string, search = '') =>
@@ -25,9 +26,10 @@ beforeEach(() => {
   rig.svc.ensureDefaults()
   asked = []
   known = [ACCOUNT]
+  on = true
   rig.svc.deps.accounts = () => known
   const accounts = {
-    get: () => known, trigger: () => undefined, forget: () => undefined,
+    enabled: () => on, get: () => known, trigger: () => undefined, forget: () => undefined,
     refresh: async (id: string, opts?: { respectTtl?: boolean }) => { asked.push({ id, respectTtl: opts?.respectTtl }); return known },
   }
   d = {
@@ -44,6 +46,12 @@ describe('accounts in the profile list', () => {
     const list = (await api('GET', ''))!.body as { profiles: BrowserProfile[] }
     expect(list.profiles[0].accounts).toEqual([ACCOUNT])
     expect(JSON.stringify(list)).not.toContain('test.person')
+  })
+  it('tells clients whether the switch is on, so they can hide the feature', async () => {
+    expect(((await api('GET', ''))!.body as { accountsEnabled?: boolean }).accountsEnabled).toBe(true)
+    on = false
+    known = []
+    expect(((await api('GET', ''))!.body as { accountsEnabled?: boolean }).accountsEnabled).toBe(false)
   })
   it('omits the field when nothing is known (new profile) or the switch is off', async () => {
     known = []

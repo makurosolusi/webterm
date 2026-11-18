@@ -40,7 +40,8 @@ export const PROFILE_ERROR_CODES = [
 ] as const
 export type ProfileErrorCode = (typeof PROFILE_ERROR_CODES)[number]
 
-export interface ProfileListResp { profiles: BrowserProfile[] }
+/** `accountsEnabled: false` = the "show signed-in accounts" switch is off: no profile carries accounts and clients hide the feature. */
+export interface ProfileListResp { profiles: BrowserProfile[]; accountsEnabled?: boolean }
 export interface ProfileCreateReq { name: string; color?: string; shade?: string; workspaceId?: string }
 export interface ProfileUpdateReq { name?: string; color?: string; shade?: string }
 export interface ProfileDuplicateReq { name: string }

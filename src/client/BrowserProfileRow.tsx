@@ -14,6 +14,7 @@ import type { BrowserProfile } from '../shared/browser.profile'
 import { VscodeMenu } from './components/vscode/vscodeMenu'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import ProfileColorPicker from './BrowserProfileColor'
+import BrowserProfileAccounts from './BrowserProfileAccounts'
 import BrowserProfileCookieDialog from './BrowserProfileCookieDialog'
 import { deleteBrowserProfile, duplicateBrowserProfile, exportProfileCookies, updateBrowserProfile } from './browserProfileApi'
 import { ProfileDot } from './browserProfile.list'
@@ -29,7 +30,8 @@ function download(name: string, text: string): void {
   URL.revokeObjectURL(url)
 }
 
-export default function BrowserProfileRow({ profile: p, onChanged }: { profile: BrowserProfile; onChanged: () => void }): React.JSX.Element {
+/** `showAccounts` false = the "show signed-in accounts" switch is off: the row shows no account line at all. */
+export default function BrowserProfileRow({ profile: p, onChanged, showAccounts = true }: { profile: BrowserProfile; onChanged: () => void; showAccounts?: boolean }): React.JSX.Element {
   const [mode, setMode] = useState<Mode>(null)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [draft, setDraft] = useState(p.name)
@@ -83,6 +85,7 @@ export default function BrowserProfileRow({ profile: p, onChanged }: { profile: 
         </IconButton>
       </div>
       <p className="m-0 pl-[18px] text-xs text-(--vscode-descriptionForeground)">{T.usedBy(p.nodeCount)} · {T.cookieDomains(p.cookieDomains)}</p>
+      {showAccounts && <BrowserProfileAccounts profile={p} />}
       {error && <p role="alert" className="m-0 pl-[18px] text-xs text-(--vscode-errorForeground)">{error}</p>}
       {menu && <VscodeMenu open anchor={menu} items={items} minWidth={180} ariaLabel={T.rowMenu(p.name)} onClose={() => setMenu(null)} />}
       {mode === 'color' && (
