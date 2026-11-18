@@ -36,7 +36,7 @@ export function BrowserSplitMenu({ controls }: { controls: SplitControls }) {
   return (
     <>
       <IconButton
-        label={`Split view (${panes}/${MAX_PANES} panes)`} size="icon-xs" aria-haspopup="menu" aria-expanded={at !== null} data-split-button
+        label={`Split view (${panes}/${MAX_PANES} panes)`} size="icon-bui" aria-haspopup="menu" aria-expanded={at !== null} data-split-button
         onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setAt({ x: r.left, y: r.bottom }) }}
       >
         <Columns2 aria-hidden="true" />

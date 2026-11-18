@@ -153,7 +153,13 @@ describe('events and follow-the-agent', () => {
     fireEvent.click(tabEl('c'))
     tabEvent({ type: 'tabActivated', nodeId: 'b1', tabId: 'a', by: 'agent' })
     expect(selected()).toEqual(['c'])
+    // The server's agentTabId follows the agent, but a human-held node shows no marker (the lease decides).
+    expect(tabEl('a').querySelector('[data-agent-marker]')).toBeNull()
+    msg({ t: 'state', id: 'b1', url: 'https://old.test/', title: 'Old page', loading: false, canBack: false, canForward: false, lease: 'agent', live: 'live' })
     expect(tabEl('a').querySelector('[data-agent-marker]')).not.toBeNull()
+    expect(tabEl('b').querySelector('[data-agent-marker]')).toBeNull()
+    msg({ t: 'state', id: 'b1', url: 'https://old.test/', title: 'Old page', loading: false, canBack: false, canForward: false, lease: 'human', live: 'live' })
+    expect(tabEl('a').querySelector('[data-agent-marker]')).toBeNull() // lease released: marker gone
   })
 
   it('applies created and updated events', () => {

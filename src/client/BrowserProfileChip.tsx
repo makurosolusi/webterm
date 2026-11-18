@@ -68,7 +68,7 @@ export default function BrowserProfileChip({ nodeId, profileId }: { nodeId: stri
           aria-label={busy ? T.moving : T.chipLabel(name)} aria-haspopup="menu" aria-expanded={menuAt !== null} aria-busy={busy}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.left, y: r.bottom }) }}
         >
-          {busy ? <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" /> : <ProfileDot profile={current} />}
+          {busy ? <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" /> : <><span className="codicon codicon-account text-(--vscode-descriptionForeground)" data-profile-kind aria-hidden="true" /><ProfileDot profile={current} /></>}
           <span className="truncate">{busy ? T.moving : name}</span>
           {nodes > 1 && <span className="tabular-nums text-(--vscode-descriptionForeground)" data-profile-nodes>{nodes}</span>}
         </Button>
