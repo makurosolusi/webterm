@@ -13,6 +13,8 @@ export interface ToolEvidence {
   state: ToolState
   /** Central: the `profile` argument of the call (browser_open); '' otherwise. */
   profile?: string
+  /** Central: the `action` argument of the call (`browser_layout` set/get/sync/all); absent otherwise. */
+  action?: string
   /** Short machine reason: Central receipt `detail` (`url_not_public`), chat result text head. */
   code: string
   /** Chat: head of the tool result text (enough to see `newTab`); absent for Central. */

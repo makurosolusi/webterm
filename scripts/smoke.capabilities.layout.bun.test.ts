@@ -22,13 +22,13 @@ describe('gradeLayoutChat (chat.default)', () => {
 })
 
 describe('gradeLayoutCentral (central.steward)', () => {
-  const lay = (o: Partial<ToolEvidence> = {}) => tool({ name: 'mcp__webterm__browser_layout', command: '{"nodeId":"b1","action":"set","spec":"h new:http://127.0.0.1:1/a new:http://127.0.0.1:1/b"}', ...o })
+  const lay = (o: Partial<ToolEvidence> = {}) => tool({ name: 'mcp__webterm__browser_layout', action: 'set', ...o })
   test('PASS with one node or a reused idle one', () => {
     expect(gradeLayoutCentral(ev([lay()], BOTH, 1)).pass).toBe(true)
     expect(gradeLayoutCentral(ev([lay()], BOTH, 0)).pass).toBe(true)
   })
   test('FAIL: only a get, two nodes, or a missing heading', () => {
-    expect(gradeLayoutCentral(ev([lay({ command: '{"action":"get"}' })], BOTH, 1)).pass).toBe(false)
+    expect(gradeLayoutCentral(ev([lay({ action: 'get' })], BOTH, 1)).pass).toBe(false)
     expect(gradeLayoutCentral(ev([lay()], BOTH, 2)).pass).toBe(false)
     expect(gradeLayoutCentral(ev([lay()], HEADING_BETA, 1)).evidence).toContain(HEADING_ALPHA)
   })

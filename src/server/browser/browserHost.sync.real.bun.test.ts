@@ -84,7 +84,8 @@ describe('real Chromium: sync mode and --all', () => {
 
     const snaps = (await verbs.snapshot(NODE, { all: true })) as unknown as AllData
     expect(snaps.okCount).toBe(2)
-    expect(snaps.results.map((x) => String(x.content))).toEqual([expect.stringContaining('Alpha'), expect.stringContaining('Beta')])
+    expect(String(snaps.results[0].content)).toContain('Alpha')
+    expect(String(snaps.results[1].content)).toContain('Beta')
 
     const click = (await verbs.click(NODE, { all: true, name: 'buy', role: 'button' })) as unknown as AllData
     expect(click.okCount).toBe(2)

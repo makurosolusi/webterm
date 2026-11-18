@@ -39,7 +39,7 @@ const nodes = (ev: Evidence): string => `new browser nodes=${ev.newBrowserNodes 
 
 /** The model split the node itself: a successful layout call that set a shape (not merely a read of the layout). */
 const settingChat = (t: ToolEvidence): boolean => t.name === 'Bash' && t.state === 'ok' && /webterm browser layout set\b/.test(t.command)
-const settingCentral = (t: ToolEvidence): boolean => /browser_layout$/.test(t.name) && t.state === 'ok' && /"action"\s*:\s*"set"/.test(t.command)
+const settingCentral = (t: ToolEvidence): boolean => /browser_layout$/.test(t.name) && t.state === 'ok' && t.action === 'set'
 
 function gradeSplit(ev: Evidence, made: ToolEvidence | undefined, what: string, maxNodes: number): Verdict {
   if (!made) return { pass: false, evidence: `FAIL no successful ${what}; ${ids(ev)}; ${nodes(ev)}` }
