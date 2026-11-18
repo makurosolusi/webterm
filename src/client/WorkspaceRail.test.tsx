@@ -222,7 +222,7 @@ describe('reorder', () => {
   })
 
   it('a failed save puts the old order back and says why (operation + cause), with Retry', async () => {
-    const onReorder = vi.fn(async () => { throw new Error('bad_order: unknown id') })
+    const onReorder = vi.fn<(ids: string[]) => Promise<void>>(async () => { throw new Error('bad_order: unknown id') })
     mount({ onReorder })
     fireEvent.keyDown(tiles()[0], { key: 'ArrowDown', altKey: true, shiftKey: true })
     await flush()

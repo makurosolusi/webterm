@@ -2,7 +2,7 @@
 // only), worktree dirty marker. Name/tooltip/aria come from the same functions as the header tab
 // (`workspaceTabFields`), so the two surfaces never tell different stories.
 import type { CSSProperties, KeyboardEvent, PointerEvent, MouseEvent } from 'react'
-import { IconTooltip } from '@/components/ui/icon-button'
+import { IconButton } from '@/components/ui/icon-button'
 import type { SessionGroup } from './sessionList'
 import { workspaceTabFields } from './WorkspaceTabDot'
 import { workspaceTabDot } from './workspaceTabs'
@@ -43,35 +43,34 @@ export function WorkspaceTile(p: WorkspaceTileProps) {
   const dirty = wt?.managed === true && (wt.dirtyCount ?? 0) > 0
   const onContextMenu = (e: MouseEvent): void => { e.preventDefault(); p.onMenu({ x: e.clientX, y: e.clientY }) }
   return (
-    <IconTooltip label={fields.tooltip ?? group.projectName} side="right">
-      <button
-        type="button"
-        role="tab"
-        className="ws-tile"
-        data-slot="workspace-tile"
-        data-ws-id={group.projectId}
-        data-active={p.active ? 'true' : 'false'}
-        data-dragging={p.dragging ? 'true' : undefined}
-        data-drop={p.drop ?? undefined}
-        aria-selected={p.active}
-        aria-controls={p.controls}
-        aria-label={fields.ariaLabel}
-        tabIndex={p.tabbable ? 0 : -1}
-        style={{ '--ws-tile': workspaceColorVar(w.color, w.colorShade) } as CSSProperties}
-        onClick={() => { if (!p.swallowClick()) p.onActivate() }}
-        onDoubleClick={p.onRename}
-        onContextMenu={onContextMenu}
-        onFocus={p.onFocus}
-        onKeyDown={p.onKeyDown}
-        onPointerDown={p.onPointerDown}
+    <IconButton
+      label={fields.ariaLabel ?? group.projectName}
+      tooltip={fields.tooltip}
+      side="right"
+      role="tab"
+      className="ws-tile rounded-none"
+      data-slot="workspace-tile"
+      data-ws-id={group.projectId}
+      data-active={p.active ? 'true' : 'false'}
+      data-dragging={p.dragging ? 'true' : undefined}
+      data-drop={p.drop ?? undefined}
+      aria-selected={p.active}
+      aria-controls={p.controls}
+      tabIndex={p.tabbable ? 0 : -1}
+      style={{ '--ws-tile': workspaceColorVar(w.color, w.colorShade) } as CSSProperties}
+      onClick={() => { if (!p.swallowClick()) p.onActivate() }}
+      onDoubleClick={p.onRename}
+      onContextMenu={onContextMenu}
+      onFocus={p.onFocus}
+      onKeyDown={p.onKeyDown}
+      onPointerDown={p.onPointerDown}
       >
-        <span className="ws-tile__mono" aria-hidden>
-          {monogram(group.projectName)}
-          {(status === 'working' || status === 'attention') && <span className={`ws-dot__badge ws-dot__badge--${status}`} />}
-          {dirty && <span className="ws-tile__dirty" />}
-        </span>
-        <span className="ws-tile__name" aria-hidden>{group.projectName}</span>
-      </button>
-    </IconTooltip>
+      <span className="ws-tile__mono" aria-hidden>
+        {monogram(group.projectName)}
+        {(status === 'working' || status === 'attention') && <span className={`ws-dot__badge ws-dot__badge--${status}`} />}
+        {dirty && <span className="ws-tile__dirty" />}
+      </span>
+      <span className="ws-tile__name" aria-hidden>{group.projectName}</span>
+    </IconButton>
   )
 }
