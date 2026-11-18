@@ -130,7 +130,7 @@ describe('handle menu', () => {
   it('disabled rows show their reason and cannot be picked', () => {
     mount({ addBrowser: undefined })
     click()
-    const row = screen.getByRole('option', { name: /Browser/ })
+    const row = screen.getByRole('option', { name: /^New Browser/ })
     expect(row.getAttribute('aria-disabled')).toBe('true')
     expect(row.textContent).toContain('Browser is turned off')
     fireEvent.click(row)

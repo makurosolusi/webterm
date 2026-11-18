@@ -44,6 +44,8 @@ export interface HandleSpawners {
 export const HANDLE_GROUP = 'Nodes'
 export const OFF_HINTS: Record<string, string> = {
   browser: 'Browser is turned off',
+  'browser-profile': 'Browser is turned off',
+  'browser-each': 'Browser is turned off',
   diff: 'Diff is unavailable',
   agentChat: 'Claude is disabled in Settings',
 }
@@ -79,8 +81,8 @@ function paneItems(s: HandleSpawners, ctx: CanvasMenuContext, at: XYPosition): C
     addFiles: () => s.addFiles(at),
     addAgent: (cmd, id) => s.addAgent(cmd, id, at),
     addBrowser: () => (s.addBrowser ?? noop)(at),
-    addBrowserWithProfile: s.openBrowserProfiles && (() => s.openBrowserProfiles?.('one', at)),
-    addBrowserForEachProfile: s.openBrowserProfiles && (() => s.openBrowserProfiles?.('each', at)),
+    addBrowserWithProfile: () => s.openBrowserProfiles?.('one', at),
+    addBrowserForEachProfile: () => s.openBrowserProfiles?.('each', at),
     addDiff: () => (s.addDiff ?? noop)(at),
     addAgentChat: () => (s.addAgentChat ?? noop)(at),
     fitView: noop,
