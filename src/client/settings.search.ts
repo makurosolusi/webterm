@@ -112,6 +112,8 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('canvas', 'gridSize', 'Grid size'),
   e('canvas', 'edgeColor', 'Cable color', 'Color of the cables between nodes.', 'edge line wire'),
   e('canvas', 'edgeWidth', 'Cable thickness', undefined, 'edge line wire width'),
+  e('canvas', 'skillCableColor', 'Skill cable color', 'Color of the cables that attach skills to agents.', 'skill cable color edge line wire accent'),
+  e('canvas', 'skillCableSize', 'Skill cable size', 'Line width of skill cables.', 'skill cable width thickness thin thick edge line wire'),
   // Notifications (osNotify.settings.tsx); per-workspace mute is in the workspace menu
   e('notifications', undefined, NOTIFY_TEXT.desktop, NOTIFY_TEXT.desktopHint, 'alert permission browser'),
   e('notifications', undefined, NOTIFY_TEXT.sound, NOTIFY_TEXT.soundHint, 'chime audio'),

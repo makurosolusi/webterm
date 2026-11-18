@@ -3,6 +3,7 @@ import type { Node, Edge, NodeChange, EdgeChange, Connection, ReactFlowInstance,
 import { useMemo, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import ContextEdge from './ContextEdge'
 import SkillEdge from './SkillEdge'
+import { skillCableVars } from './skillCable.style'
 import { SkillAwareMiniMapNode } from './skillMiniMapNode'
 import { isValidConnection } from './floatingEdge'
 import { connectionLineStyle, withTouchedAccent } from './canvasStyle'
@@ -95,7 +96,7 @@ export default function BoardCanvas({
     <ReactFlow
       className={wallpaper.active ? 'canvas--wallpaper' : undefined}
       // Cable + arrowhead color (EDGE_STROKE / `.react-flow__marker` read it); default = theme token.
-      style={settings.edgeColor === 'default' ? undefined : ({ '--edge-color': settings.edgeColor } as CSSProperties)}
+      style={{ ...(settings.edgeColor === 'default' ? null : ({ '--edge-color': settings.edgeColor } as CSSProperties)), ...skillCableVars(settings) }}
       nodes={nodes}
       nodeTypes={nodeTypes}
       edges={edges}
