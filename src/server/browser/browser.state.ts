@@ -7,6 +7,7 @@ import type { BrowserApiResult } from '../browserApi'
 import type { ControlCapabilities, ControlRequest, ControlResult } from '../control/controlTypes'
 import type { AgentOpened } from './browser.agentOpen'
 import type { ProjectOpened } from './browser.projectOpen'
+import type { LinkOpenResult } from './browser.linkOpen'
 
 export interface BrowserRuntime {
   status(): BrowserStatusResp
@@ -24,6 +25,8 @@ export interface BrowserRuntime {
   openFor?(requesterId: string, nodeId: string, profile?: string): Promise<AgentOpened>
   /** Adds a standalone browser node (no agent, no cable) to a workspace and starts its page; Central's `browser_read`. */
   openProject?(workspaceId: string, nodeId: string, profile?: string): Promise<ProjectOpened>
+  /** A link a terminal opened (`origin` = its node): open it as a tab in the cabled canvas browser, adding one when none is cabled. */
+  openLink?(originId: string, url: unknown): Promise<LinkOpenResult>
   /** `/api/control/browser/*`; null = bukan prefix itu. */
   control(req: ControlRequest, capabilities: ControlCapabilities): Promise<ControlResult | null>
   /** Hand a browser node's lease back to the human (idempotent); an agent's turn ended. */

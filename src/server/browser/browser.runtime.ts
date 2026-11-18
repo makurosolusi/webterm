@@ -45,7 +45,8 @@ import { designRoute } from './design/design.route'
 import { OUTBOX_BODY_MAX_CHARS } from '../outbox/outbox.route'
 import type { CanvasPush } from '../canvas/canvasPush'
 import type { BrowserProfileStore } from '../db.browserProfile'
-import type { BrowserProfilesMsg } from '../../shared/protocol'
+import type { BrowserProfilesMsg, LinkOpenedMsg, ViewMsg } from '../../shared/protocol'
+import { openLinkInCanvas } from './browser.linkOpen'
 import { createProfileWiring } from './browser.runtime.profiles'
 import { createTabsService, tabPersister } from './browser.runtime.tabs'
 import { setActiveProfiles } from './browser.profiles.service'
@@ -76,7 +77,7 @@ export interface RuntimeDeps {
   /** Browser profile registry (production: `db.browserProfiles()`); absent = in memory (tests). */
   profiles?: BrowserProfileStore
   /** Push a frame to every open window (profile list/live changes); absent = nobody to tell. */
-  broadcast?: (msg: BrowserProfilesMsg) => void
+  broadcast?: (msg: BrowserProfilesMsg | LinkOpenedMsg | ViewMsg) => void
 }
 
 export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntime | null> {
@@ -118,8 +119,9 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const canvasPush = async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush()
+  const navGuard = createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
   const host = new BrowserHost({
-    launcher, profileOf: profiles.profileOf, guard: toHostGuard(createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort }), denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
+    launcher, profileOf: profiles.profileOf, guard: toHostGuard(navGuard, denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
     initialTabs: (id) => nodeOf(id)?.tabs, persistTabs: tabPersister(canvasPush), agentDriving: (id) => leases.isDriven(id), tabDiscardMs: cfg.discardMs,
   })
   profiles.bind(host)
@@ -169,6 +171,17 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   d.onAgentUse?.() // shim + skill ada begitu browser hidup; sub-opsi off cukup ditolak handler
   let down = false
   const openDeps: AgentOpenDeps = { canvas: canvasPush, start: (id, workspaceId) => gwHost.open(id, workspaceId), profiles: { resolve: (r, w) => profiles.service.resolve(r, w), list: (w) => profiles.service.list(w) }, profileOfNode: profiles.profileOf }
+  // Canvas link capture: a link a terminal opened becomes a tab here (browser.linkOpen.ts); the human's tab cursor moves, never the agent's.
+  const linkDeps = {
+    guard: (url: string) => navGuard.check(url),
+    open: (origin: string) => openAgentBrowser(openDeps, origin, () => true, 'cabled'),
+    workspaceOf: (id: string) => d.workspaces().find((w) => w.nodes.some((n) => n.id === id))?.id,
+    tabsOf: (id: string) => host.tabsState(id) ?? apiDeps.tabs.get(id)?.state,
+    newTab: async (id: string, url: string) => { await apiDeps.tabs.newTab(id, { url }) },
+    reuseTab: async (id: string, tabId: string, url: string) => { await apiDeps.tabs.activate(id, tabId); await host.tabApi.navigateTab(id, tabId, url) },
+    presetOf: (id: string) => nodeOf(id)?.preset,
+    notify: (msg: LinkOpenedMsg | ViewMsg) => d.broadcast?.(msg),
+  }
   return {
     status,
     state: (id) => host.state(id),
@@ -189,6 +202,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
       open: openDeps, presetOf: (id) => nodeOf(id)?.preset, challengeOf: (id) => host.state(id)?.challenge,
     }),
+    openLink: (originId, url) => openLinkInCanvas(linkDeps, originId, url),
     openFor: (requesterId, nodeId, profile) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled', profile),
     openProject: async (workspaceId, nodeId, profile) => {
       const wanted = profile === undefined ? undefined : profiles.service.resolve(profile, workspaceId)
