@@ -234,6 +234,6 @@ view lama. `host.startScreencast/stopScreencast` berjalan di antrean aksi per no
 ## Menyusul
 P1-P3 (server, integrasi `BrowserNode`, verb agent) sudah ada. P4 split pane sudah ada: lihat `browser-split.md` (screencast
 kini untuk semua tab yang tampil di pane, bukan hanya tab aktif; layout dan device per tab ikut daftar tab yang dipersist).
-P5 QC (sinkron, bandingkan) dan verb agent `layout` belum.
+P5 QC: sinkron, verb agent `layout`/`sync`/`--all` ada di `browser-qc.md`; compare overlay belum.
 Belum diverifikasi tanpa browser: tampilan nyata strip, perilaku overflow dan drag dengan layout sungguhan, kontras
 warna di tema terang/gelap/kontras tinggi.

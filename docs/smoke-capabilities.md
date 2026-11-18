@@ -31,8 +31,12 @@ table, and always stops the server and deletes the temp dir. `~/.webterm-server`
 | `central.steward (tab-multi)` | "Use ONE browser node: load page A in it, then page C in a second tab of that same node; give both titles" | `browser_tab` ran OK with a url; the answer has `Page A` and `Page C`; at most one browser node added (an idle one may be reused) |
 | `chat.skill-author (tab-denied)` | asks for `tab new` / `tabs` | no tab verb succeeds (refused, or the model declines itself: labelled enforcement-not-exercised) |
 
+| `chat.default (layout-chat)` | the same local site with two pages: "Open http://127.0.0.1:<port>/a and http://127.0.0.1:<port>/b side by side in one browser node and tell me both headings" | a `webterm browser layout set` ran OK; the answer has `Alpha Heading` and `Beta Heading`; the run added exactly ONE browser node |
+| `central.steward (layout-central)` | same prompt | `browser_layout` `set` ran OK; both headings in the answer; at most one browser node added |
+| `chat.skill-author (layout-denied)` | same prompt | no `layout`/`sync`/`reload`/`--all` verb succeeds (refused, or the model declines itself: labelled enforcement-not-exercised) |
+
 Tab cases clear the browser nodes of the smoke board first (so no tabs are left over from an earlier case) and count the nodes
-they add. Run only them with `npm run smoke:capabilities -- --tabs`. The loopback site is allowed for plain agents because the
+they add. Run only them with `npm run smoke:capabilities -- --tabs`; the layout cases (they count nodes the same way) with `-- --layout`. The loopback site is allowed for plain agents because the
 smoke server binds loopback (`webterm` hard-denies only its own port); it is refused for the author profiles by the public-URL lock.
 
 A network/upstream failure (ECONN*, 502/503/504/529, rate limit) is retried once. A behavior failure is never retried.

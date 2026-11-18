@@ -20,7 +20,7 @@ const KEYS: Record<string, { code: string; vk: number; text: string }> = {
   Home: { code: 'Home', vk: 36, text: '' }, End: { code: 'End', vk: 35, text: '' },
 }
 
-const mouse = (type: MouseInput['type'], x: number, y: number, buttons: number, extra: Partial<MouseInput> = {}): MouseInput => ({
+export const mouse = (type: MouseInput['type'], x: number, y: number, buttons: number, extra: Partial<MouseInput> = {}): MouseInput => ({
   t: 'mouse', type, x, y, button: type === 'move' || type === 'wheel' ? 'none' : 'left', buttons, clickCount: type === 'move' || type === 'wheel' ? 0 : 1, mods: 0, dx: 0, dy: 0, ...extra,
 })
 

@@ -79,6 +79,13 @@ export function createTabApi(d: TabApiDeps) {
     setTabViewport: (nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void> => serial(nodeId, () => d.tabs.split.resizeTab(d.table.nodes.get(nodeId), tabId, { w, h, dpr })),
     setTabDevice: (nodeId: string, tabId: string, device: DeviceChoice | null) => action(nodeId, (rec) => d.tabs.split.setTabDevice(rec, tabId, device)),
     setLayout: (nodeId: string, layout: Pane | null, focus?: string) => action(nodeId, (rec) => d.tabs.split.setLayout(rec, layout, focus)),
+    /** Size (CSS px) a tab's page is rendered at: its device, its pane, else the node's. */
+    paneSize: (nodeId: string, tabId: string): { w: number; h: number } | undefined => {
+      const rec = d.table.nodes.get(nodeId)
+      if (!rec?.tabs?.state.tabs.some((t) => t.tabId === tabId)) return undefined
+      const { w, h } = d.tabs.split.sizeOf(rec, tabId)
+      return { w, h }
+    },
     /** Tab the human views / the agent works in; undefined = unknown node or no tabs. */
     viewTab: (nodeId: string): string | undefined => d.table.nodes.get(nodeId)?.tabs?.state.activeTabId ?? undefined,
     agentTab: (nodeId: string): string | undefined => d.table.nodes.get(nodeId)?.tabs?.state.agentTabId ?? undefined,

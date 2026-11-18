@@ -16,9 +16,12 @@ describe('browser.contract', () => {
     const caps = Object.values(BROWSER_CAPS)
     for (const cap of Object.values(BROWSER_VERB_CAP)) expect(caps).toContain(cap)
     expect(Object.keys(BROWSER_VERB_CAP).sort()).toEqual(
-      ['click', 'console', 'handoff', 'navigate', 'open', 'press', 'release', 'screenshot', 'scroll', 'snapshot', 'status', 'tab', 'tabs', 'type', 'wait'])
+      ['arrange', 'back', 'click', 'console', 'forward', 'handoff', 'layout', 'navigate', 'open', 'press', 'release', 'reload', 'screenshot', 'scroll', 'snapshot', 'status', 'sync', 'tab', 'tabs', 'type', 'wait'])
     expect(BROWSER_VERB_CAP.snapshot).toBe('browser.read')
     expect(BROWSER_VERB_CAP.click).toBe('browser.act')
+    expect(BROWSER_VERB_CAP.layout).toBe('browser.read') // reading the layout changes nothing; setting it or sync is an act
+    expect(BROWSER_VERB_CAP.arrange).toBe('browser.act')
+    expect(BROWSER_VERB_CAP.sync).toBe('browser.act')
   })
 
   it('semua nama env berawalan WEBTERM_BROWSER dan unik', () => {

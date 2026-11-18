@@ -3,6 +3,7 @@ import { gradeBrowserIntent, gradeDirect, gradeNegative, gradeRead, type CaseKin
 import { gradeProfile, gradeProfileDenied, PROFILE_PROMPT_CENTRAL, PROFILE_PROMPT_CHAT } from './smoke.capabilities.profile'
 import { browserNodeIds, clearBrowserNodes, countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
 import type { SmokeServer } from './smoke.capabilities.server'
+import { gradeLayoutCentral, gradeLayoutChat, gradeLayoutDenied, layoutPrompt, layoutSite } from './smoke.capabilities.layout'
 import { gradeTabDenied, gradeTabMulti, gradeTabOpen, tabDeniedPrompt, tabMultiPrompt, tabOpenPrompt, tabsSite } from './smoke.capabilities.tabs'
 
 export const PROFILE_IDS = ['central.skill-author', 'chat.skill-author', 'chat.default', 'central.steward'] as const
@@ -45,17 +46,25 @@ export const CASES: readonly SmokeCase[] = PROFILE_IDS.flatMap((profile): SmokeC
   const tabs: SmokeCase[] = profile === 'chat.default' ? [{ ...base, kind: 'tab-open', prompt: () => tabOpenPrompt(tabsSite.port) }]
     : profile === 'central.steward' ? [{ ...base, kind: 'tab-multi', prompt: () => tabMultiPrompt(tabsSite.port) }]
     : profile === 'chat.skill-author' ? [{ ...base, kind: 'tab-denied', prompt: () => tabDeniedPrompt(tabsSite.port) }] : []
-  return [positive, ...negative, ...direct, ...intent, ...profiles, ...tabs]
+  // Split layout: two pages side by side in ONE node; the steward and a plain chat arrange it themselves, the author cannot.
+  const layout: SmokeCase[] = profile === 'chat.default' ? [{ ...base, kind: 'layout-chat', prompt: () => layoutPrompt(layoutSite.port) }]
+    : profile === 'central.steward' ? [{ ...base, kind: 'layout-central', prompt: () => layoutPrompt(layoutSite.port) }]
+    : profile === 'chat.skill-author' ? [{ ...base, kind: 'layout-denied', prompt: () => layoutPrompt(layoutSite.port) }] : []
+  return [positive, ...negative, ...direct, ...intent, ...profiles, ...tabs, ...layout]
 })
 
-export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' || c.kind === 'profile' || c.kind === 'profile-denied' || c.kind === 'tab-open' || c.kind === 'tab-multi' || c.kind === 'tab-denied' ? `${c.profile} (${c.kind})` : c.profile)
+export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' || c.kind === 'profile' || c.kind === 'profile-denied' || c.kind === 'tab-open' || c.kind === 'tab-multi' || c.kind === 'tab-denied' || c.kind.startsWith('layout-') ? `${c.profile} (${c.kind})` : c.profile)
+
+/** Tab and layout cases count the browser nodes they add (one node, many pages is the point). */
+const usesNodes = (kind: string): boolean => kind.startsWith('tab-') || kind.startsWith('layout-')
 
 export async function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
-  if (c.kind.startsWith('tab-')) await clearBrowserNodes(s)
-  const before = c.kind.startsWith('tab-') ? await browserNodeIds(s) : []
+  const counted = usesNodes(c.kind)
+  if (counted) await clearBrowserNodes(s)
+  const before = counted ? await browserNodeIds(s) : []
   const run = await runRaw(s, c)
   if (c.kind === 'direct') return { ...run, evidence: { ...run.evidence, drafts: await countDrafts(s) } }
-  if (!c.kind.startsWith('tab-')) return run
+  if (!counted) return run
   const added = (await browserNodeIds(s)).filter((id) => !before.includes(id)).length
   return { ...run, evidence: { ...run.evidence, newBrowserNodes: added } }
 }
@@ -74,6 +83,9 @@ export function gradeCase(c: SmokeCase, ev: Evidence): Verdict {
   if (c.kind === 'tab-open') return gradeTabOpen(ev)
   if (c.kind === 'tab-multi') return gradeTabMulti(ev)
   if (c.kind === 'tab-denied') return gradeTabDenied(ev)
+  if (c.kind === 'layout-chat') return gradeLayoutChat(ev)
+  if (c.kind === 'layout-central') return gradeLayoutCentral(ev)
+  if (c.kind === 'layout-denied') return gradeLayoutDenied(ev)
   if (c.kind === 'open' || c.kind === 'interact') return gradeBrowserIntent(c.kind, ev)
   return c.kind === 'negative' ? gradeNegative(c.surface, ev) : gradeRead(c.surface, c.kind, ev, { author: c.author })
 }

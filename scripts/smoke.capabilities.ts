@@ -9,18 +9,21 @@ import { CASES, PROFILE_IDS, caseLabel, gradeCase, runCase, type SmokeCase } fro
 import { seedBoard, type RunResult } from './smoke.capabilities.run'
 import { startServer, type SmokeServer } from './smoke.capabilities.server'
 import { startTabsSite, tabsSite } from './smoke.capabilities.tabs'
+import { layoutSite, startLayoutSite } from './smoke.capabilities.layout'
 
-const USAGE = `usage: bun scripts/smoke.capabilities.ts [--profile <id>] [--direct] [--tabs] [--verbose]\n  profiles: ${PROFILE_IDS.join(', ')}`
+const USAGE = `usage: bun scripts/smoke.capabilities.ts [--profile <id>] [--direct] [--tabs] [--layout] [--verbose]\n  profiles: ${PROFILE_IDS.join(', ')}`
 
 const VERBOSE = process.argv.includes('--verbose')
 /** `--direct`: only the one-message skill-author cases (owner rule: a clear request is written at once). */
 const DIRECT_ONLY = process.argv.includes('--direct')
 /** `--tabs`: only the browser-tab cases (one node, many pages). */
 const TABS_ONLY = process.argv.includes('--tabs')
+/** `--layout`: only the split-layout cases (two pages side by side in one node). */
+const LAYOUT_ONLY = process.argv.includes('--layout')
 
 function parseProfile(args: readonly string[]): string | undefined {
   if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0) }
-  const argv = args.filter((a) => a !== '--verbose' && a !== '--direct' && a !== '--tabs')
+  const argv = args.filter((a) => a !== '--verbose' && a !== '--direct' && a !== '--tabs' && a !== '--layout')
   const i = argv.indexOf('--profile')
   if (i < 0 && argv.length === 0) return undefined
   const id = i >= 0 ? argv[i + 1] : undefined
@@ -62,11 +65,13 @@ function printTable(rows: readonly Row[]): void {
 
 async function main(): Promise<void> {
   const only = parseProfile(process.argv.slice(2))
-  const cases = CASES.filter((c) => (only === undefined || c.profile === only) && (!DIRECT_ONLY || c.kind === 'direct') && (!TABS_ONLY || c.kind.startsWith('tab-')))
+  const cases = CASES.filter((c) => (only === undefined || c.profile === only) && (!DIRECT_ONLY || c.kind === 'direct') && (!TABS_ONLY || c.kind.startsWith('tab-')) && (!LAYOUT_ONLY || c.kind.startsWith('layout-')))
   const server = await startServer()
   const site = await startTabsSite() // local pages for the tab cases (page A links to B with target=_blank); stopped in `finally`
   tabsSite.port = site.port
-  const onSignal = (): void => { site.stop(); void server.stop().finally(() => process.exit(130)) }
+  const layoutPages = await startLayoutSite()
+  layoutSite.port = layoutPages.port
+  const onSignal = (): void => { site.stop(); layoutPages.stop(); void server.stop().finally(() => process.exit(130)) }
   process.once('SIGINT', onSignal)
   process.once('SIGTERM', onSignal)
   const rows: Row[] = []
@@ -78,6 +83,7 @@ async function main(): Promise<void> {
     }
   } finally {
     site.stop()
+    layoutPages.stop()
     await server.stop()
   }
   printTable(rows)

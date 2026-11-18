@@ -1,6 +1,6 @@
 // Bun-only (bun:sqlite lewat db.ts). Semua di mkdtemp /tmp + WEBTERM_DATA_DIR palsu; home tak disentuh.
 import { test, expect, afterAll } from 'bun:test'
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -15,7 +15,10 @@ const modeOf = (p: string) => statSync(p).mode & 0o777
 afterAll(() => {
   if (savedDir === undefined) delete process.env.WEBTERM_DATA_DIR
   else process.env.WEBTERM_DATA_DIR = savedDir
-  rmSync(root, { recursive: true, force: true })
+  // Not `root` itself: db.ts opened its default DB under `root/boot` when it was imported above, and every later test file in the
+  // same bun process shares that open handle. Deleting it made them fail with SQLITE_IOERR_VNODE (dag.bun.test.ts, 15 tests,
+  // when both ran in one test:impacted batch). Only the directories this file made for itself are removed; `boot` is a few KB in /tmp.
+  for (const name of readdirSync(root)) if (name !== 'boot') rmSync(join(root, name), { recursive: true, force: true })
 })
 
 test('dir baru dibuat 0700', () => {

@@ -15,6 +15,7 @@ import { type BrowserReadDeps, createBrowserReadDef } from './browser.read'
 import { createBrowserOpenDef } from './browser.open'
 import { createBrowserProfileDef } from './browser.profile'
 import { createBrowserTabDef } from './browser.tab'
+import { createBrowserLayoutDef } from './browser.layout'
 import { obj, S } from '../../../capability/capability.schema'
 
 /** Env flag (agent control of browser nodes) that gates `browser_act` on top of the browser feature flag; read via
@@ -94,7 +95,7 @@ export function createBrowserActDef(deps: BrowserToolDeps): ToolDef {
 export function createBrowserDefs(deps: BrowserToolDeps): ToolDef[] {
   return [createBrowserStatusDef(deps), createBrowserActDef(deps), ...(deps.open ? [createBrowserOpenDef(deps)] : []),
     ...(deps.openProject && deps.reader ? [createBrowserReadDef(deps as BrowserReadDeps)] : []),
-    ...(deps.profiles ? [createBrowserProfileDef(deps.profiles)] : []), ...(deps.tabs ? [createBrowserTabDef(deps)] : [])]
+    ...(deps.profiles ? [createBrowserProfileDef(deps.profiles)] : []), ...(deps.tabs ? [createBrowserTabDef(deps), createBrowserLayoutDef(deps)] : [])]
 }
 
 export { BROWSER_TOOLS_FLAG }

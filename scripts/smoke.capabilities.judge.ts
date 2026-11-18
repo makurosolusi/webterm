@@ -13,6 +13,8 @@ export interface ToolEvidence {
   state: ToolState
   /** Central: the `profile` argument of the call (browser_open); '' otherwise. */
   profile?: string
+  /** Central: the `action` argument of the call (`browser_layout` set/get/sync/all); absent otherwise. */
+  action?: string
   /** Short machine reason: Central receipt `detail` (`url_not_public`), chat result text head. */
   code: string
   /** Chat: head of the tool result text (enough to see `newTab`); absent for Central. */
@@ -22,7 +24,7 @@ export interface ToolEvidence {
 /** `newBrowserNodes` = browser nodes the run added to the board (only the tab cases read it). */
 export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number; newBrowserNodes?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied' | 'tab-open' | 'tab-multi' | 'tab-denied'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied' | 'tab-open' | 'tab-multi' | 'tab-denied' | 'layout-chat' | 'layout-central' | 'layout-denied'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 

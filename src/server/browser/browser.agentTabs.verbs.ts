@@ -6,7 +6,7 @@ import type { TabsData } from '../../shared/browser.contract'
 import { MAX_TABS_PER_NODE, TAB_LIMIT_REASON } from '../../shared/browser.tabs'
 import type { BrowserTabsState } from '../../shared/browser.tabs'
 import { hostOnly } from '../../shared/browser.url'
-import type { AgentVerbs, BaseVerbs } from './browserAgent.verbs.ctx'
+import type { BaseVerbs, TabbedVerbs } from './browserAgent.verbs.ctx'
 import { asRecord, badRequest } from './browserAgent.verbs.ctx'
 import { UNTRUSTED_OPEN, stripMarkers } from './browserAgent.wrap'
 import type { BrowserHost } from './browserHost.service'
@@ -35,7 +35,7 @@ const PAGE_VERBS = ['status', 'snapshot', 'screenshot', 'wait', 'console', 'navi
 const REF_VERBS = new Set<string>(['click', 'type', 'wait'])
 const NO_TABS = 'This browser has no open page yet. Run navigate <url> first, then list its tabs.'
 
-export function withTabs(base: BaseVerbs, deps: TabVerbDeps): AgentVerbs {
+export function withTabs(base: BaseVerbs, deps: TabVerbDeps): TabbedVerbs {
   const { host } = deps
   const api = host.tabApi
   /** Tab each node's latest snapshot was taken in (the store keeps one snapshot per node, so one entry per node). */
@@ -75,7 +75,7 @@ export function withTabs(base: BaseVerbs, deps: TabVerbDeps): AgentVerbs {
   }
 
   /** A page verb with `--tab`: select that tab, hand the inner verb a body without it, then add tab info to the answer. */
-  const onTab = <V extends (typeof PAGE_VERBS)[number]>(name: V): AgentVerbs[V] => (async (nodeId: string, raw: unknown) => {
+  const onTab = <V extends (typeof PAGE_VERBS)[number]>(name: V): TabbedVerbs[V] => (async (nodeId: string, raw: unknown) => {
     const body = asRecord(raw)
     const { tab, ...rest } = body
     if (tab !== undefined) await select(nodeId, needId(tab))
@@ -85,7 +85,7 @@ export function withTabs(base: BaseVerbs, deps: TabVerbDeps): AgentVerbs {
     if (name === 'snapshot') return withHeader(nodeId, cur, res)
     if (name === 'click' && typeof res.newTab === 'string') return { ...res, note: `Opened a new tab ${res.newTab}${titleOf(nodeId, res.newTab) ? `: ${titleOf(nodeId, res.newTab)}` : ''}; you are now on it.` }
     return res
-  }) as AgentVerbs[V]
+  }) as TabbedVerbs[V]
 
   /** Snapshot: remember its tab (for stale_tab_ref) and, for a node with several tabs, list them at the top, inside the untrusted block (titles are page text). */
   function withHeader(nodeId: string, cur: string | undefined, res: Record<string, unknown>): Record<string, unknown> {
@@ -96,7 +96,7 @@ export function withTabs(base: BaseVerbs, deps: TabVerbDeps): AgentVerbs {
     return { ...res, content, ...(cur ? { tab: cur } : {}) }
   }
 
-  const pages = Object.fromEntries(PAGE_VERBS.map((v) => [v, onTab(v)])) as Pick<AgentVerbs, (typeof PAGE_VERBS)[number]>
+  const pages = Object.fromEntries(PAGE_VERBS.map((v) => [v, onTab(v)])) as Pick<TabbedVerbs, (typeof PAGE_VERBS)[number]>
 
   return {
     ...base,

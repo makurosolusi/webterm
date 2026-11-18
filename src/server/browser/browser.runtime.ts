@@ -28,6 +28,7 @@ import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
 import { agentTabHost, withNewTab } from './browser.agentTabs'
 import { withTabs } from './browser.agentTabs.verbs'
+import { withLayout } from './browser.agentLayout.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { openProjectBrowser } from './browser.projectOpen'
@@ -136,7 +137,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-  const verbs = withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep })
+  const verbs = withLayout(withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep }), { host, leases, agentAllowed, sleep })
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
   pauseLeaseOnChallenge(host, leases) // a human check is the user's to do; the agent verbs are refused meanwhile (handleBrowserControl)
@@ -157,6 +158,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     profiles: { profiles: profiles.service, ops: profiles.ops },
     setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
     tabs: createTabsService({ host, lifecycle, gwHost, hub, workspaces: d.workspaces, canvas: canvasPush, profileOf: profiles.profileOf }),
+    sync: { get: (id: string) => (host.state(id) ? host.syncOn(id) : null), set: (id: string, on: boolean) => host.sync.set(id, on) },
   }
   // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
   const design = new DesignMode({
@@ -175,6 +177,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     releaseLease: (id) => leases.release(id),
     async closeNode(id) {
       lifecycle.forget(id)
+      host.sync.forget(id)
       leases.release(id)
       agentOverride.delete(id)
       profiles.forget(id)

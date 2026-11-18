@@ -19,6 +19,8 @@ import type { BrowserStream } from './browser.stream'
 import { applyConsoleDelta, EMPTY_CONSOLE } from '../shared/browser.console'
 import type { ConsoleView } from '../shared/browser.console'
 import { isTabMsg, type TabMsg } from './browserTabs/useBrowserTabs'
+import { SYNC_OFF, applySyncMsg, isSyncMsg } from './browserSplit/browserSync'
+import type { SyncView } from './browserSplit/browserSync'
 
 export type BrowserDialog = Extract<ServerMsg, { t: 'dialog' }>
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
@@ -47,6 +49,8 @@ export interface BrowserSession {
   console: ConsoleView
   /** Split view: where frames of a pane's tab are drawn (returns the unsubscribe). Frames of a tab without a pane are dropped. */
   panes: PaneFrames
+  /** Sync mode of the node (server session state) and the panes whose last mirrored action found no match. */
+  sync: SyncView
 }
 
 /** Draws a decoded frame; the session closes the bitmap afterwards. */
@@ -75,6 +79,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [connected, setConnected] = useState(true)
   const [latency] = useState(createLatencyWindow)
   const [consoleView, setConsoleView] = useState<ConsoleView>(EMPTY_CONSOLE)
+  const [sync, setSync] = useState<SyncView>(SYNC_OFF)
   const paneSinks = useRef(new Map<string, PaneSink>())
   const panes = useMemo<PaneFrames>(() => ({
     register(tabId, sink) {
@@ -159,6 +164,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
           if (!STICKY_ERRORS.has(m.code)) arm(() => setError(undefined))
         } else if (m.t === 'dialog') setDialog(m)
         else if (isTabMsg(m)) tabMsgRef.current?.(m)
+        else if (isSyncMsg(m)) setSync((v) => applySyncMsg(v, m, Date.now()))
         else if (m.t === 'console') setConsoleView((v) => applyConsoleDelta(v, m))
         else if (m.t === 'cursor') setCursor(CURSOR_SAFE.test(m.css) ? m.css : 'default')
         else if (m.t === 'copy') {
@@ -222,7 +228,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     return true
   }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes, sync,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

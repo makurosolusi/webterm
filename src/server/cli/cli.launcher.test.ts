@@ -225,6 +225,42 @@ describe('old shims are aliases that still work', () => {
     }
   })
 
+  it('webterm browser layout get|set, sync, reload/back/forward and --all build the right verb and body', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    const url = (verb: string) => `http://127.0.0.1:8700/api/control/browser/${verb}`
+    const get = run(['browser', 'layout', 'get'], env)
+    expect(get.argv).toContain(url('layout'))
+    expect(run(['browser', 'layout'], env).argv).toContain(url('layout'))
+    const set = run(['browser', 'layout', 'set', 'h', 't1', 'new:https://b.test/x'], env)
+    expect(set.argv).toContain(url('arrange'))
+    expect(set.argv).toContain('{"spec":"h t1 new:https://b.test/x"}')
+    expect(run(['browser', 'layout', 'set', 'grid', 't1', 't2', 't3', 't4'], env).argv).toContain('{"spec":"grid t1 t2 t3 t4"}')
+    expect(run(['browser', 'layout', 'set', 'single', 't1'], env).argv).toContain('{"spec":"single t1"}')
+    expect(run(['browser', 'sync', 'on'], env).argv).toContain('{"on":true}')
+    expect(run(['browser', 'sync', 'off'], env).argv).toContain('{"on":false}')
+    for (const v of ['reload', 'back', 'forward']) expect(run(['browser', v, '--tab', 't2'], env).argv).toEqual(expect.arrayContaining([url(v), '{"tab":"t2"}']))
+    expect(run(['browser', 'navigate', 'https://example.com/', '--all'], env).argv).toContain('{"url":"https://example.com/","all":true}')
+    expect(run(['browser', 'snapshot', '--all'], env).argv).toContain('{"all":true}')
+    expect(run(['browser', 'screenshot', '--layout'], env).argv).toContain('{"layout":true}')
+    expect(run(['browser', 'screenshot', '600', '--all'], env).argv).toContain('{"maxWidth":600,"all":true}')
+    expect(run(['browser', 'click', '--all', '--text', 'Buy now', '--role', 'button', '--nth', '2'], env).argv).toContain('{"all":true,"name":"Buy now","role":"button","nth":2}')
+    expect(run(['browser', 'type', 'shoes', '--all', '--text', 'Search', '--submit'], env).argv).toContain('{"text":"shoes","submit":true,"all":true,"name":"Search"}')
+  })
+
+  it('layout, sync and --all refuse bad input before any request leaves the machine', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    for (const args of [
+      ['layout', 'zap'], ['layout', 'set'], ['layout', 'set', 'h', 'a', 'b', 'c', 'd', 'e'], ['sync'], ['sync', 'maybe'], ['open', '--all'], ['tab', 'new', '--all'],
+      ['click', '--all'], ['type', 'x', '--all'], ['click', 'e1', 's1', '--text', 'Buy'], ['snapshot', '--layout'], ['click', '--all', '--text'], ['click', '--all', '--text', 'x', '--nth', 'two'],
+    ]) {
+      const r = run(['browser', ...args], env)
+      expect([args, r.status]).toEqual([args, 2])
+      expect(r.argv).toEqual([])
+    }
+  })
+
   it('context.sh <verb> reaches the context-link route through the CLI', () => {
     installWebtermCli(home())
     const shim = join(root, 'context.sh')

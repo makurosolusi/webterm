@@ -5,11 +5,11 @@ import { BrowserError } from './browserHost.targets'
 
 const NAME_MAX_CHARS = 200
 const INDENT = '  '
-const INTERACTIVE = new Set([
+export const INTERACTIVE = new Set([
   'button', 'link', 'textbox', 'searchbox', 'checkbox', 'radio', 'combobox', 'listbox', 'menuitem', 'menuitemcheckbox',
   'menuitemradio', 'tab', 'switch', 'slider', 'spinbutton', 'option', 'treeitem',
 ])
-const SKIP_ROLES = new Set(['none', 'presentation', 'generic', 'InlineTextBox', 'LineBreak'])
+export const SKIP_ROLES = new Set(['none', 'presentation', 'generic', 'InlineTextBox', 'LineBreak'])
 
 interface AxValue { value?: unknown }
 export interface AxNode {
@@ -18,7 +18,7 @@ export interface AxNode {
 }
 export interface BuiltSnapshot { text: string; refs: Map<string, number>; truncated: boolean }
 
-const cleanName = (v: unknown): string => {
+export const cleanName = (v: unknown): string => {
   if (typeof v !== 'string') return ''
   const s = v.replace(/[\p{Cc}\s]+/gu, ' ').trim().replaceAll('"', "'")
   return s.length > NAME_MAX_CHARS ? `${s.slice(0, NAME_MAX_CHARS)}...` : s

@@ -73,6 +73,11 @@ describe('artifacts', () => {
     expect(md).not.toMatch(/wcap_/)
   })
 
+  it('SKILL.md teaches split panes: layout get/set, the shapes, new:<url>, --all with a result per tab, semantic click, sync', () => {
+    const md = buildBrowserSkillBody('/x/webterm-browser')
+    for (const t of ['`layout get`', '`layout set <shape> <tab>...`', '`h <tab> <tab> [..]`', '`grid <t1> <t2> <t3> <t4>`', '`new:<url>`', 'At most 4 panes', '`--all`', 'result PER TAB', 'does not fail the others', '`screenshot --layout`', '`click --all --text', '`no_match`', '`sync on|off`', 'not your own commands']) expect(md, t).toContain(t)
+  })
+
   it('SKILL.md teaches tabs: the verbs, --tab, newTab, stale_tab_ref, the limit, and one node over many', () => {
     const md = buildBrowserSkillBody('/x/webterm-browser')
     for (const t of ['`tabs`', '`tab new [url]`', '`tab switch <id>`', '`tab close <id>`', '`--tab <id>`', 'newTab', 'stale_tab_ref', 'tab_limit', 'at most 8', 'instead of adding nodes', 'share the node\'s profile']) expect(md, t).toContain(t)

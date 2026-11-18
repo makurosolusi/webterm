@@ -2,7 +2,7 @@
 
 Satu node `browser` bisa menampilkan beberapa tab sekaligus dalam pane yang dibelah (maks 4), seperti split pane terminal
 dan editor group VS Code. Dokumen ini mencatat *kenapa*; konteks tab ada di `browser-tabs.md`. Sinkron antar pane dan
-compare overlay (P5) dan verb agent `layout` belum dikerjakan; agent tetap mengalamatkan TAB, bukan pane.
+compare overlay (P5): sinkron dan verb agent `layout`/`--all` ada di `browser-qc.md`; agent tetap mengalamatkan TAB, bukan pane.
 
 ## Kenapa
 QC perlu melihat beberapa halaman sekaligus dan membandingkannya (ukuran berbeda, halaman berbeda) tanpa klik bolak-balik
@@ -100,5 +100,5 @@ kinerja stream 4 pane di mesin lemah. Tes jsdom membuktikan pengkabelan dan kepu
 tidak ada proses sisa.
 
 ## Menyusul (P5)
-Mode sinkron (navigasi/scroll/klik/ketik tercermin ke semua pane), verb agent `layout get|set` dan `--all`, compare overlay
-(slider swipe dan selisih piksel).
+Mode sinkron, verb agent `layout get|set`, `sync` dan `--all` sudah ada: lihat `browser-qc.md`. Compare overlay (slider swipe dan
+selisih piksel) belum di dokumen ini; komposit satu gambar untuk `screenshot --layout` ditunda.
