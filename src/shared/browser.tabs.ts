@@ -16,7 +16,10 @@ export interface BrowserTab {
   tabId: string
   title: string
   url: string
+  /** URL of the page's icon (http(s)); persisted on the board. The bytes never travel as this field. */
   favicon?: string
+  /** The icon itself as a small data URI (server-fetched, sniffed, sanitised; `browser.favicon.ts`). Runtime only: never persisted, never shown to agents. */
+  faviconData?: string
   openerTabId?: string
   loading: boolean
   discarded: boolean
@@ -64,7 +67,7 @@ export type BrowserTabEvent =
   /** The split layout changed (null = back to one pane). */
   | { type: 'layoutChanged'; nodeId: string; layout: Pane | null }
 
-/** What a node keeps on the board (`WsNode.tabs`): urls and titles only, no binary favicon; every tab restores discarded but the active one. */
+/** What a node keeps on the board (`WsNode.tabs`): urls and titles only (a favicon is its url, never the bytes); every tab restores discarded but the active one. */
 export interface PersistedTab { tabId: string; url: string; title: string; favicon?: string; openerTabId?: string; device?: DeviceChoice }
 export interface PersistedTabs { tabs: PersistedTab[]; activeTabId: string | null; agentTabId: string | null; layout?: Pane }
 
@@ -135,7 +138,7 @@ export function isBrowserTab(v: unknown): v is BrowserTab {
   if (typeof v !== 'object' || v === null) return false
   const t = v as Record<string, unknown>
   const flags = [t.loading, t.discarded, t.crashed].every((f) => typeof f === 'boolean')
-  const optional = (['favicon', 'openerTabId'] as const).every((k) => t[k] === undefined || typeof t[k] === 'string')
+  const optional = (['favicon', 'faviconData', 'openerTabId'] as const).every((k) => t[k] === undefined || typeof t[k] === 'string')
   return typeof t.tabId === 'string' && t.tabId !== '' && typeof t.title === 'string' && typeof t.url === 'string' && flags && optional
 }
 

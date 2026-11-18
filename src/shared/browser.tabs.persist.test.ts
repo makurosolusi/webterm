@@ -18,6 +18,11 @@ describe('persisted tabs', () => {
     expect(v.tabs.map((t) => t.favicon)).toEqual([undefined, 'https://f.test/i.ico'])
   })
 
+  it('never restores icon bytes from the board, even in a field of its own', () => {
+    const v = validPersistedTabs({ tabs: [{ ...tab(1), faviconData: 'data:image/png;base64,AAAA' }], activeTabId: 't1', agentTabId: 't1' })!
+    expect(JSON.stringify(v)).not.toContain('data:image')
+  })
+
   it('rejects non-objects and empty lists (node falls back to one tab)', () => {
     expect(validPersistedTabs(undefined)).toBeUndefined()
     expect(validPersistedTabs({ tabs: [] })).toBeUndefined()
