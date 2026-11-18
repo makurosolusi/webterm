@@ -67,6 +67,7 @@ export const TOOL_LABELS: Readonly<Record<string, ToolLabel>> = {
   'browser_read': { title: 'Read a web page', text: 'Opens one page in a browser node and reads it through an isolated reader, so only a short answer and its sources come back, never the page text.' },
   'browser_open': { title: 'Open a browser for an agent', text: 'Opens a browser node beside an agent you started and cables it to that agent, so it can use the page.' },
   'browser_tab': { title: 'Browser tabs', text: 'Lists, opens, switches and closes the tabs of one browser node.' },
+  'browser_downloads': { title: 'Browser downloads', text: 'Lists the files pages downloaded in a browser node: name, state, size, profile. Never reads file contents.' },
   'browser_layout': { title: 'Browser panes', text: 'Splits one browser node into up to 4 panes, syncs them, and runs a navigate, scroll or reload on every tab at once.' },
   'browser_profile': { title: 'Browser profiles', text: 'Lists or creates browser profiles (separate logins).' },
   'skill.list': { title: 'List skills', text: 'Lists the skills Central has.' },

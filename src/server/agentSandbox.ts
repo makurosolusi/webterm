@@ -22,11 +22,12 @@ export function agentSandboxOn(env: NodeJS.ProcessEnv = process.env): boolean {
 /**
  * Data-dir entries an agent shell must still READ: the skill shims it runs (`context-links`,
  * `browser-agent`), the `webterm` launcher those shims exec (`bin`; unreadable = exit 126, then an
- * unsandboxed retry that prompts), orchestrator worktrees, which can be an agent's cwd, and `downloads`
- * (files a browser node saved; an agent reads one at the path its `downloads` verb returns, see
- * docs/decisions/browser-downloads.md). None of them holds a credential. The node's OWN header file is added per node (`ownHeaders`).
+ * unsandboxed retry that prompts) and orchestrator worktrees, which can be an agent's cwd. None of them holds a credential.
+ * Not `downloads`: files a browser node saved belong to that node's profile; an agent gets one only through the `downloads
+ * read|copy` verb, which checks the cable at call time (docs/decisions/browser-downloads.md).
+ * The node's OWN header file is added per node (`ownHeaders`).
  */
-export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 'worktrees', 'downloads'] as const
+export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 'worktrees'] as const
 
 /**
  * Data-dir entries holding credentials or state an agent must never read or write directly: the
@@ -38,7 +39,7 @@ export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 
 export const AGENT_SECRET_ENTRIES = [
   'secrets', 'node-settings', 'node-tokens', 'channels', 'browser', 'central', 'relay', 'sock', 'memory', 'logs', 'run',
   'webterm.db*', 'ledger.db*', 'auth.json', 'node-auth-key.bin', 'settings.json', 'sessions.json',
-  'agent-status.json', 'integration-receipts.json',
+  'agent-status.json', 'integration-receipts.json', 'downloads',
 ] as const
 
 /**

@@ -34,6 +34,7 @@ const GOALS: ReadonlyArray<[string, readonly string[]]> = [
   ['browse yourself', ['browser_act']],
   ['work in several tabs of one browser node (open, switch, close)', ['browser_tab']],
   ['split a browser node into panes, sync them, run one action on every tab (compare pages)', ['browser_layout']],
+  ['see which files pages downloaded in a browser node (names, states, sizes only)', ['browser_downloads']],
   ['open a browser on a profile (separate logins) or create one', ['browser_open', 'browser_profile']],
   ['project health', ['health.scan']],
   ['remember', ['memory.remember']],
@@ -54,6 +55,7 @@ export function stewardOffAbilities(tools: readonly MapTool[]): Set<CapabilityId
     if (t.name === 'browser_profile') off.add('web.profiles')
     if (t.name === 'browser_tab') off.add('web.tabs')
     if (t.name === 'browser_layout') off.add('web.layout')
+    if (t.name === 'browser_downloads') off.add('web.downloads')
   }
   return off
 }

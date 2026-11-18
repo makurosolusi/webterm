@@ -21,7 +21,7 @@ const TITLE_MAX = 80
 const DOMAINS_MAX = 100
 
 /** Verbs Central's tools send through the control path; `snapshot`, `wait` and `tabs` are reads, the rest need `browser.act`. */
-export type ControlVerb = 'navigate' | 'click' | 'type' | 'snapshot' | 'wait' | 'release' | 'tabs' | 'tab' | 'layout' | 'arrange' | 'sync' | 'scroll' | 'reload' | 'back' | 'forward'
+export type ControlVerb = 'navigate' | 'click' | 'type' | 'snapshot' | 'wait' | 'release' | 'tabs' | 'tab' | 'layout' | 'arrange' | 'sync' | 'scroll' | 'reload' | 'back' | 'forward' | 'downloads'
 
 /** Ports the browser tools need from the process; resolved by the integrator, faked in tests. */
 export interface BrowserToolDeps {

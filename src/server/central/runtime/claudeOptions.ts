@@ -69,7 +69,7 @@ export const MICROS_PER_USD = 1_000_000
 export const WEBTERM_MCP_TOOL_PREFIX = 'mcp__webterm__'
 export const WEBTERM_MCP_ALLOW = `${WEBTERM_MCP_TOOL_PREFIX}*`
 /** Web abilities of the steward, worded by the capability registry (live on/off state rides in the Capabilities line, capabilityMap.ts). */
-const STEWARD_WEB_PROSE = renderCapabilityProse('central.steward', ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout', 'web.links'])
+const STEWARD_WEB_PROSE = renderCapabilityProse('central.steward', ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout', 'web.links', 'web.downloads'])
 /**
  * Static steward instructions (cache-stable, no user data). Replaces the text tool catalog the prompt
  * used to carry (K7): the tools now describe themselves through MCP `tools/list`.

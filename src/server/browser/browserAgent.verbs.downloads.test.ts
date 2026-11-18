@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserHostApi } from '../../shared/browser.contract'
+import type { DownloadsData } from '../../shared/browser.contract.downloads'
 import type { DownloadItem } from '../../shared/browser.downloads'
 import { DOWNLOADS_NOTE, downloadVerbs, withDownloadIds } from './browserAgent.verbs.downloads'
 import type { AgentCtx, BaseVerbs } from './browserAgent.verbs.ctx'
@@ -13,28 +14,29 @@ const ctx = (items: DownloadItem[], known = true): AgentCtx => ({
 } as unknown as AgentCtx)
 
 describe('downloads verb', () => {
-  it('lists newest first with the path of a finished file and the page-data note', async () => {
-    const r = await downloadVerbs(ctx([item({ id: 'a' }), item({ id: 'b', state: 'inProgress', received: 5, total: 20 })])).downloads('n1', {})
+  it('lists newest first with no path (the file is not readable on disk) and the page-data note', async () => {
+    const r = await downloadVerbs(ctx([item({ id: 'a' }), item({ id: 'b', state: 'inProgress', received: 5, total: 20 })])).downloads('n1', {}) as DownloadsData
     expect(r.note).toBe(DOWNLOADS_NOTE)
     expect(r.downloads.map((d) => d.id)).toEqual(['b', 'a'])
-    expect(r.downloads[1]).toEqual({ id: 'a', name: 'a.pdf', state: 'completed', bytes: 10, total: 10, host: 'h.example', risky: false, path: '/data/downloads/p/a.pdf' })
+    expect(r.downloads[1]).toEqual({ id: 'a', name: 'a.pdf', state: 'completed', bytes: 10, total: 10, host: 'h.example', risky: false })
+    expect(JSON.stringify(r)).not.toContain('/data/downloads')
     expect(r.downloads[0]).toMatchObject({ id: 'b', state: 'inProgress', bytes: 5, total: 20 })
   })
 
-  it('a file waiting for the human\'s Keep / Discard is listed without a path', async () => {
-    const r = await downloadVerbs(ctx([item({ id: 'a', pending: true })])).downloads('n1', {})
-    expect(r.downloads[0].path).toBeUndefined()
-    expect(r.downloads[0].state).toBe('completed')
+  it('a file waiting for the human\'s Keep / Discard is listed as completed but cannot be read yet', async () => {
+    const v = downloadVerbs(ctx([item({ id: 'a', pending: true })]))
+    expect((await v.downloads('n1', {}) as DownloadsData).downloads[0].state).toBe('completed')
+    await expect(v.downloads('n1', { read: 'a' })).rejects.toMatchObject({ wire: 'download_not_ready' })
   })
 
   it('carries the failure reason and the risky flag', async () => {
-    const r = await downloadVerbs(ctx([item({ id: 'a', state: 'failed', failure: 'too_large', risky: true, name: 'x.pkg' })])).downloads('n1', {})
+    const r = await downloadVerbs(ctx([item({ id: 'a', state: 'failed', failure: 'too_large', risky: true, name: 'x.pkg' })])).downloads('n1', {}) as DownloadsData
     expect(r.downloads[0]).toMatchObject({ state: 'failed', failure: 'too_large', risky: true })
   })
 
   it('answers an empty list without downloads wiring, refuses a bad body and an unknown node', async () => {
     const bare = { host: ctx([]).host } as AgentCtx
-    expect((await downloadVerbs(bare).downloads('n1', {})).downloads).toEqual([])
+    expect(((await downloadVerbs(bare).downloads('n1', {})) as DownloadsData).downloads).toEqual([])
     await expect(downloadVerbs(ctx([])).downloads('n1', 'x')).rejects.toThrow('JSON object')
     await expect(downloadVerbs(ctx([], false)).downloads('nope', {})).rejects.toThrow('not found')
   })
