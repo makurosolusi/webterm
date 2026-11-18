@@ -17,12 +17,12 @@ export interface ProjectOpenDeps {
 /** `browser_limit` = every live slot is taken; the other codes are the board writer's or the page start's own. */
 export type ProjectOpened = { ok: true; nodeId: string } | { ok: false; code: string }
 
-/** Adds a browser node to `workspaceId` and starts its blank page; a node that cannot start is taken off the board again. */
-export async function openProjectBrowser(deps: ProjectOpenDeps, workspaceId: string, agentAllowed: (nodeId: string) => boolean, wantedId?: string): Promise<ProjectOpened> {
+/** Adds a browser node to `workspaceId` (on `profileId`, an already-resolved profile; absent = the board's Default) and starts its blank page; a node that cannot start is taken off the board again. */
+export async function openProjectBrowser(deps: ProjectOpenDeps, workspaceId: string, agentAllowed: (nodeId: string) => boolean, wantedId?: string, profileId?: string): Promise<ProjectOpened> {
   const nodeId = wantedId ?? (deps.newId ?? randomUUID)()
   if (!agentAllowed(nodeId)) return { ok: false, code: 'disabled' }
   const canvas = await deps.canvas()
-  const added = canvas.add({ workspaceId, nodes: [{ id: nodeId, kind: BROWSER_KIND, x: 0, y: 0, ...OPEN_SIZE }] })
+  const added = canvas.add({ workspaceId, nodes: [{ id: nodeId, kind: BROWSER_KIND, x: 0, y: 0, ...OPEN_SIZE, ...(profileId && profileId !== workspaceId ? { profileId } : {}) }] })
   if (!added.ok) return { ok: false, code: added.code }
   try {
     await deps.start(nodeId, workspaceId)

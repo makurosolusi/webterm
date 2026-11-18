@@ -174,8 +174,12 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
       open: openDeps, presetOf: (id) => nodeOf(id)?.preset,
     }),
-    openFor: (requesterId, nodeId) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled'),
-    openProject: (workspaceId, nodeId) => openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId),
+    openFor: (requesterId, nodeId, profile) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled', profile),
+    openProject: async (workspaceId, nodeId, profile) => {
+      const wanted = profile === undefined ? undefined : profiles.service.resolve(profile, workspaceId)
+      if (profile !== undefined && !wanted) return { ok: false, code: 'profile_not_found' }
+      return openProjectBrowser(openDeps, workspaceId, agentAllowed, nodeId, wanted?.id)
+    },
     async shutdown() {
       if (down) return
       down = true
