@@ -89,6 +89,19 @@ export function swapPanes(root: Pane, a: string, b: string): Pane {
   return swap(root)
 }
 
+/**
+ * Drag a pane onto another: `center` swaps the two tabs' places; an edge lifts the pane out of its spot (its split collapses
+ * into the sibling) and splits `target` on that side with a 50/50 ratio. Same value back for an unknown id, itself, or a
+ * single pane. The move never counts against the pane limit: the pane leaves before it lands.
+ */
+export function movePane(root: Pane, paneId: string, target: string, where: DropEdge | 'center'): Pane {
+  const ids = layoutTabIds(root)
+  if (paneId === target || !ids.includes(paneId) || !ids.includes(target) || isLeaf(root)) return root
+  if (where === 'center') return swapPanes(root, paneId, target)
+  const rest = drop(root, paneId)
+  return rest ? splitPane(rest, target, paneId, where) : root
+}
+
 /** New ratio for the split at `path` ('' = root, then 'a'/'b' steps), clamped to [MIN_RATIO, 1-MIN_RATIO]. */
 export function resizePane(root: Pane, path: string, ratio: number): Pane {
   if (isLeaf(root)) return root
