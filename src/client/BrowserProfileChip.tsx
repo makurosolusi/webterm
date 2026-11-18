@@ -15,7 +15,7 @@ import { setNodeBrowserProfile } from './browserProfileApi'
 import { ProfileDot, profileOfNode, useProfileList } from './browserProfile.list'
 import { PROFILE_TEXT as T, profileErrorText } from './browserProfile.text'
 import { useActiveWorkspaceId } from './activeWorkspace.context'
-import { openSettingsSection } from './settings.link'
+import { openSettingsAt } from './settings.link'
 import { showNotice } from './workspaceSave.notice'
 
 const noticeKey = (nodeId: string): string => `webterm-browser-profile-${nodeId}`
@@ -30,7 +30,7 @@ function menuItems(p: { profiles: BrowserProfile[]; current?: string; failed: bo
   return [
     { type: 'header', label: T.menuHeader }, ...rows, { type: 'separator' },
     { type: 'item', id: 'profile-new', label: T.newProfile, icon: <span className="codicon codicon-add" aria-hidden="true" />, onSelect: p.onNew },
-    { type: 'item', id: 'profile-manage', label: T.manage, icon: <span className="codicon codicon-settings-gear" aria-hidden="true" />, onSelect: () => openSettingsSection('browser') },
+    { type: 'item', id: 'profile-manage', label: T.manage, icon: <span className="codicon codicon-settings-gear" aria-hidden="true" />, onSelect: () => openSettingsAt('browser', 'browser-profiles') },
   ]
 }
 

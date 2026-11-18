@@ -11,7 +11,7 @@ vi.mock('@xyflow/react', () => ({ useReactFlow: () => rf }))
 const notices = vi.hoisted(() => ({ show: vi.fn() }))
 vi.mock('./workspaceSave.notice', () => ({ showNotice: notices.show }))
 const settings = vi.hoisted(() => ({ open: vi.fn() }))
-vi.mock('./settings.link', () => ({ openSettingsSection: settings.open }))
+vi.mock('./settings.link', () => ({ openSettingsAt: settings.open }))
 vi.mock('./activeWorkspace.context', () => ({ useActiveWorkspaceId: () => 'w1' }))
 
 import BrowserProfileChip from './BrowserProfileChip'
@@ -83,7 +83,7 @@ describe('BrowserProfileChip', () => {
   it('"Manage profiles…" opens Settings > Browser', async () => {
     await openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Manage profiles…' }))
-    expect(settings.open).toHaveBeenCalledWith('browser')
+    expect(settings.open).toHaveBeenCalledWith('browser', 'browser-profiles')
   })
 
   it('"New profile…" creates then switches the node; a taken name shows inline', async () => {

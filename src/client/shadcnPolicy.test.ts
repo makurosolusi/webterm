@@ -19,6 +19,7 @@ const vscodeScreens = new Set([
   // Browser node: URL bar and cookie import form keep native controls so label queries and file input work.
   "src/client/BrowserToolbar.tsx",
   "src/client/BrowserCookieDialog.tsx",
+  "src/client/BrowserProfileCookieDialog.tsx", // same form, per profile
   // Settings / Env / Channels
   "src/client/SettingsPanel.tsx",
   "src/client/SettingsAgents.tsx",
