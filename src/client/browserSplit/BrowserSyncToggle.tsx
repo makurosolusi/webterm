@@ -29,12 +29,12 @@ export function BrowserSyncToggle({ nodeId, sync, panes }: BrowserSyncToggleProp
         <span className="bsync-on" role="group" aria-label="Sync is on" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); void stop.run() } }}>
           <Link2 aria-hidden="true" className="bsync-icon" />
           <span className="bsync-pill">Sync on</span>
-          <ActionButton action={stop} busyLabel="Stopping" variant="ghost" size="xs" className="bsync-stop" aria-label="Stop sync" aria-keyshortcuts="Escape">Stop</ActionButton>
+          <ActionButton action={stop} busyLabel="Stopping" variant="ghost" size="bui" className="bsync-stop" aria-label="Stop sync" aria-keyshortcuts="Escape">Stop</ActionButton>
         </span>
       ) : (
         <IconButton
           label="Sync panes" tooltip={enough ? 'Repeat what you do in one pane in every pane' : 'Split the node into 2 or more panes to sync them'}
-          size="icon-xs" aria-pressed={false} aria-haspopup={syncWarned() ? undefined : 'menu'} disabled={!enough} disabledReason="needs 2 or more panes" data-sync-button
+          size="icon-bui" aria-pressed={false} aria-haspopup={syncWarned() ? undefined : 'menu'} disabled={!enough} disabledReason="needs 2 or more panes" data-sync-button
           onClick={(e) => {
             if (syncWarned()) { void start.run(); return }
             const r = e.currentTarget.getBoundingClientRect()
