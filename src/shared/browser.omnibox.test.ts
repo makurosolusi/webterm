@@ -34,6 +34,8 @@ describe('resolveOmniboxInput', () => {
     ['localhost', 'http://localhost/'],
     ['172.32.0.1', 'https://172.32.0.1/'],
     ['8.8.8.8', 'https://8.8.8.8/'],
+    ['//host/x', 'https://host/x'],
+    ['bücher.de', 'https://xn--bcher-kva.de/'],
   ])('navigates %s -> %s', (input, url) => expect(go(input)).toBe(url))
 
   it.each([
@@ -41,6 +43,10 @@ describe('resolveOmniboxInput', () => {
     ['node.js tutorial', 'node.js%20tutorial'],
     ['example.com/a b', 'example.com%2Fa%20b'],
     ['kucing', 'kucing'],
+    ['google', 'google'],
+    ['foo bar', 'foo%20bar'],
+    ['what?', 'what%3F'],
+    ['日本語', '%E6%97%A5%E6%9C%AC%E8%AA%9E'],
     ['/etc/passwd', '%2Fetc%2Fpasswd'],
     ['a&b=c?#', 'a%26b%3Dc%3F%23'],
   ])('searches %s', (input, q) => expect(go(input)).toBe(SEARCH_ENGINES.google.prefix + q))
@@ -50,6 +56,11 @@ describe('resolveOmniboxInput', () => {
     ['file:///etc/passwd', 'scheme'],
     ['data:text/html,<b>x</b>', 'scheme'],
     ['about:blank', 'scheme'],
+    ['about:config', 'scheme'],
+    ['chrome://settings', 'scheme'],
+    ['JAVASCRIPT:alert(1)', 'scheme'],
+    ['vbscript:x', 'scheme'],
+    ['user:pass@example.com', 'scheme'],
     ['https://u:p@a.com/', 'userinfo'],
   ])('rejects %s (%s) without navigating', (input, reason) => expect(go(input)).toEqual({ ok: false, reason }))
 
@@ -64,6 +75,7 @@ describe('resolveOmniboxInput', () => {
 
   it('rejects a search url over the length cap instead of navigating', () => {
     expect(go('x '.repeat(5000))).toEqual({ ok: false, reason: 'too_long' })
+    expect(go('x '.repeat(1000))).toEqual({ ok: false, reason: 'too_long' }) // encoded url passes 2048, the tab cap
   })
 })
 

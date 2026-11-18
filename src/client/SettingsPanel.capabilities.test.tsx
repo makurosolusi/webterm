@@ -94,7 +94,7 @@ describe('tab Kemampuan (D8)', () => {
     expect(main.querySelector('[data-field="claude-provider"]')).toBeNull()
     expect(within(main).getAllByRole('region', { name: /Telegram/ }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Pilih lokasi' })).toBeTruthy()
-    expect(screen.getByLabelText('Browser search engine')).toBeTruthy()
+    expect(screen.getByLabelText('Search engine')).toBeTruthy()
   })
 
   it('Edit and upload files is a sub-switch of the Files card (shown while Files is on)', async () => {
