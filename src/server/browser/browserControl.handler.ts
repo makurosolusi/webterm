@@ -94,7 +94,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   if (!requester || !linked) return fail(401, 'unauthorized')
   const principal = `node:${requester}`
   if (deps.presetOf?.(requester)) {
-    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url, asObject(req.body).profile, asObject(req.body).tab)
+    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url, asObject(req.body).profile, asObject(req.body).tab ?? asObject(req.body).all ?? asObject(req.body).layout)
     if (denied) return denied
   }
   if (asked !== 'open') {

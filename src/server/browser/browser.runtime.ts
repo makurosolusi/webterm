@@ -28,6 +28,7 @@ import { handleBrowserConnection } from './browserWs.gateway'
 import { createAgentVerbs } from './browserAgent.verbs'
 import { agentTabHost, withNewTab } from './browser.agentTabs'
 import { withTabs } from './browser.agentTabs.verbs'
+import { withLayout } from './browser.agentLayout.verbs'
 import { SnapshotStore } from './browserAgent.snapshot'
 import { type AgentOpenDeps, openAgentBrowser } from './browser.agentOpen'
 import { openProjectBrowser } from './browser.projectOpen'
@@ -135,7 +136,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-  const verbs = withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep })
+  const verbs = withLayout(withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep }), { host, leases, agentAllowed, sleep })
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
   host.onState((s: BrowserState) => {

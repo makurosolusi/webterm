@@ -247,7 +247,7 @@ export function createSplit(kit: TabKit, deps: SplitDeps) {
   }
   const isShown = (rec: NodeRec, tabId: string): boolean => !!rec.tabs?.split?.visible.includes(tabId)
 
-  return { reconcile, setVisible, resizeTab, setTabDevice, setLayout, applyLayout, noteLayout, followFocus, sidePush, ackSide, swapped, stopAll, clear, input, isShown, rtOf }
+  return { reconcile, setVisible, resizeTab, setTabDevice, setLayout, applyLayout, noteLayout, followFocus, sidePush, ackSide, swapped, stopAll, clear, input, isShown, rtOf, sizeOf }
 }
 
 export type SplitSide = ReturnType<typeof createSplit>

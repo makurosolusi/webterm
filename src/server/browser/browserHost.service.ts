@@ -152,7 +152,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
-    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); this.sync.onInput(nodeId, ev); return }
+    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -161,7 +161,7 @@ export class BrowserHost implements BrowserHostApi {
     // memprosesnya; await = burst trackpad telat detik). Urutan dijaga satu socket CDP; galat dilog `fire`.
     for (const c of toCdpCommands(ev)) this.fire(rec, c.method, c.params)
     if (ev.ls !== undefined) notePendingInput(rec, ev.ls, rx, Date.now())
-    this.sync.onInput(nodeId, ev)
+    if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev) // sync repeats what a human does; an agent uses `--all`
   }
 
   /** Jalur CDP generik; hanya dipanggil lewat `cdpAllowlist` (WS-07). */

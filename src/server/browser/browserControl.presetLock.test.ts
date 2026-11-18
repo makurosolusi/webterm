@@ -43,9 +43,22 @@ describe('skill-author browser lock (server side, from the stored preset)', () =
     expect(await run('author', 'snapshot', {})).toMatchObject({ status: 200 })
   })
 
+  it.each(['layout', 'arrange', 'sync', 'reload', 'back', 'forward'])('403 verb_not_allowed_for_preset for the layout verb %s', async (verb) => {
+    expect(await run('author', verb, { spec: 'h t1 t2', on: true })).toMatchObject({ status: 403, body: { error: 'verb_not_allowed_for_preset' } })
+    expect(calls).toEqual([])
+  })
+
+  it('403 when an allowed verb asks for every tab (--all / --layout)', async () => {
+    expect(await run('author', 'navigate', { url: 'https://example.com/', all: true })).toMatchObject({ status: 403, body: { error: 'verb_not_allowed_for_preset' } })
+    expect(await run('author', 'snapshot', { all: true })).toMatchObject({ status: 403 })
+    expect(await run('author', 'screenshot', { layout: true })).toMatchObject({ status: 403 })
+    expect(calls).toEqual([])
+  })
+
   it('a node without a preset may use the tab verbs', async () => {
     expect(await run('plain', 'tabs', {})).toMatchObject({ status: 200 })
     expect(await run('plain', 'tab', { action: 'new' })).toMatchObject({ status: 200 })
+    for (const verb of ['layout', 'arrange', 'sync', 'reload']) expect(await run('plain', verb, { spec: 'h t1 t2', on: true })).toMatchObject({ status: 200 })
   })
 
   it.each(['click', 'type', 'press', 'scroll', 'screenshot', 'console', 'wait', 'status', 'handoff', 'release'])('403 verb_not_allowed_for_preset for %s', async (verb) => {

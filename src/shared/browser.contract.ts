@@ -223,6 +223,8 @@ export const BROWSER_VERB_CAP = {
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
   // Tabs of one node: `tabs` lists, `tab` creates / switches / closes (`new` takes a URL, so it is an act).
   tabs: 'browser.read', tab: 'browser.act',
+  // Split layout of one node: `layout` reads it, `arrange` sets it, `sync` switches sync mode; reload/back/forward are page verbs.
+  layout: 'browser.read', arrange: 'browser.act', sync: 'browser.act', reload: 'browser.act', back: 'browser.act', forward: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
 export type BrowserVerb = keyof typeof BROWSER_VERB_CAP
 /** CLI-only read verb (`webterm browser profiles`): lists the profile names this board can use. Not a page verb, so not in `BROWSER_VERB_CAP`; locked presets never get it. */
@@ -230,19 +232,29 @@ export const BROWSER_PROFILES_VERB = 'profiles'
 
 /** Every page verb (not open/handoff/release/tabs/tab) may carry `tab`: act in that tab of the node, which also becomes the agent's working tab. */
 export interface TabArg { tab?: string }
+/**
+ * `all: true` runs the verb on every tab the layout shows (the one visible tab without a split) and answers with `AllData`.
+ * `click`/`type` then name the element by meaning (`name` = accessible name, optional `role`, `nth` among equals), never by ref.
+ */
+export interface AllArg { all?: true; name?: string; role?: string; nth?: number }
 /** Body request per verb; `ref` berformat `e12`, `snapId` dari `snapshot` terakhir. */
 export interface VerbBodies {
-  status: TabArg; snapshot: TabArg
-  screenshot: { maxWidth?: number } & TabArg
+  status: TabArg; snapshot: TabArg & AllArg
+  screenshot: { maxWidth?: number; /** Alias of `all`: every visible tab as a named list. */ layout?: true } & TabArg & AllArg
   wait: { ms?: number; selectorRef?: string; loaded?: true } & TabArg
   console: { limit?: number; level?: ConsoleLevel } & TabArg
   /** Only on the node-token path: a new browser node beside the caller, cabled to it; `url` = navigate it at once. */
   open: { url?: string }
-  navigate: { url: string } & TabArg
-  click: { ref: string; snapId: string } & TabArg
-  type: { ref: string; snapId: string; text: string; submit?: boolean } & TabArg
+  navigate: { url: string } & TabArg & AllArg
+  click: { ref?: string; snapId?: string } & TabArg & AllArg
+  type: { ref?: string; snapId?: string; text: string; submit?: boolean } & TabArg & AllArg
   press: { key: string } & TabArg
-  scroll: { dy: number } & TabArg
+  scroll: { dy: number } & TabArg & AllArg
+  reload: TabArg & AllArg; back: TabArg & AllArg; forward: TabArg & AllArg
+  layout: Record<string, never>
+  /** Shapes: see `parseLayoutSpec` (browser.layoutSpec.ts). */
+  arrange: { spec: string }
+  sync: { on: boolean }
   tabs: Record<string, never>
   /** `new` = optional url; `switch` and `close` need `tab`. */
   tab: { action: 'new' | 'switch' | 'close'; url?: string; tab?: string }
@@ -258,11 +270,22 @@ export interface VerbData {
   wait: { ok: true }; click: { ok: true; newTab?: string; note?: string }; type: { ok: true }
   console: { content: string; count: number; dropped: number; note?: string }
   press: { ok: true }; scroll: { ok: true }
+  reload: { ok: true }; back: { ok: true }; forward: { ok: true }
+  layout: LayoutData
+  arrange: LayoutData & { note: string }
+  sync: { on: boolean; note: string }
   tabs: TabsData
   tab: TabsData & { tab?: AgentTabView; note: string }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }
 }
+/** One pane of a layout as an agent sees it. */
+export interface LayoutPane { tab: string; title: string; host: string; /** The human's focused pane. */ focus: boolean; w: number; h: number; device?: string }
+/** The node's split layout: `tree` like `h(t1, v(t2, t3))` (`t1` alone = no split), panes in reading order, and sync mode. */
+export interface LayoutData { tree: string; split: boolean; panes: LayoutPane[]; sync: boolean; maxPanes: number }
+/** Result of one tab in an `all` run; verb-specific fields (`url`, `content`, `base64`, ...) ride along. A failed tab never fails the others. */
+export interface TabResult { tab: string; ok: boolean; name?: string; error?: string; message?: string; [field: string]: unknown }
+export interface AllData { all: true; results: TabResult[]; okCount: number; failedCount: number; note?: string }
 /** Tab list a verb answers with: the node's tabs, the agent's working tab and the per-node limit. */
 export interface TabsData { tabs: AgentTabView[]; agentTab: string | null; max: number }
 /** Semua respons kontrol sukses; konten halaman selalu tak tepercaya. */

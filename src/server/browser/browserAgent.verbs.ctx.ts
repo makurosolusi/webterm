@@ -28,8 +28,12 @@ export interface AgentCtx {
 /** Verbs on an existing browser node; `open` has no node yet, the control handler serves it (`browser.agentOpen.ts`). */
 export type AgentVerbs = { [V in Exclude<BrowserVerb, 'open'>]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }
 
+/** Verbs of the split layout; they need the host's tab API and sync and are added by `withLayout` (browser.agentLayout.verbs.ts). */
+export type LayoutVerbName = 'layout' | 'arrange' | 'sync' | 'reload' | 'back' | 'forward'
+/** Verbs with tabs but not yet the layout ones (`withTabs` makes them). */
+export type TabbedVerbs = Omit<AgentVerbs, LayoutVerbName>
 /** The verbs on the node's page (`createAgentVerbs`); `tabs`/`tab` need the host's tab API and are added by `withTabs` (browser.agentTabs.verbs.ts). */
-export type BaseVerbs = Omit<AgentVerbs, 'tabs' | 'tab'>
+export type BaseVerbs = Omit<AgentVerbs, 'tabs' | 'tab' | LayoutVerbName>
 
 export const badRequest = (msg: string) => new BrowserError('bad_request', msg)
 
