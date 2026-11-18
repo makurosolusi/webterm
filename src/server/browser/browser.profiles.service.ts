@@ -11,6 +11,7 @@ import type { BrowserProfile, ProfileCreateReq, ProfileErrorCode, ProfileUpdateR
 import { DEFAULT_WORKSPACE_SHADE, backfillWorkspaceHue, isWorkspaceHue, isWorkspaceShade, pickWorkspaceColor } from '../../shared/workspaceColor'
 import { createLogger } from '../logs'
 import type { CookieVault } from './cookieVault.store'
+import type { ProfileAccount } from '../../shared/browser.accounts'
 
 const log = createLogger('browser.profiles')
 const ID_PREFIX = 'bp-'
@@ -28,6 +29,8 @@ export interface ProfilesDeps {
   nodeProfileIds(): string[]
   /** A Chromium process runs on this profile. */
   isLive(id: string): boolean
+  /** Signed-in accounts last seen for a profile (masked; [] = none known or the switch is off). */
+  accounts?(id: string): ProfileAccount[]
   /** Tell every window the list changed. */
   changed(): void
   /** Bounded audit line for a change (ledger); `by` = who asked. */
@@ -70,10 +73,12 @@ export function createProfilesService(deps: ProfilesDeps): ProfilesService {
       // An unreadable vault must not hide the profile from the picker; the cause is logged by code only.
       log.warn('browser.profiles.vault', 'cookie vault unreadable for a profile', { ids: { profileId: r.id }, error: e instanceof Error ? e.name : typeof e })
     }
+    const accounts = deps.accounts?.(r.id) ?? []
     return {
       id: r.id, name: r.name, color: r.color, shade: r.shade, createdAt: r.createdAt, workspaceId: r.workspaceId,
       ...(r.workspaceId === r.id ? { isDefaultOf: r.id } : {}),
       live: deps.isLive(r.id), nodeCount: uses.get(r.id) ?? 0, cookieDomains,
+      ...(accounts.length > 0 ? { accounts } : {}),
     }
   }
 

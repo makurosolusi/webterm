@@ -67,6 +67,7 @@ export const ENV_BROWSER = {
   headless: 'WEBTERM_BROWSER_HEADLESS',
   captureLinks: 'WEBTERM_BROWSER_CAPTURE_LINKS',
   downloadsAuto: 'WEBTERM_BROWSER_DOWNLOADS_AUTO',
+  accounts: 'WEBTERM_BROWSER_ACCOUNTS',
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'

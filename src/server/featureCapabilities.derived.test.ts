@@ -85,6 +85,10 @@ describe('detail dan sub', () => {
     expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs?.[2]).toMatchObject({ key: 'browserDownloadsAuto', on: true })
     expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_DOWNLOADS_AUTO: 'off' }, DETECT).subs?.[2]).toMatchObject({ on: false })
   })
+  it('Browser punya sub akun yang masuk, bawaan ON; off eksplisit dihormati', () => {
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs?.[3]).toMatchObject({ key: 'browserAccounts', on: true })
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_ACCOUNTS: 'off' }, DETECT).subs?.[3]).toMatchObject({ on: false })
+  })
 })
 
 describe('syncLinkedSettings (boot)', () => {

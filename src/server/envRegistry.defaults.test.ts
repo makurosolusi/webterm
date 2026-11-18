@@ -6,6 +6,7 @@ import { lifecycleConfig } from './browser/browserLifecycle.service'
 import { agentControlOn, cookieImportOn } from './browser/browser.runtime.parts'
 import { captureLinksOn } from './linkCapture/linkCapture.config'
 import { downloadModeOf } from './browser/browser.runtime.downloads'
+import { accountsOn } from './browser/browser.runtime.accounts'
 import { centralEnabled } from './central/centralModel'
 import { autonomyEnabled } from './central/centralAutonomy'
 import { maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
@@ -59,6 +60,8 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   // Default 'on': a link a terminal opens belongs to the canvas, so it lands in the canvas browser (docs/decisions/canvas-link-capture.md).
   // Default 'on': a finished download is kept in the webterm folder; off = Keep / Discard first (docs/decisions/browser-downloads.md).
   ['WEBTERM_BROWSER_DOWNLOADS_AUTO', () => onOff(downloadModeOf(E) === 'save'), 'browser/browser.runtime.downloads.ts:downloadModeOf'],
+  // Default 'on': profiles show who is signed in (Google, GitHub), masked; off = no check and no data (docs/decisions/browser-profile-accounts.md).
+  ['WEBTERM_BROWSER_ACCOUNTS', () => onOff(accountsOn(E)), 'browser/browser.runtime.accounts.ts:accountsOn'],
   ['WEBTERM_BROWSER_CAPTURE_LINKS', () => onOff(captureLinksOn(E)), 'linkCapture/linkCapture.config.ts:captureLinksOn'],
   // Default 'on' (F3-a zero-config): every inbox gate goes to Telegram with Approve once / Deny.
   ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', () => onOff(approvalButtonsOn(E)), 'channels/channelButtons.ts:approvalButtonsOn'],

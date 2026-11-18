@@ -9,12 +9,15 @@ import type { BrowserApiResult, CookieApiDeps } from './browserApi.cookies'
 import { duplicateProfile, exportCookies, removeProfile } from './browser/browser.profiles.ops'
 import type { ProfileOpsDeps } from './browser/browser.profiles.ops'
 import type { ProfileResult, ProfilesService } from './browser/browser.profiles.service'
+import type { AccountsService } from './browser/browser.accounts.service'
 import type { CookiePreviewResp } from '../shared/browser.contract'
 
 export interface ProfileApiDeps {
   profiles: ProfilesService
   ops: ProfileOpsDeps
   cookies: CookieApiDeps
+  /** Account check (absent in tests that do not need it). */
+  accounts?: AccountsService
 }
 
 const STATUS: Record<ProfileErrorCode, number> = {
@@ -90,6 +93,10 @@ export async function profileRoute(method: string, rest: string[], search: URLSe
     return null
   }
   if (kind === 'cookies') return cookies(method, id, more, search, body, d)
+  if (kind === 'accounts' && more[0] === 'refresh' && more.length === 1 && method === 'POST') {
+    // `?popover=1`: the popover merely opened, so the 10 minute TTL applies; the Refresh button sends none and only the 15 s floor applies.
+    return { status: 200, body: { accounts: (await d.accounts?.refresh(id, { respectTtl: search.get('popover') === '1' })) ?? [] } }
+  }
   if (more.length > 0) return null
   if (kind === 'duplicate' && method === 'POST') {
     const read = await readObject(body)

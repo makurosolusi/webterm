@@ -87,6 +87,9 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Stored cookie lifetime (days)',
     description: 'Cookies in the vault are discarded automatically this many days after import.',
   }),
+  flag(ENV_BROWSER.accounts, GROUP, { ...B, requires: [BROWSER_ON], label: 'Show signed-in accounts for browser profiles',
+    description: 'On: each profile shows who is signed in to Google and GitHub (name, masked email), checked inside that profile only when it opens, after a login, or on Refresh. Off: nothing is checked or shown. Cookies and full emails are never stored or shown.',
+  }, 'on'),
   flag(ENV_BROWSER.headless, GROUP, {
     ...B,
     requires: [BROWSER_ON],
