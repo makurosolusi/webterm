@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { agentChatLockFor, skillAuthorPreToolUse } from '../server/agentChat/agentChat.toolLock'
 import { agentChatRoleFor } from '../server/agentChat/agentChat.role'
 import { MODE_TOOLS, SKILL_AUTHOR_PROMPT, modeAllowsTool } from '../server/central/chat/conversationMode'
-import { BROWSER_VERB_CAP } from './browser.contract'
+import { BROWSER_PROFILES_VERB, BROWSER_VERB_CAP } from './browser.contract'
 import { capabilitiesOf, grantedCentralTools, grantedChatFamilies, renderCapabilityBriefing, renderCapabilityProse, type ProfileId } from './agentCapabilities'
 
 const cannotSection = (briefing: string): string => briefing.slice(briefing.indexOf('WHAT YOU CANNOT DO'))
@@ -73,7 +73,7 @@ describe('chat.skill-author: registry == enforcement == briefing', () => {
     const b = renderCapabilityBriefing('chat.default')
     const verbs = [...b.matchAll(/`webterm browser (\w+)/g)].map((m) => m[1]!)
     expect(verbs.length).toBeGreaterThan(5)
-    for (const v of verbs) expect(Object.keys(BROWSER_VERB_CAP), `verb ${v}`).toContain(v)
+    for (const v of verbs) expect([...Object.keys(BROWSER_VERB_CAP), BROWSER_PROFILES_VERB], `verb ${v}`).toContain(v)
     expect(b).not.toContain('WHAT YOU CANNOT DO')
     expect(b.split('\n').length).toBeLessThanOrEqual(12)
     for (const m of b.matchAll(/`webterm (\w+)/g)) expect(m[1]).toBe('browser')

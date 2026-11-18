@@ -202,6 +202,8 @@ export const BROWSER_VERB_CAP = {
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
 export type BrowserVerb = keyof typeof BROWSER_VERB_CAP
+/** CLI-only read verb (`webterm browser profiles`): lists the profile names this board can use. Not a page verb, so not in `BROWSER_VERB_CAP`; locked presets never get it. */
+export const BROWSER_PROFILES_VERB = 'profiles'
 
 /** Body request per verb; `ref` berformat `e12`, `snapId` dari `snapshot` terakhir. */
 export interface VerbBodies {

@@ -59,7 +59,7 @@ async function runHandler(def: ToolDef, ctx: ToolCtx, args: ToolInput, projectId
 }
 
 /** Codes meaning "not allowed" rather than "went wrong"; they map to receipt outcome `denied`. */
-const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'approval_rejected', 'approval_expired', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open'])
+const DENIED = new Set(['flag_off', 'tier_denied', 'guard_denied', 'forbidden_key', 'approval_required', 'approval_rejected', 'approval_expired', 'budget_exceeded', 'level_denied', 'policy_denied', 'breaker_open', 'profile_not_found'])
 /** What the caller can do next for codes that have one obvious follow-up. */
 const NEXT: Record<string, string> = {
   unknown_tool: 'cap.search {"query":"<words>"} lists the tools that exist',
@@ -68,6 +68,7 @@ const NEXT: Record<string, string> = {
   approval_rejected: 'the human rejected this; do not retry it, tell them',
   approval_expired: 'the approval card expired unanswered and the agent was cancelled; tell the human, and spawn again with a new requestId only if it is still wanted',
   tier_denied: 'propose it instead; a human approves higher tiers',
+  profile_not_found: 'browser_profile {"action":"list"} shows the browser profiles that exist',
 }
 /** `approval_required` next step by the card's ledger status, so the model never points at a dead card. */
 const APPROVAL_NEXT: Partial<Record<ApprovalStatus, string>> = {
@@ -88,12 +89,15 @@ function approvalStatusOf(ctx: ToolCtx, result: ExecResult, args: ToolInput): Ap
   return getApproval({ db: ctx.db, now: ctx.now }, named)?.status
 }
 
+/** A follow-up the handler itself computed (`data.next`, e.g. the names that exist after an unknown profile): it knows more than the static table. */
+const handlerNext = (r: ExecResult): string | undefined => (typeof r.data?.next === 'string' ? r.data.next : undefined)
+
 /** Maps an exec result to the uniform receipt; evidence is the audit event the gate itself wrote. */
 export function toReceipt(result: ExecResult, auditSeq: number, approvalStatus?: ApprovalStatus): Receipt {
   const detail = result.ok ? 'ok' : (result.code ?? 'error')
   const outcome = result.ok ? 'ok' : DENIED.has(detail) ? 'denied' : 'error'
   const keys = result.data ? Object.keys(result.data) : []
-  const next = result.ok ? null : (detail === 'approval_required' && approvalStatus ? APPROVAL_NEXT[approvalStatus] : undefined) ?? NEXT[detail] ?? null
+  const next = result.ok ? null : (detail === 'approval_required' && approvalStatus ? APPROVAL_NEXT[approvalStatus] : undefined) ?? handlerNext(result) ?? NEXT[detail] ?? null
   return {
     outcome, detail, next, operationId: null,
     evidence: { tool: result.tool, auditSeq, ...(result.projectId ? { projectId: result.projectId } : {}), ...(keys.length ? { dataKeys: keys } : {}), ...(approvalStatus ? { approvalStatus } : {}) },

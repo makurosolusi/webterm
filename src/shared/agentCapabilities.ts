@@ -72,9 +72,9 @@ export function renderCapabilityLine(profileId: ProfileId, off: ReadonlySet<Capa
   ].filter(Boolean).join(' ')
 }
 
-/** Stable hash (FNV-1a, 8 hex) of the rendered briefing: changes exactly when what the agent is told changes. */
-export function capabilityHash(profileId: ProfileId, off: ReadonlySet<CapabilityId> = NONE): string {
+/** Stable hash (FNV-1a, 8 hex) of the rendered briefing plus `live` (facts that change at runtime, e.g. the profile names): changes exactly when what the agent is told changes. */
+export function capabilityHash(profileId: ProfileId, off: ReadonlySet<CapabilityId> = NONE, live = ''): string {
   let h = 0x811c9dc5
-  for (const ch of renderCapabilityBriefing(profileId, off)) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0
+  for (const ch of renderCapabilityBriefing(profileId, off) + (live ? `\n${live}` : '')) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0
   return h.toString(16).padStart(8, '0')
 }

@@ -18,6 +18,11 @@ const DENIED = [
   'webterm browser screenshot',
   'webterm browser download https://example.com/a.zip',
   'webterm browser status',
+  // browser profiles = somebody's logins: a locked author browses signed out (registry: web.profiles is denied to it)
+  'webterm browser profiles',
+  'webterm browser open --profile work',
+  'webterm browser open --profile work https://example.com',
+  'webterm browser navigate --profile work https://example.com',
   'webterm browser press Enter',
   'webterm browser snapshot --node b1',
   'webterm browser snapshot extra',
