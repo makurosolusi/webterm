@@ -40,7 +40,12 @@
 
 .bt-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-icon { flex: none; width: var(--bui-icon); height: var(--bui-icon); }
-.bt-favicon { object-fit: contain; border-radius: 2px; }
+.bt-favicon {
+  object-fit: contain; border-radius: 3px;
+  /* A tint of the theme's own foreground: a dark logo stays readable on a dark tab and a light one on a light tab. */
+  background: color-mix(in srgb, var(--vscode-foreground, currentColor) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-foreground, currentColor) 18%, transparent);
+}
 .bt-icon--dim { opacity: 0.55; }
 .bt-icon--crashed { color: var(--vscode-errorForeground, var(--state-attention)); }
 .bt-tab[data-state="discarded"] .bt-title { opacity: 0.7; }

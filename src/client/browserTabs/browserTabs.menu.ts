@@ -1,8 +1,10 @@
 // Menu rows for the tab context menu and the All-tabs list. Pure: callers pass what a row does.
+import { createElement } from 'react'
 import type { VscodeMenuItem } from '@/components/vscode/vscodeMenu'
 import { canAddTab, type BrowserTab, type BrowserTabAction, type BrowserTabsState } from '../../shared/browser.tabs'
 import { chordLabel } from '@/commandRegistry'
 import { isMacPlatform } from '@/terminalKeys'
+import { BrowserTabIcon } from './BrowserTabIcon'
 import { isBlankTab, tabTitle } from './browserTabs.labels'
 
 export interface TabMenuDeps {
@@ -49,9 +51,9 @@ function splitItems(tabId: string, split: NonNullable<TabMenuDeps['split']>): Vs
   return [{ type: 'separator' }, row('split-right', 'Split right', 'right', chordLabel('Mod+\\', isMacPlatform())), row('split-down', 'Split down', 'bottom')]
 }
 
-/** All-tabs dropdown: one row per tab, the active one checked. */
+/** All-tabs dropdown: one row per tab with its icon; the active one shows the check mark in the icon column instead. */
 export function allTabsItems(state: BrowserTabsState, activate: (tabId: string) => void): VscodeMenuItem[] {
   return state.tabs.map((t) => ({
-    type: 'item' as const, id: t.tabId, label: tabTitle(t), checked: t.tabId === state.activeTabId, onSelect: () => activate(t.tabId),
+    type: 'item' as const, id: t.tabId, label: tabTitle(t), icon: createElement(BrowserTabIcon, { tab: t }), checked: t.tabId === state.activeTabId, onSelect: () => activate(t.tabId),
   }))
 }

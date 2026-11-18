@@ -95,8 +95,8 @@ describe('BrowserTabStrip tab visuals', () => {
   it('shows spinner instead of favicon, crashed and discarded icons, favicon, globe', () => {
     renderStrip(makeState([], {
       tabs: [
-        makeTab('a', { loading: true, favicon: 'data:image/png;base64,AA==' }), makeTab('b', { crashed: true }),
-        makeTab('c', { discarded: true }), makeTab('d', { favicon: 'data:image/png;base64,AA==' }), makeTab('e'),
+        makeTab('a', { loading: true, faviconData: 'data:image/png;base64,AA==' }), makeTab('b', { crashed: true }),
+        makeTab('c', { discarded: true }), makeTab('d', { faviconData: 'data:image/png;base64,AA==' }), makeTab('e'),
       ],
       activeTabId: 'e',
     }))
