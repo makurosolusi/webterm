@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { MAX_TABS_PER_NODE } from '../../shared/browser.tabs'
 import type { BrowserState } from '../../shared/browser.contract'
 import type { HostEvent } from './browserHost.service'
 import { POPUP_BURST_MAX, POPUP_BURST_WINDOW_MS, redirectBody } from './browserHost.shield'
@@ -50,9 +51,12 @@ describe('popups', () => {
 
   it('caps legit popups per opener and lets them through again after the window', async () => {
     let t = 1_000_000
-    const { events, state } = await openShielded({ now: () => t })
+    const { events } = await openShielded({ now: () => t })
+    // The counter belongs to the visible page: the first adopted popup becomes the view and resets it, so observe the peak.
+    let peak = 0
+    rig.host.onState((s) => { peak = Math.max(peak, s.blockedPopups ?? 0) })
     for (let i = 0; i < POPUP_BURST_MAX + 2; i++) popup(`P${i}`, `https://news.test/${i}`)
-    await waitFor(() => (state().blockedPopups ?? 0) === 2, 'flood counted')
+    await waitFor(() => peak === 2, 'flood counted')
     // The count is host-side and synchronous; each close reaches the fake CDP over its socket later.
     await waitFor(() => tabsCreated(events).length === POPUP_BURST_MAX, 'allowed popups became tabs')
     await waitFor(() => callsOf(CDP.closeTarget).length === 2, 'flooding popups closed')
@@ -60,6 +64,14 @@ describe('popups', () => {
     t += POPUP_BURST_WINDOW_MS
     popup('Q1', 'https://news.test/later')
     await waitFor(() => tabsCreated(events).length === POPUP_BURST_MAX + 1, 'allowed again')
+  })
+
+  it('a flood is refused by the rate limit even while the tab count is far below the limit', async () => {
+    const { events } = await openShielded({ now: () => 1_000_000 })
+    for (let i = 0; i < POPUP_BURST_MAX + 1; i++) popup(`P${i}`, `https://news.test/${i}`)
+    await waitFor(() => callsOf(CDP.closeTarget).length === 1, 'over-cap popup closed')
+    await waitFor(() => tabsCreated(events).length === POPUP_BURST_MAX, 'cap popups became tabs')
+    expect(tabsCreated(events).length).toBeLessThan(MAX_TABS_PER_NODE)
   })
 
   it('without an adblock policy, popups still never navigate the opener', async () => {
