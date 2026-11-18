@@ -18,7 +18,8 @@ const rule = (css: string, selector: string): string => {
   return at === -1 ? '' : css.slice(at + selector.length + 3).split('}')[0]
 }
 
-const bar = src('WorkspaceBar.tsx')
+// WorkspaceBar was split into focused modules (docs/decisions/header-rail-layout.md, W0); the contract spans all of them. Tabs first so the strip slice below still starts at the tab bar.
+const bar = ['WorkspaceBar.tabs.tsx', 'WorkspaceBar.tsx', 'WorkspaceBar.hosts.tsx', 'workspaceBar.menus.ts', 'useWorkspaceTabActions.ts'].map(src).join('\n')
 const css = src('styles.css')
 const dot = src('WorkspaceTabDot.tsx')
 const wsCss = src('workspaceColor.css')
