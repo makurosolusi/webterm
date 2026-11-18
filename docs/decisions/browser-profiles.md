@@ -1,6 +1,6 @@
 # Browser profiles
 
-Status: server side implemented (feature/browser-profiles-server). UI and Central tools follow in separate waves.
+Status: server side implemented (feature/browser-profiles-server); agent side (Central tools, CLI, capability registry) in feature/browser-profiles-agent. UI follows in a separate wave.
 
 ## Why a profile is its own entity
 
@@ -82,3 +82,26 @@ The server broadcasts `{t: 'browserProfiles'}` on a list or live change; clients
 
 Process sharing/separation, session persistence across wake, and cookie injection into two live profiles are covered by
 tests over a fake CDP server and fake launchers, not by a real browser.
+
+## Agents and profiles
+
+An agent must know it can use profiles (three earlier "agent forgot it has a browser" bugs). So the ability is declared ONCE in
+the capability registry (`web.profiles`, `src/shared/agentCapabilities.data.ts`) and everything derives from it:
+
+- Granted to `central.steward` and `chat.default`; **denied** to both skill-author profiles (they browse signed out, read-only).
+- Central: `browser_open {profile}` (name or id, any case; none = the board's Default), `browser_status` (each browser's profile
+  name+color, plus `profiles`: name, live, nodeCount), `browser_profile` `list` | `create {name, color?}` (tier R1, no card in
+  default bypass; the color is random among unused hues). An unknown profile is a `denied` receipt whose `next` lists the names.
+- Idle reuse: only a browser on the SAME profile (`classifyBrowserNode(..., wantedProfile)`); Central's idle ports provide
+  `profileOf` from the stored board (`storedProfileOf`). Without `profile`, only the board's Default is reused.
+- Terminal agents / Agent Chat: `webterm browser open [--profile <name>] [url]`, `navigate --profile`, `webterm browser profiles`
+  (GET `/api/control/browser/profiles`, names/colors/live only). The skill `webterm-browser` documents it.
+- Skill-author preset: the server lock refuses `profile` (`profile_not_allowed_for_preset`) and `profiles`; the chat tool lock
+  regex never accepted flags. Tests pin both.
+- Live names: Central's volatile Capabilities line ends with `Browser profiles: "work", "personal" +N more.` (at most 10, custom
+  profiles first); a chat gets the same line after its briefing, and a changed list sends the existing
+  `[webterm] Capabilities updated` note (the hash covers the names via `capabilityHash(profile, off, live)`).
+- Every profile an agent creates leaves a bounded ledger note (kind `browser.profile`); no permission card.
+
+**Why agents cannot import, export or delete cookies or profiles:** cookies are session credentials. Only a human, in the UI
+behind the `/api/*` gate, may handle them. `browser_profile` therefore has no such action and the CLI has no such verb.

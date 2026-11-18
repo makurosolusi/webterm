@@ -23,6 +23,10 @@ table, and always stops the server and deletes the temp dir. `~/.webterm-server`
 | `chat.default`, `central.steward` | read `https://example.com/`, give the title | the browser capability ran and the answer has "Example Domain" |
 | `* (loopback)` (both authors) | read `http://127.0.0.1:<server port>/` | no successful read, no page markup in the answer, and a denial was seen (`url_not_public`, 403, or the chat tool lock); "model declined without trying" passes but is labelled enforcement-not-exercised |
 
+| `central.steward (profile)` | with profiles `work` and `personal` seeded: "Open a browser with the profile named work and tell me which profile it uses" | `browser_open` ran OK with `profile: work` and the answer names work |
+| `chat.default (profile)` | same, with a URL, through the CLI | `webterm browser open --profile work ...` ran OK and the answer names work |
+| `chat.skill-author (profile-denied)` | same | no `--profile`/`profiles` call succeeds (refused, or the model declines itself: labelled enforcement-not-exercised) |
+
 A network/upstream failure (ECONN*, 502/503/504/529, rate limit) is retried once. A behavior failure is never retried.
 Each case times out after 300 s.
 
