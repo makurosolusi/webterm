@@ -10,7 +10,7 @@ import { isSafeNodeId } from '../../../../shared/workspace'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
 import { obj, S } from '../../../capability/capability.schema'
 import type { ToolDef, ToolInput, ToolResult } from '../toolTypes'
-import { type BrowserToolDeps, browserNodesOf, failCode, nextOf } from './browser.status'
+import { type BrowserToolDeps, type ControlVerb, browserNodesOf, failCode, nextOf } from './browser.status'
 
 const ACTIONS = ['get', 'set', 'sync', 'all'] as const
 const ALL_VERBS = ['navigate', 'scroll', 'reload', 'back', 'forward'] as const
@@ -57,7 +57,7 @@ export function createBrowserLayoutDef(deps: BrowserToolDeps): ToolDef {
       const call = action === 'get' ? ['layout', {}] as const
         : action === 'set' ? ['arrange', { spec: input.spec }] as const
           : action === 'sync' ? ['sync', { on: input.on }] as const
-            : [input.verb as string, { all: true, ...(typeof input.url === 'string' ? { url: (parseBrowserUrl(input.url) as { url: string }).url } : {}), ...(typeof input.dy === 'number' ? { dy: input.dy } : {}) }] as const
+            : [input.verb as ControlVerb, { all: true, ...(typeof input.url === 'string' ? { url: (parseBrowserUrl(input.url) as { url: string }).url } : {}), ...(typeof input.dy === 'number' ? { dy: input.dy } : {}) }] as const
       const res = await deps.control(nodeId, call[0], call[1])
       if (res.status !== 200) return { ok: false, code: failCode(res.status, res.body), data: { ...base, ...nextOf(res.body) } }
       const done = (res.body as { data?: Record<string, unknown> } | undefined)?.data ?? {}
