@@ -11,6 +11,7 @@ import type { HostEvent } from './browserHost.targets'
 import type { DeviceChoice } from '../../shared/browser.devices'
 import type { BrowserTabsState } from '../../shared/browser.tabs'
 import type { ConsoleLog } from './browserHost.console'
+import type { DownloadItem } from '../../shared/browser.downloads'
 
 const log = createLogger('browser.ws')
 const errName = (e: unknown) => (e instanceof Error ? e.name : typeof e)
@@ -36,6 +37,8 @@ export interface GatewayHost extends BrowserHostApi {
     setView(nodeId: string, visible: string[], focus?: string): Promise<void>
     setTabViewport(nodeId: string, tabId: string, w: number, h: number, dpr: number): Promise<void>
   }
+  /** Downloads of a node (absent in hosts without them); the whole list goes to a viewer on attach. */
+  downloads?: { list(nodeId: string): DownloadItem[] }
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
 }
@@ -94,6 +97,8 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       host.onEvent((e) => {
         if (e.k === 'dialog') broadcast(e.nodeId, { t: 'dialog', id: e.nodeId, kind: e.kind, message: e.message, defaultPrompt: e.defaultPrompt })
         else if (e.k === 'tab') broadcast(e.nodeId, { t: 'tab', id: e.nodeId, event: e.event })
+        else if (e.k === 'download') broadcast(e.nodeId, { t: 'download', id: e.nodeId, item: e.item })
+        else if (e.k === 'downloads') broadcast(e.nodeId, { t: 'downloads', id: e.nodeId, items: e.items })
         else if (e.k === 'tabNotice') broadcast(e.nodeId, { t: 'tabNotice', id: e.nodeId, message: e.message })
         else if (e.k === 'sync') broadcast(e.nodeId, { t: 'sync', id: e.nodeId, on: e.on })
         else if (e.k === 'syncMiss') broadcast(e.nodeId, { t: 'syncMiss', id: e.nodeId, tab: e.tab, reason: e.reason })

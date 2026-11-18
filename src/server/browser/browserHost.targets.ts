@@ -5,6 +5,7 @@ import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency, 
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
 import type { DeviceSpec } from '../../shared/browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from '../../shared/browser.tabs'
+import type { DownloadItem } from '../../shared/browser.downloads'
 import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromium.flags'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
@@ -35,6 +36,9 @@ export type HostEvent =
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
   | { k: 'tab'; nodeId: string; event: BrowserTabEvent }
   | { k: 'tabNotice'; nodeId: string; message: string }
+  /** A download of the node changed (begun, progress, ended); `downloads` = its whole list changed (an entry was removed). */
+  | { k: 'download'; nodeId: string; item: DownloadItem }
+  | { k: 'downloads'; nodeId: string; items: DownloadItem[] }
   /** Sync mode (browserHost.sync.ts) turned on/off for the node; `syncMiss` = the pane `tab` found no element matching the one acted on. */
   | { k: 'sync'; nodeId: string; on: boolean }
   | { k: 'syncMiss'; nodeId: string; tab: string; reason: 'no_match' | 'cross_origin' | 'error' }
@@ -148,10 +152,13 @@ export class TargetTable {
   }
 }
 
-/** Setup sekali per koneksi browser: temukan target (popup) dan tolak download + izin perangkat. */
-export async function setupConnection(cdp: CdpClient): Promise<void> {
+/**
+ * Setup sekali per koneksi browser: temukan target (popup), atur download + tolak izin perangkat. Download: with a folder,
+ * Chromium saves into it under the download's guid and reports events (the host renames it); without one (no download wiring) it is denied.
+ */
+export async function setupConnection(cdp: CdpClient, downloadPath?: string): Promise<void> {
   await cdp.send(CDP.setDiscoverTargets, { discover: true })
-  await cdp.send(CDP.setDownloadBehavior, { behavior: 'deny' })
+  await cdp.send(CDP.setDownloadBehavior, downloadPath ? { behavior: 'allowAndName', downloadPath, eventsEnabled: true } : { behavior: 'deny' })
   for (const name of DENIED_PERMISSIONS) {
     await cdp.send(CDP.setPermission, { permission: { name }, setting: 'denied' })
   }

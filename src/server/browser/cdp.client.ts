@@ -22,7 +22,7 @@ export const CDP = {
   setUserAgent: 'Emulation.setUserAgentOverride', setEmitTouch: 'Emulation.setEmitTouchEventsForMouse',
   mouse: 'Input.dispatchMouseEvent', key: 'Input.dispatchKeyEvent', insertText: 'Input.insertText',
   ime: 'Input.imeSetComposition', touch: 'Input.dispatchTouchEvent',
-  getVersion: 'Browser.getVersion', setDownloadBehavior: 'Browser.setDownloadBehavior', setPermission: 'Browser.setPermission',
+  getVersion: 'Browser.getVersion', setDownloadBehavior: 'Browser.setDownloadBehavior', cancelDownload: 'Browser.cancelDownload', setPermission: 'Browser.setPermission',
   evaluate: 'Runtime.evaluate', runIfWaiting: 'Runtime.runIfWaitingForDebugger',
   // Shields: intersep request (tahap Request) di halaman + iframe OOPIF yang di-auto-attach.
   setAutoAttach: 'Target.setAutoAttach', fetchEnable: 'Fetch.enable', continueRequest: 'Fetch.continueRequest',
@@ -38,6 +38,7 @@ export const CDP_EVENT = {
   frameNavigated: 'Page.frameNavigated', navigatedWithinDocument: 'Page.navigatedWithinDocument',
   frameStartedLoading: 'Page.frameStartedLoading', frameStoppedLoading: 'Page.frameStoppedLoading',
   dialogOpening: 'Page.javascriptDialogOpening',
+  downloadWillBegin: 'Browser.downloadWillBegin', downloadProgress: 'Browser.downloadProgress', // downloads (browserHost.downloads.ts)
   requestPaused: 'Fetch.requestPaused', attachedToTarget: 'Target.attachedToTarget', detachedFromTarget: 'Target.detachedFromTarget',
   consoleApiCalled: 'Runtime.consoleAPICalled', exceptionThrown: 'Runtime.exceptionThrown', logEntryAdded: 'Log.entryAdded', // console panel
 } as const

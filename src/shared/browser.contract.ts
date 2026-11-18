@@ -6,6 +6,7 @@ import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 import type { BrowserChallenge } from './browser.challenge'
+import type { DownloadItem } from './browser.downloads'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -63,6 +64,7 @@ export const ENV_BROWSER = {
   cookieTtlDays: 'WEBTERM_BROWSER_COOKIE_TTL_DAYS',
   headless: 'WEBTERM_BROWSER_HEADLESS',
   captureLinks: 'WEBTERM_BROWSER_CAPTURE_LINKS',
+  downloads: 'WEBTERM_BROWSER_DOWNLOADS',
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'
@@ -178,6 +180,10 @@ export type ServerMsg =
   | { t: 'sync'; id: string; on: boolean }
   /** Sync could not repeat an action in pane `tab` (no element with that role and name there): show "no match" on that pane only. */
   | { t: 'syncMiss'; id: string; tab: string; reason: 'no_match' | 'cross_origin' | 'error' }
+  /** One download of the node changed (begun, progress, ended); fold with `reduceDownloads`-style replace by id. */
+  | { t: 'download'; id: string; item: DownloadItem }
+  /** The node's whole download list (sent on attach, and after an entry was removed). */
+  | { t: 'downloads'; id: string; items: DownloadItem[] }
   | ConsoleServerMsg
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */
