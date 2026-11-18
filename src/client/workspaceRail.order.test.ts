@@ -1,6 +1,6 @@
 // Pure logic behind the rail tiles: display order, moves, pending order, keys, overflow, drag slot.
 import { describe, expect, it } from 'vitest'
-import { applyPendingOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceRail.order'
+import { applyPendingOrder, applyServerOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceRail.order'
 import { focusIndex, tileKeyIntent } from './workspaceRail.keys'
 import { tilesOverflow } from './workspaceRail.overflow'
 import { slotAtY } from './workspaceRail.drag'
@@ -101,5 +101,17 @@ describe('neighborWorkspaceId (Workspace: Next / Previous)', () => {
     expect(neighborWorkspaceId(['a', 'b', 'c'], 'b', 1)).toBe('c')
     expect(neighborWorkspaceId(['a'], 'a', 1)).toBeNull()
     expect(neighborWorkspaceId(['a', 'b'], null, 1)).toBe('a')
+  })
+})
+
+describe('applyServerOrder', () => {
+  const w = (id: string, position?: number): Workspace => ({ id, name: id, viewport: DEFAULT_VIEWPORT, nodes: [], bridges: [], updatedAt: 1, ...(position === undefined ? {} : { position }) }) // test-only
+  it('sorts by ids, rewrites position, appends unlisted ids in their order', () => {
+    const out = applyServerOrder([w('a', 0), w('b', 1), w('c', 2)], ['c', 'a'])
+    expect(out.map((x) => x.id)).toEqual(['c', 'a', 'b'])
+    expect(orderedWorkspaces(out).map((x) => x.id)).toEqual(['c', 'a', 'b'])
+  })
+  it('leaves entries without a position without one', () => {
+    expect(applyServerOrder([w('a'), w('b')], ['b', 'a'])).toEqual([w('b'), w('a')])
   })
 })

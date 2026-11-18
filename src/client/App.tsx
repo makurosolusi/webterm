@@ -39,6 +39,7 @@ import { setNotifyCanvas } from './osNotify'
 import { useLayoutHistory } from './layoutHistory'
 import { useWorkspaceLifecycle } from './workspaceLifecycle'
 import { useWorkspaceSaver } from './workspaceSaver'
+import { useWorkspaceOrderSave } from './workspaceOrder.save'
 import { useClosedHistory, type ReopenDeps } from './closedHistory'
 import { useCanvasUndo } from './canvasUndo'
 import { useBoardActions } from './App.board'
@@ -130,6 +131,7 @@ export default function App() {
   // Siklus hidup workspace — board MANA yang dibuka (boot, pindah tab, rename, hapus, buat) plus
   // aksi sesi lintas-workspace. Lihat `./workspaceLifecycle`: ref & setter dipinjam apa adanya,
   // jadi `scheduleSave` dan canvas tetap membaca ref yang SAMA dengan yang ditulis di sana.
+  const onReorder = useWorkspaceOrderSave(setWorkspaces)
   const { onSelect, onFocus, closeSession, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onCreateWorkspace, onCreateReported, onNewProject, boot, retryBoot } =
     useWorkspaceLifecycle({
       workspaces, activeId, applyWorkspace, scheduleSave, recordClosed,
@@ -252,8 +254,8 @@ export default function App() {
             vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings,
             // Hidden header: the rail carries a search button (Mod+K still works); other modes keep the pill / icon in the header.
             onOpenPalette: headerMode === 'hidden' ? () => omni.open('all') : undefined,
-            // Compact/Hidden: workspaces are rail tiles. `onReorder` (persisted order, T2b) is wired here once `workspaceOrder.api` exists.
-            workspaceRail: headerMode === 'full' ? undefined : { workspaces, activeId, liveActiveNodes: liveNodes, statuses, onSelect, onRenameWorkspace },
+            // Compact/Hidden: workspaces are rail tiles. `onReorder` saves the persisted order (T2b) and follows the server's answer.
+            workspaceRail: headerMode === 'full' ? undefined : { workspaces, activeId, liveActiveNodes: liveNodes, statuses, onSelect, onRenameWorkspace, onReorder },
             onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary,
             extraStatusItems: [...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems],
           }}

@@ -21,6 +21,7 @@ import type { useBoardActions } from './App.board'
 import LayersPanel from './layersPanel'
 import type { useAppTabs } from './App.tabs'
 import AppHosts from './App.hosts'
+import { appendWorkspace } from './workspaceList.push'
 import type { useStatusReasons } from './App.hooks'
 import type { useAppUrlState } from './App.route'
 import type { AgentStatus, Workspace } from '../shared/workspace'
@@ -98,7 +99,7 @@ export default function AppWorkbench(p: AppWorkbenchProps) {
       <MorningBrief onFocusNode={(id) => void onFocus(id)} onOpenDiff={(ws) => (ws === activeId ? p.onAddDiff() : void onSelect(ws))} onOpenWorkspace={(ws) => void onSelect(ws)} />
       <AppHosts
         activeWs={activeWs}
-        onCreated={(ws) => { p.setWorkspaces((prev) => [ws, ...prev.filter((w) => w.id !== ws.id)]); void onSelect(ws.id) }}
+        onCreated={(ws) => { p.setWorkspaces((prev) => appendWorkspace(prev, ws)); void onSelect(ws.id) }}
         onPlace={(placed, bridges) => { for (const n of placed) addFlowNode(() => n); p.restoreBridges(bridges, placed.map((n) => n.id)) }}
       />
       {p.board && <Suspense fallback={null}><Kanban nodes={p.flowNodes} statuses={statuses} onFocus={onFocus} onClose={() => p.setBoard(false)} /></Suspense>}

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import type { SetStateAction } from 'react'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
-import { addNewWorkspaces } from './workspaceList.push'
+import { addNewWorkspaces, appendWorkspace } from './workspaceList.push'
 
 class FakeWS {
   static instances: FakeWS[] = []
@@ -60,6 +60,14 @@ describe('addNewWorkspaces', () => {
   })
 })
 
+describe('appendWorkspace', () => {
+  test('a created workspace goes to the end; an existing id is moved there, not duplicated', () => {
+    const a = board('a', 'A'), b = board('b', 'B'), c = board('c', 'C')
+    expect(appendWorkspace([a, b], c).map((w) => w.id)).toEqual(['a', 'b', 'c'])
+    expect(appendWorkspace([a, b, c], a).map((w) => w.id)).toEqual(['b', 'c', 'a'])
+  })
+})
+
 describe('useWorkspaceListPush', () => {
   test('t:workspaces refetches the list and adds the new board; the active board is not switched', async () => {
     const { list, frame } = await fresh(async () => [board('w1', 'One'), board('w2', 'Two')])
@@ -70,6 +78,15 @@ describe('useWorkspaceListPush', () => {
     expect(s.workspaces.map((w) => w.id)).toEqual(['w1', 'w2'])
     expect(t.setActiveWs).not.toHaveBeenCalled()
     expect(t.activeWsRef.current?.id).toBe('w1')
+  })
+
+  test('t:workspaces with order re-sorts the list (another window reordered), keeping the entries', async () => {
+    const { list, frame } = await fresh(async () => [board('w1', 'One'), board('w2', 'Two'), board('w3', 'Three')])
+    const { s, t } = target(board('w1', 'One'), [board('w1', 'One'), board('w2', 'Two')])
+    renderHook(() => list.useWorkspaceListPush(t))
+    frame({ t: 'workspaces', order: ['w3', 'w2', 'w1'] })
+    await flush()
+    expect(s.workspaces.map((w) => w.id)).toEqual(['w3', 'w2', 'w1'])
   })
 
   test('a failed refresh is reported, never thrown, and leaves the list alone', async () => {
