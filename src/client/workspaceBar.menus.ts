@@ -6,6 +6,8 @@ import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenu
 import { clearOutput, toggleOutput } from './output/outputCommands'
 import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import { openSetup } from './setup/setup.open'
+import { HEADER_MODES, type HeaderMode } from './headerMode.store'
+import { HEADER_MODE_LABEL } from './headerMode.commands'
 
 /** The active workspace as the menus need it (null: nothing open, so no per-workspace rows). */
 export interface MenuActiveWorkspace {
@@ -28,6 +30,21 @@ export interface WorkspaceMenuInput {
   showLogout?: boolean
   onOpenHelp?: () => void
   onToggleLayout?: () => void
+  /** View > Header radio: the stored mode, its setter and the chord that toggles Hidden (absent: no submenu). */
+  headerMode?: HeaderMode
+  onSetHeaderMode?: (mode: HeaderMode) => void
+  headerKey?: string
+}
+
+/** View > Header: Full / Compact / Hidden as a radio group; the Hidden row shows the toggle chord. */
+function headerSubmenu(current: HeaderMode, set: (mode: HeaderMode) => void, key: string | undefined): VscodeMenuEntry {
+  return {
+    id: 'header',
+    label: 'Header',
+    submenu: HEADER_MODES.map((mode) => ({
+      id: `header-${mode}`, label: HEADER_MODE_LABEL[mode], checked: mode === current, keybinding: mode === 'hidden' ? key : undefined, onSelect: () => set(mode),
+    })),
+  }
 }
 
 /** Builds File / View / Help from props; Help is absent without `onOpenHelp`. */
@@ -52,6 +69,7 @@ export function buildWorkspaceMenus(i: WorkspaceMenuInput): VscodeMenu[] {
 
   const viewItems: VscodeMenuEntry[] = [
     ...(i.onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: i.layoutKey, disabled: !active, onSelect: i.onToggleLayout }] : []),
+    ...(i.headerMode && i.onSetHeaderMode ? [headerSubmenu(i.headerMode, i.onSetHeaderMode, i.headerKey)] : []),
     { id: 'output', label: 'Output', keybinding: i.outputKey, onSelect: toggleOutput },
     { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
   ]

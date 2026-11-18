@@ -236,3 +236,15 @@ VS Code puts the menu behind a hamburger in the Activity Bar when `window.menuBa
 ## Not verifiable without a screen
 
 Tile legibility and the 14px monogram at the tokens' real colors, the feel of the 250ms/500ms reveal timings and the 2px edge trigger on a trackpad, whether the sticky active tile plus All workspaces looks acceptable at 800px height, the compact row's width budget when the pill, side bar toggle and layout toggle share 35px at narrow widths, and how Safari/Firefox treat `Mod+Shift+H`.
+
+## Implementation status
+
+Owner decisions (2026-11-19): all five recommendations approved (`Mod+Shift+H` kept, no tiles in Full, persisted workspace order in T2b, rail widened only by pinning, no frameless native window now).
+
+- **W0 done** (branch `feature/header-modes`): `WorkspaceBar.tsx` split into `workspaceBar.menus.ts`, `useWorkspaceTabActions.ts`, `WorkspaceBar.tabs.tsx`, `WorkspaceBar.hosts.tsx`; no behavior change. `workspaceBarChrome.test.ts` now reads the split files.
+- **T1 done** (same branch): `headerMode.store.ts` (`webterm.headerMode`, default `compact`, derived effective mode), `headerMode.commands.ts` (`View: Header: Full|Compact|Hidden`, `View: Toggle Header`, `Mod+Shift+H`), `useHeaderReveal.ts` (no element; 2px edge, 250ms dwell, `buttons === 0`, hide 500ms after leaving, held open by menus/focus), `headerMode.css`, `headerMode.notice.ts` (one-time "Header is now compact" with "Restore full header"), `AppMenuButton.tsx`, Settings > Appearance > Header (`SettingsHeaderMode.tsx`), View > Header radio in both menus.
+  - Compact (T1 interim, as planned): the title row is dropped; the tab row carries the menu button (first), the workspace tabs, and at its end search, the secondary side bar toggle and the account menu. The layout toggle stays where it was.
+  - Hidden (T1 interim): the Full header (both rows) slides over the canvas on reveal; the rail gets a Search item at the top. Until T2a the workspace tabs live in that overlay, so switching workspaces in Hidden needs a reveal (or `Mod+K`).
+  - Deviation: the menu button sits at the start of the tab row (this section's T1 plan), not yet at the top of the rail; T3 moves it.
+- **Waiting**: T2a (workspace tiles in the rail), T2b (persisted workspace order, server), T3 (menu button, Account and layout toggle into the rail, Show labels, native scan test).
+- **Not observed**: no real browser was used; the reveal timings, the compact row at narrow widths and the hairline are verified by tests and source scans only (see "Not verifiable without a screen").

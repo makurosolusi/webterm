@@ -158,6 +158,7 @@ export default function Dock(props: DockProps) {
   // further. The tooltip shows ⌥⌘B through `commandId` (the side bar toggle), so a rebinding never drifts.
   const attention = props.sessionsAttention ?? 0
   const items: VscodeActivityBarItem[] = [
+    ...(props.onOpenPalette ? [{ id: 'search', label: 'Search', icon: codicon('search'), tooltip: 'Go to anything: nodes, files, URLs, agents, commands', commandId: 'workbench.omnibox' }] : []),
     { id: 'layers', label: 'Layers', icon: codicon('layers'), commandId: SIDE_BAR_VIEW_COMMANDS.layers.id },
     {
       id: 'sessions', label: 'Sessions', icon: codicon('list-tree'), commandId: SIDE_BAR_VIEW_COMMANDS.sessions.id,
@@ -177,6 +178,9 @@ export default function Dock(props: DockProps) {
 
   const onActivitySelect = (id: string) => {
     switch (id) {
+      case 'search':
+        props.onOpenPalette?.()
+        break
       case 'layers':
       case 'sessions':
       case 'history':

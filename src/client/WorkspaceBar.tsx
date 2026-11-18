@@ -17,10 +17,13 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { buildSessionList } from './sessionList'
 import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
+import { AppMenuButton } from './AppMenuButton'
+import { TOGGLE_HEADER_ID } from './headerMode.commands'
+import { setHeaderMode, useHeaderMode, type HeaderMode } from './headerMode.store'
 import { useWorktreeStatuses, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import { AccountMenu } from './AccountMenu'
 import { workspaceColorVar } from '../shared/workspaceColor'
-import { WorkspaceTabStrip } from './WorkspaceBar.tabs'
+import { CompactTail, WorkspaceTabStrip } from './WorkspaceBar.tabs'
 import { WorkspaceBarHosts } from './WorkspaceBar.hosts'
 import { buildWorkspaceMenus } from './workspaceBar.menus'
 import { useWorkspaceTabActions } from './useWorkspaceTabActions'
@@ -63,6 +66,14 @@ export interface WorkspaceBarProps {
   onToggleLayout?: () => void
   /** Layout controls at the right end of the title bar (Toggle Secondary Side Bar). */
   titleActions?: ReactNode
+  /**
+   * Effective header mode (`effectiveHeaderMode`): Full = title bar + tab row; Compact = the tab row
+   * alone, with the menu, search and account joined into it; Hidden = both rows as an overlay that
+   * shows only while `revealed`. Default Full, so existing callers are unchanged.
+   */
+  headerMode?: HeaderMode
+  /** Hidden only: the overlay is currently revealed (`useHeaderReveal`). */
+  revealed?: boolean
 }
 
 export default function WorkspaceBar({
@@ -85,10 +96,14 @@ export default function WorkspaceBar({
   layoutMode,
   onToggleLayout,
   titleActions,
+  headerMode = 'full',
+  revealed = false,
 }: WorkspaceBarProps) {
   const paletteKey = useCommandShortcut('workbench.omnibox')
   const layoutKey = useCommandShortcut('view.layout.toggle')
   const outputKey = useCommandShortcut('output.toggle')
+  const headerKey = useCommandShortcut(TOGGLE_HEADER_ID)
+  const storedMode = useHeaderMode()
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
   const groups = useMemo(
@@ -105,10 +120,14 @@ export default function WorkspaceBar({
     active: activeGroup && { projectId: activeGroup.projectId, projectName: activeGroup.projectName, sessionCount: activeGroup.sessions.length },
     layoutKey, outputKey, onNewWorkspace: () => onNewWorkspace(), onRename: a.setEditingId, onDelete: a.deleteWorkspace,
     onNewFiles, onOpenSettings, onOpenAccount, onLogout, showLogout, onOpenHelp, onToggleLayout,
+    headerMode: storedMode, onSetHeaderMode: setHeaderMode, headerKey,
   })
+  const hidden = headerMode === 'hidden'
+  const overlayState = hidden ? { 'data-revealed': revealed ? 'true' : 'false' } : {}
   return (
     <>
-      <header className="app-titlebar">
+      {headerMode !== 'compact' && (
+      <header className="app-titlebar" data-header-region="" {...overlayState}>
         <div className="brand">
           <span className="brand__mark codicon codicon-terminal" aria-hidden />
           <span className="brand__name">webterm</span>
@@ -142,9 +161,10 @@ export default function WorkspaceBar({
           {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
         </div>
       </header>
+      )}
 
-
-      <div className="app-tabs">
+      <div className="app-tabs" data-header-region="" {...overlayState}>
+        {headerMode === 'compact' && <AppMenuButton menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />}
         <WorkspaceTabStrip
           groups={groups}
           workspaces={workspaces}
@@ -173,6 +193,7 @@ export default function WorkspaceBar({
             </IconTooltip>
           </div>
         )}
+        {headerMode === 'compact' && <CompactTail {...{ onOpenPalette, titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }} />}
       </div>
 
       <WorkspaceBarHosts

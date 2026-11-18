@@ -5,6 +5,7 @@ import type { SettingsPatch } from '../shared/settings.patch'
 import { CanvasBackgroundSection } from './CanvasBackgroundSection'
 import { SettingsGroup, type SegmentedOption } from './SettingsControls'
 import { SegmentedField } from './SettingsFields'
+import { HeaderModeField } from './SettingsHeaderMode'
 
 interface P {
   settings: Settings
@@ -29,6 +30,7 @@ export function AppearanceSection({ settings: s, onChange, projectId }: P): Reac
         <SegmentedField setting="appTheme" id="st-appTheme" label="Theme" value={s.appTheme} options={THEME_OPTIONS}
           hint="System follows your computer’s light or dark mode." onChange={(v) => onChange({ appTheme: v })} />
       </SettingsGroup>
+      <HeaderModeField />
       <CanvasBackgroundSection settings={s} onChange={onChange} projectId={projectId} />
     </>
   )

@@ -13,10 +13,12 @@ import { toggleChatView, useSideBar } from './secondarySideBar.store'
 import { SecondarySideBarToggle } from './App.secondarySideBar'
 import { workspaceColorVar } from '../shared/workspaceColor'
 import type { AppSideBar } from './sideBar/useAppSideBar'
+import { useHeaderReveal } from './useHeaderReveal'
+import type { HeaderMode } from './headerMode.store'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
 
-type PassThrough = 'onAddTerminal' | 'onAddBrowser' | 'onAddAgent' | 'onCreateWorkspace' | 'onUndo' | 'onRedo' | 'canUndo' | 'canRedo' | 'needsYouCount' | 'agentSummary' | 'extraStatusItems'
+type PassThrough = 'onOpenPalette' | 'onAddTerminal' | 'onAddBrowser' | 'onAddAgent' | 'onCreateWorkspace' | 'onUndo' | 'onRedo' | 'canUndo' | 'canRedo' | 'needsYouCount' | 'agentSummary' | 'extraStatusItems'
 
 export interface AppDockProps extends Pick<DockProps, PassThrough> {
   vp: CanvasViewport
@@ -86,16 +88,21 @@ export interface AppWorkspaceBarProps
   omni: ReturnType<typeof useOmnibox>
   setShowSettings: (open: boolean) => void
   setShowHelp: (open: boolean) => void
+  /** Effective header mode (`useEffectiveHeaderMode`). */
+  headerMode: HeaderMode
 }
 
 /** WorkspaceBar wired to App's workspace lifecycle and overlays. */
 export function AppWorkspaceBar({
-  liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onAddFiles, omni, setShowSettings, setShowHelp, ...pass
+  liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onAddFiles, omni, setShowSettings, setShowHelp, headerMode, ...pass
 }: AppWorkspaceBarProps) {
   const layoutMode = useTabLayout().mode
+  const revealed = useHeaderReveal(headerMode === 'hidden')
   return (
     <WorkspaceBar
       {...pass}
+      headerMode={headerMode}
+      revealed={revealed}
       liveActiveNodes={liveNodes}
       onNewWorkspace={onNewProject}
       onRenameWorkspace={onRenameWorkspace}

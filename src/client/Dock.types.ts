@@ -4,6 +4,8 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { SideBarView } from './sideBar/sideBar.view'
 
 export interface DockProps {
+  /** Hidden header mode: adds a Search item at the top of the rail (opens Go to Anything). Absent: no item. */
+  onOpenPalette?: () => void
   onAddTerminal: () => void
   /** Tidak ada = kemampuan browser mati di server; memilih baris "Browser" memunculkan tawaran "Nyalakan". */
   onAddBrowser?: () => void
