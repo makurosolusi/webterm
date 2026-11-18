@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { lifecycleConfig } from './browser/browserLifecycle.service'
 import { agentControlOn, cookieImportOn } from './browser/browser.runtime.parts'
+import { captureLinksOn } from './linkCapture/linkCapture.config'
 import { centralEnabled } from './central/centralModel'
 import { autonomyEnabled } from './central/centralAutonomy'
 import { maxInflightFromEnv, reliabilityEnabled } from './central/autonomyDispatch'
@@ -54,6 +55,8 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],
   // Default 'on': webterm alat developer; agent yang tersambung kabel langsung bisa mengemudikan browser.
   ['WEBTERM_BROWSER_AGENT', () => onOff(agentControlOn(E)), 'browser/browser.runtime.parts.ts:agentControlOn'],
+  // Default 'on': a link a terminal opens belongs to the canvas, so it lands in the canvas browser (docs/decisions/canvas-link-capture.md).
+  ['WEBTERM_BROWSER_CAPTURE_LINKS', () => onOff(captureLinksOn(E)), 'linkCapture/linkCapture.config.ts:captureLinksOn'],
   // Default 'on' (F3-a zero-config): every inbox gate goes to Telegram with Approve once / Deny.
   ['WEBTERM_CHANNEL_APPROVAL_BUTTONS', () => onOff(approvalButtonsOn(E)), 'channels/channelButtons.ts:approvalButtonsOn'],
   // Default 'on' (zero-config): Central always knows the state of the work.

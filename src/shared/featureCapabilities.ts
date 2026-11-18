@@ -75,7 +75,10 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   browser: {
     id: 'browser', title: 'Browser on canvas', implies: [], primaryKey: 'WEBTERM_BROWSER', needs: 'chromium',
     blurb: 'Open web pages as nodes on the canvas.',
-    subs: [{ key: 'WEBTERM_BROWSER_AGENT', label: 'Let agents drive the browser', defaultOn: true, dangerous: true }],
+    subs: [
+      { key: 'WEBTERM_BROWSER_AGENT', label: 'Let agents drive the browser', defaultOn: true, dangerous: true },
+      { key: 'WEBTERM_BROWSER_CAPTURE_LINKS', label: 'Open links from terminals in the canvas browser (off: your machine browser)', defaultOn: true },
+    ],
   },
   files: {
     id: 'files', title: 'Files', implies: [], primaryKey: 'WEBTERM_FILES_VIEWERS',

@@ -29,7 +29,9 @@ describe('central.skill-author: registry == enforcement == briefing', () => {
       if (cap.level === 'granted') {
         expect(canSection(briefing)).toContain(cap.central!.usage)
       } else {
-        expect(cannotSection(briefing)).toContain(cap.denied)
+        // quietWhenDenied (web.links): a profile without a terminal never mentions it, neither under CAN nor under CANNOT.
+        if (cap.quietWhenDenied) expect(cannotSection(briefing)).not.toContain(cap.denied)
+        else expect(cannotSection(briefing)).toContain(cap.denied)
         expect(canSection(briefing)).not.toContain(cap.central?.usage ?? '\0')
       }
     })

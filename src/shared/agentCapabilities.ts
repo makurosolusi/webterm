@@ -14,6 +14,7 @@ export function capabilitiesOf(profileId: ProfileId): ProfileCapability[] {
 }
 
 const withLevel = (profileId: ProfileId, level: ProfileCapability['level']): ProfileCapability[] => capabilitiesOf(profileId).filter((c) => c.level === level)
+const listedDenied = (profileId: ProfileId): ProfileCapability[] => (PROFILES[profileId].listDenied === false ? [] : withLevel(profileId, 'denied').filter((c) => !c.quietWhenDenied))
 const surfaceOf = (profileId: ProfileId): 'central' | 'chat' => (profileId.startsWith('central.') ? 'central' : 'chat')
 
 /** Registry tool names a Central profile may call (derives `MODE_TOOLS`). */
@@ -49,7 +50,7 @@ export function renderCapabilityBriefing(profileId: ProfileId, off: ReadonlySet<
     const how = callForm(profileId, c)
     return [`- ${summaryOf(profileId, c)}${how ? ` How: ${how}.` : ''}`, ...rulesOf(profileId, c).map((r) => `  Rule: ${r}`)]
   })
-  const cannot = PROFILES[profileId].listDenied === false ? [] : withLevel(profileId, 'denied').map((c) => `- ${c.denied}`)
+  const cannot = listedDenied(profileId).map((c) => `- ${c.denied}`)
   const unavailable = split.off.map((c) => `- ${c.short} (switched off in this webterm; say so in one sentence, do not try).`)
   return [
     ...(can.length ? ['WHAT YOU CAN DO', ...can, ''] : []),
@@ -64,7 +65,7 @@ const list = (xs: string[]): string => (xs.length <= 1 ? (xs[0] ?? '') : `${xs.s
 /** One-line capability summary for banners and tooltips (`off` abilities move to "Not available right now"). */
 export function renderCapabilityLine(profileId: ProfileId, off: ReadonlySet<CapabilityId> = NONE): string {
   const split = splitOff(profileId, off)
-  const cannot = PROFILES[profileId].listDenied === false ? [] : withLevel(profileId, 'denied').map((c) => c.short)
+  const cannot = listedDenied(profileId).map((c) => c.short)
   return [
     split.on.length ? `Can ${list(split.on.map((c) => c.short))}.` : '',
     cannot.length ? `Cannot ${list(cannot)}.` : '',

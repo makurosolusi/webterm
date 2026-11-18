@@ -25,7 +25,7 @@ describe('steward web sentences', () => {
 
   it('a switched-off browser tool says so in the live line, from the registry', () => {
     const tools = [{ name: 'browser_read', access: 'off' as const }, { name: 'browser_act', access: 'off' as const }]
-    expect([...stewardOffAbilities(tools)].sort()).toEqual(['web.drive', 'web.read'])
+    expect([...stewardOffAbilities(tools)].sort()).toEqual(['web.drive', 'web.links', 'web.read'])
     const map = renderCapabilityMap(tools)
     expect(map).toContain('read one web page: browser_read (off)')
     expect(map).toContain('Not available right now (switched off): read public web pages (read-only). Not available right now (switched off): drive web pages.')

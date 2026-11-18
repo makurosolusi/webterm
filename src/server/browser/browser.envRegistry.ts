@@ -2,7 +2,6 @@
 // Nama kunci & default berasal dari `browser.contract.ts`. SEMUA fitur mati tanpa
 // `WEBTERM_BROWSER=on` (impor cookie menyala otomatis bersama browser): tidak ada proses Chromium, proxy, rute, maupun jalur `/ws/browser`.
 import { DEFAULT_COOKIE_TTL_DAYS, DEFAULT_DISCARD_MS, DEFAULT_MAX_LIVE, ENV_BROWSER, MAX_LIVE_RANGE } from '../../shared/browser.contract'
-import { ENV_CAPTURE_LINKS } from '../linkCapture/linkCapture.config'
 import { flag, num, text, type EnvSpec } from '../envRegistry.types'
 
 const GROUP = 'browser'
@@ -50,12 +49,11 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Terminal agents cabled to a Browser node may drive it (on by default; turn off per node with the toolbar toggle). Page content is untrusted.',
     dangerous: true,
   }, 'on'),
-  flag(ENV_CAPTURE_LINKS, GROUP, {
+  flag(ENV_BROWSER.captureLinks, GROUP, {
     ...B,
     requires: [BROWSER_ON],
-    audience: 'user',
     label: 'Open links from terminals in the canvas browser',
-    description: 'On: a link a terminal or agent opens (sign-in pages from login commands, `open`, `xdg-open`, $BROWSER) appears as a tab in a Browser node on the canvas, one is added next to the terminal if none is wired. ' +
+    description: 'On: a link a terminal or agent opens (sign-in pages from login commands, open, xdg-open, BROWSER) appears as a tab in a Browser node on the canvas, one is added next to the terminal if none is wired. ' +
       'Off: links open in your machine browser. Applies to terminals started after the change; running ones keep their setting until restarted.',
   }, 'on'),
   text(ENV_BROWSER.allowHosts, GROUP, {

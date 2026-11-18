@@ -49,7 +49,7 @@ export function stewardOffAbilities(tools: readonly MapTool[]): Set<CapabilityId
   const off = new Set<CapabilityId>()
   for (const t of tools) {
     if (t.access !== 'off') continue
-    if (t.name === 'browser_read') off.add('web.read')
+    if (t.name === 'browser_read') { off.add('web.read'); off.add('web.links') } // links need the canvas browser too
     if (t.name === 'browser_act') off.add('web.drive')
     if (t.name === 'browser_profile') off.add('web.profiles')
     if (t.name === 'browser_tab') off.add('web.tabs')

@@ -44,7 +44,7 @@ describe('Capabilities updated note (Central)', () => {
     tools = OFF
     const reply = await ask('m2')
     expect(reply).toContain('[webterm] Capabilities updated: Can ')
-    expect(reply).toContain('Not available right now: read public web pages (read-only) and drive web pages.')
+    expect(reply).toContain('Not available right now: read public web pages (read-only), drive web pages and have links opened from a terminal appear in the canvas browser.')
     expect(reply).toContain('NOT AVAILABLE RIGHT NOW')
     expect(notices('central:global')).toHaveLength(1)
     expect(await ask('m3')).not.toContain('Capabilities updated')

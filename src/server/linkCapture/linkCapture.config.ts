@@ -1,9 +1,10 @@
 // Names shared by the canvas link capture pieces (shims, session env, route, auth). Dependency-free so
 // `auth.ts` and the shim builders can import it without a cycle.
+import { ENV_BROWSER } from '../../shared/browser.contract'
 import { flagOr } from '../envFlag'
 
 /** Settings switch (Settings > Browser): terminal links open in the canvas browser. Default on. */
-export const ENV_CAPTURE_LINKS = 'WEBTERM_BROWSER_CAPTURE_LINKS'
+export const ENV_CAPTURE_LINKS = ENV_BROWSER.captureLinks
 /** Env var holding the PATH of the limited link-open header file of a plain terminal session (never the token). */
 export const LINK_HEADERS_ENV = 'WEBTERM_LINK_HEADERS'
 /** Header carrying the limited "open a URL in my canvas" credential: `<mac>.<nodeId>`. Accepted on `LINK_OPEN_PATH` only. */
