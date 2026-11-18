@@ -5,6 +5,7 @@ import { stateOf } from './browserAgent.verbs.ctx'
 import { actVerbs } from './browserAgent.verbs.act'
 import { readVerbs } from './browserAgent.verbs.read'
 import { consoleVerbs } from './browserAgent.verbs.console'
+import { downloadVerbs } from './browserAgent.verbs.downloads'
 import { timed } from './browserAgent.latency'
 
 export type { AgentCtx, AgentVerbs, ApprovalRequest, BaseVerbs } from './browserAgent.verbs.ctx'
@@ -28,6 +29,7 @@ export function createAgentVerbs(ctx: AgentCtx): BaseVerbs {
   return timedVerbs({
     ...readVerbs(ctx),
     ...consoleVerbs(ctx),
+    ...downloadVerbs(ctx),
     ...actVerbs(ctx),
     async handoff(nodeId) {
       stateOf(ctx, nodeId)

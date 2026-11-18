@@ -17,7 +17,7 @@ export const chatCapabilityProfile = (preset: string | undefined): ProfileId => 
 /** Browser abilities are off while the browser feature or agent control of it is off (the `webterm browser` verbs refuse then). */
 export function chatCapabilityOff(env: NodeJS.ProcessEnv = process.env): Set<CapabilityId> {
   const browser = isEnabled('browser', env) && flagOr(env[ENV_BROWSER.agent], true)
-  const off = new Set<CapabilityId>(browser ? [] : ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout'])
+  const off = new Set<CapabilityId>(browser ? [] : ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout', 'web.downloads'])
   if (!captureActive(env)) off.add('web.links') // the Settings switch or the browser feature is off: new terminals keep the machine browser
   return off
 }
