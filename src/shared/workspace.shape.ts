@@ -1,6 +1,7 @@
 import type { AgentId } from './workspace.agents'
 import { canContextLink, type AgentPermissionMode } from './workspace.capabilities'
 import type { DeviceChoice } from './browser.devices'
+import type { PersistedTabs } from './browser.tabs'
 import type { TabLayout } from './tabLayout.schema'
 import type { AgentChatNodeConfig, AgentChatPreset } from './agentChat.shape'
 
@@ -141,6 +142,7 @@ export interface WsNode {
   profileId?: string      // node 'browser': browser profile (browser.profile.ts); absent = the workspace's Default profile
   device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
   zoom?: number           // node 'browser': page zoom (1 = 100%, browser.zoom.ts); absent = 100%
+  tabs?: PersistedTabs    // node 'browser': tab list (urls/titles/order/cursors) restored after a restart; absent = one tab (browser.tabs.ts)
   chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)
   permissionMode?: AgentPermissionMode // node 'agentChat': per-node mode; absent = settings default
   chatConfig?: AgentChatNodeConfig // node 'agentChat': model / effort / thinking picked in the footer (validChatConfig)

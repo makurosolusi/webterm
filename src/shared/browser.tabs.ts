@@ -46,10 +46,47 @@ export type BrowserTabAction =
 
 /** WS events of one node's tabs; `tabActivated.by` decides whether the human's or the agent's cursor moves. */
 export type BrowserTabEvent =
-  | { type: 'tabCreated'; nodeId: string; tab: BrowserTab; index?: number }
+  /** `reopenedFrom` = id of the closed-history entry this tab was made from (Ctrl+Shift+T); it leaves the history. */
+  | { type: 'tabCreated'; nodeId: string; tab: BrowserTab; index?: number; reopenedFrom?: string }
   | { type: 'tabUpdated'; nodeId: string; tabId: string; patch: Partial<Omit<BrowserTab, 'tabId'>> }
-  | { type: 'tabClosed'; nodeId: string; tabId: string }
+  /** `remember: false` = the tab left the node (pop-out) and does not enter the closed history. */
+  | { type: 'tabClosed'; nodeId: string; tabId: string; remember?: boolean }
+  | { type: 'tabMoved'; nodeId: string; tabId: string; toIndex: number }
   | { type: 'tabActivated'; nodeId: string; tabId: string; by: 'human' | 'agent' }
+
+/** What a node keeps on the board (`WsNode.tabs`): urls and titles only, no binary favicon; every tab restores discarded but the active one. */
+export interface PersistedTab { tabId: string; url: string; title: string; favicon?: string; openerTabId?: string }
+export interface PersistedTabs { tabs: PersistedTab[]; activeTabId: string | null; agentTabId: string | null }
+
+export const MAX_FAVICON_URL_LENGTH = 512
+const FAVICON_URL = /^https?:\/\//i
+
+/** Board value as safe `PersistedTabs`: junk entries dropped, duplicates and overflow cut, cursors pointed at a surviving tab; undefined when nothing usable. */
+export function validPersistedTabs(v: unknown): PersistedTabs | undefined {
+  if (typeof v !== 'object' || v === null) return undefined
+  const raw = v as Record<string, unknown>
+  if (!Array.isArray(raw.tabs)) return undefined
+  const seen = new Set<string>()
+  const tabs: PersistedTab[] = []
+  for (const t of raw.tabs) {
+    if (tabs.length >= MAX_TABS_PER_NODE) break
+    if (typeof t !== 'object' || t === null) continue
+    const o = t as Record<string, unknown>
+    if (typeof o.tabId !== 'string' || o.tabId === '' || o.tabId.length > 64 || seen.has(o.tabId)) continue
+    const url = validateTabUrl(o.url ?? '')
+    if (!url.ok) continue
+    seen.add(o.tabId)
+    const favicon = typeof o.favicon === 'string' && o.favicon.length <= MAX_FAVICON_URL_LENGTH && FAVICON_URL.test(o.favicon) ? o.favicon : undefined
+    tabs.push({
+      tabId: o.tabId, url: url.url, title: sanitizeTabTitle(o.title), ...(favicon ? { favicon } : {}),
+      ...(typeof o.openerTabId === 'string' && o.openerTabId !== '' ? { openerTabId: o.openerTabId } : {}),
+    })
+  }
+  if (tabs.length === 0) return undefined
+  const pick = (id: unknown): string | null => (typeof id === 'string' && seen.has(id) ? id : null)
+  const activeTabId = pick(raw.activeTabId) ?? tabs[0].tabId
+  return { tabs, activeTabId, agentTabId: pick(raw.agentTabId) ?? activeTabId }
+}
 
 export const emptyTabsState = (): BrowserTabsState => ({ tabs: [], activeTabId: null, agentTabId: null, closed: [] })
 
@@ -181,10 +218,15 @@ export function applyTabEvent(state: BrowserTabsState, e: BrowserTabEvent): Brow
       if (state.tabs.some((t) => t.tabId === e.tab.tabId)) return state
       const tabs = state.tabs.slice()
       tabs.splice(e.index ?? tabs.length, 0, e.tab)
-      return { ...state, tabs, activeTabId: state.activeTabId ?? e.tab.tabId, agentTabId: state.agentTabId ?? e.tab.tabId }
+      const closed = e.reopenedFrom ? state.closed.filter((t) => t.tabId !== e.reopenedFrom) : state.closed
+      return { ...state, tabs, closed, activeTabId: state.activeTabId ?? e.tab.tabId, agentTabId: state.agentTabId ?? e.tab.tabId }
     }
     case 'tabUpdated': return { ...state, tabs: state.tabs.map((t) => (t.tabId === e.tabId ? { ...t, ...e.patch } : t)) }
-    case 'tabClosed': return removeTabs(state, new Set([e.tabId]), true)
+    case 'tabClosed': return removeTabs(state, new Set([e.tabId]), e.remember !== false)
+    case 'tabMoved': {
+      const tabs = reorderTabs(state.tabs, e.tabId, e.toIndex)
+      return tabs === state.tabs ? state : { ...state, tabs }
+    }
     case 'tabActivated':
       if (!state.tabs.some((t) => t.tabId === e.tabId)) return state
       return e.by === 'agent' ? { ...state, agentTabId: e.tabId } : { ...state, activeTabId: e.tabId }

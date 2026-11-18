@@ -18,12 +18,13 @@ const SID = 'S-T1' // sessionId yang dibuat server tiruan untuk target pertama
 const callsOf = (method: string) => rig.fake.calls.filter((c) => c.method === method)
 async function openLive(url = 'https://example.com/', guard = stubGuard(['evil.test'])) {
   rig = await makeHostRig(guard)
-  const events: HostEvent[] = []
+  const events: HostEvent[] = [] // dialog/error events; tab events go to `tabEvents` so crash/dialog counts stay exact
+  const tabEvents: HostEvent[] = []
   const states: BrowserState[] = []
-  rig.host.onEvent((e) => events.push(e))
+  rig.host.onEvent((e) => (e.k === 'tab' || e.k === 'tabNotice' ? tabEvents : events).push(e))
   rig.host.onState((s) => states.push(s))
   const st = await rig.host.open('n1', 'w1', url)
-  return { events, states, st }
+  return { events, tabEvents, states, st }
 }
 
 describe('open', () => {
@@ -208,25 +209,24 @@ describe('navigation', () => {
     await expect(rig.host.navAction('n1', 'go')).rejects.toMatchObject({ code: 'bad_request' })
   })
 
-  it('a popup (window.open) is closed and announced as a new node; the opener page is NOT navigated', async () => {
-    const { events } = await openLive()
+  it('a popup (window.open) becomes a tab of the opener node: its page is kept (window.opener works) and the opener is NOT navigated', async () => {
+    const { tabEvents } = await openLive()
     const info = { targetId: 'P1', type: 'page', title: '', url: 'https://pop.example/x', openerId: 'T1' }
     rig.fake.emit(CDP_EVENT.targetCreated, { targetInfo: info })
-    await waitFor(() => events.some((e) => e.k === 'popup'), 'popup event')
-    expect(events).toContainEqual({ k: 'popup', nodeId: 'n1', url: 'https://pop.example/x' })
-    await waitFor(() => callsOf(CDP.closeTarget).length === 1, 'popup closed')
-    expect(callsOf(CDP.closeTarget)[0].params).toEqual({ targetId: 'P1' })
+    await waitFor(() => tabEvents.some((e) => e.k === 'tab' && e.event.type === 'tabCreated'), 'tab created')
+    expect(callsOf(CDP.attachToTarget).map((c) => c.params.targetId)).toEqual(['T1', 'P1'])
+    expect(callsOf(CDP.closeTarget)).toHaveLength(0) // the popup page is adopted, never closed
     expect(callsOf(CDP.navigate).map((c) => c.params.url)).toEqual(['https://example.com/']) // pembuka tetap di halamannya
-    expect(rig.host.state('n1')?.url).toBe('https://example.com/')
+    expect(rig.host.tabsState('n1')?.tabs.map((t) => t.url)).toEqual(['https://example.com/', 'https://pop.example/x'])
+    expect(rig.host.tabsState('n1')?.tabs[1].openerTabId).toBe(rig.host.tabsState('n1')?.tabs[0].tabId)
   })
 
   it('a popup that gets its url later is handled on targetInfoChanged', async () => {
-    const { events } = await openLive()
+    const { tabEvents } = await openLive()
     const base = { targetId: 'P2', type: 'page', title: '', openerId: 'T1' }
     rig.fake.emit(CDP_EVENT.targetCreated, { targetInfo: { ...base, url: '' } })
     rig.fake.emit(CDP_EVENT.targetInfoChanged, { targetInfo: { ...base, url: 'https://late.example/' } })
-    await waitFor(() => events.some((e) => e.k === 'popup'), 'late popup event')
-    expect(events).toContainEqual({ k: 'popup', nodeId: 'n1', url: 'https://late.example/' })
+    await waitFor(() => tabEvents.some((e) => e.k === 'tab' && e.event.type === 'tabCreated' && e.event.tab.url === 'https://late.example/'), 'late popup tab')
   })
 })
 

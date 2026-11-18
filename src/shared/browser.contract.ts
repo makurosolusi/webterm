@@ -3,6 +3,7 @@
 // Murni deklarasi: tanpa import client/server, tanpa side effect saat import.
 import type { ConsoleClientMsg, ConsoleLevel, ConsoleServerMsg } from './browser.console'
 import type { DeviceChoice } from './browser.devices'
+import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -150,7 +151,14 @@ export type ServerMsg =
   | { t: 'cursor'; id: string; css: string }
   | { t: 'copy'; id: string; text: string }
   | { t: 'error'; id: string; code: BrowserErrorCode; hostname?: string }
+  /** Legacy: popups are tabs now (`tab` events); the server no longer sends this and the UI integration removes the handler. */
   | { t: 'popup'; id: string; url: string }
+  /** Whole tab list of the node (sent on attach). */
+  | { t: 'tabs'; id: string; state: BrowserTabsState }
+  /** One change of the node's tab list; fold with `applyTabEvent`. */
+  | { t: 'tab'; id: string; event: BrowserTabEvent }
+  /** Human-readable reason an action on the tabs was refused or redirected (e.g. "Tab limit (8) reached"). */
+  | { t: 'tabNotice'; id: string; message: string }
   | ConsoleServerMsg
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */
@@ -225,7 +233,7 @@ export interface VerbData {
   open: { nodeId: string; url: string; note: string }
   /** Node-token `navigate` with no cabled browser opens one first and also returns the `open` fields. */
   navigate: { ok: true } & Partial<VerbData['open']>
-  wait: { ok: true }; click: { ok: true }; type: { ok: true }
+  wait: { ok: true }; click: { ok: true; newTab?: string }; type: { ok: true }
   console: { content: string; count: number; dropped: number; note?: string }
   press: { ok: true }; scroll: { ok: true }
   handoff: { lease: 'agent'; ttlMs: number }

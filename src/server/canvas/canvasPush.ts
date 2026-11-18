@@ -31,7 +31,7 @@ export type CanvasRemoveResult =
 /** Fields of an existing node a push may change; `null` clears title/color/chatSessionId/agentId/sessionId/cmd. Any other key is ignored.
  *  The agent chat fields are written by the node's server session (agentChat.runtime.ts), and kind/agentId/sessionId/cmd
  *  by the Claude view switch (agentChat.view.ts), never by Central's canvas.edit (its ops set only layout/look fields). */
-export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode' | 'kind'>> & {
+export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode' | 'kind' | 'tabs'>> & {
   title?: string | null
   color?: string | null
   chatSessionId?: string | null

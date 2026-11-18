@@ -6,7 +6,7 @@ import { createLogger } from '../logs'
 import { CDP, CDP_EVENT } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
 import { isInternalUrl, popupOf, pushFrame } from './browserHost.targets'
-import type { HostEvent, NavGuard, NodeRec, TargetTable } from './browserHost.targets'
+import type { BgTab, HostEvent, NavGuard, NodeRec, PendingPopup, TargetTable } from './browserHost.targets'
 
 const log = createLogger('browser.host')
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -20,8 +20,14 @@ export interface RouterOps {
   refresh(rec: NodeRec): Promise<void>
   fire(rec: NodeRec, method: string, params?: object): void
   closeTarget(opener: NodeRec, targetId: string): Promise<void>
-  /** Popup sah/terblokir diputuskan Shields; pembuka TIDAK pernah dinavigasi ke URL popup. */
-  popup(opener: NodeRec, url: string): void
+  /** Popup sah/terblokir diputuskan Shields (true = boleh); pembuka TIDAK pernah dinavigasi ke URL popup. */
+  popup(opener: NodeRec, url: string): boolean
+  /** Popup yang lolos Shields menjadi tab di node pembuka (halamannya diadopsi, bukan dibuat ulang). */
+  adopt(opener: NodeRec, openerTargetId: string | undefined, targetId: string, url: string): Promise<void>
+  /** Tab latar: event sesi, judul, dan hilangnya halaman (tidak menjatuhkan node). */
+  bgEvent(b: BgTab, method: string, p: Record<string, unknown>, sessionId: string): void
+  bgTitle(b: BgTab, title: string): void
+  bgGone(b: BgTab): void
   /** State Shields untuk halaman baru (hitungan direset per muat halaman, seperti Brave). */
   pageState(url: string): Partial<BrowserState>
   detached(p: Record<string, unknown>): void
@@ -29,12 +35,14 @@ export interface RouterOps {
 
 /** Pembuat handler `'*'` untuk satu koneksi CDP; popup yang belum punya URL diingat per router. */
 export function createEventRouter(ops: RouterOps): CdpHandler {
-  const popups = new Map<string, NodeRec>()
+  const popups = new Map<string, PendingPopup>()
   const { table } = ops
 
   const crashTarget = (targetId: unknown) => {
     const rec = table.target(targetId)
-    if (rec) ops.crash(rec)
+    if (rec) { ops.crash(rec); return }
+    const bg = table.bgTarget(targetId)
+    if (bg) ops.bgGone(bg)
   }
 
   const onFrameNavigated = (rec: NodeRec, p: Record<string, unknown>) => {
@@ -64,8 +72,9 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
   }
 
   /**
-   * Popup (`window.open`/`target=_blank`) -> ditutup, lalu Shields memutuskan: blokir+hitung atau node baru.
-   * Dulu pembuka dinavigasi ke URL popup: iklan popunder menimpa halaman pengguna (laporan retrogames.cc).
+   * Popup (`window.open`/`target=_blank`): Shields memutuskan; yang lolos menjadi tab baru di node pembuka (halamannya
+   * diadopsi supaya `window.opener`/postMessage OAuth tetap jalan), sisanya ditutup. Pembuka tidak pernah dinavigasi ke
+   * URL popup oleh kita (laporan retrogames.cc: popunder menimpa halaman pengguna).
    */
   const onTargetInfo = (p: Record<string, unknown>, created: boolean) => {
     const info = p.targetInfo as { targetId: string; type: string; title: string; url: string; openerId?: string } | undefined
@@ -75,16 +84,27 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       if (!created) ops.patch(owner, { title: info.title })
       return
     }
+    const bg = table.bgTarget(info.targetId)
+    if (bg) {
+      if (!created) ops.bgTitle(bg, info.title)
+      return
+    }
     const pop = popupOf(table, popups, created, info)
     if (!pop) return
     const nodeId = pop.opener.nodeId
-    ops.closeTarget(pop.opener, info.targetId)
-      .catch((err) => log.warn('browser.popup', 'closing popup failed', { ids: { nodeId }, error: errMsg(err) }))
-    ops.popup(pop.opener, pop.url)
+    if (!ops.popup(pop.opener, pop.url)) {
+      ops.closeTarget(pop.opener, info.targetId)
+        .catch((err) => log.warn('browser.popup', 'closing popup failed', { ids: { nodeId }, error: errMsg(err) }))
+      return
+    }
+    ops.adopt(pop.opener, pop.openerId, info.targetId, pop.url)
+      .catch((err) => log.warn('browser.popup', 'adopting popup failed', { ids: { nodeId }, error: errMsg(err) }))
   }
 
   return (p, sessionId, method) => {
     const rec = table.session(sessionId)
+    const bg = rec ? undefined : table.bgSession(sessionId)
+    if (bg && sessionId) { ops.bgEvent(bg, method, p, sessionId); if (method !== CDP_EVENT.detachedFromTarget) return }
     switch (method) {
       case CDP_EVENT.screencastFrame: return rec && pushFrame(rec, p)
       case CDP_EVENT.frameNavigated: return rec && onFrameNavigated(rec, p)
@@ -107,8 +127,10 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       case CDP_EVENT.targetInfoChanged: return onTargetInfo(p, false)
       case CDP_EVENT.detachedFromTarget: {
         // Sesi UTAMA node lepas (target ditukar/ditutup tanpa `discard`) = target hilang; `discard` unbind lebih dulu.
-        const main = table.session(typeof p.sessionId === 'string' ? p.sessionId : undefined)
+        const gone = typeof p.sessionId === 'string' ? p.sessionId : undefined
+        const main = table.session(gone)
         if (main) ops.crash(main)
+        else { const b = table.bgSession(gone); if (b) ops.bgGone(b) }
         return ops.detached(p)
       }
     }

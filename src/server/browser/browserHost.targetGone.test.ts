@@ -14,7 +14,7 @@ const callsOf = (method: string) => rig.fake.calls.filter((c) => c.method === me
 async function openLive() {
   rig = await makeHostRig()
   const events: HostEvent[] = []
-  rig.host.onEvent((e) => events.push(e))
+  rig.host.onEvent((e) => { if (e.k !== 'tab' && e.k !== 'tabNotice') events.push(e) }) // tab events are covered by the tabs tests
   await rig.host.open('n1', 'w1', 'https://example.com/')
   return events
 }
