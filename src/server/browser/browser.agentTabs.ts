@@ -3,10 +3,12 @@
 // Nodes with one tab (or whose agent tab is the view) take the unchanged host path.
 import type { BrowserHostApi } from '../../shared/browser.contract'
 import type { BrowserHost } from './browserHost.service'
-import type { AgentVerbs } from './browserAgent.verbs.ctx'
+import type { BaseVerbs } from './browserAgent.verbs.ctx'
 
 /** How long a click waits for a popup tab to appear before it reports none. */
-export const NEW_TAB_WAIT_MS = 300
+// 300 ms was too short with a real Chromium (smoke: the popup tab appeared after the click had already answered, so the model
+// read the old tab); a click with no popup pays this once.
+export const NEW_TAB_WAIT_MS = 1000
 
 /** Host the verbs use: per-tab when the agent's tab is not the human's view. */
 export function agentTabHost(host: BrowserHost): BrowserHostApi {
@@ -35,7 +37,7 @@ export function agentTabHost(host: BrowserHost): BrowserHostApi {
  * `click` that opens a popup/new tab: the popup adoption moves the agent's cursor there (the click runs while the agent
  * holds the lease) and the result names it as `newTab`. Old clients ignore the extra field.
  */
-export function withNewTab(verbs: AgentVerbs, host: BrowserHost): AgentVerbs {
+export function withNewTab(verbs: BaseVerbs, host: BrowserHost): BaseVerbs {
   return {
     ...verbs,
     async click(nodeId, body) {

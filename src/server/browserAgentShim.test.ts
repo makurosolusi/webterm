@@ -73,6 +73,12 @@ describe('artifacts', () => {
     expect(md).not.toMatch(/wcap_/)
   })
 
+  it('SKILL.md teaches tabs: the verbs, --tab, newTab, stale_tab_ref, the limit, and one node over many', () => {
+    const md = buildBrowserSkillBody('/x/webterm-browser')
+    for (const t of ['`tabs`', '`tab new [url]`', '`tab switch <id>`', '`tab close <id>`', '`--tab <id>`', 'newTab', 'stale_tab_ref', 'tab_limit', 'at most 8', 'instead of adding nodes', 'share the node\'s profile']) expect(md, t).toContain(t)
+    expect(md).toContain('`tab new|switch|close`')
+  })
+
   it('SKILL.md has no handoff step and no stop-and-wait; act verbs take control and the safety sections stay', () => {
     const md = buildBrowserSkillBody('/x/webterm-browser')
     expect(md).not.toMatch(/handoff/i)

@@ -27,8 +27,25 @@ table, and always stops the server and deletes the temp dir. `~/.webterm-server`
 | `chat.default (profile)` | same, with a URL, through the CLI | `webterm browser open --profile work ...` ran OK and the answer names work |
 | `chat.skill-author (profile-denied)` | same | no `--profile`/`profiles` call succeeds (refused, or the model declines itself: labelled enforcement-not-exercised) |
 
+| `chat.default (tab-open)` | a local site (served by the smoke on a random loopback port): "Open http://127.0.0.1:<port>/ in a browser node, click the link Open B (it opens in a new tab), and tell me the heading of the new tab" | a `webterm browser click` succeeded and its answer carried `newTab`; the answer has `Page B Heading`; the run added exactly ONE browser node to the board |
+| `central.steward (tab-multi)` | "Use ONE browser node: load page A in it, then page C in a second tab of that same node; give both titles" | `browser_tab` ran OK with a url; the answer has `Page A` and `Page C`; at most one browser node added (an idle one may be reused) |
+| `chat.skill-author (tab-denied)` | asks for `tab new` / `tabs` | no tab verb succeeds (refused, or the model declines itself: labelled enforcement-not-exercised) |
+
+Tab cases clear the browser nodes of the smoke board first (so no tabs are left over from an earlier case) and count the nodes
+they add. Run only them with `npm run smoke:capabilities -- --tabs`. The loopback site is allowed for plain agents because the
+smoke server binds loopback (`webterm` hard-denies only its own port); it is refused for the author profiles by the public-URL lock.
+
 A network/upstream failure (ECONN*, 502/503/504/529, rate limit) is retried once. A behavior failure is never retried.
 Each case times out after 300 s.
+
+## Findings from the tab cases (2026-11-18)
+
+Run 1 failed twice, for two non-briefing reasons, and both were fixed (the briefing did not change between runs):
+a click on a `target=_blank` link answered before the popup tab existed (`NEW_TAB_WAIT_MS` 300 ms was too short with a real Chromium;
+now 1000 ms, a click without a popup pays it once), and the steward case reused a browser node that an earlier case had left with
+tabs (the tab cases now clear the board's browser nodes first). Run 2: all three PASS (chat.default 26 s, central.steward 25 s). The
+`tab-denied` control passed as "model declined itself": enforcement of the tab verbs is proven by `browserControl.presetLock.test.ts`
+and the registry parity tests, not by this run.
 
 ## When to run it
 

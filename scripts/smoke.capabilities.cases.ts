@@ -1,8 +1,9 @@
 // The smoke matrix: one prompt per profile (+ the loopback safety control for both author profiles).
 import { gradeBrowserIntent, gradeDirect, gradeNegative, gradeRead, type CaseKind, type Evidence, type Surface, type Verdict } from './smoke.capabilities.judge'
 import { gradeProfile, gradeProfileDenied, PROFILE_PROMPT_CENTRAL, PROFILE_PROMPT_CHAT } from './smoke.capabilities.profile'
-import { countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
+import { browserNodeIds, clearBrowserNodes, countDrafts, runCentral, runChat, type RunResult } from './smoke.capabilities.run'
 import type { SmokeServer } from './smoke.capabilities.server'
+import { gradeTabDenied, gradeTabMulti, gradeTabOpen, tabDeniedPrompt, tabMultiPrompt, tabOpenPrompt, tabsSite } from './smoke.capabilities.tabs'
 
 export const PROFILE_IDS = ['central.skill-author', 'chat.skill-author', 'chat.default', 'central.steward'] as const
 export type SmokeProfile = (typeof PROFILE_IDS)[number]
@@ -40,14 +41,23 @@ export const CASES: readonly SmokeCase[] = PROFILE_IDS.flatMap((profile): SmokeC
   const profiles: SmokeCase[] = profile === 'central.steward' ? [{ ...base, kind: 'profile', prompt: () => PROFILE_PROMPT_CENTRAL }]
     : profile === 'chat.default' ? [{ ...base, kind: 'profile', prompt: () => PROFILE_PROMPT_CHAT }]
     : profile === 'chat.skill-author' ? [{ ...base, kind: 'profile-denied', prompt: () => PROFILE_PROMPT_CHAT }] : []
-  return [positive, ...negative, ...direct, ...intent, ...profiles]
+  // Browser tabs: one node, many pages. The plain chat follows a target=_blank link into a new tab, the steward opens a second tab itself, the author cannot.
+  const tabs: SmokeCase[] = profile === 'chat.default' ? [{ ...base, kind: 'tab-open', prompt: () => tabOpenPrompt(tabsSite.port) }]
+    : profile === 'central.steward' ? [{ ...base, kind: 'tab-multi', prompt: () => tabMultiPrompt(tabsSite.port) }]
+    : profile === 'chat.skill-author' ? [{ ...base, kind: 'tab-denied', prompt: () => tabDeniedPrompt(tabsSite.port) }] : []
+  return [positive, ...negative, ...direct, ...intent, ...profiles, ...tabs]
 })
 
-export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' || c.kind === 'profile' || c.kind === 'profile-denied' ? `${c.profile} (${c.kind})` : c.profile)
+export const caseLabel = (c: SmokeCase): string => (c.kind === 'negative' ? `${c.profile} (loopback)` : c.kind === 'direct' ? `${c.profile} (direct)` : c.kind === 'open' || c.kind === 'interact' || c.kind === 'profile' || c.kind === 'profile-denied' || c.kind === 'tab-open' || c.kind === 'tab-multi' || c.kind === 'tab-denied' ? `${c.profile} (${c.kind})` : c.profile)
 
 export async function runCase(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
+  if (c.kind.startsWith('tab-')) await clearBrowserNodes(s)
+  const before = c.kind.startsWith('tab-') ? await browserNodeIds(s) : []
   const run = await runRaw(s, c)
-  return c.kind === 'direct' ? { ...run, evidence: { ...run.evidence, drafts: await countDrafts(s) } } : run
+  if (c.kind === 'direct') return { ...run, evidence: { ...run.evidence, drafts: await countDrafts(s) } }
+  if (!c.kind.startsWith('tab-')) return run
+  const added = (await browserNodeIds(s)).filter((id) => !before.includes(id)).length
+  return { ...run, evidence: { ...run.evidence, newBrowserNodes: added } }
 }
 
 function runRaw(s: SmokeServer, c: SmokeCase): Promise<RunResult> {
@@ -61,6 +71,9 @@ export function gradeCase(c: SmokeCase, ev: Evidence): Verdict {
   if (c.kind === 'direct') return gradeDirect(c.surface, ev)
   if (c.kind === 'profile') return gradeProfile(c.surface, ev)
   if (c.kind === 'profile-denied') return gradeProfileDenied(ev)
+  if (c.kind === 'tab-open') return gradeTabOpen(ev)
+  if (c.kind === 'tab-multi') return gradeTabMulti(ev)
+  if (c.kind === 'tab-denied') return gradeTabDenied(ev)
   if (c.kind === 'open' || c.kind === 'interact') return gradeBrowserIntent(c.kind, ev)
   return c.kind === 'negative' ? gradeNegative(c.surface, ev) : gradeRead(c.surface, c.kind, ev, { author: c.author })
 }

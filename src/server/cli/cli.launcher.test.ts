@@ -196,6 +196,35 @@ describe('old shims are aliases that still work', () => {
     expect(run(['browser', 'snapshot', '--profile', 'work'], env).argv).toEqual([]) // no request left the machine
   })
 
+  it('webterm browser tabs / tab new|switch|close / --tab send the tab bodies to the control route', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    const url = (verb: string) => `http://127.0.0.1:8700/api/control/browser/${verb}`
+    const tabs = run(['browser', 'tabs'], env)
+    expect(tabs.status).toBe(0)
+    expect(tabs.argv).toContain(url('tabs'))
+    expect(run(['browser', 'tab', 'new', 'https://example.com/b'], env).argv).toContain('{"action":"new","url":"https://example.com/b"}')
+    expect(run(['browser', 'tab', 'new'], env).argv).toContain('{"action":"new"}')
+    expect(run(['browser', 'tab', 'switch', 't2'], env).argv).toContain('{"action":"switch","tab":"t2"}')
+    expect(run(['browser', 'tab', 'close', 't2'], env).argv).toContain('{"action":"close","tab":"t2"}')
+    // --tab joins the verb's own body, and a body-less verb gets just the tab
+    expect(run(['browser', 'snapshot', '--tab', 't3'], env).argv).toContain('{"tab":"t3"}')
+    expect(run(['browser', 'click', 'e5', 's2', '--tab', 't3'], env).argv).toContain('{"ref":"e5","snapId":"s2","tab":"t3"}')
+    expect(run(['browser', 'navigate', 'https://example.com/', '--tab', 't3'], env).argv).toContain('{"url":"https://example.com/","tab":"t3"}')
+    const status = run(['browser', 'status', '--tab', 't3'], env)
+    expect(status.argv).toEqual(expect.arrayContaining(['-X', 'POST', '{"tab":"t3"}'])) // a GET would drop the body
+  })
+
+  it('--tab and the tab verbs refuse bad input before any request leaves the machine', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    for (const args of [['open', '--tab', 't2'], ['tab', 'new', '--tab', 't2'], ['tabs', '--tab', 't2'], ['snapshot', '--tab', 't2;rm'], ['snapshot', '--tab'], ['tab', 'switch'], ['tab', 'close'], ['tab', 'explode', 't2'], ['tab']]) {
+      const r = run(['browser', ...args], env)
+      expect([args, r.status]).toEqual([args, 2])
+      expect(r.argv).toEqual([])
+    }
+  })
+
   it('context.sh <verb> reaches the context-link route through the CLI', () => {
     installWebtermCli(home())
     const shim = join(root, 'context.sh')

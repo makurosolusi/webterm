@@ -3,6 +3,7 @@
 import type { Evidence, ToolEvidence, ToolState } from './smoke.capabilities.judge'
 
 const HEAD = 80
+const OUTPUT_HEAD = 600
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
@@ -49,6 +50,7 @@ export function chatEvidence(events: unknown[]): Evidence {
         command: str(rec(ev.input).command),
         state: state === 'done' ? 'ok' : state === 'denied' ? 'denied' : state === 'error' ? 'failed' : 'pending',
         code: str(ev.result).replace(/\s+/g, ' ').slice(0, HEAD),
+        output: str(ev.result).replace(/\s+/g, ' ').slice(0, OUTPUT_HEAD),
       })
     }
     if (ev.t === 'message' && ev.role === 'assistant' && Array.isArray(ev.parts)) {

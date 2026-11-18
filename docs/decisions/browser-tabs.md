@@ -152,6 +152,43 @@ ulang. Tes regresi fake-CDP ada di `browserHost.tabs.test.ts`. Belum terverifika
 Linux/Windows, dan klik manusia nyata lewat `Input.dispatchMouseEvent` (klik di tes memakai `element.click()` dengan
 `userGesture`).
 
+## Agent (P3)
+Code: `browser.agentTabs.verbs.ts` (`withTabs`: verbs `tabs`/`tab`, `--tab`, `stale_tab_ref`, snapshot header), `src/shared/browser.agentTabs.ts`
+(compact tab view), `central/tools/defs/browser.tab.ts`, registry capability `web.tabs` (`agentCapabilities.data.ts`).
+
+- **Verbs.** `webterm browser tabs` (read: id, title, host, `active` = the human's tab, `agent` = the agent's working tab, `opener`,
+  `state` ready/loading/discarded/crashed; never a full URL), `tab new [url]`, `tab switch <id>`, `tab close <id>` (act: they take the
+  lease like any act verb). Every page verb (`status snapshot screenshot wait console navigate click type press scroll`) takes `--tab <id>`.
+  Control route: `tabs` = `browser.read`, `tab` = `browser.act` (`BROWSER_VERB_CAP`).
+- **`--tab` is sticky.** It selects the tab (moves `agentTabId` through `tabApi.activate(by:'agent')`) and then runs the verb on it, so the
+  next verb without `--tab` is in the same tab. Chosen over "act there once and come back": coming back would move the human's view too
+  while "follow agent" is on. The human's tab moves only by the server's follow rule, never by `--tab` alone.
+- **Click that opens a tab.** The server already moves `agentTabId`; the result carries `newTab` and a `note` ("Opened a new tab t3: <title>;
+  you are now on it."), so the model reads the new page with the next `snapshot`.
+- **Refs belong to a tab.** Each snapshot remembers the tab it was taken in (answer field `tab`). A `click/type/wait` whose snapshot came from
+  another tab is refused with `stale_tab_ref` (409) and `next: "snapshot tab <current> first, ..."`. The ref format is unchanged (`e12`).
+- **Header.** For a node with 2+ tabs the snapshot's first line is `Tabs (n): t1 "Title" | t3 "Title" <- you`. It sits INSIDE the untrusted
+  block (titles are page text) and look-alike markers are neutralised.
+- **Refusals are never dead ends.** Every tab refusal carries `next`: `tab_limit` (409, "close a tab first (tab close <id>), or work in another
+  browser node"), `unknown_tab` (404, "list the tab ids with the tabs verb"), `stale_tab_ref`. Wire shape `{error, message, next}` (`AgentTabError`).
+  A new URL goes through the same navigation/SSRF guard as `navigate` (`403 blocked`).
+- **Locked preset.** The skill-author preset keeps its whitelist `open|navigate|snapshot`; `tabs`, `tab` and any body carrying `tab` are 403
+  `verb_not_allowed_for_preset` (it has one page and no reason to juggle tabs).
+- **Central.** New tool `browser_tab` (R1: list/new/switch/close, no approval card), chosen over widening `browser_act` because list/new/close
+  are not page actions and the `browser_act` shape check is strict per action. `browser_act` and `browser_read` take an optional `tab`;
+  `browser_act` answers `newTab` and `note`; `browser_status` lists `tabs` per browser that has more than one.
+- **One source of words (anti-forgetting).** Capability `web.tabs` lives once in `agentCapabilities.data.ts`: granted to `central.steward` and
+  `chat.default`, denied for both author profiles (their CANNOT list says "Use browser tabs ..."). The steward prompt, the plain chat briefing,
+  the UI line and the "Capabilities updated" note are all rendered from it; the Capability map goal and the off-switch (`browser_tab` off ->
+  `web.tabs` off) follow the tool catalog. Nothing hand-writes "you can/cannot use tabs".
+- **Sessions already running.** The briefing text changed, so `capabilityHash` changed: the existing `Capabilities updated` note reaches a chat
+  that last saw the old hash (test: `agentChat.capabilities.bun.test.ts`, a node recorded with a pre-tabs hash). The Claude Code skill
+  `webterm-browser` is rewritten on boot.
+- **Not done here.** Split pane (P4) and QC sync/compare (P5).
+- **Verified only with a fake CDP:** popup adoption, `agentTabId` moves, discard/wake of background tabs. The real-model smoke
+  (`docs/smoke-capabilities.md`, cases `tab-open`, `tab-multi`, `tab-denied`) covers the end to end path with a real Chromium.
+
+
 ## Menyusul
 P1 server (model tab, popup -> tab, screencast hanya tab aktif, persistensi); P2b integrasi ke `BrowserNode`
 setelah profil ter-merge; P3 agent (verb `tabs`/`tab`, `--tab`, `newTab`); P4 split pane; P5 QC (sinkron, bandingkan).

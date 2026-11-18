@@ -28,6 +28,9 @@ export interface AgentCtx {
 /** Verbs on an existing browser node; `open` has no node yet, the control handler serves it (`browser.agentOpen.ts`). */
 export type AgentVerbs = { [V in Exclude<BrowserVerb, 'open'>]: (nodeId: string, body: unknown) => Promise<VerbData[V]> }
 
+/** The verbs on the node's page (`createAgentVerbs`); `tabs`/`tab` need the host's tab API and are added by `withTabs` (browser.agentTabs.verbs.ts). */
+export type BaseVerbs = Omit<AgentVerbs, 'tabs' | 'tab'>
+
 export const badRequest = (msg: string) => new BrowserError('bad_request', msg)
 
 /** Body harus objek biasa. */

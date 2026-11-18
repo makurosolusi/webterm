@@ -11,6 +11,9 @@ import { NODE_HEADERS_ENV } from '../hooksPaths'
 const verbsOf = (cap: 'browser.read' | 'browser.act'): string =>
   Object.entries(BROWSER_VERB_CAP).filter(([, c]) => c === cap).map(([v]) => v).join('|')
 
+/** Verbs that act on the node's page and so accept `--tab <id>`. */
+const PAGE_VERBS = 'status|snapshot|screenshot|wait|console|navigate|click|type|press|scroll'
+
 /** `handoff` stays accepted for sessions that already know it, but is no longer advertised: act verbs take control themselves. */
 const advertised = (cap: 'browser.read' | 'browser.act'): string => verbsOf(cap).split('|').filter((v) => v !== 'handoff').join('|')
 
@@ -19,17 +22,18 @@ export const ESC_FN = `esc() { printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 
 
 /** `webterm browser <verb> [args] [--node <id>]`; the server picks the cabled browser at call time. */
 export const BROWSER_COMMAND = `cmd_browser() {
-usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB}" >&2; exit 2; }
+usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | tab new [url]|switch <id>|close <id> | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB} | <page verb> --tab <id>" >&2; exit 2; }
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
 PORT="\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}"
 [ "$#" -gt 0 ] || usage
 verb="$1"; shift
-node=""; profile=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
+node=""; profile=""; tab=""; submit=0; loaded=0; ms=""; wref=""; n=0; p1=""; p2=""; p3=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --node) [ "$#" -ge 2 ] || usage; node="$2"; shift 2 ;;
     --profile) [ "$#" -ge 2 ] || usage; profile="$2"; shift 2 ;;
+    --tab) [ "$#" -ge 2 ] || usage; tab="$2"; shift 2 ;;
     --ms) [ "$#" -ge 2 ] || usage; ms="$2"; shift 2 ;;
     --ref) [ "$#" -ge 2 ] || usage; wref="$2"; shift 2 ;;
     --submit) submit=1; shift ;;
@@ -38,6 +42,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 case "$node" in *[!A-Za-z0-9_.:-]*) echo "bad node id" >&2; exit 2 ;; esac
+case "$tab" in *[!A-Za-z0-9_-]*) echo "bad tab id" >&2; exit 2 ;; esac
 num() { case "$1" in ""|*[!0-9.-]*) echo "numeric argument expected: $1" >&2; exit 2 ;; esac; }
 [ -z "$ms" ] || num "$ms"
 case "$verb" in scroll) num "$p1" ;; screenshot|console) [ -z "$p1" ] || num "$p1" ;; esac
@@ -70,10 +75,20 @@ case "$verb" in
     [ "$submit" = 0 ] || body="$body,\\"submit\\":true"
     body="$body}" ;;
   press) [ -n "$p1" ] || usage; body="{\\"key\\":\\"$(esc "$p1")\\"}" ;;
+  tab)
+    case "$p1" in
+      new) body="{\\"action\\":\\"new\\""; [ -z "$p2" ] || body="$body,\\"url\\":\\"$(esc "$p2")\\""; body="$body}" ;;
+      switch|close) [ -n "$p2" ] || usage; body="{\\"action\\":\\"$p1\\",\\"tab\\":\\"$(esc "$p2")\\"}" ;;
+      *) usage ;;
+    esac ;;
   scroll) [ -n "$p1" ] || usage; body="{\\"dy\\":$p1}" ;;
 esac
+if [ -n "$tab" ]; then
+  case "$verb" in ${PAGE_VERBS}) ;; *) echo "--tab only applies to page verbs (not open, tab, tabs, release)" >&2; exit 2 ;; esac
+  if [ "$body" = "{}" ]; then body="{\\"tab\\":\\"$tab\\"}"; else body="\${body%?},\\"tab\\":\\"$tab\\"}"; fi
+fi
 url="http://127.0.0.1:$PORT${BROWSER_CONTROL_PREFIX}/\${node:+$node/}$verb"
-if [ "$verb" = status ] || [ "$verb" = ${BROWSER_PROFILES_VERB} ]; then method=GET; else method=POST; fi
+if { [ "$verb" = status ] && [ -z "$tab" ]; } || [ "$verb" = ${BROWSER_PROFILES_VERB} ]; then method=GET; else method=POST; fi
 curl -sS -H "@$hdr" -X "$method" \\
   -H "content-type: application/json" --data-binary "$body" "$url"
 echo

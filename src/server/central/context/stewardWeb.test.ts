@@ -38,6 +38,22 @@ describe('steward web sentences', () => {
   })
 })
 
+describe('steward and browser tabs', () => {
+  it('the steward prompt carries the registry sentences about tabs (same words as the briefing, no hand-written copy)', () => {
+    const prose = renderCapabilityProse('central.steward', ['web.tabs'])
+    expect(CENTRAL_STEWARD_PROMPT).toContain(prose)
+    expect(prose).toContain('A browser node holds TABS')
+    expect(prose).toContain('browser_tab {"nodeId"')
+  })
+
+  it('the capability map has the tab goal; a switched-off browser_tab says so from the registry', () => {
+    expect(renderCapabilityMap([...WEB, { name: 'browser_tab', access: 'auto' as const }])).toContain('work in several tabs of one browser node (open, switch, close): browser_tab (auto)')
+    const off = [{ name: 'browser_tab', access: 'off' as const }]
+    expect([...stewardOffAbilities(off)]).toEqual(['web.tabs'])
+    expect(renderCapabilityMap(off)).toContain('Not available right now (switched off): work in several tabs of one browser node.')
+  })
+})
+
 describe('steward and browser profiles', () => {
   afterEach(() => setActiveProfiles(null))
   const TOOLS = [...WEB, { name: 'browser_open', access: 'auto' as const }, { name: 'browser_profile', access: 'auto' as const }]

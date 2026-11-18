@@ -34,6 +34,7 @@ export function createBrowserToolDeps(env: Record<string, string | undefined>, s
   const reader = createPageReader()
   return {
     state: (nodeId) => active()?.state(nodeId),
+    tabs: (nodeId) => active()?.tabs?.(nodeId),
     focused: () => presence.focusedNode()?.nodeId ?? null,
     listDomains: (workspaceId) => active()?.listDomains(workspaceId).map(({ domain }) => ({ domain })) ?? [],
     async control(nodeId, verb, body) {

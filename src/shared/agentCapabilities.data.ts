@@ -2,7 +2,7 @@
 // tool lock), the system prompts and the UI text are all derived from (see docs/decisions/agent-capabilities.md).
 // Data only: no server/DB imports, so client and server both import it. Add a capability here, nowhere else.
 
-export type CapabilityId = 'skills.author' | 'web.read' | 'web.drive' | 'web.profiles' | 'canvas' | 'agents' | 'memory' | 'channels'
+export type CapabilityId = 'skills.author' | 'web.read' | 'web.drive' | 'web.profiles' | 'web.tabs' | 'canvas' | 'agents' | 'memory' | 'channels'
 export type ProfileId = 'central.skill-author' | 'chat.skill-author' | 'central.steward' | 'chat.default'
 /** `webterm <family> ...` command families a locked chat may run (strict parsers live in the server tool lock). */
 export type ChatFamily = 'skills' | 'browser'
@@ -59,6 +59,13 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
     chat: { usage: '`webterm browser open --profile <name> [<url>]`, `webterm browser profiles` (lists the names; no profile = the board\'s Default)', example: 'webterm browser profiles' },
     rules: ['Cookies and saved logins stay with the human: you can use a profile but never read, import or export its cookies.'],
   },
+  'web.tabs': {
+    id: 'web.tabs', short: 'work in several tabs of one browser node',
+    summary: 'A browser node holds TABS (up to 8). A click that opens a link in a new tab moves you to it automatically (the result says newTab). Open many pages in one node instead of many nodes.',
+    denied: 'Use browser tabs (open, switch or close tabs of a browser node).',
+    central: { tools: ['browser_tab'], usage: 'browser_tab {"nodeId":"<browser node>","action":"list|new|switch|close","url":"<for new>","tab":"<tab id, for switch and close>"}; browser_act and browser_read take "tab" to work in another tab; browser_status lists the tabs of each browser' },
+    chat: { usage: '`webterm browser tabs` lists them, `webterm browser tab new [<url>]`, `webterm browser tab switch <id>`, `webterm browser tab close <id>`; add `--tab <id>` to any other verb to act on another tab', example: 'webterm browser tabs' },
+  },
   canvas: {
     id: 'canvas', short: 'use the canvas', summary: 'Open, move and close nodes on the canvas.',
     denied: 'Use the canvas (open, move or close nodes).',
@@ -106,7 +113,7 @@ export const PROFILES: Readonly<Record<ProfileId, ProfileDef>> = {
     override: { 'web.drive': { summary: 'Drive a project browser node yourself: navigate, click and type, or open a browser node.', rules: [] } },
   },
   'chat.default': {
-    id: 'chat.default', title: 'agent chat', granted: ['web.read', 'web.drive', 'web.profiles'], listDenied: false,
+    id: 'chat.default', title: 'agent chat', granted: ['web.read', 'web.drive', 'web.profiles', 'web.tabs'], listDenied: false,
     override: {
       'web.read': {
         summary: 'You CAN open and drive a browser node with `webterm browser ...`: open a page, then read it. You are not offline, so try before saying a page cannot be read.',

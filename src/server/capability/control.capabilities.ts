@@ -17,7 +17,9 @@ const browserRoute = { method: 'POST', path: `${BROWSER_CONTROL_PREFIX}/:nodeId/
 // each property names the verb(s) it belongs to and the verb handler enforces which are required.
 const ref = S.str(16, { pattern: '^e\\d+$', description: 'click, type: element ref from the latest snapshot (e12).' })
 const snapId = S.str(200, { description: 'click, type: snapId of the snapshot the ref came from.' })
+const tab = S.str(64, { description: 'tab verb: the tab id to switch to or close. Any other page verb: act in this tab of the node (it becomes your working tab).' })
 const browserReadArgs: Record<string, JsonSchema> = {
+  tab,
   maxWidth: { ...S.int(1, VIEWPORT_MAX), description: 'screenshot: max width in px.' },
   ms: { ...S.int(0, WAIT_MAX_MS), description: 'wait: timeout (or plain sleep) in ms.' },
   selectorRef: S.str(16, { pattern: '^e\\d+$', description: 'wait: until this snapshot ref is rendered.' }),
@@ -26,6 +28,8 @@ const browserReadArgs: Record<string, JsonSchema> = {
   level: { ...S.oneOf(...CONSOLE_LEVELS), description: 'console: minimum level (default info).' },
 }
 const browserActArgs: Record<string, JsonSchema> = {
+  tab,
+  action: { ...S.oneOf('new', 'switch', 'close'), description: 'tab: open a new tab (optional url), switch to a tab, or close one.' },
   url: S.str(URL_MAX_CHARS, { description: 'open (optional), navigate: absolute URL.' }),
   ref, snapId,
   text: S.str(undefined, { description: 'type: text inserted at the caret.' }),
@@ -94,13 +98,13 @@ const CONTROL = [
     output: S.anyObj(),
   }),
   defineCapability({
-    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot, wait or console.',
+    name: 'browser.read', summary: 'Read a browser node: status, snapshot, screenshot, wait, console or the list of its tabs.',
     tier: 'R0', scope: 'node', projections: ['control-http'], idempotent: true, route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.read')), ...browserReadArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
   }),
   defineCapability({
-    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, release; open = new node cabled to the calling agent.',
+    name: 'browser.act', summary: 'Drive a browser node: navigate, click, type, press, scroll, release, tabs; open = new node cabled to the caller.',
     tier: 'R1', scope: 'node', projections: ['control-http'], route: browserRoute,
     input: obj({ nodeId, verb: S.oneOf(...verbsOf('browser.act')), ...browserActArgs }, ['verb']),
     output: S.anyObj('Verb data (browser.contract.ts VerbData).'),
