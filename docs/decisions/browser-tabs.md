@@ -115,6 +115,43 @@ Code: `src/client/browserTabs/useBrowserTabs.ts` (state + aksi), `browserTabs.ap
 - **Deviasi.** Riwayat tertutup dibuka via `POST /reopen` (terbaru); entri yang lebih lama dibuka sebagai tab baru di URL-nya.
   Belum diverifikasi tanpa browser nyata: tampilan strip di node, seret nyata, fokus/pintasan di Chromium sungguhan.
 
+## Verifikasi Chromium nyata
+
+`src/server/browser/browserHost.tabs.real.bun.test.ts` (+ `browserHost.tabs.real.testkit.ts`) menjalankan `BrowserHost` nyata di
+atas Chrome headless (pool produksi, proxy SSRF produksi, penjaga navigasi produksi dengan allowlist `127.0.0.1:<port acak>`
+saja; loopback tidak dilonggarkan) dan server HTTP lokal. Didaftarkan hanya bila ada Chromium; berjalan di gelombang
+`*.real.bun.test.ts` `test:bun`. Hasil (3 run berturut-turut, semua 11 tes hijau, tanpa proses/dir temp tersisa):
+
+| Butir | Hasil |
+|---|---|
+| (a) klik `window.open` = TAB baru di node yang sama; `window.opener` popup hidup | lulus |
+| (b) popup instan `postMessage` + `window.close()`: judul opener `GOT:token-123`, tanpa tab/notice sisa | lulus (setelah perbaikan 2) |
+| (b2) popup yang sempat diadopsi lalu menutup dirinya: tab hilang, view kembali ke opener, node tidak crash | GAGAL sebelum perbaikan 1, lulus sesudahnya |
+| (c) `target=_blank` = tab baru | lulus |
+| (d) popup ke-9 ditolak, notice, URL dibuka di tab pembuka | lulus |
+| (e) banjir popup > `POPUP_BURST_MAX` ditolak | lulus |
+| (f) screencast mengalir sebelum, di popup, dan sesudah kembali | lulus |
+| (g) tab latar dibuang lalu dibangunkan, URL dimuat ulang | lulus |
+| (g2) opener dengan popup hidup tidak dibuang | lulus (setelah perbaikan 3) |
+| (h) tanpa proses Chromium dan dir data sementara | lulus |
+
+Temuan dan perbaikan (akar, bukan gejala):
+
+1. **Popup yang menutup dirinya mematikan node.** `Target.targetDestroyed`/`detachedFromTarget` pada target view dianggap
+   hilangnya halaman node (`crash`), dan pada tab latar hanya menandai `crashed`; padahal `window.close()` pada popup adalah
+   penutupan tab. Sekarang, bila node punya tab lain, kedua event itu menghapus tab (tanpa masuk "baru ditutup") dan view
+   kembali ke tab pembuka (bukan tetangga kanan, mengikuti Chrome; OAuth butuh pembuka di layar). Node dengan satu tab
+   tetap `crash` seperti sebelumnya; `targetCrashed` tetap menandai tab `crashed`.
+2. **Popup yang tutup sebelum sempat di-attach** (OAuth instan) menghasilkan notice "A popup could not be opened as a tab"
+   padahal tugasnya selesai; "No target with given id" kini dicatat info saja, tanpa notice.
+3. **Pembuka dibuang saat popup hidup.** Tab latar dibuang setelah jeda diam (default 5 menit), dan itu memutus `window.opener`
+   popup yang masih terbuka (2FA lama). Tab yang punya popup hidup tidak dibuang.
+
+`window.opener` bertahan tanpa perubahan desain: halaman popup diadopsi (target asli Chromium dipertahankan), bukan dibuat
+ulang. Tes regresi fake-CDP ada di `browserHost.tabs.test.ts`. Belum terverifikasi: Chrome headful (bukan headless),
+Linux/Windows, dan klik manusia nyata lewat `Input.dispatchMouseEvent` (klik di tes memakai `element.click()` dengan
+`userGesture`).
+
 ## Agent (P3)
 Code: `browser.agentTabs.verbs.ts` (`withTabs`: verbs `tabs`/`tab`, `--tab`, `stale_tab_ref`, snapshot header), `src/shared/browser.agentTabs.ts`
 (compact tab view), `central/tools/defs/browser.tab.ts`, registry capability `web.tabs` (`agentCapabilities.data.ts`).
@@ -150,6 +187,7 @@ Code: `browser.agentTabs.verbs.ts` (`withTabs`: verbs `tabs`/`tab`, `--tab`, `st
 - **Not done here.** Split pane (P4) and QC sync/compare (P5).
 - **Verified only with a fake CDP:** popup adoption, `agentTabId` moves, discard/wake of background tabs. The real-model smoke
   (`docs/smoke-capabilities.md`, cases `tab-open`, `tab-multi`, `tab-denied`) covers the end to end path with a real Chromium.
+
 
 ## Menyusul
 P1 server (model tab, popup -> tab, screencast hanya tab aktif, persistensi); P2b integrasi ke `BrowserNode`

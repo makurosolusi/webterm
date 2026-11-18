@@ -185,7 +185,7 @@ export function createTabs(ops: TabsOps) {
   }
 
   /** Remove a tab and its page; the human's view moves to the neighbour (right, then left), or the node shows a blank page. */
-  async function remove(rec: NodeRec, tabId: string, remember: boolean): Promise<BrowserTabsState> {
+  async function remove(rec: NodeRec, tabId: string, remember: boolean, backTo?: string): Promise<BrowserTabsState> {
     const t = tabsOf(rec)
     must(rec, tabId)
     const prev = t.state
@@ -193,19 +193,41 @@ export function createTabs(ops: TabsOps) {
     const rt = t.rt.get(tabId)
     const wasView = prev.activeTabId === tabId
     kit.cancelDiscard(rec, tabId)
-    if (wasView && next.activeTabId) {
+    const view = backTo ?? next.activeTabId
+    if (wasView && view) {
       t.state = { ...next, activeTabId: prev.activeTabId } // the view still sits on this page until setView swaps it
-      await setView(rec, next.activeTabId, tabId, true)
+      await setView(rec, view, tabId, true)
     } else if (wasView) {
       t.blank = rt
       if (rt?.sessionId) fire(rec, rt.sessionId, CDP.navigate, { url: BLANK_URL })
       ops.patch(rec, { url: '', title: '', loading: false, canBack: false, canForward: false, netError: undefined })
     } else closeTarget(rec, rt)
     t.rt.delete(tabId)
-    t.state = next
+    t.state = wasView && backTo ? { ...next, activeTabId: backTo } : next
     emitTab(rec, { type: 'tabClosed', nodeId: rec.nodeId, tabId, ...(remember ? {} : { remember: false }) })
     kit.schedule(rec)
     return next
+  }
+
+  /** The tab whose page is `targetId`, when its disappearance is a tab closing (another tab remains) and not the node losing its page. */
+  function closedTab(rec: NodeRec, targetId: string): string | undefined {
+    const t = rec.tabs
+    if (!t || t.state.tabs.length < 2) return undefined
+    return [...t.rt].find(([, rt]) => rt.targetId === targetId)?.[0]
+  }
+
+  /**
+   * A page closed itself (`window.close()` of a popup: Chromium destroys the target; a crash is a different event). Its tab
+   * goes like a user close, without entering "recently closed"; when it was the view, the view returns to the tab that
+   * opened it (Chrome does the same; OAuth needs the opener on screen), else the neighbour.
+   */
+  async function pageClosed(rec: NodeRec, targetId: string): Promise<void> {
+    const id = closedTab(rec, targetId)
+    const t = rec.tabs
+    if (!id || !t) return // already handled by the first of the destroyed/detached events
+    const opener = find(t, id)?.openerTabId
+    const back = t.state.activeTabId === id && opener && opener !== id && find(t, opener) ? opener : undefined
+    await remove(rec, id, false, back)
   }
 
   async function move(rec: NodeRec, tabId: string, toIndex: number): Promise<void> {
@@ -240,7 +262,7 @@ export function createTabs(ops: TabsOps) {
   function forget(rec: NodeRec): void { kit.forgetTimers(rec); kit.forgetSaved(rec.nodeId) }
 
   const popup = createPopupSide(kit, { create, liveSession })
-  return { restore, bindView, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
+  return { restore, bindView, closedTab, pageClosed, viewPatched, viewLost, dropAll, liveSession, newTab, remove, move, duplicate, reopenClosed, activate, forget, flush: kit.flush, ...popup, state: (rec: NodeRec) => rec.tabs?.state }
 }
 
 export type TabManager = ReturnType<typeof createTabs>
