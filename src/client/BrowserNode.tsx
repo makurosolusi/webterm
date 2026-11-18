@@ -12,6 +12,7 @@ import NodeChrome, { termNodeClass } from './NodeChrome'
 import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
+import BrowserProfileChip from './BrowserProfileChip'
 import { useNodeActions } from './nodeActions'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
@@ -76,7 +77,7 @@ export interface BrowserNodeProps extends NodeProps {
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
 function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay }: BrowserNodeProps) {
-  const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
+  const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; profileId?: string; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
@@ -196,6 +197,8 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           onRename={(t) => rf.updateNodeData(id, { title: t })}
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
+          // Profile chip: in the canvas header and, in tab mode, among the tab's actions (both render `extraHeader`).
+          extraHeader={<BrowserProfileChip nodeId={id} profileId={d.profileId} />}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;

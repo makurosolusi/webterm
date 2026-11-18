@@ -60,6 +60,7 @@ const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   central: 'assistant orchestrator autonomy check-in budget spending limit',
   rules: 'secret secrets allow deny block approve approvals permission policy safety always',
   account: 'password username user login session sessions device devices sign out logout',
+  browser: 'browser profile profiles account login logins cookies session sessions identity multiple accounts',
   capabilities: 'capabilities browser files telegram chromium',
   health: 'status diagnostics doctor problem broken check data folder developer',
   developer: 'raw debug values troubleshooting env',
@@ -122,6 +123,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   ...CARDS,
   e('capabilities', 'browserSearchEngine', 'Browser search engine', 'Used when what you type in the address bar is not a web address.', 'google duckduckgo bing'),
   e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
+  e('browser', 'browser-profiles', 'Browser profiles', 'Separate logins for each browser: create, rename, color, import cookies, duplicate, export or delete a profile.', 'profile profiles cookies login session account container import export duplicate'),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),
   // Health (HealthSection.tsx)
   e('health', undefined, HEALTH_TEXT.dataDir, 'Where webterm keeps its data on this computer.', 'directory path storage'),

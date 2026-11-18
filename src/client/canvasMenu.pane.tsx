@@ -20,6 +20,7 @@ import { HandleMenuView } from './handleMenu.view'
 import { useSkillEntries } from './skillNode.entries'
 import type { SkillRef } from './skillNode.add'
 import { SN } from './skillNode.labels'
+import { openProfileSpawn } from './browserProfile.spawn'
 import type { AgentId } from '../shared/workspace'
 import type { Settings } from '../shared/settings'
 
@@ -147,6 +148,8 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
           addTerminal: () => deps.onAddTerminal(open.at),
           addFiles: () => deps.onAddFiles(open.at),
           addBrowser: () => (onAddBrowser ? onAddBrowser(open.at) : offerBrowser()),
+          addBrowserWithProfile: onAddBrowser && (() => openProfileSpawn('one', open.at)),
+          addBrowserForEachProfile: onAddBrowser && (() => openProfileSpawn('each', open.at)),
           addDiff: deps.onAddDiff && (() => deps.onAddDiff?.(open.at)),
           addAgentChat: deps.onAddAgentChat && (() => deps.onAddAgentChat?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),

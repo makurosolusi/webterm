@@ -2,6 +2,7 @@
 // The DB (via api.ts) is the source of truth; these functions carry no DOM/IO.
 import type { Node, Edge } from '@xyflow/react'
 import { isAgentChatPreset, validChatConfig } from '../shared/agentChat.shape'
+import { isBrowserProfileId } from '../shared/browser.profile'
 import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
 import { SKILLS_IN, SKILL_CARD_SIZE, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
@@ -16,7 +17,7 @@ export function toFlow(n: WsNode): Node {
     // A collapsed skill is always the round token: boards saved when it was a 260x44 card load as a token (position kept).
     width: isSkillToken(n) ? SKILL_NODE_SIZE.width : n.width ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.width : 400),
     height: isSkillToken(n) ? SKILL_NODE_SIZE.height : n.height ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.height : 300),
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, profileId: n.profileId, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion },
   }
 }
 
@@ -49,6 +50,7 @@ export function toWsNode(n: Node): WsNode {
     panes: d.panes,
     url: d.url,
     agentControl: d.agentControl,
+    profileId: isBrowserProfileId(d.profileId) ? d.profileId : undefined,
     device: d.device,
     zoom: typeof d.zoom === 'number' && d.zoom >= ZOOM_MIN && d.zoom <= ZOOM_MAX ? d.zoom : undefined,
     chatSessionId: d.chatSessionId,

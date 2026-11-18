@@ -89,7 +89,7 @@ export interface StreamOpenMsg { t: 'sse.open'; id: string }
 export interface StreamEventMsg { t: 'sse.ev'; id: string; event: string; data: string; lastId: string }
 // The stream ended (`status` 200) or was refused (its HTTP status). Nothing follows for this id.
 export interface StreamEndMsg { t: 'sse.end'; id: string; status: number }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | WorkspaceColorMsg | ActMsg | NetMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | WorkspaceColorMsg | BrowserProfilesMsg | ActMsg | NetMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
 
 export const WS_PATH = '/ws'
 /** `{bootId, build}` behind the /api gate: lets a failing socket tell "server down" from "credential refused". */

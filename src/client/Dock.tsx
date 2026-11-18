@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { openProfileSpawn } from './browserProfile.spawn'
+import { PROFILE_TEXT } from './browserProfile.text'
 import { BUILTIN_AGENT_IDS, agentConfig, assembleCmd, customLaunchCmd } from '../shared/workspace'
 import type { BuiltinAgentId } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
@@ -27,6 +29,8 @@ export { ZOOM_PRESETS } from './Dock.statusBar'
 /** Id baris Quick Pick "Add node"; agent builtin/custom diberi prefix + id agent. */
 const ADD_TERMINAL_ID = 'terminal'
 const ADD_BROWSER_ID = 'browser'
+const ADD_BROWSER_PROFILE_ID = 'browser-profile'
+const ADD_BROWSER_EACH_ID = 'browser-each'
 const ADD_WORKSPACE_ID = 'workspace'
 /** Id of the registered "new diff node" command (commandRegistry.defaults.ts); the Dock runs it. */
 const DIFF_COMMAND_ID = 'diff.new'
@@ -112,6 +116,10 @@ export default function Dock(props: DockProps) {
   const addItems = useMemo<VscodeQuickPickItem[]>(() => [
     { id: ADD_TERMINAL_ID, label: 'Terminal', icon: codicon('terminal') },
     { id: ADD_BROWSER_ID, label: 'Browser', icon: codicon('globe') },
+    ...(onAddBrowser ? [
+      { id: ADD_BROWSER_PROFILE_ID, label: PROFILE_TEXT.withProfile, icon: codicon('globe') },
+      { id: ADD_BROWSER_EACH_ID, label: PROFILE_TEXT.forEach, icon: codicon('globe') },
+    ] : []),
     ...(filesCommand ? [{ id: FILES_COMMAND_ID, label: 'Files', icon: codicon('files') }] : []),
     ...(diffCommand ? [{ id: DIFF_COMMAND_ID, label: 'Diff (working changes)', icon: codicon('diff') }] : []),
     ...(commands.some((c) => c.id === AGENT_CHAT_COMMAND_ID && c.run) ? [{ id: AGENT_CHAT_COMMAND_ID, label: 'Agent Chat', icon: codicon('comment-discussion') }] : []),
@@ -121,13 +129,17 @@ export default function Dock(props: DockProps) {
     }),
     ...visibleCustoms.map((c) => ({ id: `${ADD_CUSTOM_PREFIX}${c.id}`, label: c.label, icon: codicon('hubot') })),
     { id: ADD_WORKSPACE_ID, label: 'Workspace…', icon: codicon('new-folder') },
-  ], [builtins, visibleCustoms, diffCommand, filesCommand, commands])
+  ], [builtins, visibleCustoms, diffCommand, filesCommand, commands, onAddBrowser])
 
   const onAddSelect = (id: string) => {
     if (id === ADD_TERMINAL_ID) return addTerminal()
     if (id === ADD_BROWSER_ID) {
       if (onAddBrowser) onAddBrowser()
       else setOffer('browser')
+      return setAddOpen(false)
+    }
+    if (id === ADD_BROWSER_PROFILE_ID || id === ADD_BROWSER_EACH_ID) {
+      openProfileSpawn(id === ADD_BROWSER_EACH_ID ? 'each' : 'one')
       return setAddOpen(false)
     }
     if (id === ADD_WORKSPACE_ID) return openWorkspaceForm()

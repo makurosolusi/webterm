@@ -1,7 +1,7 @@
 // Broadcast frames of the shared terminal socket (ws.ts) that are not tied to one terminal
 // subscriber: agent status, fs dirty hints, canvas pushes, view/shot requests, workspace list.
 import { emitFsEvent } from './fsEvents'
-import type { ActMsg, CanvasMsg, NetMsg, ServerMsg, ShotMsg, StatusReason, ViewMsg, WorkspaceColorMsg, WorkspacesMsg } from '../shared/protocol'
+import type { ActMsg, BrowserProfilesMsg, CanvasMsg, NetMsg, ServerMsg, ShotMsg, StatusReason, ViewMsg, WorkspaceColorMsg, WorkspacesMsg } from '../shared/protocol'
 import type { AgentStatus } from '../shared/workspace'
 import { noteStatus } from './unread'
 
@@ -53,6 +53,13 @@ export function subscribeWorkspaceColor(cb: (msg: WorkspaceColorMsg) => void): (
   return () => { colorListeners.delete(cb) }
 }
 
+const profileListeners = new Set<(msg: BrowserProfilesMsg) => void>()
+/** The browser profile list or a profile's live state changed: `t:'browserProfiles'` (clients refetch the list). */
+export function subscribeBrowserProfiles(cb: (msg: BrowserProfilesMsg) => void): () => void {
+  profileListeners.add(cb)
+  return () => { profileListeners.delete(cb) }
+}
+
 const shotListeners = new Set<(msg: ShotMsg) => void>()
 /** The central agent asks for a screenshot of what the user sees: `t:'shot'`. */
 export function subscribeShot(cb: (msg: ShotMsg) => void): () => void {
@@ -75,7 +82,7 @@ export function subscribeNet(cb: (msg: NetMsg) => void): () => void {
 }
 
 /** Frames that go to every listener of a kind, not to one terminal subscriber. */
-type BroadcastMsg = Extract<ServerMsg, { t: 'status' | 'fsdirty' | 'canvas' | 'view' | 'workspaces' | 'workspaceColor' | 'shot' | 'act' | 'net' }>
+type BroadcastMsg = Extract<ServerMsg, { t: 'status' | 'fsdirty' | 'canvas' | 'view' | 'workspaces' | 'workspaceColor' | 'browserProfiles' | 'shot' | 'act' | 'net' }>
 
 /** Deliver a broadcast frame to its listeners; false = not a broadcast (a per-terminal frame). */
 export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
@@ -105,6 +112,7 @@ export function dispatchBroadcast(msg: ServerMsg): msg is BroadcastMsg {
   if (msg.t === 'view') { for (const l of [...viewListeners]) l(msg); return true }
   if (msg.t === 'workspaces') { for (const l of [...workspacesListeners]) l(msg); return true }
   if (msg.t === 'workspaceColor') { for (const l of [...colorListeners]) l(msg); return true }
+  if (msg.t === 'browserProfiles') { for (const l of [...profileListeners]) l(msg); return true }
   if (msg.t === 'act') { for (const l of [...actListeners]) l(msg); return true }
   if (msg.t === 'net') { for (const l of [...netListeners]) l(msg); return true }
   if (msg.t === 'shot') { for (const l of [...shotListeners]) l(msg); return true }

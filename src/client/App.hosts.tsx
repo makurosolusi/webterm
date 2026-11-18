@@ -2,6 +2,7 @@
 // The hosts own their open state; App only feeds them the workspace context they need.
 import TimelineHost from './Timeline'
 import { BrowserLinkOfferHost } from './browserLinkOffer'
+import BrowserProfileSpawnDialog from './BrowserProfileSpawnDialog'
 import { NodeCloseConfirmHost } from './nodeCloseConfirm'
 import { ReopenConfirmHost } from './reopenConfirm'
 import BakeoffHost from './bakeoff/BakeoffHost'
@@ -25,6 +26,7 @@ export default function AppHosts({ activeWs, onCreated, onPlace }: AppHostsProps
       <NodeCloseConfirmHost />
       <ReopenConfirmHost />
       <BrowserLinkOfferHost />
+      <BrowserProfileSpawnDialog />
       <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
       <ReplayHost workspaceId={activeId} nodes={(activeWs?.nodes ?? []).filter((n) => n.agentId)} />
       <TemplatesHost activeWs={activeWs} onCreated={onCreated} onPlace={onPlace} />

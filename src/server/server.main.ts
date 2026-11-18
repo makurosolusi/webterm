@@ -152,8 +152,7 @@ registerBrowserCapability({
   env: process.env, webtermPort: PORT, loopbackBind: isLoopbackHost(HOST), onAgentUse: ensureBrowserAgentShim,
   dataRoot: dataDir(), secrets: createFileSecretStore(join(dataDir(), 'secrets')), workspaces: () => db.list(),
   profiles: db.browserProfiles(),
-  // The `browserProfiles` frame joins ServerMsg with the UI wave (client ws.listeners owns that union's exhaustiveness); until then it rides the same wire. Remove the cast then.
-  broadcast: (msg) => broadcastUi(msg as unknown as ServerMsg),
+  broadcast: (msg) => broadcastUi(msg),
 })
 onCapabilityChange('browser', { start: applyPtyOptions, stop: applyPtyOptions })
 // Semua hook sudah terpasang: boot = reconcile dari himpunan kosong ke yang on di env (hanya yang on yang jalan).
