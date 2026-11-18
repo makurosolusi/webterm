@@ -2,6 +2,7 @@
 // (ending their sessions), or patch existing nodes' layout/look and add/remove cables, then tell every open UI so it applies that live (`t:'canvas'`, client
 // `workspaceCanvasPush.ts`) without a save conflict.
 import { randomUUID } from 'node:crypto'
+import type { PersistedTabs } from '../../shared/browser.tabs'
 import type { Workspace } from '../../shared/workspace'
 import { CANVAS_PATCH_KEYS, type ServerMsg } from '../../shared/protocol'
 import { OPEN_GAP, placeBeside, type Rect } from '../../shared/canvasPlace'
@@ -31,7 +32,8 @@ export type CanvasRemoveResult =
 /** Fields of an existing node a push may change; `null` clears title/color/chatSessionId/agentId/sessionId/cmd. Any other key is ignored.
  *  The agent chat fields are written by the node's server session (agentChat.runtime.ts), and kind/agentId/sessionId/cmd
  *  by the Claude view switch (agentChat.view.ts), never by Central's canvas.edit (its ops set only layout/look fields). */
-export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode' | 'kind' | 'tabs'>> & {
+export type NodePatch = { id: string } & Partial<Pick<CanvasNode, 'x' | 'y' | 'width' | 'height' | 'collapsed' | 'hideLinks' | 'chatConfig' | 'permissionMode' | 'kind'>> & {
+  tabs?: PersistedTabs | null
   title?: string | null
   color?: string | null
   chatSessionId?: string | null

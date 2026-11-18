@@ -43,6 +43,8 @@ async function boot(env: Record<string, string> = ON): Promise<Rig> {
     adblock: offlineAdblock(), broadcast: (m) => { frames.push(m) },
     canvas: {
       add(input) { board.nodes.push(...input.nodes); board.bridges.push(...(input.bridges ?? [])); return { ok: true, updatedAt: ++seq, nodes: input.nodes } },
+      remove: () => ({ ok: false, code: 'node_not_found' }), // test-only: tab persistence/pop-out is not exercised here
+      update: () => ({ ok: true, updatedAt: seq, nodes: [], bridges: [], unlinked: [] }),
       workspaceOfNode: (id) => (board.nodes.some((n) => n.id === id) ? board : null),
     },
   })
