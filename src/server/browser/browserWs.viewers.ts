@@ -27,6 +27,8 @@ export interface GatewayHost extends BrowserHostApi {
   setDevice(nodeId: string, device: DeviceChoice | null): Promise<void>
   /** Tab list of a node, sent to a viewer on attach (absent in hosts without tabs). */
   tabsState?(nodeId: string): BrowserTabsState | undefined
+  /** Sync mode of a node (browserHost.sync.ts); absent = hosts without it. */
+  syncOn?(nodeId: string): boolean
   /** Split view: the tabs on screen (one per pane) + the focused one (only those stream), and one pane's size (absent in hosts without tabs). */
   tabApi?: {
     setView(nodeId: string, visible: string[], focus?: string): Promise<void>
@@ -91,6 +93,8 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
         if (e.k === 'dialog') broadcast(e.nodeId, { t: 'dialog', id: e.nodeId, kind: e.kind, message: e.message, defaultPrompt: e.defaultPrompt })
         else if (e.k === 'tab') broadcast(e.nodeId, { t: 'tab', id: e.nodeId, event: e.event })
         else if (e.k === 'tabNotice') broadcast(e.nodeId, { t: 'tabNotice', id: e.nodeId, message: e.message })
+        else if (e.k === 'sync') broadcast(e.nodeId, { t: 'sync', id: e.nodeId, on: e.on })
+        else if (e.k === 'syncMiss') broadcast(e.nodeId, { t: 'syncMiss', id: e.nodeId, tab: e.tab, reason: e.reason })
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })
       }),
       ...(host.console ? [host.console.onDelta((d) => broadcast(d.id, { t: 'console', ...d }))] : []),

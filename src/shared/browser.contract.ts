@@ -168,6 +168,10 @@ export type ServerMsg =
   | { t: 'tab'; id: string; event: BrowserTabEvent }
   /** Human-readable reason an action on the tabs was refused or redirected (e.g. "Tab limit (8) reached"). */
   | { t: 'tabNotice'; id: string; message: string }
+  /** Sync mode of the node (session state: sent on attach and on every change). */
+  | { t: 'sync'; id: string; on: boolean }
+  /** Sync could not repeat an action in pane `tab` (no element with that role and name there): show "no match" on that pane only. */
+  | { t: 'syncMiss'; id: string; tab: string; reason: 'no_match' | 'cross_origin' | 'error' }
   | ConsoleServerMsg
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */

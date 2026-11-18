@@ -1,7 +1,7 @@
 // Semantic element matching: the same element found again in ANOTHER page by what it is (role + accessible name + n-th
 // among equals in the accessibility tree), never by a snapshot ref. Used by sync mode (a human click mirrored into the
 // other panes) and by `click|type --all --text` (one action on every tab). Pure matching on top, a small CDP layer below.
-import type { BrowserInputEvent } from '../../shared/browser.contract'
+import type { BrowserInputEvent, KeyInput } from '../../shared/browser.contract'
 import { AGENT_CDP } from './browserAgent.cdpAllowlist'
 import { cleanName, INTERACTIVE, SKIP_ROLES } from './browserAgent.snapshot'
 import type { AxNode } from './browserAgent.snapshot'
@@ -105,7 +105,7 @@ export async function clickTarget(io: TabIo, t: SemanticTarget, pageUrl: string,
   }
 }
 
-const ENTER: BrowserInputEvent = { t: 'key', type: 'down', key: 'Enter', code: 'Enter', text: '\r', vk: 13, mods: 0 }
+const ENTER: KeyInput = { t: 'key', type: 'down', key: 'Enter', code: 'Enter', text: '\r', vk: 13, mods: 0 }
 
 /** Focus the field `t` names and type `text` at its caret (Enter after it when `submit`). */
 export async function typeTarget(io: TabIo, t: SemanticTarget, text: string, submit: boolean, exact = true): Promise<SemanticOutcome> {

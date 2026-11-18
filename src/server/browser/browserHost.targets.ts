@@ -35,6 +35,9 @@ export type HostEvent =
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
   | { k: 'tab'; nodeId: string; event: BrowserTabEvent }
   | { k: 'tabNotice'; nodeId: string; message: string }
+  /** Sync mode (browserHost.sync.ts) turned on/off for the node; `syncMiss` = the pane `tab` found no element matching the one acted on. */
+  | { k: 'sync'; nodeId: string; on: boolean }
+  | { k: 'syncMiss'; nodeId: string; tab: string; reason: 'no_match' | 'cross_origin' | 'error' }
 
 export { DEFAULT_VIEWPORT }
 

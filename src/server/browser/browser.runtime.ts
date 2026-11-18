@@ -155,6 +155,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     profiles: { profiles: profiles.service, ops: profiles.ops },
     setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
     tabs: createTabsService({ host, lifecycle, gwHost, hub, workspaces: d.workspaces, canvas: canvasPush, profileOf: profiles.profileOf }),
+    sync: { get: (id: string) => (host.state(id) ? host.syncOn(id) : null), set: (id: string, on: boolean) => host.sync.set(id, on) },
   }
   // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
   const design = new DesignMode({
@@ -173,6 +174,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     releaseLease: (id) => leases.release(id),
     async closeNode(id) {
       lifecycle.forget(id)
+      host.sync.forget(id)
       leases.release(id)
       agentOverride.delete(id)
       profiles.forget(id)

@@ -19,6 +19,8 @@ import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
 import { createTabApi } from './browserHost.tabs.api'
+import { createSync } from './browserHost.sync'
+import type { NodeSync } from './browserHost.sync'
 import type { TabApi } from './browserHost.tabs.api'
 import type { BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
 import type { TargetLifecycle } from './browserHost.lifecycle'
@@ -60,6 +62,8 @@ export class BrowserHost implements BrowserHostApi {
   private readonly tabs: TabManager
   /** Tabs of a node (list, actions, per-tab CDP for the agent); see browserHost.tabs.api.ts. */
   readonly tabApi: TabApi
+  /** Sync mode: a human action in one pane repeated in the others (browserHost.sync.ts). */
+  readonly sync: NodeSync
   readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
@@ -71,6 +75,7 @@ export class BrowserHost implements BrowserHostApi {
       refresh: (r) => this.refresh(r), initialTabs: deps.initialTabs, persist: deps.persistTabs, agentDriving: deps.agentDriving, discardMs: deps.tabDiscardMs,
     })
     this.tabApi = createTabApi({ table: this.table, tabs: this.tabs, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch })
+    this.sync = createSync({ table: this.table, tabApi: this.tabApi, emit })
     this.route = createEventRouter({
       table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.life.crash(r),
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
@@ -147,7 +152,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
-    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); return }
+    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); this.sync.onInput(nodeId, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -156,6 +161,7 @@ export class BrowserHost implements BrowserHostApi {
     // memprosesnya; await = burst trackpad telat detik). Urutan dijaga satu socket CDP; galat dilog `fire`.
     for (const c of toCdpCommands(ev)) this.fire(rec, c.method, c.params)
     if (ev.ls !== undefined) notePendingInput(rec, ev.ls, rx, Date.now())
+    this.sync.onInput(nodeId, ev)
   }
 
   /** Jalur CDP generik; hanya dipanggil lewat `cdpAllowlist` (WS-07). */
@@ -164,6 +170,9 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   discard(nodeId: string): Promise<void> { return this.life.discard(nodeId) }
+
+  /** Sync mode of a node (for the gateway's attach message). */
+  syncOn(nodeId: string): boolean { return this.sync.isOn(nodeId) }
 
   /** Tab list of a node (for the gateway's attach message); undefined = no tabs yet. */
   tabsState(nodeId: string): BrowserTabsState | undefined { return this.tabApi.state(nodeId) }
@@ -198,8 +207,13 @@ export class BrowserHost implements BrowserHostApi {
     await this.send(this.need(nodeId), CDP.handleDialog, { accept, promptText: text })
   }
 
-  /** Aksi nav non-URL (`go` memakai `navigate`). */
+  /** Aksi nav non-URL (`go` memakai `navigate`); in sync mode the other panes follow once this one has gone. */
   async navAction(nodeId: string, action: (typeof NAV_ACTIONS)[number], url?: string): Promise<void> {
+    await this.navOwn(nodeId, action, url)
+    this.sync.onNav(nodeId, action, url)
+  }
+
+  private async navOwn(nodeId: string, action: (typeof NAV_ACTIONS)[number], url?: string): Promise<void> {
     if (action === 'go') {
       if (!url) throw new BrowserError('bad_request', `nav go without url for node ${nodeId}`)
       return this.navigate(nodeId, url)
@@ -286,6 +300,7 @@ export class BrowserHost implements BrowserHostApi {
 
   private emit(e: HostEvent): void {
     for (const cb of this.eventCbs) this.safe(() => cb(e))
+    this.safe(() => this.sync?.onEvent(e)) // `sync` is made after the first events can fire (constructor)
   }
 
   private safe(fn: () => void): void {
