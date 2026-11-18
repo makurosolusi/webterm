@@ -40,8 +40,11 @@ test('the registered board tools are exactly the planned ones', () => {
 
 test('no registered tool sets a done status through its input', async () => {
   const registry = everyTool()
+  // One migrated DB for all tools: migrate() costs ~157 ms and ran once per tool (~78x, ~12 s, over bun's 5 s default).
+  // The task is reset to needs_review before each call, so every tool still sees the same starting state.
+  const { db, store } = reviewTask()
   for (const def of registry.list()) {
-    const { db, store } = reviewTask()
+    db.query("UPDATE central_task SET status = 'needs_review' WHERE id = 't'").run()
     const ctx = { db, registry, guard: ALLOW_ALL_GUARD, maxTier: 'R3' as const, conversationId: 'central:global', now: () => 1, env }
     await execTool(ctx, def.name, { projectId: 'p', taskId: 't', status: 'done', fields: { status: 'done' } })
     if (store.getTask('t')?.status !== 'needs_review') throw new Error(`${def.name} moved the task`)
