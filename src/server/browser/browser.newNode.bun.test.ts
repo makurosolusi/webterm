@@ -124,7 +124,7 @@ describe('the other ways to get a node on a profile', () => {
   test('Central/agent open with a profile (openProject): the page starts on that profile and a viewer attaches to a live node', async () => {
     const r = await boot()
     const p = await make(r, 'Work')
-    const opened = await r.rt.openProject('w1', 'proj1', 'Work')
+    const opened = await r.rt.openProject?.('w1', 'proj1', 'Work')
     expect(opened).toMatchObject({ ok: true })
     expect(r.acquired[0]).toBe(p.id)
     const c = await r.connect()
