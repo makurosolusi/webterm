@@ -246,3 +246,9 @@ jadi "+" mengikuti tab terakhir; saat overflow daftar menyusut ke ruang tersedia
 otomatis menetap di tepi kanannya, tanpa `position: sticky`. Batas 8 tab, Ctrl+T, dan dobel-klik area kosong tak berubah;
 "+" bukan target drop urutan (drag hanya membaca `[role=tab]`). Tes: `BrowserTabStrip.newtab.test.tsx`.
 Belum diverifikasi tanpa browser: tampilan nyata di tema terang/gelap dan lebar sempit.
+
+## Favicon tab
+Gejala: ikon tab selalu globe. Akar: model punya `favicon` tetapi server tidak pernah mengisinya. Kini server membaca
+ikon halaman, mengambil byte lewat Chromium profil yang sama, dan mengirimnya sebagai data URI (`BrowserTab.faviconData`,
+hanya runtime); `favicon` tetap URL http(s) untuk board. Strip, All tabs, dan header pane memakai `BrowserTabIcon`; baris
+judul node tidak. Detail, model ancaman, dan batas: `browser-favicons.md`.
