@@ -32,7 +32,7 @@ describe('settings pickers per screen', () => {
     fireEvent.click(within(theme).getByRole('radio', { name: 'Dark' }))
     expect(onChange).toHaveBeenLastCalledWith({ appTheme: 'dark' })
     for (const moved of ['Font size', 'Terminal colors', 'Cursor blink']) expect(screen.queryByText(moved), moved).toBeNull()
-    expect(document.querySelectorAll('[data-slot="settings-group"]').length).toBe(2) // Theme, Canvas background
+    expect(document.querySelectorAll('[data-slot="settings-group"]').length).toBe(3) // Theme, Layout (header mode), Canvas background
     expect(document.querySelector('h4')).toBeNull()
   })
 

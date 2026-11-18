@@ -1,0 +1,80 @@
+/* Header modes (docs/decisions/header-rail-layout.md). `.app-shell--header-compact|hidden` is the ONLY
+   place the header height changes: floating UI reads `--tabbar-h`, so overriding it here (full = 70px
+   from styles.css, compact = 35px, hidden = 0px) moves every panel without editing any of them.
+   Compound selectors (0,2,0) beat `.app-shell` regardless of sheet order; `body.clean-view .app-shell`
+   (0,2,1) still wins, so clean view hides everything in every mode. */
+
+/* Compact: the title bar row is gone; the tab row carries the menu, search and account. */
+.app-shell.app-shell--header-compact {
+  --tabbar-h: var(--editor-tabs-h);
+  grid-template-rows: 0 var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
+}
+
+/* Hidden: no header rows. Both rows become an overlay that slides over the canvas while revealed
+   (`data-revealed`), without changing `--tabbar-h`, so pan, zoom and node positions never jump.
+   While hidden they are `visibility: hidden`: not focusable and, above all, they never take a click. */
+.app-shell.app-shell--header-hidden {
+  --tabbar-h: 0px;
+  position: relative;
+  grid-template-rows: 0 0 minmax(0, 1fr) var(--status-bar-h);
+}
+.app-shell--header-hidden > .app-titlebar,
+.app-shell--header-hidden > .app-tabs {
+  grid-area: auto;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  visibility: hidden;
+  transform: translateY(-100%);
+  transition: transform 120ms ease, visibility 0s linear 120ms;
+  box-shadow: var(--wt-shadow-floating);
+}
+.app-shell--header-hidden > .app-titlebar { top: 0; height: var(--title-bar-h); }
+.app-shell--header-hidden > .app-tabs { top: var(--title-bar-h); height: var(--editor-tabs-h); }
+.app-shell--header-hidden > [data-revealed='true'] {
+  visibility: visible;
+  transform: none;
+  transition: transform 120ms ease, visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell--header-hidden > .app-titlebar,
+  .app-shell--header-hidden > .app-tabs,
+  .app-shell--header-hidden > [data-revealed='true'] { transition: none; }
+}
+
+/* The 2px "something is here" hairline along the top edge of a Hidden header. `pointer-events: none`
+   is load-bearing (an element there must never take a click). */
+.app-shell--header-hidden::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 29;
+  background: var(--vscode-focusBorder);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Compact menu button: one 35px icon cell (the model's label stays as the accessible name). */
+.app-menu-button { display: flex; flex: none; border-right: 1px solid var(--vscode-tab-border); }
+.app-menu-button .vscode-menu-bar { height: var(--editor-tabs-h); }
+.app-menu-button .vscode-menu-bar__item {
+  width: var(--editor-tabs-h);
+  justify-content: center;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0;
+  color: var(--vscode-tab-inactiveForeground);
+}
+.app-menu-button .vscode-menu-bar__item::before {
+  content: '\eb94';
+  font: normal normal var(--ui-icon-size) / 1 codicon;
+}
+
+/* Right end of the compact row: search, side bar toggle, account. */
+.app-tabs__actions.app-tabs__tail { align-items: center; gap: 2px; padding: 0 4px; }
+.app-tabs__actions.app-tabs__tail > .app-tabs__action { align-self: stretch; }
+body.clean-view .app-shell--header-hidden::before { display: none; }

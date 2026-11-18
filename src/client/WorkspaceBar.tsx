@@ -14,31 +14,22 @@
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
 // bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout toggle DISEMBUNYIKAN.
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import NodeContextMenu from './NodeContextMenu'
 import { buildSessionList } from './sessionList'
-import { workspaceTabFields } from './WorkspaceTabDot'
-import { deleteWorkspaceMessage } from './workspaceMenu'
-import { WorkspaceTabRename } from './WorkspaceTabRename'
 import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
-import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
-import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
-import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenuBar'
-import { clearOutput, toggleOutput } from './output/outputCommands'
-import { offerRemoveWorktree } from './workspaceWorktree.api'
-import { useWorktreeStatuses, worktreeSummary, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
-import WorkspaceCreateHost, { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
-import { useNotifyPrefs } from './osNotify.prefs'
-import { WorkspaceTabMenu } from './WorkspaceTabMenu'
-import { openSetup } from './setup/setup.open'
+import { AppMenuButton } from './AppMenuButton'
+import { TOGGLE_HEADER_ID } from './headerMode.commands'
+import { setHeaderMode, useHeaderMode, type HeaderMode } from './headerMode.store'
+import { useWorktreeStatuses, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
 import { AccountMenu } from './AccountMenu'
-import { WorkspaceColorHost } from './WorkspaceColorPicker'
 import { workspaceColorVar } from '../shared/workspaceColor'
+import { CompactTail, WorkspaceTabStrip } from './WorkspaceBar.tabs'
+import { WorkspaceBarHosts } from './WorkspaceBar.hosts'
+import { buildWorkspaceMenus } from './workspaceBar.menus'
+import { useWorkspaceTabActions } from './useWorkspaceTabActions'
 import type { ColorChange } from './api'
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 
-/** Jarak menu dari tepi bawah tombol `+` (`r.bottom + 4`). */
-const MENU_GAP = 4
 
 export interface WorkspaceBarProps {
   /** Semua workspace, urutan tab mengikuti urutan array ini. */
@@ -75,6 +66,14 @@ export interface WorkspaceBarProps {
   onToggleLayout?: () => void
   /** Layout controls at the right end of the title bar (Toggle Secondary Side Bar). */
   titleActions?: ReactNode
+  /**
+   * Effective header mode (`effectiveHeaderMode`): Full = title bar + tab row; Compact = the tab row
+   * alone, with the menu, search and account joined into it; Hidden = both rows as an overlay that
+   * shows only while `revealed`. Default Full, so existing callers are unchanged.
+   */
+  headerMode?: HeaderMode
+  /** Hidden only: the overlay is currently revealed (`useHeaderReveal`). */
+  revealed?: boolean
 }
 
 export default function WorkspaceBar({
@@ -97,109 +96,38 @@ export default function WorkspaceBar({
   layoutMode,
   onToggleLayout,
   titleActions,
+  headerMode = 'full',
+  revealed = false,
 }: WorkspaceBarProps) {
   const paletteKey = useCommandShortcut('workbench.omnibox')
   const layoutKey = useCommandShortcut('view.layout.toggle')
   const outputKey = useCommandShortcut('output.toggle')
+  const headerKey = useCommandShortcut(TOGGLE_HEADER_ID)
+  const storedMode = useHeaderMode()
   // Agregasi yang SAMA dengan sidebar sesi (filter kosong = semua baris). Memakai ulang
   // `buildSessionList` menjaga dot header dan badge sidebar tidak pernah bercerita beda.
   const groups = useMemo(
     () => buildSessionList(workspaces, liveActiveNodes, activeId, statuses, ''),
     [workspaces, liveActiveNodes, activeId, statuses],
   )
-
-  /** Tab context menu: which workspace it acts on (not necessarily the active one) and where. */
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
-  const mutedIds = useNotifyPrefs().muted
-  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [colorId, setColorId] = useState<string | null>(null)
-
+  const a = useWorkspaceTabActions(workspaces, onDeleteWorkspace)
   const worktrees = useWorktreeStatuses(workspaces)
-  const colorWs = colorId ? workspaces.find((w) => w.id === colorId) ?? null : null
   const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
-
-  const menuGroup = menu ? groups.find((g) => g.projectId === menu.id) ?? null : null
-
-  const deleteWorkspace = (projectId: string, projectName: string, sessions: number): void => {
-    // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang), jadi ia
-    // wajib lewat satu langkah konfirmasi. `confirm()` native adalah modal yang tidak bisa
-    // terklik sambil lalu; browser yang menekan dialognya memulangkan `false` → tidak menghapus.
-    if (!window.confirm(deleteWorkspaceMessage(projectName, sessions))) return
-    // A worktree workspace then offers to remove its checkout too (second confirm, branch kept). A
-    // failed removal is shown and the workspace stays, so its dirty work is never orphaned silently.
-    const cwd = workspaces.find((w) => w.id === projectId)?.cwd
-    offerRemoveWorktree(cwd).then(
-      () => onDeleteWorkspace(projectId),
-      (err: unknown) => window.alert(`Workspace not deleted: ${err instanceof Error ? err.message : String(err)}`),
-    )
-  }
-
-  // File: New → Rename/Delete (workspace aktif) → Settings → Logout, seperti File di VS Code
-  // (aksi dokumen, lalu Preferences, lalu keluar). Delete tidak diberi warna bahaya: VS Code tak
-  // mewarnai item menu, dan konfirmasi `window.confirm` sudah menjaga aksinya.
-  const fileItems: VscodeMenuEntry[] = [
-    { id: 'new-workspace', label: 'New Workspace', onSelect: () => onNewWorkspace() },
-    { id: 'clone-repository', label: 'Clone Repository…', onSelect: () => openWorkspaceCreate('clone') },
-    { id: 'new-project', label: 'New Project…', onSelect: () => openWorkspaceCreate('project') },
-  ]
-  if (activeGroup && onNewFiles) fileItems.push({ type: 'separator' }, { id: 'new-files', label: 'New Files Node', onSelect: onNewFiles })
-  if (activeGroup) {
-    fileItems.push(
-      { type: 'separator' },
-      {
-        id: 'rename-workspace',
-        label: 'Rename Workspace…',
-        onSelect: () => setEditingId(activeGroup.projectId),
-      },
-      {
-        id: 'delete-workspace',
-        label: 'Delete Workspace',
-        onSelect: () => deleteWorkspace(activeGroup.projectId, activeGroup.projectName, activeGroup.sessions.length),
-      },
-    )
-  }
-  if (onOpenSettings) fileItems.push({ type: 'separator' }, { id: 'settings', label: 'Settings…', onSelect: onOpenSettings })
-  if (showLogout && onOpenAccount) fileItems.push({ type: 'separator' }, { id: 'account', label: 'Account…', onSelect: onOpenAccount })
-  if (showLogout && onLogout) fileItems.push(...(onOpenAccount ? [] : [{ type: 'separator' } as const]), { id: 'logout', label: 'Sign out', onSelect: onLogout })
-
-  const viewItems: VscodeMenuEntry[] = [
-    ...(onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: layoutKey ?? undefined, disabled: !activeGroup, onSelect: onToggleLayout }] : []),
-    { id: 'output', label: 'Output', keybinding: outputKey, onSelect: toggleOutput },
-    { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
-  ]
-  const menus: VscodeMenu[] = [
-    { id: 'file', label: 'File', items: fileItems },
-    { id: 'view', label: 'View', items: viewItems },
-  ]
-  if (onOpenHelp) {
-    menus.push({
-      id: 'help',
-      label: 'Help',
-      items: [{ id: 'shortcuts', label: 'Keyboard Shortcuts Reference', onSelect: onOpenHelp }, { id: 'setup', label: 'Set up webterm…', onSelect: () => openSetup() }],
-    })
-  }
-
-  // Worktree state on the tab: VS Code's dirty dot plus branch in the tooltip; the full badge sits
-  // next to the active workspace's name in the title bar (the tab label slot is a plain string).
   const accentOf = (id: string): string => workspaceColorVar(workspaces.find((x) => x.id === id)?.color, workspaces.find((x) => x.id === id)?.colorShade)
-  const tabs: VscodeEditorTab[] = groups.map((g) => {
-    const wt = worktrees[g.projectId]
-    return {
-      id: g.projectId,
-      label: g.projectName,
-      ...workspaceTabFields(g, workspaces.find((x) => x.id === g.projectId), wt?.managed ? worktreeSummary(wt) : undefined),
-      dirty: wt?.managed === true && (wt.dirtyCount ?? 0) > 0,
-      editor: editingId === g.projectId
-        ? <WorkspaceTabRename initial={g.projectName} onCommit={(name) => onRenameWorkspace(g.projectId, name)} onClose={() => setEditingId(null)} />
-        : undefined,
-    }
-  })
 
+  const menus = buildWorkspaceMenus({
+    active: activeGroup && { projectId: activeGroup.projectId, projectName: activeGroup.projectName, sessionCount: activeGroup.sessions.length },
+    layoutKey, outputKey, onNewWorkspace: () => onNewWorkspace(), onRename: a.setEditingId, onDelete: a.deleteWorkspace,
+    onNewFiles, onOpenSettings, onOpenAccount, onLogout, showLogout, onOpenHelp, onToggleLayout,
+    headerMode: storedMode, onSetHeaderMode: setHeaderMode, headerKey,
+  })
+  const hidden = headerMode === 'hidden'
+  const overlayState = hidden ? { 'data-revealed': revealed ? 'true' : 'false' } : {}
   return (
     <>
-      <header className="app-titlebar">
+      {headerMode !== 'compact' && (
+      <header className="app-titlebar" data-header-region="" {...overlayState}>
         <div className="brand">
           <span className="brand__mark codicon codicon-terminal" aria-hidden />
           <span className="brand__name">webterm</span>
@@ -233,31 +161,21 @@ export default function WorkspaceBar({
           {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
         </div>
       </header>
+      )}
 
-      <div className="app-tabs">
-        <VscodeEditorTabBar
-          tabs={tabs}
+      <div className="app-tabs" data-header-region="" {...overlayState}>
+        {headerMode === 'compact' && <AppMenuButton menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />}
+        <WorkspaceTabStrip
+          groups={groups}
+          workspaces={workspaces}
+          worktrees={worktrees}
           activeId={activeId}
-          onActivate={onSelect}
-          onDoubleClick={setEditingId}
-          onContextMenu={(id, at) => setMenu({ id, ...at })}
-          ariaLabel="Workspaces"
-          trailing={
-            <IconTooltip label="New workspace: open a folder, clone a repository or create a project">
-              <button
-                type="button"
-                className="app-tabs__action"
-                aria-label="New workspace"
-                onClick={(e) => {
-                  // Three ways in, as welcome cards: open a folder, clone, or start a new project.
-                  const r = e.currentTarget.getBoundingClientRect()
-                  setAddMenu({ x: r.left, y: r.bottom + MENU_GAP })
-                }}
-              >
-                <span className="codicon codicon-add" aria-hidden />
-              </button>
-            </IconTooltip>
-          }
+          editingId={a.editingId}
+          onSelect={onSelect}
+          onEdit={a.setEditingId}
+          onRenameWorkspace={onRenameWorkspace}
+          onTabMenu={(id, at) => a.setMenu({ id, ...at })}
+          onAddMenu={a.setAddMenu}
         />
         {onToggleLayout && activeGroup && (
           <div className="app-tabs__actions">
@@ -275,31 +193,26 @@ export default function WorkspaceBar({
             </IconTooltip>
           </div>
         )}
+        {headerMode === 'compact' && <CompactTail {...{ onOpenPalette, titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }} />}
       </div>
 
-      {addMenu && (
-        <NodeContextMenu
-          x={addMenu.x}
-          y={addMenu.y}
-          rows={[
-            { label: 'Open Folder…', onClick: () => onNewWorkspace() },
-            { label: 'Clone Repository…', onClick: () => openWorkspaceCreate('clone') },
-            { label: 'New Project…', onClick: () => openWorkspaceCreate('project') },
-          ]}
-          onClose={() => setAddMenu(null)}
-        />
-      )}
-      {onSetWorkspaceColor && <WorkspaceColorHost workspace={colorWs} onClose={() => setColorId(null)} onSet={onSetWorkspaceColor} />}
-      <WorkspaceCreateHost onOpenFolder={() => onNewWorkspace()} onCreated={(path) => onNewWorkspace(path)} onOpenWorkspace={onSelect} />
-
-      {menu && menuGroup && (
-        <WorkspaceTabMenu
-          x={menu.x} y={menu.y} projectId={menuGroup.projectId} muted={mutedIds.includes(menuGroup.projectId)} isActive={menuGroup.projectId === activeId}
-          onSelect={onSelect} onRename={() => setEditingId(menuGroup.projectId)} onClose={() => setMenu(null)}
-          onColor={onSetWorkspaceColor ? () => setColorId(menuGroup.projectId) : undefined}
-          onDelete={() => deleteWorkspace(menuGroup.projectId, menuGroup.projectName, menuGroup.sessions.length)}
-        />
-      )}
+      <WorkspaceBarHosts
+        workspaces={workspaces}
+        groups={groups}
+        activeId={activeId}
+        addMenu={a.addMenu}
+        menu={a.menu}
+        colorId={a.colorId}
+        onCloseAddMenu={() => a.setAddMenu(null)}
+        onCloseMenu={() => a.setMenu(null)}
+        onCloseColor={() => a.setColorId(null)}
+        onColor={a.setColorId}
+        onRename={a.setEditingId}
+        onDelete={a.deleteWorkspace}
+        onSelect={onSelect}
+        onNewWorkspace={onNewWorkspace}
+        onSetWorkspaceColor={onSetWorkspaceColor}
+      />
     </>
   )
 }

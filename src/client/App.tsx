@@ -14,6 +14,10 @@ import { useAppSideBar, useSessionsAttention } from './sideBar/useAppSideBar'
 import { toggleSideBar, toggleSideBarView } from './secondarySideBar.store'
 import { useCentralControlEnabled } from './central/centralControlApi'
 import { CleanViewHint, useCleanView } from './cleanView'
+import { useEffectiveHeaderMode } from './headerMode.store'
+import { useHeaderModeCommands } from './headerMode.commands'
+import { useHeaderModeNotice } from './headerMode.notice'
+import './headerMode.css'
 import Omnibox from './Omnibox'
 import { openEditorAt, useOmnibox } from './Omnibox.open'
 import { setLspFileOpener } from './editorLsp.store'
@@ -201,6 +205,10 @@ export default function App() {
     toggleBoard: () => setBoard((v) => !v),
   })
   useAppSession(!authRequired, settings, settingsHydrated, update)
+  // Header mode (Full / Compact / Hidden): derived here because Full is forced while booting or without a workspace.
+  const headerMode = useEffectiveHeaderMode(hydrated, workspaces.length)
+  useHeaderModeCommands()
+  useHeaderModeNotice(headerMode)
 
   // Gerbang auth: board tak pernah dirender sebelum token cocok. Di LUAR SettingsProvider tak apa —
   // SignInScreen tidak membaca settings. Sesudah semua hook, jadi urutan hook App tetap stabil antar render.
@@ -211,11 +219,11 @@ export default function App() {
     <SettingsUpdateProvider value={update}>
     <NodeActionsProvider value={nodeActions}>
     <ActiveWorkspaceProvider value={activeId}>
-    <div className={`app-shell${sideBar.open && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}`}>
+    <div className={`app-shell${sideBar.open && hydrated && !noWorkspaces ? ' app-shell--sidebar' : ''}${headerMode === 'full' ? '' : ` app-shell--header-${headerMode}`}`}>
       {/* Header dirender SELALU — juga di layar Welcome: tombol `+`-nya adalah jalan masuk yang
           sama, dan header yang baru muncul setelah workspace pertama akan menggeser canvas
           46px ke bawah tepat saat pengguna menekan tombol. Lihat catatan di WorkspaceBar. */}
-      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp }} />
+      <AppWorkspaceBar {...{ workspaces, activeId, liveNodes, statuses, onSelect, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onLogout, showLogout: signedIn, onOpenAccount: () => routeActions.openSettings('account'), onAddFiles, omni, setShowSettings, setShowHelp, headerMode }} />
       {/* Satu-satunya pembawa tinggi canvas; `Welcome` (position: absolute; inset: 0) dan
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
@@ -241,6 +249,8 @@ export default function App() {
         <AppWorkbench
           dock={{
             vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings,
+            // Hidden header: the rail carries a search button (Mod+K still works); other modes keep the pill / icon in the header.
+            onOpenPalette: headerMode === 'hidden' ? () => omni.open('all') : undefined,
             onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary,
             extraStatusItems: [...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems],
           }}
