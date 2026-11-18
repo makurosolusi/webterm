@@ -1,7 +1,9 @@
 /** @vitest-environment jsdom */
-// WorkspaceBar in the three header modes. The inventory below is the T1 slice of the table in
+// WorkspaceBar in the three header modes. The inventory below is the header slice of the table in
 // docs/decisions/header-rail-layout.md: every header control must stay reachable in Full, Compact and
-// Hidden, and the compact menu must open the SAME menu model as the Full menu bar.
+// Hidden, and the compact menu must open the SAME menu model as the Full menu bar. Workspace tabs and
+// `+` are strip controls in Full only; in Compact/Hidden they are rail tiles (WorkspaceRail.inventory.test.tsx
+// proves the tiles and `+` are there, so no control is lost).
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
@@ -36,9 +38,10 @@ function mount(headerMode: HeaderMode, over: Partial<WorkspaceBarProps> = {}) {
 
 /** Inventory slice: control -> accessible role + name, present in every mode (Hidden: in the reveal overlay). */
 const DIRECT_CONTROLS: ReadonlyArray<readonly [role: string, name: string]> = [
-  ['button', 'Search'], ['button', 'New workspace'], ['button', 'Toggle tab layout'], ['button', 'Account'],
-  ['button', 'Toggle Secondary Side Bar'], ['tab', 'Proj'],
+  ['button', 'Search'], ['button', 'Toggle tab layout'], ['button', 'Account'], ['button', 'Toggle Secondary Side Bar'],
 ]
+/** Strip-only controls: Full draws them in the tab row, Compact/Hidden move them to the rail. */
+const STRIP_CONTROLS: ReadonlyArray<readonly [role: string, name: string]> = [['button', 'New workspace'], ['tab', 'Proj']]
 /** Inventory slice: menu rows by their top-level menu. Header is the new View > Header row. */
 const MENU_ROWS: Readonly<Record<string, readonly string[]>> = {
   File: ['New Workspace', 'Clone Repository…', 'New Project…', 'New Files Node', 'Rename Workspace…', 'Delete Workspace', 'Settings…', 'Account…', 'Sign out'],
@@ -61,6 +64,11 @@ describe.each(MODES)('header mode %s', (mode) => {
   it.each(DIRECT_CONTROLS)('keeps %s "%s" reachable', (role, name) => {
     mount(mode)
     expect(screen.getByRole(role, { name: name === 'Proj' ? /Proj/ : name })).toBeTruthy()
+  })
+
+  it.each(STRIP_CONTROLS)('%s "%s" is a strip control only in Full', (role, name) => {
+    mount(mode)
+    expect(Boolean(screen.queryByRole(role, { name: name === 'Proj' ? /Proj/ : name }))).toBe(mode === 'full')
   })
 
   it.each(Object.entries(MENU_ROWS))('opens %s with every row of the one menu model', (top, rows) => {
@@ -95,12 +103,15 @@ describe('Compact', () => {
     expect(rowsIn('compact')).toEqual(full)
   })
 
-  it('the menu button sits first in the tab row and search, side bar toggle and account sit at its end', () => {
+  it('is one row: menu button first, then the command pill and the layout switch, side bar toggle and account at the end; no workspace tabs', () => {
     const { container } = mount('compact')
     const row = container.querySelector('.app-tabs') as HTMLElement
     expect(row.firstElementChild?.classList.contains('app-menu-button')).toBe(true)
+    expect(row.querySelector('.app-titlebar__center button[aria-label="Search"]')).toBeTruthy()
+    expect(row.querySelector('[role="tablist"], [role="tab"]')).toBeNull()
     const tail = row.lastElementChild as HTMLElement
-    expect([...tail.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Search', 'Toggle Secondary Side Bar', 'Account'])
+    expect([...tail.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Toggle Secondary Side Bar', 'Account'])
+    expect(container.querySelectorAll('button[aria-label="Search"]')).toHaveLength(1)
   })
 
   it('the same handlers run: File > Settings… from the compact menu calls onOpenSettings', () => {
@@ -130,16 +141,17 @@ describe('Full', () => {
 })
 
 describe('Hidden', () => {
-  it('renders both rows as an overlay: not revealed by default, revealed on demand, no extra element', () => {
+  it('renders only the title bar as an overlay (no tab row: workspaces are rail tiles): not revealed by default, revealed on demand', () => {
     const { container, rerender } = mount('hidden')
     const rows = [...container.querySelectorAll('[data-header-region]')]
-    expect(rows).toHaveLength(2)
-    expect(rows.map((r) => r.getAttribute('data-revealed'))).toEqual(['false', 'false'])
+    expect(rows).toHaveLength(1)
+    expect(container.querySelector('.app-tabs')).toBeNull()
+    expect(rows.map((r) => r.getAttribute('data-revealed'))).toEqual(['false'])
     rerender(
       <WorkspaceBar workspaces={[ws]} activeId="w1" liveActiveNodes={[]} statuses={{}} headerMode="hidden" revealed
         onSelect={vi.fn()} onNewWorkspace={vi.fn()} onRenameWorkspace={vi.fn()} onDeleteWorkspace={vi.fn()} />,
     )
-    expect([...container.querySelectorAll('[data-header-region]')].map((r) => r.getAttribute('data-revealed'))).toEqual(['true', 'true'])
+    expect([...container.querySelectorAll('[data-header-region]')].map((r) => r.getAttribute('data-revealed'))).toEqual(['true'])
   })
 })
 

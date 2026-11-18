@@ -14,6 +14,8 @@ import { SecondarySideBarToggle } from './App.secondarySideBar'
 import { workspaceColorVar } from '../shared/workspaceColor'
 import type { AppSideBar } from './sideBar/useAppSideBar'
 import { useHeaderReveal } from './useHeaderReveal'
+import { WorkspaceRail, type WorkspaceRailProps } from './WorkspaceRail'
+import { useWorkspaceNavCommands } from './workspaceNav.commands'
 import type { HeaderMode } from './headerMode.store'
 
 type Toggle = Dispatch<SetStateAction<boolean>>
@@ -34,16 +36,19 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   toggleCleanView: () => void
   setPicker: (picker: { onPick: (p: string) => void } | null) => void
   setShowSettings: (open: boolean) => void
+  /** Compact/Hidden header: the workspace tiles shown in the rail. Absent in Full (the header's tab strip shows them). */
+  workspaceRail?: WorkspaceRailProps
 }
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, ...pass
+  vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, workspaceRail, ...pass
 }: AppDockProps) {
   const side = useSideBar()
   return (
     <Dock
       {...pass}
+      workspaceGroup={workspaceRail && <WorkspaceRail {...workspaceRail} />}
       onBrowse={(onPick) => setPicker({ onPick })}
       onBack={vp.onBack}
       onForward={vp.onForward}
@@ -98,6 +103,7 @@ export function AppWorkspaceBar({
 }: AppWorkspaceBarProps) {
   const layoutMode = useTabLayout().mode
   const revealed = useHeaderReveal(headerMode === 'hidden')
+  useWorkspaceNavCommands(pass.workspaces, pass.activeId, pass.onSelect)
   return (
     <WorkspaceBar
       {...pass}

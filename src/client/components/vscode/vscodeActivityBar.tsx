@@ -99,6 +99,7 @@ export function VscodeActivityBar({
           type="button"
           data-slot="vscode-activity-bar-item"
           data-active={active ? 'true' : 'false'}
+          data-label={item.label}
           className="vscode-activity-bar__item"
           aria-label={count ? `${item.label}, ${count}` : item.label}
           aria-current={active ? 'page' : undefined}

@@ -13,14 +13,16 @@
 //
 // Kedua baris dirender SELALU, juga saat belum ada workspace (`App` merender `Welcome` di
 // bawahnya): tombol `+` jalan masuk yang sama. Tanpa workspace, layout toggle DISEMBUNYIKAN.
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { buildSessionList } from './sessionList'
-import { IconTooltip, useCommandShortcut } from '@/components/ui/icon-button'
+import { useCommandShortcut } from '@/components/ui/icon-button'
 import { VscodeMenuBar } from '@/components/vscode/vscodeMenuBar'
 import { AppMenuButton } from './AppMenuButton'
 import { TOGGLE_HEADER_ID } from './headerMode.commands'
 import { setHeaderMode, useHeaderMode, type HeaderMode } from './headerMode.store'
-import { useWorktreeStatuses, WorkspaceWorktreeBadge } from './WorkspaceWorktreeBadge'
+import { useWorktreeStatuses } from './WorkspaceWorktreeBadge'
+import { CommandPill, LayoutToggle } from './WorkspaceBar.pill'
+import { resetWorkspaceTabUi } from './workspaceTabUi.store'
 import { AccountMenu } from './AccountMenu'
 import { workspaceColorVar } from '../shared/workspaceColor'
 import { CompactTail, WorkspaceTabStrip } from './WorkspaceBar.tabs'
@@ -99,7 +101,6 @@ export default function WorkspaceBar({
   headerMode = 'full',
   revealed = false,
 }: WorkspaceBarProps) {
-  const paletteKey = useCommandShortcut('workbench.omnibox')
   const layoutKey = useCommandShortcut('view.layout.toggle')
   const outputKey = useCommandShortcut('output.toggle')
   const headerKey = useCommandShortcut(TOGGLE_HEADER_ID)
@@ -112,6 +113,8 @@ export default function WorkspaceBar({
   )
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const a = useWorkspaceTabActions(workspaces, onDeleteWorkspace)
+  // The tab-surface state is shared with the rail tiles; it never outlives the bar.
+  useEffect(() => resetWorkspaceTabUi, [])
   const worktrees = useWorktreeStatuses(workspaces)
   const activeGroup = groups.find((g) => g.projectId === activeId) ?? null
   const accentOf = (id: string): string => workspaceColorVar(workspaces.find((x) => x.id === id)?.color, workspaces.find((x) => x.id === id)?.colorShade)
@@ -123,10 +126,14 @@ export default function WorkspaceBar({
     headerMode: storedMode, onSetHeaderMode: setHeaderMode, headerKey,
   })
   const hidden = headerMode === 'hidden'
+  const compact = headerMode === 'compact'
   const overlayState = hidden ? { 'data-revealed': revealed ? 'true' : 'false' } : {}
+  const accent = activeId ? accentOf(activeId) : undefined
+  const pill = <CommandPill onOpenPalette={onOpenPalette} accent={accent} name={activeGroup?.projectName} worktree={activeId ? worktrees[activeId] : undefined} />
+  const layoutToggle = onToggleLayout && activeGroup ? <LayoutToggle layoutMode={layoutMode} onToggle={onToggleLayout} /> : null
   return (
     <>
-      {headerMode !== 'compact' && (
+      {!compact && (
       <header className="app-titlebar" data-header-region="" {...overlayState}>
         <div className="brand">
           <span className="brand__mark codicon codicon-terminal" aria-hidden />
@@ -136,65 +143,42 @@ export default function WorkspaceBar({
         <VscodeMenuBar menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />
 
         {/* Command center: identitas workspace aktif. */}
-        <div className="app-titlebar__center">
-          {onOpenPalette ? (
-            // VS Code command center: the pill opens Go to Anything and shows its chord.
-            <IconTooltip label="Go to anything: nodes, files, URLs, agents, commands" commandId="workbench.omnibox">
-              <button type="button" className="app-titlebar__name" aria-label="Search" onClick={onOpenPalette}>
-                <span className="codicon codicon-search" aria-hidden />
-                {activeId && <span className="ws-chip" aria-hidden style={{ '--ws-chip': accentOf(activeId) } as CSSProperties} />}
-                <span className="app-titlebar__label">{activeGroup?.projectName ?? 'Search'}</span>
-                <WorkspaceWorktreeBadge status={activeId ? worktrees[activeId] : undefined} />
-                {paletteKey && <span className="kbd">{paletteKey}</span>}
-              </button>
-            </IconTooltip>
-          ) : (
-            <span className="app-titlebar__name">
-              {activeGroup?.projectName ?? ''}
-              <WorkspaceWorktreeBadge status={activeId ? worktrees[activeId] : undefined} />
-            </span>
-          )}
-        </div>
+        <div className="app-titlebar__center">{pill}</div>
 
         <div className="app-titlebar__actions">
+          {/* Hidden has no tab row, so its layout switch rides in the revealed title bar. */}
+          {hidden && layoutToggle}
           {titleActions}
           {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
         </div>
       </header>
       )}
 
-      <div className="app-tabs" data-header-region="" {...overlayState}>
-        {headerMode === 'compact' && <AppMenuButton menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />}
-        <WorkspaceTabStrip
-          groups={groups}
-          workspaces={workspaces}
-          worktrees={worktrees}
-          activeId={activeId}
-          editingId={a.editingId}
-          onSelect={onSelect}
-          onEdit={a.setEditingId}
-          onRenameWorkspace={onRenameWorkspace}
-          onTabMenu={(id, at) => a.setMenu({ id, ...at })}
-          onAddMenu={a.setAddMenu}
-        />
-        {onToggleLayout && activeGroup && (
-          <div className="app-tabs__actions">
-            <IconTooltip label={layoutMode === 'tabs' ? 'Switch to canvas layout' : 'Switch to tab layout'} commandId="view.layout.toggle">
-              <button
-                type="button"
-                className="app-tabs__action"
-                aria-label="Toggle tab layout"
-                aria-pressed={layoutMode === 'tabs'}
-                onClick={onToggleLayout}
-              >
-                {/* One layout switch per board (VS Code keeps layout controls in the title bar, not per editor group). */}
-                <span className="codicon codicon-editor-layout" aria-hidden />
-              </button>
-            </IconTooltip>
-          </div>
+      {/* Workspaces are strip tabs only in Full. Compact/Hidden show them as rail tiles (WorkspaceRail),
+          so Compact's single row is menu, command pill and actions, and Hidden has no tab row at all. */}
+      {!hidden && (
+      <div className="app-tabs" data-header-region="">
+        {compact && <AppMenuButton menus={menus} openId={menuOpen} onOpenChange={setMenuOpen} />}
+        {compact ? (
+          <div className="app-titlebar__center">{pill}</div>
+        ) : (
+          <WorkspaceTabStrip
+            groups={groups}
+            workspaces={workspaces}
+            worktrees={worktrees}
+            activeId={activeId}
+            editingId={a.editingId}
+            onSelect={onSelect}
+            onEdit={a.setEditingId}
+            onRenameWorkspace={onRenameWorkspace}
+            onTabMenu={(id, at) => a.setMenu({ id, ...at })}
+            onAddMenu={a.setAddMenu}
+          />
         )}
-        {headerMode === 'compact' && <CompactTail {...{ onOpenPalette, titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }} />}
+        {layoutToggle && <div className="app-tabs__actions">{layoutToggle}</div>}
+        {compact && <CompactTail {...{ titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }} />}
       </div>
+      )}
 
       <WorkspaceBarHosts
         workspaces={workspaces}

@@ -32,7 +32,9 @@ describe('header mode in the real App', () => {
       else expect(shell().className).not.toContain('app-shell--header-')
       expect(Boolean(document.querySelector('.app-titlebar'))).toBe(mode !== 'compact')
       expect(Boolean(document.querySelector('.app-menu-button'))).toBe(mode === 'compact')
-      expect(document.querySelector('.app-tabs')).toBeTruthy()
+      expect(Boolean(document.querySelector('.app-tabs'))).toBe(mode !== 'hidden')
+      // tiles live in the rail in Compact/Hidden, never in Full (one surface per control)
+      expect(Boolean(document.querySelector('.dock [role="tablist"][aria-label="Workspaces"]'))).toBe(mode !== 'full')
     },
   )
 
@@ -55,7 +57,7 @@ describe('header mode in the real App', () => {
     vi.unstubAllGlobals()
   })
 
-  it('Hidden puts a Search item at the top of the rail; the other modes do not', async () => {
+  it('Hidden puts a Search button at the top of the rail; the other modes do not', async () => {
     setHeaderMode('hidden')
     await mountCanvas(FIXTURE)
     const rail = document.querySelector('.dock') as HTMLElement

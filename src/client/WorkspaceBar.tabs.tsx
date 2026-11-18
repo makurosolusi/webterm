@@ -71,10 +71,9 @@ export function WorkspaceTabStrip({ groups, workspaces, worktrees, activeId, edi
   )
 }
 
-// Compact header mode: the title bar row is gone, so search, the title-bar actions (secondary side bar
-// toggle) and the account menu join the tab row. Same handlers as the Full title bar.
+// Compact header mode: the title bar row is gone, so the title-bar actions (secondary side bar toggle)
+// and the account menu join the single row, after the command pill. Same handlers as the Full title bar.
 export interface CompactTailProps {
-  onOpenPalette?: () => void
   titleActions?: ReactNode
   showLogout?: boolean
   onOpenAccount?: () => void
@@ -83,16 +82,9 @@ export interface CompactTailProps {
 }
 
 /** Right end of the Compact row. */
-export function CompactTail({ onOpenPalette, titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }: CompactTailProps) {
+export function CompactTail({ titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }: CompactTailProps) {
   return (
     <div className="app-tabs__actions app-titlebar__actions app-tabs__tail">
-      {onOpenPalette && (
-        <IconTooltip label="Go to anything: nodes, files, URLs, agents, commands" commandId="workbench.omnibox">
-          <button type="button" className="app-tabs__action" aria-label="Search" onClick={onOpenPalette}>
-            <span className="codicon codicon-search" aria-hidden />
-          </button>
-        </IconTooltip>
-      )}
       {titleActions}
       {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
     </div>

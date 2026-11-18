@@ -43,7 +43,7 @@ describe('--tabbar-h per mode: 70 / 35 / 0', () => {
 
 describe('Hidden overlay', () => {
   it('unrevealed rows are visibility:hidden (no click, no focus) and revealed ones show without moving layout', () => {
-    const rows = block(css, '.app-shell--header-hidden > .app-titlebar,\n.app-shell--header-hidden > .app-tabs')
+    const rows = block(css, '.app-shell--header-hidden > .app-titlebar')
     expect(rows).toContain('visibility: hidden')
     expect(rows).toContain('position: absolute')
     expect(block(css, ".app-shell--header-hidden > [data-revealed='true']")).toContain('visibility: visible')

@@ -18,6 +18,8 @@ import { useChatFeed } from './chat/chatFeed'
 import { CanvasStatusBar } from './Dock.statusBar'
 import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
+import { useRailLabelsAttribute } from './railLabels.store'
+import './workspaceRail.css'
 
 import type { DockProps } from './Dock.types'
 import { useTabLayout } from './tabLayout.store'
@@ -57,6 +59,7 @@ function activeActivityIds(props: DockProps): string[] {
  * aksi kanvas (`Dock.statusBar.tsx`). Quick Pick Add tetap di sini karena tombol pembukanya ada di rail.
  */
 export default function Dock(props: DockProps) {
+  useRailLabelsAttribute()
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const canvasMode = useTabLayout().mode !== 'tabs'
@@ -158,7 +161,6 @@ export default function Dock(props: DockProps) {
   // further. The tooltip shows ⌥⌘B through `commandId` (the side bar toggle), so a rebinding never drifts.
   const attention = props.sessionsAttention ?? 0
   const items: VscodeActivityBarItem[] = [
-    ...(props.onOpenPalette ? [{ id: 'search', label: 'Search', icon: codicon('search'), tooltip: 'Go to anything: nodes, files, URLs, agents, commands', commandId: 'workbench.omnibox' }] : []),
     { id: 'layers', label: 'Layers', icon: codicon('layers'), commandId: SIDE_BAR_VIEW_COMMANDS.layers.id },
     {
       id: 'sessions', label: 'Sessions', icon: codicon('list-tree'), commandId: SIDE_BAR_VIEW_COMMANDS.sessions.id,
@@ -178,9 +180,6 @@ export default function Dock(props: DockProps) {
 
   const onActivitySelect = (id: string) => {
     switch (id) {
-      case 'search':
-        props.onOpenPalette?.()
-        break
       case 'layers':
       case 'sessions':
       case 'history':
@@ -204,6 +203,14 @@ export default function Dock(props: DockProps) {
   return (
     <>
       <div className="dock">
+        {/* Hidden header: search sits above the workspace group (Mod+K still works in every mode). */}
+        {props.onOpenPalette && (
+          <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Search" tooltip="Go to anything: nodes, files, URLs, agents, commands"
+            commandId="workbench.omnibox" side="right" onClick={props.onOpenPalette}>
+            <span className="vscode-activity-bar__icon" aria-hidden>{codicon('search')}</span>
+          </IconButton>
+        )}
+        {props.workspaceGroup}
         <VscodeActivityBar
           items={items}
           activeIds={activeActivityIds(props)}

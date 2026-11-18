@@ -3,6 +3,7 @@ import type { Node, Edge, ReactFlowInstance } from '@xyflow/react'
 import { useRememberLastResize } from './nodeSpawn'
 import '@xyflow/react/dist/style.css'
 import { AppWorkspaceBar } from './App.chrome'
+import { WORKSPACE_CANVAS_ID } from './workspaceTiles'
 import AppWorkbench from './App.workbench'
 import FolderPicker from './FolderPicker'
 import Welcome from './Welcome'
@@ -228,7 +229,7 @@ export default function App() {
           ReactFlow sama-sama mengisinya. Panel mengapung TIDAK ikut masuk ke sini: `top`-nya
           dihitung dari atas viewport lewat --tabbar-h/--ss-top-chrome, jadi menaruhnya di dalam
           .app-main akan menghitung tinggi header dua kali. */}
-      <div className="app-main">
+      <div className="app-main" id={WORKSPACE_CANVAS_ID}>
         {!hydrated ? <BootScreen boot={boot} onRetry={retryBoot} /> : noWorkspaces ? (
           <Welcome
             onNewProject={onNewProject} onCreateEmpty={(name) => void onCreateReported(name)} setup={settingsHydrated ? settings.setup : undefined}
@@ -251,6 +252,8 @@ export default function App() {
             vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings,
             // Hidden header: the rail carries a search button (Mod+K still works); other modes keep the pill / icon in the header.
             onOpenPalette: headerMode === 'hidden' ? () => omni.open('all') : undefined,
+            // Compact/Hidden: workspaces are rail tiles. `onReorder` (persisted order, T2b) is wired here once `workspaceOrder.api` exists.
+            workspaceRail: headerMode === 'full' ? undefined : { workspaces, activeId, liveActiveNodes: liveNodes, statuses, onSelect, onRenameWorkspace },
             onAddTerminal, onAddBrowser, onAddAgent, onCreateWorkspace, onUndo, onRedo, canUndo, canRedo, needsYouCount, agentSummary,
             extraStatusItems: [...saveStatusItems, ...outputStatusItems, ...(centralEnabled ? [TASK_BOARD_STATUS_ITEM] : []), ...portItems, ...problems.statusItems, ...tasks.statusItems],
           }}
