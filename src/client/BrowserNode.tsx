@@ -13,7 +13,6 @@ import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
 import BrowserProfileChip from './BrowserProfileChip'
-import { useNodeActions } from './nodeActions'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
@@ -31,6 +30,12 @@ import { deviceStyle, useDeviceSession } from './browser.device'
 import { useConsoleDrawer } from './BrowserConsole'
 import type { ConsoleSlot } from './BrowserConsole'
 import { useNodeHost } from './tabLayout.context'
+import { BrowserTabStrip } from './browserTabs/BrowserTabStrip'
+import { BrowserTabPanel, showsNewTabPage } from './browserTabs/BrowserTabPanel'
+import { browserTabDomId } from './browserTabs/BrowserTabItem'
+import { useBrowserTabs } from './browserTabs/useBrowserTabs'
+import type { TabMsg } from './browserTabs/useBrowserTabs'
+import { useBrowserTabShortcuts } from './browserTabs/useBrowserTabShortcuts'
 import './browser.css'
 import './browser.driven.css'
 
@@ -85,9 +90,9 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const { inTab, visible, maximized } = useNodeHost()
   // Canvas zoom is irrelevant in a tab pane or maximized (1:1 either way); a hidden tab detaches the stream.
   const lowZoom = useStore((s) => !inTab && !maximized && s.transform[2] < ZOOM_PAUSE_BELOW)
-  const { openBrowserAt } = useNodeActions()
-  // Popup sah (window.open / target=_blank) dari halaman ini: node baru di sebelahnya, seperti tab baru di Brave/Chrome.
-  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (url) => { openBrowserAt?.({ url, anchorNodeId: id }) })
+  // Popups are tabs of this node now (server side); the tab messages feed `useBrowserTabs` below.
+  const tabMsg = useRef<(m: TabMsg) => void>(undefined)
+  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (m) => tabMsg.current?.(m))
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
   // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.
@@ -100,6 +105,10 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const bodyRef = useRef<HTMLDivElement>(null)
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
+  const tabs = useBrowserTabs(id, state, send)
+  tabMsg.current = tabs.onMsg
+  useBrowserTabShortcuts({ containerRef: bodyRef, state: tabs.view, onAction: tabs.act, onNotice: tabs.notify })
+  const panelId = `bt-panel-${id}`
   const lastGo = useRef<string | undefined>(undefined)
   const device = resolveDevice(d.device)
   const surfaceSession = useDeviceSession(session, device)
@@ -178,7 +187,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
     return () => { el.removeEventListener('keydown', onKey, true); el.removeEventListener('wheel', onWheel, { capture: true }) }
   }, [])
   const driven = state?.lease === 'agent'
-  const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked
+  const showStart = isBlankUrl(state?.url) && !d.url && !state?.blocked && !showsNewTabPage(tabs.view, tabs.active, tabs.standIn)
 
   const toggleCollapse = () => {
     if (!collapsed) { expandedH.current = height ?? DEFAULT_H; rf.updateNode(id, { height: COLLAPSED_H }) }
@@ -206,12 +215,14 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           onClose={() => { void rf.deleteElements({ nodes: [{ id }] }) }}
         />
         <div ref={bodyRef} className="node-body browser-node">
+          <BrowserTabStrip state={tabs.view} onAction={tabs.act} onNotice={tabs.notify} panelId={panelId} />
           {renderToolbar?.(ctx)}
           <BrowserDeviceHeader device={device} onRotate={() => d.device && ctx.setDevice({ ...d.device, landscape: !d.device.landscape })} />
-          <div className="browser-body">
+          <div className="browser-body" role="tabpanel" id={panelId} aria-labelledby={tabs.active ? browserTabDomId(tabs.active.tabId) : undefined} aria-label={tabs.active ? undefined : 'New tab'}>
             <div className={device ? 'browser-zoom browser-zoom--device' : 'browser-zoom'} style={{ '--browser-zoom': zoom, ...deviceStyle(device) } as CSSProperties}>
               <BrowserSurface session={surfaceSession} />
             </div>
+            <BrowserTabPanel view={tabs.view} active={tabs.active} standIn={tabs.standIn} act={tabs.act} go={(url) => ctx.nav('go', url)} />
             {showStart && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
           </div>

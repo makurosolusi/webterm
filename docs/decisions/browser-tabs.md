@@ -88,6 +88,33 @@ The old `{t:'popup'}` is no longer sent.
 Not verified without a real Chromium: that an adopted popup keeps `window.opener` live, real OAuth round trips, and that
 screencast resumes on a swapped page.
 
+## Integrasi di node (P2b)
+Code: `src/client/browserTabs/useBrowserTabs.ts` (state + aksi), `browserTabs.api.ts` (REST), `BrowserTabPanel.tsx`
+(halaman tab baru / crashed / discarded), dipasang di `BrowserNode.tsx`; tes: `BrowserNode.tabs.test.tsx`.
+
+- **Letak.** Strip tepat di bawah baris judul/profil node dan di atas toolbar URL; area halaman = `role=tabpanel`
+  (`aria-labelledby` = tab aktif, tab `aria-controls` = panel). Pintasan dipasang di body node (fase capture), jadi
+  hanya hidup saat fokus ada di node; xterm dan input teks lain di dalam node dikecualikan. Textarea penyerap
+  keyboard permukaan halaman diberi `data-tab-shortcuts` supaya Ctrl/Cmd+T/W/1-8 tetap sampai dari halaman.
+- **Omnibox = tab aktif.** Server menayangkan dan menavigasi hanya tab aktif (slot tampilan), jadi `nav` WS yang sudah ada
+  (go/back/forward/reload/stop) otomatis mengenai tab aktif; tidak ada endpoint navigasi per tab. Judul/URL/favicon node
+  mengikuti state sesi yang sama.
+- **Optimistic vs tunggu server.** activate/close/move/pop-out/close-others/close-to-right diterapkan lokal lewat
+  `reduceTabs` lalu dikembalikan (rollback + toast) bila REST gagal; respons selalu menggantikan state. new/duplicate/reopen
+  menunggu server karena id tab dibuat server. Reload tab non-aktif = activate lalu `nav reload`.
+- **Ikuti agent.** `tabActivated by:'agent'` menggeser tab aktif UI selama manusia belum memilih tab sendiri (server sudah
+  memindahkan halaman yang di-stream pada mode ikuti); memilih tab = berhenti mengikuti selama node ini terpasang.
+- **Pop-out.** Node baru ditambahkan server ke board (profil sama, di samping) dan tiba lewat dorongan `canvas.update`;
+  klien hanya menghapus tab dan memberi toast. Tidak ada pembuatan node di klien. Penanganan `{t:'popup'}` lama dihapus.
+- **Galat.** 409 `tab_limit` -> toast "Tab limit (8) reached" (tombol + sudah nonaktif dengan alasan), `max_live` -> toast
+  "Too many browsers are active. Hide one first.", galat lain -> rollback + "Could not <aksi>: ...". Koneksi putus: state tab
+  terakhir tetap, penanda "Reconnecting..." memakai overlay node yang sudah ada.
+- **Node lama.** Sebelum server mengirim daftar tab (atau tanpa data) strip menampilkan satu tab dari judul halaman + `+`.
+  Tab kosong pertama tetap memakai halaman awal node; halaman tab baru dipakai untuk tab kosong saat ada lebih dari satu tab
+  atau riwayat tertutup. Galat navigasi tetap lewat overlay `BrowserNoticeAction` (tidak digandakan oleh komponen state tab).
+- **Deviasi.** Riwayat tertutup dibuka via `POST /reopen` (terbaru); entri yang lebih lama dibuka sebagai tab baru di URL-nya.
+  Belum diverifikasi tanpa browser nyata: tampilan strip di node, seret nyata, fokus/pintasan di Chromium sungguhan.
+
 ## Menyusul
 P1 server (model tab, popup -> tab, screencast hanya tab aktif, persistensi); P2b integrasi ke `BrowserNode`
 setelah profil ter-merge; P3 agent (verb `tabs`/`tab`, `--tab`, `newTab`); P4 split pane; P5 QC (sinkron, bandingkan).

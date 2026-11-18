@@ -39,7 +39,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }
 
-const request = <T>(method: string, path: string, body?: unknown): Promise<T> => call<T>(method, `${BROWSER_REST_PREFIX}${path}`, body)
+export const request = <T>(method: string, path: string, body?: unknown): Promise<T> => call<T>(method, `${BROWSER_REST_PREFIX}${path}`, body)
 
 const seg = encodeURIComponent
 
