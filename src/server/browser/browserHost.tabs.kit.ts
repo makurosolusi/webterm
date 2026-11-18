@@ -2,7 +2,7 @@
 // `browserHost.tabs.ts` builds the actions on top of it; `browserHost.tabs.popup.ts` the popup/background-event side.
 import { DEFAULT_DISCARD_MS } from '../../shared/browser.contract'
 import type { BrowserState } from '../../shared/browser.contract'
-import { BLANK_URL, MAX_TABS_PER_NODE, sanitizeTabTitle, TAB_LIMIT_REASON, validPersistedTabs } from '../../shared/browser.tabs'
+import { BLANK_URL, MAX_FAVICON_URL_LENGTH, MAX_TABS_PER_NODE, sanitizeTabTitle, TAB_LIMIT_REASON, validPersistedTabs } from '../../shared/browser.tabs'
 import type { BrowserTab, BrowserTabEvent, BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
 import { createLogger } from '../logs'
 import { stopCast } from './browserHost.cast'
@@ -54,6 +54,9 @@ export interface TabsOps {
 
 export type Tabs = NodeTabs
 
+/** Only a short http(s) icon url goes on the board (never icon bytes); `validPersistedTabs` applies the same rule when reading back. */
+const persistableIcon = (u: string | undefined): boolean => !!u && u.length <= MAX_FAVICON_URL_LENGTH && /^https?:\/\//i.test(u)
+
 export function createKit(ops: TabsOps) {
   const setTimer = ops.setTimer ?? ((fn: () => void, ms: number) => { const t = setTimeout(fn, ms); (t as { unref?: () => void }).unref?.(); return t })
   const clearTimer = ops.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>))
@@ -76,7 +79,7 @@ export function createKit(ops: TabsOps) {
   const notice = (rec: NodeRec, message: string): void => ops.emit({ k: 'tabNotice', nodeId: rec.nodeId, message })
 
   const toPersisted = (s: BrowserTabsState): PersistedTabs | null => s.tabs.length === 0 ? null : {
-    tabs: s.tabs.map((t) => ({ tabId: t.tabId, url: t.url, title: t.title, ...(t.favicon ? { favicon: t.favicon } : {}), ...(t.openerTabId ? { openerTabId: t.openerTabId } : {}), ...(t.device ? { device: t.device } : {}) })),
+    tabs: s.tabs.map((t) => ({ tabId: t.tabId, url: t.url, title: t.title, ...(persistableIcon(t.favicon) ? { favicon: t.favicon } : {}), ...(t.openerTabId ? { openerTabId: t.openerTabId } : {}), ...(t.device ? { device: t.device } : {}) })),
     activeTabId: s.activeTabId, agentTabId: s.agentTabId, ...(s.layout ? { layout: s.layout } : {}),
   }
   const flush = (rec: NodeRec): void => {
@@ -187,7 +190,7 @@ export function createKit(ops: TabsOps) {
   const forgetSaved = (nodeId: string): void => { lastSaved.delete(nodeId) }
   const title = sanitizeTabTitle
 
-  return { ops, idOf, tabsOf, find, must, emitTab, notice, flush, schedule, patchTab, setState, send, fire, stopStream, closeTarget, emulate, spawn, load, cancelDiscard, armDiscard, discardTab, forgetTimers, canAdd, initial, forgetSaved, title }
+  return { ops, setTimer, clearTimer, idOf, tabsOf, find, must, emitTab, notice, flush, schedule, patchTab, setState, send, fire, stopStream, closeTarget, emulate, spawn, load, cancelDiscard, armDiscard, discardTab, forgetTimers, canAdd, initial, forgetSaved, title }
 }
 
 export type TabKit = ReturnType<typeof createKit>

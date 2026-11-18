@@ -29,6 +29,8 @@ export interface RouterOps {
   /** Tab latar: event sesi, judul, dan hilangnya halaman (tidak menjatuhkan node). */
   bgEvent(b: BgTab, method: string, p: Record<string, unknown>, sessionId: string): void
   bgTitle(b: BgTab, title: string): void
+  /** A page called a CDP binding (the favicon <link> watcher): the view page's own event. */
+  binding(rec: NodeRec, p: Record<string, unknown>): void
   bgGone(b: BgTab): void
   /** State Shields untuk halaman baru (hitungan direset per muat halaman, seperti Brave). */
   pageState(url: string): Partial<BrowserState>
@@ -117,6 +119,7 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       case CDP_EVENT.frameStoppedLoading:
         if (rec) { ops.patch(rec, { loading: false }); void ops.refresh(rec) }
         return
+      case CDP_EVENT.bindingCalled: return rec && ops.binding(rec, p)
       case CDP_EVENT.dialogOpening:
         if (rec) ops.emit({ k: 'dialog', nodeId: rec.nodeId, kind: p.type as 'alert', message: String(p.message ?? ''), defaultPrompt: typeof p.defaultPrompt === 'string' ? p.defaultPrompt : undefined })
         return
