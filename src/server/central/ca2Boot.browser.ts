@@ -8,6 +8,7 @@ import { presence } from '../channels/channelPresence'
 import type { CapabilityStore } from '../control/capabilities'
 import { allows, clampTtl } from '../control/capabilities'
 import type { ControlCapabilities } from '../control/controlTypes'
+import { createProfile, listProfiles, resolveProfile } from '../browser/browser.profiles.service'
 import { createPageReader } from './context/pageReader'
 import type { BrowserToolDeps } from './tools/defs/browser.status'
 
@@ -47,16 +48,25 @@ export function createBrowserToolDeps(env: Record<string, string | undefined>, s
         src.store.revoke(token)
       }
     },
-    async openProject(workspaceId, nodeId) {
+    async openProject(workspaceId, nodeId, profile) {
       const rt = active()
       if (!rt?.openProject) return { ok: false, code: 'disabled' }
-      return rt.openProject(workspaceId, nodeId)
+      return rt.openProject(workspaceId, nodeId, profile)
+    },
+    // The registry module is the one the HTTP routes and the agent verb use; an agent-made profile leaves its ledger note there.
+    profiles: {
+      list: (workspaceId) => listProfiles(workspaceId),
+      resolve: (ref, workspaceId) => resolveProfile(ref, workspaceId),
+      create(input) {
+        const made = createProfile(input, 'agent')
+        return made.ok ? { ok: true, profile: made.value } : { ok: false, code: made.code }
+      },
     },
     reader,
-    async open(requesterId, nodeId) {
+    async open(requesterId, nodeId, profile) {
       const rt = active()
       if (!rt?.openFor) return { ok: false, code: 'disabled' }
-      const made = await rt.openFor(requesterId, nodeId)
+      const made = await rt.openFor(requesterId, nodeId, profile)
       // A browser already cabled to the agent (it opened its own first) is reused: `nodeId` says which one.
       if (made.ok) return { ok: true, started: true, nodeId: made.nodeId }
       // The node is on the board and cabled; only its page waits until the user shows it.

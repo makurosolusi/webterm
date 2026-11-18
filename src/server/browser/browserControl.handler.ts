@@ -1,7 +1,7 @@
 // Handler murni `/api/control/browser/[:nodeId/]:verb` (PLAN b §4.6). Pola control: `{status, body} | null`
 // (null = bukan milik handler ini). Dua jalur identitas: capability `browser.*` (Agent Pusat, node wajib di path) atau
 // token node sesi agent PTY — target lalu diselesaikan SAAT PANGGILAN dari kabel node itu (`browser.linkedTarget.ts`).
-import { BROWSER_CONTROL_PREFIX, BROWSER_VERB_CAP, BlockedError } from '../../shared/browser.contract'
+import { BROWSER_CONTROL_PREFIX, BROWSER_PROFILES_VERB, BROWSER_VERB_CAP, BlockedError } from '../../shared/browser.contract'
 import type { BrowserErrorCode, BrowserVerb } from '../../shared/browser.contract'
 import { isSafeNodeId } from '../../shared/workspace'
 import { asObject, headerValue } from '../control/controlTypes'
@@ -71,6 +71,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   const parts = req.path.slice(prefix.length).split('/')
   // `<verb>` saja = target dari kabel; `<nodeId>/<verb>` = target eksplisit.
   const [wanted, verb] = parts.length === 1 ? [undefined, parts[0]] : parts
+  if (parts.length === 1 && verb === BROWSER_PROFILES_VERB) return profilesVerb(req, deps)
   if (parts.length > 2 || !verb || !Object.hasOwn(BROWSER_VERB_CAP, verb)) return fail(404, 'not_found')
   if (wanted !== undefined && !isSafeNodeId(wanted)) return fail(400, 'invalid_node_id')
   const asked = verb as BrowserVerb
@@ -91,7 +92,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   if (!requester || !linked) return fail(401, 'unauthorized')
   const principal = `node:${requester}`
   if (deps.presetOf?.(requester)) {
-    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url)
+    const denied = presetBrowserDenial(asked, wanted, asObject(req.body).url, asObject(req.body).profile)
     if (denied) return denied
   }
   if (asked !== 'open') {
@@ -102,6 +103,20 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
     return fail(400, 'bad_request', { message: '`open` makes a new browser node; do not pass --node.' })
   }
   return openThenNavigate(req.body, requester, { ...deps, linked }, asked === 'navigate')
+}
+
+/** `webterm browser profiles`: the profile names the calling canvas agent may pass to `open --profile`. Read-only, node token only; a locked preset never gets it. */
+async function profilesVerb(req: ControlRequest, deps: BrowserControlDeps): Promise<ControlResult> {
+  if (req.method !== 'GET') return fail(405, 'method_not_allowed')
+  const requester = deps.linked && requesterOf(req.headers)
+  if (!requester) return fail(401, 'unauthorized')
+  if (deps.presetOf?.(requester)) return fail(403, 'verb_not_allowed_for_preset', { message: 'This agent may only open, navigate to and read public web pages.' })
+  const profiles = deps.open?.profiles
+  if (!profiles) return fail(503, 'open_unavailable', { message: 'Browser profiles are not available on this server.' })
+  const ws = (await deps.open!.canvas()).workspaceOfNode(requester)
+  if (!ws) return fail(404, 'not_on_board', { message: 'This session is not a node on any webterm board.' })
+  const list = profiles.list(ws.id).map((p) => ({ name: p.name, color: p.color, live: p.live }))
+  return { status: 200, body: controlOk({ profiles: list, note: 'Open a browser on one with `webterm browser open --profile <name> [url]`; no --profile = this board\'s Default.' }) }
 }
 
 /** `open`, or `navigate` with no cabled browser: add a cabled browser node, then navigate it through the normal gates. */

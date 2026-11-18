@@ -11,13 +11,15 @@ export interface ToolEvidence {
   /** Chat Bash: the command line; Central: the url argument when present. */
   command: string
   state: ToolState
+  /** Central: the `profile` argument of the call (browser_open); '' otherwise. */
+  profile?: string
   /** Short machine reason: Central receipt `detail` (`url_not_public`), chat result text head. */
   code: string
 }
 /** `drafts` = pending skill drafts found in the store after the run (only the direct-flow case reads it). */
 export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 
