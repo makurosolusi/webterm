@@ -26,6 +26,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/components/ui/icon-button.policy.test.ts',
     'src/client/cssTranslateResetPolicy.test.ts',
     'src/client/eventSource.policy.test.ts',
+    'src/client/headerMode.css.test.ts',
     'src/client/filesToolbarPolicy.test.tsx',
     'src/client/iconTooltipPolicy.test.ts',
     'src/client/independentSource.policy.test.ts',
@@ -38,6 +39,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/settings.link.policy.test.ts',
     'src/client/settings.search.policy.test.ts',
     'src/client/shadcnPolicy.test.ts',
+    'src/client/workspaceRail.policy.test.ts',
     'src/client/wrapperNeutral.policy.test.ts',
   ],
   server: [

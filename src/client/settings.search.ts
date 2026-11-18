@@ -28,7 +28,7 @@ import { isMacPlatform } from './terminalKeys.platform'
 import { MOVED_SETTINGS_PAGES, SETTINGS_SECTIONS, type SectionId } from './settingsSections.registry'
 import type { CentralTab } from './secondarySideBar.store'
 import { TOKEN_TEXT } from './tokenAccessLabels'
-import { HEADER_MODE_FIELD } from './SettingsHeaderMode'
+import { HEADER_MODE_FIELD, RAIL_LABELS_FIELD } from './SettingsHeaderMode'
 
 /** Group of a result: a Settings page, or `control` for pages that moved to the Control side bar. */
 export type SearchGroupId = SectionId | 'control'
@@ -78,6 +78,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Appearance (SettingsAppearanceSection.tsx, CanvasBackgroundSection.tsx)
   e('appearance', 'appTheme', 'Theme', 'System follows your computer’s light or dark mode.', 'dark light mode system appearance'),
   e('appearance', 'header-mode', HEADER_MODE_FIELD.label, HEADER_MODE_FIELD.hint, 'title bar tabs compact hidden full menu rail layout toolbar'),
+  e('appearance', 'rail-labels', RAIL_LABELS_FIELD.label, RAIL_LABELS_FIELD.hint, 'rail activity bar sidebar names labels expand wide pin workspace tiles'),
   e('appearance', 'canvasBackground', 'Canvas background', 'Color, gradient, image or looping video behind the nodes, for all workspaces or just this one.', 'wallpaper image gradient color photo video background video mp4 webm gif animated webp playback motion'),
   // Terminal › Look, Behavior, Advanced (SettingsTerminalSections.tsx); ids kept from when the look sat on Appearance
   e('terminal', 'terminalTheme', 'Terminal colors', undefined, 'color scheme theme palette dark light preview'),

@@ -1,9 +1,12 @@
+import type { ReactNode } from 'react'
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { SideBarView } from './sideBar/sideBar.view'
 
 export interface DockProps {
+  /** Compact/Hidden header: the workspace tile group (`WorkspaceRail`), between search and the tool icons. Absent in Full. */
+  workspaceGroup?: ReactNode
   /** Hidden header mode: adds a Search item at the top of the rail (opens Go to Anything). Absent: no item. */
   onOpenPalette?: () => void
   onAddTerminal: () => void

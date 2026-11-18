@@ -4,22 +4,23 @@
    Compound selectors (0,2,0) beat `.app-shell` regardless of sheet order; `body.clean-view .app-shell`
    (0,2,1) still wins, so clean view hides everything in every mode. */
 
-/* Compact: the title bar row is gone; the tab row carries the menu, search and account. */
+/* Compact: the title bar row is gone; the one remaining row carries the menu, command pill and account.
+   Workspaces are rail tiles, not tabs. */
 .app-shell.app-shell--header-compact {
   --tabbar-h: var(--editor-tabs-h);
   grid-template-rows: 0 var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
 }
 
-/* Hidden: no header rows. Both rows become an overlay that slides over the canvas while revealed
+/* Hidden: no header rows. The title bar becomes an overlay that slides over the canvas while revealed
    (`data-revealed`), without changing `--tabbar-h`, so pan, zoom and node positions never jump.
-   While hidden they are `visibility: hidden`: not focusable and, above all, they never take a click. */
+   There is no tab row in Hidden: workspaces are rail tiles (WorkspaceRail), the layout switch rides in
+   the title bar. While hidden the overlay is `visibility: hidden`: not focusable and never takes a click. */
 .app-shell.app-shell--header-hidden {
   --tabbar-h: 0px;
   position: relative;
   grid-template-rows: 0 0 minmax(0, 1fr) var(--status-bar-h);
 }
-.app-shell--header-hidden > .app-titlebar,
-.app-shell--header-hidden > .app-tabs {
+.app-shell--header-hidden > .app-titlebar {
   grid-area: auto;
   position: absolute;
   left: 0;
@@ -31,7 +32,6 @@
   box-shadow: var(--wt-shadow-floating);
 }
 .app-shell--header-hidden > .app-titlebar { top: 0; height: var(--title-bar-h); }
-.app-shell--header-hidden > .app-tabs { top: var(--title-bar-h); height: var(--editor-tabs-h); }
 .app-shell--header-hidden > [data-revealed='true'] {
   visibility: visible;
   transform: none;
@@ -39,7 +39,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell--header-hidden > .app-titlebar,
-  .app-shell--header-hidden > .app-tabs,
   .app-shell--header-hidden > [data-revealed='true'] { transition: none; }
 }
 
@@ -74,7 +73,7 @@
   font: normal normal var(--ui-icon-size) / 1 codicon;
 }
 
-/* Right end of the compact row: search, side bar toggle, account. */
+/* Right end of the compact row: side bar toggle, account. */
 .app-tabs__actions.app-tabs__tail { align-items: center; gap: 2px; padding: 0 4px; }
 .app-tabs__actions.app-tabs__tail > .app-tabs__action { align-self: stretch; }
 body.clean-view .app-shell--header-hidden::before { display: none; }

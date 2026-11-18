@@ -1,21 +1,15 @@
-// State + confirm flow behind the workspace tab surfaces (tab menu, `+` menu, rename, color, delete).
-import { useState } from 'react'
+// Confirm flow + store binding behind the workspace tab surfaces (tab menu, `+` menu, rename, color, delete).
 import { deleteWorkspaceMessage } from './workspaceMenu'
 import { offerRemoveWorktree } from './workspaceWorktree.api'
+import { setAddMenu, setColorId, setEditingId, setTabMenu, useWorkspaceTabUi } from './workspaceTabUi.store'
 import type { Workspace } from '../shared/workspace'
 
-export interface PointAt {
-  x: number
-  y: number
-}
+export type { PointAt } from './workspaceTabUi.store'
 
-/** Owns the tab-surface state; `deleteWorkspace` is the single confirm path for File and tab menus. */
+/** Binds the shared tab-surface state; `deleteWorkspace` is the single confirm path for File and tab menus. */
 export function useWorkspaceTabActions(workspaces: Workspace[], onDeleteWorkspace: (id: string) => void) {
-  /** Tab context menu: which workspace it acts on (not necessarily the active one) and where. */
-  const [menu, setMenu] = useState<({ id: string } & PointAt) | null>(null)
-  const [addMenu, setAddMenu] = useState<PointAt | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [colorId, setColorId] = useState<string | null>(null)
+  // State lives in `workspaceTabUi.store` so the header strip and the rail tiles share one set of hosts.
+  const { menu, addMenu, editingId, colorId } = useWorkspaceTabUi()
 
   const deleteWorkspace = (projectId: string, projectName: string, sessions: number): void => {
     // Hapus TIDAK bisa dibatalkan (row workspace + seluruh board tersimpannya hilang), jadi ia
@@ -31,5 +25,5 @@ export function useWorkspaceTabActions(workspaces: Workspace[], onDeleteWorkspac
     )
   }
 
-  return { menu, setMenu, addMenu, setAddMenu, editingId, setEditingId, colorId, setColorId, deleteWorkspace }
+  return { menu, setMenu: setTabMenu, addMenu, setAddMenu, editingId, setEditingId, colorId, setColorId, deleteWorkspace }
 }
