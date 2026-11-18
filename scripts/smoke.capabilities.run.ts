@@ -67,6 +67,8 @@ let workspaceId: string | undefined
 export async function seedBoard(s: SmokeServer): Promise<void> {
   const created = await api<{ id: string }>(s, 'POST', '/api/workspaces', { name: 'capability-smoke', cwd: s.cwd })
   workspaceId = created.id
+  // Two accounts for the profile cases (UI route: seeded through HTTP like the Browser panel does, not through the agent).
+  for (const name of ['work', 'personal']) await api(s, 'POST', '/api/browser/profiles', { name, workspaceId })
 }
 
 /** Adds one Agent Chat node to the seeded board and returns its id. */
@@ -114,7 +116,7 @@ export async function runChat(s: SmokeServer, opts: { preset?: 'skill-author'; p
     if (e.t === 'permission' && typeof e.requestId === 'string' && !answered.has(e.requestId)) {
       answered.add(e.requestId)
       const cmd = String((e.input as { command?: unknown } | null)?.command ?? '')
-      const allow = e.toolName === 'Bash' && /^webterm (browser (open|navigate|snapshot)|skills (list|propose|get))\b/.test(cmd)
+      const allow = e.toolName === 'Bash' && /^webterm (browser (open|navigate|snapshot|profiles)|skills (list|propose|get))\b/.test(cmd)
       const body = allow ? { requestId: e.requestId, behavior: 'allow' } : { requestId: e.requestId, behavior: 'deny', message: 'smoke: not part of the browser capability' }
       void api(s, 'POST', `/api/agent-chat/${nodeId}/permission`, body).catch(() => undefined) // 409 = already settled
     }

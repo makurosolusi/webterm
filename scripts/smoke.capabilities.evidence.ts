@@ -25,6 +25,7 @@ export function centralEvidence(messages: unknown[]): Evidence {
         id: str(part.toolCallId),
         name: str(part.name),
         command: str(rec(part.args).url),
+        ...(str(rec(part.args).profile) ? { profile: str(rec(part.args).profile) } : {}),
         state: denied ? 'denied' : (CENTRAL_STATE[str(part.state)] ?? 'failed'),
         code: str(result.detail) === 'ok' ? '' : str(result.detail),
       })
