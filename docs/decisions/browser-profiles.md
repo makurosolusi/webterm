@@ -156,3 +156,9 @@ before starting it, so they read the profile from the board and need no hint (sa
 paths in `browser.profiles.runtime.bun.test.ts`).
 
 Log: `browser.launch_failed` carries `reason` (see `browser-tabs.md`, "A node that cannot operate").
+
+## Who is signed in
+
+A profile can show which Google and GitHub accounts are signed in (name and a masked email), checked inside the profile's own
+Chromium and cached per profile; see `browser-profile-accounts.md`. The profile list gains optional `accounts`, and the chip,
+its menu and Settings > Browser show them. A Settings switch turns the whole thing off.
