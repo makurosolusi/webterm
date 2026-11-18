@@ -289,3 +289,19 @@ describe('browser_read: latency phases', () => {
     } finally { setActiveLatency(before) }
   })
 })
+
+describe('browser_read: tab', () => {
+  it('reads in the named tab: navigate, wait and snapshot all carry it; a bad tab id is an invalid shape', async () => {
+    const s = rig()
+    expect(await s.run({ nodeId: 'br-1', tab: 't2' })).toMatchObject({ ok: true })
+    const bodies = s.calls.filter(([, v]) => ['navigate', 'wait', 'snapshot'].includes(v)).map(([, , b]) => JSON.parse(b) as { tab?: string })
+    expect(bodies).toHaveLength(3)
+    for (const b of bodies) expect(b.tab).toBe('t2')
+    expect(await s.run({ nodeId: 'br-1', tab: '../x' })).toMatchObject({ ok: false, code: 'invalid_shape' })
+  })
+  it('without `tab` no body carries one', async () => {
+    const s = rig()
+    await s.run({ nodeId: 'br-1' })
+    for (const [, , b] of s.calls) expect(b).not.toContain('"tab"')
+  })
+})

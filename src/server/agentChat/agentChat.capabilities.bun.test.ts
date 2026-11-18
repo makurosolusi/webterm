@@ -11,6 +11,8 @@ import { openFixture, type Fixture } from '../central/centralTestFixture.testuti
 import { AgentChatPool, type AgentChatTarget } from './agentChat.pool'
 import { buildAgentChatOptions } from './agentChat.options'
 import { chatCapabilityNote } from './agentChat.capabilities'
+import { CAPABILITY_SEEN_KIND } from '../capabilityNote'
+import { appendEvent } from '../ledger/ledgerEvent'
 import { setActiveProfiles } from '../browser/browser.profiles.service'
 import { makeRig, ws } from '../browser/browser.profiles.testkit'
 
@@ -67,10 +69,19 @@ describe('Capabilities updated note per node', () => {
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     const note = chatCapabilityNote(ctx(), 'n-1', undefined, base)
-    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only), drive web pages and use browser profiles (separate logins).')
+    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only), drive web pages, use browser profiles (separate logins) and work in several tabs of one browser node.')
     expect(note?.text).toContain('NOT AVAILABLE RIGHT NOW')
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, base)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)?.text).toContain('You CAN open')
+  })
+
+  test('a node that last saw the briefing from before tabs existed is told about tabs once, with the full briefing', () => {
+    appendEvent(ctx(), { actor: 'system:capabilities', kind: CAPABILITY_SEEN_KIND, correlationId: 'chat:n-old', payload: { profile: 'chat.default', hash: 'a0b1c2d3' } })
+    const note = chatCapabilityNote(ctx(), 'n-old', undefined, on)
+    expect(note?.line).toContain('work in several tabs of one browser node')
+    expect(note?.text).toContain('A browser node holds TABS')
+    expect(note?.text).toContain('`webterm browser tab switch <id>`')
+    expect(chatCapabilityNote(ctx(), 'n-old', undefined, on)).toBe(undefined)
   })
 
   test('two nodes do not leak into each other', () => {

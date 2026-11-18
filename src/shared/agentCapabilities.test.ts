@@ -56,6 +56,27 @@ describe('capability registry renderers', () => {
     expect(capabilityHash('chat.default', new Set(), '')).toBe(capabilityHash('chat.default'))
   })
 
+  it('web.tabs: the steward and a plain chat are told about tabs from the registry; both authors are denied; the hash follows', () => {
+    const chat = renderCapabilityBriefing('chat.default')
+    expect(chat).toContain('A browser node holds TABS')
+    expect(chat).toContain('moves you to it automatically (the result says newTab)')
+    expect(chat).toContain('`webterm browser tabs`')
+    expect(chat).toContain('`webterm browser tab switch <id>`')
+    expect(chat).toContain('`--tab <id>`')
+    expect(chat).toContain('Open many pages in one node instead of many nodes.')
+    const steward = renderCapabilityProse('central.steward', ['web.tabs'])
+    expect(steward).toContain('A browser node holds TABS')
+    expect(steward).toContain('browser_tab {"nodeId"')
+    expect(renderCapabilityProse('central.steward', ['web.tabs'], new Set<CapabilityId>(['web.tabs']))).toContain('Not available right now')
+    for (const id of AUTHORS) {
+      expect(capabilitiesOf(id).find((c) => c.id === 'web.tabs')?.level).toBe('denied')
+      expect(renderCapabilityBriefing(id)).not.toContain('browser_tab')
+    }
+    expect(renderCapabilityBriefing('chat.skill-author')).toContain('Use browser tabs')
+    // turning it off, or dropping it from the registry text, changes the hash a running chat compares
+    expect(capabilityHash('chat.default', new Set<CapabilityId>(['web.tabs']))).not.toBe(capabilityHash('chat.default'))
+  })
+
   it('renderCapabilityProse words only the asked abilities and says "not available" for an off one', () => {
     expect(renderCapabilityProse('central.steward', ['web.read'])).toContain('How: browser_read {"url"')
     expect(renderCapabilityProse('central.steward', ['web.read'])).not.toContain('browser_act')
