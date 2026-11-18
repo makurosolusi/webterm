@@ -1,4 +1,4 @@
-// Cari biner Chromium dan jalankan satu proses per profil workspace. Tidak pernah dipanggil test
+// Cari biner Chromium dan jalankan satu proses per profil. Tidak pernah dipanggil test
 // dengan biner nyata: `spawn`, `exists`, `readFile`, `sleep` diinjeksi.
 import { spawn as nodeSpawn } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
@@ -200,10 +200,17 @@ export async function launchChromium(
   throw new LaunchError('launch_failed', `Chromium did not publish ${ACTIVE_PORT_FILE} within the start timeout`)
 }
 
-/** Antarmuka peluncur yang dipakai `BrowserHost`: URL debugger browser untuk satu workspace. */
-export interface BrowserLauncher { acquire(workspaceId: string): Promise<string>; shutdown(): void }
+/** Antarmuka peluncur yang dipakai `BrowserHost`: URL debugger browser untuk satu profil (kunci = profileId). */
+export interface BrowserLauncher {
+  acquire(profileId: string): Promise<string>
+  shutdown(): void
+  /** A Chromium process runs (or is starting) on this profile. Absent in test fakes = treated as not live. */
+  isLive?(profileId: string): boolean
+  /** Kill the process of one profile (its session stays on disk). */
+  stop?(profileId: string): void
+}
 
-/** Satu proses Chromium per profil workspace; dibuat ulang bila mati; `shutdown()` membunuh semuanya. */
+/** Satu proses Chromium per profil; dibuat ulang bila mati; `shutdown()` membunuh semuanya. */
 export function createChromiumPool(cfg: {
   env: Record<string, string | undefined>
   dataRoot: string
@@ -214,26 +221,32 @@ export function createChromiumPool(cfg: {
 }): BrowserLauncher {
   const live = new Map<string, Promise<Launched>>()
   return {
-    acquire(workspaceId) {
-      let p = live.get(workspaceId)
+    acquire(profileId) {
+      let p = live.get(profileId)
       if (!p) {
         p = (async () => {
           const bin = resolveBinary(cfg.env, cfg.exists)
           const headless = headlessReason(cfg.env, cfg.platform)
-          if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { workspaceId } })
-          const profileDir = profileDirFor(cfg.dataRoot, workspaceId)
+          if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { profileId } })
+          const profileDir = profileDirFor(cfg.dataRoot, profileId)
           // Not in `live` = no Chromium of this pool owns the profile; a holder is a leftover of an earlier run.
           const reclaimed = await reclaimProfile(profileDir, KILL_GRACE_MS, cfg.deps?.sleep ?? defaultSleep, cfg.deps)
-          if (reclaimed !== null) log.warn('browser.profile_reclaimed', 'reclaimed the workspace profile from a stale Chromium', { ids: { workspaceId }, pid: reclaimed })
+          if (reclaimed !== null) log.warn('browser.profile_reclaimed', 'reclaimed the profile from a stale Chromium', { ids: { profileId }, pid: reclaimed })
           return launchChromium({
             bin, profileDir, proxyServer: cfg.proxyServer(), headless: headless !== null,
-            onExit: () => { live.delete(workspaceId); log.info('browser.exit', 'chromium exited', { ids: { workspaceId } }) },
+            onExit: () => { if (live.get(profileId) === p) live.delete(profileId); log.info('browser.exit', 'chromium exited', { ids: { profileId } }) },
           }, cfg.deps)
         })()
-        live.set(workspaceId, p)
-        p.catch(() => live.delete(workspaceId)) // lemparan tetap sampai ke pemanggil acquire
+        live.set(profileId, p)
+        p.catch(() => live.delete(profileId)) // lemparan tetap sampai ke pemanggil acquire
       }
       return p.then((l) => l.wsUrl)
+    },
+    isLive: (profileId) => live.has(profileId),
+    stop(profileId) {
+      const p = live.get(profileId)
+      live.delete(profileId)
+      p?.then((l) => l.kill(), () => undefined) // gagal-launch sudah dilaporkan ke pemanggil acquire
     },
     shutdown() {
       for (const p of live.values()) p.then((l) => l.kill(), () => undefined) // gagal-launch sudah dilaporkan ke pemanggil acquire

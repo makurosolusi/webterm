@@ -16,7 +16,7 @@ export interface BrowserRuntime {
   /** Layani satu socket `/ws/browser` milik workspace tertentu. */
   gateway(ws: WebSocket, workspaceId: string): void
   /** `/api/browser/*`; null = bukan prefix itu. */
-  api(method: string, pathname: string, body: () => Promise<string>): Promise<BrowserApiResult | null>
+  api(method: string, pathname: string, body: () => Promise<string>, search?: URLSearchParams): Promise<BrowserApiResult | null>
   /** Server-side `open` for a canvas agent: browser node `nodeId` beside `requesterId`, cabled to it, page started (Central playbooks). */
   openFor?(requesterId: string, nodeId: string): Promise<AgentOpened>
   /** Adds a standalone browser node (no agent, no cable) to a workspace and starts its page; Central's `browser_read`. */

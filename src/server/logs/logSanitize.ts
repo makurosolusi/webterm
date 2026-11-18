@@ -69,7 +69,7 @@ export function sanitizeData(data: Record<string, unknown> | undefined): Record<
 export function sanitizeIds(ids: LogEntry['ids']): LogEntry['ids'] {
   if (!ids || typeof ids !== 'object') return undefined
   const out: NonNullable<LogEntry['ids']> = {}
-  for (const key of ['workspaceId', 'nodeId', 'sessionId', 'requestId'] as const) {
+  for (const key of ['workspaceId', 'profileId', 'nodeId', 'sessionId', 'requestId'] as const) {
     const id = ids[key]
     if (typeof id === 'string' && id !== '') out[key] = safeText(id, MAX_ID_CHARS)
   }

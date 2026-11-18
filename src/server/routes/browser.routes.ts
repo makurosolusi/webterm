@@ -5,5 +5,12 @@ import { BROWSER_BODY_MAX_BYTES } from '../browserApi'
 import { send, type ApiRoute } from './route.core'
 
 export const browserRoutes: ApiRoute[] = [
-  { name: 'browser', handle: async (c) => send(c.res, await activeBrowser()?.api(c.method, c.path, c.body(BROWSER_BODY_MAX_BYTES))) },
+  {
+    name: 'browser',
+    handle: async (c) => {
+      const result = await activeBrowser()?.api(c.method, c.path, c.body(BROWSER_BODY_MAX_BYTES), c.url.searchParams)
+      for (const [k, v] of Object.entries(result?.headers ?? {})) c.res.setHeader(k, v) // e.g. Content-Disposition of a cookie export
+      return send(c.res, result)
+    },
+  },
 ]

@@ -138,6 +138,7 @@ export interface WsNode {
   diffNotes?: DiffNoteData[] // node 'diff': review notes not yet sent (validDiffNotes)
   plan?: PlanNodeData     // node 'plan': draft / approved dag (validPlanData)
   agentControl?: boolean  // node 'browser': agent boleh mengemudikan (butuh WEBTERM_BROWSER_AGENT)
+  profileId?: string      // node 'browser': browser profile (browser.profile.ts); absent = the workspace's Default profile
   device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
   zoom?: number           // node 'browser': page zoom (1 = 100%, browser.zoom.ts); absent = 100%
   chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)

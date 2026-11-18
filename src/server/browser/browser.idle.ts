@@ -7,7 +7,7 @@ export const CENTRAL_BROWSER_PREFIX = 'br-'
 
 export type IdleReason =
   | 'idle' | 'user_owned' | 'state_unknown' | 'discarded' | 'lease_agent' | 'focused' | 'loading'
-  | 'cabled_active_agent' | 'cabled_unknown_node'
+  | 'cabled_active_agent' | 'cabled_unknown_node' | 'other_profile'
 
 /** The agent behind a node id; `active` = it may still use its cabled browser (non-terminal and not `candidate_done`). */
 export interface AgentOfNode { id: string; state: string; active: boolean }
@@ -20,6 +20,8 @@ export interface IdlePorts {
   agentOfNode(nodeId: string): AgentOfNode | null
   /** Node the user is looking at right now. */
   focusedNode(): string | null
+  /** Profile a browser node runs in (`resolveProfileId`); needed only when a caller asks for a specific profile. */
+  profileOf?(workspaceId: string, nodeId: string): string
 }
 export interface CabledTo { nodeId: string; agentId?: string; agentState?: string }
 export interface IdleVerdict { idle: boolean; reason: IdleReason; owner: 'central' | 'user'; cabledTo?: CabledTo }
@@ -46,13 +48,14 @@ function cablesOf(p: IdlePorts, workspaceId: string, nodeId: string): Cable[] {
 }
 
 /**
- * Classifies one browser node. Only a Central-owned (`br-`) node that is live, human-leased, unfocused, not loading and
+ * Classifies one browser node. With `wantedProfile`, a node on any other profile is `other_profile` (not idle, not in use:
+ * it is somebody's other account, never to be handed out for this request). Only a Central-owned (`br-`) node that is live, human-leased, unfocused, not loading and
  * not cabled to a still-active agent is idle. A cable to a FINISHED agent (`candidate_done`, closed, orphaned, gone)
  * does not count: that stale cable is what used to keep every research browser "busy" forever.
  * `discarded` nodes are never auto-taken: navigate would rebuild the page, but through the raw host, bypassing the MAX_LIVE
  * slot gate (`lifecycle.attach`) and leaving the page untracked by the lifecycle (never evicted or discarded again).
  */
-export function classifyBrowserNode(p: IdlePorts, workspaceId: string, nodeId: string): IdleVerdict {
+export function classifyBrowserNode(p: IdlePorts, workspaceId: string, nodeId: string, wantedProfile?: string): IdleVerdict {
   const owner = nodeId.startsWith(CENTRAL_BROWSER_PREFIX) ? 'central' : 'user'
   const cables = cablesOf(p, workspaceId, nodeId)
   const blocking = cables.find((c) => c.blocks)
@@ -61,6 +64,7 @@ export function classifyBrowserNode(p: IdlePorts, workspaceId: string, nodeId: s
   const verdict = (reason: IdleReason): IdleVerdict => ({ idle: reason === 'idle', reason, owner, ...(cabledTo ? { cabledTo } : {}) })
   const s = p.stateOf(nodeId)
   if (!s) return verdict('state_unknown')
+  if (wantedProfile !== undefined && p.profileOf?.(workspaceId, nodeId) !== wantedProfile) return verdict('other_profile')
   if (s.live === 'discarded') return verdict('discarded')
   if (s.lease === 'agent') return verdict('lease_agent')
   if (p.focusedNode() === nodeId) return verdict('focused')

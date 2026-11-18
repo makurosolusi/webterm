@@ -42,6 +42,8 @@ beforeEach(() => {
     injector: { inject: async (_w, c) => void injected.push(...c), remove: async (_w, dom) => void removed.push(dom) },
     lease: { holder: () => 'human', takeover: (n) => void leaseLog.push(`takeover:${n}`), release: (n) => void leaseLog.push(`release:${n}`) },
     setAgentControl: (n, e) => void agentSet.push([n, e]),
+    profiles: {} as BrowserApiDeps['profiles'], // test-only: profile routes have their own suite (browserApi.profiles.test.ts)
+    setNodeProfile: async () => ({ ok: false, code: 'profile_not_found' }),
   }
 })
 afterEach(() => rmSync(base, { recursive: true, force: true }))

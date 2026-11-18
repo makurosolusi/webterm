@@ -73,6 +73,8 @@ export interface WorkspacesMsg { t: 'workspaces' }
 // A workspace's identity color changed (picker in any window, or Central's `workspace.color`): every window recolors its tab.
 // `by: 'central'` = Central's `workspace.color` did it: the window shows a notice naming the change, with Undo to `previous`.
 export interface WorkspaceColorMsg { t: 'workspaceColor'; workspaceId: string; color: string; shade: string; by?: 'central'; name?: string; previous?: { color: string; shade: string } }
+// The browser profile list or a profile's live state changed (create/rename/delete/import/process start-stop): clients refetch GET /api/browser/profiles.
+export interface BrowserProfilesMsg { t: 'browserProfiles' }
 // Central just acted on a node through a tool (`verb`, e.g. `typed`/`spawned`); `n` = actions folded into this frame.
 // Carries ids and a verb only, never prompts, typed text or results; the client reads titles from its board.
 export interface ActMsg { t: 'act'; v: 1; tool: string; verb: string; nodeId: string; nodeId2?: string; workspaceId?: string; turnId?: string; host?: string; n: number }
