@@ -15,6 +15,7 @@ import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
 import type { ShieldPolicy } from './adblock.shields'
 import { createConsoleLog } from './browserHost.console'
+import { createChallengeTracker } from './browserHost.challenge'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
@@ -51,6 +52,7 @@ export interface HostDeps {
 const TUNNEL_FAILED = /ERR_TUNNEL_CONNECTION_FAILED$/
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
+  private readonly challenges = createChallengeTracker()
   private readonly stateCbs = new Set<(s: BrowserState) => void>()
   private readonly eventCbs = new Set<(e: HostEvent) => void>()
 
@@ -221,6 +223,9 @@ export class BrowserHost implements BrowserHostApi {
     await this.send(rec, CDP.reload)
   }
 
+  /** "I'm done" on a human check: the node stops flagging this page and agents may continue. */
+  dismissChallenge(nodeId: string): void { const rec = this.need(nodeId); const p = this.challenges.dismiss(rec.state); if (p) this.patch(rec, p) }
+
   /** Teks seleksi halaman (untuk aksi `copy`). */
   async selectionText(nodeId: string): Promise<string> {
     const r = await this.send<{ result?: { value?: unknown } }>(this.need(nodeId), CDP.evaluate, { expression: 'String(window.getSelection())', returnByValue: true })
@@ -276,7 +281,8 @@ export class BrowserHost implements BrowserHostApi {
     this.patch(rec, { url, netError: dns ? 'net::ERR_NAME_NOT_RESOLVED' : r.errorText, loading: false })
   }
 
-  private patch(rec: NodeRec, part: Partial<BrowserState>): void {
+  private patch(rec: NodeRec, raw: Partial<BrowserState>): void {
+    const part = this.challenges.apply(rec.state, raw)
     const next = mergeState(rec.state, part)
     if (!next) return
     rec.state = next

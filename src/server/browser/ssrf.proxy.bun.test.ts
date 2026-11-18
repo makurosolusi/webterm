@@ -41,7 +41,7 @@ function raw(port: number, text: string, until?: string, then?: string): Promise
     const s = connect({ host: '127.0.0.1', port })
     let buf = ''
     let sent = false
-    s.on('data', (d) => {
+    s.on('data', (d: Buffer) => {
       buf += d.toString()
       if (then && !sent && buf.includes('\r\n\r\n')) { sent = true; s.write(then) }
       if (until && buf.includes(until)) s.destroy()
@@ -137,4 +137,38 @@ test('allowlist getter dibaca ulang tiap koneksi (izin dari Pengaturan berlaku t
   expect(await raw(t.proxy.port, connectReq('nas.lan:8080'))).toContain('blocked: private_host')
   allow = new Set([allowKey('nas.lan', 8080)])
   expect(await raw(t.proxy.port, connectReq('nas.lan:8080'), 'Established')).toContain('200 Connection Established')
+})
+
+// HTTPS must stay end to end: the proxy never terminates TLS, so the TLS/HTTP2 fingerprint a site sees is Chrome's own.
+test('CONNECT is a blind byte pipe: a ClientHello-shaped binary arrives upstream unchanged and the reply returns unchanged', async () => {
+  const hello = Buffer.concat([Buffer.from([0x16, 0x03, 0x01, 0x0b, 0xb8, 0x01]), Buffer.from(Array.from({ length: 3000 }, (_, i) => (i * 37 + 11) & 0xff))])
+  const reply = Buffer.concat([Buffer.from([0x16, 0x03, 0x03]), Buffer.from(Array.from({ length: 2000 }, (_, i) => (i * 91 + 5) & 0xff))])
+  const upstreamGot: Buffer[] = []
+  const upstream = createTcp((s) => { s.on('data', (d: Buffer) => { upstreamGot.push(d); if (Buffer.concat(upstreamGot).length >= hello.length) s.write(reply) }) })
+  await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r))
+  closers.push(() => new Promise<void>((r) => { upstream.close(() => r()) }))
+  const t = await setup(async () => [PUBLIC_IP], [], (upstream.address() as AddressInfo).port)
+  const back: Buffer[] = []
+  await new Promise<void>((resolve) => {
+    const s = connect({ host: '127.0.0.1', port: t.proxy.port })
+    let tunnelOpen = false
+    let header = ''
+    s.on('data', (d: Buffer) => {
+      if (!tunnelOpen) {
+        header += d.toString('latin1')
+        const end = header.indexOf('\r\n\r\n')
+        if (end < 0) return
+        tunnelOpen = true
+        s.write(hello)
+        const rest = Buffer.from(header.slice(end + 4), 'latin1')
+        if (rest.length) back.push(rest)
+      } else back.push(d)
+      if (Buffer.concat(back).length >= reply.length) s.destroy()
+    })
+    s.on('close', () => resolve())
+    s.write(connectReq('www.google.com:443'))
+  })
+  expect(Buffer.concat(upstreamGot).equals(hello)).toBe(true)
+  expect(Buffer.concat(back).equals(reply)).toBe(true)
+  expect(t.dialed.join()).toBe(`${PUBLIC_IP}:443`) // validated IP dialed once, no second TLS leg opened by the proxy
 })

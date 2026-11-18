@@ -22,6 +22,12 @@ describe('capability registry renderers', () => {
     expect(renderCapabilityLine('central.skill-author')).toBe('Can list, read and draft skills and read public web pages (read-only). Cannot drive web pages, use browser profiles (separate logins), work in several tabs of one browser node, use the canvas, run agents, use memory and use channels.')
   })
 
+  it('every agent that can open a page is told to hand a human check to the user (one registry sentence)', () => {
+    const rule = 'If a page asks you to verify you are human, stop and ask the user to complete it in the browser node.'
+    for (const id of ['central.steward', 'chat.default', 'central.skill-author', 'chat.skill-author'] as const) expect(renderCapabilityBriefing(id), id).toContain(rule)
+    expect(renderCapabilityProse('central.steward', ['web.read'])).toContain(rule)
+  })
+
   it('a profile that grants everything has no CANNOT section', () => {
     expect(renderCapabilityBriefing('central.steward')).not.toContain('WHAT YOU CANNOT DO')
   })

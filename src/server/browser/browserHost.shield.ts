@@ -8,6 +8,7 @@ import { CDP, ignoreClosed } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import type { AdblockVerdict } from './adblock.engine'
 import type { ShieldPolicy } from './adblock.shields'
+import { shieldExempt } from './adblock.exempt'
 import { BrowserError } from './browserHost.targets'
 import type { HostEvent, NodeRec, TargetTable } from './browserHost.targets'
 
@@ -70,7 +71,7 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
 
   const verdict = (rec: NodeRec, sid: string | undefined, p: Record<string, unknown>): AdblockVerdict => {
     const url = (p.request as { url?: unknown } | undefined)?.url
-    if (!policy || typeof url !== 'string' || !shielded(rec)) return PASS
+    if (!policy || typeof url !== 'string' || !shielded(rec) || shieldExempt(url, rec.state.url)) return PASS
     const kind = String(p.resourceType ?? 'Other')
     if (kind === 'Document') {
       if (sid === rec.sessionId && p.frameId === rec.targetId) return PASS // dokumen utama: navigasi pengguna/agent tak pernah diblokir

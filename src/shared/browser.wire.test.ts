@@ -73,6 +73,7 @@ describe('parseClientMsg valid', () => {
     expect(ok({ t: 'ack', id: 'n', seq: 4294967295 })).toEqual({ t: 'ack', id: 'n', seq: 4294967295 })
     expect(ok({ t: 'copy', id: 'n' })).toEqual({ t: 'copy', id: 'n' })
     expect(ok({ t: 'takeover', id: 'n' })).toEqual({ t: 'takeover', id: 'n' })
+    expect(ok({ t: 'challengeDone', id: 'n' })).toEqual({ t: 'challengeDone', id: 'n' })
   })
 
   it('mouse lengkap, dan default untuk field opsional', () => {

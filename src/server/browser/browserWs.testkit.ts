@@ -20,6 +20,7 @@ export class FakeHost implements GatewayHost {
   viewports: Array<[string, number, number, number]> = []
   opens: string[] = []
   navs: string[] = []
+  dismissed: string[] = []
   stateCbs = new Set<(s: BrowserState) => void>()
   eventCbs = new Set<(e: HostEvent) => void>()
   frames = new Map<string, (f: Frame) => void>()
@@ -52,6 +53,7 @@ export class FakeHost implements GatewayHost {
   async navAction(id: string, action: string, url?: string) { this.maybeFail('nav'); this.navs.push(`${id}:${action}:${url ?? ''}`) }
   async selectionText() { return 'selected' }
   shields: string[] = []
+  dismissChallenge(id: string) { this.dismissed.push(id) }
   async setShields(id: string, on: boolean) { this.shields.push(`${id}:${on}`) }
   devices: Array<[string, unknown]> = []
   async setDevice(id: string, device: unknown) { this.devices.push([id, device]) }
