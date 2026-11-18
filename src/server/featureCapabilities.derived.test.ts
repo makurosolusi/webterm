@@ -74,8 +74,12 @@ describe('detail dan sub', () => {
     expect(viewOf('telegram', { WEBTERM_TELEGRAM: 'on' }, DETECT).detail).toBeUndefined()
   })
   it('Browser punya sub agent berbahaya, bawaan ON (alat developer); off eksplisit tetap dihormati', () => {
-    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs).toEqual([{ key: 'browserAgent', label: 'Let agents drive the browser', on: true, dangerous: true }])
-    expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, DETECT).subs).toEqual([expect.objectContaining({ key: 'browserAgent', on: false })])
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs?.[0]).toEqual({ key: 'browserAgent', label: 'Let agents drive the browser', on: true, dangerous: true })
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_AGENT: 'off' }, DETECT).subs?.[0]).toEqual(expect.objectContaining({ key: 'browserAgent', on: false }))
+  })
+  it('Browser punya sub tautan terminal ke canvas, bawaan ON; off eksplisit dihormati', () => {
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on' }, DETECT).subs?.[1]).toMatchObject({ key: 'browserCaptureLinks', on: true })
+    expect(viewOf('browser', { WEBTERM_BROWSER: 'on', WEBTERM_BROWSER_CAPTURE_LINKS: 'off' }, DETECT).subs?.[1]).toMatchObject({ on: false })
   })
 })
 

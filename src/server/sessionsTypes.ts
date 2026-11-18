@@ -51,6 +51,9 @@ export interface SessionsOptions {
   hookReplyApprovals?: boolean
   /** Sumber PTY. Di-inject supaya test bisa memakai PTY palsu tanpa `Bun.Terminal`. */
   spawn?: typeof spawnPty
+  /** Link capture (browser links of a terminal open in the canvas): `true`/`false` forces it, absent = on for real spawns only
+   *  (an injected `spawn` is a test and must not write into the data dir). It still needs `captureActive` (switch + browser on). */
+  linkCapture?: boolean
   /** Sumber waktu untuk tombstone exit. Di-inject supaya test tidak bergantung jam dinding. */
   now?: () => number
 }

@@ -2,6 +2,7 @@ import type { OpenMsg, ServerMsg } from '../shared/protocol'
 import { isSafeNodeId, type Pane } from '../shared/workspace'
 import { sessionIdsOf } from '../shared/paneSessions'
 import { forgetNodeToken } from './hooks'
+import { forgetLinkHeaders } from './linkCapture/linkCapture.identity'
 import { SessionsCore, exitOutput } from './sessionsCore'
 import { ptyLog } from './sessionsLog'
 import { producePtyExit } from './events/producers'
@@ -16,6 +17,7 @@ export class SessionsEnd extends SessionsCore {
     // sesi. Agent yang keluar sendiri sudah dihapus dari `map` oleh `onExit`, sehingga `close` yang
     // menyusul tetap harus membersihkannya.
     forgetNodeToken(id)
+    forgetLinkHeaders(id)
     this.registry.deleteTranscript(id)
     const session = this.map.get(id)
     // `self` menang: proses yang terbukti keluar sendiri tidak boleh ditimpa `closed`. `closed` hanya

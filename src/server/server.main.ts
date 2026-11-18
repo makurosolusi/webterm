@@ -45,6 +45,8 @@ import { lspUpgrade } from './lsp/lsp.route'
 import { WS_ORIGIN_REQUIRED, humanUpgradeOriginOk } from './wsOrigin'
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
 import { ensureBrowserAgentShim } from './browserAgentShim'
+import { linkCredentialOwner } from './linkCapture/linkCapture.identity'
+import { installLinkCapture } from './linkCapture/linkCapture.shims'
 import { isSafeWorkspaceId } from './browser/profile.paths'
 import { activeBrowser, registerBrowserCapability } from './browser/browser.activate'
 import { enabledSet, isEnabled, onCapabilityChange, reconcile } from './featureCapabilities.runtime'
@@ -135,6 +137,7 @@ function allowed(req: http.IncomingMessage, url: URL): boolean {
     // `verify` adalah method pada modul-const, jadi tidak ada siklus bootstrap saat init.
     isCapabilityToken: (t) => capabilityStore.verify(t) !== undefined,
     isUiSession: (v) => uiSessions().verify(v),
+    isLinkCredential: (v) => linkCredentialOwner(v) !== undefined,
   })
   if (!ok) logAuthReject(url.pathname, denyReason(req.headers, expectedToken))
   return ok
@@ -146,6 +149,8 @@ export { isNodeTokenPath }
 // membaca token node dari env anak saat runtime, jadi root token tidak pernah ditulis ke disk
 // (file itu terbaca semua proses dengan uid yang sama).
 installContextLink()
+// Link catcher shims (BROWSER / open / xdg-open) in <dataDir>/bin; sessions use them only while the Settings switch is on.
+installLinkCapture()
 
 // Browser on the canvas: started/stopped by the `browser` capability, no restart (browser.activate.ts).
 registerBrowserCapability({

@@ -28,7 +28,7 @@ test('full route order snapshot', () => {
     'ports', 'problems', 'tasks',
     'outbox', 'node-status',
     'mcpapps',
-    'agent-status', 'tools', 'mcp', 'control', 'context-link',
+    'agent-status', 'tools', 'mcp', 'control', 'context-link', 'link-open',
     'generate-name', 'folder-picker',
     'central-chat', 'ca2', 'extended',
     'approval-human', 'policy', 'secrets', 'procedural', 'policy-sim', 'memory-controls', 'blackboard', 'memory-proposals', 'routines',

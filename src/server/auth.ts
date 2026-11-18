@@ -14,6 +14,7 @@
 import crypto from 'node:crypto'
 import { firstHeader } from './httpHeaders'
 import { createLogger } from './logs'
+import { LINK_OPEN_PATH, LINK_TOKEN_HEADER } from './linkCapture/linkCapture.config'
 
 const log = createLogger('auth')
 
@@ -119,6 +120,7 @@ export function isNodeTokenPath(pathname: string): boolean {
   return (
     pathname === '/api/agent-status' ||
     pathname === '/api/context-link' ||
+    pathname === LINK_OPEN_PATH ||
     pathname.startsWith('/api/control/') ||
     pathname === '/api/tools' ||
     pathname.startsWith('/api/tools/')
@@ -147,6 +149,8 @@ export function authorizeRequest(args: {
   isCapabilityToken?: (token: string) => boolean
   /** Validator of the `wt_ui` session cookie value. Optional: without it no cookie is accepted. */
   isUiSession?: (value: string) => boolean
+  /** Validator of the limited link-open credential of a plain terminal; honoured on `LINK_OPEN_PATH` only. */
+  isLinkCredential?: (value: string) => boolean
 }): boolean {
   if (authorize(args)) return true
   if (!sameOrigin(args.headers)) return false
@@ -157,6 +161,11 @@ export function authorizeRequest(args: {
   if (isNodeTokenPath(args.pathname)) {
     const candidate = firstHeader(args.headers[TOKEN_HEADER])
     if (typeof candidate === 'string' && candidate !== '' && args.isNodeToken(candidate)) return true
+  }
+  // Limited link-open credential (plain terminals, which hold no node token): ONE path, nothing else.
+  if (args.pathname === LINK_OPEN_PATH) {
+    const link = firstHeader(args.headers[LINK_TOKEN_HEADER])
+    if (typeof link === 'string' && link !== '' && args.isLinkCredential?.(link)) return true
   }
   // Capability: HANYA untuk keluarga control API, HANYA dari header (seperti semua kredensial di
   // sini). Jalur lain (settings/workspaces/fs//ws) tetap root-only.

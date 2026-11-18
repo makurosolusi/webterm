@@ -24,6 +24,7 @@ import { NODE_STATUS_FILE, StatusStore } from './sessionsStatusStore'
 import { missingBinaryText } from './sessionsNotices'
 import { findOnPath } from './binaryOnPath'
 import { dataDir } from './config'
+import { captureActive, captureEnv, withCapturePrefix } from './linkCapture/linkCapture.env'
 import { recordEvent } from './events/producers'
 import { recordLaunchLevel } from './permission/permission.mode'
 import type { StaleSweepEntry } from './nodeRegistry'
@@ -123,7 +124,13 @@ export class Sessions extends SessionsAdopt {
     // File ditulis hanya untuk spawn NYATA: spawn ter-inject (test) tidak menjalankan proses apa pun
     // yang membacanya, dan tidak boleh menulis ke data dir pengguna.
     if (msg.agentId && !this.options.spawn) writeNodeHeaders(msg.id)
+    // Link capture: BROWSER + shim dir first on PATH for EVERY session, so a link a terminal opens lands in the
+    // canvas browser (linkCapture/). Spread BEFORE the agent keys so an agent's own PATH/ids stay authoritative.
+    const capture = (this.options.linkCapture ?? !this.options.spawn) && captureActive()
+    const shell = resolveShell(this.options.shell)
+    if (capture && cmd) cmd = withCapturePrefix(cmd, shell)
     const env: Record<string, string> = {
+      ...(capture ? captureEnv({ nodeId: msg.id, agent: !!msg.agentId, port: PORT, shell, interactive: !cmd, writeFiles: !this.options.spawn }) : {}),
       ...(msg.agentId ? { [NODE_HEADERS_ENV]: claudeHeadersPath(msg.id) } : {}),
       ...(isContextCapable(msg.agentId)
         ? { WEBTERM_NODE_ID: msg.id, WEBTERM_PORT: String(PORT) }

@@ -49,6 +49,13 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     description: 'Terminal agents cabled to a Browser node may drive it (on by default; turn off per node with the toolbar toggle). Page content is untrusted.',
     dangerous: true,
   }, 'on'),
+  flag(ENV_BROWSER.captureLinks, GROUP, {
+    ...B,
+    requires: [BROWSER_ON],
+    label: 'Open links from terminals in the canvas browser',
+    description: 'On: a link a terminal or agent opens (sign-in pages from login commands, open, xdg-open, BROWSER) appears as a tab in a Browser node on the canvas, one is added next to the terminal if none is wired. ' +
+      'Off: links open in your machine browser. Applies to terminals started after the change; running ones keep their setting until restarted.',
+  }, 'on'),
   text(ENV_BROWSER.allowHosts, GROUP, {
     ...B,
     requires: [BROWSER_ON],

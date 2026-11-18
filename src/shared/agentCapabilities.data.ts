@@ -2,7 +2,7 @@
 // tool lock), the system prompts and the UI text are all derived from (see docs/decisions/agent-capabilities.md).
 // Data only: no server/DB imports, so client and server both import it. Add a capability here, nowhere else.
 
-export type CapabilityId = 'skills.author' | 'web.read' | 'web.drive' | 'web.profiles' | 'web.tabs' | 'web.layout' | 'canvas' | 'agents' | 'memory' | 'channels'
+export type CapabilityId = 'skills.author' | 'web.read' | 'web.drive' | 'web.profiles' | 'web.tabs' | 'web.layout' | 'web.links' | 'canvas' | 'agents' | 'memory' | 'channels'
 export type ProfileId = 'central.skill-author' | 'chat.skill-author' | 'central.steward' | 'chat.default'
 /** `webterm <family> ...` command families a locked chat may run (strict parsers live in the server tool lock). */
 export type ChatFamily = 'skills' | 'browser'
@@ -19,6 +19,8 @@ export interface CapabilityDef {
   central?: { tools: readonly string[]; usage: string }
   /** Chat surface: the command family the tool lock derives from this, the call form, one sample command. */
   chat?: { family?: ChatFamily; usage: string; example: string }
+  /** Never listed under "cannot": it only means something to an agent that has a terminal, so a profile without it simply does not mention it. */
+  quietWhenDenied?: true
   /** Rules that go with the ability (rendered only while granted). */
   rules?: readonly string[]
 }
@@ -76,6 +78,11 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
     central: { tools: ['browser_layout'], usage: 'browser_layout {"nodeId":"<browser node>","action":"get"} | {"action":"set","spec":"single <tab> | h <tab> <tab> [..] | v <tab> <tab> [..] | grid <t1> <t2> <t3> <t4>"} (a tab is an id from browser_tab or new:<url>; at most 4 panes) | {"action":"sync","on":true|false} | {"action":"all","verb":"navigate|scroll|reload|back|forward","url":"<navigate>","dy":"<scroll>"}; read every page with browser_read and its "tab"' },
     chat: { usage: '`webterm browser layout get`, `webterm browser layout set <single|h|v|grid> <tab|new:url>...` (at most 4 panes), `webterm browser sync on|off`, `webterm browser <navigate|snapshot|screenshot|scroll|reload|back|forward> --all`, `webterm browser click --all --text "<element name>" [--role r] [--nth n]`, `webterm browser screenshot --layout`', example: 'webterm browser layout get' },
   },
+  'web.links': {
+    id: 'web.links', short: 'have links opened from a terminal appear in the canvas browser',
+    summary: 'A link a terminal or agent opens (open, xdg-open, $BROWSER, a sign-in page from a login command such as gh, vercel, npm or claude) opens by itself as a tab in a browser node on the canvas, never in the user\'s own browser; a browser node is added next to the terminal when none is wired.',
+    denied: 'Have links opened from a terminal appear in the canvas browser.', quietWhenDenied: true,
+  },
   canvas: {
     id: 'canvas', short: 'use the canvas', summary: 'Open, move and close nodes on the canvas.',
     denied: 'Use the canvas (open, move or close nodes).',
@@ -122,11 +129,12 @@ export const PROFILES: Readonly<Record<ProfileId, ProfileDef>> = {
     // browser_act is navigate, click and type only (central/tools/defs/browser.act.ts): the generic wording would promise scripts and screenshots.
     override: {
       'web.drive': { summary: 'Drive a project browser node yourself: navigate, click and type, or open a browser node.', rules: [] },
+      'web.links': { summary: 'A link an agent you started opens from its terminal (a sign-in page from a login command, open, xdg-open, $BROWSER) opens by itself as a tab in a browser node on that board, never in the user\'s own browser; a browser node is added next to the terminal when none is wired.' },
       'web.layout': { summary: 'A browser node can be split into up to 4 panes, one tab each: browser_layout `set` arranges them, `sync` mirrors the user\'s own actions across panes, and `all` runs one action on every tab and returns a result per tab (a tab that fails does not fail the others). Use it to compare pages in ONE node instead of opening several.' },
     },
   },
   'chat.default': {
-    id: 'chat.default', title: 'agent chat', granted: ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout'], listDenied: false,
+    id: 'chat.default', title: 'agent chat', granted: ['web.read', 'web.drive', 'web.profiles', 'web.tabs', 'web.layout', 'web.links'], listDenied: false,
     override: {
       'web.read': {
         summary: 'You CAN open and drive a browser node with `webterm browser ...`: open a page, then read it. You are not offline, so try before saying a page cannot be read.',

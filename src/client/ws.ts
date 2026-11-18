@@ -18,7 +18,7 @@ import { addStream, dispatchStreamFrame, streamsSocketClosed, streamsSocketOpene
 export { replayOpen } from './ws.replayOpen'
 export type { ExitReason } from './ws.terminals'
 export { STREAM_CLOSED, STREAM_CONNECTING, STREAM_OPEN, type WsEventSource } from './ws.streams'
-export { getStatus, onReconnect, subscribeAct, subscribeCanvas, subscribeNet, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaceColor, subscribeWorkspaces } from './ws.listeners'
+export { getStatus, onReconnect, subscribeAct, subscribeCanvas, subscribeLinkOpened, subscribeNet, subscribeShot, subscribeStatus, subscribeView, subscribeWorkspaceColor, subscribeWorkspaces } from './ws.listeners'
 
 let ws: WebSocket | null = null
 let everConnected = false

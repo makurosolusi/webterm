@@ -75,6 +75,9 @@ export interface WorkspacesMsg { t: 'workspaces' }
 export interface WorkspaceColorMsg { t: 'workspaceColor'; workspaceId: string; color: string; shade: string; by?: 'central'; name?: string; previous?: { color: string; shade: string } }
 // The browser profile list or a profile's live state changed (create/rename/delete/import/process start-stop): clients refetch GET /api/browser/profiles.
 export interface BrowserProfilesMsg { t: 'browserProfiles' }
+// A link opened in a terminal was captured and shown in browser node `nodeId` (`host` = hostname only, never the URL:
+// it can carry a sign-in token). `created` = the browser node was added for it. The window shows a short notice.
+export interface LinkOpenedMsg { t: 'linkOpened'; workspaceId: string; nodeId: string; host: string; created?: boolean }
 // Central just acted on a node through a tool (`verb`, e.g. `typed`/`spawned`); `n` = actions folded into this frame.
 // Carries ids and a verb only, never prompts, typed text or results; the client reads titles from its board.
 export interface ActMsg { t: 'act'; v: 1; tool: string; verb: string; nodeId: string; nodeId2?: string; workspaceId?: string; turnId?: string; host?: string; n: number }
@@ -89,7 +92,7 @@ export interface StreamOpenMsg { t: 'sse.open'; id: string }
 export interface StreamEventMsg { t: 'sse.ev'; id: string; event: string; data: string; lastId: string }
 // The stream ended (`status` 200) or was refused (its HTTP status). Nothing follows for this id.
 export interface StreamEndMsg { t: 'sse.end'; id: string; status: number }
-export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | WorkspaceColorMsg | BrowserProfilesMsg | ActMsg | NetMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
+export type ServerMsg = OutputMsg | ExitMsg | ResetMsg | StatusMsg | FsDirtyMsg | CanvasMsg | ViewMsg | ShotMsg | WorkspacesMsg | WorkspaceColorMsg | BrowserProfilesMsg | LinkOpenedMsg | ActMsg | NetMsg | PongMsg | HelloMsg | StreamOpenMsg | StreamEventMsg | StreamEndMsg
 
 export const WS_PATH = '/ws'
 /** `{bootId, build}` behind the /api gate: lets a failing socket tell "server down" from "credential refused". */

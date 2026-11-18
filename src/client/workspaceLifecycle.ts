@@ -32,6 +32,7 @@ import { useCanvasPush } from './workspaceCanvasPush'
 import { useViewPush } from './workspaceView.push'
 import { useWorkspaceListPush } from './workspaceList.push'
 import { useSetWorkspaceColor, useWorkspaceColorPush } from './workspaceColor.sync'
+import { useLinkOpenedNotice } from './linkOpened.notice'
 import type { ColorChange } from './api'
 import { useCanvasShot } from './canvasShot'
 import type { Workspace } from '../shared/workspace'
@@ -120,6 +121,7 @@ export function useWorkspaceLifecycle(deps: WorkspaceLifecycleDeps): WorkspaceLi
   useViewPush({ activeWsRef, onSelect, onFocus, onFit, onZoomTo, onPanBy, setBoard }) // central agent's `canvas.show` / `canvas.camera` / `workspace.switch`
   useWorkspaceListPush({ activeWsRef, setActiveWs, setWorkspaces }) // central agent's `workspace.create` / `workspace.rename`
   useWorkspaceColorPush({ activeWsRef, setActiveWs, setWorkspaces }) // a color changed in another window or by Central
+  useLinkOpenedNotice() // a terminal's link was captured into a canvas browser
   const onSetWorkspaceColor = useSetWorkspaceColor({ activeWsRef, setActiveWs, setWorkspaces }, workspaces)
   useCanvasShot() // central agent's `canvas.screenshot`
 
