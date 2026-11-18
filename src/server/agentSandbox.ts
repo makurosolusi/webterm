@@ -22,10 +22,11 @@ export function agentSandboxOn(env: NodeJS.ProcessEnv = process.env): boolean {
 /**
  * Data-dir entries an agent shell must still READ: the skill shims it runs (`context-links`,
  * `browser-agent`), the `webterm` launcher those shims exec (`bin`; unreadable = exit 126, then an
- * unsandboxed retry that prompts) and orchestrator worktrees, which can be an agent's cwd. None of
- * them holds a credential. The node's OWN header file is added per node (`ownHeaders`).
+ * unsandboxed retry that prompts), orchestrator worktrees, which can be an agent's cwd, and `downloads`
+ * (files a browser node saved; an agent reads one at the path its `downloads` verb returns, see
+ * docs/decisions/browser-downloads.md). None of them holds a credential. The node's OWN header file is added per node (`ownHeaders`).
  */
-export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 'worktrees'] as const
+export const AGENT_READABLE_ENTRIES = ['context-links', 'browser-agent', 'bin', 'worktrees', 'downloads'] as const
 
 /**
  * Data-dir entries holding credentials or state an agent must never read or write directly: the

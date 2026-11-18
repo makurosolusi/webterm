@@ -21,6 +21,8 @@ import type { ConsoleView } from '../shared/browser.console'
 import { isTabMsg, type TabMsg } from './browserTabs/useBrowserTabs'
 import { SYNC_OFF, applySyncMsg, isSyncMsg } from './browserSplit/browserSync'
 import type { SyncView } from './browserSplit/browserSync'
+import { applyDownloadMsg, isDownloadMsg } from './browserDownloads/browserDownloads.state'
+import type { DownloadItem } from '../shared/browser.downloads'
 
 export type BrowserDialog = Extract<ServerMsg, { t: 'dialog' }>
 type WithoutId<T> = T extends unknown ? Omit<T, 'id'> : never
@@ -51,6 +53,8 @@ export interface BrowserSession {
   panes: PaneFrames
   /** Sync mode of the node (server session state) and the panes whose last mirrored action found no match. */
   sync: SyncView
+  /** Downloads of this node (server list on attach, then one message per change); see browserDownloads/. */
+  downloads: DownloadItem[]
 }
 
 /** Draws a decoded frame; the session closes the bitmap afterwards. */
@@ -80,6 +84,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
   const [latency] = useState(createLatencyWindow)
   const [consoleView, setConsoleView] = useState<ConsoleView>(EMPTY_CONSOLE)
   const [sync, setSync] = useState<SyncView>(SYNC_OFF)
+  const [downloads, setDownloads] = useState<DownloadItem[]>([])
   const paneSinks = useRef(new Map<string, PaneSink>())
   const panes = useMemo<PaneFrames>(() => ({
     register(tabId, sink) {
@@ -165,6 +170,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
         } else if (m.t === 'dialog') setDialog(m)
         else if (isTabMsg(m)) tabMsgRef.current?.(m)
         else if (isSyncMsg(m)) setSync((v) => applySyncMsg(v, m, Date.now()))
+        else if (isDownloadMsg(m)) setDownloads((v) => applyDownloadMsg(v, m))
         else if (m.t === 'console') setConsoleView((v) => applyConsoleDelta(v, m))
         else if (m.t === 'cursor') setCursor(CURSOR_SAFE.test(m.css) ? m.css : 'default')
         else if (m.t === 'copy') {
@@ -228,7 +234,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     return true
   }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes, sync,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes, sync, downloads,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

@@ -48,6 +48,8 @@ import type { BrowserProfileStore } from '../db.browserProfile'
 import type { BrowserProfilesMsg, LinkOpenedMsg, ViewMsg } from '../../shared/protocol'
 import { openLinkInCanvas } from './browser.linkOpen'
 import { createProfileWiring } from './browser.runtime.profiles'
+import { createDownloadWiring } from './browser.runtime.downloads'
+import { withDownloadIds } from './browserAgent.verbs.downloads'
 import { createTabsService, tabPersister } from './browser.runtime.tabs'
 import { setActiveProfiles } from './browser.profiles.service'
 
@@ -120,8 +122,9 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const cfg = lifecycleConfig(env)
   const canvasPush = async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush()
   const navGuard = createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
+  const downloads = createDownloadWiring({ env, dataRoot: d.dataRoot, now, workspaces: d.workspaces, profileOf: profiles.profileOf })
   const host = new BrowserHost({
-    launcher, profileOf: profiles.profileOf, guard: toHostGuard(navGuard, denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
+    downloads: downloads.deps, launcher, profileOf: profiles.profileOf, guard: toHostGuard(navGuard, denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
     initialTabs: (id) => nodeOf(id)?.tabs, persistTabs: tabPersister(canvasPush), agentDriving: (id) => leases.isDriven(id), tabDiscardMs: cfg.discardMs,
   })
   profiles.bind(host)
@@ -139,7 +142,8 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const agentAllowed = (id: string) => agentEnv() && (agentOverride.get(id) ?? nodeOf(id)?.agentControl) !== false
   const wake = async (id: string, url: string): Promise<void> => { await wakeDiscarded(host, lifecycle, id, url) }
   const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-  const verbs = withLayout(withTabs(withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console }), host), { host, leases, agentAllowed, sleep }), { host, leases, agentAllowed, sleep })
+  const pageVerbs = withNewTab(createAgentVerbs({ host: agentTabHost(host), leases, snapshots: new SnapshotStore(), agentAllowed, wake, sleep, now, console: host.console, downloads: host.downloads }), host)
+  const verbs = withLayout(withTabs(host.downloads ? withDownloadIds(pageVerbs, host.downloads, now) : pageVerbs, { host, leases, agentAllowed, sleep }), { host, leases, agentAllowed, sleep })
   const versionProbe = createVersionProbe({ acquire: (profileId) => launcher.acquire(profileId), connect: d.connect })
   let liveProfiles = ''
   pauseLeaseOnChallenge(host, leases) // a human check is the user's to do; the agent verbs are refused meanwhile (handleBrowserControl)
@@ -160,6 +164,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     profiles: { profiles: profiles.service, ops: profiles.ops },
     setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
     tabs: createTabsService({ host, lifecycle, gwHost, hub, workspaces: d.workspaces, canvas: canvasPush, profileOf: profiles.profileOf }),
+    downloads: host.downloads,
     sync: { get: (id: string) => (host.state(id) ? host.syncOn(id) : null), set: (id: string, on: boolean) => host.sync.set(id, on) },
   }
   // Design Mode (G11): human-UI routes under /api/browser/<id>/design, tried before the rest.
@@ -213,7 +218,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       if (down) return
       down = true
       setActiveProfiles(null)
-      clearInterval(sweep); clearInterval(adblockTimer); unLease(); lifecycle.dispose(); versionProbe.reset()
+      clearInterval(sweep); clearInterval(adblockTimer); downloads.stop(); unLease(); lifecycle.dispose(); versionProbe.reset()
       // Tutup halaman satu per satu dulu: stop dari Settings tak boleh meninggalkan tab yatim di Chromium.
       await Promise.all([...live].map((id) => host.discard(id).catch((e) => log.warn('browser.stop', 'page close failed', { error: e instanceof Error ? e.name : typeof e }))))
       await host.dispose().catch((e) => log.warn('browser.stop', 'CDP dispose failed', { error: e instanceof Error ? e.name : typeof e }))

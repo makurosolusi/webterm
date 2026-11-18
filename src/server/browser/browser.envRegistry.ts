@@ -56,6 +56,13 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     description: 'On: a link a terminal or agent opens (sign-in pages from login commands, open, xdg-open, BROWSER) appears as a tab in a Browser node on the canvas, one is added next to the terminal if none is wired. ' +
       'Off: links open in your machine browser. Applies to terminals started after the change; running ones keep their setting until restarted.',
   }, 'on'),
+  flag(ENV_BROWSER.downloadsAuto, GROUP, {
+    ...B,
+    requires: [BROWSER_ON],
+    label: 'Keep downloads automatically',
+    description: 'On: files a page downloads are saved in the webterm folder of that browser profile (never your Downloads folder); "Save a copy" in the node takes one out. ' +
+      'Off: each finished file waits for Keep or Discard in the node\'s downloads list. Applies to new downloads.',
+  }, 'on'),
   text(ENV_BROWSER.allowHosts, GROUP, {
     ...B,
     requires: [BROWSER_ON],

@@ -215,6 +215,23 @@ describe('old shims are aliases that still work', () => {
     expect(status.argv).toEqual(expect.arrayContaining(['-X', 'POST', '{"tab":"t3"}'])) // a GET would drop the body
   })
 
+  it('webterm browser downloads posts an empty body to the downloads verb, takes --node, and rejects --tab/--all', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    const url = 'http://127.0.0.1:8700/api/control/browser/downloads'
+    const r = run(['browser', 'downloads'], env)
+    expect(r.status).toBe(0)
+    expect(r.argv).toContain(url)
+    expect(r.argv).toContain('{}')
+    expect(run(['browser', 'downloads', '--node', 'b1'], env).argv).toContain('http://127.0.0.1:8700/api/control/browser/b1/downloads')
+    for (const args of [['downloads', '--tab', 't2'], ['downloads', '--all']]) {
+      const bad = run(['browser', ...args], env)
+      expect([args, bad.status]).toEqual([args, 2])
+      expect(bad.argv).toEqual([])
+    }
+    expect(run(['browser'], env).stderr).toContain('downloads')
+  })
+
   it('--tab and the tab verbs refuse bad input before any request leaves the machine', () => {
     installWebtermCli(home())
     const env = { WEBTERM_NODE_HEADERS: headers() }

@@ -6,6 +6,7 @@ import type { SnapshotStore } from './browserAgent.snapshot'
 import { BrowserError } from './browserHost.targets'
 import type { LeaseService } from './browserLease.service'
 import type { ConsoleLog } from './browserHost.console'
+import type { HostDownloads } from './browserHost.downloads'
 
 export interface ApprovalRequest { nodeId: string; verb: 'click'; hostname: string }
 
@@ -23,6 +24,8 @@ export interface AgentCtx {
   now(): number
   /** Console buffer of the host (verb `console`); absent = the verb answers `disabled`. */
   console?: Pick<ConsoleLog, 'read' | 'capture'>
+  /** Downloads of the host (verb `downloads`); absent = an empty list. */
+  downloads?: Pick<HostDownloads, 'list' | 'file'>
 }
 
 /** Verbs on an existing browser node; `open` has no node yet, the control handler serves it (`browser.agentOpen.ts`). */

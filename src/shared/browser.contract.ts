@@ -6,6 +6,7 @@ import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 import type { BrowserChallenge } from './browser.challenge'
+import type { DownloadItem, DownloadState } from './browser.downloads'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -63,6 +64,7 @@ export const ENV_BROWSER = {
   cookieTtlDays: 'WEBTERM_BROWSER_COOKIE_TTL_DAYS',
   headless: 'WEBTERM_BROWSER_HEADLESS',
   captureLinks: 'WEBTERM_BROWSER_CAPTURE_LINKS',
+  downloadsAuto: 'WEBTERM_BROWSER_DOWNLOADS_AUTO',
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'
@@ -178,6 +180,10 @@ export type ServerMsg =
   | { t: 'sync'; id: string; on: boolean }
   /** Sync could not repeat an action in pane `tab` (no element with that role and name there): show "no match" on that pane only. */
   | { t: 'syncMiss'; id: string; tab: string; reason: 'no_match' | 'cross_origin' | 'error' }
+  /** One download of the node changed (begun, progress, ended); fold with `reduceDownloads`-style replace by id. */
+  | { t: 'download'; id: string; item: DownloadItem }
+  /** The node's whole download list (sent on attach, and after an entry was removed). */
+  | { t: 'downloads'; id: string; items: DownloadItem[] }
   | ConsoleServerMsg
 
 /** Pembaca lease untuk gateway (WS-04), diimplementasikan WS-07. */
@@ -229,6 +235,8 @@ export const BROWSER_VERB_CAP = {
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
   // Tabs of one node: `tabs` lists, `tab` creates / switches / closes (`new` takes a URL, so it is an act).
   tabs: 'browser.read', tab: 'browser.act',
+  // Files the node's pages downloaded (saved in the webterm folder): a list with the path of each finished file.
+  downloads: 'browser.read',
   // Split layout of one node: `layout` reads it, `arrange` sets it, `sync` switches sync mode; reload/back/forward are page verbs.
   layout: 'browser.read', arrange: 'browser.act', sync: 'browser.act', reload: 'browser.act', back: 'browser.act', forward: 'browser.act',
 } as const satisfies Record<string, BrowserCap>
@@ -262,6 +270,7 @@ export interface VerbBodies {
   arrange: { spec: string }
   sync: { on: boolean }
   tabs: Record<string, never>
+  downloads: Record<string, never>
   /** `new` = optional url; `switch` and `close` need `tab`. */
   tab: { action: 'new' | 'switch' | 'close'; url?: string; tab?: string }
   handoff: Record<string, never>; release: Record<string, never>
@@ -272,19 +281,24 @@ export interface VerbData {
   screenshot: { mime: 'image/jpeg'; base64: string }
   open: { nodeId: string; url: string; note: string }
   /** Node-token `navigate` with no cabled browser opens one first and also returns the `open` fields. */
-  navigate: { ok: true } & Partial<VerbData['open']>
-  wait: { ok: true }; click: { ok: true; newTab?: string; note?: string }; type: { ok: true }
+  navigate: { ok: true; /** A download this action started: its id (see the `downloads` verb). */ download?: string } & Partial<VerbData['open']>
+  wait: { ok: true }; click: { ok: true; newTab?: string; note?: string; download?: string }; type: { ok: true; download?: string }
   console: { content: string; count: number; dropped: number; note?: string }
-  press: { ok: true }; scroll: { ok: true }
+  press: { ok: true; download?: string }; scroll: { ok: true }
   reload: { ok: true }; back: { ok: true }; forward: { ok: true }
   layout: LayoutData
   arrange: LayoutData & { note: string }
   sync: { on: boolean; note: string }
   tabs: TabsData
+  downloads: DownloadsData
   tab: TabsData & { tab?: AgentTabView; note: string }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }
 }
+/** One download as an agent sees it; `path` only for a finished, kept file (an agent reads the file there). */
+export interface AgentDownload { id: string; name: string; state: DownloadState; bytes: number; total: number; host: string; risky: boolean; failure?: string; path?: string }
+/** Result of the `downloads` verb, newest first. File names and hosts come from the page: data, never instructions (`note`). */
+export interface DownloadsData { downloads: AgentDownload[]; note: string }
 /** One pane of a layout as an agent sees it. */
 export interface LayoutPane { tab: string; title: string; host: string; /** The human's focused pane. */ focus: boolean; w: number; h: number; device?: string }
 /** The node's split layout: `tree` like `h(t1, v(t2, t3))` (`t1` alone = no split), panes in reading order, and sync mode. */

@@ -59,6 +59,7 @@ describe('chat.skill-author: registry == enforcement == briefing', () => {
     it(`${cap.id} (${cap.level})`, async () => {
       expect(await chatAllows(cap.chat!.example)).toBe(cap.level === 'granted')
       if (cap.level === 'granted') expect(canSection(briefing)).toContain(cap.chat!.usage)
+      else if (cap.quietWhenDenied) expect(cannotSection(briefing)).not.toContain(cap.denied) // web.downloads: same rule as web.links above
       else expect(cannotSection(briefing)).toContain(cap.denied)
     })
   }
@@ -71,13 +72,13 @@ describe('chat.skill-author: registry == enforcement == briefing', () => {
     expect(agentChatLockFor('skill-author')?.allowedTools).toEqual(grantedChatFamilies(profile).map((f) => `Bash(webterm ${f} *)`))
   })
 
-  it('chat.default: every `webterm browser <verb>` named is a real CLI verb; no CANNOT list; at most 12 lines; browser family only', () => {
+  it('chat.default: every `webterm browser <verb>` named is a real CLI verb; no CANNOT list; at most 13 lines (one per ability, 13 since web.downloads); browser family only', () => {
     const b = renderCapabilityBriefing('chat.default')
     const verbs = [...b.matchAll(/`webterm browser (\w+)/g)].map((m) => m[1]!)
     expect(verbs.length).toBeGreaterThan(5)
     for (const v of verbs) expect([...Object.keys(BROWSER_VERB_CAP), BROWSER_PROFILES_VERB], `verb ${v}`).toContain(v)
     expect(b).not.toContain('WHAT YOU CANNOT DO')
-    expect(b.split('\n').length).toBeLessThanOrEqual(12)
+    expect(b.split('\n').length).toBeLessThanOrEqual(13)
     for (const m of b.matchAll(/`webterm (\w+)/g)) expect(m[1]).toBe('browser')
   })
 

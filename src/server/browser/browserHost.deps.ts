@@ -4,6 +4,7 @@ import type { ShieldPolicy } from './adblock.shields'
 import type { CdpClient } from './cdp.client'
 import type { BrowserLauncher } from './chromium.launch'
 import type { NavGuard } from './browserHost.targets'
+import type { HostDownloadsDeps } from './browserHost.downloads'
 
 export interface HostDeps {
   launcher: BrowserLauncher
@@ -19,4 +20,5 @@ export interface HostDeps {
   persistTabs?: (nodeId: string, tabs: PersistedTabs | null) => void // write a node's tab list to the board (the host debounces)
   agentDriving?: (nodeId: string) => boolean // an agent holds the node's lease: popups its clicks open count as the agent's
   tabDiscardMs?: number // idle time before a background tab is discarded
+  downloads?: HostDownloadsDeps // absent = every download is denied (browserHost.downloads.ts)
 }

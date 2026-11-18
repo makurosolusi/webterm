@@ -37,7 +37,6 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export type { HostDeps } from './browserHost.deps'
 
-
 export class BrowserHost implements BrowserHostApi {
   private readonly table = new TargetTable()
   private readonly pageIo: PageIo = { send: (r, m, p) => this.send(r, m, p), cdpOf: (r) => this.cdpOf(r) }
@@ -80,12 +79,13 @@ export class BrowserHost implements BrowserHostApi {
       detached: (p) => this.shield.detached(p),
     })
     this.life = createTargetLifecycle({
-      table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice,
+      table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice, downloads: deps.downloads, now: deps.now,
       shield: this.shield, console: this.console, route: this.route, tabs: this.tabs, patch, emit,
       io: (r) => this.io(r), goto: (r, url) => this.goto(r, url),
     })
   }
 
+  get downloads() { return this.life.downloads } // list/cancel/remove/export of the nodes' downloads; undefined = denied (browserHost.downloads.ts)
   // ---- BrowserHostApi ----
   open(nodeId: string, workspaceId: string, url?: string): Promise<BrowserState> { return this.life.open(nodeId, workspaceId, url) }
 

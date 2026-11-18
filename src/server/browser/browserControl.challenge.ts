@@ -7,7 +7,7 @@ import type { ControlResult } from '../control/controlTypes'
 import type { LeaseService } from './browserLease.service'
 
 /** Verbs that stay available during a check: reading the node's state, listing tabs, handing the lease back. */
-const ALWAYS_OK: ReadonlySet<BrowserVerb> = new Set(['status', 'tabs', 'release'])
+const ALWAYS_OK: ReadonlySet<BrowserVerb> = new Set(['status', 'tabs', 'downloads', 'release'])
 const refusals = new Map<string, number>() // nodeId -> verbs refused for the check now on screen
 
 /** The refusal an agent verb gets while `challenge` is shown, or null to let it run. Clears the count once the check is gone. */

@@ -9,6 +9,8 @@ import { cookieRoute, fail, readObject } from './browserApi.cookies'
 import { profileRoute } from './browserApi.profiles'
 import { tabsRoute } from './browserApi.tabs'
 import { syncRoute } from './browserApi.sync'
+import { downloadsRoute } from './browserApi.downloads'
+import type { DownloadsApiDeps } from './browserApi.downloads'
 import type { SyncApiDeps } from './browserApi.sync'
 import type { TabsApiDeps } from './browserApi.tabs'
 import type { ProfileApiDeps } from './browserApi.profiles'
@@ -35,6 +37,8 @@ export interface BrowserApiDeps extends Omit<CookieApiDeps, 'cookieImportEnabled
   tabs?: TabsApiDeps
   /** Sync mode of a split node (`/api/browser/:nodeId/sync`); absent = 404. */
   sync?: SyncApiDeps
+  /** Downloads of a node (`/api/browser/:nodeId/downloads/*`); absent = 404. */
+  downloads?: DownloadsApiDeps
 }
 
 /** Segmen path -> nilai terdekode, atau `null` bila bukan UTF-8 percent-encoding sah. */
@@ -104,6 +108,7 @@ export async function handleBrowserApi(
     return isSafeNodeId(id) ? takeLease(id, body, d) : fail(400, 'bad_request')
   }
   if (kind === 'sync' && !rest.length) return d.sync ? syncRoute(method, id, body, d.sync) : fail(404, 'not_found')
+  if (kind === 'downloads') return (d.downloads && downloadsRoute(method, id, rest, d.downloads)) ?? fail(404, 'not_found')
   if (kind === 'tabs') return d.tabs ? ((await tabsRoute(method, id, rest, body, d.tabs)) ?? fail(404, 'not_found')) : fail(404, 'not_found')
   if (kind === 'cookies') {
     if (!isSafeWorkspaceId(id)) return fail(400, 'bad_request')

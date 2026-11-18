@@ -44,7 +44,7 @@ describe('claudeProtectionSettings', () => {
     const sandbox = (claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings).sandbox!
     expect(sandbox.enabled).toBe(true)
     expect(sandbox.filesystem.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
-    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/bin`, `${DIR}/worktrees`])
+    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/bin`, `${DIR}/worktrees`, `${DIR}/downloads`])
     expect(sandbox.filesystem.allowWrite).toEqual(['~/'])
     expect(sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([
       `${DIR}/secrets`, `${DIR}/node-settings`, `${DIR}/context-links`, `${DIR}/webterm.db`, `${DIR}/webterm.db-wal`, `${DIR}/ledger.db-shm`,
@@ -56,6 +56,16 @@ describe('claudeProtectionSettings', () => {
     // Keychain/socket tools run outside the sandbox; docs syntax `x *` matches with or without args.
     expect((sandbox as unknown as { excludedCommands: string[] }).excludedCommands).toEqual(expect.arrayContaining(['gh *', 'docker *', 'brew *', 'op *', 'security *']))
     expect(SANDBOX_EXCLUDED_COMMANDS.every((c) => c.endsWith(' *'))).toBe(true)
+  })
+
+  it('downloaded files are readable at their path, and that opens nothing else: browser profiles, cookie vault and secrets stay denied', () => {
+    const s = claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings
+    const fs = s.sandbox!.filesystem
+    expect(fs.allowRead).toContain(`${DIR}/downloads`)
+    expect(s.permissions.deny.some((r) => r.includes('/downloads'))).toBe(false)
+    expect(AGENT_SECRET_ENTRIES).not.toContain('downloads')
+    for (const e of ['browser', 'secrets', 'node-settings', 'webterm.db*']) expect(fs.allowRead).not.toContain(`${DIR}/${e}`)
+    expect(fs.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS]) // the whole data dir is still denied; only the listed entries are re-allowed
   })
 
   it('the webterm launcher is runnable but not replaceable; opening it leaves every secret denied', () => {
