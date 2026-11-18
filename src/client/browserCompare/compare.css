@@ -1,0 +1,44 @@
+/* Pane comparison overlay: covers the node's page area (.browser-body is position:relative). VS Code theme tokens only. */
+.bc-overlay {
+  position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; gap: var(--bui-gap, 4px); padding: 8px;
+  background: var(--vscode-editor-background); color: var(--vscode-foreground); font-size: var(--bui-font, 13px); outline: none;
+}
+.bc-bar, .bc-opts, .bc-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bc-spacer { flex: 1; }
+.bc-field { display: inline-flex; align-items: center; gap: 6px; }
+.bc-field output { min-width: 3ch; text-align: center; }
+.bc-legend { display: inline-flex; align-items: center; gap: 6px; font-size: var(--bui-font-sm, 12px); }
+.bc-swatch { display: inline-block; width: 12px; height: 12px; background: #f00; border: 1px solid var(--vscode-panel-border); }
+.bc-swatch--same { background: var(--vscode-editor-background); }
+.bc-warn { margin: 0; font-size: var(--bui-font-sm, 12px); color: var(--vscode-editorWarning-foreground, var(--vscode-foreground)); }
+.bc-body { flex: 1; min-height: 0; container-type: size; display: flex; align-items: center; justify-content: center; overflow: auto; }
+.bc-foot { font-size: var(--bui-font-sm, 12px); }
+.bc-note { color: var(--vscode-descriptionForeground); }
+.bc-pct { font-weight: 600; }
+
+.bc-stage { position: relative; width: min(100cqw, 100cqh * var(--bc-ratio)); aspect-ratio: var(--bc-ratio); background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); }
+.bc-layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bc-layer--dim { opacity: 0.35; }
+.bc-clip { position: absolute; inset: 0; }
+.bc-busy { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent); }
+
+/* Slider shared by the swipe divider and the onion-skin track: 28px hit area around a thin line / thumb. */
+.bc-slider { position: absolute; display: flex; align-items: center; justify-content: center; width: var(--bui-hit, 28px); transform: translateX(-50%); cursor: ew-resize; touch-action: none; }
+.bc-slider:focus-visible { outline: var(--bui-focus, 2px) solid var(--vscode-focusBorder); outline-offset: 1px; }
+.bc-divider { top: 0; bottom: 0; }
+.bc-divider::before { content: ''; position: absolute; top: 0; bottom: 0; width: 2px; background: var(--vscode-focusBorder); }
+.bc-grip { position: relative; width: 16px; height: 32px; border-radius: 8px; background: var(--vscode-focusBorder); border: 2px solid var(--vscode-editor-background); }
+.bc-track { position: relative; display: inline-block; width: 160px; height: var(--bui-hit, 28px); }
+.bc-track::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 4px; transform: translateY(-50%); background: var(--vscode-panel-border); border-radius: 2px; }
+.bc-thumb { top: 0; bottom: 0; }
+.bc-thumb::before { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--vscode-focusBorder); }
+
+.bc-skeleton { width: 70%; height: 70%; background: var(--vscode-editorWidget-background); animation: bc-pulse 1.4s ease-in-out infinite; }
+@keyframes bc-pulse { 50% { opacity: 0.5; } }
+.bc-states { display: flex; flex-direction: column; gap: 12px; }
+.bc-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bc-state p { margin: 0; }
+.bc-pick-row { display: flex; flex-direction: column; gap: 4px; margin-block: 8px; }
+.bc-pick-warn { margin: 0; font-size: var(--bui-font-sm, 12px); color: var(--vscode-errorForeground); }
+
+@media (prefers-reduced-motion: reduce) { .bc-skeleton { animation: none; } }
