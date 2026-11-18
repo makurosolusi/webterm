@@ -49,6 +49,7 @@ import type { BrowserProfilesMsg, LinkOpenedMsg, ViewMsg } from '../../shared/pr
 import { openLinkInCanvas } from './browser.linkOpen'
 import { createProfileWiring } from './browser.runtime.profiles'
 import { createDownloadWiring } from './browser.runtime.downloads'
+import { createAccountsWiring } from './browser.runtime.accounts'
 import { withDownloadIds } from './browserAgent.verbs.downloads'
 import { createTabsService, tabPersister } from './browser.runtime.tabs'
 import { setActiveProfiles } from './browser.profiles.service'
@@ -117,11 +118,13 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   const swept = vault.sweepAll()
   if (swept.failed.length) log.warn('browser.vault', 'Some cookie vault blobs are unreadable', { checked: swept.checked, failed: swept.failed.length })
   const live = new Set<string>()
-  const profiles = createProfileWiring({ workspaces: d.workspaces, dataRoot: d.dataRoot, launcher, vault, store: d.profiles, broadcast: d.broadcast, liveNodes: () => live })
+  const navGuard = createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
+  // Who is signed in per profile (Google, GitHub): checked inside the profile's own Chromium, see docs/decisions/browser-profile-accounts.md.
+  const accounts = createAccountsWiring({ env, dataRoot: d.dataRoot, launcher, connect: d.connect, guard: (u) => navGuard.check(u), broadcast: d.broadcast, now })
+  const profiles = createProfileWiring({ workspaces: d.workspaces, dataRoot: d.dataRoot, launcher, vault, store: d.profiles, broadcast: d.broadcast, liveNodes: () => live, accounts: accounts.service })
   const leases = new LeaseService(now)
   const cfg = lifecycleConfig(env)
   const canvasPush = async () => d.canvas ?? (await import('../canvas/canvasPush.runtime')).getCanvasPush()
-  const navGuard = createNavigationGuard({ allow: allowLive, allowLoopback, webtermPort: d.webtermPort })
   const downloads = createDownloadWiring({ env, dataRoot: d.dataRoot, now, workspaces: d.workspaces, profileOf: profiles.profileOf })
   const host = new BrowserHost({
     downloads: downloads.deps, launcher, profileOf: profiles.profileOf, guard: toHostGuard(navGuard, denials), connect: d.connect, shields, now, initialDevice: (id) => nodeOf(id)?.device,
@@ -155,14 +158,15 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       if (ws) versionProbe.probe(host.profileOf(s.id) ?? ws.id) // the probed process must be one a node already runs, never a fresh Default
     } else if (live.delete(s.id) && live.size === 0) versionProbe.reset() // tak ada browser hidup: restart berikutnya baca ulang
     const now = [...new Set([...live].map((id) => host.profileOf(id)))].sort().join()
+    accounts.onState(s, host.profileOf(s.id))
     if (now !== liveProfiles) { liveProfiles = now; profiles.liveChanged() } // the set of profiles with a running process changed
   })
   const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: lifecycleConfig(env).maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env) })
   const apiDeps = {
-    vault, preview: createCookiePreviewStore(), injector: createCookieInjector({ launcher, connect: d.connect }), status,
+    vault, preview: createCookiePreviewStore(), injector: accounts.wrapInjector(createCookieInjector({ launcher, connect: d.connect })), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
     setAgentControl: (id: string, on: boolean) => { agentOverride.set(id, on) },
-    profiles: { profiles: profiles.service, ops: profiles.ops },
+    profiles: { profiles: profiles.service, ops: profiles.ops, accounts: accounts.service },
     setNodeProfile: (nodeId: string, profileId: string) => profiles.setNodeProfile(host, lifecycle, nodeId, profileId),
     tabs: createTabsService({ host, lifecycle, gwHost, hub, workspaces: d.workspaces, canvas: canvasPush, profileOf: profiles.profileOf }),
     downloads: host.downloads,
@@ -200,6 +204,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
       leases.release(id)
       agentOverride.delete(id)
       profiles.forget(id)
+      accounts.forgetNode(id)
       await host.discard(id)
     },
     gateway: (ws, workspaceId) => handleBrowserConnection(ws, { host: adaptGatewayHost(host, lifecycle), leases, hub, enabled: () => !down, workspaceId, initialUrl: (id) => nodeOf(id)?.url, hintProfile: profiles.hint, onCapacity: (cb) => lifecycle.onCapacity(cb) }),

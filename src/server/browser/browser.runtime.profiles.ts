@@ -11,6 +11,7 @@ import type { BrowserHost } from './browserHost.service'
 import type { BrowserLifecycle } from './browserLifecycle.service'
 import type { BrowserLauncher } from './chromium.launch'
 import type { CookieVault } from './cookieVault.store'
+import type { AccountsService } from './browser.accounts.service'
 import type { ProfileOpsDeps } from './browser.profiles.ops'
 import { createProfilesService, err, nodeProfileIdsOf, ok, setActiveProfiles } from './browser.profiles.service'
 import type { ProfileActor, ProfileResult, ProfilesService } from './browser.profiles.service'
@@ -28,6 +29,8 @@ export interface ProfileWiringDeps {
   broadcast?: (msg: BrowserProfilesMsg) => void
   /** Node ids with a live page (for `live` when the launcher cannot say). */
   liveNodes(): Iterable<string>
+  /** Signed-in accounts per profile (the account check service); absent = none shown. */
+  accounts?: Pick<AccountsService, 'get' | 'forget'>
 }
 
 export interface ProfileWiring {
@@ -65,12 +68,12 @@ export function createProfileWiring(d: ProfileWiringDeps): ProfileWiring {
     }
   }
   const service = createProfilesService({
-    store: d.store ?? createMemoryProfileStore(), workspaces: d.workspaces, vault: d.vault, isLive, changed, note,
+    store: d.store ?? createMemoryProfileStore(), workspaces: d.workspaces, vault: d.vault, isLive, changed, note, accounts: d.accounts ? (id) => d.accounts?.get(id) ?? [] : undefined,
     nodeProfileIds: () => nodeProfileIdsOf(d.workspaces(), (id) => override.get(id)),
   })
   setActiveProfiles(service)
   service.ensureDefaults()
-  const ops: ProfileOpsDeps = { svc: service, vault: d.vault, dataRoot: d.dataRoot, stop: (id) => d.launcher.stop?.(id) }
+  const ops: ProfileOpsDeps = { svc: service, vault: d.vault, dataRoot: d.dataRoot, stop: (id) => d.launcher.stop?.(id), onRemoved: (id) => d.accounts?.forget(id) }
   return {
     service, ops, profileOf, liveChanged: changed,
     bind: (host) => { hostRef = host },

@@ -14,14 +14,14 @@ import { SettingsGroup } from './SettingsControls'
 /** Settings page body; `workspaceId` scopes the list to the open board's profiles ('' = all). */
 export function BrowserProfilesSection({ workspaceId = '' }: { workspaceId?: string }): React.JSX.Element {
   const status = useBrowserStatus()
-  const { profiles, error, reload, loaded } = useProfileList(workspaceId || undefined)
+  const { profiles, error, reload, loaded, accountsEnabled } = useProfileList(workspaceId || undefined)
   const [creating, setCreating] = useState(false)
 
   let body: React.JSX.Element
   if (!status) body = <CardEmpty text={`${T.off}. ${T.offHint}`} />
   else if (error && profiles.length === 0) body = <CardError text={T.listFailed} onRetry={reload} />
   else if (profiles.length === 0) body = !loaded ? <CardLoading text={T.loading} /> : <CardEmpty text={T.noProfiles} />
-  else body = <ul role="list" aria-label={T.groupTitle} className="m-0 flex list-none flex-col divide-y p-0">{profiles.map((p) => <BrowserProfileRow key={p.id} profile={p} onChanged={reload} />)}</ul>
+  else body = <ul role="list" aria-label={T.groupTitle} className="m-0 flex list-none flex-col divide-y p-0">{profiles.map((p) => <BrowserProfileRow key={p.id} profile={p} onChanged={reload} showAccounts={accountsEnabled} />)}</ul>
 
   return (
     <div className="flex flex-col">

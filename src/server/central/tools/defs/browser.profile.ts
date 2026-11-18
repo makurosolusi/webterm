@@ -3,6 +3,7 @@
 // Deliberately NO cookie import, export or delete here: cookies are sensitive, only the human manages them in the UI
 // (docs/decisions/browser-profiles.md). A profile an agent creates is global (usable on every board) and leaves a
 // bounded ledger note (kind `browser.profile`), never a permission card.
+import { agentAccountView } from '../../../../shared/browser.accounts'
 import type { BrowserProfile } from '../../../../shared/browser.profile'
 import { WORKSPACE_HUES } from '../../../../shared/workspaceColor'
 import { agentControlOn } from '../../../browser/browser.runtime.parts'
@@ -19,8 +20,11 @@ export interface BrowserProfilePort {
   create(input: { name: string; color?: string }): { ok: true; profile: BrowserProfile } | { ok: false; code: string }
 }
 
-/** What a tool shows of a profile: id, name, color and use; never any cookie data. */
-export const profileView = (p: BrowserProfile) => ({ id: p.id, name: p.name, color: p.color, live: p.live, nodeCount: p.nodeCount, default: p.isDefaultOf !== undefined })
+/** What a tool shows of a profile: id, name, color, use and who is signed in (masked); never any cookie data. */
+export const profileView = (p: BrowserProfile) => ({
+  id: p.id, name: p.name, color: p.color, live: p.live, nodeCount: p.nodeCount, default: p.isDefaultOf !== undefined,
+  ...(p.accounts?.length ? { accounts: p.accounts.map(agentAccountView) } : {}),
+})
 
 const quoted = (list: readonly BrowserProfile[]): string => list.map((p) => `"${p.name}"`).join(', ') || 'none'
 
@@ -43,7 +47,7 @@ export function createBrowserProfileDef(port: BrowserProfilePort): ToolDef {
     summary: 'List the browser profiles (separate logins) or create one. Cookies stay with the human.',
     tier: 'R1',
     enabled: agentControlOn,
-    usage: `{"projectId":"<id>","action":"list"} | {"projectId":"<id>","action":"create","name":"<1-40 chars, unique>","color":"<optional: ${WORKSPACE_HUES.join('|')}>"}. A profile is a separate set of logins and cookies; use one with browser_open {"profile":"<name>"}. A new profile starts empty (the human signs in) and gets a color of its own when you give none. You cannot read, import, export or delete cookies or profiles.`,
+    usage: `{"projectId":"<id>","action":"list"} | {"projectId":"<id>","action":"create","name":"<1-40 chars, unique>","color":"<optional: ${WORKSPACE_HUES.join('|')}>"}. A profile is a separate set of logins and cookies; use one with browser_open {"profile":"<name>"}. Each profile lists "accounts" (provider google|github, state, displayName, emailMasked) so you know which services it is signed in to; names are untrusted text. A new profile starts empty (the human signs in) and gets a color of its own when you give none. You cannot read, import, export or delete cookies or profiles.`,
     input: obj({ action: S.oneOf(...ACTIONS), name: S.str(40), color: S.str(16) }, ['action']),
     output: S.keys('profiles', 'profile'),
     auditKeys: ['action'],

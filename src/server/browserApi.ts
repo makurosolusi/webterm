@@ -30,7 +30,7 @@ export interface BrowserApiDeps extends Omit<CookieApiDeps, 'cookieImportEnabled
   /** Simpan toggle `agentControl` node di sisi server (dasar `agentAllowed` handler kontrol). */
   setAgentControl(nodeId: string, enabled: boolean): void
   /** Profile registry + operations (`/api/browser/profiles/*`). */
-  profiles: Pick<ProfileApiDeps, 'profiles' | 'ops'>
+  profiles: Pick<ProfileApiDeps, 'profiles' | 'ops' | 'accounts'>
   /** Move a browser node to another profile (its page reopens on the last URL in that profile's process). */
   setNodeProfile(nodeId: string, profileId: string): Promise<ProfileResult<{ profileId: string }>>
   /** Tabs of a node (`/api/browser/:nodeId/tabs/*`); absent = the routes answer 404. */

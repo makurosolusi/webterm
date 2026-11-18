@@ -3,6 +3,8 @@
 // Chromium process and session; different profiles never share anything. A node without a profile uses the
 // Default profile of its workspace, whose id IS the workspace id (so every login made before profiles existed stays).
 
+import type { ProfileAccount } from './browser.accounts'
+
 export const BROWSER_PROFILE_NAME_MAX = 40
 export const BROWSER_PROFILES_PATH = '/api/browser/profiles'
 /** Frame the server broadcasts when the profile list or a profile's live state changes (clients refetch the list). */
@@ -28,6 +30,8 @@ export interface BrowserProfile {
   nodeCount: number
   /** Cookie domains saved in the profile's vault (never values). */
   cookieDomains: number
+  /** Who is signed in (Google, GitHub), masked; absent while unchecked or when the Settings switch is off. */
+  accounts?: ProfileAccount[]
 }
 
 export const PROFILE_ERROR_CODES = [
@@ -36,7 +40,8 @@ export const PROFILE_ERROR_CODES = [
 ] as const
 export type ProfileErrorCode = (typeof PROFILE_ERROR_CODES)[number]
 
-export interface ProfileListResp { profiles: BrowserProfile[] }
+/** `accountsEnabled: false` = the "show signed-in accounts" switch is off: no profile carries accounts and clients hide the feature. */
+export interface ProfileListResp { profiles: BrowserProfile[]; accountsEnabled?: boolean }
 export interface ProfileCreateReq { name: string; color?: string; shade?: string; workspaceId?: string }
 export interface ProfileUpdateReq { name?: string; color?: string; shade?: string }
 export interface ProfileDuplicateReq { name: string }

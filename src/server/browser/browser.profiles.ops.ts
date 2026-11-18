@@ -19,6 +19,8 @@ export interface ProfileOpsDeps {
   dataRoot: string
   /** Stop the Chromium process of this profile (its nodes' pages become `discarded`, session stays on disk). */
   stop(id: string): void
+  /** A profile was deleted: drop what hangs off it (its account cache). */
+  onRemoved?(id: string): void
 }
 
 /** Delete: refused while a node uses it, and for a Default profile whose workspace still exists. Stops its process, wipes dir + vault. */
@@ -33,6 +35,7 @@ export function removeProfile(o: ProfileOpsDeps, id: string, by: ProfileActor = 
   rmSync(profileDir(id, o.dataRoot), { recursive: true, force: true })
   o.vault.clear(id)
   store.remove(id)
+  o.onRemoved?.(id)
   o.svc.deps.note?.(`deleted browser profile "${row.name}"`, by)
   o.svc.deps.changed()
   return ok(null)

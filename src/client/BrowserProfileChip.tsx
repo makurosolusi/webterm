@@ -3,7 +3,7 @@
 // A switch moves the node: the server reopens its page on the last URL in that profile's browser. The server
 // answers first, then the node's `profileId` is stored (so a refusal leaves the node and board untouched) and one
 // notice reports the result; a failure has Retry.
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
@@ -11,6 +11,10 @@ import { VscodeMenu } from './components/vscode/vscodeMenu'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import type { BrowserProfile } from '../shared/browser.profile'
 import BrowserProfileCreateDialog from './BrowserProfileCreateDialog'
+import { accountMenuItems } from './browserProfile.accounts.menu'
+import { signedInAccounts } from '../shared/browser.accounts'
+import { ACCOUNT_TEXT, accountsStale, accountsSummary, hasSignedIn } from './browserProfile.accounts.text'
+import { useProfileAccounts } from './browserProfile.accounts.use'
 import { setNodeBrowserProfile } from './browserProfileApi'
 import { ProfileDot, profileOfNode, useProfileList } from './browserProfile.list'
 import { PROFILE_TEXT as T, profileErrorText } from './browserProfile.text'
@@ -19,16 +23,17 @@ import { openSettingsAt } from './settings.link'
 import { showNotice } from './workspaceSave.notice'
 
 const noticeKey = (nodeId: string): string => `webterm-browser-profile-${nodeId}`
+const accountsNoticeKey = (nodeId: string): string => `webterm-browser-accounts-${nodeId}`
 
 /** Menu rows for `profiles`: one per profile (dot, name, checkmark, live/nodes hint), then the actions. */
-function menuItems(p: { profiles: BrowserProfile[]; current?: string; failed: boolean; onPick: (x: BrowserProfile) => void; onNew: () => void; onReload: () => void }): VscodeMenuItem[] {
+function menuItems(p: { profiles: BrowserProfile[]; current?: string; failed: boolean; accounts: VscodeMenuItem[]; onPick: (x: BrowserProfile) => void; onNew: () => void; onReload: () => void }): VscodeMenuItem[] {
   const rows: VscodeMenuItem[] = p.profiles.map((x) => ({
     type: 'item', id: `profile-${x.id}`, label: x.name, icon: <ProfileDot profile={x} />, checked: x.id === p.current,
     keybinding: T.rowHint(x) || undefined, title: [x.name, T.rowHint(x)].filter(Boolean).join(' · '), onSelect: () => p.onPick(x),
   }))
   if (p.failed) rows.push({ type: 'item', id: 'profiles-retry', label: `${T.listFailed} ${T.retry}`, onSelect: p.onReload })
   return [
-    { type: 'header', label: T.menuHeader }, ...rows, { type: 'separator' },
+    { type: 'header', label: T.menuHeader }, ...rows, ...p.accounts, { type: 'separator' },
     { type: 'item', id: 'profile-new', label: T.newProfile, icon: <span className="codicon codicon-add" aria-hidden="true" />, onSelect: p.onNew },
     { type: 'item', id: 'profile-manage', label: T.manage, icon: <span className="codicon codicon-settings-gear" aria-hidden="true" />, onSelect: () => openSettingsAt('browser', 'browser-profiles') },
   ]
@@ -38,12 +43,31 @@ function menuItems(p: { profiles: BrowserProfile[]; current?: string; failed: bo
 export default function BrowserProfileChip({ nodeId, profileId }: { nodeId: string; profileId?: string }): React.JSX.Element {
   const rf = useReactFlow()
   const workspaceId = useActiveWorkspaceId() ?? ''
-  const { profiles, error, reload } = useProfileList(workspaceId || undefined)
+  const { profiles, error, reload, accountsEnabled } = useProfileList(workspaceId || undefined)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const current = profileOfNode(profiles, workspaceId, profileId)
   const nodes = current?.nodeCount ?? 0
+  const acc = useProfileAccounts(accountsEnabled ? current : undefined)
+  const signedIn = accountsEnabled && hasSignedIn(acc.accounts)
+  const { check, refresh } = acc
+  // The menu closes when a row is picked, so the result of Refresh is told in one notice (failure has Retry).
+  const refreshAccounts = useCallback((): void => {
+    refresh(false).then(
+      (r) => showNotice(accountsNoticeKey(nodeId), { severity: 'info', title: ACCOUNT_TEXT.refreshed(signedInAccounts(r).length) }),
+      () => showNotice(accountsNoticeKey(nodeId), {
+        severity: 'error', title: ACCOUNT_TEXT.failed, actions: [{ label: ACCOUNT_TEXT.retry, onClick: refreshAccounts }],
+      }),
+    )
+  }, [refresh, nodeId])
+  // Opening the menu re-reads the list (the switch may have changed) and checks accounts once when the answer is stale.
+  useEffect(() => {
+    if (!menuAt) return
+    reload()
+    if (accountsEnabled && current && accountsStale(acc.accounts, Date.now())) check(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per open; the data it reads is the value at that moment
+  }, [menuAt === null])
 
   const move = useCallback((to: BrowserProfile): void => {
     setBusy(true)
@@ -62,21 +86,22 @@ export default function BrowserProfileChip({ nodeId, profileId }: { nodeId: stri
   const name = current?.name ?? T.chipLoading
   return (
     <span className="nodrag inline-flex" data-browser-profile={current?.id}>
-      <IconTooltip label={current ? T.chipTip(current.name, nodes) : T.sharedSession}>
+      <IconTooltip label={current ? `${T.chipTip(current.name, nodes)}${accountsEnabled ? ` ${accountsSummary(acc.accounts)}.` : ''}` : T.sharedSession}>
         <Button
           type="button" size="bui" variant="ghost" className="max-w-36 gap-1 px-1" disabled={busy}
-          aria-label={busy ? T.moving : T.chipLabel(name)} aria-haspopup="menu" aria-expanded={menuAt !== null} aria-busy={busy}
+          aria-label={busy ? T.moving : `${T.chipLabel(name)}${signedIn ? `. ${ACCOUNT_TEXT.signedIn}` : ''}`} aria-haspopup="menu" aria-expanded={menuAt !== null} aria-busy={busy}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt(menuAt ? null : { x: r.left, y: r.bottom }) }}
         >
           {busy ? <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" /> : <><span className="codicon codicon-account text-(--vscode-descriptionForeground)" data-profile-kind aria-hidden="true" /><ProfileDot profile={current} /></>}
           <span className="truncate">{busy ? T.moving : name}</span>
+          {signedIn && <span data-accounts-dot aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-(--vscode-charts-green)" />}
           {nodes > 1 && <span className="tabular-nums text-(--vscode-descriptionForeground)" data-profile-nodes>{nodes}</span>}
         </Button>
       </IconTooltip>
       {menuAt && (
         <VscodeMenu
           open anchor={menuAt} minWidth={240} ariaLabel={T.menuLabel} onClose={() => setMenuAt(null)}
-          items={menuItems({ profiles, current: current?.id, failed: error !== null, onPick: (x) => { if (x.id !== current?.id) move(x) }, onNew: () => setCreating(true), onReload: reload })}
+          items={menuItems({ profiles, current: current?.id, failed: error !== null, accounts: accountsEnabled && current ? accountMenuItems({ accounts: acc.accounts, loading: acc.loading, failed: acc.failed, now: Date.now(), onRefresh: refreshAccounts }) : [], onPick: (x) => { if (x.id !== current?.id) move(x) }, onNew: () => setCreating(true), onReload: reload })}
         />
       )}
       {creating && (

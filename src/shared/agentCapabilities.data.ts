@@ -58,10 +58,10 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, CapabilityDef>> = {
   },
   'web.profiles': {
     id: 'web.profiles', short: 'use browser profiles (separate logins)',
-    summary: 'Browser nodes have PROFILES: separate logins and cookies, one per account. Open the browser on the profile the task needs instead of logging in and out; list the profiles or create one when none fits.',
+    summary: 'Browser nodes have PROFILES: separate logins and cookies, one per account. Open the browser on the profile the task needs instead of logging in and out; a profile lists who is signed in to Google/GitHub (masked), so pick the one that already has the login. List the profiles or create one when none fits.',
     denied: 'Use or create browser profiles (separate browser logins).',
     central: { tools: ['browser_profile'], usage: 'browser_open {"profile":"<name or id>"} opens a browser on that profile (omit it for the board\'s Default); browser_profile {"action":"list"} or {"action":"create","name":"<name>"} (color is picked for you); browser_status shows the profile of each browser' },
-    chat: { usage: '`webterm browser open --profile <name> [<url>]`, `webterm browser profiles` (lists the names; no profile = the board\'s Default)', example: 'webterm browser profiles' },
+    chat: { usage: '`webterm browser open --profile <name> [<url>]`, `webterm browser profiles` (names and who is signed in; no profile = the board\'s Default)', example: 'webterm browser profiles' },
     rules: ['Cookies and saved logins stay with the human: you can use a profile but never read, import or export its cookies.'],
   },
   'web.tabs': {
@@ -151,7 +151,7 @@ export const PROFILES: Readonly<Record<ProfileId, ProfileDef>> = {
       },
       // A chat can use and list profiles; creating one is Central's (browser_profile) or the human's.
       'web.profiles': {
-        summary: 'Browser nodes have PROFILES: separate logins and cookies, one per account. Open the browser on the profile the task needs instead of logging in and out; list the names first when unsure.',
+        summary: 'Browser nodes have PROFILES: separate logins and cookies, one per account. Open the browser on the profile the task needs instead of logging in and out; the list shows who is signed in (Google/GitHub, masked), so pick the profile that already has the login.',
       },
       'web.drive': {
         summary: 'Drive that browser node on the pages the user asks for: click, type, press keys, scroll, log in.',
