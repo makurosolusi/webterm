@@ -42,8 +42,8 @@ describe('agent verbs while the node shows a human check', () => {
 
   it('status, tabs and release still work, so the agent can see the state and hand the node back', async () => {
     const r = rig({ current: CHECK })
-    for (const verb of ['status', 'tabs'] as const) expect((await r.call(verb, 'read')).status).toBe(200)
-    expect((await r.call('release')).status).toBe(200)
+    for (const verb of ['status', 'tabs'] as const) expect((await r.call(verb, 'read'))?.status).toBe(200)
+    expect((await r.call('release'))?.status).toBe(200)
     expect(r.ran).toEqual(['status', 'tabs', 'release'])
   })
 
@@ -61,7 +61,7 @@ describe('agent verbs while the node shows a human check', () => {
     const r = rig(check)
     for (let i = 0; i < HUMAN_VERIFICATION_STOP_AFTER + 1; i++) await r.call('click')
     check.current = undefined // "I'm done" or the page moved on
-    expect((await r.call('click')).status).toBe(200)
+    expect((await r.call('click'))?.status).toBe(200)
     expect(r.ran).toEqual(['click'])
     check.current = CHECK
     expect((await r.call('click'))?.body).toMatchObject({ refused: 1, next: HUMAN_VERIFICATION_NEXT })

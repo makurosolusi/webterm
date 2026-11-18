@@ -10,6 +10,7 @@ import BrowserToolbar from './BrowserToolbar'
 import DesignModeBar from './browser/design/DesignModeBar'
 import { useDesignMode } from './browser/design/useDesignMode'
 import BrowserLeaseChip from './BrowserLeaseChip'
+import BrowserChallengeBanner from './BrowserChallengeBanner'
 import BrowserCookieDialog from './BrowserCookieDialog'
 import { setAgentControl } from './browser.api'
 import BrowserNoticeAction from './browser.noticeAction'
@@ -74,6 +75,7 @@ export const BrowserNodeType = memo(function BrowserNodeType(p: NodeProps) {
         renderOverlay={(ctx) => (
           <>
             <BrowserLeaseChip lease={ctx.state?.lease} onTakeover={ctx.takeover} />
+            <BrowserChallengeBanner challenge={ctx.state?.challenge} onDone={ctx.challengeDone} />
             <BrowserNoticeAction state={ctx.state} error={ctx.error} target={ctx.target} nav={ctx.nav} />
           </>
         )}

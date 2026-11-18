@@ -62,6 +62,8 @@ export interface BrowserSlotCtx {
   target?: string
   nav: (action: (typeof NAV_ACTIONS)[number], url?: string) => void
   takeover: () => void
+  /** "I'm done" on a human-check banner: the server stops flagging the page and agents continue. */
+  challengeDone: () => void
   /** Page zoom (1 = 100%) and its step; client-side (browser.zoom.ts), saved in node data `zoom`. */
   zoom: number
   stepZoom: (dir: -1 | 1) => void
@@ -151,6 +153,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
       send({ t: 'nav', action, ...(url === undefined ? {} : { url }) })
     },
     takeover: () => send({ t: 'takeover' }),
+    challengeDone: () => send({ t: 'challengeDone' }),
     setShields: (on) => send({ t: 'shields', on }),
     device: d.device, setDevice: (dev) => { rf.updateNodeData(id, { device: dev ?? undefined }); send({ t: 'device', device: dev }) },
     zoom, stepZoom: (dir) => setZoom(stepZoom(zoomRef.current, dir)), resetZoom: () => setZoom(ZOOM_DEFAULT),
