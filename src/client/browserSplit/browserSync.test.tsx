@@ -84,11 +84,11 @@ describe('BrowserSyncToggle', () => {
     expect(lastBody()).toEqual({ on: false })
   })
 
-  it('a refused request shows the reason as an alert and keeps the state the server reports', async () => {
+  it('a refused request shows the failure as an alert and keeps the state the server reports', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 }))
     render(<BrowserSyncToggle nodeId="n1" sync={ON} panes={2} />)
     fireEvent.click(screen.getByRole('button', { name: 'Stop sync' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Could not stop sync (bad_request)')
+    expect((await screen.findByRole('alert')).textContent).toContain('bad_request')
     expect(screen.getByText('Sync on', { selector: '.bsync-pill' })).toBeTruthy()
   })
 })

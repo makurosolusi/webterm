@@ -69,7 +69,7 @@ describe('Capabilities updated note per node', () => {
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)).toBe(undefined)
     const note = chatCapabilityNote(ctx(), 'n-1', undefined, base)
-    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only), drive web pages, use browser profiles (separate logins) and work in several tabs of one browser node.')
+    expect(note?.line).toBe('[webterm] Capabilities updated: Not available right now: read public web pages (read-only), drive web pages, use browser profiles (separate logins), work in several tabs of one browser node and split a browser node into panes and run one action on every tab.')
     expect(note?.text).toContain('NOT AVAILABLE RIGHT NOW')
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, base)).toBe(undefined)
     expect(chatCapabilityNote(ctx(), 'n-1', undefined, on)?.text).toContain('You CAN open')
@@ -82,6 +82,16 @@ describe('Capabilities updated note per node', () => {
     expect(note?.text).toContain('A browser node holds TABS')
     expect(note?.text).toContain('`webterm browser tab switch <id>`')
     expect(chatCapabilityNote(ctx(), 'n-old', undefined, on)).toBe(undefined)
+  })
+
+  test('a node that last saw the briefing from before panes existed is told about layout, sync and --all once', () => {
+    appendEvent(ctx(), { actor: 'system:capabilities', kind: CAPABILITY_SEEN_KIND, correlationId: 'chat:n-tabs', payload: { profile: 'chat.default', hash: 'a0b1c2d3' } })
+    const note = chatCapabilityNote(ctx(), 'n-tabs', undefined, on)
+    expect(note?.line).toContain('split a browser node into panes and run one action on every tab')
+    expect(note?.text).toContain('A browser node can be split into up to 4 panes')
+    expect(note?.text).toContain('`webterm browser layout set <single|h|v|grid> <tab|new:url>...`')
+    expect(note?.text).toContain('`--all`')
+    expect(chatCapabilityNote(ctx(), 'n-tabs', undefined, on)).toBe(undefined)
   })
 
   test('two nodes do not leak into each other', () => {
