@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { COOKIE_BODY_MAX_BYTES } from '../shared/browser.contract'
 import type { CookieDomainInfo, CookieFormat, CookiePreviewResp } from '../shared/browser.contract'
@@ -63,12 +65,14 @@ export default function BrowserProfileCookieDialog({ profile, onClose, onChanged
         </DialogHeader>
         <p role="note" className="m-0 text-xs text-(--vscode-errorForeground)">{C.warning}</p>
         <div className="flex flex-col gap-2 text-xs">
-          <label className="flex items-center gap-2">{C.formatLabel}
-            <select value={format} disabled={busy} onChange={(e) => setFormat(e.target.value as CookieFormat)}>
-              {FORMATS.map((f) => <option key={f} value={f}>{C.formats[f]}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-2">{C.fileLabel}<input type="file" disabled={busy} onChange={onFile} /></label>
+          <div className="flex items-center gap-2">
+            <span id="bp-cookie-format">{C.formatLabel}</span>
+            <Select value={format} disabled={busy} onValueChange={(v) => setFormat(v as CookieFormat)}>
+              <SelectTrigger size="sm" aria-labelledby="bp-cookie-format"><SelectValue /></SelectTrigger>
+              <SelectContent>{FORMATS.map((f) => <SelectItem key={f} value={f}>{C.formats[f]}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <label className="flex items-center gap-2">{C.fileLabel}<Input type="file" disabled={busy} onChange={onFile} /></label>
         </div>
         {busy && <p role="status" className="m-0 text-xs">{T.working}</p>}
         {error && <p role="alert" className="m-0 text-xs text-(--vscode-errorForeground)">{error}</p>}
