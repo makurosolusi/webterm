@@ -22,7 +22,7 @@ export interface ToolEvidence {
 /** `newBrowserNodes` = browser nodes the run added to the board (only the tab cases read it). */
 export interface Evidence { tools: ToolEvidence[]; text: string; drafts?: number; newBrowserNodes?: number }
 
-export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied' | 'tab-open' | 'tab-multi' | 'tab-denied'
+export type CaseKind = 'read' | 'title' | 'negative' | 'direct' | 'open' | 'interact' | 'profile' | 'profile-denied' | 'tab-open' | 'tab-multi' | 'tab-denied' | 'layout-chat' | 'layout-central' | 'layout-denied'
 export type Surface = 'central' | 'chat'
 export interface Verdict { pass: boolean; evidence: string }
 

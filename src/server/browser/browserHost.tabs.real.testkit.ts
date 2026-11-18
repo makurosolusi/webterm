@@ -36,6 +36,9 @@ const PAGES: Record<string, string> = {
   '/stay': STAY,
   '/b': `<title>B</title>${TICKER}`,
   '/click': `<title>idle</title>${TICKER}<button id=k style="position:fixed;left:0;top:0;width:200px;height:100px" onclick="document.title='clicked'">k</button>`,
+  // QC pages (sync + --all): same control by name on both, one only on the first, a heading each.
+  '/qc-a': `<title>QA</title><h1>Alpha</h1><button id=buy onclick="document.title='bought-a'">Buy</button><button id=only onclick="document.title='only-a'">OnlyA</button>`,
+  '/qc-b': `<title>QB</title><h1>Beta</h1><button id=buy onclick="document.title='bought-b'">Buy</button>`,
   '/blank-target': `<title>bt</title>${TICKER}<a id=l target=_blank href=/b>b</a>`,
 }
 
