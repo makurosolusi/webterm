@@ -22,6 +22,8 @@ import { openAgentBrowser, openedNote } from './browser.agentOpen'
 import type { AgentOpenDeps } from './browser.agentOpen'
 import { presetBrowserDenial } from './browser.presetLock'
 import { AgentTabError } from './browser.agentTabs.verbs'
+import { challengeRefusal } from './browserControl.challenge'
+import type { BrowserChallenge } from '../../shared/browser.challenge'
 
 const log = createLogger('browser.control')
 const CAPABILITY_HEADER = 'x-webterm-capability'
@@ -39,6 +41,8 @@ export interface BrowserControlDeps {
   open?: AgentOpenDeps
   /** Stored `preset` of a canvas node (read from the DB-backed board, never from the client); set = read-only public-web lock. */
   presetOf?(nodeId: string): string | undefined
+  /** The human check a node's page shows right now (state.challenge); agent verbs pause while it is set. */
+  challengeOf?(nodeId: string): BrowserChallenge | undefined
 }
 
 type NodeVerb = Exclude<BrowserVerb, 'open'>
@@ -167,6 +171,8 @@ async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, pr
     return fail(403, 'disabled', { message: 'Agent control is off for this browser node (toolbar checkbox or Settings). Only the user can turn it on; do not retry.' })
   }
 
+  const paused = challengeRefusal(nodeId, v, deps.challengeOf?.(nodeId))
+  if (paused) return paused
   try {
     const data = await deps.verbs[v](nodeId, asObject(body))
     return { status: 200, body: controlOk(data) }

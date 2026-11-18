@@ -40,6 +40,8 @@ interface Opts {
   openCode?: string
   reader?: PageReader
   humanActive?: Set<string>
+  /** Nodes whose page is a human check: the control handler refuses their verbs. */
+  challenged?: Set<string>
   verbText?: string
 }
 
@@ -63,7 +65,7 @@ function rig(o: Opts = {}) {
       return { ok: true }
     },
   })
-  const control: BrowserControlDeps = { capabilities: { verify: (t) => store.verify(t), allows: (r, v, res) => allows(r, v, res) }, verbs, agentAllowed: () => true, policy: () => null }
+  const control: BrowserControlDeps = { capabilities: { verify: (t) => store.verify(t), allows: (r, v, res) => allows(r, v, res) }, verbs, agentAllowed: () => true, policy: () => null, challengeOf: (id) => (o.challenged?.has(id) ? { kind: 'recaptcha', url: 'https://x.test/recaptcha/' } : undefined) }
   // Same rule as ca2Boot.browser: each verb is minted its own capability from BROWSER_VERB_CAP.
   const ctl: BrowserToolDeps['control'] = (nodeId, verb, body) => createControlCaller(control, (id) => {
     minted.push(BROWSER_VERB_CAP[verb])
@@ -205,6 +207,13 @@ describe('browser_read: node choice', () => {
     const t = rig({ humanActive: new Set(['br-1']) })
     expect(await t.run({ nodeId: 'br-1' })).toMatchObject({ ok: false, code: 'human_active' })
     expect(t.opened).toEqual([])
+  })
+  it('a human check on the node answers human_verification_required with the instruction; the page is never read and no other node is tried', async () => {
+    const t = rig({ challenged: new Set(['br-1']) })
+    const r = await t.run({ nodeId: 'br-1' })
+    expect(r).toMatchObject({ ok: false, code: 'human_verification_required', data: { message: expect.stringContaining('do not retry') } })
+    expect(t.opened).toEqual([])
+    expect(t.calls.map(([, verb]) => verb)).not.toContain('snapshot')
   })
   it('releases the lease even when the navigation fails', async () => {
     const s = rig()
