@@ -43,6 +43,8 @@ export interface BrowserControlDeps {
   presetOf?(nodeId: string): string | undefined
   /** The human check a node's page shows right now (state.challenge); agent verbs pause while it is set. */
   challengeOf?(nodeId: string): BrowserChallenge | undefined
+  /** Working directory of a canvas agent node (its own, else its board's): where `downloads copy` may write. Absent = copy answers `no_agent_cwd`. */
+  cwdOf?(requesterId: string): string | undefined
 }
 
 type NodeVerb = Exclude<BrowserVerb, 'open'>
@@ -90,7 +92,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
     if (asked === 'open') return fail(400, 'agent_node_only', { message: '`open` adds a browser node beside the calling canvas agent; it needs a node token, not a capability.' })
     if (wanted === undefined) return fail(400, 'node_required')
     if (!deps.capabilities.allows(record, BROWSER_VERB_CAP[asked], `node:${wanted}`)) return fail(403, 'forbidden')
-    return runVerb(deps, asked, wanted, capabilityHolder(record), undefined, req.body)
+    return runVerb(deps, asked, wanted, capabilityHolder(record), undefined, req.body, undefined)
   }
   // Token node sesi agent: hanya browser yang terhubung kabel dengannya (default-deny untuk yang lain).
   const linked = deps.linked
@@ -104,7 +106,7 @@ export async function handleBrowserControl(req: ControlRequest, deps: BrowserCon
   if (asked !== 'open') {
     const target = linked(requester, wanted)
     const none = !target.ok && asked === 'navigate' && deps.open !== undefined && (target.result.body as { error?: string }).error === 'no_linked_browser'
-    if (!none) return target.ok ? runVerb(deps, asked, target.nodeId, principal, target.cable, req.body) : target.result
+    if (!none) return target.ok ? runVerb(deps, asked, target.nodeId, principal, target.cable, req.body, requester) : target.result
   } else if (wanted !== undefined) {
     return fail(400, 'bad_request', { message: '`open` makes a new browser node; do not pass --node.' })
   }
@@ -147,7 +149,7 @@ async function openThenNavigate(body: unknown, requester: string, deps: BrowserC
   if (!url) return { status: 200, body: controlOk(opened) }
   const target = deps.linked(requester, made.nodeId)
   if (!target.ok) return withOpened(target.result, opened)
-  return withOpened(await runVerb(deps, 'navigate', made.nodeId, `node:${requester}`, target.cable, { url: url.url }), opened)
+  return withOpened(await runVerb(deps, 'navigate', made.nodeId, `node:${requester}`, target.cable, { url: url.url }, requester), opened)
 }
 
 function withOpened(result: ControlResult, opened: Opened): ControlResult {
@@ -158,7 +160,7 @@ function withOpened(result: ControlResult, opened: Opened): ControlResult {
 }
 
 /** Policy, the agent-control switch, then the verb itself on an existing browser node. */
-async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, principal: string, cable: Grant[] | undefined, body: unknown): Promise<ControlResult> {
+async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, principal: string, cable: Grant[] | undefined, body: unknown, requester: string | undefined): Promise<ControlResult> {
   // Rules on top of the cable/token (PLAN S2): the cable is a live `browser.*` grant, a human rule
   // written later can narrow it (last match wins). Release only hands control back, so it is never gated.
   if (v !== 'release') {
@@ -174,7 +176,9 @@ async function runVerb(deps: BrowserControlDeps, v: NodeVerb, nodeId: string, pr
   const paused = challengeRefusal(nodeId, v, deps.challengeOf?.(nodeId))
   if (paused) return paused
   try {
-    const data = await deps.verbs[v](nodeId, asObject(body))
+    // `downloads copy` writes into the CALLER's working directory: the server decides it from the proven requester, whatever the body says.
+    const args = v === 'downloads' ? { ...asObject(body), cwd: requester === undefined ? undefined : deps.cwdOf?.(requester) } : asObject(body)
+    const data = await deps.verbs[v](nodeId, args)
     return { status: 200, body: controlOk(data) }
   } catch (err) {
     return mapError(err, nodeId)

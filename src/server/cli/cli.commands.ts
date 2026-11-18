@@ -24,7 +24,7 @@ export const ESC_FN = `esc() { printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 
 
 /** `webterm browser <verb> [args] [--node <id>]`; the server picks the cabled browser at call time. */
 export const BROWSER_COMMAND = `cmd_browser() {
-usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | tab new [url]|switch <id>|close <id> | layout get | layout set single|h|v|grid <tab|new:url>... | sync on|off | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB} | <page verb> --tab <id> | <navigate|snapshot|screenshot|scroll|reload|back|forward|click|type> --all [--text <name> --role <r> --nth <n>] | screenshot --layout" >&2; exit 2; }
+usage() { echo "usage: webterm-browser <${advertised('browser.read')}|${advertised('browser.act')}> [args] [--node <browserNodeId>] | tab new [url]|switch <id>|close <id> | downloads [read <id>|copy <id> <name>] | layout get | layout set single|h|v|grid <tab|new:url>... | sync on|off | open|navigate [--profile <name>] | ${BROWSER_PROFILES_VERB} | <page verb> --tab <id> | <navigate|snapshot|screenshot|scroll|reload|back|forward|click|type> --all [--text <name> --role <r> --nth <n>] | screenshot --layout" >&2; exit 2; }
 hdr="\${${NODE_HEADERS_ENV}:-}"
 if [ -z "$hdr" ] || [ ! -r "$hdr" ]; then echo "Not a webterm agent session (no node credentials)." >&2; exit 2; fi
 PORT="\${WEBTERM_PORT:-\${NODETERM_PORT:-8700}}"
@@ -91,6 +91,13 @@ case "$verb" in
   arrange) [ -n "$p2" ] || usage; body="{\\"spec\\":\\"$(esc "$p2\${p3:+ $p3}$more")\\"}" ;;
   sync) case "$p1" in on) body="{\\"on\\":true}" ;; off) body="{\\"on\\":false}" ;; *) usage ;; esac ;;
   press) [ -n "$p1" ] || usage; body="{\\"key\\":\\"$(esc "$p1")\\"}" ;;
+  downloads)
+    case "$p1" in
+      "") ;;
+      read) [ -n "$p2" ] || usage; body="{\\"read\\":\\"$(esc "$p2")\\"}" ;;
+      copy) [ -n "$p3" ] || usage; body="{\\"copy\\":\\"$(esc "$p2")\\",\\"to\\":\\"$(esc "$p3")\\"}" ;;
+      *) usage ;;
+    esac ;;
   tab)
     case "$p1" in
       new) body="{\\"action\\":\\"new\\""; [ -z "$p2" ] || body="$body,\\"url\\":\\"$(esc "$p2")\\""; body="$body}" ;;

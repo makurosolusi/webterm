@@ -232,6 +232,18 @@ describe('old shims are aliases that still work', () => {
     expect(run(['browser'], env).stderr).toContain('downloads')
   })
 
+  it('webterm browser downloads read|copy build the read/copy bodies and refuse missing arguments', () => {
+    installWebtermCli(home())
+    const env = { WEBTERM_NODE_HEADERS: headers() }
+    expect(run(['browser', 'downloads', 'read', 'abc-1'], env).argv).toContain('{"read":"abc-1"}')
+    expect(run(['browser', 'downloads', 'copy', 'abc-1', 'data/out.pdf'], env).argv).toContain('{"copy":"abc-1","to":"data/out.pdf"}')
+    for (const args of [['read'], ['copy'], ['copy', 'abc-1'], ['frob', 'abc-1'], ['read', 'a', 'b', 'c']]) {
+      const bad = run(['browser', 'downloads', ...args], env)
+      expect([args, bad.status]).toEqual([args, 2])
+      expect(bad.argv).toEqual([])
+    }
+  })
+
   it('--tab and the tab verbs refuse bad input before any request leaves the machine', () => {
     installWebtermCli(home())
     const env = { WEBTERM_NODE_HEADERS: headers() }

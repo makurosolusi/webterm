@@ -136,6 +136,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
   sweep.unref()
 
   const nodeOf = (id: string) => d.workspaces().flatMap((w) => w.nodes).find((n) => n.id === id)
+  const agentCwdOf = (id: string) => { const w = d.workspaces().find((x) => x.nodes.some((n) => n.id === id)); return w?.nodes.find((n) => n.id === id)?.cwd ?? w?.cwd }
   const agentOverride = new Map<string, boolean>() // toggle terbaru dari UI menang atas snapshot board yang belum tersimpan
   // Default ON (alat developer): hanya `off` eksplisit di sub-opsi atau toggle node yang mematikan.
   const agentEnv = () => agentControlOn(env)
@@ -205,7 +206,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     api: async (method, pathname, body, search) => (await designRoute(method, pathname, body, design)) ?? handleBrowserApi(method, pathname, body, apiDeps, search),
     control: (req, capabilities) => handleBrowserControl(req, {
       capabilities, verbs, agentAllowed, linked: (who, wanted) => resolveLinkedBrowser(d.workspaces(), who, wanted),
-      open: openDeps, presetOf: (id) => nodeOf(id)?.preset, challengeOf: (id) => host.state(id)?.challenge,
+      open: openDeps, presetOf: (id) => nodeOf(id)?.preset, challengeOf: (id) => host.state(id)?.challenge, cwdOf: agentCwdOf,
     }),
     openLink: (originId, url) => openLinkInCanvas(linkDeps, originId, url),
     openFor: (requesterId, nodeId, profile) => openAgentBrowser({ ...openDeps, newId: () => nodeId }, requesterId, agentAllowed, 'cabled', profile),

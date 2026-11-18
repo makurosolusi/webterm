@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AGENT_PROTECTION_PATH, agentProtectionRoute } from './agentSandbox.api'
-import { AGENT_SECRET_ENTRIES, BROWSER_PROFILE_DIRS, SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
+import { AGENT_READABLE_ENTRIES, AGENT_SECRET_ENTRIES,BROWSER_PROFILE_DIRS, SANDBOX_EXCLUDED_COMMANDS, UNSANDBOXED_RETRY_RULE, agentProtection, agentSandboxOn, claudeProtectionSettings } from './agentSandbox'
 import { forgetNodeToken, nodeToken } from './hooksTokens'
 import { nodeTokenMismatch, requesterNodeId } from './agentStatusAuth'
 import { BUILTIN_AGENT_IDS } from '../shared/workspace'
@@ -44,7 +44,7 @@ describe('claudeProtectionSettings', () => {
     const sandbox = (claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings).sandbox!
     expect(sandbox.enabled).toBe(true)
     expect(sandbox.filesystem.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS])
-    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/bin`, `${DIR}/worktrees`, `${DIR}/downloads`])
+    expect(sandbox.filesystem.allowRead).toEqual([`${DIR}/context-links`, `${DIR}/browser-agent`, `${DIR}/bin`, `${DIR}/worktrees`])
     expect(sandbox.filesystem.allowWrite).toEqual(['~/'])
     expect(sandbox.filesystem.denyWrite).toEqual(expect.arrayContaining([
       `${DIR}/secrets`, `${DIR}/node-settings`, `${DIR}/context-links`, `${DIR}/webterm.db`, `${DIR}/webterm.db-wal`, `${DIR}/ledger.db-shm`,
@@ -58,14 +58,19 @@ describe('claudeProtectionSettings', () => {
     expect(SANDBOX_EXCLUDED_COMMANDS.every((c) => c.endsWith(' *'))).toBe(true)
   })
 
-  it('downloaded files are readable at their path, and that opens nothing else: browser profiles, cookie vault and secrets stay denied', () => {
+  it('downloads of every browser profile are unreadable and unwritable for an agent shell: files come only through the `downloads` verb', () => {
     const s = claudeProtectionSettings(DIR, { platform: 'darwin', env: {} }) as Settings
     const fs = s.sandbox!.filesystem
-    expect(fs.allowRead).toContain(`${DIR}/downloads`)
-    expect(s.permissions.deny.some((r) => r.includes('/downloads'))).toBe(false)
-    expect(AGENT_SECRET_ENTRIES).not.toContain('downloads')
-    for (const e of ['browser', 'secrets', 'node-settings', 'webterm.db*']) expect(fs.allowRead).not.toContain(`${DIR}/${e}`)
-    expect(fs.denyRead).toEqual([DIR, ...BROWSER_PROFILE_DIRS]) // the whole data dir is still denied; only the listed entries are re-allowed
+    expect(fs.allowRead).not.toContain(`${DIR}/downloads`)
+    expect(fs.allowRead.some((p) => p.includes('downloads'))).toBe(false)
+    expect(fs.denyRead).toContain(DIR) // the whole data dir is denied and nothing re-allows downloads
+    expect(fs.denyWrite).toContain(`${DIR}/downloads`)
+    expect(s.permissions.deny).toEqual(expect.arrayContaining([`Read(/${DIR}/downloads)`, `Read(/${DIR}/downloads/**)`]))
+    expect(AGENT_SECRET_ENTRIES).toContain('downloads')
+    expect(AGENT_READABLE_ENTRIES).not.toContain('downloads')
+    // Without the sandbox (Linux, or switched off) the permission rules alone still deny the read.
+    const plain = claudeProtectionSettings(DIR, { platform: 'linux', env: {} }) as Settings
+    expect(plain.permissions.deny).toContain(`Read(/${DIR}/downloads/**)`)
   })
 
   it('the webterm launcher is runnable but not replaceable; opening it leaves every secret denied', () => {

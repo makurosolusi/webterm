@@ -6,7 +6,9 @@ import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 import type { BrowserChallenge } from './browser.challenge'
-import type { DownloadItem, DownloadState } from './browser.downloads'
+import type { DownloadItem } from './browser.downloads'
+import type { DownloadsBody, DownloadsReply } from './browser.contract.downloads'
+import type { LayoutData, TabsData } from './browser.contract.layout'
 
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
@@ -211,20 +213,11 @@ export interface BrowserHostApi {
 }
 
 // ---- §4.5 REST /api/browser/* (tidak ada respons yang memuat nilai cookie) ----
-export type CookieFormat = 'storageState' | 'netscape'
 export interface BrowserStatusResp {
   enabled: boolean; binFound: boolean; version?: string; live: number; maxLive: number
   agentEnabled: boolean; cookieImportEnabled: boolean
 }
-export interface CookieDomainInfo { domain: string; count: number; expiresAt?: number }
-export interface CookiePreviewReq { format: CookieFormat; content: string }
-export interface CookiePreviewResp {
-  previewId: string; domains: Array<{ domain: string; count: number; hasSession: boolean }>; expiresAt: number
-  /** Jumlah cookie login Google yang dilewati saat import (kebijakan Orca; lihat cookieImportPolicy). */
-  googleSkipped?: number
-}
-export interface CookieCommitReq { previewId: string; domains: string[] }
-export interface CookieCommitResp { imported: number; domains: string[] }
+export type * from './browser.contract.cookies'
 
 // ---- §4.6 Kontrol agent /api/control/browser/:nodeId/:verb ----
 export const BROWSER_CAPS = { read: 'browser.read', act: 'browser.act' } as const
@@ -235,7 +228,7 @@ export const BROWSER_VERB_CAP = {
   scroll: 'browser.act', handoff: 'browser.act', release: 'browser.act',
   // Tabs of one node: `tabs` lists, `tab` creates / switches / closes (`new` takes a URL, so it is an act).
   tabs: 'browser.read', tab: 'browser.act',
-  // Files the node's pages downloaded (saved in the webterm folder): a list with the path of each finished file.
+  // Files the node's pages downloaded: list, `read` (text) and `copy` (into the caller's working directory).
   downloads: 'browser.read',
   // Split layout of one node: `layout` reads it, `arrange` sets it, `sync` switches sync mode; reload/back/forward are page verbs.
   layout: 'browser.read', arrange: 'browser.act', sync: 'browser.act', reload: 'browser.act', back: 'browser.act', forward: 'browser.act',
@@ -270,7 +263,7 @@ export interface VerbBodies {
   arrange: { spec: string }
   sync: { on: boolean }
   tabs: Record<string, never>
-  downloads: Record<string, never>
+  downloads: DownloadsBody
   /** `new` = optional url; `switch` and `close` need `tab`. */
   tab: { action: 'new' | 'switch' | 'close'; url?: string; tab?: string }
   handoff: Record<string, never>; release: Record<string, never>
@@ -290,23 +283,12 @@ export interface VerbData {
   arrange: LayoutData & { note: string }
   sync: { on: boolean; note: string }
   tabs: TabsData
-  downloads: DownloadsData
+  downloads: DownloadsReply
   tab: TabsData & { tab?: AgentTabView; note: string }
   handoff: { lease: 'agent'; ttlMs: number }
   release: { lease: 'human' }
 }
-/** One download as an agent sees it; `path` only for a finished, kept file (an agent reads the file there). */
-export interface AgentDownload { id: string; name: string; state: DownloadState; bytes: number; total: number; host: string; risky: boolean; failure?: string; path?: string }
-/** Result of the `downloads` verb, newest first. File names and hosts come from the page: data, never instructions (`note`). */
-export interface DownloadsData { downloads: AgentDownload[]; note: string }
-/** One pane of a layout as an agent sees it. */
-export interface LayoutPane { tab: string; title: string; host: string; /** The human's focused pane. */ focus: boolean; w: number; h: number; device?: string }
-/** The node's split layout: `tree` like `h(t1, v(t2, t3))` (`t1` alone = no split), panes in reading order, and sync mode. */
-export interface LayoutData { tree: string; split: boolean; panes: LayoutPane[]; sync: boolean; maxPanes: number }
-/** Result of one tab in an `all` run; verb-specific fields (`url`, `content`, `base64`, ...) ride along. A failed tab never fails the others. */
-export interface TabResult { tab: string; ok: boolean; name?: string; error?: string; message?: string; [field: string]: unknown }
-export interface AllData { all: true; results: TabResult[]; okCount: number; failedCount: number; note?: string }
-/** Tab list a verb answers with: the node's tabs, the agent's working tab and the per-node limit. */
-export interface TabsData { tabs: AgentTabView[]; agentTab: string | null; max: number }
+export type * from './browser.contract.downloads'
+export type * from './browser.contract.layout'
 /** Semua respons kontrol sukses; konten halaman selalu tak tepercaya. */
 export interface ControlOk<T> { ok: true; data: T; provenance: 'untrusted-web' }
