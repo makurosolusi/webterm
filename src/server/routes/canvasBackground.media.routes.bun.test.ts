@@ -133,7 +133,7 @@ test('Range: first/middle/last window, open-ended, suffix, HEAD and headers', as
   expect(whole.status).toBe(200)
   expect(whole.headers.get('accept-ranges')).toBe('bytes')
   expect(whole.headers.get('x-content-type-options')).toBe('nosniff')
-  expect(whole.headers.get('cache-control')).toStartWith('private')
+  expect(whole.headers.get('cache-control')?.startsWith('private')).toBe(true)
   const head = await get(undefined, 'HEAD')
   expect([head.status, head.headers.get('content-length'), head.headers.get('content-type')]).toEqual([200, '1000', 'video/mp4'])
   expect((await head.arrayBuffer()).byteLength).toBe(0)

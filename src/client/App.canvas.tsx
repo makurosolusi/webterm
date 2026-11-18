@@ -92,7 +92,7 @@ export default function BoardCanvas({
   const gridSize = clampSetting('gridSize', settings.gridSize, DEFAULT_SETTINGS.gridSize)
   return (
     <>
-    <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} />
+    <CanvasBackgroundLayer bg={wallpaper.shown} imageUrl={wallpaper.imageUrl} onVideoLoaded={wallpaper.onVideoLoaded} onVideoError={wallpaper.onVideoError} />
     <ReactFlow
       className={wallpaper.active ? 'canvas--wallpaper' : undefined}
       // Cable + arrowhead color (EDGE_STROKE / `.react-flow__marker` read it); default = theme token.

@@ -71,3 +71,7 @@
 }
 /* A notice between rows of the Settings card sits at the rows' inset. */
 .st-group-card > .cbg-notice { margin: 8px 14px; }
+.cbg-media-info {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}

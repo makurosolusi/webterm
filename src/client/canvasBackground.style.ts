@@ -1,7 +1,7 @@
 // Pure styling for the canvas wallpaper: luminance -> dot grid color, contrast guard, and the CSS
 // of each wallpaper layer. No DOM, so it is unit-tested in node-env.
 import type { CSSProperties } from 'react'
-import { IMAGE_GRADIENT_OVERLAY_OPACITY, type CanvasBackground, type CanvasGradient } from '../shared/canvasBackground.schema'
+import { IMAGE_GRADIENT_OVERLAY_OPACITY, isCanvasVideoId, type CanvasBackground, type CanvasGradient } from '../shared/canvasBackground.schema'
 
 /** Above this relative luminance the background counts as light and gets dark dots. */
 export const LIGHT_BACKGROUND_LUMINANCE = 0.4
@@ -75,21 +75,25 @@ export interface LayerStyles {
   overlay?: CSSProperties
 }
 
-/** Layer styles for a background; `imageUrl` null in image mode means "no usable image". */
-export function layerStyles(bg: CanvasBackground, imageUrl: string | null): LayerStyles | null {
+/**
+ * Layer styles for a background; `imageUrl` null in image mode means "no usable image".
+ * A video gets no blur (it would re-run on every frame) and no CSS image: the `<video>` element
+ * paints it. `hideImage` keeps the layer (dim, overlay) while a paused animation's still frame loads.
+ */
+export function layerStyles(bg: CanvasBackground, imageUrl: string | null, hideImage = false): LayerStyles | null {
   if (bg.mode === 'color') return { base: { background: bg.color } }
   if (bg.mode === 'gradient') return { base: { background: gradientCss(bg.gradient) } }
   if (bg.mode !== 'image' || !imageUrl) return null
   // Blur pulls transparent pixels in from outside the box; bleeding the layer past the edges by
   // twice the radius (clipped by the parent) keeps the borders solid.
   const bleed = bg.imageBlur * 2
+  const picture: CSSProperties = isCanvasVideoId(bg.imageId) || hideImage ? {} : {
+    backgroundImage: `url("${imageUrl}")`,
+    ...FIT[bg.imageFit],
+    ...(bg.imageBlur > 0 ? { filter: `blur(${bg.imageBlur}px)`, inset: -bleed } : {}),
+  }
   return {
-    base: {
-      backgroundImage: `url("${imageUrl}")`,
-      backgroundColor: 'var(--canvas-bg)',
-      ...FIT[bg.imageFit],
-      ...(bg.imageBlur > 0 ? { filter: `blur(${bg.imageBlur}px)`, inset: -bleed } : {}),
-    },
+    base: { backgroundColor: 'var(--canvas-bg)', ...picture },
     dim: bg.imageDim > 0 ? { background: `rgba(0, 0, 0, ${bg.imageDim / 100})` } : undefined,
     overlay: bg.imageGradientOverlay ? { background: gradientCss(bg.gradient), opacity: IMAGE_GRADIENT_OVERLAY_OPACITY } : undefined,
   }
