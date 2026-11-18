@@ -1,6 +1,6 @@
 # Browser profiles
 
-Status: server side implemented (feature/browser-profiles-server). UI and Central tools follow in separate waves.
+Status: server side implemented (feature/browser-profiles-server); UI implemented (feature/browser-profiles-ui). Central tools follow in a separate wave.
 
 ## Why a profile is its own entity
 
@@ -82,3 +82,31 @@ The server broadcasts `{t: 'browserProfiles'}` on a list or live change; clients
 
 Process sharing/separation, session persistence across wake, and cookie injection into two live profiles are covered by
 tests over a fake CDP server and fake launchers, not by a real browser.
+
+## UI
+
+Modeled on Chrome profiles, Firefox containers and VS Code profiles: the profile is always visible where a browser shows,
+and switching it is one click.
+
+- **Node header chip** (`BrowserProfileChip`): color dot + name (tooltip: "Nodes on the same profile share cookies and
+  logins", plus the node count when shared). The menu lists profiles (checkmark on the current, `live` and node count per
+  row), then New profile… and Manage profiles… (opens Settings › Browser). Picking a profile calls `POST /:nodeId/profile`;
+  only after the server answers is `profileId` stored on the node (so a refusal leaves node and board unchanged), and one
+  notice reports "Moved to profile X; page reloaded". A failure shows an error notice with Retry. The board's own Default
+  is stored as no `profileId`, so a copied board never points at another board's Default.
+- **Spawn**: "Browser with profile…" (one click on a profile) and "Open a browser for each profile…" sit beside "Browser" in
+  the canvas menu, the handle menu, the Dock add list and the command palette. Both open one dialog
+  (`BrowserProfileSpawnDialog`, driven by `browserProfile.spawn.ts`, no prop plumbing). The "each" dialog starts with every
+  profile ticked, has Select all and "Open N browsers"; nodes land in a grid (`browserProfile.layout.ts`, never overlapping
+  each other or existing nodes) and the view fits them. The live limit is read from `/api/browser/status`: what fits
+  opens, the rest is named in one warning notice.
+- **Settings › Browser** (`BrowserProfilesSection`, searchable): per row dot, name, Default/live badges, "used by N nodes",
+  "N cookie domains" and a menu: Rename (inline), Color (the workspace palette picker rows), Import cookies…, Duplicate
+  (disabled with reason while live), Export cookies (download), Delete (confirmation; disabled with reason when used or
+  Default). Server codes map to plain sentences and show inline. States: browser off, loading, failed + Retry, empty.
+- **Cookies per profile** (`BrowserProfileCookieDialog`): preview (sites, counts, skipped Google sign-in cookies with
+  the reason), choose sites, import, summary; stored sites with remove per site / all.
+- **Live updates**: `BrowserProfilesMsg` is part of `ServerMsg`; `subscribeBrowserProfiles` feeds `useBrowserProfiles`.
+
+Not verified without a real browser: how the dropdown, dialogs and the N-node grid look and feel, drag/keyboard focus
+order in the menus, color contrast of the dots in both themes (tokens are reused from the workspace palette).
