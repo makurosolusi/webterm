@@ -188,6 +188,34 @@ Code: `browser.agentTabs.verbs.ts` (`withTabs`: verbs `tabs`/`tab`, `--tab`, `st
 - **Verified only with a fake CDP:** popup adoption, `agentTabId` moves, discard/wake of background tabs. The real-model smoke
   (`docs/smoke-capabilities.md`, cases `tab-open`, `tab-multi`, `tab-denied`) covers the end to end path with a real Chromium.
 
+## A node that cannot operate (2026-11-18)
+
+Owner report: a new browser opened with a profile showed the start page, a tab "New tab" with the agent robot, an address bar
+holding a URL the page never loaded, and nothing responded; older browsers were fine.
+
+Root causes (each proven by a test that failed before the fix):
+
+1. **The MAX_LIVE gate refused the node without any state.** `BrowserLifecycle.admit` returned false, `attach` threw
+   `BlockedError('max_live')`, and the gateway sent it as the generic `{t:'error', code:'blocked'}` ("This address is blocked.",
+   non-sticky: gone after 4 s). The node never got a `state` or a `tabs` message, so the client stayed on its stand-in tab and
+   start page, and every `nav`/click went to a node the server did not have. Nothing was logged either (no `browser.launch`).
+   Now: its own wire code `max_live` (sticky), a log line `browser.attach_refused {reason:'max_live', live, maxLive}`, and a
+   plate in the page area ("Browser paused: the limit of N active browsers is reached") with **Hide another browser…** (collapses
+   the chosen browser; collapsed = hidden = evictable) and **Try again**. The gateway keeps the refused attach in `waiting` and
+   retries it when `BrowserLifecycle.onCapacity` fires (a node was forgotten or hidden), so the node wakes by itself through the
+   same `lifecycle.attach` gate; there is no second gate. While paused, `nav` from the toolbar is not sent and a warning explains why.
+2. **The stand-in tab claimed to be the agent's.** `useBrowserTabs` built its stand-in with `agentTabId = tabId`, which the strip
+   draws as the robot. A node nothing is attached to has no agent in it: `agentTabId` is now `null` there.
+3. **A launch failure only said `launch_failed`.** The cause is now classified once (`launchReason`: `profile_locked`,
+   `bin_not_found`, `spawn_error`, `debug_port_timeout`, `crashed_on_start`, `sandbox_unavailable`, `connect_failed`), logged in
+   `browser.launch_failed` as `reason` (+ `detail`, our own LaunchError text, never a raw error that may hold paths) together with
+   node and profile, sent as `error.reason`, and shown on the existing plate. Try again relaunches through `acquire`, which
+   already reclaims a leftover Chromium of this server (`reclaimProfile`); there is no separate "Reclaim profile" button because it
+   would do exactly what Try again does.
+
+Not verified without a real browser: how the plate looks in both themes, the collapse animation of the hidden node, and the real
+timing of the wake after hiding.
+
 
 ## Menyusul
 P1-P3 (server, integrasi `BrowserNode`, verb agent) sudah ada. P4 split pane sudah ada: lihat `browser-split.md` (screencast

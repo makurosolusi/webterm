@@ -133,3 +133,19 @@ and switching it is one click.
 
 Not verified without a real browser: how the dropdown, dialogs and the N-node grid look and feel, drag/keyboard focus
 order in the menus, color contrast of the dots in both themes (tokens are reused from the workspace palette).
+
+## A new node on a profile: the profile travels with the first attach
+
+A node created in the UI with a profile (dialog "Browser with profile…", "Open a browser for each profile…") exists only on
+the client until the board save fires (400 ms debounce), but its WS `attach` arrives at once. The server resolves the profile
+from the SAVED board (`profileOf` -> `resolveProfileId`), found no node, and opened the workspace Default instead: the
+picked profile was ignored and the launch used (and could fail on) the Default's process. Proven by
+`browser.newNode.bun.test.ts` (acquired `["w1"]` instead of the picked profile id).
+
+Fix: `attach` carries an optional `profileId`; the gateway calls `hintProfile`, which sets the node's profile override only
+when the node is NOT on the saved board yet, the id is a known profile and it is global or this board's. The saved board
+always wins afterwards, a switch still goes through `POST /:nodeId/profile`. Agent/Central opens add the node to the board
+before starting it, so they read the profile from the board and need no hint (same test file, via `openFor`/`openProject`
+paths in `browser.profiles.runtime.bun.test.ts`).
+
+Log: `browser.launch_failed` carries `reason` (see `browser-tabs.md`, "A node that cannot operate").
