@@ -123,6 +123,7 @@ export const CL = {
   authorBannerPurpose: 'Walks you through title, steps and checks before writing.',
   authorBannerTools: renderCapabilityLine('central.skill-author'),
   authorBannerDrafts: 'Drafts need your approval in the Skills tab.',
+  authorBannerBack: 'Back to Central chat',
   authorBannerTarget: (name: string) => `Editing ${name}.`,
   authorChip: 'Limited tools',
   authorChipHelp: renderCapabilityLine('central.skill-author'),

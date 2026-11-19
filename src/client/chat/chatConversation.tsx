@@ -35,6 +35,8 @@ export interface ChatConversationViewProps {
   streamFactory: StreamFactory
   /** Focus the composer on mount (New chat). */
   focusComposer?: boolean
+  /** A skill-author chat's way back to the steward chat (banner action). */
+  onBackToCentral?: () => void
   /** Enables the `/` command menu (central/centralCommands); absent = plain composer. */
   commands?: CentralChatHost
 }
@@ -208,7 +210,7 @@ export default function ChatConversationView(props: ChatConversationViewProps) {
 
   return (
     <section ref={section} className="chat-conversation" aria-label="Conversation">
-      {authoring && <CentralSkillAuthorBanner target={conversation.skillTarget ?? null} />}
+      {authoring && <CentralSkillAuthorBanner target={conversation.skillTarget ?? null} {...(props.onBackToCentral ? { onBack: props.onBackToCentral } : {})} />}
       <TurnLiveRegion info={turn} failed={failed} />
       <ChatMessages messages={orderedMessages(state)} streaming={busy || rerunning || state.stream === 'reconnecting'} status={turn} onRetry={send}
         imageUrl={(ref) => chatImageUrl(conversation.id, ref)}

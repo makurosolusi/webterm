@@ -1,12 +1,13 @@
 // What the Central skill-author chat shows about itself: a compact role banner above the thread and a composer chip.
 // Display only: neither is ever sent to the model as a message.
+import { Button } from '@/components/ui/button'
 import { CL } from './centralLabels'
 import { SD } from './skillDetail.labels'
 import './central.css'
 import './skillDetail.css'
 
 /** Purpose, tool limit and the approval rule, plus the skill being edited when there is one. */
-export function CentralSkillAuthorBanner({ target }: { target?: string | null }) {
+export function CentralSkillAuthorBanner({ target, onBack }: { target?: string | null; onBack?: () => void }) {
   return (
     <aside className="ccp-author-banner" aria-label={CL.authorBannerLabel}>
       <strong>{CL.authorBannerTitle}</strong>
@@ -15,6 +16,7 @@ export function CentralSkillAuthorBanner({ target }: { target?: string | null })
       <span className="skd-banner-lock"><span className="codicon codicon-lock" aria-hidden="true" />{SD.roleLocked}</span>
       <span>{CL.authorBannerTools}</span>
       <span>{CL.authorBannerDrafts}</span>
+      {onBack && <Button size="sm" variant="secondary" onClick={onBack}>{CL.authorBannerBack}</Button>}
     </aside>
   )
 }
