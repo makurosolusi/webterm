@@ -1,13 +1,14 @@
-// Cari biner Chromium dan jalankan satu proses per profil. Tidak pernah dipanggil test
+// Cari biner Chromium (hanya milik webterm sendiri) dan jalankan satu proses per profil. Tidak pernah dipanggil test
 // dengan biner nyata: `spawn`, `exists`, `readFile`, `sleep` diinjeksi.
 import { spawn as nodeSpawn } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { ENV_BROWSER } from '../../shared/browser.contract'
 import type { LaunchReason } from '../../shared/browser.contract'
 import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from './chromium.flags'
 import { createLogger } from '../logs'
 import { childEnv } from '../childEnv'
+import { ensureManaged, managedBinaryPath, managedRoot } from './chromium.managed'
 import { lockHolder, reclaimProfile } from './chromium.profileLock'
 import type { ProfileLockDeps } from './chromium.profileLock'
 
@@ -19,82 +20,23 @@ const STDERR_TAIL_CHARS = 4_096
 const PROFILE_DIR_MODE = 0o700
 const ACTIVE_PORT_FILE = 'DevToolsActivePort'
 
-// Aplikasi macOS berbasis Chromium yang mendukung CDP + DevToolsActivePort. Arc sengaja tidak
-// ada: tidak mendukung CDP secara andal.
-const MAC_APPS = ['Google Chrome', 'Chromium', 'Google Chrome Canary', 'Microsoft Edge', 'Brave Browser'] as const
-
-/** Lokasi umum macOS/Linux bila `WEBTERM_BROWSER_BIN` kosong; urutan = prioritas. */
-export const BIN_CANDIDATES = [
-  ...MAC_APPS.map((n) => `/Applications/${n}.app/Contents/MacOS/${n}`),
-  '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-  '/snap/bin/chromium',
-] as const
-
-/** Nama perintah yang dicari di tiap direktori `PATH` setelah lokasi umum. */
-export const PATH_NAMES = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'] as const
-
-/** Cache Playwright (macOS, Linux) relatif ke HOME; dicari paling akhir. */
-const PLAYWRIGHT_CACHES = ['Library/Caches/ms-playwright', '.cache/ms-playwright'] as const
-/** Biner di dalam `chromium-<rev>/` lintas versi Playwright (lama: Chromium.app; baru: Chrome for Testing). */
-const PLAYWRIGHT_BINS = [
-  'chrome-mac/Chromium.app/Contents/MacOS/Chromium',
-  'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
-  'chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
-  'chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
-  'chrome-linux/chrome', 'chrome-linux64/chrome',
-] as const
-const PLAYWRIGHT_DIR = /^chromium-(\d+)$/
-
-/** `<data dir>/browsers`: where "Download Chromium" installs (browserDownload.ts), layout of @puppeteer/browsers' Cache. */
+/** `<data dir>/browsers`: where "Download Chromium" installs (browserDownload.ts); only reachable through the `WEBTERM_BROWSER_BIN` it saves. */
 export const BROWSERS_SUBDIR = 'browsers'
-/** Cache layout `<cacheDir>/chrome/<platform>-<buildId>/<bin>` (Chrome for Testing). */
-const DOWNLOADED_BROWSER = 'chrome'
-const DOWNLOADED_BINS = [...PLAYWRIGHT_BINS, 'chrome-linux-arm64/chrome'] as const
-const DOWNLOADED_DIR = /^[a-z0-9_]+-(\d+(?:\.\d+)*)$/
 
 /** Data dir as config.ts `dataDir()` derives it, from an env snapshot (pure: tests pass their own); null without either var. */
 export const dataDirOf = (env: Record<string, string | undefined>): string | null =>
   env.WEBTERM_DATA_DIR || (env.HOME ? join(env.HOME, '.webterm-server') : null)
 
-/** Newest version first (`131.0.6778.85` > `131.0.6778.9`). */
-const byVersionDesc = (a: string, b: string): number => {
-  const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)]
-  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (y[i] ?? 0) - (x[i] ?? 0)
-  return 0
-}
-
-/** Binaries a previous "Download Chromium" left in `<data dir>/browsers`, newest build first (survives restarts without the override). */
-export function downloadedCandidates(dataDir: string, listDir: ListDir = defaultListDir): string[] {
-  const root = join(dataDir, BROWSERS_SUBDIR, DOWNLOADED_BROWSER)
-  return listDir(root)
-    .map((name) => ({ name, version: DOWNLOADED_DIR.exec(name)?.[1] }))
-    .filter((d): d is { name: string; version: string } => d.version !== undefined)
-    .sort((a, b) => byVersionDesc(a.version, b.version))
-    .flatMap((d) => DOWNLOADED_BINS.map((b) => join(root, d.name, b)))
-}
-
-export type ListDir = (dir: string) => string[]
-const defaultListDir: ListDir = (dir) => (existsSync(dir) ? readdirSync(dir) : [])
-
-/** Semua biner Chromium yang ADA di disk, urut prioritas: lokasi umum -> PATH -> unduhan webterm -> cache Playwright (revisi terbaru dulu). */
-export function chromiumCandidates(
-  env: Record<string, string | undefined>,
-  exists: (p: string) => boolean = existsSync,
-  listDir: ListDir = defaultListDir,
-): string[] {
-  const fromPath = (env.PATH ?? '').split(delimiter).filter(Boolean).flatMap((d) => PATH_NAMES.map((n) => join(d, n)))
-  const home = env.HOME
-  const fromPlaywright = home ? PLAYWRIGHT_CACHES.flatMap((c) => {
-    const root = join(home, c)
-    return listDir(root)
-      .map((name) => ({ name, rev: Number(PLAYWRIGHT_DIR.exec(name)?.[1] ?? NaN) }))
-      .filter((d) => Number.isFinite(d.rev))
-      .sort((a, b) => b.rev - a.rev)
-      .flatMap((d) => PLAYWRIGHT_BINS.map((b) => join(root, d.name, b)))
-  }) : []
+/** Managed binary path for this env's data dir (may not exist yet); null on an unsupported platform or without a data dir. */
+export function managedPathOf(env: Record<string, string | undefined>): string | null {
   const data = dataDirOf(env)
-  const fromDownload = data ? downloadedCandidates(data, listDir) : []
-  return [...new Set([...BIN_CANDIDATES, ...fromPath, ...fromDownload, ...fromPlaywright])].filter((p) => exists(p))
+  return data ? managedBinaryPath(managedRoot(data)) : null
+}
+
+/** Chromium binaries that exist: only webterm's own managed build. Installed Chrome/Brave/Edge are never auto-picked (canvas-containment.md). */
+export function chromiumCandidates(env: Record<string, string | undefined>, exists: (p: string) => boolean = existsSync): string[] {
+  const managed = managedPathOf(env)
+  return managed && exists(managed) ? [managed] : []
 }
 
 export class LaunchError extends Error {
@@ -117,34 +59,31 @@ export function launchReason(err: unknown): LaunchReason {
   return err instanceof LaunchError ? (err.reason ?? REASON_OF_CODE[err.code]) : 'connect_failed'
 }
 
-/** Path biner: override eksplisit (harus ada; TIDAK jatuh ke otomatis) -> kandidat pertama -> `LaunchError('no_binary')`. */
-export function resolveBinary(
-  env: Record<string, string | undefined>,
-  exists: (p: string) => boolean = existsSync,
-  listDir: ListDir = defaultListDir,
-): string {
+/** Path biner: override eksplisit (harus ada; TIDAK jatuh ke otomatis) -> biner terkelola yang sudah ada -> `LaunchError('no_binary')`. */
+export function resolveBinary(env: Record<string, string | undefined>, exists: (p: string) => boolean = existsSync): string {
   const explicit = env[ENV_BROWSER.bin]?.trim()
   if (explicit) {
     if (!exists(explicit)) throw new LaunchError('no_binary', `${ENV_BROWSER.bin} points to a missing file`)
     return explicit
   }
-  const found = chromiumCandidates(env, exists, listDir)[0]
-  if (!found) throw new LaunchError('no_binary', `no Chromium found; install one or set ${ENV_BROWSER.bin}`)
+  const found = chromiumCandidates(env, exists)[0]
+  if (!found) throw new LaunchError('no_binary', 'managed Chrome for Testing is not downloaded yet')
   return found
 }
 
-/** Deteksi biner Chromium tanpa melempar: override menang (harus ada), lalu kandidat otomatis; null = hilang. */
+/**
+ * Deteksi biner tanpa melempar: override menang (harus ada); lalu biner terkelola. Bila belum diunduh tetapi platform didukung,
+ * jalur tujuannya dilaporkan (diunduh otomatis saat peluncuran pertama); null = tidak ada jalan ke browser.
+ */
 export function detectChromium(
   env: Record<string, string | undefined>,
   exists: (p: string) => boolean = existsSync,
-  listDir: ListDir = defaultListDir,
 ): { path: string; source: 'override' | 'auto' } | null {
-  try {
-    return { path: resolveBinary(env, exists, listDir), source: env[ENV_BROWSER.bin]?.trim() ? 'override' : 'auto' }
-  } catch (e) {
-    if (e instanceof LaunchError && e.code === 'no_binary') return null
-    throw e
+  if (env[ENV_BROWSER.bin]?.trim()) {
+    return exists(env[ENV_BROWSER.bin]!.trim()) ? { path: env[ENV_BROWSER.bin]!.trim(), source: 'override' } : null
   }
+  const path = managedPathOf(env)
+  return path ? { path, source: 'auto' } : null
 }
 
 /** Bagian ChildProcess yang dipakai (memudahkan fake di test). */
@@ -224,6 +163,21 @@ export interface BrowserLauncher {
   stop?(profileId: string): void
 }
 
+/** Explicit/managed binary, else a one-time automatic download of the managed build (info log, not an error). */
+async function resolveOrInstall(cfg: { env: Record<string, string | undefined>; dataRoot: string; exists?: (p: string) => boolean; install?: (root: string) => Promise<string> }): Promise<string> {
+  try {
+    return resolveBinary(cfg.env, cfg.exists)
+  } catch (e) {
+    if (!(e instanceof LaunchError) || e.code !== 'no_binary' || cfg.env[ENV_BROWSER.bin]?.trim()) throw e
+    log.info('browser.managed_missing', 'Managed Chrome for Testing missing; downloading it once')
+    try {
+      return await (cfg.install ?? ensureManaged)(managedRoot(cfg.dataRoot))
+    } catch (err) {
+      throw new LaunchError('no_binary', `could not download the managed Chrome for Testing: ${err instanceof Error ? err.message : 'unknown error'}`, err)
+    }
+  }
+}
+
 /** Satu proses Chromium per profil; dibuat ulang bila mati; `shutdown()` membunuh semuanya. */
 export function createChromiumPool(cfg: {
   env: Record<string, string | undefined>
@@ -232,6 +186,8 @@ export function createChromiumPool(cfg: {
   deps?: LaunchDeps
   exists?: (p: string) => boolean
   platform?: NodeJS.Platform
+  /** Seam: downloads the managed build into `<dataRoot>/browser/chrome-for-testing`; returns its binary. */
+  install?: (root: string) => Promise<string>
 }): BrowserLauncher {
   const live = new Map<string, Promise<Launched>>()
   return {
@@ -239,7 +195,7 @@ export function createChromiumPool(cfg: {
       let p = live.get(profileId)
       if (!p) {
         p = (async () => {
-          const bin = resolveBinary(cfg.env, cfg.exists)
+          const bin = await resolveOrInstall(cfg)
           const headless = headlessReason(cfg.env, cfg.platform)
           if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { profileId } })
           const profileDir = profileDirFor(cfg.dataRoot, profileId)

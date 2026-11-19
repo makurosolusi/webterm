@@ -43,7 +43,7 @@ function procs(o: { lock?: string | null; command?: string | null; alive?: boole
 function pool(deps: LaunchDeps) {
   const children: FakeChild[] = []
   const p = createChromiumPool({
-    env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
+    env: { WEBTERM_DATA_DIR: '/d' }, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
     deps: {
       ...deps,
       spawn: () => { const c = new FakeChild(); children.push(c); return c },
@@ -99,7 +99,7 @@ describe('profile_locked', () => {
     const child = new FakeChild()
     // Through the pool: the holder survives TERM and KILL, Chromium hands off to it and exits.
     const pooled = createChromiumPool({
-      env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
+      env: { WEBTERM_DATA_DIR: '/d' }, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
       deps: { ...f.deps, spawn: () => { queueMicrotask(() => child.exit()); return child }, readFile: () => null, sleep: async () => { await Promise.resolve() } },
     })
     expect(await pooled.acquire('wa').catch((e: unknown) => e)).toMatchObject({ code: 'profile_locked' })

@@ -98,3 +98,20 @@ OS call):
 Static scanning cannot see a URL passed through a variable to an allowlisted call, a program that calls the OS opener by
 absolute path, or a Chromium runtime flag; the runtime guard in `src/server/browser/*` and the shims cover those
 (see `canvas-link-capture.md` "What cannot be caught").
+
+## Managed browser binary
+
+The Browser node never uses a browser installed on the user's machine (Chrome, Chromium, Brave, Edge, Playwright or
+Puppeteer caches). An installed browser is the user's daily app: it shares the app identity, can appear or take focus on
+the desktop, and shares OS handlers (default-browser, URL schemes), which breaks the canvas containment above.
+
+webterm owns its Chrome instead: a version-locked **Chrome for Testing** (`CHROME_FOR_TESTING_VERSION` in
+`src/server/browser/chromium.managed.ts`), an app named "Google Chrome for Testing" with its own identity. Resolution
+order in `chromium.launch.ts`:
+
+1. `WEBTERM_BROWSER_BIN`, only when the user sets it (a missing file is an error, never a fallback).
+2. `<data dir>/browser/chrome-for-testing/<version>/...` when present.
+3. Otherwise downloaded once (HTTPS, size and time capped, zip-slip safe extraction) into 2, then used.
+
+`bun scripts/fetch-chrome.ts --dest <dir>` does the same by hand. `CHROME_SHA256` pins each platform archive; Chrome for
+Testing publishes no checksums, so fill it with `--print-sha256` after verifying the values.
