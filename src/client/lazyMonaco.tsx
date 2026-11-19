@@ -4,6 +4,7 @@ import { defineWebtermThemes } from './monacoTheme'
 import { getBrowserWorkspace } from './browser.stream'
 import * as fsClient from './fsClient'
 import { LSP_WS_PATH } from './editorLsp.client'
+import { maskDiskText } from './editorMask.live'
 
 /**
  * Monaco di-muat MALAS, satu kali, lewat dynamic import.
@@ -71,6 +72,8 @@ export function loadMonaco(): Promise<MonacoApi> {
       open: (workspace, language) => new WebSocket(lspWsUrl(workspace, language)),
       readMeta: fsClient.readMeta,
       writeChecked: fsClient.writeChecked,
+      // Disk text shown without an editor node (peek, rename preview) is masked like the node itself.
+      maskDisplay: maskDiskText,
     })
     return monaco
   })()

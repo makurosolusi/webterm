@@ -11,6 +11,8 @@ import { useLiveSettings } from './useSettings'
 import { formatBytes } from '../shared/fsLimits'
 import type { ReadEncoding } from '../shared/fsContract'
 import type { MonacoApi } from './lazyMonaco'
+import { maskStatusItems } from './editorMask.items'
+import type { EditorMask } from './useEditorMask'
 import type { ViewerMeta } from './viewers/ViewerHost'
 import './node-statusbar.css'
 
@@ -66,11 +68,13 @@ export interface EditorStatusBarProps {
   saving: boolean
   readOnly: boolean
   meta?: ViewerMeta | null
+  /** Secret masking of the open file: adds its count and Reveal all / Edit / Hide. */
+  mask?: EditorMask
 }
 
 type Item = { id: string; text: string; tip: string; onClick?: (e: MouseEvent) => void }
 
-function Bar({ live, encoding, saving, readOnly, meta }: EditorStatusBarProps): React.JSX.Element | null {
+function Bar({ live, encoding, saving, readOnly, meta, mask }: EditorStatusBarProps): React.JSX.Element | null {
   const [, setTick] = useState(0)
   const [menu, setMenu] = useState<{ x: number; y: number; rows: MenuRow[] } | null>(null)
   useEffect(() => {
@@ -114,6 +118,7 @@ function Bar({ live, encoding, saving, readOnly, meta }: EditorStatusBarProps): 
       ]) },
       // Monaco has no language picker of its own, so the mode is shown, not switched.
       { id: 'language', text: facts.language, tip: `${EDITOR_STATUS_TEXT.language}: ${facts.language}` },
+      ...maskStatusItems(mask),
     )
   } else if (meta) {
     for (const [i, text] of viewerFacts(meta).entries()) items.push({ id: `meta${i}`, text, tip: i === 0 && meta.width ? 'Image size in pixels' : 'File size' })

@@ -6,6 +6,7 @@ import { loadMonaco, type MonacoApi } from './lazyMonaco'
 import { currentMonacoTheme, EDITOR_OPTIONS } from './monacoTheme'
 import { isMarkdownExt, loadRefusal, opensInPreview } from './editorFile'
 import { setEditorDirty } from './editorDirty'
+import { useEditorMask } from './useEditorMask'
 
 export type EditorConflict = { kind: 'version'; current?: FsVersion } | { kind: 'missing' }
 export type WriteChecked = (path: string, content: string, opts?: { expectedVersion?: FsVersion; mustExist?: boolean }) => Promise<FsResult>
@@ -73,6 +74,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
   const [loadKey, setLoadKey] = useState(0)
   /** The mounted editor (null until Monaco is up), for options and actions owned by the node. */
   const [live, setLive] = useState<{ monaco: MonacoApi; editor: MonacoEditor.IStandaloneCodeEditor } | null>(null)
+  // Secret masking (docs/decisions/secret-masking.md): while `mask.modeRef` is 'masked' the model holds display text.
+  const mask = useEditorMask({ pathRef, editor: live?.editor ?? null, dirty, fileReadOnly: readOnlyRef })
 
   // Preview renders Markdown, so it exists only for Markdown files (VS Code's "Open Preview").
   const togglePreview = () => {
@@ -87,7 +90,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
    *  after the write landed; false when it was refused, failed, or could not start. */
   const doWrite = (opts: { expectedVersion?: FsVersion; mustExist?: boolean }): Promise<boolean> => {
     const editor = editorRef.current
-    if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current) return Promise.resolve(false)
+    if (!editor || !loadedRef.current || readOnlyRef.current || savingRef.current || mask.modeRef.current === 'masked') return Promise.resolve(false)
     const value = editor.getValue()
     savingRef.current = true
     setSaving(true)
@@ -120,6 +123,8 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
   const save = (): Promise<boolean> => {
     if (!editorRef.current) return Promise.resolve(false)
+    // Masked: the buffer is display text and never dirty; nothing may be written.
+    if (mask.modeRef.current === 'masked') return Promise.resolve(true)
     // Guard !dirty: ⌘S pada buffer bersih tidak menulis (menghindari mtime berubah & EVERSION palsu).
     if (editorRef.current.getValue() === savedRef.current) return Promise.resolve(true)
     return doWrite({ expectedVersion: versionRef.current, mustExist: true })
@@ -147,14 +152,15 @@ export function useEditorFile(a: UseEditorFileArgs) {
         fail('reload', refusal ?? `${fileName} is no longer UTF-8 text; the buffer was not replaced.`)
         return
       }
-      if (onlyIfClean && editor.getValue() !== savedRef.current) {
+      if (onlyIfClean && mask.modeRef.current !== 'masked' && editor.getValue() !== savedRef.current) {
         setConflict({ kind: 'version', current: meta.version })
         return
       }
       savedRef.current = meta.content
       versionRef.current = meta.version
-      editor.setValue(meta.content)
-      if (previewRef.current) setPreviewSource(meta.content)
+      const text = mask.load(meta.content)
+      editor.setValue(text)
+      if (previewRef.current) setPreviewSource(text)
       setDirty(false)
       setConflict(null)
       setSaveError('')
@@ -171,7 +177,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
 
   /** Pandangan sesaat untuk `useEditorSync`: dirty/saving/versi terakhir yang dikenal. */
   const snapshot = () => ({
-    dirty: !!editorRef.current && editorRef.current.getValue() !== savedRef.current,
+    dirty: !!editorRef.current && mask.modeRef.current !== 'masked' && editorRef.current.getValue() !== savedRef.current,
     saving: savingRef.current,
     version: versionRef.current
   })
@@ -187,6 +193,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
     setConflict(null)
     setEncoding('utf8')
     setPreview(false)
+    mask.reset()
     const filePath = pathRef.current
     let disposed = false
     let model: MonacoEditor.ITextModel | null = null
@@ -213,10 +220,11 @@ export function useEditorFile(a: UseEditorFileArgs) {
         const host = hostRef.current
         if (disposed || !host) return
         readOnlyRef.current = meta.encoding === 'non-utf8'
+        const text = mask.load(meta.content)
         // Satu model per NODE (fragment = id node): dua node pada file yang sama tidak berbagi model.
         const uri = m.Uri.file(filePath).with({ fragment: id })
-        model = m.editor.getModel(uri) ?? m.editor.createModel(meta.content, undefined, uri)
-        editor = m.editor.create(host, { ...EDITOR_OPTIONS, model, theme: currentMonacoTheme(), readOnly: readOnlyRef.current })
+        model = m.editor.getModel(uri) ?? m.editor.createModel(text, undefined, uri)
+        editor = m.editor.create(host, { ...EDITOR_OPTIONS, model, theme: currentMonacoTheme(), readOnly: readOnlyRef.current || mask.modeRef.current === 'masked' })
         // Monaco memegang satu tema global: ikuti pergantian Dark/Light app selama node ini hidup.
         themeObserver = new MutationObserver(() => m.editor.setTheme(currentMonacoTheme()))
         themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
@@ -227,7 +235,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
         loadedRef.current = true
         setEncoding(meta.encoding)
         editor.onDidChangeModelContent(() => {
-          setDirty(editor!.getValue() !== savedRef.current)
+          if (mask.modeRef.current !== 'masked') setDirty(editor!.getValue() !== savedRef.current)
           if (!previewRef.current) return
           clearTimeout(previewTimer)
           previewTimer = setTimeout(() => { if (!disposed && editor) setPreviewSource(editor.getValue()) }, PREVIEW_DEBOUNCE_MS)
@@ -237,7 +245,7 @@ export function useEditorFile(a: UseEditorFileArgs) {
         // Cmd+S saves the focused node's file, like VS Code's save on the active editor.
         saveAction = editor.addAction({ id: SAVE_ACTION_ID, label: 'File: Save', keybindings: [m.KeyMod.CtrlCmd | m.KeyCode.KeyS], run: () => { void saveRef.current() } })
         if (opensInPreview(ext, a.openMarkdownPreview)) {
-          setPreviewSource(meta.content)
+          setPreviewSource(text)
           setPreview(true)
         }
       })
@@ -271,5 +279,5 @@ export function useEditorFile(a: UseEditorFileArgs) {
   }, [id, dirty])
   useEffect(() => () => setEditorDirty(id, false), [id])
 
-  return { live, dirty, saving, preview, previewSource, encoding, conflict, saveError, retry, retryLoad, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
+  return { live, dirty, saving, preview, previewSource, mask, encoding, conflict, saveError, retry, retryLoad, togglePreview, toggleRef, save, reload, overwrite, snapshot, flagConflict: setConflict }
 }
