@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { allRows } from '../../../ledger/ledgerCore'
-import { FIXTURE_SECRET, NOW, makeLedger, makeRepo, sh } from '../../../knowledge/knowledgeFixture.testutil'
+import { FIXTURE_SECRET, GIT_SLOW_TEST_TIMEOUT_MS, NOW, makeLedger, makeRepo, sh } from '../../../knowledge/knowledgeFixture.testutil'
 import { openKnowledgeDb } from '../../../knowledge/knowledgeStore'
 import { refreshIndex } from '../../../knowledge/knowledgeFresh'
 import { registerWorkspaceLookup } from '../../workspaceLookup'
@@ -31,7 +31,7 @@ test('all four tools are R0 and off without the flag', async () => {
   expect(r.ok).toBe(false)
   expect(r.code).toBe('flag_off')
   rmSync(root, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
 
 test('kb.search, kb.map and project.brief answer with asOf and stale when on', async () => {
   const root = makeRepo()
@@ -53,7 +53,7 @@ test('kb.search, kb.map and project.brief answer with asOf and stale when on', a
   expect(audits.length).toBe(3)
   expect(audits.some((a) => a.includes('zebraquokka'))).toBe(false)
   rmSync(root, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
 
 test('stale is reported after a new commit; the next call refreshes', async () => {
   const root = makeRepo()
@@ -68,7 +68,7 @@ test('stale is reported after a new commit; the next call refreshes', async () =
   expect((hit.data as { stale: boolean; hits: Array<{ path: string }> }).stale).toBe(false)
   expect((hit.data as { hits: Array<{ path: string }> }).hits[0]?.path).toBe('src/z.ts')
   rmSync(root, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
 
 test('input validation: bad query/limit/unknown project are coded failures', async () => {
   const root = makeRepo()
@@ -78,7 +78,7 @@ test('input validation: bad query/limit/unknown project are coded failures', asy
   expect((await execTool(ctx, 'kb.map', { projectId: 'p1', limit: 0 })).code).toBe('invalid_shape')
   expect((await execTool(ctx, 'kb.map', { projectId: 'nope' })).code).toBe('project_not_found')
   rmSync(root, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
 
 test('files outside the project root are never read (symlinked README)', async () => {
   const root = makeRepo()
@@ -95,7 +95,7 @@ test('files outside the project root are never read (symlinked README)', async (
   expect(JSON.stringify(all.data).includes('linkdir')).toBe(false)
   rmSync(root, { recursive: true, force: true })
   rmSync(outside, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
 
 test('project.discover lists workspaces without a project, with git root', async () => {
   const root = makeRepo()
@@ -118,4 +118,4 @@ test('project.discover lists workspaces without a project, with git root', async
   expect((await execTool(ctx, 'project.discover', { limit: 99 })).code).toBe('invalid_shape')
   rmSync(root, { recursive: true, force: true })
   rmSync(plain, { recursive: true, force: true })
-})
+}, GIT_SLOW_TEST_TIMEOUT_MS)
