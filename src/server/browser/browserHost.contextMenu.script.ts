@@ -14,8 +14,11 @@ export const BACKSTOP_SCRIPT = `(() => {
     if (window.__webtermCtx) return
     Object.defineProperty(window, '__webtermCtx', { value: true })
     const cancel = (e) => { if (!e.defaultPrevented) e.preventDefault() }
+    // The host's synthetic probe (hitExpression) sets __webtermProbe on the frame's window: our own backstop must not
+    // cancel it, or dispatchEvent() would report "the site cancelled" for every page.
+    const onCtx = (e) => { if (!window.__webtermProbe) cancel(e) }
     const onLink = (e) => !!(e.target && e.target.closest && e.target.closest('a[href]'))
-    addEventListener('contextmenu', cancel, false)
+    addEventListener('contextmenu', onCtx, false)
     addEventListener('auxclick', (e) => { if (e.button === 1 && onLink(e)) cancel(e) }, false)
     addEventListener('click', (e) => { if ((e.ctrlKey || e.metaKey) && onLink(e)) cancel(e) }, false)
   } catch (e) {
@@ -43,7 +46,17 @@ export function hitExpression(x: number, y: number, fire: boolean): string {
       el = inner; doc = d
     }
     if (!el) return '{}'
-    if (fire && !el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, composed: true, clientX: ox, clientY: oy, button: 2, view: doc.defaultView }))) return '{"custom":true}'
+    if (fire) {
+      const win = doc.defaultView
+      let handled
+      try {
+        win.__webtermProbe = true
+        handled = !el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, composed: true, clientX: ox, clientY: oy, button: 2, view: win }))
+      } finally {
+        try { delete win.__webtermProbe } catch (e) { win.__webtermProbe = false }
+      }
+      if (handled) return '{"custom":true}'
+    }
     const a = el.closest('a[href]'), img = el.closest('img'), ed = el.closest('input,textarea,[contenteditable]')
     const editable = !!ed && (ed.isContentEditable || (/^(INPUT|TEXTAREA)$/.test(ed.tagName) && !ed.readOnly && !ed.disabled && !/^(checkbox|radio|button|submit|reset|file|image|range|color)$/.test(ed.type)))
     return JSON.stringify({ link: a ? { href: a.href, text: (a.textContent || '').slice(0, 300) } : undefined, image: img ? (img.currentSrc || img.src) : undefined, selection: String(doc.getSelection()).length > 0, editable })
