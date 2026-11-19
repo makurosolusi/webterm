@@ -120,7 +120,8 @@ test('sweep: stale root loses its processes, tmux server, keychain items and fil
   expect(existsSync(stale.root)).toBe(false)
   for (const p of groupKids) expect(alive(p)).toBe(false)
   if (tmux) expect(spawnSync(tmux, ['-L', sock, 'has-session']).status).not.toBe(0)
-  expect(k.calls.map((a) => a.at(-1)).sort()).toEqual([...claudeKeychainServices(stale.claude), ...claudeKeychainServices(kept.claude)].sort())
+  const wantKeychain = [...claudeKeychainServices(stale.claude), ...claudeKeychainServices(kept.claude)].sort()
+  expect(k.calls.map((a) => a.at(-1)).sort()).toEqual(process.platform === 'darwin' ? wantKeychain : []) // macOS-only cleanup
   for (const p of [live, young, kept]) expect(existsSync(p.root)).toBe(true)
   expect(existsSync(join(kept.root, OWNER_FILE))).toBe(true)
   expect(existsSync(join(base, 'not-fresh'))).toBe(true)
@@ -138,6 +139,8 @@ test('sweep: stale root loses its processes, tmux server, keychain items and fil
 const fakeBin = join(base, 'bin')
 mkdirSync(fakeBin)
 const securityCalls = fakeSecurity(fakeBin)
+// Keychain cleanup is macOS-only by design: elsewhere the fake `security` must never be invoked.
+const expectKeychainCalls = (service: string) => (process.platform === 'darwin' ? expect(securityCalls()).toContain(service) : expect(securityCalls()).toBe(''))
 const scriptEnv = { ...process.env, TMPDIR: base, PATH: `${fakeBin}:${process.env.PATH}` }
 const script = join(import.meta.dirname, 'devFresh.ts')
 
@@ -155,7 +158,7 @@ test('--clean reports and removes a stale root, lists a live one and leaves it',
   expect(r.stdout).toContain(`live, left running: ${live.root}`)
   expect(existsSync(stale.root)).toBe(false)
   expect(existsSync(live.root)).toBe(true)
-  expect(securityCalls()).toContain(claudeKeychainServices(stale.claude)[0])
+  expectKeychainCalls(claudeKeychainServices(stale.claude)[0])
   process.kill(-liveOwner.pid!, 'SIGKILL')
   rmSync(live.root, { recursive: true, force: true })
 }, 30_000)
@@ -179,5 +182,5 @@ test(`SIGKILL of dev:fresh (${smoke}): its server stops by itself and cleans roo
   expect(await until(() => !alive(o.childPid), 6000)).toBe(true) // watchdog polls every 2 s
   expect(await until(() => !existsSync(root), 10_000)).toBe(true)
   if (tmux) expect(spawnSync(tmux, ['-L', o.tmuxSocket, 'has-session']).status).not.toBe(0)
-  expect(securityCalls()).toContain(claudeKeychainServices(join(root, 'claude'))[0])
+  expectKeychainCalls(claudeKeychainServices(join(root, 'claude'))[0])
 }, 90_000)
