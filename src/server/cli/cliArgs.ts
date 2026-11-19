@@ -10,6 +10,8 @@ export type CliAction =
   | { kind: 'readme' }
   | { kind: 'docs'; topic?: string }
   | { kind: 'reset-password'; username: string }
+  /** `webterm command ...`: custom command registry, run directly on the data dir (customCommands.cli.ts). */
+  | { kind: 'command'; args: string[] }
   | { kind: 'error'; message: string }
   /** Hidden subcommand (selfLaunch.ts): run a bundled entry point in-process with the remaining args. */
   | { kind: 'internal'; entry: InternalEntry; args: string[] }
@@ -80,6 +82,7 @@ function unknown(arg: string): CliAction {
 export function parseArgs(argv: readonly string[]): CliAction {
   const entry = INTERNAL_COMMANDS.get(argv[0] ?? '')
   if (entry) return { kind: 'internal', entry, args: argv.slice(1) }
+  if (argv[0] === 'command') return { kind: 'command', args: argv.slice(1) }
   const seen = new Set<FlagKind>()
   const values = new Map<FlagKind, string>()
   for (let i = 0; i < argv.length; i++) {

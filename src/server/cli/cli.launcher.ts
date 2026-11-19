@@ -14,6 +14,7 @@ import { dataDir } from '../config'
 import { flagOn } from '../envFlag'
 import { NODE_HEADERS_ENV } from '../hooksPaths'
 import { BROWSER_COMMAND, CONTEXT_COMMAND, ESC_FN } from './cli.commands'
+import { COMMAND_SH } from './cli.customCommands'
 import { buildEvalCommand } from './cli.eval'
 import { SKILLS_COMMAND } from './cli.skills'
 import { snapshotOf, TOOL_INDEX } from './cli.registry'
@@ -84,6 +85,8 @@ usage: webterm <command> [args]
   browser <verb> [args]           drive the browser node wired to this node (alias: webterm-browser)
   browser open --profile <name>   open it on a browser profile (own logins); \`browser profiles\` lists the names
   context <verb> [--node X]       read a linked node's context (alias: context.sh)
+  command list|detect|rescan|path list|which <name>  custom commands the user registered (add/remove are
+                                  human-UI only and denied in agent sessions)
   eval run [--model fake|real]    replay promoted eval cases (user rejections) against Central
 EOF
 }
@@ -119,6 +122,7 @@ cmd_report() {
 }
 ${BROWSER_COMMAND}
 ${CONTEXT_COMMAND}
+${COMMAND_SH}
 ${buildEvalCommand()}
 cmd="\${1:-help}"; [ "$#" -gt 0 ] && shift
 json=0
@@ -138,6 +142,7 @@ case "$cmd" in
   report) cmd_report "$@" ;;
   browser) cmd_browser "$@" ;;
   context) cmd_context "$@" ;;
+  command) cmd_command "$@" ;;
   eval) cmd_eval "$@" ;;
   *) cmd_call "$cmd" "$@" ;;
 esac

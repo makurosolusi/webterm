@@ -19,8 +19,10 @@ export const PORT = parsePort(process.env.PORT)
 
 /** Catatan peluncuran yang terlihat pengguna, ditulis ke stream terminal. Bahasa Inggris supaya
  *  seragam dengan `[process exited]` di client. */
-export const wrapperMissingNotice = (bin: string): string =>
-  `\r\n[webterm] '${bin}' is not installed — launching the agent command without that wrapper.\r\n`
+export const wrapperMissingNotice = (bin: string, incompatible?: string | null): string =>
+  incompatible
+    ? `\r\n[webterm] ${incompatible} — launched without it.\r\n`
+    : `\r\n[webterm] '${bin}' was not found — launched without it. If you just installed it, run "webterm command rescan" (or Rescan in Settings).\r\n`
 
 /**
  * Baris peluncuran final untuk sebuah intent open: perintah dasar client plus flag session-id /

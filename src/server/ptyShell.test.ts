@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { logBus } from './logs'
+import { customBinPath } from './customBinPath'
 import { ptyEnv, resolveCwd, resolveShell, shellArgv } from './ptyShell'
 
 const only = (...present: string[]) => (bin: string) => present.includes(bin)
@@ -75,11 +76,12 @@ describe('ptyEnv', () => {
       'WEBTERM_TOKEN', 'WEBTERM_DATA_DIR', 'NODETERM_NODE_ID', 'NODETERM_PORT', 'NODETERM_NODE_TOKEN',
     ]
     for (const k of stripped) expect(k in env).toBe(false)
-    for (const k of ['PATH', 'BUN_INSTALL']) expect(env[k]).toBe(source[k as keyof typeof source])
+    expect(env.BUN_INSTALL).toBe(source.BUN_INSTALL)
+    expect(env.PATH).toBe(`${customBinPath(source)}:/usr/bin`) // managed custom-bin dir first
   })
   it('tidak membuang nama yang hanya BERAWALAN sama tanpa garis bawah', () => {
     const env = ptyEnv({ WEBTERMAPP: '1', NODETERMX: '2', PATH: '/x' }, { interactive: false })
-    expect(env).toEqual({ WEBTERMAPP: '1', NODETERMX: '2', PATH: '/x', TERM: 'xterm-256color' })
+    expect(env).toEqual({ WEBTERMAPP: '1', NODETERMX: '2', PATH: `${customBinPath({})}:/x`, TERM: 'xterm-256color' })
   })
   it('shell biasa: identitas terminal + locale default per platform', () => {
     const mac = ptyEnv(source, { interactive: true, platform: 'darwin' })
@@ -92,7 +94,7 @@ describe('ptyEnv', () => {
   })
   it('jalur agent tidak mendapat TERM_PROGRAM/COLORTERM/LANG tambahan', () => {
     const env = ptyEnv({ PATH: '/x' }, { interactive: false })
-    expect(env).toEqual({ PATH: '/x', TERM: 'xterm-256color' })
+    expect(env).toEqual({ PATH: `${customBinPath({})}:/x`, TERM: 'xterm-256color' })
   })
 })
 

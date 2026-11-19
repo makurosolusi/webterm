@@ -143,7 +143,7 @@ test('a missing wrapper degrades to the bare command and says so once', async ()
     )
     await pollFor(a.joined, 'WRAPPED_OK')
     expect(a.joined()).toContain('WRAPPED_OK')              // perintah polos benar-benar berjalan
-    expect(a.joined()).toContain(`'webterm-missing-wrapper-9f3a' is not installed`)
+    expect(a.joined()).toContain(`'webterm-missing-wrapper-9f3a' was not found`)
     expect(a.joined().includes('load envman')).toBe(false)
   } finally {
     s.close('w1')

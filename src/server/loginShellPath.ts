@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { delimiter } from 'node:path'
 import { ptyEnv, resolveShell } from './ptyShell'
 import { createLogger } from './logs'
@@ -28,6 +28,18 @@ export function loginShellPath(shell: string = resolveShell(undefined), env: Nod
     log.warn('pty.login_path_failed', 'Login shell PATH could not be resolved; probing the process PATH only', { code: (err as { status?: number }).status })
     return undefined
   }
+}
+
+/** Same probe without blocking the event loop (pathResolver refresh on a miss). Undefined on failure or timeout. */
+export function loginShellPathAsync(shell: string = resolveShell(undefined), env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    execFile(shell, ['-i', '-l', '-c', `printf '%s%s%s' ${MARK} "$PATH" ${MARK}`], {
+      encoding: 'utf8', env: ptyEnv(env, { interactive: false }), timeout: LOGIN_SHELL_TIMEOUT_MS,
+    }, (err, stdout) => {
+      if (err) log.warn('pty.login_path_failed', 'Login shell PATH refresh failed', { code: (err as { code?: unknown }).code })
+      resolve(err ? undefined : stdout.split(MARK)[1] || undefined)
+    })
+  })
 }
 
 /** `current` followed by the entries of `extra` it lacks; empty entries dropped, first occurrence kept. */
