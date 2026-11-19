@@ -12,14 +12,17 @@ const SHORTCUT_MODS = MOD.Ctrl | MOD.Meta
 /** Perintah CDP untuk satu input; `modifiers` memakai bitmask yang sama dengan CDP (Alt=1 Ctrl=2 Meta=4 Shift=8). */
 export function toCdpCommands(ev: BrowserInputEvent): CdpCommand[] {
   switch (ev.t) {
-    case 'mouse':
+    case 'mouse': {
+      // A move with a button held must name it, or Chromium drops drag selection (also for clients that send 'none').
+      const button = ev.type === 'move' && ev.button === 'none' ? (ev.buttons & 1 ? 'left' : ev.buttons & 4 ? 'middle' : 'none') : ev.button
       return [{
         method: CDP.mouse,
         params: {
-          type: MOUSE_TYPE[ev.type], x: ev.x, y: ev.y, button: ev.button, buttons: ev.buttons,
+          type: MOUSE_TYPE[ev.type], x: ev.x, y: ev.y, button, buttons: ev.buttons,
           clickCount: ev.clickCount, modifiers: ev.mods, deltaX: ev.dx, deltaY: ev.dy, pointerType: 'mouse',
         },
       }]
+    }
     case 'key': {
       const base = { key: ev.key, code: ev.code, modifiers: ev.mods, windowsVirtualKeyCode: ev.vk, nativeVirtualKeyCode: ev.vk }
       if (ev.type === 'up') return [{ method: CDP.key, params: { type: 'keyUp', ...base } }]
