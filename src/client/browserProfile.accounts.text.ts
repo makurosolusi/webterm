@@ -1,6 +1,6 @@
 // Text and pure helpers for "who is signed in" on a browser profile (chip menu + Settings > Browser). English only.
 import { ACCOUNT_CHECK_TTL_MS, providerOf, signedInAccounts } from '../shared/browser.accounts'
-import type { ProfileAccount } from '../shared/browser.accounts'
+import type { AccountReason, ProfileAccount } from '../shared/browser.accounts'
 
 const MIN = 60_000
 
@@ -34,17 +34,33 @@ export const ACCOUNT_TEXT = {
   checked: (now: number, at: number): string => `checked ${agoText(now, at)}`,
 } as const
 
+/** Plain-language reason for an `unknown` answer (or a signed-in profile whose name could not be read). */
+export const REASON_TEXT: Record<AccountReason, string> = {
+  probe_blocked: 'the check page was blocked',
+  probe_download: 'the check page was downloaded instead of shown',
+  probe_failed: 'the check page failed to load',
+  probe_timeout: 'the check page took too long',
+  parse_failed: "couldn't parse the response",
+  redirected: 'the provider sent the check to another page',
+  empty_list: 'the provider listed no accounts',
+  challenge: 'the provider asked for a human check; webterm waits before asking again',
+  cookies_unreadable: "couldn't read the profile's cookies",
+  identity_unavailable: "the name isn't available yet",
+}
+export const reasonText = (a: Pick<ProfileAccount, 'reason'>): string | undefined => (a.reason ? REASON_TEXT[a.reason] : undefined)
+
 export const stateText = (a: Pick<ProfileAccount, 'state'>): string =>
   a.state === 'signed_in' ? ACCOUNT_TEXT.signedIn : a.state === 'expired' ? ACCOUNT_TEXT.expired : a.state === 'signed_out' ? ACCOUNT_TEXT.signedOut : ACCOUNT_TEXT.unknown
 
 export const providerLabel = (a: Pick<ProfileAccount, 'provider'>): string => providerOf(a.provider)?.label ?? a.provider
 
 /** "Google · Bip" for a signed-in account, "Google · Session expired" otherwise. */
-export const accountTitle = (a: ProfileAccount): string => `${providerLabel(a)} · ${a.state === 'signed_in' ? (a.displayName ?? ACCOUNT_TEXT.signedIn) : stateText(a)}`
+export const accountTitle = (a: ProfileAccount): string =>
+  `${providerLabel(a)} · ${a.state === 'signed_in' ? (a.displayName ?? ACCOUNT_TEXT.signedIn) : stateText(a)}${a.state === 'unknown' && reasonText(a) ? ` — ${reasonText(a)}` : ''}`
 
 /** Full tooltip: provider, name, masked email, state, when it was checked. */
 export const accountDetail = (a: ProfileAccount, now: number): string =>
-  [providerLabel(a), a.displayName, a.emailMasked, stateText(a), ACCOUNT_TEXT.checked(now, a.checkedAt)].filter(Boolean).join(' · ')
+  [providerLabel(a), a.displayName, a.emailMasked, stateText(a), reasonText(a), ACCOUNT_TEXT.checked(now, a.checkedAt)].filter(Boolean).join(' · ')
 
 /** What to list: everything that is not plain "signed out" (kept out of the way); empty when nobody is signed in or expired. */
 export const visibleAccounts = (all: readonly ProfileAccount[]): ProfileAccount[] => all.filter((a) => a.state !== 'signed_out')

@@ -6,6 +6,9 @@ export const ACCOUNT_PROVIDER_IDS = ['google', 'github'] as const
 export type AccountProviderId = (typeof ACCOUNT_PROVIDER_IDS)[number]
 export const ACCOUNT_STATES = ['signed_in', 'signed_out', 'expired', 'unknown'] as const
 export type AccountState = (typeof ACCOUNT_STATES)[number]
+/** Short code for WHY an answer is `unknown` (or why a `signed_in` has no name). Shown in the UI and logged; never carries data. */
+export const ACCOUNT_REASONS = ['probe_blocked', 'probe_download', 'probe_failed', 'probe_timeout', 'parse_failed', 'redirected', 'empty_list', 'challenge', 'cookies_unreadable', 'identity_unavailable'] as const
+export type AccountReason = (typeof ACCOUNT_REASONS)[number]
 
 /** Do not re-check the same profile + provider more often than this (also the base of the backoff after a challenge). */
 export const ACCOUNT_CHECK_TTL_MS = 10 * 60_000
@@ -24,6 +27,8 @@ export interface ProfileAccount {
   emailMasked?: string
   /** https image on one of the provider's own hosts; optional. */
   avatarUrl?: string
+  /** Why the state is `unknown`, or why a signed-in profile has no name (cookie signal only). */
+  reason?: AccountReason
   checkedAt: number
 }
 
@@ -32,6 +37,8 @@ export interface AccountProvider {
   label: string
   /** A cookie on one of these domains (or a subdomain) marks the profile as a candidate; without one nothing is requested. */
   cookieDomains: readonly string[]
+  /** Names of cookies that mean "a session exists" (names only; values are never read). Absent = the domain alone makes the profile a candidate. */
+  sessionCookies?: readonly string[]
   /** The single page the check loads inside the profile's own Chromium (public provider URL, passes the navigation guard). */
   probeUrl: string
   /** Hosts an avatar may come from. */
@@ -41,6 +48,8 @@ export interface AccountProvider {
 export const ACCOUNT_PROVIDERS: readonly AccountProvider[] = [
   {
     id: 'google', label: 'Google', cookieDomains: ['google.com'],
+    // Google's auth cookie names (SID family, SAPISID, LSID). The list is from public knowledge of Google's session cookies, not a contract: a miss reads as signed out only when none exists.
+    sessionCookies: ['SID', '__Secure-1PSID', '__Secure-3PSID', 'SAPISID', '__Secure-1PAPISID', '__Secure-3PAPISID', 'LSID'],
     // Chromium's own signed-in-accounts listing (gaia ListAccounts): name + email, no full page load. Unofficial; see docs/decisions/browser-profile-accounts.md.
     probeUrl: 'https://accounts.google.com/ListAccounts?json=standard&source=ChromiumBrowser&gpsia=1',
     avatarHosts: ['googleusercontent.com'],
@@ -95,8 +104,9 @@ export function validateAccount(raw: unknown): ProfileAccount | undefined {
   // Re-mask: a stored value that is a full address (a bug or a hand edit) is masked again, never passed through.
   const emailMasked = typeof r.emailMasked === 'string' && /^[^\s@]\*\*\*@[^\s@]+$/.test(r.emailMasked) ? r.emailMasked : maskEmail(r.emailMasked)
   const avatarUrl = safeAvatarUrl(r.avatarUrl, p.avatarHosts)
+  const reason = ACCOUNT_REASONS.find((x) => x === r.reason)
   return {
-    provider: p.id, state: r.state as AccountState, checkedAt: r.checkedAt,
+    provider: p.id, state: r.state as AccountState, checkedAt: r.checkedAt, ...(reason ? { reason } : {}),
     ...(displayName ? { displayName } : {}), ...(emailMasked ? { emailMasked } : {}), ...(avatarUrl ? { avatarUrl } : {}),
   }
 }

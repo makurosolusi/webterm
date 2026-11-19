@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ProfileAccount } from '../shared/browser.accounts'
 import { ACCOUNT_CHECK_TTL_MS } from '../shared/browser.accounts'
-import { accountDetail, accountsStale, accountsSummary, agoText, hasSignedIn, visibleAccounts } from './browserProfile.accounts.text'
+import { accountDetail, accountTitle, REASON_TEXT, accountsStale, accountsSummary, agoText, hasSignedIn, visibleAccounts } from './browserProfile.accounts.text'
 
 // test-only accounts
 const g = (over: Partial<ProfileAccount> = {}): ProfileAccount => ({ provider: 'google', state: 'signed_in', displayName: 'Test Person', emailMasked: 't***@gmail.com', checkedAt: 1000, ...over })
@@ -41,5 +41,14 @@ describe('helpers', () => {
   })
   it('accountDetail carries provider, name, masked email, state and age', () => {
     expect(accountDetail(g(), 1000 + 120_000)).toBe('Google · Test Person · t***@gmail.com · Signed in · checked 2 min ago')
+  })
+})
+
+describe('reason', () => {
+  it('an unknown row says why, in the title and the hover; a nameless signed-in row stays "Signed in"', () => {
+    const u = g({ state: 'unknown', reason: 'parse_failed', displayName: undefined })
+    expect(accountTitle(u)).toBe("Google · Unknown — couldn't parse the response")
+    expect(accountDetail(u, 1000)).toContain(REASON_TEXT.parse_failed)
+    expect(accountTitle(g({ displayName: undefined, reason: 'identity_unavailable' }))).toBe('Google · Signed in')
   })
 })
