@@ -9,6 +9,25 @@ import { CANVAS_OWNER, CLAUDE_MOUSE_AGENT } from './ptySupervisor'
  *  enough that a layout saved late, or a restore from backup, still finds its agent alive. */
 export const ORPHAN_REAP_GRACE_MS = 24 * 60 * 60 * 1000
 
+/** Seed pieces stay far below the log cap: the log evicts whole chunks, so one big seed chunk would
+ *  be dropped entirely by the first redraw and leave a reattached client with only the screen. */
+const SEED_CHUNK_BYTES = 16 * 1024
+
+/** Split `text` into pieces of about SEED_CHUNK_BYTES, cut only after a newline. */
+export function splitSeed(text: string): string[] {
+  const parts: string[] = []
+  for (let from = 0; from < text.length;) {
+    let to = Math.min(from + SEED_CHUNK_BYTES, text.length)
+    if (to < text.length) {
+      const nl = text.indexOf('\n', to)
+      to = nl === -1 ? text.length : nl + 1
+    }
+    parts.push(text.slice(from, to))
+    from = to
+  }
+  return parts
+}
+
 /** Boot-time re-adoption of tmux sessions, with their last status and the two-phase orphan reaper. */
 export class SessionsAdopt extends SessionsEnd {
   /**
@@ -50,7 +69,7 @@ export class SessionsAdopt extends SessionsEnd {
       if (s.agentId === CLAUDE_MOUSE_AGENT) supervisor.mouseOn(s.id) // sessions made before mouse-on existed
       const history = s.history > 0 ? supervisor.capture(s.id, { escapes: true, screen: false }) : undefined
       const session = this.track(s.id, supervisor.attach(s.id, s.cols, s.rows), s.agentId, s.cols, s.rows)
-      if (history) this.emit(session, history.replace(/\r?\n/g, '\r\n'))
+      if (history) for (const part of splitSeed(history.replace(/\r?\n/g, '\r\n'))) this.emit(session, part)
       const last = saved?.get(s.id)
       if (last) this.registry.setStatus(s.id, last.status, last.updatedAt)
       // Morning brief (F3-e): an agent that kept running through the restart is reported as restored.
