@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VscodeActivityBar } from './vscodeActivityBar'
 import { VscodeBreadcrumbs } from './vscodeBreadcrumbs'
 import { VscodeEditorTabBar } from './vscodeEditorTabBar'
-import { VscodeMenuBar } from './vscodeMenuBar'
+import { VscodeMenu } from './vscodeMenu'
 import { VscodeSplitView } from './vscodeSplitView'
 import { VscodeStatusBar } from './vscodeStatusBar'
 
@@ -32,10 +32,10 @@ function cssBlock(selector: string): string {
 }
 
 describe('vscode-shell.css metrics', () => {
-  it('keeps the menu bar and menu rows at 35px and 22px', () => {
-    expect(cssBlock('.vscode-menu-bar')).toContain('height: var(--title-bar-h, 35px)')
-    expect(cssBlock('.vscode-menu-bar__item')).toContain('padding: 0 8px')
-    expect(cssBlock('.vscode-menu__item')).toContain('height: var(--menu-row-h, 24px)')
+  it('keeps menu rows at 24px (the menu itself is `vscode-menu.css`, drawn by VscodeMenu)', () => {
+    const menuCss = readFileSync(path.resolve(path.dirname(cssPath), 'vscode-menu.css'), 'utf8')
+    expect(menuCss).toMatch(/\.vscode-menu__row \{[^}]*height: var\(--menu-row-h, 24px\)/)
+    expect(css).not.toContain('.vscode-menu-bar')
   })
 
   it('keeps a 48px activity bar with 48px items, 24px icons and a 2px active edge', () => {
@@ -139,82 +139,6 @@ describe('VscodeStatusBar', () => {
   })
 })
 
-const menus = [
-  {
-    id: 'file',
-    label: 'File',
-    items: [
-      { id: 'new', label: 'New File', keybinding: '⌘N', onSelect: () => {} },
-      { type: 'separator' as const },
-      { id: 'exit', label: 'Exit', disabled: true, onSelect: () => {} },
-    ],
-  },
-  {
-    id: 'view',
-    label: 'View',
-    items: [{ id: 'zoom', label: 'Zoom In', checked: true, onSelect: () => {} }],
-  },
-]
-
-function MenuHarness({ onNew }: { onNew?: () => void }) {
-  const [openId, setOpenId] = useState<string | null>(null)
-  const data = menus.map((menu) =>
-    menu.id === 'file'
-      ? { ...menu, items: menu.items.map((item) => ('id' in item && item.id === 'new' ? { ...item, onSelect: onNew } : item)) }
-      : menu,
-  )
-  return <VscodeMenuBar menus={data} openId={openId} onOpenChange={setOpenId} />
-}
-
-describe('VscodeMenuBar', () => {
-  it('opens a menu, supports arrows and Escape, and selects items', () => {
-    const onNew = vi.fn()
-    render(<MenuHarness onNew={onNew} />)
-
-    const file = screen.getByRole('menuitem', { name: 'File' })
-    fireEvent.click(file)
-    expect(file.getAttribute('aria-expanded')).toBe('true')
-    const menu = screen.getByRole('menu', { name: 'File' })
-    expect(menu).toBeTruthy()
-    expect(document.activeElement?.textContent).toContain('New File')
-
-    fireEvent.keyDown(menu, { key: 'Escape' })
-    expect(screen.queryByRole('menu')).toBeNull()
-    expect(file.getAttribute('aria-expanded')).toBe('false')
-
-    fireEvent.click(file)
-    fireEvent.click(screen.getByRole('menuitem', { name: /^New File/ }))
-    expect(onNew).toHaveBeenCalledTimes(1)
-    expect(screen.queryByRole('menu')).toBeNull()
-  })
-
-  it('does not activate disabled rows and exposes checked rows', () => {
-    render(<MenuHarness />)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
-
-    const exit = screen.getByRole('menuitem', { name: 'Exit' })
-    expect(exit.getAttribute('aria-disabled')).toBe('true')
-    fireEvent.click(exit)
-    expect(screen.getByRole('menu', { name: 'File' })).toBeTruthy()
-
-    const view = screen.getByRole('menuitem', { name: 'View' })
-    fireEvent.mouseEnter(view)
-    expect(view.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('menuitemcheckbox', { name: 'Zoom In' }).getAttribute('aria-checked')).toBe('true')
-  })
-
-  it('moves between top-level menus with ArrowRight while open', () => {
-    render(<MenuHarness />)
-    const file = screen.getByRole('menuitem', { name: 'File' })
-    fireEvent.keyDown(file, { key: 'ArrowDown' })
-    expect(screen.getByRole('menu', { name: 'File' })).toBeTruthy()
-
-    const menu = screen.getByRole('menu', { name: 'File' })
-    fireEvent.keyDown(menu, { key: 'ArrowRight' })
-    expect(screen.getByRole('menu', { name: 'View' })).toBeTruthy()
-  })
-})
-
 function TabHarness({ onActivate, onClose }: { onActivate: (id: string) => void; onClose: (id: string) => void }) {
   const [activeId, setActiveId] = useState('one')
   return (
@@ -311,10 +235,12 @@ describe('VscodeEditorTabBar — VS Code tab gestures', () => {
 
 describe('codicon glyphs and chrome css', () => {
   it('uses codicons for menu check/caret and breadcrumb separators, not text or inline svg', () => {
-    render(<MenuHarness />)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
-    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'View' }))
+    render(<VscodeMenu open anchor={{ x: 0, y: 0 }} onClose={() => {}} items={[
+      { type: 'item', id: 'zoom', label: 'Zoom In', checked: true },
+      { type: 'item', id: 'more', label: 'More', submenu: [{ type: 'item', id: 'x', label: 'X' }] },
+    ]} />)
     expect(document.querySelector('.codicon-check')).not.toBeNull()
+    expect(document.querySelector('.vscode-menu__submenu-caret.codicon-chevron-right')).not.toBeNull()
     cleanup()
     render(<VscodeBreadcrumbs segments={[{ id: 'a', label: 'a' }, { id: 'b', label: 'b' }]} />)
     expect(document.querySelector('.vscode-breadcrumbs__separator .codicon-chevron-right')).not.toBeNull()
@@ -333,29 +259,6 @@ describe('codicon glyphs and chrome css', () => {
     render(<VscodeStatusBar left={[]} right={(['prominent', 'debugging'] as const).map((tone) => ({ id: tone, label: tone, tone }))} />)
     expect(screen.getByText('debugging').closest('[data-slot]')?.getAttribute('data-tone')).toBe('debugging')
     expect(screen.getByText('prominent').closest('[data-slot]')?.getAttribute('data-tone')).toBe('prominent')
-  })
-})
-
-describe('VscodeMenuBar — Alt focuses the menu bar', () => {
-  it('focuses the first menu on a lone Alt tap but not when another key was pressed or typing', () => {
-    render(<><input aria-label="field" /><MenuHarness /></>)
-    const file = screen.getByRole('menuitem', { name: 'File' })
-
-    fireEvent.keyDown(document.body, { key: 'Alt' })
-    fireEvent.keyUp(document.body, { key: 'Alt' })
-    expect(document.activeElement).toBe(file)
-
-    file.blur()
-    fireEvent.keyDown(document.body, { key: 'Alt' })
-    fireEvent.keyDown(document.body, { key: 'k' })
-    fireEvent.keyUp(document.body, { key: 'Alt' })
-    expect(document.activeElement).not.toBe(file)
-
-    const field = screen.getByLabelText('field')
-    field.focus()
-    fireEvent.keyDown(field, { key: 'Alt' })
-    fireEvent.keyUp(field, { key: 'Alt' })
-    expect(document.activeElement).toBe(field)
   })
 })
 

@@ -1,61 +1,8 @@
-/* VS Code shell primitives: menu bar, activity bar, status bar, editor tabs,
+/* VS Code shell primitives: activity bar, status bar, editor tabs,
  * breadcrumbs, split view. Colors come only from the `--vscode-*` tokens defined in
  * `vscode/vscode-theme.css` (loaded in main.tsx). Metrics follow
  * RND/20-VSCODE-UI-PLAN.md section 1.1. Chrome keeps the default cursor; VS Code
  * uses pointer only for links. */
-
-/* -------------------------------------------------------------- menu bar */
-.vscode-menu-bar {
-  display: flex; align-items: stretch; box-sizing: border-box; height: var(--title-bar-h, 35px);
-  background: inherit;
-  color: var(--vscode-titleBar-activeForeground, var(--vscode-foreground));
-  font-family: var(--vscode-font-family, system-ui, sans-serif); font-size: var(--ui-font-size, 13px);
-  user-select: none;
-}
-.vscode-menu-bar__anchor { position: relative; display: flex; }
-.vscode-menu-bar__item {
-  display: inline-flex; align-items: center; box-sizing: border-box; height: 100%;
-  margin: 0; padding: 0 8px; border: 0; border-radius: 5px;
-  background: transparent; color: inherit; font: inherit; cursor: default; white-space: nowrap;
-}
-.vscode-menu-bar__item:hover,
-.vscode-menu-bar__item[data-open='true'] {
-  background: var(--vscode-menubar-selectionBackground, var(--vscode-menu-selectionBackground));
-}
-.vscode-menu-bar__item:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px;
-}
-.vscode-menu-bar__panel { position: absolute; top: 100%; left: 0; z-index: 1000; }
-
-/* ------------------------------------------------------------------ menu */
-.vscode-menu__list {
-  box-sizing: border-box; min-width: 160px; margin: 0; padding: 4px 0;
-  border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border));
-  border-radius: var(--vscode-cornerRadius-large, 8px);
-  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
-  box-shadow: var(--wt-shadow-floating);
-  color: var(--vscode-menu-foreground, var(--vscode-foreground));
-  font-family: var(--vscode-font-family, system-ui, sans-serif); font-size: var(--ui-font-size, 13px);
-}
-.vscode-menu-bar__row { position: relative; }
-.vscode-menu__item {
-  display: flex; align-items: center; box-sizing: border-box; width: calc(100% - 8px); height: var(--menu-row-h, 24px);
-  margin: 0 4px; padding: 0; border: 0; border-radius: var(--vscode-cornerRadius-medium, 6px);
-  background: transparent; color: inherit; font: inherit; text-align: left;
-  cursor: default; white-space: nowrap;
-}
-.vscode-menu__item:hover,
-.vscode-menu__item:focus {
-  outline: none;
-  background: var(--vscode-list-hoverBackground);
-  color: var(--vscode-list-hoverForeground, var(--vscode-menu-foreground));
-}
-.vscode-menu__item[data-disabled='true'] { opacity: 0.4; cursor: default; }
-.vscode-menu__item[data-disabled='true']:hover { background: transparent; color: inherit; }
-.vscode-menu__item[data-danger='true'] .vscode-menu__label {
-  color: var(--vscode-errorForeground, var(--state-attention));
-}
-.vscode-menu__submenu { position: absolute; top: -5px; left: 100%; z-index: 1001; margin-left: -4px; }
 
 /* ---------------------------------------------------------- activity bar */
 .vscode-activity-bar {

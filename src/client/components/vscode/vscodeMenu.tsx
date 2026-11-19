@@ -9,7 +9,7 @@ import {
 import { createPortal } from 'react-dom'
 import { portalContainer, useOnFullscreenChange } from './portalContainer'
 import './vscode-menu.css'
-import { clamp } from './vscodeClamp'
+import { placeContext, placeSubmenu, type MenuParentBox, type MenuSide } from './vscodeMenu.place'
 
 const VIEWPORT_MARGIN = 8
 const SUBMENU_OVERLAP = 4
@@ -81,6 +81,8 @@ function focusableIndices(items: VscodeMenuItem[]): number[] {
 interface MenuPanelProps {
   x: number
   y: number
+  /** Set for a submenu: the parent panel's edges and the parent row's top, so it opens beside its parent. */
+  parent?: MenuParentBox
   items: VscodeMenuItem[]
   minWidth: number
   ariaLabel?: string
@@ -88,14 +90,14 @@ interface MenuPanelProps {
   onClose: () => void
 }
 
-function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPanelProps) {
+function MenuPanel({ x, y, parent, items, minWidth, ariaLabel, level, onClose }: MenuPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const itemRefs = useRef(new Map<number, HTMLButtonElement | null>())
   const activeRef = useRef(-1)
   const submenuRef = useRef<number | null>(null)
   const [active, setActive] = useState(-1)
   const [submenuIndex, setSubmenuIndex] = useState<number | null>(null)
-  const [position, setPosition] = useState({ top: y, left: x })
+  const [position, setPosition] = useState<{ top: number; left: number; side: MenuSide }>({ top: y, left: x, side: 'none' })
   const typeahead = useRef('')
   const typeaheadTimer = useRef<number | null>(null)
   const closeRef = useRef(onClose)
@@ -171,23 +173,14 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
     // this would re-register and steal focus on every parent render.
   }, [])
 
-  // Flip/shift so the panel stays inside the viewport with an 8px margin.
+  // Place the panel inside the viewport with an 8px margin (a submenu beside its parent, see `placeSubmenu`).
   useLayoutEffect(() => {
     const element = rootRef.current
     if (!element) return
-    const width = element.offsetWidth || minWidth
-    const height = element.offsetHeight
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    let left = x
-    let top = y
-    if (left + width > vw - VIEWPORT_MARGIN) left = x - width
-    if (top + height > vh - VIEWPORT_MARGIN) top = y - height
-    setPosition({
-      left: clamp(left, VIEWPORT_MARGIN, vw - width - VIEWPORT_MARGIN),
-      top: clamp(top, VIEWPORT_MARGIN, vh - height - VIEWPORT_MARGIN),
-    })
-  }, [x, y, minWidth, items.length])
+    const size = { width: element.offsetWidth || minWidth, height: element.offsetHeight }
+    const vp = { width: window.innerWidth, height: window.innerHeight }
+    setPosition(parent ? placeSubmenu(parent, size, vp, VIEWPORT_MARGIN, SUBMENU_OVERLAP) : placeContext({ x, y }, size, vp, VIEWPORT_MARGIN))
+  }, [x, y, parent?.left, parent?.right, parent?.top, minWidth, items.length])
 
   const runTypeahead = (key: string) => {
     typeahead.current += key.toLowerCase()
@@ -258,7 +251,8 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
 
   const submenuRow = submenuIndex === null ? null : items[submenuIndex]
   const submenuItems = submenuRow?.type === 'item' ? submenuRow.submenu ?? [] : []
-  const submenuRect = submenuIndex === null ? null : itemRefs.current.get(submenuIndex)?.getBoundingClientRect() ?? null
+  const rowRect = submenuIndex === null ? null : itemRefs.current.get(submenuIndex)?.getBoundingClientRect() ?? null
+  const panelRect = rootRef.current?.getBoundingClientRect() ?? null
 
   return createPortal(
     <div
@@ -269,6 +263,7 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
       tabIndex={-1}
       data-slot="vscode-menu"
       data-level={level}
+      data-side={position.side}
       className="vscode-menu nodrag"
       style={{ top: position.top, left: position.left, minWidth }}
       onKeyDown={onKeyDown}
@@ -341,10 +336,11 @@ function MenuPanel({ x, y, items, minWidth, ariaLabel, level, onClose }: MenuPan
         )
       })}
 
-      {submenuIndex !== null && submenuItems.length > 0 && submenuRect && (
+      {submenuIndex !== null && submenuItems.length > 0 && rowRect && panelRect && (
         <MenuPanel
-          x={submenuRect.right - SUBMENU_OVERLAP}
-          y={submenuRect.top - SUBMENU_OVERLAP}
+          x={panelRect.right - SUBMENU_OVERLAP}
+          y={rowRect.top - SUBMENU_OVERLAP}
+          parent={{ left: panelRect.left, right: panelRect.right, top: rowRect.top }}
           items={submenuItems}
           minWidth={minWidth}
           ariaLabel={ariaLabel ? `${ariaLabel} submenu` : undefined}

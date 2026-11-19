@@ -2,7 +2,7 @@
 // rail's menu button in Compact/Hidden) get their menus from, so the two can never list different rows.
 import { useMemo } from 'react'
 import { useCommandShortcut } from '@/components/ui/icon-button'
-import type { VscodeMenu } from '@/components/vscode/vscodeMenuBar'
+import type { VscodeMenu } from '@/components/vscode/vscodeMenu.model'
 import { buildSessionList } from './sessionList'
 import { TOGGLE_HEADER_ID } from './headerMode.commands'
 import { setHeaderMode, useHeaderMode } from './headerMode.store'
