@@ -1,6 +1,6 @@
 // Every terminal session (plain shell AND agent) carries the link catcher: BROWSER, the shim dir first on PATH,
 // the port; plain shells also the limited link header path (never a token). The switch and the browser feature gate it.
-import { mkdtempSync } from 'node:fs'
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -14,9 +14,14 @@ process.env.WEBTERM_DATA_DIR = mkdtempSync(join(tmpdir(), 'wt-sesscap-'))
 const BIN = dirname(cliPath())
 let spawned: Array<{ env?: Record<string, string>; cmd?: string }>
 const saved = { ...process.env }
+// A stand-in executable named zsh: the session picks its link hook from the shell NAME and falls back to bash when
+// the path is missing, so a runner without zsh would otherwise never exercise the zsh branch (nothing runs it: spawn is faked).
+const ZSH = join(mkdtempSync(join(tmpdir(), 'wt-fakezsh-')), 'zsh')
+writeFileSync(ZSH, '#!/bin/sh\n')
+chmodSync(ZSH, 0o755)
 
 function sessions(linkCapture = true): Sessions {
-  return new Sessions({ linkCapture, shell: '/bin/zsh', spawn: ((o: { env?: Record<string, string>; cmd?: string }) => { spawned.push({ env: o.env, cmd: o.cmd }); return new FakePty() }) as never })
+  return new Sessions({ linkCapture, shell: ZSH, spawn: ((o: { env?: Record<string, string>; cmd?: string }) => { spawned.push({ env: o.env, cmd: o.cmd }); return new FakePty() }) as never })
 }
 const open = (s: Sessions, id: string, extra: object = {}) => s.handle({ t: 'open', id, cols: 80, rows: 24, ...extra } as never, () => {})
 

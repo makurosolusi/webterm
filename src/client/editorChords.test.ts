@@ -36,7 +36,7 @@ function fakeMonaco() {
 }
 
 const offs: Array<() => void> = []
-afterEach(() => { offs.splice(0).forEach((f) => f()); connectKeybindings({}, null) })
+afterEach(() => { offs.splice(0).forEach((f) => f()); connectKeybindings({}, null); vi.unstubAllGlobals() })
 
 describe('editor chord forwarding', () => {
   it('maps registry chords to Monaco keybindings', () => {
@@ -45,9 +45,15 @@ describe('editor chord forwarding', () => {
     expect(monacoKeybinding(NEXT_TAB_KEY, monaco)).toBe((1 << 11) | (1 << 10) | 90)
     expect(monacoKeybinding('Mod+Shift+\\', monaco)).toBe((1 << 11) | (1 << 10) | 93)
     expect(monacoKeybinding('Alt+Z', monaco)).toBe((1 << 9) | 56)
-    expect(monacoKeybinding('Ctrl+K', monaco)).toBe((1 << 8) | 41) // macOS Ctrl = WinCtrl
     expect(monacoKeybinding('F5', monaco)).toBe(63)
     expect(monacoKeybinding('Mod+Q', monaco)).toBe(0) // no code in this fake: skipped, not bit soup
+  })
+
+  it('maps Ctrl by platform: WinCtrl on macOS, the primary modifier (CtrlCmd) elsewhere', () => {
+    vi.stubGlobal('navigator', { platform: 'MacIntel' })
+    expect(monacoKeybinding('Ctrl+K', monaco)).toBe((1 << 8) | 41)
+    vi.stubGlobal('navigator', { platform: 'Linux x86_64' })
+    expect(monacoKeybinding('Ctrl+K', monaco)).toBe((1 << 11) | 41)
   })
 
   it('forwards exactly the tab-layout chords by default', () => {

@@ -1,6 +1,8 @@
 // A claude node's recorded launch profile reaches the PTY command, through Sessions.open with an
 // injected fake spawn (no real PTY). Data dir isolated by src/testIsolation.setup.ts + hoisted guard.
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest'
 import type { ServerMsg } from '../../shared/protocol'
 
 await vi.hoisted(async () => {
@@ -15,6 +17,15 @@ const { registerClaudeLaunchSettings } = await import('./claudeLauncher')
 const { DEFAULT_SETTINGS } = await import('../../shared/settings')
 
 afterEach(() => registerClaudeLaunchSettings(() => DEFAULT_SETTINGS))
+
+// Stand-in `envman` on PATH: Sessions drops a launch wrapper that is not installed (unwrapMissingWrapper), and CI
+// runners do not have it. Nothing runs it (spawn is faked); it only has to exist and be executable.
+const binDir = mkdtempSync(`${tmpdir()}/wt-fake-envman-`)
+writeFileSync(`${binDir}/envman`, '#!/bin/sh\n')
+chmodSync(`${binDir}/envman`, 0o755)
+const realPath = process.env.PATH
+beforeAll(() => { process.env.PATH = `${binDir}:${realPath ?? ''}` })
+afterAll(() => { process.env.PATH = realPath })
 
 function harness() {
   const cmds: (string | undefined)[] = []

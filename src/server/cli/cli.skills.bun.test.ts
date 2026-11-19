@@ -94,6 +94,9 @@ afterEach(() => {
 const cli = (args: string[], stdin?: string) => new Promise<{ code: number; out: string; err: string }>((resolve) => {
   const env = { PATH: process.env.PATH ?? '/usr/bin:/bin', WEBTERM_NODE_HEADERS: hdr, WEBTERM_PORT: port }
   const child = execFile(cliPath(), args, { env }, (e, out, err) => resolve({ code: e ? Number((e as { code?: number }).code ?? 1) : 0, out, err }))
+  // A CLI that rejects its flags (exit 2) never reads stdin, so on Linux the pipe write races the exit and
+  // raises EPIPE as an unhandled 'error' event. That is a valid outcome here; the exit code is what is asserted.
+  child.stdin?.on('error', (e: NodeJS.ErrnoException) => { if (e.code !== 'EPIPE') resolve({ code: 1, out: '', err: String(e) }) })
   child.stdin?.end(stdin ?? '')
 })
 const propose = (name: string, extra: string[] = [], stdin: string = GOOD.body) => cli(['skills', 'propose', '--name', name, '--title', GOOD.title, '--description', GOOD.description, '--body-file', '-', ...(extra.includes('--audience') ? [] : ['--audience', 'canvas']), ...extra], stdin)
