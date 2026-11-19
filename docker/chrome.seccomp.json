@@ -1051,17 +1051,6 @@
     },
     {
       "names": [
-        "chroot"
-      ],
-      "action": "SCMP_ACT_ALLOW",
-      "includes": {
-        "caps": [
-          "CAP_SYS_CHROOT"
-        ]
-      }
-    },
-    {
-      "names": [
         "delete_module",
         "init_module",
         "finit_module"
@@ -1193,6 +1182,13 @@
       ],
       "action": "SCMP_ACT_ALLOW",
       "comment": "Chrome sandbox: unprivileged user namespaces without CAP_SYS_ADMIN"
+    },
+    {
+      "names": [
+        "chroot"
+      ],
+      "action": "SCMP_ACT_ALLOW",
+      "comment": "Chrome namespace sandbox: chroot('/proc/self/fdinfo/') inside its own user namespace; kernel still needs CAP_SYS_CHROOT there"
     }
   ]
 }
