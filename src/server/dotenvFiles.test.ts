@@ -1,3 +1,4 @@
+import { customBinPath, withCustomBin } from './customBinPath'
 import { describe, it, expect } from 'vitest'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -59,9 +60,13 @@ describe('recordDotenvBoot + ptyEnv', () => {
 
   it('kunci asal .env dibuang, nilai beda dipertahankan, provider/OS dipertahankan', () => {
     const strip = new Set(['APP_SECRET', 'ANTHROPIC_API_KEY', 'PATH', 'LC_ALL'])
-    const env = ptyEnv({ APP_SECRET: MARK, SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }, { interactive: false, strip })
+    const input = { APP_SECRET: MARK, SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }
+    const env = ptyEnv(input, { interactive: false, strip })
     expect('APP_SECRET' in env).toBe(false)
-    expect(env).toMatchObject({ SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' })
+    expect(env).toMatchObject({ SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', LC_ALL: 'C', LAIN: 'v' })
+    // ptyEnv puts the managed custom-bin dir first; the inherited PATH must survive right behind it.
+    expect(env.PATH).toBe(withCustomBin('/x', customBinPath(input)))
+    expect(env.PATH!.endsWith('/x')).toBe(true)
   })
 
   it('TELEGRAM_BOT_TOKEN tidak pernah masuk PTY, walau bukan asal .env', () => {
