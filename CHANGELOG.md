@@ -16,6 +16,9 @@
 
 ### Fixed
 - Terminal scrollback was lost after a server restart. The tmux history is now seeded in chunks, so the first redraw no longer discards it. More terminal output tests were added, and a `ws.resync` debug log (byte counts only) helps diagnose similar cases.
+- Right click in a Browser node now shows the webterm context menu again (the page-side safety script cancelled the host's own probe, so the host always assumed the site had its own menu).
+- Drag to select text in a Browser node works again (mouse moves now name the held button, which Chromium needs to extend a selection).
+- A Browser page that Chromium reports as "Not attached to an active page" is now recovered once (its target is activated and the command retried). If it stays gone, the node shows an error with Reload instead of loading forever, and Stop always ends the loading indicator.
 
 ### Known limitations
 - Sticky rendering has not been observed in a real browser yet.
@@ -26,6 +29,7 @@
 - No Chromium flag was added for external protocol handlers.
 - An `ls` that hangs over ssh is not diagnosed yet (likely on the remote side).
 - The default `scrollbackBytes` (256 KiB) is smaller than `scrollbackLines` (10,000), so the history seed is capped.
+- The root cause of the stale page session after a server restart is not yet proven; the recovery is a mitigation verified with a fake CDP only.
 
 ## [0.9.1] - 2026-11-19
 
