@@ -5,12 +5,12 @@ import type { Workspace, WsNodeKind } from '../shared/workspace'
 import { TEMPLATE_KINDS } from './templates/template.model'
 import { renderCard } from './awareness/awarenessCard'
 
-const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, agentChat: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, skill: true }
+const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, agentChat: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, skill: true, sticky: true }
 const ALL = Object.keys(KINDS) as WsNodeKind[]
 
 describe('server registries cover every WsNodeKind', () => {
-  it('a template may hold every kind but app (placed by an agent MCP view) and skill (a reference to a library skill, never captured)', () => {
-    expect(ALL.filter((k) => !TEMPLATE_KINDS.includes(k) && k !== 'app' && k !== 'skill')).toEqual([])
+  it('a template may hold every kind but app (placed by an agent MCP view) skill (a reference to a library skill, never captured) and sticky (a loose canvas note, never captured)', () => {
+    expect(ALL.filter((k) => !TEMPLATE_KINDS.includes(k) && k !== 'app' && k !== 'skill' && k !== 'sticky')).toEqual([])
   })
 
   it('the awareness card lists a wired agentChat as a peer', () => {

@@ -10,9 +10,10 @@
 import { validPersistedTabs } from './browser.tabs'
 import { DEFAULT_VIEWPORT, validDiffNotes, validExpanded, validPlanData, type BridgeLink, type Viewport, type WsNode, type WsNodeKind } from './workspace.shape'
 
+import { cleanStickyTag, cleanStickyText, isStickyColor } from './sticky.palette'
 import { isWorkspaceHue, isWorkspaceShade } from './workspaceColor'
 
-const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true, skill: true }
+const KINDS: Record<WsNodeKind, true> = { terminal: true, agent: true, files: true, editor: true, browser: true, diff: true, plan: true, app: true, agentChat: true, skill: true, sticky: true }
 
 /** The persisted board fields of a workspace (identity, version and layout are handled elsewhere). */
 export interface WorkspaceBoard { name: string; cwd?: string; color?: string; colorShade?: string; viewport: Viewport; nodes: WsNode[]; bridges: BridgeLink[] }
@@ -48,6 +49,9 @@ function cleanNode(n: Record<string, unknown>): WsNode {
   if (n.viewAs !== undefined && n.viewAs !== 'text') delete node.viewAs
   if (n.skill !== undefined && typeof n.skill !== 'string') delete node.skill
   if (n.seenVersion !== undefined && typeof n.seenVersion !== 'string') delete node.seenVersion
+  if (n.stickyText !== undefined) node.stickyText = cleanStickyText(n.stickyText)
+  if (n.stickyTag !== undefined) node.stickyTag = cleanStickyTag(n.stickyTag)
+  if (n.stickyColor !== undefined && !isStickyColor(n.stickyColor)) delete node.stickyColor
   if (n.tabs !== undefined) {
     const tabs = validPersistedTabs(n.tabs)
     if (tabs) node.tabs = tabs

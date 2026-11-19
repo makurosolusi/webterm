@@ -3,6 +3,7 @@ import { canContextLink, type AgentPermissionMode } from './workspace.capabiliti
 import type { DeviceChoice } from './browser.devices'
 import type { PersistedTabs } from './browser.tabs'
 import type { TabLayout } from './tabLayout.schema'
+import type { StickyColorId } from './sticky.palette'
 import type { AgentChatNodeConfig, AgentChatPreset } from './agentChat.shape'
 
 // ---------------------------------------------------------------------------------------------
@@ -28,7 +29,7 @@ export interface BridgeLink {
   kind: 'context' | 'file' | 'skill'
 }
 
-export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app' | 'agentChat' | 'skill'
+export type WsNodeKind = 'terminal' | 'agent' | 'files' | 'editor' | 'browser' | 'diff' | 'plan' | 'app' | 'agentChat' | 'skill' | 'sticky'
 
 /** Satu pane = satu PTY. `id` adalah id sesi yang dipakai protokol, jadi daun akar sebuah node
  *  memakai id NODE-nya sendiri: board yang tersimpan sebelum split ada tetap menemukan shell-nya. */
@@ -149,6 +150,9 @@ export interface WsNode {
   preset?: AgentChatPreset // node 'agentChat': born as a preset (skill-author); absent = plain chat
   presetTarget?: string   // node 'agentChat': skill name a skill-author chat edits
   skill?: string          // node 'skill': name of the library skill it references (never a copy)
+  stickyText?: string     // node 'sticky': plain note text, <= STICKY_TEXT_MAX (cleanStickyText)
+  stickyTag?: string      // node 'sticky': one-line corner label, <= STICKY_TAG_MAX (cleanStickyTag)
+  stickyColor?: StickyColorId // node 'sticky': palette id (sticky.palette.ts); absent = default. Not `color`, which other kinds use
   seenVersion?: string    // node 'skill': active version when the node was added or last acknowledged
 }
 
