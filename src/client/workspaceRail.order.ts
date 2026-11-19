@@ -34,3 +34,11 @@ export function applyPendingOrder(list: Workspace[], pending: readonly string[] 
   const out = pending.map((id) => byId.get(id))
   return out.every((w): w is Workspace => w !== undefined) ? out : list
 }
+
+/** `list` in the order of `ids` (ids it lacks keep their relative order at the end); `position` is rewritten to match
+ *  where an entry carries one, so `orderedWorkspaces` follows. Entries are otherwise kept as is (they may hold unsent edits). */
+export function applyServerOrder(list: Workspace[], ids: readonly string[]): Workspace[] {
+  const rank = new Map(ids.map((id, i) => [id, i]))
+  const sorted = list.map((w, i) => ({ w, i })).sort((a, b) => (rank.get(a.w.id) ?? ids.length) - (rank.get(b.w.id) ?? ids.length) || a.i - b.i).map((x) => x.w)
+  return sorted.map((w, i) => ((w as { position?: unknown }).position === undefined ? w : { ...w, position: i }))
+}

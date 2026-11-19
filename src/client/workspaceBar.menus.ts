@@ -34,6 +34,10 @@ export interface WorkspaceMenuInput {
   headerMode?: HeaderMode
   onSetHeaderMode?: (mode: HeaderMode) => void
   headerKey?: string
+  /** View > Show Rail Labels: the pinned-rail preference, its toggle and chord (absent: no row). */
+  railLabels?: boolean
+  onToggleRailLabels?: () => void
+  railLabelsKey?: string
 }
 
 /** View > Header: Full / Compact / Hidden as a radio group; the Hidden row shows the toggle chord. */
@@ -70,6 +74,7 @@ export function buildWorkspaceMenus(i: WorkspaceMenuInput): VscodeMenu[] {
   const viewItems: VscodeMenuEntry[] = [
     ...(i.onToggleLayout ? [{ id: 'toggle-layout', label: 'Toggle Tab Layout', keybinding: i.layoutKey, disabled: !active, onSelect: i.onToggleLayout }] : []),
     ...(i.headerMode && i.onSetHeaderMode ? [headerSubmenu(i.headerMode, i.onSetHeaderMode, i.headerKey)] : []),
+    ...(i.onToggleRailLabels ? [{ id: 'rail-labels', label: 'Show Rail Labels', checked: i.railLabels === true, keybinding: i.railLabelsKey, onSelect: i.onToggleRailLabels }] : []),
     { id: 'output', label: 'Output', keybinding: i.outputKey, onSelect: toggleOutput },
     { id: 'clear-output', label: 'Clear Output', onSelect: () => void clearOutput() },
   ]

@@ -11,6 +11,7 @@ import type { CanvasMsg } from '../shared/protocol'
 import type { Workspace } from '../shared/workspace'
 import { fetchWorkspaces } from './api'
 import { reported } from './workspaceActionError'
+import { applyServerOrder } from './workspaceRail.order'
 import { subscribeCanvas, subscribeWorkspaces } from './ws'
 
 export interface ListTarget {
@@ -26,6 +27,9 @@ export function addNewWorkspaces(prev: Workspace[], fresh: readonly Workspace[])
   return added.length ? [...prev, ...added] : prev
 }
 
+/** `prev` without `ws`, then `ws` at the END (a new workspace never jumps to the front: the persisted order appends). */
+export const appendWorkspace = (prev: Workspace[], ws: Workspace): Workspace[] => [...prev.filter((w) => w.id !== ws.id), ws]
+
 /** Rename the mounted board from a pushed `name`; false when the frame carries none or is for another board. */
 export function applyRenamePush(t: Pick<ListTarget, 'activeWsRef' | 'setActiveWs'>, msg: CanvasMsg): boolean {
   const cur = t.activeWsRef.current
@@ -40,11 +44,12 @@ export function applyRenamePush(t: Pick<ListTarget, 'activeWsRef' | 'setActiveWs
 export function useWorkspaceListPush(t: ListTarget): void {
   const { activeWsRef, setActiveWs, setWorkspaces } = t
   useEffect(() => {
-    const refresh = reported('refresh the workspace list', async (_list: string) => {
+    // `order` (after a reorder in any window) re-sorts the list; a create carries none and just appends.
+    const refresh = reported('refresh the workspace list', async (_list: string, order?: string[]) => {
       const fresh = await fetchWorkspaces()
-      setWorkspaces((prev) => addNewWorkspaces(prev, fresh))
+      setWorkspaces((prev) => { const merged = addNewWorkspaces(prev, fresh); return order ? applyServerOrder(merged, order) : merged })
     })
-    const offList = subscribeWorkspaces(() => { void refresh('workspaces') })
+    const offList = subscribeWorkspaces((msg) => { void refresh('workspaces', msg.order) })
     const offCanvas = subscribeCanvas((msg) => { applyRenamePush({ activeWsRef, setActiveWs }, msg) })
     return () => { offList(); offCanvas() }
   }, [activeWsRef, setActiveWs, setWorkspaces])

@@ -29,16 +29,19 @@ export interface AccountMenuProps {
   onOpenHelp?: () => void
   /** After a successful Sign out; tests replace it. Default reloads to the sign-in page. */
   reload?: () => void
+  /** `rail`: an activity-bar button whose menu opens to the right (Compact/Hidden); default: the title bar's button. */
+  variant?: 'titlebar' | 'rail'
 }
 
 type Who = { state: 'loading' } | { state: 'ok'; user: AuthUser | null } | { state: 'error'; text: string }
 
 /** The account button and its menu. */
-export function AccountMenu({ onOpenAccount, onOpenSettings, onOpenHelp, reload }: AccountMenuProps): React.JSX.Element {
+export function AccountMenu({ onOpenAccount, onOpenSettings, onOpenHelp, reload, variant = 'titlebar' }: AccountMenuProps): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [who, setWho] = useState<Who>({ state: 'loading' })
   const out = useSignOut(reload)
   const hasAccount = !!onOpenAccount
+  const rail = variant === 'rail'
 
   // Asked on every open, so a username changed in Settings shows the next time the menu opens.
   useEffect(() => {
@@ -54,15 +57,17 @@ export function AccountMenu({ onOpenAccount, onOpenSettings, onOpenHelp, reload 
 
   return (
     <DropdownMenu.Root modal={false} open={open} onOpenChange={setOpen}>
-      <IconTooltip label={ACCOUNT_MENU_TEXT.tooltip}>
+      <IconTooltip label={ACCOUNT_MENU_TEXT.tooltip} side={rail ? 'right' : undefined}>
         <DropdownMenu.Trigger asChild>
-          <button type="button" className="titlebar__action" aria-label={ACCOUNT_MENU_TEXT.button}>
-            <span className="codicon codicon-account" aria-hidden />
+          <button type="button" className={rail ? 'vscode-activity-bar__item dock-btn rounded-none' : 'titlebar__action'} aria-label={ACCOUNT_MENU_TEXT.button}>
+            {rail
+              ? <span className="vscode-activity-bar__icon" aria-hidden><span className="codicon codicon-account" /></span>
+              : <span className="codicon codicon-account" aria-hidden />}
           </button>
         </DropdownMenu.Trigger>
       </IconTooltip>
       <DropdownMenu.Portal container={portalContainer()}>
-        <DropdownMenu.Content className="act-menu" side="bottom" align="end" sideOffset={4}>
+        <DropdownMenu.Content className="act-menu" side={rail ? 'right' : 'bottom'} align="end" sideOffset={4}>
           {hasAccount && (
             <>
               <WhoLabel who={who} />

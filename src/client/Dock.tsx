@@ -18,6 +18,7 @@ import { useChatFeed } from './chat/chatFeed'
 import { CanvasStatusBar } from './Dock.statusBar'
 import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
+import { DockModes } from './Dock.modes'
 import { useRailLabelsAttribute } from './railLabels.store'
 import './workspaceRail.css'
 
@@ -203,6 +204,8 @@ export default function Dock(props: DockProps) {
   return (
     <>
       <div className="dock">
+        {/* Compact/Hidden header: the app menu is the first control of the rail (Full keeps the menu bar). */}
+        {props.railMenu}
         {/* Hidden header: search sits above the workspace group (Mod+K still works in every mode). */}
         {props.onOpenPalette && (
           <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Search" tooltip="Go to anything: nodes, files, URLs, agents, commands"
@@ -218,41 +221,7 @@ export default function Dock(props: DockProps) {
           ariaLabel="Activity bar"
         />
 
-        {/* Grup bawah (ala "Manage" VS Code): Settings membuka dialog; lock dan clean view adalah
-            toggle ber-`aria-pressed`, yang tidak dimiliki item navigasi activity bar. */}
-        <div className="dock__modes" data-slot="dock-modes">
-          {props.onOpenSettings && (
-            <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Settings" commandId="workbench.settings"
-              side="right" onClick={props.onOpenSettings}>
-              <span className="vscode-activity-bar__icon" aria-hidden>{codicon('settings-gear')}</span>
-            </IconButton>
-          )}
-
-          {canvasMode && (
-            <IconButton
-              className="vscode-activity-bar__item dock-btn rounded-none"
-              label={props.locked ? 'Unlock view' : 'Lock view'}
-              tooltip={props.locked ? 'View locked: pan and zoom are off. Click to unlock' : 'View unlocked. Click to lock pan and zoom; nodes stay movable'}
-              side="right"
-              aria-pressed={props.locked}
-              onClick={props.onToggleLock}
-            >
-              <span className="vscode-activity-bar__icon" aria-hidden>{codicon(props.locked ? 'lock' : 'unlock')}</span>
-            </IconButton>
-          )}
-
-          <IconButton
-            className="vscode-activity-bar__item dock-btn rounded-none"
-            label="Clean view"
-            tooltip={props.cleanView ? 'Clean view is on. Click to show the chrome again' : 'Clean view is off. Click to hide all chrome'}
-            commandId="view.cleanView"
-            side="right"
-            aria-pressed={props.cleanView}
-            onClick={props.onToggleCleanView}
-          >
-            <span className="vscode-activity-bar__icon" aria-hidden>{codicon('eye-closed')}</span>
-          </IconButton>
-        </div>
+        <DockModes {...props} canvasMode={canvasMode} />
 
         <VscodeQuickPick
           open={addOpen}

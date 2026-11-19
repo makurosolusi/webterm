@@ -36,34 +36,27 @@ function mount(headerMode: HeaderMode, over: Partial<WorkspaceBarProps> = {}) {
   )
 }
 
-/** Inventory slice: control -> accessible role + name, present in every mode (Hidden: in the reveal overlay). */
-const DIRECT_CONTROLS: ReadonlyArray<readonly [role: string, name: string]> = [
-  ['button', 'Search'], ['button', 'Toggle tab layout'], ['button', 'Account'], ['button', 'Toggle Secondary Side Bar'],
+/** Header slice of the inventory: where each control is drawn BY THE HEADER per mode (the rail's half, and the
+ *  combined "once per mode" contract, is `headerRail.inventory.test.tsx`). */
+const HEADER_CONTROLS: ReadonlyArray<readonly [name: string, drawn: Record<HeaderMode, boolean>]> = [
+  ['Search', { full: true, compact: true, hidden: true }], // the command pill
+  ['Toggle tab layout', { full: true, compact: true, hidden: false }], // Hidden: rail bottom group
+  ['Account', { full: true, compact: false, hidden: false }], // Compact/Hidden: rail bottom group
+  ['Toggle Secondary Side Bar', { full: true, compact: true, hidden: true }],
 ]
 /** Strip-only controls: Full draws them in the tab row, Compact/Hidden move them to the rail. */
 const STRIP_CONTROLS: ReadonlyArray<readonly [role: string, name: string]> = [['button', 'New workspace'], ['tab', 'Proj']]
-/** Inventory slice: menu rows by their top-level menu. Header is the new View > Header row. */
+/** Menu rows by top-level menu (rows 3-14): the Full menu bar's model, which the rail's menu button reuses. */
 const MENU_ROWS: Readonly<Record<string, readonly string[]>> = {
   File: ['New Workspace', 'Clone Repository…', 'New Project…', 'New Files Node', 'Rename Workspace…', 'Delete Workspace', 'Settings…', 'Account…', 'Sign out'],
-  View: ['Toggle Tab Layout', 'Header', 'Output', 'Clear Output'],
+  View: ['Toggle Tab Layout', 'Header', 'Show Rail Labels', 'Output', 'Clear Output'],
   Help: ['Keyboard Shortcuts Reference', 'Set up webterm…'],
 }
 
-/** Opens a top-level menu the way the mode draws it: the bar's own label, or Menu > submenu in Compact. */
-function openTop(mode: HeaderMode, top: string): void {
-  if (mode === 'compact') {
-    if (!screen.queryByRole('menuitem', { name: 'File', hidden: false })) fireEvent.click(screen.getByRole('menuitem', { name: 'Menu' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: top }))
-  } else {
-    fireEvent.click(screen.getByRole('menuitem', { name: top }))
-  }
-}
-const rowsOf = (): string[] => screen.getAllByRole('menuitem').map((el) => el.textContent ?? '')
-
 describe.each(MODES)('header mode %s', (mode) => {
-  it.each(DIRECT_CONTROLS)('keeps %s "%s" reachable', (role, name) => {
+  it.each(HEADER_CONTROLS)('draws "%s" in the header only where the inventory says', (name, drawn) => {
     mount(mode)
-    expect(screen.getByRole(role, { name: name === 'Proj' ? /Proj/ : name })).toBeTruthy()
+    expect(screen.queryAllByRole('button', { name }).length > 0).toBe(drawn[mode])
   })
 
   it.each(STRIP_CONTROLS)('%s "%s" is a strip control only in Full', (role, name) => {
@@ -71,62 +64,38 @@ describe.each(MODES)('header mode %s', (mode) => {
     expect(Boolean(screen.queryByRole(role, { name: name === 'Proj' ? /Proj/ : name }))).toBe(mode === 'full')
   })
 
-  it.each(Object.entries(MENU_ROWS))('opens %s with every row of the one menu model', (top, rows) => {
+  it('draws a menu bar only in Full (Compact/Hidden: the rail menu button)', () => {
     mount(mode)
-    openTop(mode, top)
+    expect(screen.queryAllByRole('menubar')).toHaveLength(mode === 'full' ? 1 : 0)
+  })
+})
+
+describe('Full menu bar', () => {
+  it.each(Object.entries(MENU_ROWS))('opens %s with every row of the model', (top, rows) => {
+    mount('full')
+    fireEvent.click(screen.getByRole('menuitem', { name: top }))
     const names = [...document.querySelectorAll('[role^="menuitem"]')].map((el) => el.textContent ?? '')
     for (const row of rows) expect(names.some((n) => n.startsWith(row)), `${top} > ${row}`).toBe(true)
   })
 })
 
 describe('Compact', () => {
-  it('draws no title bar (nothing twice) and one menu button with the same File / View / Help model', () => {
+  it('draws no title bar, no brand, no menu and no account (nothing twice: they are rail controls)', () => {
     const { container } = mount('compact')
     expect(container.querySelector('.app-titlebar')).toBeNull()
     expect(container.querySelector('.brand')).toBeNull()
-    expect(screen.getAllByRole('button', { name: 'Account' })).toHaveLength(1)
-    expect(screen.getAllByRole('menubar')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Menu' }))
-    expect(rowsOf()).toEqual(['Menu', 'File', 'View', 'Help'])
+    expect(container.querySelector('.app-menu-button, [role="menubar"]')).toBeNull()
+    expect(screen.queryAllByRole('button', { name: 'Account' })).toHaveLength(0)
   })
 
-  it.each(Object.keys(MENU_ROWS))('%s opens exactly the rows the Full menu bar opens (one model, two doors)', (top) => {
-    const rowsIn = (mode: HeaderMode): string[] => {
-      const view = mount(mode)
-      openTop(mode, top)
-      const rows = [...document.querySelectorAll(mode === 'compact' ? '.vscode-menu__submenu .vscode-menu__item' : '.vscode-menu__item')].map((el) => el.textContent ?? '')
-      view.unmount()
-      return rows
-    }
-    const full = rowsIn('full')
-    expect(full.length).toBeGreaterThan(1)
-    expect(rowsIn('compact')).toEqual(full)
-  })
-
-  it('is one row: menu button first, then the command pill and the layout switch, side bar toggle and account at the end; no workspace tabs', () => {
+  it('is one row: the command pill, then the layout switch and the side bar toggle at the end; no workspace tabs', () => {
     const { container } = mount('compact')
     const row = container.querySelector('.app-tabs') as HTMLElement
-    expect(row.firstElementChild?.classList.contains('app-menu-button')).toBe(true)
+    expect(row.firstElementChild?.classList.contains('app-titlebar__center')).toBe(true)
     expect(row.querySelector('.app-titlebar__center button[aria-label="Search"]')).toBeTruthy()
     expect(row.querySelector('[role="tablist"], [role="tab"]')).toBeNull()
-    const tail = row.lastElementChild as HTMLElement
-    expect([...tail.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Toggle Secondary Side Bar', 'Account'])
+    expect([...row.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Search', 'Toggle tab layout', 'Toggle Secondary Side Bar'])
     expect(container.querySelectorAll('button[aria-label="Search"]')).toHaveLength(1)
-  })
-
-  it('the same handlers run: File > Settings… from the compact menu calls onOpenSettings', () => {
-    const onOpenSettings = vi.fn()
-    mount('compact', { onOpenSettings })
-    openTop('compact', 'File')
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }))
-    expect(onOpenSettings).toHaveBeenCalledTimes(1)
-  })
-
-  it('lone Alt focuses the menu button (same primitive as the menu bar)', () => {
-    mount('compact')
-    fireEvent.keyDown(document, { key: 'Alt' })
-    fireEvent.keyUp(document, { key: 'Alt' })
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Menu' }))
   })
 })
 
@@ -141,6 +110,13 @@ describe('Full', () => {
 })
 
 describe('Hidden', () => {
+  it('the revealed bar carries the pill and the side bar toggle only (menu, account and layout switch are in the rail)', () => {
+    const { container } = mount('hidden', { revealed: true })
+    const bar = container.querySelector('.app-titlebar') as HTMLElement
+    expect([...bar.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Search', 'Toggle Secondary Side Bar'])
+    expect(bar.querySelector('.brand, [role="menubar"]')).toBeNull()
+  })
+
   it('renders only the title bar as an overlay (no tab row: workspaces are rail tiles): not revealed by default, revealed on demand', () => {
     const { container, rerender } = mount('hidden')
     const rows = [...container.querySelectorAll('[data-header-region]')]
@@ -159,7 +135,7 @@ describe('View > Header', () => {
   it.each(MODES)('is a radio group that shows the stored mode (%s) and sets the mode', (stored) => {
     setHeaderMode(stored)
     mount('full')
-    openTop('full', 'View')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Header' }))
     for (const m of MODES) {
       const row = screen.getByRole('menuitemcheckbox', { name: new RegExp(m, 'i') })
@@ -168,14 +144,5 @@ describe('View > Header', () => {
     const target = MODES.find((m) => m !== stored) as HeaderMode
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: new RegExp(target, 'i') }))
     expect(getHeaderMode()).toBe(target)
-  })
-
-  it('works from the compact menu too (View > Header > Hidden)', () => {
-    setHeaderMode('compact')
-    mount('compact')
-    openTop('compact', 'View')
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Header' }))
-    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Hidden/ }))
-    expect(getHeaderMode()).toBe('hidden')
   })
 })
