@@ -9,6 +9,7 @@ import type { CdpClient, CdpHandler } from './cdp.client'
 import { screencastParams, toCdpCommands } from './browserHost.input'
 import { startCast, stopCast } from './browserHost.cast'
 import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
+import { recovering, targetOfSession } from './browserHost.recover'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
@@ -63,7 +64,7 @@ export class BrowserHost implements BrowserHostApi {
     this.shield = createShieldRouter({ table: this.table, policy: deps.shields, patch, emit, now: deps.now })
     this.tabs = createTabs({
       table: this.table, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch, emit, io: (r) => this.io(r), shield: this.shield, console: this.console,
-      refresh: (r) => this.refresh(r), initialTabs: deps.initialTabs, persist: deps.persistTabs, agentDriving: deps.agentDriving, discardMs: deps.tabDiscardMs,
+      refresh: (r) => this.refresh(r), gone: (r) => this.life.crash(r), initialTabs: deps.initialTabs, persist: deps.persistTabs, agentDriving: deps.agentDriving, discardMs: deps.tabDiscardMs,
     })
     this.tabApi = createTabApi({ table: this.table, tabs: this.tabs, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch })
     this.sync = createSync({ table: this.table, tabApi: this.tabApi, emit })
@@ -119,7 +120,7 @@ export class BrowserHost implements BrowserHostApi {
     return this.tabApi.run(nodeId, async () => {
       const rec = this.need(nodeId)
       rec.cast = { onFrame, seq: 0, acks: new Map() }
-      await startCast((m, p) => this.send(rec, m, p), screencastParams(castViewport(rec)), `node ${nodeId}`)
+      await startCast((m, p) => this.send(rec, m, p), screencastParams(castViewport(rec)), `node ${nodeId}`).catch((err: unknown) => { this.patch(rec, { loading: false }); throw err }) // no endless spinner behind a failed stream
       if (rec.tabs?.split?.visible.length) await this.tabs.split.reconcile(rec) // start the other panes too
     })
   }
@@ -212,7 +213,7 @@ export class BrowserHost implements BrowserHostApi {
     }
     const lost = this.table.nodes.get(nodeId)
     if (action === 'reload' && lost && !lost.sessionId) { await this.open(nodeId, lost.workspaceId, lost.state.url || undefined); return } // halaman crash: Reload memulihkan (Chrome "Aw, Snap")
-    await stepPage(this.pageIo, this.need(nodeId), action)
+    await stepPage(this.pageIo, this.need(nodeId), action, (r, p) => this.patch(r, p))
   }
 
   /** Sakelar Shields untuk situs halaman node ini (dipersist per host), lalu muat ulang seperti Brave. */
@@ -251,7 +252,7 @@ export class BrowserHost implements BrowserHostApi {
     const sid = rec.sessionId
     if (!sid) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
     try {
-      return await (await this.cdpOf(rec)).send<T>(method, params, sid)
+      return await recovering(await this.cdpOf(rec), targetOfSession(rec, sid)).send<T>(method, params, sid)
     } catch (err) {
       if (!isTargetGone(err)) throw err
       // Balasan galat bisa tiba sebelum event detach/destroy: lepas node di sini juga, supaya `open` membuat target baru.
@@ -290,7 +291,7 @@ export class BrowserHost implements BrowserHostApi {
     const sid = rec.sessionId
     if (!sid) return
     try {
-      const h = await readHistory(await this.cdpOf(rec), sid)
+      const h = await readHistory(recovering(await this.cdpOf(rec), rec.targetId), sid)
       if (rec.sessionId === sid) this.patch(rec, { title: h.title, canBack: h.canBack, canForward: h.canForward })
     } catch (err) {
       log.warn('browser.history', 'history read failed', { ids: { nodeId: rec.nodeId }, error: errMsg(err) })

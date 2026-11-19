@@ -6,13 +6,14 @@ import { BLANK_URL, MAX_FAVICON_URL_LENGTH, MAX_TABS_PER_NODE, sanitizeTabTitle,
 import type { BrowserTab, BrowserTabEvent, BrowserTabsState, PersistedTabs } from '../../shared/browser.tabs'
 import { createLogger } from '../logs'
 import { stopCast } from './browserHost.cast'
-import { CDP } from './cdp.client'
+import { CDP, isTargetGone } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { deviceCommands } from './browserHost.device'
 import type { DeviceIo } from './browserHost.device'
 import type { ConsoleLog } from './browserHost.console'
 import type { ShieldRouter } from './browserHost.shield'
-import { BrowserError, createPageTarget } from './browserHost.targets'
+import { BrowserError, createPageTarget, TargetGoneError } from './browserHost.targets'
+import { isRecoverable, recovering, targetOfSession } from './browserHost.recover'
 import type { HostEvent, NavGuard, NodeRec, NodeTabs, TabRt, TargetTable } from './browserHost.targets'
 import { metricsParams } from './browserHost.input'
 
@@ -39,6 +40,8 @@ export interface TabsOps {
   shield: ShieldRouter
   console: ConsoleLog
   refresh(rec: NodeRec): Promise<void>
+  /** The view's page stayed gone after the recovery: lose the node's target (crash) so the client shows Reload. */
+  gone?(rec: NodeRec): void
   /** Tab list saved on the board (`WsNode.tabs`); read once when a node's page first opens. */
   initialTabs?(nodeId: string): unknown
   /** Write the node's tab list to the board (debounced here); the runtime owns the actual save. */
@@ -110,8 +113,26 @@ export function createKit(ops: TabsOps) {
   }
   const setState = (rec: NodeRec, next: BrowserTabsState): void => { tabsOf(rec).state = next; schedule(rec) }
 
-  const send = async (rec: NodeRec, sid: string, method: string, params: object = {}): Promise<Record<string, unknown>> =>
-    (await ops.cdpOf(rec)).send<Record<string, unknown>>(method, params, sid)
+  /** A page that stays gone after the recovery: the view's node is lost (crashed, with a Reload), a background tab is marked crashed. */
+  const pageLost = (rec: NodeRec, sid: string): void => {
+    if (rec.sessionId === sid) { ops.gone?.(rec); return }
+    const b = ops.table.bgSession(sid)
+    if (!b) return
+    const rt = b.rec.tabs?.rt.get(b.tabId)
+    ops.table.bgUnbind(rt?.targetId, rt?.sessionId)
+    b.rec.tabs?.rt.delete(b.tabId)
+    patchTab(b.rec, b.tabId, { crashed: true, loading: false })
+  }
+  const send = async (rec: NodeRec, sid: string, method: string, params: object = {}): Promise<Record<string, unknown>> => {
+    const cdp = await ops.cdpOf(rec)
+    try {
+      return await recovering(cdp, targetOfSession(rec, sid)).send<Record<string, unknown>>(method, params, sid)
+    } catch (err) {
+      if (!isRecoverable(method) || !isTargetGone(err)) throw err // other commands keep their raw error (a stop on an old page must not unbind the view)
+      pageLost(rec, sid)
+      throw new TargetGoneError(`node ${rec.nodeId}: tab page is gone (${method})`, err)
+    }
+  }
   /** Fire-and-forget CDP command on a tab session; failures (the page is going away anyway) are logged, not thrown. */
   const fire = (rec: NodeRec, sid: string | undefined, method: string, params: object = {}): void => {
     if (!sid) return

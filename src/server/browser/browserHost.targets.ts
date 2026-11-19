@@ -185,7 +185,7 @@ export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']):
 }
 
 /** Posisi riwayat navigasi: judul + bisa mundur/maju (dan id entri tetangga untuk back/forward). */
-export async function readHistory(cdp: CdpClient, sessionId: string): Promise<{ title: string; canBack: boolean; canForward: boolean; entryIds: { prev?: number; next?: number } }> {
+export async function readHistory(cdp: Pick<CdpClient, 'send'>, sessionId: string): Promise<{ title: string; canBack: boolean; canForward: boolean; entryIds: { prev?: number; next?: number } }> {
   const h = await cdp.send<{ currentIndex: number; entries: Array<{ id: number; title: string }> }>(CDP.getNavigationHistory, {}, sessionId)
   const cur = h.entries[h.currentIndex]
   return {

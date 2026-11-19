@@ -11,7 +11,7 @@ export const CDP_CONNECT_TIMEOUT_MS = 10_000
 
 /** Tabel tunggal method CDP yang dipakai host (diuji: tak ada literal method di luar tabel ini). */
 export const CDP = {
-  createTarget: 'Target.createTarget', attachToTarget: 'Target.attachToTarget', closeTarget: 'Target.closeTarget',
+  createTarget: 'Target.createTarget', activateTarget: 'Target.activateTarget',attachToTarget: 'Target.attachToTarget', closeTarget: 'Target.closeTarget',
   setDiscoverTargets: 'Target.setDiscoverTargets',
   pageEnable: 'Page.enable', navigate: 'Page.navigate', reload: 'Page.reload', stopLoading: 'Page.stopLoading',
   getNavigationHistory: 'Page.getNavigationHistory', navigateToHistoryEntry: 'Page.navigateToHistoryEntry',
