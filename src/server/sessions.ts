@@ -7,6 +7,7 @@ import { claudeHeadersPath } from './hooksPaths'
 import { retryWatchdogEnv } from './agentEnv'
 import { resumeIsDead, transcriptMissingNotice } from './transcriptPresence'
 import { PORT, launchLine, wrapperMissingNotice } from './launchLine'
+import { incompatReasonFor, takeFoundNotices } from './pathResolver'
 import { SessionsAdopt } from './sessionsAdopt'
 import { ptyLog } from './sessionsLog'
 import { spawnAgent } from './spawn/agentSpawn'
@@ -95,12 +96,16 @@ export class Sessions extends SessionsAdopt {
     const notices: string[] = profileNotice ? [profileNotice] : []
     if (deadResume) notices.push(transcriptMissingNotice)
     if (cmd) {
-      const unwrapped = unwrapMissingWrapper(cmd, binaryExists)
+      // binaryExists rescans the usual tool dirs on a miss (pathResolver); a binary built for another OS/arch counts as unusable.
+      const unwrapped = unwrapMissingWrapper(cmd, (b) => binaryExists(b) && incompatReasonFor(b) === null)
+      for (const n of takeFoundNotices()) notices.push(`\r\n[webterm] ${n}\r\n`)
       if (unwrapped) {
+        const incompatible = incompatReasonFor(unwrapped.missing)
+        spawnLog.warn('spawn.wrapper_dropped', 'Wrapper command not usable; launching without it', { command: unwrapped.missing, reason: incompatible ? 'incompatible' : 'not_found' })
         cmd = unwrapped.cmd
         // Hanya NAMA binary yang hilang yang dilaporkan — baris perintah bisa memuat argumen
         // bermuatan rahasia, jadi ia tidak pernah dicetak maupun dikirim.
-        notices.push(wrapperMissingNotice(unwrapped.missing))
+        notices.push(wrapperMissingNotice(unwrapped.missing, incompatible))
       }
       // A2: an agent program missing from PATH fails the open with the preflight's words, before
       // anything spawns. Plain names only (a path or env prefix is left to the shell); a held tmux

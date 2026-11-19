@@ -27,6 +27,7 @@ import { handoffRoutes } from './routes/handoff.routes'
 import { pushRoutes } from './routes/push.routes'
 import { claudeProviderRoutes } from './routes/claudeProvider.routes'
 import { claudeLauncherRoutes } from './routes/claudeLauncher.routes'
+import { customCommandsRoutes } from './routes/customCommands.routes'
 import { proxyInfoRoutes } from './routes/proxy.routes'
 import { bakeoffRoutes } from './routes/bakeoff.routes'
 import { evalCasesRoutes } from './routes/evalcases.routes'
@@ -77,6 +78,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   ...pushRoutes,
   ...claudeProviderRoutes,
   ...claudeLauncherRoutes,
+  ...customCommandsRoutes,
   ...proxyInfoRoutes,
   ...bakeoffRoutes,
   ...evalCasesRoutes,

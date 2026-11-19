@@ -1,6 +1,8 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
+import { customBinPath, withCustomBin } from './customBinPath'
+import { refreshOnMiss } from './pathResolver'
 import { getDotenvBoot, PTY_KEEP_FROM_DOTENV } from './dotenvFiles'
 import { createLogger } from './logs'
 
@@ -29,7 +31,11 @@ export function binaryExists(bin: string, pathEnv = process.env.PATH ?? ''): boo
     }
   }
   if (bin.includes('/')) return executable(bin)
-  return pathEnv.split(':').some((dir) => dir && executable(join(dir, bin)))
+  const onPath = (p: string): boolean => p.split(':').some((dir) => dir && executable(join(dir, bin)))
+  if (onPath(pathEnv)) return true
+  // A miss on the server's own PATH is not trusted: the tool may have been installed after boot
+  // (pathResolver rescans the usual dirs and the user's extra dirs, rate limited per name).
+  return pathEnv === process.env.PATH && refreshOnMiss(bin) && onPath(process.env.PATH ?? '')
 }
 
 const DARWIN_DEFAULT_SHELL = '/bin/zsh'
@@ -105,6 +111,9 @@ export function ptyEnv(
     if (v !== undefined && !LEAKED_ENV.test(k) && !(strip.has(k) && !keep(k))) env[k] = v
   }
   env.TERM = 'xterm-256color'
+  // Managed custom commands (customBinPath): first on PATH for every shell and launcher. Login shells
+  // keep inherited entries (path_helper reorders but does not drop them), so it survives `-l`.
+  env.PATH = withCustomBin(env.PATH, customBinPath(source))
   if (opts.interactive) {
     env.TERM_PROGRAM = 'webterm'
     env.COLORTERM = 'truecolor'

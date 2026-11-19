@@ -12,6 +12,8 @@ import { createServerIdentity } from '../health.api'
 import { type InternalEntry, parseArgs } from './cliArgs'
 import { buildHelp, buildTopicList, buildVersion, docsTopic, topicSlugs } from './cliHelp'
 import type * as ResetPassword from './cliResetPassword'
+import type * as CommandCli from '../customCommands.cli'
+import type * as CommandStore from '../customCommands.store'
 
 export const EXIT_OK = 0
 export const EXIT_USAGE = 2
@@ -63,6 +65,12 @@ export function runCli(argv: readonly string[]): number | 'serve' | { entry: Int
       // other flags must leave no trace. require() stays synchronous and is bundled by `--compile`.
       const { runResetPassword } = require('./cliResetPassword') as typeof ResetPassword
       return runResetPassword(action.username, { writeErr: (t) => writeAll(STDERR, t), writeOut: (t) => writeAll(STDOUT, t) })
+    }
+    case 'command': {
+      // Loaded only for this verb (its imports create the data dir); require() stays synchronous.
+      const { runCommandCli } = require('../customCommands.cli') as typeof CommandCli
+      const { defaultCtx } = require('../customCommands.store') as typeof CommandStore
+      return runCommandCli(action.args, defaultCtx(), { out: (t) => writeAll(STDOUT, t), err: (t) => writeAll(STDERR, t) })
     }
     case 'readme':
       page(readme)

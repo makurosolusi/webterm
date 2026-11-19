@@ -23,6 +23,9 @@ try {
 // 5 s); the guard itself spawns nothing. Dynamic for the same import-order reason as server.main.
 const { mergeLoginShellPath } = await import('./loginShellPath')
 mergeLoginShellPath()
+// After the login-shell merge so the managed custom-bin dir stays FIRST on PATH for every later reader.
+const { bootCustomBin } = await import('./customCommands.store')
+bootCustomBin()
 
 const server = await import('./server.main')
 /** Resolves once the main listener is bound; for an in-process host (src/native) that imports this module. */

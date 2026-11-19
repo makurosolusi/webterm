@@ -7,6 +7,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { childEnv } from './childEnv'
+import { customBinPath, withCustomBin } from './customBinPath'
 import { runSetupScript } from './workspaceWorktree.setup'
 import { runPrecheck } from './routines/routinePrecheck'
 
@@ -28,7 +29,8 @@ describe('children that run user code get the filtered env (sec-208-7)', () => {
   test('childEnv drops server vars, keeps PATH, and lets explicit extras through', () => {
     const env = childEnv({ WEBTERM_ROOT_PATH: '/r' })
     for (const k of CANARIES) expect(k in env).toBe(false)
-    expect(env.PATH).toBe(process.env.PATH)
+    // PATH is kept, with the managed custom-bin dir put first (customBinPath).
+    expect(env.PATH).toBe(withCustomBin(process.env.PATH, customBinPath()))
     expect(env.WEBTERM_ROOT_PATH).toBe('/r')
   })
 

@@ -24,7 +24,7 @@ const { TELEGRAM_WEBHOOK_PATH } = await import('../channels/channelsRuntime')
 const { TOKEN_ACCESS_PATH, tokenAccessRoute } = await import('../tokenAccess.api')
 
 /** Route entries wrapped in `uiOnly` (route.uiOnly.ts) or gated the same way in their handler. */
-const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat', 'claude-view']
+const GATED = ['fs-verbs', 'folder-picker', 'workspaces', 'git-info', 'workspace-create', 'generate-name', 'agent-chat', 'claude-view', 'custom-commands-write']
 /** Answer without the webterm page: the channel webhook (own provider secret, routed before /api)
  *  and the node-token surfaces (`isNodeTokenPath`) the CLI, browser skill and hooks call. */
 const ALLOWLIST = ['/api/agent-status', '/api/context-link', '/api/control/browser/navigate', '/api/tools', '/api/tools/x']
@@ -46,6 +46,9 @@ const PROBES: [string, string][] = [
   ['GET', '/api/agent-chat/n1/stream'], ['GET', '/api/agent-chat/n1/history'], ['POST', '/api/agent-chat/n1/send'],
   ['POST', '/api/agent-chat/n1/interrupt'], ['POST', '/api/agent-chat/n1/permission'], ['POST', '/api/agent-chat/n1/mode'],
   ['POST', '/api/claude-view/n1'],
+  // Registering a command changes what every terminal can execute: a human write, never an agent's.
+  ['POST', '/api/custom-commands'], ['POST', '/api/custom-commands/remove'], ['DELETE', '/api/custom-commands/x'],
+  ['POST', '/api/custom-commands/paths'], ['POST', '/api/custom-commands/paths/remove'], ['DELETE', '/api/custom-commands/paths'],
   // "Download Chromium" spends ~200 MB and picks the browser to use: a human write (settings guard), never an agent's.
   ['POST', '/api/capabilities/chromium-download'], ['POST', '/api/capabilities/chromium-download/cancel'],
 ]
