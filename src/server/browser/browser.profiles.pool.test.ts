@@ -22,7 +22,7 @@ function pool() {
   const children: Child[] = []
   const argv: string[][] = []
   const p = createChromiumPool({
-    env: {}, platform: 'darwin', dataRoot: mkdtempSync(join(tmpdir(), 'wt-pool-')), proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
+    env: { WEBTERM_DATA_DIR: '/d' }, platform: 'darwin', dataRoot: mkdtempSync(join(tmpdir(), 'wt-pool-')), proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
     deps: { spawn: (_b, a) => { const c = new Child(); children.push(c); argv.push(a); return c }, readFile: () => '9222\n/devtools/browser/x', sleep: async () => undefined },
   })
   return { p, children, argv }

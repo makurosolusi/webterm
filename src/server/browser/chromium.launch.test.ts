@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ENV_BROWSER } from '../../shared/browser.contract'
-import { BIN_CANDIDATES, chromiumCandidates, createChromiumPool, detectChromium, LaunchError, launchChromium, launchReason, resolveBinary } from './chromium.launch'
+import { chromiumCandidates, createChromiumPool, detectChromium, LaunchError, launchChromium, launchReason, managedPathOf, resolveBinary } from './chromium.launch'
 import type { ChildLike, LaunchDeps } from './chromium.launch'
 
 class FakeChild implements ChildLike {
@@ -24,73 +24,31 @@ let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'wt-launch-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
-// test-only: disk palsu = himpunan path yang "ada" + isi direktori palsu.
-const fakeFs = (files: string[], dirs: Record<string, string[]> = {}) => ({
-  exists: (p: string) => files.includes(p),
-  listDir: (d: string) => dirs[d] ?? [],
-})
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const BRAVE = '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'
-const PW = '/home/u/.cache/ms-playwright'
+const MANAGED = managedPathOf({ WEBTERM_DATA_DIR: '/d' }) as string
 
-describe('chromiumCandidates', () => {
-  it('lists only paths on disk, priority: well-known -> PATH -> Playwright (newest revision first)', () => {
-    const files = [BRAVE, CHROME, '/opt/bin/chromium',
-      `${PW}/chromium-1100/chrome-linux/chrome`, `${PW}/chromium-1200/chrome-linux64/chrome`]
-    const fs = fakeFs(files, { [PW]: ['chromium-1100', 'chromium-1200', 'chromium_headless_shell-1200', 'ffmpeg-1'] })
-    expect(chromiumCandidates({ PATH: '/opt/bin:/missing', HOME: '/home/u' }, fs.exists, fs.listDir)).toEqual([
-      CHROME, BRAVE, '/opt/bin/chromium', `${PW}/chromium-1200/chrome-linux64/chrome`, `${PW}/chromium-1100/chrome-linux/chrome`,
-    ])
+describe('managed-only resolution', () => {
+  it('lists only the managed binary, and only when it exists; installed browsers are never candidates', () => {
+    const env = { WEBTERM_DATA_DIR: '/d', PATH: '/usr/bin', HOME: '/home/u' }
+    const installed = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome']
+    expect(chromiumCandidates(env, (p) => installed.includes(p))).toEqual([])
+    expect(chromiumCandidates(env, (p) => p === MANAGED || installed.includes(p))).toEqual([MANAGED])
   })
-  it('dedupes a PATH hit that is also a well-known location', () => {
-    const fs = fakeFs(['/usr/bin/chromium'])
-    expect(chromiumCandidates({ PATH: '/usr/bin' }, fs.exists, fs.listDir)).toEqual(['/usr/bin/chromium'])
+  it('default data dir under HOME like config.ts', () => {
+    expect(managedPathOf({ HOME: '/home/u' })).toContain('/home/u/.webterm-server/browser/chrome-for-testing/')
+    expect(managedPathOf({})).toBeNull()
   })
-  it('finds a build "Download Chromium" left in <data dir>/browsers (newest first), after PATH and before Playwright', () => {
-    const root = '/d/browsers/chrome'
-    const linux = (v: string) => `${root}/linux-${v}/chrome-linux64/chrome`
-    const fs = fakeFs([linux('131.0.6778.9'), linux('131.0.6778.85'), '/opt/bin/chromium', `${PW}/chromium-1200/chrome-linux64/chrome`],
-      { [root]: ['linux-131.0.6778.9', 'linux-131.0.6778.85', '131.0.0-chrome-linux64.zip'], [PW]: ['chromium-1200'] })
-    expect(chromiumCandidates({ PATH: '/opt/bin', HOME: '/home/u', WEBTERM_DATA_DIR: '/d' }, fs.exists, fs.listDir)).toEqual([
-      '/opt/bin/chromium', linux('131.0.6778.85'), linux('131.0.6778.9'), `${PW}/chromium-1200/chrome-linux64/chrome`,
-    ])
-    // Without WEBTERM_DATA_DIR the default data dir under HOME is searched, like config.ts dataDir().
-    const mac = '/home/u/.webterm-server/browsers/chrome/mac_arm-131.0.6778.85/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'
-    const fs2 = fakeFs([mac], { '/home/u/.webterm-server/browsers/chrome': ['mac_arm-131.0.6778.85'] })
-    expect(detectChromium({ HOME: '/home/u' }, fs2.exists, fs2.listDir)).toEqual({ path: mac, source: 'auto' })
+  it('detectChromium: valid override wins; invalid override does NOT fall back', () => {
+    expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c' }, () => true)).toEqual({ path: '/opt/c', source: 'override' })
+    expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c', WEBTERM_DATA_DIR: '/d' }, (p) => p === MANAGED)).toBeNull()
   })
-  it('empty when nothing exists, and without HOME skips the Playwright cache', () => {
-    const listDir = (d: string) => { throw new Error(`unexpected listDir ${d}`) }
-    expect(chromiumCandidates({}, () => false, listDir)).toEqual([])
+  it('detectChromium: blank override = managed path (even before the first download)', () => {
+    expect(detectChromium({ [ENV_BROWSER.bin]: '  ', WEBTERM_DATA_DIR: '/d' }, () => false)).toEqual({ path: MANAGED, source: 'auto' })
   })
-})
-
-describe('detectChromium with candidates', () => {
-  const fs = fakeFs(['/opt/bin/chromium', '/opt/custom'])
-  const env = { PATH: '/opt/bin' }
-  it('valid override wins over auto candidates', () => {
-    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '/opt/custom' }, fs.exists, fs.listDir)).toEqual({ path: '/opt/custom', source: 'override' })
-  })
-  it('invalid override does NOT fall back to auto (existing contract)', () => {
-    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '/opt/gone' }, fs.exists, fs.listDir)).toBeNull()
-  })
-  it('empty/blank override = auto, first candidate', () => {
-    expect(detectChromium({ ...env, [ENV_BROWSER.bin]: '  ' }, fs.exists, fs.listDir)).toEqual({ path: '/opt/bin/chromium', source: 'auto' })
-  })
-})
-
-describe('resolveBinary', () => {
-  it('prefers the explicit env path when it exists', () => {
-    expect(resolveBinary({ [ENV_BROWSER.bin]: '/opt/c' }, (p) => p === '/opt/c')).toBe('/opt/c')
-  })
-  it('does not silently fall back when the explicit path is missing', () => {
-    expect(() => resolveBinary({ [ENV_BROWSER.bin]: '/opt/missing' }, () => false)).toThrow(LaunchError)
-  })
-  it('falls back to the first existing candidate', () => {
-    expect(resolveBinary({}, (p) => p === BIN_CANDIDATES[3])).toBe(BIN_CANDIDATES[3])
-  })
-  it('throws no_binary when nothing is found', () => {
-    expect(() => resolveBinary({}, () => false)).toThrowError(expect.objectContaining({ code: 'no_binary' }))
+  it('resolveBinary: explicit, then managed, else no_binary (never an installed browser)', () => {
+    expect(resolveBinary({ [ENV_BROWSER.bin]: '/opt/c' }, () => true)).toBe('/opt/c')
+    expect(() => resolveBinary({ [ENV_BROWSER.bin]: '/opt/c' }, () => false)).toThrow(LaunchError)
+    expect(resolveBinary({ WEBTERM_DATA_DIR: '/d' }, (p) => p === MANAGED)).toBe(MANAGED)
+    expect(() => resolveBinary({ WEBTERM_DATA_DIR: '/d' }, (p) => p === '/usr/bin/chromium')).toThrow(/not downloaded/)
   })
 })
 
@@ -163,7 +121,7 @@ describe('createChromiumPool', () => {
     const children: FakeChild[] = []
     const spawned: string[][] = []
     const p = createChromiumPool({
-      env, platform, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
+      env: { WEBTERM_DATA_DIR: dir, ...env }, platform, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => true,
       deps: {
         spawn: (_b, args) => { const c = new FakeChild(); children.push(c); spawned.push(args); return c },
         readFile: () => `${1000 + children.length}\n/devtools/browser/x`,
@@ -220,7 +178,27 @@ describe('createChromiumPool', () => {
   })
 
   it('surfaces no_binary from resolution', async () => {
-    const p = createChromiumPool({ env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => false })
+    const p = createChromiumPool({ env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => false, install: async () => { throw new Error('offline') } })
     await expect(p.acquire('wa')).rejects.toMatchObject({ code: 'no_binary' })
+  })
+
+  it('downloads the managed build once when missing (zero-config), then launches it', async () => {
+    const installed: string[] = []
+    const children: string[] = []
+    const p = createChromiumPool({
+      env: {}, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => false, platform: 'linux',
+      install: async (root) => { installed.push(root); return '/managed/chrome' },
+      deps: { spawn: (bin) => { children.push(bin); return new FakeChild() }, readFile: () => '9222\n/devtools/browser/x', sleep: noSleep },
+    })
+    await p.acquire('wa')
+    expect(installed).toEqual([join(dir, 'browser', 'chrome-for-testing')])
+    expect(children).toEqual(['/managed/chrome'])
+  })
+
+  it('does not download when WEBTERM_BROWSER_BIN is set but missing', async () => {
+    let called = false
+    const p = createChromiumPool({ env: { [ENV_BROWSER.bin]: '/gone' }, dataRoot: dir, proxyServer: () => 'http://127.0.0.1:9', exists: () => false, install: async () => { called = true; return 'x' } })
+    await expect(p.acquire('wa')).rejects.toMatchObject({ code: 'no_binary' })
+    expect(called).toBe(false)
   })
 })

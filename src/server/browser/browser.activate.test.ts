@@ -138,11 +138,12 @@ describe('detectChromium', () => {
   it('env eksplisit yang hilang tidak jatuh diam-diam ke lokasi umum', () => {
     expect(detectChromium({ [ENV_BROWSER.bin]: '/opt/c' }, (p) => p !== '/opt/c')).toBeNull()
   })
-  it('auto: lokasi umum pertama yang ada', () => {
-    const r = detectChromium({}, (p) => p === '/usr/bin/chromium')
-    expect(r).toEqual({ path: '/usr/bin/chromium', source: 'auto' })
+  it('auto: biner terkelola (jalur tujuan, diunduh saat peluncuran pertama); browser terpasang tidak dipakai', () => {
+    const r = detectChromium({ WEBTERM_DATA_DIR: '/d' }, (p) => p === '/usr/bin/chromium')
+    expect(r?.source).toBe('auto')
+    expect(r?.path).toContain('/d/browser/chrome-for-testing/')
   })
   it('tak ada = null', () => {
-    expect(detectChromium({}, () => false)).toBeNull()
+    expect(detectChromium({}, () => false)).toBeNull() // no data dir, no override: nowhere to put a managed build
   })
 })
