@@ -20,11 +20,17 @@ describe('google ListAccounts parser', () => {
     expect(r).toEqual({ challenge: false, state: 'signed_in', displayName: 'Test Person', emailMasked: 't***@gmail.com', avatarUrl: 'https://lh3.googleusercontent.com/a/x=s48' })
     expect(JSON.stringify(r)).not.toContain('test.person')
   })
+  it('tolerates wrappers: HTML <pre>/<script>, surrounding text, a bare array', () => {
+    const body = JSON.stringify(['gaia.l.a.r', [acct()]])
+    for (const text of [`<html><body><pre>${body}</pre></body></html>`, `<script>postMessage(${body})</script>`, `  ${body}\n`, `)]}'\n<pre>${body}</pre>`]) {
+      expect(parseProbe('google', google(text))).toMatchObject({ state: 'signed_in', displayName: 'Test Person' })
+    }
+  })
   it('accepts the anti-JSON-hijacking prefix', () => {
     expect(parseProbe('google', google(`)]}'\n${JSON.stringify(['gaia.l.a.r', [acct()]])}`))).toMatchObject({ state: 'signed_in' })
   })
-  it('empty list = signed out; every account flagged signed out = signed out', () => {
-    expect(parseProbe('google', google(['gaia.l.a.r', []]))).toEqual({ challenge: false, state: 'signed_out' })
+  it('empty list is unknown (the service falls back to the session cookie); every account flagged signed out = signed out', () => {
+    expect(parseProbe('google', google(['gaia.l.a.r', []]))).toEqual({ challenge: false, state: 'unknown', reason: 'empty_list' }) // not trusted as signed out
     expect(parseProbe('google', google(['gaia.l.a.r', [acct({ 14: 1 })]]))).toEqual({ challenge: false, state: 'signed_out' })
   })
   it('all listed accounts invalid = expired; a valid one later in the list wins', () => {
@@ -37,10 +43,10 @@ describe('google ListAccounts parser', () => {
     expect(r).not.toHaveProperty('avatarUrl')
   })
   it('anything unrecognised is unknown, never a guess or a throw', () => {
-    for (const text of ['not json', '{"a":1}', '["only-one"]', '[1,"x"]']) expect(parseProbe('google', google(text))).toEqual({ challenge: false, state: 'unknown' })
-    expect(parseProbe('google', google(['gaia.l.a.r', []], { url: 'https://accounts.google.com/v3/signin/identifier' }))).toEqual({ challenge: false, state: 'unknown' })
-    expect(parseProbe('google', 'garbage')).toEqual({ challenge: false, state: 'unknown' })
-    expect(parseProbe('google', undefined)).toEqual({ challenge: false, state: 'unknown' })
+    for (const text of ['not json', '{"a":1}', '["only-one"]', '[1,"x"]']) expect(parseProbe('google', google(text))).toEqual({ challenge: false, state: 'unknown', reason: 'parse_failed' })
+    expect(parseProbe('google', google(['gaia.l.a.r', []], { url: 'https://accounts.google.com/v3/signin/identifier' }))).toEqual({ challenge: false, state: 'unknown', reason: 'redirected' })
+    expect(parseProbe('google', 'garbage')).toEqual({ challenge: false, state: 'unknown', reason: 'parse_failed' })
+    expect(parseProbe('google', undefined)).toEqual({ challenge: false, state: 'unknown', reason: 'parse_failed' })
   })
   it('a human check page is a challenge', () => {
     expect(parseProbe('google', google('x', { url: 'https://www.google.com/sorry/index?continue=x' }))).toEqual({ challenge: true })
@@ -56,11 +62,11 @@ describe('github page parser', () => {
   })
   it('empty meta = signed out; missing meta (markup changed) = unknown, not signed out', () => {
     expect(parseProbe('github', github({ userLogin: '' }))).toEqual({ challenge: false, state: 'signed_out' })
-    expect(parseProbe('github', github({ userLogin: null }))).toEqual({ challenge: false, state: 'unknown' })
+    expect(parseProbe('github', github({ userLogin: null }))).toEqual({ challenge: false, state: 'unknown', reason: 'parse_failed' })
   })
   it('rejects a login that is not a GitHub login, and a redirect away from github.com', () => {
-    expect(parseProbe('github', github({ userLogin: '<script>' }))).toEqual({ challenge: false, state: 'unknown' })
-    expect(parseProbe('github', github({ userLogin: 'octocat', url: 'https://evil.example/' }))).toEqual({ challenge: false, state: 'unknown' })
+    expect(parseProbe('github', github({ userLogin: '<script>' }))).toEqual({ challenge: false, state: 'unknown', reason: 'parse_failed' })
+    expect(parseProbe('github', github({ userLogin: 'octocat', url: 'https://evil.example/' }))).toEqual({ challenge: false, state: 'unknown', reason: 'redirected' })
   })
   it('a rate-limit page is a challenge', () => {
     expect(parseProbe('github', github({ title: 'Rate limit exceeded', userLogin: null }))).toEqual({ challenge: true })

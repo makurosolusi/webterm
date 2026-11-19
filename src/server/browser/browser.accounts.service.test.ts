@@ -31,7 +31,7 @@ async function setup(over: { live?: boolean; enabled?: boolean; cookies?: string
       'github.com': { url: 'https://github.com/', title: 'GitHub', text: 'hi', userLogin: 'octocat', avatar: null },
     },
   }
-  fake.handle('Storage.getCookies', () => ({ cookies: rig.cookies.map((domain) => ({ name: 'sid', value: COOKIE_CANARY, domain, path: '/' })) }))
+  fake.handle('Storage.getCookies', () => ({ cookies: rig.cookies.map((domain) => ({ name: domain.includes('google') ? 'SID' : 'user_session', value: COOKIE_CANARY, domain, path: '/' })) }))
   fake.handle('Page.navigate', (p) => { rig.current = new URL(String(p.url)).hostname; return {} })
   fake.handle('Runtime.evaluate', (p) => ({ result: { value: String(p.expression).includes('readyState') ? true : JSON.stringify(rig.pages[rig.current]) } }))
   const t = { now: 1_000_000 }
@@ -129,12 +129,11 @@ describe('account check', () => {
     expect((await svc.refresh('bp-1'))[0]).toMatchObject({ provider: 'github', state: 'unknown' })
     expect(navigated()).toHaveLength(1)
     t.now += ACCOUNT_CHECK_TTL_MS + 1 // TTL over, backoff (2 x TTL) not
-    await svc.refresh('bp-1', { respectTtl: true })
-    await svc.refresh('bp-1')
+    await svc.refresh('bp-1', { respectTtl: true }) // automatic: held back by the backoff
     expect(navigated()).toHaveLength(1)
     t.now += ACCOUNT_CHECK_TTL_MS * 2
     rig.pages['github.com'] = { url: 'https://github.com/', title: 'GitHub', text: '', userLogin: 'octocat', avatar: null }
-    expect((await svc.refresh('bp-1'))[0]).toMatchObject({ state: 'signed_in' })
+    expect((await svc.refresh('bp-1', { respectTtl: true }))[0]).toMatchObject({ state: 'signed_in' })
   })
 
   it('a failing page leaves the old answer and the other provider intact', async () => {
@@ -146,10 +145,73 @@ describe('account check', () => {
       rig.current = new URL(String(p.url)).hostname
       return {}
     })
-    rig.pages['accounts.google.com'] = { url: 'https://accounts.google.com/ListAccounts', title: '', text: JSON.stringify(['gaia.l.a.r', []]), userLogin: null, avatar: null }
+    rig.pages['accounts.google.com'] = { url: 'https://accounts.google.com/ListAccounts', title: '', text: JSON.stringify(['gaia.l.a.r', [['gaia.l.a', 1, 'N', 'a@b.co', '', 1, 1, 0, 0, 1, '1', 0, 0, 0, 1]]]), userLogin: null, avatar: null }
     const out = await svc.refresh('bp-1')
     expect(out.find((a) => a.provider === 'github')).toMatchObject({ state: 'signed_in', displayName: 'octocat' })
     expect(out.find((a) => a.provider === 'google')).toMatchObject({ state: 'signed_out' })
+  })
+
+  it('session cookie but unreadable identity: signed in without a name and a reason, never unknown', async () => {
+    for (const [page, reason] of [
+      [{ url: 'https://accounts.google.com/ListAccounts', title: '', text: '<html>nope</html>', userLogin: null, avatar: null }, 'parse_failed'],
+      [{ url: 'https://accounts.google.com/v3/signin', title: '', text: '', userLogin: null, avatar: null }, 'redirected'],
+      [{ url: 'https://accounts.google.com/ListAccounts', title: '', text: '["gaia.l.a.r",[]]', userLogin: null, avatar: null }, 'empty_list'],
+    ] as const) {
+      const { svc } = await setup({ cookies: ['.google.com'], pages: { 'accounts.google.com': page } })
+      const g = (await svc.refresh('bp-1')).find((a) => a.provider === 'google')
+      expect(g).toMatchObject({ state: 'signed_in', reason })
+      expect(g).not.toHaveProperty('displayName')
+      await fake.close(); rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('no network at all: the cookie name alone gives signed_in (session) or signed_out (only other cookies)', async () => {
+    const { svc, rig, t, navigated } = await setup({ cookies: ['.google.com'] })
+    fake.handle('Storage.getCookies', () => ({ cookies: [{ name: 'NID', value: COOKIE_CANARY, domain: '.google.com' }] }))
+    expect((await svc.refresh('bp-1')).find((a) => a.provider === 'google')).toMatchObject({ state: 'signed_out' })
+    expect(navigated()).toEqual([])
+    fake.handle('Storage.getCookies', () => ({ cookies: [{ name: 'SAPISID', value: COOKIE_CANARY, domain: '.google.com' }] }))
+    rig.pages['accounts.google.com'] = { url: 'https://accounts.google.com/ListAccounts', title: '', text: 'x', userLogin: null, avatar: null }
+    t.now += ACCOUNT_FORCE_FLOOR_MS + 1
+    expect((await svc.refresh('bp-1')).find((a) => a.provider === 'google')).toMatchObject({ state: 'signed_in' })
+  })
+
+  it('a probe that throws still leaves a Google session signed in (reason probe_failed); GitHub keeps its old answer', async () => {
+    const { svc, t } = await setup()
+    await svc.refresh('bp-1')
+    t.now += ACCOUNT_FORCE_FLOOR_MS + 1
+    fake.handle('Page.navigate', () => ({ __error: { code: -32000, message: 'boom' } }))
+    const out = await svc.refresh('bp-1')
+    expect(out.find((a) => a.provider === 'google')).toMatchObject({ state: 'signed_in', displayName: 'Test Person', reason: 'probe_failed' })
+    expect(out.find((a) => a.provider === 'github')).toMatchObject({ state: 'signed_in', displayName: 'octocat' })
+  })
+
+  it('a download or failed navigation is reported with its reason (GitHub has no cookie fallback: unknown)', async () => {
+    const { svc } = await setup({ cookies: ['github.com'] })
+    fake.handle('Page.navigate', () => ({ isDownload: true }))
+    expect((await svc.refresh('bp-1'))[0]).toMatchObject({ provider: 'github', state: 'unknown', reason: 'probe_download' })
+  })
+
+  it('manual Refresh passes the automatic backoff (still serial and floored); automatic triggers do not; a new session cookie clears it', async () => {
+    const { svc, t, rig, navigated } = await setup({ cookies: ['.google.com'] })
+    rig.pages['accounts.google.com'] = { url: 'https://www.google.com/sorry/index', title: '', text: '', userLogin: null, avatar: null }
+    const google = async () => (await svc.refresh('bp-1')).find((a) => a.provider === 'google')
+    expect(await google()).toMatchObject({ state: 'signed_in', reason: 'challenge' })
+    expect(navigated()).toHaveLength(1)
+    t.now += ACCOUNT_FORCE_FLOOR_MS + 1
+    await svc.refresh('bp-1', { respectTtl: true }) // automatic: held back by backoff
+    expect(navigated()).toHaveLength(1)
+    rig.pages['accounts.google.com'] = { url: 'https://accounts.google.com/ListAccounts', title: '', text: GOOGLE_JSON, userLogin: null, avatar: null }
+    expect(await google()).toMatchObject({ state: 'signed_in', displayName: 'Test Person' }) // manual: goes through
+    expect(navigated()).toHaveLength(2)
+  })
+
+  it('never writes a cookie value or the reason-less secret anywhere (file, logs)', async () => {
+    const before = logBus.query({}).length
+    const { svc } = await setup({ cookies: ['.google.com'], pages: { 'accounts.google.com': { url: 'https://accounts.google.com/x', title: '', text: '', userLogin: null, avatar: null } } })
+    await svc.refresh('bp-1')
+    expect(readFileSync(join(dir, 'browser', 'accounts', 'bp-1.json'), 'utf8')).not.toContain(COOKIE_CANARY)
+    expect(JSON.stringify(logBus.query({}).slice(before))).not.toContain(COOKIE_CANARY)
   })
 
   it('survives a restart through the file and forget() removes it', async () => {

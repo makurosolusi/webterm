@@ -82,3 +82,14 @@ describe('summaries', () => {
     expect(signedInAccounts(undefined)).toEqual([])
   })
 })
+
+describe('reason', () => {
+  it('a known reason survives validation, an invented one is dropped', () => {
+    expect(validateAccount({ provider: 'google', state: 'unknown', reason: 'probe_download', checkedAt: 1 })).toMatchObject({ reason: 'probe_download' })
+    expect(validateAccount({ provider: 'google', state: 'unknown', reason: 'a@b.co', checkedAt: 1 })).not.toHaveProperty('reason')
+  })
+  it('only Google lists session cookie names (GitHub keeps domain gating)', () => {
+    expect(ACCOUNT_PROVIDERS.find((p) => p.id === 'google')?.sessionCookies).toContain('SID')
+    expect(ACCOUNT_PROVIDERS.find((p) => p.id === 'github')?.sessionCookies).toBeUndefined()
+  })
+})

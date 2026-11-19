@@ -118,3 +118,53 @@ sessions read as signed out).
 
 Both probe pages against the live providers (shape per above, documented sources only), the hidden tab not stealing focus or
 showing in the screencast, and how the dot, menu rows and Settings lines look in both themes.
+
+
+## Google showed "Unknown" while signed in (fix: `fix/browser-google-account-detect`)
+
+Symptom: Google page shows the avatar, GitHub reads fine, the chip menu says "Google · Unknown", Refresh changes nothing.
+
+Reading: `unknown` is only ever produced when the probe page answered with something the parser did not accept (or never
+rendered), so the cookie gate passed and the probe ran. GitHub and Google share that whole path; they differ only in WHAT
+is read: GitHub = an HTML page and one `<meta>` read from the DOM; Google = a JSON endpoint rendered as text and parsed.
+Hypotheses, in order of likelihood (none could be proven without the owner's live profile):
+
+1. **Response format (possible, most likely).** Current Chromium parses ListAccounts as a base64 protobuf
+   (`gaia_auth_util.cc` `ParseListAccountsData`, no prefix handling); the old `json=standard` array is the legacy shape and
+   may no longer be served, or wrapped. The parser accepted only a bare array or a `)]}'` prefix. Now tolerant of
+   HTML/`<pre>`/`<script>` wrappers; a protobuf answer still gives `parse_failed`. **Temporary mitigation**, not a fix of
+   the identity surface.
+2. **Download (possible).** Since the downloads feature the host sets `Browser.setDownloadBehavior allowAndName`; a response
+   served as a file never renders, the tab stays `about:blank` and the readiness loop timed out silently. Now
+   `Page.navigate`'s `isDownload` gives `probe_download`, and a timeout gives `probe_timeout`.
+3. **Challenge backoff (possible, explains "Refresh does nothing").** A human-check page set `unknown` and a backoff of up
+   to 6 h; Refresh was held by it. Manual Refresh now skips the automatic backoff.
+4. **Guard / adblock (unlikely).** The probe passes the same navigation guard as pages; `accounts.google.com` is the
+   user's own sign-in domain. Now reported as `probe_blocked` if it happens.
+5. **Cookie gating (ruled out as the cause).** The check reads the profile's own Chromium cookies via CDP (not the vault), so a
+   login done by hand counts, for Google and GitHub alike.
+6. **Stale cached `unknown` (partly).** The answer is rewritten on every check; the only thing that persisted was the backoff.
+   A newly appearing session cookie now clears it.
+
+## Layers added
+
+- **Session signal (no network, robust).** Names (never values) of the profile's cookies are read through CDP. Google lists
+  its auth names (`SID`, `__Secure-1PSID`, `__Secure-3PSID`, `SAPISID`, `__Secure-1PAPISID`, `__Secure-3PAPISID`, `LSID`; from
+  public knowledge, **not verified against a live profile**). One of them present = `signed_in`, none = `signed_out`
+  with zero requests. GitHub keeps domain gating and has NO cookie fallback (anonymous visitors hold cookies there, so
+  a name list would need live verification); its `unknown` stays `unknown`.
+- **Identity on top.** The probe still runs (TTL, serial, backoff unchanged for automatic checks). Success adds name/masked
+  email. Any failure for Google (unreadable, redirected, empty list, challenge, throw) keeps `signed_in` with no name
+  (and keeps a name read earlier) and a `reason`. An empty ListAccounts list is not trusted as signed out.
+- **Reasons.** `ProfileAccount.reason`: `probe_blocked`, `probe_download`, `probe_failed`, `probe_timeout`, `parse_failed`,
+  `redirected`, `empty_list`, `challenge`, `cookies_unreadable`, `identity_unavailable`. Menu/Settings row: "Google · Unknown
+  — couldn't parse the response"; hover has the full text. Logged as provider + state + reason + profile id only.
+- **Refresh.** Manual Refresh ignores the automatic backoff (still serial per profile, 15 s floor); the popover and
+  navigation triggers do not. A session cookie appearing (login) clears the backoff for that provider.
+- **Not done:** reading the body with `Network.loadNetworkResource`/same-origin fetch instead of the rendered DOM; no
+  evidence yet that rendering is the problem. Revisit if live `reason` shows `parse_failed` on a JSON-looking page.
+- Agents: a nameless `signed_in` reads "Google: signed in" (`describeAccount`); no reason is sent to agents.
+
+What to look at on a live profile: chip menu row for Google. "Signed in" (maybe with a name) = the session layer works;
+"Unknown — <reason>" names the failing path; "Signed in" without a name plus a hover reason = identity surface is the
+broken part (hypothesis 1 or 2).
