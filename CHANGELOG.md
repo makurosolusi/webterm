@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.1] - 2026-11-19
+
+### Added
+- Secret masking in the file editor, on by default. Values that look like API keys, tokens, passwords or private keys are covered with `•` characters of the same length, so the layout does not shift. Reveal one value or all of them; Edit is a deliberate action; revealed values hide again after 15, 30 or 60 seconds, or never. A notice explains what is hidden, and saving is blocked while a file is masked.
+- The same masking applies to Find in Files results, the Diff node (with a Reveal control) and file previews and compare views.
+- Two new settings: Mask secrets in files and Hide revealed secrets after. A status bar item shows the masking state and offers Reveal all, Edit and Hide.
+
+### Changed
+- The Downloads popover in a Browser node now opens by itself when a download starts. It closes 6 seconds after the download finishes if you have not touched it; a failed download keeps it open. The toolbar icon briefly shows a done mark.
+
+### Fixed
+- The Central chat panel no longer lands in a skill-author conversation. It always opens the Central steward chat unless you open another one on purpose, and a "Back to Central chat" button returns to it.
+- Stale tests updated.
+
+### Known limitations
+- `cat .env` in a terminal is not masked.
+- The original text stays in browser memory, so masking is not a protection against DevTools.
+- For a multi-line YAML value only the first line is masked.
+- Only the first 1 MiB of a larger file is scanned for secrets.
+- In search results the fact that a file matched stays visible.
+- An LSP rename on a masked value only changes what is displayed.
+
 ## [0.9.0] - 2026-11-19
 
 Operator notes:
