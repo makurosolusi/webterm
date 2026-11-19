@@ -2,6 +2,7 @@
 // Frame di-ack ke host SAAT DITERIMA (DevTools ScreenCaptureModel.ts:154-155) supaya produksi frame Chromium tak
 // terikat round-trip klien; tiap penonton memegang SATU frame tertunda, frame terbaru menimpa yang lama, dikirim saat
 // `ws.send` sebelumnya selesai atau klien meng-ack (Steel page-screencast.ts:146-168,200-232: deliver/flush/send).
+import type { ContextMenu } from './browserHost.contextMenu'
 import { encodeFrame } from '../../shared/browser.wire'
 import type { BrowserHostApi, BrowserState, Frame, LeaseView, ServerMsg } from '../../shared/browser.contract'
 import { createLogger } from '../logs'
@@ -41,6 +42,8 @@ export interface GatewayHost extends BrowserHostApi {
   downloads?: { list(nodeId: string): DownloadItem[] }
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
+  /** Menu action "Open link in new tab" (absent in hosts without tabs). */
+  ctxMenu?: Pick<ContextMenu, 'openLink'>
 }
 
 /** Ujung tulis satu klien; implementasi nyata membungkus `ws`. */
@@ -100,6 +103,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
         else if (e.k === 'download') broadcast(e.nodeId, { t: 'download', id: e.nodeId, item: e.item })
         else if (e.k === 'downloads') broadcast(e.nodeId, { t: 'downloads', id: e.nodeId, items: e.items })
         else if (e.k === 'tabNotice') broadcast(e.nodeId, { t: 'tabNotice', id: e.nodeId, message: e.message })
+        else if (e.k === 'contextMenu') broadcast(e.nodeId, { t: 'contextMenu', id: e.nodeId, ...(e.tab ? { tab: e.tab } : {}), ...e.info })
         else if (e.k === 'sync') broadcast(e.nodeId, { t: 'sync', id: e.nodeId, on: e.on })
         else if (e.k === 'syncMiss') broadcast(e.nodeId, { t: 'syncMiss', id: e.nodeId, tab: e.tab, reason: e.reason })
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })

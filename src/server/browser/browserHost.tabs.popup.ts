@@ -8,6 +8,7 @@ import { createLogger } from '../logs'
 import { CDP, CDP_EVENT } from './cdp.client'
 import { blockOf, isInternalUrl, readHistory } from './browserHost.targets'
 import type { BgTab, NodeRec } from './browserHost.targets'
+import { BACKSTOP_SCRIPT } from './browserHost.contextMenu.script'
 import type { TabKit } from './browserHost.tabs.kit'
 import type { Favicons } from './browserHost.favicon'
 
@@ -74,6 +75,7 @@ export function createPopupSide(kit: TabKit, deps: PopupDeps) {
           const cdp = await ops.cdpOf(rec)
           const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
           await cdp.send(CDP.pageEnable, {}, sessionId)
+          await cdp.send(CDP.addScript, { source: BACKSTOP_SCRIPT }, sessionId)
           await cdp.send(CDP.setFocusEmulation, { enabled: true }, sessionId)
           await ops.shield.enable(cdp, sessionId)
           await ops.console.enable(cdp, sessionId)

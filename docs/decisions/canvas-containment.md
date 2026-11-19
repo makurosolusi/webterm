@@ -33,6 +33,39 @@ explicit action.
   refuse `file:` URLs and web-like files (.html/.htm/.xhtml/.svg); see `canvas-link-capture.md`.
 - Server (own opener calls): arguments must be paths; `assertPathArg` (`src/server/openArgGuard.ts`) throws on a URL.
 
+## Browser node context menu
+
+Chromium (headful, offscreen) shows its NATIVE context menu for a forwarded right click, and "Open link in new
+tab/window" from it creates a target with no opener: a tab on the user's machine. The native menu must never appear.
+Source closed, not only the effect (the runtime guard in `browserHost.containment.ts` stays as the last net):
+
+- **The right button is never forwarded.** `BrowserHost.input` passes every mouse event through
+  `ctxMenu.intercept` (`browserHost.contextMenu.ts`); right down/up end there. The host hit-tests the point with
+  `Runtime.evaluate` (`elementFromPoint`, same-origin iframes entered), after giving the site a synthetic cancelable
+  `contextmenu` event: a site that cancels it (Figma, Docs) keeps its own menu and webterm shows nothing. Otherwise the
+  client gets `contextMenu` and draws its own menu (`src/client/browserContextMenu/`, shared `VscodeMenu`: role menu,
+  arrows/Enter/Esc, focus returns).
+- **Backstop script** (`BACKSTOP_SCRIPT`, `Page.addScriptToEvaluateOnNewDocument` on every page we create): bubble-phase
+  `contextmenu` (keyboard menu key, Shift+F10), `auxclick` button 1 and Ctrl/Cmd+click on a link are cancelled unless the
+  page already did, so Chromium opens neither its menu nor a tab. Middle and Ctrl/Cmd+click are still forwarded (sites
+  with their own middle-button pan keep working); the host hit-tests and opens a link under the pointer as a tab of the
+  node (`tabApi.newTab`, same guard/tab-limit as popups).
+- **No CDP binding.** `Runtime.bindingCalled` is delivered only with Runtime enabled, which the host keeps off (anti-bot
+  detectable). Results come back as `Runtime.evaluate` return values, so there is no binding name for a page to forge.
+- **The page is untrusted.** The hit-test answer goes through `sanitizeContext` (`src/shared/browser.contextmenu.ts`):
+  http/https only, address and text capped, selection sent as a boolean (never its text), `data:` images dropped;
+  hit-tests are limited to `CTX_RATE_MAX` per `CTX_RATE_WINDOW_MS` per node. The client action "Open link in new tab"
+  (`openLink`) is validated by the wire parser and again in `ctxMenu.openLink`.
+- **Menu rows** (all inside the canvas): link: Open link in new tab, Copy link address; image: Copy image address;
+  selection / editable: Copy, Cut, Paste; page: Back, Forward, Reload. "Open in system browser" is NOT in this menu: the
+  only legitimate exit stays the explicit action in the toolbar's ⋮ menu. Right click on the tab strip / toolbar is
+  unchanged (it is not the page's).
+- **Limits.** A right click inside a cross-origin iframe gets the page-level menu (a synthetic event cannot cross the
+  origin, and the iframe's own custom menu does not see it). Synthetic `contextmenu` has `isTrusted=false`. Not provable
+  without a real Chromium: that the backstop listener cancels Chromium's own middle/Ctrl+click tab open (known platform
+  behaviour of `preventDefault` on `auxclick`/`click`); if it did not, the containment guard still moves the stray page
+  into a tab, and that tab can then appear twice. Save image is not offered (no download path for it exists).
+
 ## Adding a new exit
 
 Do not. First route the feature through the helpers above. If a real exit is unavoidable (a native integration, a new

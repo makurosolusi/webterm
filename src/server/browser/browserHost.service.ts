@@ -16,6 +16,7 @@ import type { HostDeps } from './browserHost.deps'
 import { createConsoleLog } from './browserHost.console'
 import { createChallengeTracker } from './browserHost.challenge'
 import { createHostContainment, type Containment } from './browserHost.containment'
+import { createContextMenu, type ContextMenu } from './browserHost.contextMenu'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
@@ -53,6 +54,7 @@ export class BrowserHost implements BrowserHostApi {
   readonly tabApi: TabApi
   /** Sync mode: a human action in one pane repeated in the others (browserHost.sync.ts). */
   readonly sync: NodeSync
+  readonly ctxMenu: ContextMenu // right click = the canvas's own menu, never Chromium's native one: `input` drops the right button
   readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
@@ -65,6 +67,7 @@ export class BrowserHost implements BrowserHostApi {
     })
     this.tabApi = createTabApi({ table: this.table, tabs: this.tabs, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch })
     this.sync = createSync({ table: this.table, tabApi: this.tabApi, emit })
+    this.ctxMenu = createContextMenu({ cdpOf: (r) => this.cdpOf(r), emit, now: deps.now ?? Date.now, newTab: (n, q) => this.tabApi.newTab(n, q), sessionOf: async (r, t) => (t && r.tabs && t !== r.tabs.state.activeTabId ? this.tabs.liveSession(r, t) : r.sessionId) })
     this.contain = createHostContainment({ table: this.table, cdpOf: (r) => this.cdpOf(r), popupAllowed: (r, u) => this.shield.popupAllowed(r, u), newTab: (n, q) => this.tabApi.newTab(n, q), emit, now: deps.now, graceMs: deps.containGraceMs })
     this.route = createEventRouter({
       table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.life.crash(r),
@@ -143,7 +146,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
-    this.contain.noteInput(nodeId, ev); if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev); return }
+    this.contain.noteInput(nodeId, ev); if (this.ctxMenu.intercept(rec, ev)) return; if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -194,9 +197,7 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   /** Jawab dialog JS yang sedang terbuka. */
-  async answerDialog(nodeId: string, accept: boolean, text?: string): Promise<void> {
-    await this.send(this.need(nodeId), CDP.handleDialog, { accept, promptText: text })
-  }
+  async answerDialog(nodeId: string, accept: boolean, text?: string): Promise<void> { await this.send(this.need(nodeId), CDP.handleDialog, { accept, promptText: text }) }
 
   /** Aksi nav non-URL (`go` memakai `navigate`); in sync mode the other panes follow once this one has gone. */
   async navAction(nodeId: string, action: (typeof NAV_ACTIONS)[number], url?: string): Promise<void> {
@@ -225,9 +226,7 @@ export class BrowserHost implements BrowserHostApi {
   dismissChallenge(nodeId: string): void { const rec = this.need(nodeId); const p = this.challenges.dismiss(rec.state); if (p) this.patch(rec, p) }
 
   /** Teks seleksi halaman (untuk aksi `copy`). */
-  async selectionText(nodeId: string): Promise<string> {
-    return selectedText(this.pageIo, this.need(nodeId))
-  }
+  async selectionText(nodeId: string): Promise<string> { return selectedText(this.pageIo, this.need(nodeId)) }
 
   /** Tutup semua koneksi CDP (proses Chromium dimatikan oleh `launcher.shutdown()`). */
   dispose(): Promise<void> { this.contain.dispose(); return this.life.dispose() }

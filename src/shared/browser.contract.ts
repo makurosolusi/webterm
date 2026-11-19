@@ -4,6 +4,7 @@
 import type { ConsoleClientMsg, ConsoleLevel, ConsoleServerMsg } from './browser.console'
 import type { AgentTabView } from './browser.agentTabs'
 import type { DeviceChoice } from './browser.devices'
+import type { ContextInfo } from './browser.contextmenu'
 import type { BrowserTabEvent, BrowserTabsState } from './browser.tabs'
 import type { BrowserChallenge } from './browser.challenge'
 import type { DownloadItem } from './browser.downloads'
@@ -157,6 +158,8 @@ export type ClientMsg =
   | { t: 'view'; id: string; visible: string[]; focus?: string }
   | { t: 'nav'; id: string; action: (typeof NAV_ACTIONS)[number]; url?: string }
   | { t: 'copy'; id: string }
+  /** Menu action "Open link in new tab": the url becomes a tab of this node (opener tab = `tab`). */
+  | { t: 'openLink'; id: string; url: string; tab?: string }
   | { t: 'dialog'; id: string; accept: boolean; text?: string }
   | { t: 'takeover'; id: string }
   /** "I'm done": the user finished the human check; the node stops showing it and agents may continue. */
@@ -179,6 +182,8 @@ export type ServerMsg =
   | { t: 'tab'; id: string; event: BrowserTabEvent }
   /** Human-readable reason an action on the tabs was refused or redirected (e.g. "Tab limit (8) reached"). */
   | { t: 'tabNotice'; id: string; message: string }
+  /** The user right-clicked the page: show webterm's own menu for what is under the pointer (the native menu never runs). `tab` = the pane. */
+  | ({ t: 'contextMenu'; id: string; tab?: string } & ContextInfo)
   /** Sync mode of the node (session state: sent on attach and on every change). */
   | { t: 'sync'; id: string; on: boolean }
   /** Sync could not repeat an action in pane `tab` (no element with that role and name there): show "no match" on that pane only. */

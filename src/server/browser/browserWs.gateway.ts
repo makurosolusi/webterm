@@ -180,6 +180,10 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
       case 'copy':
         sink.sendJson({ t: 'copy', id, text: await host.selectionText(id) })
         return
+      case 'openLink':
+        if (!host.ctxMenu) throw new BrowserError('disabled', `openLink: not available for node ${id}`)
+        await host.ctxMenu.openLink(id, m.url, m.tab)
+        return
       case 'dialog':
         await host.answerDialog(id, m.accept, m.text)
         return
