@@ -1,0 +1,72 @@
+# Builds the Docker image (never pushes), starts it, and checks the pinned tools. No real browser page is opened.
+name: docker
+
+on:
+  pull_request:
+    paths: [Dockerfile, .dockerignore, docker-compose.yml, docker/**, scripts/fetch-chrome.ts, package.json, bun.lock, .github/workflows/docker.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Home seeding never overwrites (no Docker needed)
+        run: bash docker/seed-home.test.sh
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: webterm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run container and wait for the healthcheck
+        run: |
+          mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/ws"
+          chmod 777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/ws"
+          docker run -d --name webterm-ci --init \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --security-opt seccomp=docker/chrome.seccomp.json \
+            --shm-size 1g \
+            -e WEBTERM_BROWSER=on \
+            -v "$RUNNER_TEMP/data:/data" -v "$RUNNER_TEMP/ws:/workspace" \
+            --health-cmd 'curl -s -o /dev/null --max-time 3 http://127.0.0.1:8700/api/health' \
+            --health-interval 5s --health-retries 12 --health-start-period 10s \
+            webterm:ci
+          for _ in $(seq 1 60); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' webterm-ci)"
+            [ "$status" = healthy ] && exit 0
+            sleep 3
+          done
+          docker logs webterm-ci
+          echo "container never became healthy" >&2
+          exit 1
+
+      - name: Check pinned tools inside the image
+        run: |
+          docker exec webterm-ci claude --version
+          docker exec webterm-ci sh -c '"$WEBTERM_BROWSER_BIN" --version'
+          docker exec webterm-ci sh -c 'tmux -V && git --version && bun --version'
+
+      - name: Check custom-command dirs are on PATH (login and interactive shells)
+        run: |
+          for flags in -lc -ic; do
+            path="$(docker exec webterm-ci bash "$flags" 'echo "$PATH"' 2>/dev/null)"
+            case "$path" in /data/custom-bin:/opt/custom/bin:*:/home/webterm/.local/bin:*|/data/custom-bin:/opt/custom/bin:/home/webterm/.local/bin:*) ;; *) echo "bash $flags PATH is $path" >&2; exit 1 ;; esac
+          done
+          docker exec webterm-ci test -d /data/custom-bin
+
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs webterm-ci || true

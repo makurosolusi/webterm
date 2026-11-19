@@ -1,0 +1,69 @@
+# webterm in Docker. Quickstart: docs/docker.md.
+#   export ANTHROPIC_API_KEY=...        # or run `claude login` inside the container instead
+#   docker compose up -d --build
+services:
+  webterm:
+    build:
+      context: .
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.328}
+        CODEX_VERSION: ${CODEX_VERSION:-}
+        GEMINI_CLI_VERSION: ${GEMINI_CLI_VERSION:-}
+    image: webterm:local
+    container_name: webterm
+    restart: unless-stopped
+    init: true # reaps zombie shells/Chrome children; the image also ships tini for plain `docker run`
+
+    # Host side is loopback only: the container itself binds 0.0.0.0, the published port does not.
+    ports:
+      - "127.0.0.1:${PORT:-8700}:${PORT:-8700}"
+    # Optional wrapper variables for custom commands (values never reach logs): WEBTERM_ENV_FILE=./my.env
+    env_file:
+      - ${WEBTERM_ENV_FILE:-/dev/null}
+    environment:
+      PORT: ${PORT:-8700}
+      HOST: 0.0.0.0
+      WEBTERM_DATA_DIR: /data
+      WEBTERM_CUSTOM_BIN: /data/custom-bin
+      WEBTERM_BROWSER: ${WEBTERM_BROWSER:-on}
+      # Claude auth, default mode: pass-through from the host env (no value stored here).
+      # Alternative: `docker exec -it webterm claude login` (state lives in the webterm-home volume).
+      ANTHROPIC_API_KEY:
+      ANTHROPIC_BASE_URL:
+      ANTHROPIC_AUTH_TOKEN:
+
+    volumes:
+      - webterm-data:/data
+      # Default: your real project files. For an isolated copy use a named volume instead, see docs/docker.md.
+      - ${WEBTERM_PROJECTS:-./workspace}:/workspace
+      - webterm-home:/home/webterm # whole home: ~/.claude, ~/.local, ~/.cargo, rc files, git config
+      # Static custom commands (Linux binaries/scripts), read-only, after the managed /data/custom-bin on PATH.
+      - ${WEBTERM_CUSTOM_BIN_HOST:-./custom-bin}:/opt/custom/bin:ro
+
+    # Chrome keeps its own sandbox: user namespaces are allowed by the seccomp profile, not by privileges.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./docker/chrome.seccomp.json
+    shm_size: 1gb
+    mem_limit: ${WEBTERM_MEM_LIMIT:-5g} # leaves headroom on an 8 GB machine
+    cpus: ${WEBTERM_CPUS:-4}
+    pids_limit: 2048
+
+    # Any HTTP answer proves the server is up (/api/health itself needs credentials, so curl runs without -f).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null --max-time 3 http://127.0.0.1:$${PORT:-8700}/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # Not read-only by default: agents install packages, write ~/.gitconfig, ~/.cache and ~/.npm. To try it,
+    # uncomment and expect to add tmpfs mounts for every home path your tools write (untested here).
+    # read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+
+volumes:
+  webterm-data:
+  webterm-home:

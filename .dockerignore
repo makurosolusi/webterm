@@ -1,0 +1,23 @@
+# Keep credentials and local state out of the build context (and so out of the image).
+.git
+.claude
+node_modules
+dist
+webterm
+workspace
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account.json
+cookies.txt
+*.cookies.txt
+*.log
+.DS_Store
+docs
+RND
+PLAN
