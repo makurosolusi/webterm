@@ -10,6 +10,7 @@ import DiffNode from './DiffNode'
 import PlanNode from './PlanNode'
 import AgentChatNode from './AgentChatNode'
 import SkillNode from './SkillNode'
+import StickyNode from './StickyNode'
 import McpAppNode from './mcpapps/McpAppNode'
 import { BrowserNodeType } from './BrowserNode.slots'
 import { useLiveSettings, useSettingsUpdate } from './useSettings'
@@ -22,6 +23,8 @@ export const nodeTypes = {
   agentChat: withTabPortal(AgentChatNode),
   // A canvas skill by reference, cabled to an agent's Skills port (SkillNode.tsx, docs/decisions/skill-canvas-nodes.md).
   skill: withTabPortal(SkillNode),
+  // Sticky note: canvas-only (not a tab, docs/decisions/sticky-note.md), so no tab portal.
+  sticky: StickyNode,
   files: withTabPortal(FilesNode),
   browser: withTabPortal(BrowserNodeType),
   // Working-tree diff + review notes (DiffNode.tsx); cwd comes from node data or the wired agent.

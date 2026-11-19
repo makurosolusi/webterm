@@ -50,7 +50,9 @@ export const TAB_LAYOUT_LIMITS = { tabs: 500, idLength: 128 } as const
 /** Node kinds that are NOT tabs. Files is the docked panel; every other kind (agent, terminal,
  *  editor, browser, diff, plan, app) is a tab so no node becomes unreachable in tab mode. */
 const PANEL_KINDS: readonly WsNodeKind[] = ['files']
-export const isTabKind = (kind: WsNodeKind): boolean => !PANEL_KINDS.includes(kind)
+/** Canvas-only kinds: no tab and no panel, they live on the canvas, in Layers and on the mini-map (a sticky note, docs/decisions/sticky-note.md). */
+const CANVAS_ONLY_KINDS: readonly WsNodeKind[] = ['sticky']
+export const isTabKind = (kind: WsNodeKind): boolean => !PANEL_KINDS.includes(kind) && !CANVAS_ONLY_KINDS.includes(kind)
 
 export function defaultTabLayout(): TabLayout {
   return { mode: 'canvas', tabs: { order: [], active: null, filesPanel: { open: true, width: FILES_PANEL_WIDTH.default }, groups: [] } }

@@ -9,6 +9,7 @@ import { PROFILE_TEXT } from './browserProfile.text'
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
 import { openSetup } from './setup/setup.open'
+import { STICKY_NEW_KEY, STICKY_TEXT } from './sticky.labels'
 import { isMacPlatform } from './terminalKeys.platform'
 
 // Chrome's back/forward: ⌘[ / ⌘] on macOS, Alt+Left / Alt+Right elsewhere (`browser.keys.ts`).
@@ -67,6 +68,8 @@ export interface AppCommandDeps {
   newBrowser?: () => void
   /** Absent until the board wires `onAddDiff`: no command without a handler. */
   newDiff?: () => void
+  /** Absent until the board wires `onAddSticky`: no command without a handler. */
+  newSticky?: () => void
   fitView: () => void
   /** Maximize/restore the focused (or the one selected) node inside the canvas area. */
   toggleMaximizeNode: () => void
@@ -93,6 +96,7 @@ export function appCommands(d: AppCommandDeps): Command[] {
       { id: 'browser.openForEachProfile', label: `Browser: ${PROFILE_TEXT.forEach}`, run: () => openProfileSpawn('each') },
     ] : []),
     ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
+    ...(d.newSticky ? [{ id: 'sticky.new', label: STICKY_TEXT.commandNew, defaultKey: STICKY_NEW_KEY, run: d.newSticky }] : []),
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
     { id: 'view.sessions', label: 'View: Toggle Side Bar', defaultKey: SIDE_BAR_KEY, run: d.toggleSessions },
@@ -111,10 +115,11 @@ export function useAppCommands(deps: AppCommandDeps): void {
   ref.current = deps
   const hasBrowser = deps.newBrowser !== undefined
   const hasDiff = deps.newDiff !== undefined
+  const hasSticky = deps.newSticky !== undefined
   const list = useMemo(() => {
     const live = {} as Record<keyof AppCommandDeps, () => void>
     for (const k of Object.keys(ref.current) as (keyof AppCommandDeps)[]) live[k] = () => ref.current[k]?.()
-    return appCommands({ ...live, newBrowser: hasBrowser ? live.newBrowser : undefined, newDiff: hasDiff ? live.newDiff : undefined })
-  }, [hasBrowser, hasDiff])
+    return appCommands({ ...live, newBrowser: hasBrowser ? live.newBrowser : undefined, newDiff: hasDiff ? live.newDiff : undefined, newSticky: hasSticky ? live.newSticky : undefined })
+  }, [hasBrowser, hasDiff, hasSticky])
   useRegisterCommands(list)
 }

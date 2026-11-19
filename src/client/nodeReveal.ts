@@ -34,8 +34,9 @@ function focusNodeRoot(id: string): void {
  * panel Files. `kind` kosong = anggap tab. Fokus ditunda satu frame sampai pane aktif ter-render.
  */
 export function revealInTabs(id: string, kind?: string, focus = true): void {
-  if (kind !== undefined && !isTabKind(kind as WsNodeKind)) setFilesPanelOpen(true)
-  else {
+  // Files docks as a panel; a canvas-only kind (sticky) has no tab view, so tab mode has nothing to show for it.
+  if (kind === 'files') setFilesPanelOpen(true)
+  else if (kind === undefined || isTabKind(kind as WsNodeKind)) {
     activateTab(id)
     // Node baru belum direkonsiliasi ke `order` saat dipanggil; coba lagi sekali setelah render.
     if (!getTabLayout().tabs.order.includes(id)) requestAnimationFrame(() => activateTab(id))

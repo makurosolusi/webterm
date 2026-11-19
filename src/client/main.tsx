@@ -1,6 +1,7 @@
 import './vscode/vscode-theme.css'
 import './index.css'
 import './styles.css'
+import './fonts/sticky.font.css'
 import './vscode/register'
 import { installCodicons } from './vscode/codicons'
 import { createRoot } from 'react-dom/client'

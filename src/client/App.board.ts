@@ -19,6 +19,7 @@ import type { HandleSpawners } from './handleMenu.model'
 import { useBrowserAdd } from './useBrowserAdd'
 import { useAgentChatAdd, useSkillAuthorAdd } from './agentChat.add'
 import { useBrowserOpen } from './useBrowserOpen'
+import { useStickyAdd } from './sticky.add'
 import { connectWorkspaceLayout } from './App.tabs'
 import { bridgesToRestore, type ClosedHistory } from './closedHistory'
 import { openProfileSpawn, useBrowserProfileSpawn } from './browserProfile.spawn'
@@ -204,6 +205,7 @@ export function useBoardActions({
   const onAddFiles = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'files', dirPath: ws.cwd }), at), [addFlowNode])
   // Diff node on the workspace folder; a wired agent's cwd (its worktree) takes over (DiffNode `root`).
   const onAddDiff = useCallback((at?: XYPosition) => addFlowNode((_, ws) => ({ id: randomId(), kind: 'diff', cwd: ws.cwd, title: 'Changes' }), at), [addFlowNode])
+  const onAddSticky = useStickyAdd(addFlowNode, rf, nodesRef, settings)
   const onAddBrowser = useBrowserAdd(addFlowNode, activeId, browserReady) // undefined = fitur mati di server
   const onAddAgentChat = useAgentChatAdd(addFlowNode, settings) // undefined = Claude disabled in settings
   const openSkillAuthor = useSkillAuthorAdd(addFlowNode, settings)
@@ -266,7 +268,7 @@ export function useBoardActions({
     link: onConnect,
   }), [onAddTerminal, onAddFiles, onAddAgent, onAddBrowser, onAddDiff, onAddAgentChat, onAddSkill, onConnect])
 
-  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn, openSkillAuthor, addSkillNode }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn, openSkillAuthor, addSkillNode])
+  const nodeActions = useMemo(() => ({ onSession, onToggleHideLinks, openBrowserAt, workspaceId: activeId, spawn, openSkillAuthor, addSkillNode, addSticky: onAddSticky }), [onSession, onToggleHideLinks, openBrowserAt, activeId, spawn, openSkillAuthor, addSkillNode, onAddSticky])
 
-  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, nodeActions }
+  return { applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, onAddSticky, nodeActions }
 }

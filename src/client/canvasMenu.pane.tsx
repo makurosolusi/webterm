@@ -41,6 +41,8 @@ export interface CanvasPaneMenuDeps {
   onAddAgent: (cmd: string, agentId: AgentId, cwd?: string, at?: XYPosition) => void
   /** Skill node (by reference) at the click point; absent = no "Skill…" row. */
   onAddSkill?: (skill: SkillRef, at: XYPosition) => void
+  /** Sticky note centred on the click point. */
+  onAddSticky?: (at?: XYPosition) => void
   onFit: () => void
   onSelectAll: () => void
 }
@@ -154,6 +156,7 @@ export function useCanvasPaneMenu(deps: CanvasPaneMenuDeps): {
           addAgentChat: deps.onAddAgentChat && (() => deps.onAddAgentChat?.(open.at)),
           addAgent: (cmd, agentId) => deps.onAddAgent(cmd, agentId, undefined, open.at),
           addSkill: deps.onAddSkill && pickSkill,
+          addSticky: deps.onAddSticky && (() => deps.onAddSticky?.(open.at)),
           fitView: deps.onFit,
           selectAll: deps.onSelectAll,
         },

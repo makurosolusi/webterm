@@ -4,6 +4,8 @@ import { SESSION_KINDS, sessionTitle } from './sessionList'
 import { isAutoName } from './nodeIdentity'
 import { folderTitle } from './fileBrowse'
 import { fileBaseName } from './editorFile'
+import { STICKY_TEXT } from './sticky.labels'
+import { stickyRowLabel } from './sticky.model'
 import type { WsNode, WsNodeKind } from '../shared/workspace'
 
 export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
@@ -17,6 +19,7 @@ export const NODE_KIND_LABEL: Record<WsNodeKind, string> = {
   plan: 'Plan',
   app: 'App',
   skill: 'Skill',
+  sticky: STICKY_TEXT.kind,
 }
 
 /** Codicon per kind, shared by the node tab strip and tab mode: shape tells kinds apart
@@ -32,6 +35,7 @@ export const KIND_ICON: Record<WsNodeKind, string> = {
   plan: 'type-hierarchy',
   app: 'window',
   skill: 'book',
+  sticky: 'note',
 }
 
 /** Nama node seperti yang dilihat pengguna di chrome-nya. Tiap kind memakai rantai fallback milik
@@ -40,6 +44,7 @@ export const KIND_ICON: Record<WsNodeKind, string> = {
 export function nodeRowLabel(n: WsNode): string {
   const title = isAutoName(n.title) ? undefined : n.title?.trim()
   if (title) return title
+  if (n.kind === 'sticky') return stickyRowLabel(n.stickyText)
   if (n.kind === 'files') return n.dirPath ? folderTitle(n.dirPath) : NODE_KIND_LABEL.files
   if (n.kind === 'skill') return n.skill || NODE_KIND_LABEL.skill
   if (n.kind === 'editor') return n.filePath ? fileBaseName(n.filePath) : NODE_KIND_LABEL.editor

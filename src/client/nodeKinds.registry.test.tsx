@@ -25,23 +25,24 @@ const NOT_HAND_CREATED: readonly WsNodeKind[] = ['editor', 'plan', 'app']
 
 describe('node kind registries cover every WsNodeKind', () => {
   it('SESSION_KINDS lists every kind that owns a live agent/shell session', () => {
-    expect(missing(SESSION_KINDS, ['files', 'editor', 'browser', 'diff', 'plan', 'app', 'skill'])).toEqual([])
+    expect(missing(SESSION_KINDS, ['files', 'editor', 'browser', 'diff', 'plan', 'app', 'skill', 'sticky'])).toEqual([])
   })
 
   it('the canvas context menu can create every hand-created kind', () => {
     const rows = buildCanvasMenuRows(
-      { addTerminal: noop, addAgent: noop, addFiles: noop, addBrowser: noop, addDiff: noop, addAgentChat: noop, addSkill: noop, fitView: noop },
+      { addTerminal: noop, addAgent: noop, addFiles: noop, addBrowser: noop, addDiff: noop, addAgentChat: noop, addSkill: noop, addSticky: noop, fitView: noop },
       { nodeCount: 0, disabledAgents: [], customAgents: [], agentLaunchCommands: {} },
     )
     const keys = rows.map((r) => ('key' in r ? r.key : '')).map((k) => (k.startsWith('agent:') ? 'agent' : k))
     expect(missing(keys, NOT_HAND_CREATED)).toEqual([])
   })
 
+  // A sticky note is canvas-only (not a tab), so the tab-mode "+" menu leaves it out on purpose.
   it('the tab-mode "+" menu can create every hand-created kind', () => {
     const ids = newTabMenuItems({ onAddTerminal: noop, onAddAgent: noop, onAddAgentChat: noop, onAddBrowser: noop, onAddDiff: noop, onAddFiles: noop })
       .map((i) => ('id' in i ? i.id : ''))
     // A skill node is added from the Skills tab, the pane menu or a Skills port, never from the tab-mode "+" (it is a cable end, not a view).
-    expect(missing(ids, [...NOT_HAND_CREATED, 'skill'])).toEqual([])
+    expect(missing(ids, [...NOT_HAND_CREATED, 'skill', 'sticky'])).toEqual([])
   })
 
   it('⌘K can create agents, agent chats, browsers and plans', () => {

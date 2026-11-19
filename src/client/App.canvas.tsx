@@ -62,7 +62,7 @@ export default function BoardCanvas({
   const { nodes, edges } = useMemo(() => markTouched(boardNodes, boardEdges, acted), [boardNodes, boardEdges, acted])
   const touchedIds = useMemo(() => new Set(acted.map((e) => e.nodeId)), [acted])
   // undefined = flag browser mati: handler drop tidak melakukan apa pun (termasuk tanpa preventDefault).
-  const { openBrowserAt, workspaceId, spawn, addSkillNode } = useNodeActions()
+  const { openBrowserAt, workspaceId, spawn, addSkillNode, addSticky } = useNodeActions()
   // Click a bridge handle / release a cable on the pane -> spawn menu (needs connectOnClick off below).
   const handleMenu = useHandleMenu({
     nodes: boardNodes, settings, spawn,
@@ -118,6 +118,12 @@ export default function BoardCanvas({
       onEdgeDoubleClick={(_, e) => { void rf.current?.deleteElements({ edges: [{ id: e.id }] }) }}
       onMoveEnd={onMoveEnd}
       onPaneContextMenu={onPaneContextMenu}
+      // Double-click on EMPTY canvas drops a sticky note there (not on a node, a cable or while the view is locked); it replaces zoom-on-double-click.
+      zoomOnDoubleClick={false}
+      onDoubleClick={(e) => {
+        if (locked || !addSticky || !(e.target instanceof Element) || !e.target.classList.contains('react-flow__pane')) return
+        addSticky(rf.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY }))
+      }}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onInit={(i) => (rf.current = i)}
