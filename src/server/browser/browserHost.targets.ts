@@ -178,7 +178,7 @@ export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']):
   await cdp.send(CDP.addScript, { source: BACKSTOP_SCRIPT }, sessionId) // no native context menu / stray tab from middle or Ctrl+click
   await cdp.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr), sessionId)
   // Jendela offscreen/minimized (atau headless fallback) tak pernah punya fokus OS; tanpa emulasi Chrome menganggap
-  // halaman tak fokus. Tab sudah aktif di jendelanya sendiri, jadi TANPA Page.bringToFront: di macOS itu memulihkan
+  // halaman tak fokus. Tab sudah aktif di jendelanya sendiri, jadi tanpa mengangkat jendela (dilarang oleh cdp.windowGuard): di macOS itu memulihkan
   // jendela minimized dan mencuri fokus (diukur).
   await cdp.send(CDP.setFocusEmulation, { enabled: true }, sessionId)
   return { targetId, sessionId }

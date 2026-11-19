@@ -13,7 +13,7 @@ import type { DeviceIo } from './browserHost.device'
 import type { ConsoleLog } from './browserHost.console'
 import type { ShieldRouter } from './browserHost.shield'
 import { BrowserError, createPageTarget, TargetGoneError } from './browserHost.targets'
-import { isRecoverable, recovering, targetOfSession } from './browserHost.recover'
+import { isRecoverable } from './browserHost.recover'
 import type { HostEvent, NavGuard, NodeRec, NodeTabs, TabRt, TargetTable } from './browserHost.targets'
 import { metricsParams } from './browserHost.input'
 
@@ -126,7 +126,7 @@ export function createKit(ops: TabsOps) {
   const send = async (rec: NodeRec, sid: string, method: string, params: object = {}): Promise<Record<string, unknown>> => {
     const cdp = await ops.cdpOf(rec)
     try {
-      return await recovering(cdp, targetOfSession(rec, sid)).send<Record<string, unknown>>(method, params, sid)
+      return await cdp.send<Record<string, unknown>>(method, params, sid)
     } catch (err) {
       if (!isRecoverable(method) || !isTargetGone(err)) throw err // other commands keep their raw error (a stop on an old page must not unbind the view)
       pageLost(rec, sid)
