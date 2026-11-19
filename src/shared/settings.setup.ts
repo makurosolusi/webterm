@@ -2,8 +2,9 @@
 // whether the user finished or skipped it. Patched per step (`settings.patch.ts`): a PATCH carrying
 // `{ setup: { steps: { claude: 'done' } } }` keeps the other steps, `null` clears one step.
 
-/** Wizard steps, in the order the wizard shows them. */
-export const SETUP_STEPS = ['claude', 'browser', 'central', 'basics'] as const
+/** Wizard steps, in the order the wizard shows them. A step added later is harmless for an install that
+ *  already finished: `completedAt` alone decides whether the wizard shows, never the count of answered steps. */
+export const SETUP_STEPS = ['claude', 'browser', 'commands', 'central', 'basics'] as const
 export type SetupStep = (typeof SETUP_STEPS)[number]
 export const SETUP_STEP_STATES = ['done', 'skipped'] as const
 export type SetupStepState = (typeof SETUP_STEP_STATES)[number]

@@ -10,7 +10,7 @@ import type { SectionId } from './settingsSections.registry'
 /** Rows of Settings › Central Agent (`centralSettings.registry.ts` ids). */
 export type CentralFieldId = keyof typeof CENTRAL_FIELD_TEXT
 /** Blocks without a Settings key of their own. */
-const BLOCK_FIELD_IDS = ['model-ladder', 'claude-provider', 'chromium', 'agentEngine', 'browser-profiles', 'browser-limit', 'header-mode', 'rail-labels'] as const
+const BLOCK_FIELD_IDS = ['model-ladder', 'claude-provider', 'chromium', 'agentEngine', 'browser-profiles', 'browser-limit', 'header-mode', 'rail-labels', 'custom-commands'] as const
 
 /**
  * What `data-field` may hold, and so what a link may target: a `Field setting="<key>"` (its key),

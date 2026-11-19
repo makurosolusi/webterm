@@ -6,6 +6,7 @@
 // rendered `data-field` ids in sync, and the labels equal to the ones on screen.
 import { CAPABILITIES, type CapabilityId } from '../shared/featureCapabilities'
 import { ADVANCED_TEXT } from './advancedLabels'
+import { COMMANDS_TEXT } from './customCommands/commands.labels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
 import { LIMIT_TEXT } from './BrowserLimitField'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
@@ -56,7 +57,7 @@ const PAGE_KEYWORDS: Partial<Record<SectionId, string>> = {
   appearance: 'look theme dark light mode wallpaper background',
   terminal: 'look font color colors cursor keyboard mouse clipboard scrollback buffer shell zsh bash fish',
   keyboard: 'keybinding keybindings shortcut shortcuts hotkey key keys chord record rebind conflict',
-  canvas: 'grid node cable edge snap folder',
+  canvas: 'grid node cable edge snap folder command commands tool path',
   notifications: 'alert alerts sound chime notify permission mute',
   claude: 'anthropic agent agents permission approval profile model connection login key proxy',
   central: 'assistant orchestrator autonomy check-in budget spending limit',
@@ -116,6 +117,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   e('canvas', 'maskAutoHideSec', 'Hide revealed secrets after', 'How long a revealed secret stays visible before it is masked again.', 'file editor reveal timeout never'),
   e('canvas', 'nodeStatusBar', 'Status bar', 'Show session and agent details at the bottom of each node, with warnings when something looks wrong.', 'footer statusline anomaly warning pid uptime context cost'),
   e('canvas', 'defaultProjectsFolder', 'Default projects folder', 'Where Clone repository and New project put new folders.', 'directory path clone git'),
+  e('canvas', 'custom-commands', COMMANDS_TEXT.title, 'Tools you install are found automatically; add the folder they live in.', 'command commands tool tools folder path install installer detect rescan wrapper alias'),
   e('canvas', 'gridSize', 'Grid size'),
   e('canvas', 'edgeColor', 'Cable color', 'Color of the cables between nodes.', 'edge line wire'),
   e('canvas', 'edgeWidth', 'Cable thickness', undefined, 'edge line wire width'),

@@ -16,6 +16,7 @@ import { NOTIFY_TEXT, useDesktopNotify } from '../osNotify.settings'
 import { useCapabilities } from '../useCapabilities'
 import { ProjectsFolderSetting } from '../workspaceCreate/ProjectsFolderSetting'
 import { BrowserStep } from './setup.browser'
+import { CommandsStep } from './setup.commands'
 import { ClaudeStep } from './setup.claude'
 import { SETUP_TEXT } from './setup.labels'
 import { StepFooter, StepLoading, StepPage, Tiles, type StepProps, type StepSetting } from './setup.ui'
@@ -89,6 +90,7 @@ export function BasicsStep({ nav, settings, update }: StepProps & { settings: Se
 export function SetupStepBody({ step, nav, settings, update }: StepProps & { step: SetupStep; settings: Settings; update(patch: SettingsPatch): void }): React.JSX.Element {
   if (step === 'claude') return <ClaudeStep nav={nav} />
   if (step === 'browser') return <BrowserStep nav={nav} />
+  if (step === 'commands') return <CommandsStep nav={nav} />
   if (step === 'central') return <CentralStep nav={nav} />
   return <BasicsStep nav={nav} settings={settings} update={update} />
 }

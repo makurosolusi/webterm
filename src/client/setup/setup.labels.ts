@@ -5,7 +5,7 @@ import type { SetupStep } from '../../shared/settings.setup'
 export const SETUP_TEXT = {
   title: 'Set up webterm',
   stepOf: (n: number, total: number): string => `Step ${n} of ${total}`,
-  steps: { claude: 'Claude', browser: 'Browser', central: 'Central Agent', basics: 'Basics' } as Record<SetupStep, string>,
+  steps: { claude: 'Claude', browser: 'Browser', commands: 'Commands', central: 'Central Agent', basics: 'Basics' } as Record<SetupStep, string>,
   state: { done: 'Done', skipped: 'Skipped', current: 'Current', todo: 'Not started' },
   /** Codicon per answered/unanswered state; the wizard stepper and Welcome's card share it. */
   stateIcon: { done: 'pass-filled', skipped: 'circle-slash', todo: 'circle-large-outline' },
@@ -13,6 +13,7 @@ export const SETUP_TEXT = {
   description: {
     claude: 'Choose how webterm signs in to Claude. Every Claude agent and Central use it.',
     browser: 'Browser nodes show live web pages on the canvas. Choose the browser they use.',
+    commands: 'Tools you install, such as a sign-in helper, are found by webterm on their own. Optional: add the folder they live in.',
     central: 'Central is an assistant that sees all your projects and nodes.',
     basics: 'Theme, projects folder and notifications. Each one applies as you choose it.',
   } as Record<SetupStep, string>,
@@ -63,6 +64,10 @@ export const SETUP_TEXT = {
     headlessLoading: 'Loading the current setting…',
     checking: 'Checking…',
     stillNone: 'Still no browser found.',
+  },
+
+  commands: {
+    where: 'Canvas › Commands',
   },
 
   central: {

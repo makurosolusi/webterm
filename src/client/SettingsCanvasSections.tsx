@@ -14,6 +14,8 @@ import './canvasBackground.css'
 import { quickDragLabel } from './quickDrag/quickDrag.modifier'
 import { isMacPlatform } from './terminalKeys'
 import { ProjectsFolderSetting } from './workspaceCreate/ProjectsFolderSetting'
+import { COMMANDS_TEXT } from './customCommands/commands.labels'
+import { CustomCommandsPanel } from './customCommands/CustomCommandsPanel'
 import { useFieldSave } from './settingsSave'
 import { settingsSaves } from './useSettings'
 
@@ -84,6 +86,11 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
       </SettingsGroup>
       <SettingsGroup title="New projects">
         <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
+      </SettingsGroup>
+      <SettingsGroup title="Commands">
+        <Field label={COMMANDS_TEXT.title} field="custom-commands" block>
+          <CustomCommandsPanel />
+        </Field>
       </SettingsGroup>
       <SettingsAdvanced>
         <NumberSelectField setting="gridSize" id="st-gridSize" label="Grid size" value={s.gridSize} options={GRID_SIZE_OPTIONS}

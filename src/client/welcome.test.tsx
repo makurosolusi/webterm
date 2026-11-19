@@ -36,7 +36,7 @@ describe('Welcome', () => {
 
     it('lists every step with Done / Skipped / Not started, the wizard words and counts done steps', () => {
       render(<Welcome onNewProject={noop} onCreateEmpty={noop} setup={mixed} />)
-      expect(screen.getByRole('heading', { name: 'Finish setup · 1 of 4' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Finish setup · 1 of 5' })).toBeTruthy()
       const row = (label: string) => screen.getByText(label).closest('button')!.textContent
       expect(row('Claude')).toBe('ClaudeDone')
       expect(row('Browser')).toBe('BrowserSkipped')

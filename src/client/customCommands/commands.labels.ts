@@ -1,0 +1,51 @@
+// Every string of the custom-commands panel (English, product language), shared by the wizard step and Settings.
+import type { CustomCommandSource } from '../../shared/customCommands'
+
+export const COMMANDS_TEXT = {
+  title: 'Custom commands',
+  hint: 'Install a tool the usual way (for example its one-line installer). webterm finds it by itself and every terminal can run it. In a terminal: `webterm command detect`, `webterm command path add <folder>`.',
+  loading: 'Looking for tools on this machine…',
+  loadFailed: 'Could not load the tools on this machine.',
+  retry: 'Retry',
+  retrying: 'Retrying…',
+  found: {
+    title: 'Found on this machine',
+    empty: 'No tools found yet. Install one, then press Rescan.',
+    ok: 'Found',
+    missing: 'Not installed',
+    source: { 'custom-bin': 'webterm folder', extra: 'Tool folder', path: 'PATH', candidate: 'Known tool' } satisfies Record<CustomCommandSource, string>,
+  },
+  rescan: { button: 'Rescan', busy: 'Scanning…', failed: 'Rescan failed', result: (n: number): string => `${n} ${n === 1 ? 'directory' : 'directories'} added` },
+  folders: {
+    title: 'Tool folders',
+    hint: 'Every tool inside a folder you add is found in all terminals and agents. A tool folder must not be writable by other users.',
+    empty: 'No extra folders yet.',
+    missing: 'Folder not found',
+    unsafe: 'Unsafe: writable by other users',
+    remove: 'Remove',
+    removeBusy: 'Removing…',
+    removeLabel: (dir: string): string => `Remove folder ${dir}`,
+    removed: 'Folder removed',
+    removeFailed: 'Could not remove the folder',
+  },
+  add: {
+    label: 'Add folder',
+    placeholder: '/path/to/tools',
+    button: 'Add folder',
+    busy: 'Adding…',
+    needDir: 'Choose or type a folder first.',
+    notAbsolute: 'Use an absolute path, e.g. /home/you/.local/bin.',
+    done: (dir: string): string => `Added ${dir}`,
+    failed: 'Could not add the folder',
+  },
+  session: {
+    title: 'Found this session',
+    hint: 'These folders were added to PATH for this run only. Add them permanently to keep them after a restart.',
+    button: 'Add permanently',
+    buttonLabel: (dir: string): string => `Add ${dir} permanently`,
+    busy: 'Adding…',
+    done: 'Added permanently',
+    failed: 'Could not add the folder',
+  },
+  compat: { wrong_platform: 'Wrong platform', wrong_arch: 'Wrong architecture' },
+}
