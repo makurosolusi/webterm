@@ -152,7 +152,7 @@ describe('CDP method table', () => {
     const dir = __dirname
     const literal = /['"](?:Target|Page|Input|Emulation|Browser|Runtime|Inspector)\.[a-zA-Z]+['"]/
     const offenders = readdirSync(dir)
-      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.testkit.ts') && f !== 'cdp.client.ts')
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.testkit.ts') && f !== 'cdp.client.ts' && f !== 'cdp.windowGuard.ts')
       .filter((f) => literal.test(readFileSync(join(dir, f), 'utf8')))
     expect(offenders).toEqual([])
     expect(CDP.startScreencast).toBe('Page.startScreencast')

@@ -5,7 +5,6 @@ import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
-import { recovering } from './browserHost.recover'
 import { isAbortedNav, readHistory } from './browserHost.targets'
 import type { NavGuard, NodeRec } from './browserHost.targets'
 
@@ -40,7 +39,7 @@ export async function stepPage(io: PageIo, rec: NodeRec, action: Exclude<(typeof
     patch(rec, { loading: false })
     return
   }
-  const h = await readHistory(recovering(await io.cdpOf(rec), rec.targetId), rec.sessionId as string)
+  const h = await readHistory(await io.cdpOf(rec), rec.sessionId as string)
   const entryId = action === 'back' ? h.entryIds.prev : h.entryIds.next
   if (entryId !== undefined) await io.send(rec, CDP.navigateToHistoryEntry, { entryId })
 }

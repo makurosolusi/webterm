@@ -3,6 +3,7 @@
 import WebSocket from 'ws'
 import type { RawData } from 'ws'
 import { createLogger } from '../logs'
+import { windowSurfacingViolation } from './cdp.windowGuard'
 
 const log = createLogger('browser.cdp')
 
@@ -11,7 +12,7 @@ export const CDP_CONNECT_TIMEOUT_MS = 10_000
 
 /** Tabel tunggal method CDP yang dipakai host (diuji: tak ada literal method di luar tabel ini). */
 export const CDP = {
-  createTarget: 'Target.createTarget', activateTarget: 'Target.activateTarget',attachToTarget: 'Target.attachToTarget', closeTarget: 'Target.closeTarget',
+  createTarget: 'Target.createTarget', attachToTarget: 'Target.attachToTarget', closeTarget: 'Target.closeTarget',
   setDiscoverTargets: 'Target.setDiscoverTargets',
   pageEnable: 'Page.enable', navigate: 'Page.navigate', reload: 'Page.reload', stopLoading: 'Page.stopLoading',
   getNavigationHistory: 'Page.getNavigationHistory', navigateToHistoryEntry: 'Page.navigateToHistoryEntry',
@@ -126,6 +127,11 @@ export class CdpClient {
   /** Kirim perintah CDP; hasil = `result`. Reject ber-konteks (method + id) saat error/timeout/putus. */
   send<T = Record<string, unknown>>(method: string, params?: object, sessionId?: string): Promise<T> {
     const id = this.nextId++
+    const banned = windowSurfacingViolation(method, params)
+    if (banned) {
+      log.warn('cdp.window', 'refused a command that could surface an OS window', { method })
+      return Promise.reject(new Error(`cdp ${method} (#${id}) refused: ${banned}`))
+    }
     if (this.dead) return Promise.reject(new CdpClosedError(`cdp ${method} (#${id}) not sent: ${this.dead.message}`))
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {

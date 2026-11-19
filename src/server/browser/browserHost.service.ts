@@ -9,7 +9,6 @@ import type { CdpClient, CdpHandler } from './cdp.client'
 import { screencastParams, toCdpCommands } from './browserHost.input'
 import { startCast, stopCast } from './browserHost.cast'
 import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
-import { recovering, targetOfSession } from './browserHost.recover'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
 import type { ShieldRouter } from './browserHost.shield'
@@ -252,7 +251,7 @@ export class BrowserHost implements BrowserHostApi {
     const sid = rec.sessionId
     if (!sid) throw new BrowserError('crashed', `node ${rec.nodeId} has no live browser target`)
     try {
-      return await recovering(await this.cdpOf(rec), targetOfSession(rec, sid)).send<T>(method, params, sid)
+      return await (await this.cdpOf(rec)).send<T>(method, params, sid)
     } catch (err) {
       if (!isTargetGone(err)) throw err
       // Balasan galat bisa tiba sebelum event detach/destroy: lepas node di sini juga, supaya `open` membuat target baru.
@@ -291,7 +290,7 @@ export class BrowserHost implements BrowserHostApi {
     const sid = rec.sessionId
     if (!sid) return
     try {
-      const h = await readHistory(recovering(await this.cdpOf(rec), rec.targetId), sid)
+      const h = await readHistory(await this.cdpOf(rec), sid)
       if (rec.sessionId === sid) this.patch(rec, { title: h.title, canBack: h.canBack, canForward: h.canForward })
     } catch (err) {
       log.warn('browser.history', 'history read failed', { ids: { nodeId: rec.nodeId }, error: errMsg(err) })

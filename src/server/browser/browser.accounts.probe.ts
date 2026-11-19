@@ -3,6 +3,7 @@
 // page in a throw-away background tab to read the signed-in identity from it. No separate HTTP client ever sees a cookie.
 import { CDP } from './cdp.client'
 import { markOwnTarget } from './browserHost.containment'
+import { windowPlacement } from './chromium.flags'
 import type { CdpClient } from './cdp.client'
 import { cookieDomainMatches } from '../../shared/browser.accounts'
 import type { AccountProvider } from '../../shared/browser.accounts'
@@ -42,7 +43,7 @@ export function hasSession(cookies: readonly CookieRef[], p: AccountProvider): b
 /** Load the provider's probe page in a hidden tab, read it, close the tab. Never throws for a page problem: that is `unknown`. */
 export async function probeProvider(cdp: CdpClient, p: AccountProvider, d: ProbeDeps): Promise<ParsedAccount> {
   if (!d.guard(p.probeUrl).ok) return unknownBecause('probe_blocked')
-  const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: BLANK, background: true })
+  const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: BLANK, ...windowPlacement() })
   markOwnTarget(targetId) // a probe page is ours, not a stray
   try {
     const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })

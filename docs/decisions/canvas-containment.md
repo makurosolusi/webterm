@@ -66,6 +66,15 @@ Source closed, not only the effect (the runtime guard in `browserHost.containmen
   behaviour of `preventDefault` on `auxclick`/`click`); if it did not, the containment guard still moves the stray page
   into a tab, and that tab can then appear twice. Save image is not offered (no download path for it exists).
 
+## Window surfacing is banned
+
+No CDP command may raise, focus or move an OS window of the user's machine. Node windows are deliberately minimized on
+macOS (`windowPlacement`), and `Target.activateTarget`, `Page.bringToFront` and `Browser.setWindowBounds` un-minimize and
+focus the real window. They are refused at the single send point (`CdpClient.send` via `cdp.windowGuard.ts`, so the agent
+allowlist is covered too), and `Target.createTarget` is only allowed as `newWindow` + `background` + `focus:false`.
+`windowSurfacing.policy.test.ts` fails if any browser source names a banned method. A page that Chromium reports as not
+attached (-32000) is therefore never "activated": the node is lost or the tab marked crashed and the user gets Reload.
+
 ## Adding a new exit
 
 Do not. First route the feature through the helpers above. If a real exit is unavoidable (a native integration, a new

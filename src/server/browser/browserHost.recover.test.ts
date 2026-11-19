@@ -1,4 +1,4 @@
-// A page Chromium reports as "Not attached to an active page": one recovery (activate + retry), then a visible error, never a stuck spinner.
+// A page Chromium reports as "Not attached to an active page": never activated (that would surface the OS window), a visible error (Reload), never a stuck spinner.
 import { afterEach, describe, expect, it } from 'vitest'
 import { TargetGoneError } from './browserHost.service'
 import { logBus } from '../logs'
@@ -20,22 +20,13 @@ async function openLoading() {
 }
 
 describe('page not attached to an active page', () => {
-  it('startScreencast: activates the target and retries once, the node stays live', async () => {
-    await openLoading()
-    let n = 0
-    rig.fake.handle(CDP.startScreencast, () => (n++ === 0 ? NOT_ACTIVE : {}))
-    await rig.host.startScreencast('n1', () => undefined)
-    expect(callsOf(CDP.activateTarget)).toMatchObject([{ params: { targetId: 'T1' } }])
-    expect(callsOf(CDP.startScreencast)).toHaveLength(2)
-    expect(rig.host.state('n1')?.live).toBe('live')
-  })
-
-  it('startScreencast: still failing after the recovery -> visible error state and loading cleared', async () => {
+  it('startScreencast: gone page -> TargetGoneError, visible error state, loading cleared, no retry, no activation', async () => {
     await openLoading()
     rig.fake.handle(CDP.startScreencast, () => NOT_ACTIVE)
     const err = await rig.host.startScreencast('n1', () => undefined).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(TargetGoneError)
-    expect(callsOf(CDP.startScreencast)).toHaveLength(2) // exactly one retry
+    expect(callsOf(CDP.startScreencast)).toHaveLength(1)
+    expect(rig.fake.methods()).not.toContain('Target.activateTarget')
     expect(rig.host.state('n1')).toMatchObject({ live: 'discarded', loading: false })
   })
 
@@ -54,12 +45,11 @@ describe('page not attached to an active page', () => {
     expect(logBus.snapshot().some((e) => e.level === 'warn' && e.message === 'stop loading failed; clearing the loading flag')).toBe(true)
   })
 
-  it('stop: a page that is not attached is recovered first, then stopLoading succeeds', async () => {
+  it('stop: a page that is not attached still clears loading and activates nothing', async () => {
     await openLoading()
-    let n = 0
-    rig.fake.handle(CDP.stopLoading, () => (n++ === 0 ? NOT_ACTIVE : {}))
+    rig.fake.handle(CDP.stopLoading, () => NOT_ACTIVE)
     await rig.host.navAction('n1', 'stop')
-    expect(callsOf(CDP.activateTarget)).toHaveLength(1)
-    expect(rig.host.state('n1')).toMatchObject({ live: 'live', loading: false })
+    expect(rig.host.state('n1')?.loading).toBe(false)
+    expect(rig.fake.methods()).not.toContain('Target.activateTarget')
   })
 })
