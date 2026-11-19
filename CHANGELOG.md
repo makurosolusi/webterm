@@ -7,18 +7,24 @@
 - A webterm-owned context menu on Browser nodes: Open link in new tab, Copy link address, Copy, Cut, Paste, Back, Forward and Reload.
 - A notice "Blocked a window that tried to open outside the canvas" when a page tries to open a window outside the canvas.
 - A `containment.policy` guard test that keeps links and windows inside the canvas.
+- Docker image and compose files (`docs/docker.md`): a multi-arch image is published to GHCR on version tags. The Chrome sandbox stays on through a seccomp profile (no `--no-sandbox`), Claude Code is pinned in the image, and the whole home is a volume, so tools installed with `curl | sh` persist.
+- Custom commands: tools installed anywhere (installer one-liners and the like) are found automatically through a managed PATH folder, extra tool folders and per-platform `<os>-<arch>` subfolders, and a platform mismatch is detected. There is a Commands step in the setup wizard, a Commands group in Settings, and `webterm command list|add|remove|which|detect|path|rescan`.
 
 ### Changed
 - Links from terminals, markdown, MCP apps and documentation now open in a Browser node on the canvas instead of the system browser. When that is not possible, a notice appears with explicit "Open in system browser" and "Copy link" actions.
 - `open` / `xdg-open` in a terminal now refuse `file:` and `ftp:` URLs and .html / .svg files, with a clear message.
 - Middle-click or Ctrl+click on a link in a Browser node opens it as a tab in that node.
 - Right-click in a Browser node is no longer passed through to Chromium.
+- The Browser node now runs a webterm-owned, version-pinned Chrome for Testing (downloaded on first use) and no longer picks an installed Chrome, Brave or Edge automatically. Set `WEBTERM_BROWSER_BIN` to choose one.
+- A missing wrapper command is no longer dropped silently; a notice explains it.
+- Account checks open their own hidden window.
 
 ### Fixed
 - Terminal scrollback was lost after a server restart. The tmux history is now seeded in chunks, so the first redraw no longer discards it. More terminal output tests were added, and a `ws.resync` debug log (byte counts only) helps diagnose similar cases.
 - Right click in a Browser node now shows the webterm context menu again (the page-side safety script cancelled the host's own probe, so the host always assumed the site had its own menu).
 - Drag to select text in a Browser node works again (mouse moves now name the held button, which Chromium needs to extend a selection).
 - A Browser page that Chromium reports as "Not attached to an active page" is now recovered once (its target is activated and the command retried). If it stays gone, the node shows an error with Reload instead of loading forever, and Stop always ends the loading indicator.
+- Pressing Stop in a Browser node could raise a real Chrome window on the machine. Any CDP command that raises, focuses or moves an OS window is now refused in one place, with a scanner test.
 
 ### Known limitations
 - Sticky rendering has not been observed in a real browser yet.
@@ -30,6 +36,10 @@
 - An `ls` that hangs over ssh is not diagnosed yet (likely on the remote side).
 - The default `scrollbackBytes` (256 KiB) is smaller than `scrollbackLines` (10,000), so the history seed is capped.
 - The root cause of the stale page session after a server restart is not yet proven; the recovery is a mitigation verified with a fake CDP only.
+- Chrome for Testing is not published for Linux arm64, so arm64 images use Debian's Chromium (the version follows Debian).
+- The Chrome archive SHA-256 pin is not filled in yet (downloads rely on HTTPS only).
+- The Docker image was verified on one arm64 Docker host; the amd64 path only runs in CI.
+- The headless default on macOS is not decided (bot-detection measurement pending).
 
 ## [0.9.1] - 2026-11-19
 
