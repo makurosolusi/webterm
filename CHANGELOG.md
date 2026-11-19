@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.9.2] - 2026-11-19
+
+### Added
+- Sticky notes: notes on the canvas in 10 colors with a corner label and handwriting-style text (Caveat, bundled locally, OFL licence). Edit in place, text fits the note automatically, resize freely, and change colors for a multi-selection from the toolbar. Create one from the canvas right-click menu, by double-clicking empty canvas, with the command "Sticky: New Sticky Note", or with Mod+Alt+N. A sticky is not a tab, is not saved into templates, and creating or deleting one can be undone.
+- A webterm-owned context menu on Browser nodes: Open link in new tab, Copy link address, Copy, Cut, Paste, Back, Forward and Reload.
+- A notice "Blocked a window that tried to open outside the canvas" when a page tries to open a window outside the canvas.
+- A `containment.policy` guard test that keeps links and windows inside the canvas.
+
+### Changed
+- Links from terminals, markdown, MCP apps and documentation now open in a Browser node on the canvas instead of the system browser. When that is not possible, a notice appears with explicit "Open in system browser" and "Copy link" actions.
+- `open` / `xdg-open` in a terminal now refuse `file:` and `ftp:` URLs and .html / .svg files, with a clear message.
+- Middle-click or Ctrl+click on a link in a Browser node opens it as a tab in that node.
+- Right-click in a Browser node is no longer passed through to Chromium.
+
+### Fixed
+- Terminal scrollback was lost after a server restart. The tmux history is now seeded in chunks, so the first redraw no longer discards it. More terminal output tests were added, and a `ws.resync` debug log (byte counts only) helps diagnose similar cases.
+
+### Known limitations
+- Sticky rendering has not been observed in a real browser yet.
+- Stickies do not mask secrets: a pasted token is shown and stored as is.
+- Agents and Central cannot read or create stickies yet.
+- The stray-window guard and the Browser node context menu have not been verified in a real Chromium.
+- The guard script does not reach cross-process iframes.
+- No Chromium flag was added for external protocol handlers.
+- An `ls` that hangs over ssh is not diagnosed yet (likely on the remote side).
+- The default `scrollbackBytes` (256 KiB) is smaller than `scrollbackLines` (10,000), so the history seed is capped.
+
 ## [0.9.1] - 2026-11-19
 
 ### Added
