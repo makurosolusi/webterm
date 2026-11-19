@@ -4,6 +4,7 @@
 import { targetScore, type PaletteTarget } from './paletteTargets'
 import { rankWithHistory } from './QuickOpen.recency'
 import type { GrepMatch } from './QuickOpen.grep'
+import { maskLine } from './secretMask.surfaces'
 import type { RecentItem } from './browser.recent'
 
 export type OmniScope = 'all' | 'files'
@@ -110,9 +111,10 @@ export function omniboxItems(query: string, scope: OmniScope, src: OmniSources):
 }
 
 /** Text search matches as rows, plus a "Load more" row while the server has another page. */
-export function searchItems(matches: readonly GrepMatch[], hasMore: boolean): OmniItem[] {
+export function searchItems(matches: readonly GrepMatch[], hasMore: boolean, maskSecrets = false): OmniItem[] {
+  // With `maskSecrets` the row text hides secret values; the match itself (file:line, col) stays listed.
   const rows = matches.map((m, i): OmniItem => ({
-    id: `match:${i}:${m.file}:${m.line}`, label: m.text.trim() || '(blank line)', description: `${m.file}:${m.line}`,
+    id: `match:${i}:${m.file}:${m.line}`, label: (maskSecrets ? maskLine(m.file, m.text) : m.text).trim() || '(blank line)', description: `${m.file}:${m.line}`,
     icon: 'search', group: 'Results', action: { kind: 'file', rel: m.file, line: m.line, col: m.col },
   }))
   return hasMore ? [...rows, { id: 'more', label: 'Load more results…', icon: 'ellipsis', group: 'Results', action: { kind: 'more' } }] : rows

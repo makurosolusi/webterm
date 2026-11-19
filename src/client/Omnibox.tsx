@@ -10,6 +10,7 @@ import '@/components/vscode/vscode-quick-pick.css'
 import { omniboxItems, omniMode, omniNeedle, searchItems, type OmniAction, type OmniItem, type OmniScope, type OmniSources } from './Omnibox.sources'
 import { SEARCH_TEXT, useTextSearch, useWorkspaceFiles } from './Omnibox.data'
 import { loadRecentFiles, recentUnder } from './QuickOpen.recency'
+import { useLiveSettings } from './useSettings'
 
 export const OMNIBOX_TEXT = {
   placeholder: { all: 'Go to node, file, URL, agent, or type > for commands, % to search text', files: 'Go to file (type % to search text, > for commands)' },
@@ -37,6 +38,7 @@ export default function Omnibox({ scope, initialQuery = '', root, sources, onAct
   const inputRef = useRef<HTMLInputElement>(null)
   useOnFullscreenChange(onClose)
 
+  const { maskSecrets } = useLiveSettings()
   const mode = omniMode(query, scope)
   const needle = omniNeedle(query)
   const listed = useWorkspaceFiles(root, mode === 'files' || mode === 'mixed')
@@ -44,8 +46,8 @@ export default function Omnibox({ scope, initialQuery = '', root, sources, onAct
   const recentFiles = useMemo(() => (root ? recentUnder(root, loadRecentFiles()) : []), [root])
 
   const items: OmniItem[] = useMemo(
-    () => (mode === 'search' ? searchItems(text.matches, text.hasMore) : omniboxItems(query, scope, { ...sources, files: listed.files, recentFiles })),
-    [mode, text.matches, text.hasMore, query, scope, sources, listed.files, recentFiles],
+    () => (mode === 'search' ? searchItems(text.matches, text.hasMore, maskSecrets) : omniboxItems(query, scope, { ...sources, files: listed.files, recentFiles })),
+    [mode, text.matches, text.hasMore, maskSecrets, query, scope, sources, listed.files, recentFiles],
   )
   const at = Math.min(active, Math.max(items.length - 1, 0))
   useEffect(() => { setActive(0) }, [query])
