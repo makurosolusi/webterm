@@ -6,6 +6,7 @@ import { PassThrough } from 'node:stream'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { findOnPath } from './binaryOnPath'
 import { cancelGrep, grepFiles, parseRgLine } from './fsGrep'
 import { GREP_VERBS } from './fsGrep.route'
 
@@ -37,7 +38,8 @@ const where = (ms: { file: string; line: number }[]) => JSON.stringify(ms.map((m
 
 it('finds literal, case-insensitive matches with line/col, honours .gitignore, skips binaries', async () => {
   const r = await ok(repo, 'needle')
-  expect(r.engine).toBe('rg')
+  // The rg path is only meaningful where rg is installed (CI installs it); the fallback is always tested below.
+  expect(r.engine).toBe(findOnPath('rg') ? 'rg' : 'fallback')
   expect(where(r.matches)).toBe('["a.ts:1","a.ts:3","b/c.ts:2"]')
   expect(r.matches[0].col).toBe(7)
   expect(r.matches[0].text).toBe('const needle = 1')

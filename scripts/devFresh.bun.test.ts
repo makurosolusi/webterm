@@ -122,5 +122,7 @@ test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token
   expect(existsSync(freshSetupCodePath(fresh.paths))).toBe(true) // the banner names this file: a fresh install has no account
   await fresh.stop()
   expect(existsSync(fresh.paths.root)).toBe(false)
-  expect(calls()).toContain(`-s Claude Code-credentials-`)
+  // deleteClaudeKeychain is macOS-only by design (no `security` elsewhere): off darwin it must not call it at all.
+  if (process.platform === 'darwin') expect(calls()).toContain(`-s Claude Code-credentials-`)
+  else expect(calls()).toBe('')
 }, 90_000)
