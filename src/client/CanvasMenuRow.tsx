@@ -14,6 +14,7 @@ const ICON_NAMES: Record<CanvasMenuIcon, string> = {
   browser: 'globe',
   diff: 'git-compare',
   skill: 'book',
+  sticky: 'note',
   'select-all': 'selection',
   fit: 'screen-full',
 }

@@ -1,4 +1,6 @@
 import { createContext, useContext } from 'react'
+import type { XYPosition } from '@xyflow/react'
+import type { StickyColorId } from '../shared/sticky.palette'
 import type { OpenBrowserReq, OpenResult } from './browser.open.plan'
 import type { HandleSpawners } from './handleMenu.model'
 import type { AddSkillResult, AddSkillTarget, SkillRef } from './skillNode.add'
@@ -17,6 +19,8 @@ export type NodeActions = {
   openSkillAuthor?: (target?: string) => string
   /** Adds a skill node to the active board: with no `target`, cabled to the one selected Claude agent when there is exactly one; absent = no board provider. */
   addSkillNode?: (skill: SkillRef, target?: AddSkillTarget) => AddSkillResult
+  /** Adds a sticky note centred on `at` (default: the view centre), open for typing; returns its id. Absent = no board provider. */
+  addSticky?: (at?: XYPosition, color?: StickyColorId) => string
 }
 
 /**

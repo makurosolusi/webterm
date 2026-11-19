@@ -119,7 +119,7 @@ export default function App() {
     useLayoutHistory({ nodesRef, setNodes, scheduleSave })
 
   const {
-    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, nodeActions,
+    applyWorkspace, onNodesChange, onConnect, onEdgesChange, addFlowNode, restoreBridges, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, onAddSticky, nodeActions,
   } = useBoardActions({
     rf, activeWsRef, nodesRef, edgesRef, settings, activeId, browserReady: hydrated && !authRequired,
     setActiveWs, setNodes, setEdges, flushSave, scheduleSave, resetViewport, resetLayout, pushLayout, recordClosed,
@@ -160,7 +160,7 @@ export default function App() {
   }, [onNodesChange])
 
   const { onPaneContextMenu, menu: paneMenu } = useCanvasPaneMenu({
-    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, onFit, onSelectAll,
+    rf, settings, nodeCount: nodes.length, onAddTerminal, onAddFiles, onAddDiff, onAddBrowser, onAddAgent, onAddAgentChat, onAddSkill, onAddSticky, onFit, onSelectAll,
   })
 
   const nodeColor = useCallback((n: Node) => miniMapNodeColor(n, statuses), [statuses])
@@ -204,7 +204,7 @@ export default function App() {
   useAppCommands({
     openOmnibox: () => omni.open('all'), openQuickOpen: () => omni.open('files'), openFindInFiles: () => omni.open('files', '%'),
     openShortcuts: () => setShowHelp(true), openSettings: () => setShowSettings(true),
-    newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
+    newTerminal: () => onAddTerminal(), newFiles: () => onAddFiles(), newDiff: () => onAddDiff(), newSticky: () => onAddSticky(), newBrowser: onAddBrowser && (() => onAddBrowser()), fitView: () => onFit(),
     toggleMaximizeNode: () => toggleMaximizeTarget(nodesRef.current),
     toggleSessions: () => sideBar.setOpen((v) => !v), toggleChat: () => toggleSideBarView('chat'), toggleSecondarySideBar: toggleSideBar,
     toggleBoard: () => setBoard((v) => !v),

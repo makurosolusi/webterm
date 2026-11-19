@@ -150,8 +150,8 @@ describe('withTabPortal', () => {
     expect(container.querySelector('[data-testid=view-a]')).toBeNull()
   })
 
-  it('exposes the ten node types as stable module constants', () => {
-    expect(Object.keys(nodeTypes).sort()).toEqual(['agent', 'agentChat', 'app', 'browser', 'diff', 'editor', 'files', 'plan', 'skill', 'terminal'])
+  it('exposes the eleven node types as stable module constants', () => {
+    expect(Object.keys(nodeTypes).sort()).toEqual(['agent', 'agentChat', 'app', 'browser', 'diff', 'editor', 'files', 'plan', 'skill', 'sticky', 'terminal'])
     Object.values(nodeTypes).forEach((t) => expect(t).toBeTruthy())
   })
 })

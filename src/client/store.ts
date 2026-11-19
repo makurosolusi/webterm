@@ -4,10 +4,15 @@ import type { Node, Edge } from '@xyflow/react'
 import { isAgentChatPreset, validChatConfig } from '../shared/agentChat.shape'
 import { isBrowserProfileId } from '../shared/browser.profile'
 import { ZOOM_MAX, ZOOM_MIN } from './browser.zoom'
+import { STICKY_DEFAULT_SIZE, cleanStickyTag, cleanStickyText, isStickyColor } from '../shared/sticky.palette'
 import { SKILLS_IN, SKILL_CARD_SIZE, SKILL_NODE_SIZE, SKILL_OUT } from '../shared/skillPorts'
 import { isPermissionMode, validDiffNotes, validPlanData, type AgentStatus, type WsNode, type BridgeLink } from '../shared/workspace'
 
 const isSkillToken = (n: WsNode): boolean => n.kind === 'skill' && n.collapsed !== false
+
+/** Size of a node saved without one: a skill card and a sticky note have their own, everything else 400x300. */
+const defaultWidth = (kind: WsNode['kind']): number => (kind === 'skill' ? SKILL_CARD_SIZE.width : kind === 'sticky' ? STICKY_DEFAULT_SIZE.width : 400)
+const defaultHeight = (kind: WsNode['kind']): number => (kind === 'skill' ? SKILL_CARD_SIZE.height : kind === 'sticky' ? STICKY_DEFAULT_SIZE.height : 300)
 
 export function toFlow(n: WsNode): Node {
   return {
@@ -15,9 +20,9 @@ export function toFlow(n: WsNode): Node {
     type: n.kind,
     position: { x: n.x, y: n.y },
     // A collapsed skill is always the round token: boards saved when it was a 260x44 card load as a token (position kept).
-    width: isSkillToken(n) ? SKILL_NODE_SIZE.width : n.width ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.width : 400),
-    height: isSkillToken(n) ? SKILL_NODE_SIZE.height : n.height ?? (n.kind === 'skill' ? SKILL_CARD_SIZE.height : 300),
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, profileId: n.profileId, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion },
+    width: isSkillToken(n) ? SKILL_NODE_SIZE.width : n.width ?? defaultWidth(n.kind),
+    height: isSkillToken(n) ? SKILL_NODE_SIZE.height : n.height ?? defaultHeight(n.kind),
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, profileId: n.profileId, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion, stickyText: n.stickyText, stickyTag: n.stickyTag, stickyColor: n.stickyColor },
   }
 }
 
@@ -60,6 +65,10 @@ export function toWsNode(n: Node): WsNode {
     presetTarget: typeof d.presetTarget === 'string' ? d.presetTarget : undefined,
     skill: typeof d.skill === 'string' ? d.skill : undefined,
     seenVersion: typeof d.seenVersion === 'string' ? d.seenVersion : undefined,
+    // A field missing here is dropped silently on save; the server sanitizes again (workspace.schema.ts).
+    stickyText: typeof d.stickyText === 'string' ? cleanStickyText(d.stickyText) : undefined,
+    stickyTag: typeof d.stickyTag === 'string' ? cleanStickyTag(d.stickyTag) : undefined,
+    stickyColor: isStickyColor(d.stickyColor) ? d.stickyColor : undefined,
     // Validated on the way out: node data is written by the Diff node and must not persist junk.
     diffNotes: d.diffNotes === undefined ? undefined : validDiffNotes(d.diffNotes),
     plan: d.plan === undefined ? undefined : validPlanData(d.plan),

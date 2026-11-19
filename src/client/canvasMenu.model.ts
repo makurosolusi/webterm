@@ -14,9 +14,10 @@ import { BUILTIN_AGENT_IDS, FALLBACK_AGENT_COLOR, agentConfig, assembleCmd, cust
 import type { AgentId, BuiltinAgentId } from '../shared/workspace'
 import type { CustomAgent } from '../shared/settings'
 import { PROFILE_TEXT } from './browserProfile.text'
+import { STICKY_TEXT } from './sticky.labels'
 
 /** Ikon dirujuk lewat NAMA, bukan elemen React — supaya modul ini tetap bebas JSX dan bisa diuji. */
-export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'skill' | 'select-all' | 'fit'
+export type CanvasMenuIcon = 'terminal' | 'agent' | 'agentChat' | 'files' | 'browser' | 'diff' | 'skill' | 'sticky' | 'select-all' | 'fit'
 
 /** Label menu terkumpul di satu tempat, bukan bertebaran sebagai string telanjang di tiap baris. */
 export const MENU_LABELS = {
@@ -29,6 +30,7 @@ export const MENU_LABELS = {
   browserEach: PROFILE_TEXT.forEach,
   diff: 'Diff (working changes)',
   skill: 'Skill…',
+  sticky: STICKY_TEXT.menuAdd,
   selectAll: 'Select All',
   fitView: 'Fit View',
 } as const
@@ -76,6 +78,8 @@ export interface CanvasMenuHandlers {
   addAgentChat?: () => void
   /** Opens the skill picker at the click point (a canvas skill node, by reference); absent = no row. */
   addSkill?: () => void
+  /** A sticky note at the click point; absent = no row. */
+  addSticky?: () => void
   fitView: () => void
   selectAll?: () => void
 }
@@ -153,6 +157,8 @@ export function buildCanvasMenuRows(
   if (handlers.addBrowserForEachProfile) rows.push({ key: 'browser-each', label: MENU_LABELS.browserEach, icon: 'browser', onClick: handlers.addBrowserForEachProfile })
   if (handlers.addDiff) rows.push({ key: 'diff', label: MENU_LABELS.diff, icon: 'diff', onClick: handlers.addDiff })
   if (handlers.addSkill) rows.push({ key: 'skill', label: MENU_LABELS.skill, icon: 'skill', onClick: handlers.addSkill })
+
+  if (handlers.addSticky) rows.push({ key: 'sticky', label: MENU_LABELS.sticky, icon: 'sticky', onClick: handlers.addSticky })
 
   rows.push({ type: 'separator' })
 

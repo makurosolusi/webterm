@@ -2,6 +2,7 @@
 // `App.tsx` supaya App tetap soal state/wiring saja — di sini tidak ada state, ref, atau IO.
 import { MarkerType, Position } from '@xyflow/react'
 import type { Edge, Node, NodeHandle } from '@xyflow/react'
+import { stickyHex } from '../shared/sticky.palette'
 import { hiddenEdgeNodeIds, edgeVisible } from './floatingEdge'
 import type { AgentStatus, BridgeLink } from '../shared/workspace'
 
@@ -23,6 +24,8 @@ export const MINIMAP_SKILL_ACCENT = 'var(--skill-accent)'
 /** Warna satu node di MiniMap: status agent berwarna (selesai = netral), skill beraksen khas, selain itu netral. */
 export function miniMapNodeColor(n: Node, statuses: Record<string, AgentStatus>): string {
   if (n.type === 'skill') return MINIMAP_SKILL_ACCENT
+  // A sticky shows its own paper color on the mini-map (shared palette hex, not a theme token).
+  if (n.type === 'sticky') return stickyHex((n.data as { stickyColor?: unknown } | undefined)?.stickyColor)
   const s = statuses[n.id]
   return s ? STATUS_COLOR[s] : MINIMAP_NODE_NEUTRAL
 }
