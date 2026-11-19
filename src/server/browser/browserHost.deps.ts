@@ -20,5 +20,6 @@ export interface HostDeps {
   persistTabs?: (nodeId: string, tabs: PersistedTabs | null) => void // write a node's tab list to the board (the host debounces)
   agentDriving?: (nodeId: string) => boolean // an agent holds the node's lease: popups its clicks open count as the agent's
   tabDiscardMs?: number // idle time before a background tab is discarded
+  containGraceMs?: number // how long an unowned page may live before the containment guard acts (tests shorten it)
   downloads?: HostDownloadsDeps // absent = every download is denied (browserHost.downloads.ts)
 }

@@ -15,6 +15,7 @@ import type { ShieldRouter } from './browserHost.shield'
 import type { HostDeps } from './browserHost.deps'
 import { createConsoleLog } from './browserHost.console'
 import { createChallengeTracker } from './browserHost.challenge'
+import { createHostContainment, type Containment } from './browserHost.containment'
 import { createTargetLifecycle } from './browserHost.lifecycle'
 import { createTabs } from './browserHost.tabs'
 import type { TabManager } from './browserHost.tabs'
@@ -29,8 +30,7 @@ import type { TargetLifecycle } from './browserHost.lifecycle'
 import { blockOf, BrowserError, mergeState, notePendingInput, readHistory, TargetGoneError, TargetTable } from './browserHost.targets'
 import type { HostEvent, NavGuard, NodeRec } from './browserHost.targets'
 
-export { BrowserError, TargetGoneError } from './browserHost.targets'
-export type { HostEvent, NavGuard } from './browserHost.targets'
+export { BrowserError, TargetGoneError, type HostEvent, type NavGuard } from './browserHost.targets'
 
 const log = createLogger('browser.host')
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -47,6 +47,7 @@ export class BrowserHost implements BrowserHostApi {
   private readonly route: CdpHandler
   private readonly shield: ShieldRouter
   private readonly life: TargetLifecycle
+  private readonly contain: Containment // pages Chromium opens by itself are moved into a tab of their node or closed
   private readonly tabs: TabManager
   /** Tabs of a node (list, actions, per-tab CDP for the agent); see browserHost.tabs.api.ts. */
   readonly tabApi: TabApi
@@ -64,6 +65,7 @@ export class BrowserHost implements BrowserHostApi {
     })
     this.tabApi = createTabApi({ table: this.table, tabs: this.tabs, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch })
     this.sync = createSync({ table: this.table, tabApi: this.tabApi, emit })
+    this.contain = createHostContainment({ table: this.table, cdpOf: (r) => this.cdpOf(r), popupAllowed: (r, u) => this.shield.popupAllowed(r, u), newTab: (n, q) => this.tabApi.newTab(n, q), emit, now: deps.now, graceMs: deps.containGraceMs })
     this.route = createEventRouter({
       table: this.table, guard: deps.guard, patch, emit, crash: (r) => this.life.crash(r),
       refresh: (r) => this.refresh(r), fire: (r, m, p) => this.fire(r, m, p),
@@ -76,7 +78,7 @@ export class BrowserHost implements BrowserHostApi {
       },
       bgEvent: (b, m, p, sid) => this.tabs.bgEvent(b, m, p, sid), bgTitle: (b, t) => this.tabs.bgTitle(b, t), bgGone: (b) => this.tabs.bgGone(b), binding: (r, p) => this.tabs.binding(r, p),
       pageState: (url) => this.shield.pageState(url),
-      detached: (p) => this.shield.detached(p),
+      detached: (p) => this.shield.detached(p), stray: (i) => this.contain.stray(i), gone: (t) => this.contain.gone(t),
     })
     this.life = createTargetLifecycle({
       table: this.table, launcher: deps.launcher, profileOf: deps.profileOf, guard: deps.guard, connect: deps.connect, initialDevice: deps.initialDevice, downloads: deps.downloads, now: deps.now,
@@ -141,7 +143,7 @@ export class BrowserHost implements BrowserHostApi {
   async input(nodeId: string, ev: BrowserInputEvent): Promise<void> {
     const rec = this.need(nodeId)
     const rx = ev.ls === undefined ? 0 : Date.now() // cap terima server (I1-d); jalur langsung gateway = saat pesan tiba
-    if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev); return }
+    this.contain.noteInput(nodeId, ev); if (ev.tab && rec.tabs && ev.tab !== rec.tabs.state.activeTabId) { this.tabs.split.input(rec, ev.tab, ev); if (!this.deps.agentDriving?.(nodeId)) this.sync.onInput(nodeId, ev); return }
     if (ev.t === 'touch' && !rec.touch) {
       await this.send(rec, CDP.setTouchEmulation, { enabled: true, maxTouchPoints: TOUCH_POINTS_MAX })
       rec.touch = true
@@ -228,7 +230,7 @@ export class BrowserHost implements BrowserHostApi {
   }
 
   /** Tutup semua koneksi CDP (proses Chromium dimatikan oleh `launcher.shutdown()`). */
-  dispose(): Promise<void> { return this.life.dispose() }
+  dispose(): Promise<void> { this.contain.dispose(); return this.life.dispose() }
 
   // ---- internal ----
   private blockOf(url: string) { return blockOf(this.deps.guard, url) }

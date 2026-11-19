@@ -6,6 +6,8 @@ import { createLogger } from '../logs'
 import { CDP, CDP_EVENT } from './cdp.client'
 import type { CdpHandler } from './cdp.client'
 import { isInternalUrl, popupOf, pushFrame } from './browserHost.targets'
+import { markOwnTarget } from './browserHost.containment'
+import type { StrayInfo } from './browserHost.containment'
 import type { BgTab, HostEvent, NavGuard, NodeRec, PendingPopup, TargetTable } from './browserHost.targets'
 
 const log = createLogger('browser.host')
@@ -35,6 +37,10 @@ export interface RouterOps {
   /** State Shields untuk halaman baru (hitungan direset per muat halaman, seperti Brave). */
   pageState(url: string): Partial<BrowserState>
   detached(p: Record<string, unknown>): void
+  /** A page nobody owns appeared (no opener, not ours): the containment guard decides its fate (browserHost.containment.ts). */
+  stray(info: StrayInfo): void
+  /** A target went away: forget it in the containment guard. */
+  gone(targetId: string): void
 }
 
 /** Pembuat handler `'*'` untuk satu koneksi CDP; popup yang belum punya URL diingat per router. */
@@ -94,7 +100,11 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       return
     }
     const pop = popupOf(table, popups, created, info)
-    if (!pop) return
+    if (!pop) {
+      if (!popups.has(info.targetId)) ops.stray({ targetId: info.targetId, type: info.type, url: info.url })
+      return
+    }
+    markOwnTarget(info.targetId) // handed to the popup route: not a stray
     const nodeId = pop.opener.nodeId
     if (!ops.popup(pop.opener, pop.url)) {
       ops.closeTarget(pop.opener, info.targetId)
@@ -127,6 +137,7 @@ export function createEventRouter(ops: RouterOps): CdpHandler {
       case CDP_EVENT.targetCrashed: return crashTarget(p.targetId)
       case CDP_EVENT.targetDestroyed: {
         popups.delete(String(p.targetId))
+        ops.gone(String(p.targetId))
         const owner = table.target(p.targetId) ?? table.bgTarget(p.targetId)?.rec
         if (owner && typeof p.targetId === 'string' && ops.closed(owner, p.targetId)) return
         return crashTarget(p.targetId)
