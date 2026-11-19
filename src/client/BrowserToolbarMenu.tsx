@@ -11,6 +11,7 @@ import type { DeviceChoice } from '../shared/browser.devices'
 import { BrowserDevicePopover } from './BrowserDevicePicker'
 import BrowserAgentOffer from './browser.agentOffer'
 import { writeClipboard } from './browser.clipboard'
+import { openInSystemBrowser } from './canvasLinks'
 import { zoomLabel } from './browser.zoom'
 import { AGENT_OFFER_TEXT, TOOLBAR_MENU_TEXT as M, TOOLBAR_TEXT, TOOLBAR_TIP, ZOOM_TEXT } from './browser.uxText'
 import type { DesignMode } from './browser/design/useDesignMode'
@@ -83,7 +84,7 @@ export default function BrowserToolbarMenu(p: BrowserToolbarMenuProps) {
     { type: 'item', id: 'copy-url', label: M.copyUrl, icon: icon('copy'), disabled: !url, onSelect: () => {
       void writeClipboard(url).then((r) => { if (!r.ok) { console.warn('browser.copyUrl failed', r.error); p.onError(M.copyFailed) } })
     } },
-    { type: 'item', id: 'open-external', label: M.openExternal, icon: icon('link-external'), disabled: !url, onSelect: () => { window.open(url, '_blank', 'noopener') } },
+    { type: 'item', id: 'open-external', label: M.openExternal, icon: icon('link-external'), disabled: !url, onSelect: () => { openInSystemBrowser(url) } },
   )
   if (p.agentEnabled) {
     items.push({ type: 'separator' }, { type: 'item', id: 'agent', label: TOOLBAR_TEXT.agentControl, checked: p.agentControl, onSelect: () => p.onAgentControl(!p.agentControl) })

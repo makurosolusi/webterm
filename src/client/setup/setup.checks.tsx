@@ -3,6 +3,7 @@
 // waiting line up and read the same. Failure fixes (install and sign-in commands) reuse `CopyLine`.
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ExternalLink } from '../ExternalLink'
 import { CONNECTION_TEXT, CopyLine } from '../claudeLauncher/ConnectionTest'
 import { CONN_STAGES, type ConnectionTestHandle, type ConnStage, type StageEvent } from '../claudeLauncher/connectionTest.client'
 
@@ -38,7 +39,7 @@ function Row({ stage, e }: { stage: ConnStage; e: StageEvent | undefined }): Rea
           {e.install ? <>
             <CopyLine label={CONNECTION_TEXT.install} command={e.install.installCommand} />
             <CopyLine label={CONNECTION_TEXT.npm} command={e.install.npmCommand} />
-            <a className="self-start underline" href={e.install.docsUrl} target="_blank" rel="noreferrer">{CONNECTION_TEXT.docs}</a>
+            <ExternalLink className="self-start underline" href={e.install.docsUrl}>{CONNECTION_TEXT.docs}</ExternalLink>
           </> : null}
           {e.signIn?.command ? <CopyLine label={CONNECTION_TEXT.signIn} command={e.signIn.command} /> : null}
         </div>

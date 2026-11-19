@@ -7,6 +7,8 @@
 // scrolls inside the preview; `mailto:` and `tel:` keep the browser default, which hands them to
 // the OS without leaving the page.
 
+import { openLinkInCanvas } from './canvasLinks'
+
 export type MarkdownLinkDecision =
   | { action: 'external'; url: string }
   | { action: 'local'; path: string; line?: number; column?: number }
@@ -126,8 +128,7 @@ export function handleMarkdownLinkEvent(e: LinkEvent, baseDir: string, deps: Mar
 
 type OpenBrowser = (req: { url: string; anchorNodeId?: string }) => { status: string }
 
-/** Open a web link in a browser node on the canvas, or in a new browser tab when that node is off or refuses the URL. */
+/** Open a web link in a browser node on the canvas; when that node is off or refuses it, a notice offers the explicit exit (never a silent tab). */
 export function openWebLink(openBrowserAt: OpenBrowser | undefined, url: string, anchorNodeId?: string): void {
-  const result = openBrowserAt?.({ url, anchorNodeId })
-  if (!result || result.status === 'invalid') window.open(url, '_blank', 'noopener,noreferrer')
+  openLinkInCanvas(url, { openBrowserAt, anchorNodeId })
 }

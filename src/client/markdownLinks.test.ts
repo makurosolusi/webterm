@@ -133,14 +133,11 @@ describe('openWebLink', () => {
     windowOpen.mockRestore()
   })
 
-  it('falls back to a noopener tab when there is no browser node or it rejects the URL', () => {
+  it('never opens a tab itself when there is no browser node or it rejects the URL', () => {
     const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null)
     openWebLink(undefined, 'https://one.test/')
     openWebLink(() => ({ status: 'invalid' }), 'https://two.test/')
-    expect(windowOpen.mock.calls).toEqual([
-      ['https://one.test/', '_blank', 'noopener,noreferrer'],
-      ['https://two.test/', '_blank', 'noopener,noreferrer'],
-    ])
+    expect(windowOpen).not.toHaveBeenCalled()
     windowOpen.mockRestore()
   })
 })

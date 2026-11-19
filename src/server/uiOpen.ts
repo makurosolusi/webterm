@@ -9,6 +9,7 @@ import { lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEFAULT_HOST, tokensMatch } from './auth'
 import { childEnv } from './childEnv'
+import { assertPathArg } from './openArgGuard'
 import { createLogger } from './logs'
 
 const log = createLogger('auth')
@@ -39,6 +40,7 @@ export interface UiOpener {
 
 /** Default opener: `open` (macOS), `xdg-open` (Linux), `explorer.exe` (Windows); argv = the path. */
 export const openWithSystem: OpenFile = (path) => {
+  assertPathArg(path, 'uiOpen')
   if (process.env.NODE_ENV === 'test') return Promise.reject(new Error('refusing to launch a browser under a test runner'))
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer.exe' : 'xdg-open'
   return new Promise((resolve, reject) => {

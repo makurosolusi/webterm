@@ -3,6 +3,7 @@
 // "Testing… N s" header with Cancel, and a final banner (status on success, alert on failure).
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ExternalLink } from '../ExternalLink'
 import { CONN_STAGES, type ConnectionTestHandle, type ConnectionTestState, type ConnStage, type StageEvent } from './connectionTest.client'
 
 export const CONNECTION_TEXT = {
@@ -71,7 +72,7 @@ function Row({ stage, e }: { stage: ConnStage; e: StageEvent | undefined }): Rea
           {e.install ? <>
             <CopyLine label={CONNECTION_TEXT.install} command={e.install.installCommand} />
             <CopyLine label={CONNECTION_TEXT.npm} command={e.install.npmCommand} />
-            <a className="underline" href={e.install.docsUrl} target="_blank" rel="noreferrer">{CONNECTION_TEXT.docs}</a>
+            <ExternalLink className="underline" href={e.install.docsUrl}>{CONNECTION_TEXT.docs}</ExternalLink>
           </> : null}
           {e.signIn?.command ? <CopyLine label={CONNECTION_TEXT.signIn} command={e.signIn.command} /> : null}
         </div>

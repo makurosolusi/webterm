@@ -64,11 +64,4 @@ describe('openLinkOnModifiedClick', () => {
     openLinkOnModifiedClick({ metaKey: false, ctrlKey: false }, 'https://a.test', open)
     expect(open).not.toHaveBeenCalled()
   })
-  it('default opener uses a new tab with noopener', () => {
-    const w = vi.fn()
-    vi.stubGlobal('window', { open: w })
-    openLinkOnModifiedClick({ metaKey: true, ctrlKey: false }, 'https://a.test')
-    vi.unstubAllGlobals()
-    expect(w).toHaveBeenCalledWith('https://a.test', '_blank', 'noopener')
-  })
 })

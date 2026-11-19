@@ -1,6 +1,7 @@
 // The link catcher: `webterm-open` (the BROWSER handler) plus shims named like the programs that open a link
 // (`open`, `xdg-open`, ...), installed into `<dataDir>/bin`, which every terminal session puts first on PATH.
-// POSIX sh + curl like the `webterm` CLI. A shim ONLY takes http(s) URLs; every other call (files, folders,
+// POSIX sh + curl like the `webterm` CLI. A shim ONLY takes web URLs (http/https/ftp); `file:` URLs and web-like files
+// (.html/.htm/.xhtml/.svg) are refused (they would open the machine browser); every other call (folders, other files,
 // `open -a App`, mailto:, no webterm credentials, switch off) goes to the real opener found on PATH AFTER
 // the shim directory, with WEBTERM_OPEN_BYPASS set so nothing can loop back into a shim.
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -45,9 +46,20 @@ real() {
   echo "webterm: no $name found to open: $*" >&2; exit 127
 }
 fail() { echo "webterm: could not open in canvas browser: $1; URL: $2" >&2; exit 1; }
-isurl() { case "$1" in [hH][tT][tT][pP]://*|[hH][tT][tT][pP][sS]://*) return 0 ;; *) return 1 ;; esac; }
+isurl() { case "$1" in [hH][tT][tT][pP]://*|[hH][tT][tT][pP][sS]://*|[fF][tT][pP]://*) return 0 ;; *) return 1 ;; esac; }
+# A file: URL or a web-like file (.html/.htm/.xhtml/.svg) would open in the machine browser: refused, never forwarded.
+webfile() {
+  case "$1" in [fF][iI][lL][eE]:*) return 0 ;; esac
+  case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in *.html|*.htm|*.xhtml|*.svg) return 0 ;; esac
+  return 1
+}
+refuse() { echo "webterm: refused to open $1: web pages open in the canvas browser only. Serve it over http(s) and open that URL, or use 'Open in system browser' in the UI." >&2; exit 1; }
 [ -z "\${${LINK_BYPASS_ENV}:-}" ] || real "$@"
 [ "$#" -gt 0 ] || real "$@"
+# An explicit app/reveal/editor flag (-a -b -R -e -t -f) is the user's own choice of program; otherwise the default handler of a web file is a browser.
+explicit=""
+if [ -n "$as" ]; then for a in "$@"; do case "$a" in -a|-b|-R|-e|-t|-f) explicit=1 ;; esac; done; fi
+if [ -z "$explicit" ]; then for a in "$@"; do if webfile "$a"; then refuse "$a"; fi; done; fi
 urls=""
 if [ -n "$as" ]; then
   # A named opener takes over only when EVERY argument is an http(s) URL (a flag, file or app name = the user's own call).

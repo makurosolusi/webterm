@@ -12,6 +12,7 @@ import { callCapabilities } from '../capabilitiesApi'
 import { useCentralEnv } from '../centralSettings.env'
 import { ChromiumDownload } from '../ChromiumDownload'
 import { ChromiumPathField } from '../ChromiumPathField'
+import { ExternalLink } from '../ExternalLink'
 import { useCapabilities } from '../useCapabilities'
 import { SETUP_TEXT } from './setup.labels'
 import { StepFooter, StepLoading, StepPage, Tiles, type StepProps, type StepSetting } from './setup.ui'
@@ -80,7 +81,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
         <div className="flex flex-col gap-1.5 text-xs" data-browser-none>
           <p className="m-0 flex items-center gap-1.5"><span className="codicon codicon-warning" aria-hidden="true" />{T.noneFound}</p>
           <div className="flex items-center gap-2">
-            <a className="underline" href={T.chromeUrl} target="_blank" rel="noreferrer">{T.getChrome}</a>
+            <ExternalLink className="underline" href={T.chromeUrl}>{T.getChrome}</ExternalLink>
             <ActionButton size="sm" variant="outline" action={check} busyLabel={T.checking}>{T.checkAgain}</ActionButton>
           </div>
           <ActionResult action={check} stamp="checked" />

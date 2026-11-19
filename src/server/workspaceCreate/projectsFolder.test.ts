@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { findExistingClone, readOriginUrl } from './alreadyCloned'
 import { normalizeRepoUrl } from './cloneUrl'
 import { preflight } from './preflight'
@@ -102,6 +102,12 @@ describe('reveal', () => {
     await revealPath('/a/b c/proj', { platform: 'darwin', spawn })
     await revealPath('/a/b c/proj', { platform: 'linux', spawn })
     expect(calls).toEqual([['open', ['-R', '/a/b c/proj']], ['xdg-open', ['/a/b c']]])
+  })
+
+  it('refuses a URL: the file manager opener must never reach a browser', () => {
+    const never = vi.fn(async () => undefined)
+    expect(() => revealPath('https://example.com', { platform: 'darwin', spawn: never })).toThrow(/refusing to hand a URL/)
+    expect(never).not.toHaveBeenCalled()
   })
 
   it('rejects with the command named when it cannot start', async () => {
