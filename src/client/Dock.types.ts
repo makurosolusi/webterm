@@ -5,15 +5,13 @@ import type { VscodeStatusItem } from '@/components/vscode/vscodeStatusBar'
 import type { SideBarView } from './sideBar/sideBar.view'
 
 export interface DockProps {
-  /** Compact/Hidden header: the app menu button, first in the rail. Absent in Full (the header's menu bar is the door). */
+  /** The app menu button (hamburger), first in the rail. */
   railMenu?: ReactNode
-  /** Compact/Hidden header: the Account button (bottom group, above Settings). */
+  /** The Account button (bottom group, above Settings). */
   railAccount?: ReactNode
-  /** Hidden header: the board layout switch (bottom group). */
+  /** Hidden header only: the board layout switch (bottom group). */
   railLayout?: ReactNode
-  /** Compact/Hidden header: the workspace tile group (`WorkspaceRail`), between search and the tool icons. Absent in Full. */
-  workspaceGroup?: ReactNode
-  /** Hidden header mode: adds a Search item at the top of the rail (opens Go to Anything). Absent: no item. */
+  /** Opens Go to Anything: the rail's Search item (Mod+K works too). Absent: no item. */
   onOpenPalette?: () => void
   onAddTerminal: () => void
   /** Tidak ada = kemampuan browser mati di server; memilih baris "Browser" memunculkan tawaran "Nyalakan". */

@@ -1,0 +1,28 @@
+/* Rail rhythm and the pinned rail (docs/decisions/header-rail-layout.md).
+
+   Rhythm: every rail item is ONE cell of `--rail-item-h`, every group separates its items by ONE `--rail-gap`. Items
+   are in normal flow (flex column) and nothing in the rail is absolutely positioned, so two items can never share
+   a spot; `dock.rail.policy.test.ts` pins both.
+
+   Pinned rail (`data-rail-labels='on'` on <html>, set by `railLabels.store`) widens the column to 220px and shows a
+   name beside every item; there is no hover-peek (the rail's right edge is a pan zone). */
+:root {
+  --rail-item-h: 48px;
+  --rail-gap: 0px;
+  --rail-w-pinned: 220px;
+}
+:root[data-rail-labels='on'] { --activity-bar-w: var(--rail-w-pinned); }
+
+/* One size for every item, whatever draws it (activity bar item, menu, account, settings, toggles). */
+.dock .vscode-activity-bar__item,
+.dock .dock-btn { width: 100%; height: var(--rail-item-h); }
+.dock__top,
+.dock__modes,
+.dock .vscode-activity-bar__group { gap: var(--rail-gap); }
+
+/* Pinned rail: items are rows (icon + name) instead of squares. The width token drives the grid column and every
+   floating panel's offset, so nothing else moves by hand. */
+:root[data-rail-labels='on'] .vscode-activity-bar__item,
+:root[data-rail-labels='on'] .dock-btn { justify-content: flex-start; gap: 12px; padding-left: 10px; }
+:root[data-rail-labels='on'] .vscode-activity-bar__item::after { content: attr(data-label); font-size: 13px; white-space: nowrap; }
+:root[data-rail-labels='on'] .dock-btn::after { content: attr(aria-label); font-size: 13px; white-space: nowrap; }

@@ -1,4 +1,4 @@
-// Bottom group of the rail (ala "Manage" VS Code): Account (Compact/Hidden), Settings (opens a dialog), the
+// Bottom group of the rail (ala "Manage" VS Code): Account, Settings (opens a dialog), the
 // Hidden header's layout switch, then lock and clean view, which are TOGGLES (`aria-pressed`) that the
 // navigation items of the activity bar cannot be.
 import type { ReactNode } from 'react'
@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
 
 export interface DockModesProps {
-  /** Compact/Hidden: the Account button, above Settings. */
+  /** The Account button, above Settings. */
   railAccount?: ReactNode
   onOpenSettings?: () => void
   /** Hidden: the board layout switch (the header has no tab row to hold it). */

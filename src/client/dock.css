@@ -10,7 +10,12 @@
 }
 
 /* Grid item, bukan plat melayang: activity bar adalah bagian tetap dari chrome, sama seperti VS
-   Code. `position: relative` menjaga z-index lama (di atas panel yang z-12). */
+   Code. `position: relative` menjaga z-index lama (di atas panel yang z-12).
+
+   Tinggi rail: kolom flex biasa. Grup atas (menu, search) dan grup bawah (account ... clean view) tidak menyusut,
+   begitu juga activity bar (`flex: 1 0 auto`); bila jendela terlalu pendek, `.dock` yang menggulung dan grup bawah
+   menempel di tepi bawah (`sticky`). Dulu activity bar `height: 100%` + `flex: 1 1 auto` berbasis setinggi rail, jadi
+   ia menyusut bersama saudara-saudaranya sementara itemnya (`flex: none`) meluap tanpa terpotong: ikon bertabrakan. */
 .dock {
   grid-area: activity;
   position: relative;
@@ -18,15 +23,21 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   background: var(--vscode-activityBar-background);
   border-right: 1px solid var(--vscode-activityBar-border);
 }
 
+.dock__top { display: flex; flex: none; flex-direction: column; }
+
 /* Primitif membawa latar sendiri; di dalam rail ia memakai latar rail supaya satu permukaan. */
 .dock > .vscode-activity-bar {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   width: 100%;
-  min-height: 0;
+  height: auto;
   border-right: 0; /* `.dock` yang memegang garis pemisah */
   background: transparent;
 }
@@ -36,9 +47,13 @@
    hanya mengubah kecerahan ikon. Warna idle ikut inactiveForeground rail, karena grup ini berada
    di luar `<nav>` activity bar dan kalau tidak akan mewarisi warna teks biasa. */
 .dock__modes {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   flex: none;
+  background: var(--vscode-activityBar-background);
   color: var(--vscode-activityBar-inactiveForeground);
 }
 
