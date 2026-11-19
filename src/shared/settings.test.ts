@@ -6,7 +6,8 @@ describe('DEFAULT_SETTINGS', () => {
   it('tidak memuat kunci yang bisa membawa rahasia (settings melintas HTTP)', () => {
     // `key$` bukan `key`: `terminalFontZoomKeys` adalah tombol keyboard, bukan kredensial.
     const risky = /secret|token|password|credential|auth|key$/i
-    expect(Object.keys(DEFAULT_SETTINGS).filter((k) => risky.test(k))).toEqual([])
+    // `maskSecrets` is a boolean switch about secrets, not a place to store one.
+    expect(Object.keys(DEFAULT_SETTINGS).filter((k) => risky.test(k) && k !== 'maskSecrets')).toEqual([])
   })
 
   it('default scrollback dalam BYTE sama dengan konstanta server hari ini (256 KiB)', () => {
@@ -141,6 +142,25 @@ describe('quickDrag', () => {
     expect(mergeSettings({ quickDrag: 'altDrag' }).quickDrag).toBe('cmdCtrl')
     expect(mergeSettings({ quickDrag: '' }).quickDrag).toBe('cmdCtrl')
     expect(mergeSettings({ quickDrag: 1 }).quickDrag).toBe('cmdCtrl')
+  })
+})
+
+describe('maskSecrets / maskAutoHideSec', () => {
+  it('default to safe: masking ON, auto-hide 30 s', () => {
+    expect(DEFAULT_SETTINGS.maskSecrets).toBe(true)
+    expect(DEFAULT_SETTINGS.maskAutoHideSec).toBe(30)
+    expect(mergeSettings({}).maskSecrets).toBe(true)
+  })
+
+  it('round-trips every preset and the off switch', () => {
+    for (const n of [15, 30, 60, 0]) expect(mergeSettings({ maskAutoHideSec: n }).maskAutoHideSec).toBe(n)
+    expect(mergeSettings({ maskSecrets: false }).maskSecrets).toBe(false)
+    expect(mergeSettings(mergeSettings({ maskSecrets: false, maskAutoHideSec: 0 }))).toMatchObject({ maskSecrets: false, maskAutoHideSec: 0 })
+  })
+
+  it('normalizes values outside the presets to the default', () => {
+    for (const bad of [45, -5, 61, 1000, 'x', '30', null, NaN, 7.5]) expect(mergeSettings({ maskAutoHideSec: bad }).maskAutoHideSec).toBe(30)
+    expect(mergeSettings({ maskSecrets: 'no' }).maskSecrets).toBe(true)
   })
 })
 

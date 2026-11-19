@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Field, SelectField, ToggleField } from './SettingsFields'
 import { SettingsAdvanced, SettingsGroup, SettingsSegmented, type SegmentedOption } from './SettingsControls'
 import { NumberSelectField } from './SettingsPickerFields'
-import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS } from './settingsPresets'
+import { EDGE_COLOR_PRESETS, EDGE_WIDTH_OPTIONS, GRID_SIZE_OPTIONS, MASK_AUTO_HIDE_OPTIONS } from './settingsPresets'
 import { SkillCableFields } from './SettingsSkillCable'
 import { Swatch } from './CanvasBackgroundControls'
 import { EDGE_STROKE } from './canvasStyle'
@@ -73,6 +73,14 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         <ToggleField setting="nodeStatusBar" id="st-nodeStatusBar" label="Status bar" value={s.nodeStatusBar}
           hint="Show session and agent details at the bottom of each node, with warnings when something looks wrong."
           onChange={(v) => onChange({ nodeStatusBar: v })} />
+      </SettingsGroup>
+      <SettingsGroup title="File editor">
+        <ToggleField setting="maskSecrets" id="st-maskSecrets" label="Mask secrets in files" value={s.maskSecrets}
+          hint="Values of API keys, tokens and passwords are hidden until you reveal them."
+          onChange={(v) => onChange({ maskSecrets: v })} />
+        <NumberSelectField setting="maskAutoHideSec" id="st-maskAutoHideSec" label="Hide revealed secrets after" value={s.maskAutoHideSec}
+          options={MASK_AUTO_HIDE_OPTIONS} onChange={(v) => onChange({ maskAutoHideSec: v })}
+          lock={s.maskSecrets ? undefined : { reason: 'Turn on “Mask secrets in files” first.' }} />
       </SettingsGroup>
       <SettingsGroup title="New projects">
         <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
