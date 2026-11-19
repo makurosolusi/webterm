@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.3] - 2026-11-19
+
+### Fixed
+- The Docker image build for linux/amd64 failed because the Chrome download script imported sources that were not copied into the image yet; the needed files are now copied before the download and a test fails when a new import is missing from that list.
+- CI now runs green: tests no longer assume macOS (Keychain, ripgrep, zsh, HOME, pgrep self-match) and the workflow installs the tools the suites need.
+
+### Changed
+- Known limitation: v0.9.2 was tagged but no image was published for it (its image build failed); use 0.9.3 or later.
+
 ## [0.9.2] - 2026-11-19
 
 ### Added
