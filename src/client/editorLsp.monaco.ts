@@ -28,6 +28,8 @@ export interface EditorLspDeps {
   open(workspaceId: string, language: ServerLanguage): WebSocket
   readMeta(path: string): Promise<ReadMeta>
   writeChecked(path: string, content: string, opts: { expectedVersion?: FsVersion; mustExist?: boolean }): Promise<FsResult>
+  /** Hides secrets in disk text that is only displayed (peek copies, rename preview); never used for writes. */
+  maskDisplay?(path: string, text: string): string
 }
 
 /** Files fetched read-only so Peek can show a definition/reference outside open editors. ponytail: cap, not paging. */
@@ -186,7 +188,7 @@ export function wireEditorLsp(m: M, deps: EditorLspDeps): void {
           fetched.add(path)
           const meta = await deps.readMeta(path).catch((e: unknown) => { console.warn('lsp: cannot read definition target', path, e instanceof Error ? e.message : String(e)); return null })
           if (!meta || meta.encoding !== 'utf8') continue
-          if (!m.editor.getModel(uri)) peek.add(m.editor.createModel(meta.content, undefined, uri))
+          if (!m.editor.getModel(uri)) peek.add(m.editor.createModel(deps.maskDisplay?.(path, meta.content) ?? meta.content, undefined, uri))
         }
       }
       out.push({ uri, range: toRange(l.range) })
@@ -227,7 +229,7 @@ export function wireEditorLsp(m: M, deps: EditorLspDeps): void {
     if (!files.length) return { edits: [] }
     const ok = await requestRenamePreview({
       nodeId: model.uri.fragment, newName,
-      files: files.map((f) => ({ path: f.path, lines: renamePreviewLines(f.meta?.content ?? f.models[0]!.getValue(), f.edits) })),
+      files: files.map((f) => ({ path: f.path, lines: renamePreviewLines(f.meta ? (deps.maskDisplay?.(f.path, f.meta.content) ?? f.meta.content) : f.models[0]!.getValue(), f.edits) })),
     })
     if (!ok) return { edits: [], rejectReason: 'Rename cancelled.' }
     // ponytail: disk files are written one by one; a failure midway leaves the earlier ones renamed (all failures are named).

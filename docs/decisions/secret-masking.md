@@ -35,3 +35,30 @@ It is pure (no I/O, no DOM): `detectSecrets(path, text)` returns `{ fileWide, ra
 Linear time. Every unbounded run is anchored by a lookbehind so it is scanned once per run, the
 scan is line based, placeholder regexes only run on values up to 256 chars, and tests include
 hostile inputs (long runs, repeated prefixes, unclosed `${`) with time limits.
+
+## Editor integration
+
+Wired in `useEditorMask.ts` (state), `editorMask.tokens.ts` (per-value reveal), `editorMask.items.tsx`
+(status bar + banners), `editorMask.live.ts` (setting for Monaco-side code). Active only while the
+`maskSecrets` setting is on; `maskAutoHideSec` drives `useSecretReveal`.
+
+- **The model holds display text, not the real text.** Masked: `maskText(real, scan, reveal)` (same
+  length, bullets), read-only. The real text lives only in a ref. No CSS blur or decoration-only hiding.
+- **Reveal / Reveal all** change the display text only; the editor stays read-only. **Edit** reveals
+  everything and swaps the real text in, editable ("Secrets visible — editing.").
+- **Masked mode never writes**: save is a no-op, dirty is always false, `getValue()` is not used for
+  save/dirty. Reload reads the real text from disk and masks again. Markdown preview and conflict
+  Compare use the masked text. LSP sees the model text (so display text); peek copies and the rename
+  preview of files read from disk go through `maskDisplay` (`editorMask.live.ts`).
+- **Data-loss guard**: when auto-hide / blur / Escape fires while editing with unsaved changes, nothing
+  is re-masked and no edit is dropped; a notice says so, and the re-mask happens after save or discard
+  (reload). A clean edit session re-masks right away with "Secrets hidden again."
+- **Undo / view state**: swaps use `model.setValue`, which in Monaco 0.57 clears the undo stack and the
+  model decorations (`textModel.js` `_setValueFromTextBuffer`), so undo can never cross between real and
+  display text. Cursor and scroll are restored with `saveViewState` / `restoreViewState` around it.
+  Per-value hover/click decorations are rebuilt after every swap.
+- When Settings turns the status bar off, Reveal all / Edit / Hide appear in the banner instead.
+
+Known limits: a rename (LSP) that edits an open masked node changes only the display text and is not
+written back (reveal and Edit first); Monaco model markers/glyph decorations from the language server
+are cleared by a swap until the next diagnostics push.

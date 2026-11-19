@@ -1,0 +1,3 @@
+/* Masked secret values in the editor: a pointer cursor says "click to reveal this one". */
+.webterm-secret-token { cursor: pointer; }
+.editor-node__mask { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }

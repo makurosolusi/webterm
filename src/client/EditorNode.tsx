@@ -13,6 +13,7 @@ import * as fsClient from './fsClient'
 import { EditorConflictBar } from './EditorConflictBar'
 import { EditorCrumbs, EditorDirtyDot, EditorHeaderActions, PREVIEW_COMMAND_ID, useFilesRoot } from './EditorNode.header'
 import { EditorCompare } from './EditorNode.compare'
+import { EditorMaskBanner } from './editorMask.items'
 import { CopyText, EditorLoadFailure, EditorLoading } from './EditorNode.notices'
 import EditorStatusBar, { runEditorAction, type ViewerMeta } from './EditorStatusBar'
 import type { MenuRow } from './NodeContextMenu'
@@ -126,7 +127,7 @@ function EditorNode({
     const meta = await readMeta(filePath)
     const refusal = loadRefusal(meta.content, 'File', true)
     if (refusal) throw new Error(refusal)
-    return { path: filePath, original: meta.content, modified: live?.editor.getValue() ?? '' }
+    return { path: filePath, original: ef.mask.maskDisk(filePath, meta.content), modified: live?.editor.getValue() ?? '' }
   }
   // Tab mode: the tab is the header, so the header's actions move to the tab strip and tab menu.
   const host = useNodeHost()
@@ -255,6 +256,7 @@ function EditorNode({
               </IconButton>
             </div>
           )}
+          {editable && <EditorMaskBanner mask={ef.mask} />}
           {editable && <EditorRenamePreview nodeId={id} />}
           {editable && ef.conflict && (
             <EditorConflictBar conflict={ef.conflict} fileName={fileName} onReload={() => void ef.reload()} onOverwrite={ef.overwrite} onCompare={() => setComparing(true)} />
@@ -266,7 +268,7 @@ function EditorNode({
             </div>
           )}
         </div>
-        <EditorStatusBar live={live} encoding={ef.encoding} saving={ef.saving} readOnly={readOnly} meta={kind !== 'text' ? viewerMeta : null} />
+        <EditorStatusBar live={live} encoding={ef.encoding} saving={ef.saving} readOnly={readOnly} mask={ef.mask} meta={kind !== 'text' ? viewerMeta : null} />
       </div>
     </>
   )
