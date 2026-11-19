@@ -24,6 +24,11 @@ describe('parseCookies storageState', () => {
     expect(b).toMatchObject({ domain: 'b.org', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: undefined })
   })
 
+  it('reads Cookie-Editor fields: expirationDate and no_restriction', () => {
+    const [c] = parseCookies('storageState', JSON.stringify([{ name: 'a', value: 'v', domain: 'x.com', expirationDate: 1900000000.5, sameSite: 'no_restriction' }])) // test-only
+    expect(c).toMatchObject({ expires: 1900000000.5, sameSite: 'None' })
+  })
+
   it('accepts a bare cookie array', () => {
     expect(parseCookies('storageState', JSON.stringify([{ name: 'a', value: '', domain: 'x.com' }]))).toHaveLength(1)
   })
