@@ -19,7 +19,7 @@ Open `http://127.0.0.1:8700` on the Docker host and create the first account wit
 `compose.ghcr.yml` runs the image from `ghcr.io/makurosolusi/webterm` without a repo checkout. The seccomp profile is a local file, so fetch the one from the SAME tag as the image:
 
 ```sh
-TAG=0.9.2
+TAG=0.9.3
 curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v$TAG/docker/chrome.seccomp.json
 curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v$TAG/compose.ghcr.yml
 WEBTERM_IMAGE_TAG=$TAG docker compose -f compose.ghcr.yml up -d
@@ -27,7 +27,7 @@ WEBTERM_IMAGE_TAG=$TAG docker compose -f compose.ghcr.yml up -d
 
 - **Tags:** `x.y.z`, `x.y`, `latest` (stable releases only) and `sha-<short>`. Pin `WEBTERM_IMAGE_TAG` to `x.y.z` for reproducible deployments; `pull_policy: always` re-checks the tag on every `up`. Point `WEBTERM_SECCOMP` elsewhere if the profile is not next to the compose file.
 - **Visibility:** a new GHCR package is private by default. Change it under GitHub > Packages > the package > Package settings. For a private image run `docker login ghcr.io` first with a token that has `read:packages`.
-- **Releasing:** update `CHANGELOG.md`, then push tag `v0.9.2` (matching `package.json`). `.github/workflows/docker-publish.yml` builds, runs the smoke test (healthcheck, `claude --version`, Chrome `--version`, custom-command PATH; no real page), and only then pushes `linux/amd64` + `linux/arm64` with provenance and SBOM. The workflow can also be started manually.
+- **Releasing:** update `CHANGELOG.md`, then push tag `v0.9.3` (matching `package.json`). `.github/workflows/docker-publish.yml` builds, runs the smoke test (healthcheck, `claude --version`, Chrome `--version`, custom-command PATH; no real page), and only then pushes `linux/amd64` + `linux/arm64` with provenance and SBOM. The workflow can also be started manually.
 
 ## Browser per architecture
 
