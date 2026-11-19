@@ -7,7 +7,7 @@ describe('settings.setup normalize', () => {
   it('defaults to incomplete with no steps', () => {
     expect(DEFAULT_SETTINGS.setup).toEqual({ completedAt: null, steps: {} })
     expect(mergeSettings(null).setup).toEqual(DEFAULT_SETUP)
-    expect(SETUP_STEPS).toEqual(['claude', 'browser', 'central', 'basics'])
+    expect(SETUP_STEPS).toEqual(['claude', 'browser', 'commands', 'central', 'basics'])
   })
 
   it('drops unknown steps and values', () => {

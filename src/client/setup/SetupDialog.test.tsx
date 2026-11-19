@@ -51,11 +51,11 @@ describe('SetupDialog', () => {
   })
 
   it('?setup=1 resumes at the first unfinished step and shows the step marks', async () => {
-    mount('/?setup=1', withSteps({ claude: 'done', browser: 'skipped' }))
+    mount('/?setup=1', withSteps({ claude: 'done', browser: 'skipped', commands: 'skipped' }))
     expect(heading()).toBe(SETUP_TEXT.steps.central)
-    expect(screen.getByText(SETUP_TEXT.stepOf(3, 4))).toBeTruthy()
+    expect(screen.getByText(SETUP_TEXT.stepOf(4, 5))).toBeTruthy()
     const state = (s: string): string | null => document.querySelector(`[data-step="${s}"]`)?.getAttribute('data-state') ?? null
-    expect([state('claude'), state('browser'), state('central'), state('basics')]).toEqual(['done', 'skipped', 'current', 'todo'])
+    expect([state('claude'), state('browser'), state('commands'), state('central'), state('basics')]).toEqual(['done', 'skipped', 'skipped', 'current', 'todo'])
     await screen.findByText(SETUP_TEXT.central.modes.off)
   })
 
@@ -108,7 +108,7 @@ describe('SetupDialog', () => {
   it('Finish on the last step sets completedAt and shows the Done panel with the project actions', async () => {
     const run = vi.fn()
     const off = registerCommands([{ id: 'workspace.newProject', label: 'Workspace: New Project…', run }])
-    mount('/?setup=basics', withSteps({ claude: 'done', browser: 'done', central: 'done' }))
+    mount('/?setup=basics', withSteps({ claude: 'done', browser: 'done', commands: 'done', central: 'done' }))
     click(SETUP_TEXT.finish)
     await screen.findByText(SETUP_TEXT.doneBody)
     const p = patches.at(-1)?.setup
@@ -132,7 +132,7 @@ describe('SetupDialog', () => {
       expect(current[0]).toBe(item('central'))
       expect(item('claude').querySelector('.setup-marker .codicon-check')).toBeTruthy()
       expect(item('browser').querySelector('.setup-marker .codicon-circle-slash')).toBeTruthy()
-      expect(item('basics').querySelector('.setup-marker')?.textContent).toBe('4')
+      expect(item('basics').querySelector('.setup-marker')?.textContent).toBe('5')
       // Answered steps go back; the current and upcoming ones are not buttons.
       expect(item('claude').querySelector('button')).toBeTruthy()
       expect(item('browser').querySelector('button')).toBeTruthy()
@@ -152,10 +152,10 @@ describe('SetupDialog', () => {
       expect(patches).toEqual([])
     })
 
-    it('header has title, Step n of 4 and Close; footer has Back (quiet), Skip (ghost), Continue (primary)', async () => {
+    it('header has title, Step n of 5 and Close; footer has Back (quiet), Skip (ghost), Continue (primary)', async () => {
       mount('/?setup=browser')
       expect(screen.getByRole('heading', { name: SETUP_TEXT.title })).toBeTruthy()
-      expect(screen.getByText(SETUP_TEXT.stepOf(2, 4))).toBeTruthy()
+      expect(screen.getByText(SETUP_TEXT.stepOf(2, 5))).toBeTruthy()
       const f = footer()
       const btn = (name: string): HTMLElement => within(f).getByRole('button', { name })
       expect(btn(SETUP_TEXT.back).getAttribute('data-variant')).toBe('ghost')
