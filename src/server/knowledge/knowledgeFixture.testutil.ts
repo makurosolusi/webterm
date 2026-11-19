@@ -9,6 +9,8 @@ import { MIGRATIONS } from '../ledger/ledgerSchema'
 // test-only values
 export const FIXTURE_SECRET = 'ZZ_FIXTURE_NOT_A_REAL_SECRET_VALUE_12345'
 export const NOW = 1_700_000_000_000
+// Per-test timeout for tests that run real `git commit`: CI runners have slow I/O and the default 5s flakes.
+export const GIT_SLOW_TEST_TIMEOUT_MS = 30_000
 
 /** Runs git in `dir` with a fixed identity. */
 export function sh(dir: string, ...args: string[]): string {

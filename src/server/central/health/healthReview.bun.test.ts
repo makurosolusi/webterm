@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TaskView, WorkStatus } from '../../../shared/centralWork'
-import { put, sh } from '../../knowledge/knowledgeFixture.testutil'
+import { GIT_SLOW_TEST_TIMEOUT_MS, put, sh } from '../../knowledge/knowledgeFixture.testutil'
 import { migrate } from '../../ledger/migration'
 import type { WorkMove } from '../work/workModel'
 import { createHealthReview, parseDiff } from './healthReview'
@@ -98,7 +98,7 @@ describe('createHealthReview', () => {
     ])
     const noTest = findings().find((f) => f.rule === 'new_file_no_test')!
     expect(noTest).toMatchObject({ origin: 'review', taskId: 't1', severity: 'medium', confidence: 'medium', source: 'Rule 3 (global CLAUDE.md)' })
-  })
+  }, GIT_SLOW_TEST_TIMEOUT_MS)
 
   test('a later review of the same task fixes what the task no longer has', async () => {
     const dir = repo({ 'src/a.ts': 'export const a = 1\n', 'src/a.test.ts': "import './a'\n" }, { 'src/a.ts': 'export const a = 1\n// TODO later\n' })
@@ -110,7 +110,7 @@ describe('createHealthReview', () => {
     review.onMove(move())
     await review.idle()
     expect(findings()).toEqual([])
-  })
+  }, GIT_SLOW_TEST_TIMEOUT_MS)
 
   test('other moves, no checkout and no changed files record nothing', async () => {
     const dir = repo({ 'src/a.ts': 'export const a = 1\n', 'src/b.ts': 'export const b = 1\n' }, {})
@@ -125,7 +125,7 @@ describe('createHealthReview', () => {
     none.review.onMove(none.move())
     await none.review.idle()
     expect(none.scans()).toEqual([])
-  })
+  }, GIT_SLOW_TEST_TIMEOUT_MS)
 
   test('git failure is logged, never thrown into the move, and leaves no scan', async () => {
     const notRepo = mkdtempSync(join(tmpdir(), 'health-review-norepo-'))
@@ -134,7 +134,7 @@ describe('createHealthReview', () => {
     review.onMove(move()) // a throw here fails the test: onMove must never throw into the move
     await review.idle()
     expect(scans()).toEqual([])
-  })
+  }, GIT_SLOW_TEST_TIMEOUT_MS)
 
   test('single-flight per task: moves during a running review coalesce into one rerun', async () => {
     const dir = repo({ 'src/a.ts': 'export const a = 1\n' }, { 'src/a.ts': 'export const a = 2\n// TODO x\n' })
@@ -144,5 +144,5 @@ describe('createHealthReview', () => {
     review.onMove(move())
     await review.idle()
     expect(scans().length).toBe(2)
-  })
+  }, GIT_SLOW_TEST_TIMEOUT_MS)
 })
