@@ -1,13 +1,14 @@
 import { afterEach, expect, it } from 'bun:test'
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { runCommand } from './verifier'
 import type { VerifyExec } from './verify'
 import { createProcessExec } from './verifyProcess'
 
 // A marker no other process on the machine carries, so pgrep only ever sees this test's tree.
 const MARK = `${37 + (process.pid % 1000) / 1000}`
-const survivors = (): number => execSync(`pgrep -f 'sleep ${MARK}' || true`).toString().split('\n').filter(Boolean).length
-afterEach(() => { execSync(`pkill -f 'sleep ${MARK}' || true`) })
+// No shell wrapper: `sh -c "pgrep -f 'sleep MARK'"` would carry the pattern in its own argv and match itself (pgrep exit 1 = no match, not an error).
+const survivors = (): number => spawnSync('pgrep', ['-f', `sleep ${MARK}`]).stdout.toString().split('\n').filter(Boolean).length
+afterEach(() => { spawnSync('pkill', ['-f', `sleep ${MARK}`]) })
 
 it('a verify timeout kills the whole tree (npm -> sh -> vitest shape), not only the direct child', async () => {
   // `runCommand` answers from its own deadline; the group kill is the exec's and finishes later. The
