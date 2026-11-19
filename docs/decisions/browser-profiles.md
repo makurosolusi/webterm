@@ -162,3 +162,44 @@ Log: `browser.launch_failed` carries `reason` (see `browser-tabs.md`, "A node th
 A profile can show which Google and GitHub accounts are signed in (name and a masked email), checked inside the profile's own
 Chromium and cached per profile; see `browser-profile-accounts.md`. The profile list gains optional `accounts`, and the chip,
 its menu and Settings > Browser show them. A Settings switch turns the whole thing off.
+
+## Cookie import UX
+
+Symptom (owner report): the import looked unfinished. The ⋮ menu opened a wide submenu holding one item ("From File…") and a bold
+Google sentence rendered as a menu row; the dialog showed native `<select>`, `<input type=file>` and `<details>`, a long red
+paragraph for an ordinary security note, a claim of "only the sites you pick" with no way to pick, and no preview.
+
+Design (reference: browser data import in Chrome/Edge/Firefox, password-manager import). One dialog, `browserCookies/CookieImportDialog`,
+serves both entry points through a `CookieTarget` (workspace browser from the ⋮ menu, profile from Settings > Browser):
+
+1. **Pick**: a drop zone plus a "Choose file…" button (the real input is `sr-only`, labelled, `accept=.json,.txt,.cookies`). Initial
+   focus is the button. Oversize (> `COOKIE_BODY_MAX_BYTES`) and wrong-extension files are refused client-side with a specific message.
+2. **Format** is detected by sniffing the first characters (`{`/`[` = JSON: Playwright storage state or a Cookie-Editor array;
+   tab-separated rows = Netscape). The Format `Select` appears only when detection fails or the user asks to change it.
+   The server parser stays the single source of truth for formats (`cookieImport.parse.ts`); the client never parses cookies.
+   Only the `File` handle is kept between steps, so a format override re-reads the file instead of holding its text in state.
+3. **Preview** (server `/preview`): sites with cookie counts, all ticked by default, Select all/none, a filter above 8 sites.
+   Names and values never reach the UI. Google sites come back as `blocked: [{domain, count, reason}]` and are listed inline,
+   disabled, with the reason; they no longer fail or hide anything. `googleSkipped` stays for the summary count.
+4. **Import N cookies** (disabled with a reason line at 0), spinner on the button, inputs locked, Esc/outside click/close ignored
+   while in flight. The commit sends `{previewId, domains}` of the ticked sites only (the contract already had the allowlist).
+5. **Result**: imported count and sites, skipped count with the reason sentence, "Done" and "Import another file".
+6. **Errors** are classified once (`classifyCookieError`: workspace `bad_request/not_found/disabled/payload_too_large` and profile
+   `cookie_import_*` codes, HTTP 413, failed fetch) and each kind says what happened and what to do. `cookie_import_disabled`
+   replaces the form by an explanation and an "Open Settings" action.
+7. **Security note** is an `Alert` in the caution tone with a shield icon, a one-line risk statement and a folded "Learn more"
+   (Collapsible). Red (`destructive`) is only used for real errors. "How to get a cookie file" is a Collapsible naming
+   Cookie-Editor/EditThisCookie, Playwright `storageState` and Netscape `cookies.txt`; no third-party command-line tool.
+8. **Stored cookies**: rows with count and relative expiry, a trash icon per site (tooltip), "Clear all" behind an `AlertDialog`
+   confirmation, and an empty state. Existing routes are enough: `DELETE .../cookies[/<domain>]` clears one or all.
+9. **Menu**: one row "Import cookies…" (cloud-upload icon, `title` explains the Google limit) that opens the dialog. The submenu
+   and its note row are gone, which also removes the odd bottom-left placement; no shared menu primitive was touched.
+
+Server changes are small: the preview adds `blocked`, and the parser accepts Cookie-Editor's `expirationDate` and `no_restriction`.
+Cookie values still never appear in a response or a log line (tests use a canary).
+
+Deliberately not built: per-site removal undo (the cookies are deleted server-side; a confirmation for "Clear all" is the safeguard),
+a client-side parser or value preview, import from other browsers' stores, drag-and-drop of several files, a preview-by-cookie-name view.
+
+Not verified without a real browser: how the dialog, the drop-zone highlight and the Collapsible chevrons look in light/dark and at
+narrow widths, and the Radix focus return to the menu after close. Covered by jsdom tests: states, ARIA, focus entry, Escape rules.

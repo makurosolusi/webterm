@@ -21,7 +21,8 @@ export class CookieImportError extends Error {
 
 const HTTP_ONLY_PREFIX = '#HttpOnly_'
 const NETSCAPE_MIN_FIELDS = 6 // 7 kolom; kolom value boleh hilang bila kosong (trailing tab terpangkas)
-const SAME_SITE: Record<string, SameSite> = { strict: 'Strict', lax: 'Lax', none: 'None' }
+// `no_restriction` is the Cookie-Editor / Chrome extension API spelling of None.
+const SAME_SITE: Record<string, SameSite> = { strict: 'Strict', lax: 'Lax', none: 'None', no_restriction: 'None' }
 
 /** Kunci pengelompokan domain: huruf kecil tanpa titik di depan. ponytail: bukan eTLD+1 (tanpa PSL); upgrade bila perlu. */
 export function domainKey(domain: string): string {
@@ -43,7 +44,8 @@ function fromJsonCookie(raw: unknown): BrowserCookie {
   const value = str(r.value)
   const domain = str(r.domain)
   if (!name || value === undefined || !domain) return fail('invalid_cookie')
-  const expires = typeof r.expires === 'number' && Number.isFinite(r.expires) && r.expires > 0 ? r.expires : -1
+  // Playwright says `expires`; Cookie-Editor / Chrome extension exports say `expirationDate`.
+  const expires = [r.expires, r.expirationDate].find((v): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0) ?? -1
   return {
     name, value, domain: domain.toLowerCase(), path: str(r.path) || '/', expires,
     httpOnly: r.httpOnly === true, secure: r.secure === true,

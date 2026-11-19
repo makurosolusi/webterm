@@ -41,4 +41,17 @@ describe('cookie preview store', () => {
     for (let i = 0; i < 16; i++) s.put('ws1', [ck('a.org')])
     expect(s.take(first, 'ws1', ['a.org'])).toBeNull()
   })
+
+  it('names refused Google domains with counts only, and omits the field when nothing is refused', () => {
+    const s = createCookiePreviewStore()
+    const r = s.put('ws1', [ck('.google.com'), ck('accounts.google.com'), ck('.google.com'), ck('a.org')])
+    expect(r.blocked).toEqual([
+      { domain: 'accounts.google.com', count: 1, reason: 'google_source_bound' },
+      { domain: 'google.com', count: 2, reason: 'google_source_bound' },
+    ])
+    expect(r.domains.map((d) => d.domain)).toEqual(['a.org'])
+    expect(r.googleSkipped).toBe(3)
+    expect(JSON.stringify(r)).not.toContain(CANARY)
+    expect('blocked' in s.put('ws1', [ck('a.org')])).toBe(false)
+  })
 })

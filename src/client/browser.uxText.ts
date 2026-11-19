@@ -93,68 +93,6 @@ export const CHIP_TEXT = {
   stopLabel: 'Stop the agent and take control of this browser',
 } as const
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-
-export const COOKIE_TEXT = {
-  title: 'Cookies',
-  description: 'Import cookies from a file so this workspace browser stays signed in.',
-  warning:
-    'Imported cookies can sign this browser in to your accounts, and whatever drives the browser (you or an agent) acts as you. ' +
-    'Only import cookies you trust, and only for the sites you pick. Cookies are stored encrypted on this server and expire automatically.',
-  fileLabel: 'Cookie file',
-  formatLabel: 'File format',
-  formats: { storageState: 'Playwright storage state (JSON)', netscape: 'Netscape cookies.txt' },
-  preview: 'Preview',
-  previewing: 'Reading…',
-  domainsHeading: 'Choose sites to import',
-  selectAll: 'Select all',
-  sessionTag: 'session',
-  import: 'Import selected',
-  importing: 'Importing…',
-  cancel: 'Cancel',
-  close: 'Close',
-  importedHeading: 'Import complete',
-  storedHeading: 'Stored cookies',
-  storedEmpty: 'No cookies stored for this workspace yet.',
-  removeAll: 'Remove all',
-  loading: 'Loading…',
-  cookieCount: (n: number) => plural(n, 'cookie', 'cookies'),
-  // Kebijakan Orca "Google logins aren't imported": sesi Google terikat perangkat asal.
-  googleSkipped: (n: number) => `Google logins aren’t imported — sign in to Google directly in the browser node (${plural(n, 'cookie', 'cookies')} skipped).`,
-  imported: (cookies: number, sites: number) => `Imported ${plural(cookies, 'cookie', 'cookies')} from ${plural(sites, 'site', 'sites')}.`,
-  removeLabel: (domain: string) => `Remove cookies for ${domain}`,
-  selectLabel: (domain: string) => `Import cookies for ${domain}`,
-  tooLarge: 'That file is too large.',
-  readFail: 'The file could not be read.',
-  errors: {
-    bad_request: 'The server could not read that file. Check its format and try again.',
-    not_found: 'The preview expired. Choose the file again.',
-    disabled: 'Cookie import is turned off on this server.',
-    payload_too_large: 'That file is too large.',
-    generic: 'Something went wrong. Try again.',
-  },
-  // Panduan ekspor dari browser milik user sendiri (RND/33: webterm tidak membaca store browser lain).
-  guide: {
-    summary: 'How to get a cookie file',
-    optionA: 'Option A: install a cookies.txt (Netscape format) export extension from the Chrome Web Store, open the site, then export only the sites you need. Pick a trusted extension: third-party cookie extensions have been used as malware.',
-    optionB: 'Option B: run this in a terminal on your own computer (requires yt-dlp; replace <site-url>). The file contains every browser cookie, so in the next step check only the domains you need.',
-    command: 'yt-dlp --cookies-from-browser chrome --cookies cookies.txt --skip-download <site-url>',
-    commandLabel: 'yt-dlp cookie export command',
-    copy: 'Copy command',
-    copied: 'Copied',
-    formatHint: 'Then choose the "Netscape cookies.txt" format above and upload the file.',
-    warning: 'A cookie file is the same as login access. Import only the domains you need, and delete the file after importing.',
-    safest: 'Safest: sign in once directly in this browser node; its profile persists, so no cookie file is needed.',
-  },
-} as const
-
-// Submenu "Import Cookies" di menu ⋯ node browser (meniru Orca browser-toolbar-menu-dropdown.tsx).
-export const COOKIE_MENU_TEXT = {
-  importCookies: 'Import Cookies',
-  fromFile: 'From File…',
-  googleNote: 'Google logins can’t be imported — sign in to Google directly in this browser',
-} as const
-
 export const ZOOM_TEXT = {
   out: 'Zoom out',
   in: 'Zoom in',

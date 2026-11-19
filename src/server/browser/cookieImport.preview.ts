@@ -32,6 +32,10 @@ export function createCookiePreviewStore(opts: { now?: () => number; ttlMs?: num
       sweep()
       // Filter di sini = satu titik: commit hanya bisa `take` dari set yang sudah difilter.
       const { importable: cookies, googleSkipped } = partitionImportableCookies(parsed)
+      const kept = new Set(cookies)
+      const refused = new Map<string, number>()
+      for (const c of parsed) if (!kept.has(c)) refused.set(domainKey(c.domain), (refused.get(domainKey(c.domain)) ?? 0) + 1)
+      const blocked = [...refused].map(([domain, count]) => ({ domain, count, reason: 'google_source_bound' as const })).sort((a, b) => a.domain.localeCompare(b.domain))
       while (entries.size >= MAX_PREVIEWS) entries.delete(entries.keys().next().value as string)
       const previewId = randomUUID()
       const expiresAt = now() + ttlMs
@@ -44,7 +48,7 @@ export function createCookiePreviewStore(opts: { now?: () => number; ttlMs?: num
         byDomain.set(domainKey(c.domain), d)
       }
       const domains = [...byDomain].map(([domain, v]) => ({ domain, ...v })).sort((a, b) => a.domain.localeCompare(b.domain))
-      return { previewId, domains, expiresAt, googleSkipped }
+      return { previewId, domains, expiresAt, googleSkipped, ...(blocked.length ? { blocked } : {}) }
     },
     take(previewId, workspaceId, domains) {
       sweep()

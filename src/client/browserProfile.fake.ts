@@ -27,7 +27,7 @@ export function fakeBrowserServer(profiles: BrowserProfile[]): FakeServer {
     if (method === 'GET' && url.includes('/export')) return new Response('{"cookies":[]}')
     if (method === 'POST' && url.includes('/accounts/refresh')) return new Response(JSON.stringify({ accounts: s.refreshed }))
     if (method === 'GET' && url.startsWith('/api/browser/profiles')) return new Response(JSON.stringify({ profiles: s.profiles, accountsEnabled: s.accountsEnabled }))
-    if (url.endsWith('/cookies/preview')) return new Response(JSON.stringify({ previewId: 'pv1', expiresAt: 1, googleSkipped: 3, domains: [{ domain: 'b.com', count: 4, hasSession: true }] }))
+    if (url.endsWith('/cookies/preview')) return new Response(JSON.stringify({ previewId: 'pv1', expiresAt: 1, googleSkipped: 3, blocked: [{ domain: 'google.com', count: 3, reason: 'google_source_bound' }], domains: [{ domain: 'b.com', count: 4, hasSession: true }] }))
     if (url.endsWith('/cookies/import')) return new Response(JSON.stringify({ imported: 4, skipped: 3, reasons: ['google_source_bound'], domains: ['b.com'] }))
     if (method === 'POST' && url === '/api/browser/profiles') return new Response(JSON.stringify(prof('bp-new', 'Created')), { status: 201 })
     if (method === 'POST' && url.endsWith('/profile')) return new Response(JSON.stringify({ profileId: 'x' }))
