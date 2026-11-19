@@ -15,6 +15,8 @@ import { workspaceColorVar } from '../shared/workspaceColor'
 import type { AppSideBar } from './sideBar/useAppSideBar'
 import { useHeaderReveal } from './useHeaderReveal'
 import { WorkspaceRail, type WorkspaceRailProps } from './WorkspaceRail'
+import { RailAccount, RailLayout, RailMenu, type RailChromeProps } from './RailChrome'
+import type { WorkspaceMenuProps } from './useWorkspaceMenus'
 import { useWorkspaceNavCommands } from './workspaceNav.commands'
 import type { HeaderMode } from './headerMode.store'
 
@@ -38,17 +40,24 @@ export interface AppDockProps extends Pick<DockProps, PassThrough> {
   setShowSettings: (open: boolean) => void
   /** Compact/Hidden header: the workspace tiles shown in the rail. Absent in Full (the header's tab strip shows them). */
   workspaceRail?: WorkspaceRailProps
+  /** Compact/Hidden header: the menu, account and (Hidden) layout switch live in the rail. Absent in Full. */
+  railChrome?: Omit<RailChromeProps, 'layoutMode'>
 }
 
 /** Dock wired to App's state: its toggles, canvas viewport controls, and status-bar chips. */
 export default function AppDock({
-  vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, workspaceRail, ...pass
+  vp, settings, activeWs, board, setBoard, sideBar, sessionsAttention, locked, setLocked, cleanView, toggleCleanView, setPicker, setShowSettings, workspaceRail, railChrome, ...pass
 }: AppDockProps) {
   const side = useSideBar()
+  const layoutMode = useTabLayout().mode
+  const chrome = railChrome && { ...railChrome, layoutMode }
   return (
     <Dock
       {...pass}
       workspaceGroup={workspaceRail && <WorkspaceRail {...workspaceRail} />}
+      railMenu={chrome && <RailMenu {...chrome} />}
+      railAccount={chrome && <RailAccount {...chrome} />}
+      railLayout={chrome && <RailLayout {...chrome} />}
       onBrowse={(onPick) => setPicker({ onPick })}
       onBack={vp.onBack}
       onForward={vp.onForward}
@@ -83,43 +92,33 @@ export default function AppDock({
 }
 
 export interface AppWorkspaceBarProps
-  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect' | 'onLogout' | 'showLogout' | 'onOpenAccount'> {
+  extends Pick<WorkspaceBarProps, 'workspaces' | 'activeId' | 'statuses' | 'onSelect'> {
   liveNodes: WorkspaceBarProps['liveActiveNodes']
-  onNewProject: WorkspaceBarProps['onNewWorkspace']
+  /** The File / View / Help inputs, shared with the rail's menu button (`chromeMenuProps`). */
+  menu: WorkspaceMenuProps
   onRenameWorkspace: (id: string, name: string) => Promise<unknown>
-  onDeleteWorkspace: (id: string) => Promise<unknown>
   onSetWorkspaceColor: WorkspaceBarProps['onSetWorkspaceColor']
-  onAddFiles: () => void
   omni: ReturnType<typeof useOmnibox>
-  setShowSettings: (open: boolean) => void
-  setShowHelp: (open: boolean) => void
   /** Effective header mode (`useEffectiveHeaderMode`). */
   headerMode: HeaderMode
 }
 
 /** WorkspaceBar wired to App's workspace lifecycle and overlays. */
-export function AppWorkspaceBar({
-  liveNodes, onNewProject, onRenameWorkspace, onDeleteWorkspace, onSetWorkspaceColor, onAddFiles, omni, setShowSettings, setShowHelp, headerMode, ...pass
-}: AppWorkspaceBarProps) {
+export function AppWorkspaceBar({ liveNodes, menu, onRenameWorkspace, onSetWorkspaceColor, omni, headerMode, ...pass }: AppWorkspaceBarProps) {
   const layoutMode = useTabLayout().mode
   const revealed = useHeaderReveal(headerMode === 'hidden')
   useWorkspaceNavCommands(pass.workspaces, pass.activeId, pass.onSelect)
   return (
     <WorkspaceBar
       {...pass}
+      {...menu}
       headerMode={headerMode}
       revealed={revealed}
       liveActiveNodes={liveNodes}
-      onNewWorkspace={onNewProject}
       onRenameWorkspace={onRenameWorkspace}
       onSetWorkspaceColor={onSetWorkspaceColor}
-      onDeleteWorkspace={(id) => void onDeleteWorkspace(id)}
-      onOpenSettings={() => setShowSettings(true)}
-      onOpenHelp={() => setShowHelp(true)}
-      onNewFiles={() => onAddFiles()}
       onOpenPalette={() => omni.open('all')}
       layoutMode={layoutMode}
-      onToggleLayout={toggleLayoutMode}
       titleActions={pass.workspaces.length > 0 ? <SecondarySideBarToggle /> : undefined}
     />
   )

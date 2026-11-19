@@ -10,6 +10,7 @@ const RAIL_FILES = [
   'WorkspaceRail.tsx', 'WorkspaceRail.tile.tsx', 'WorkspaceRail.all.tsx', 'WorkspaceRail.rename.tsx',
   'workspaceRail.order.ts', 'workspaceRail.keys.ts', 'workspaceRail.drag.ts', 'workspaceRail.reorder.ts', 'workspaceRail.overflow.ts',
   'workspaceTiles.ts', 'workspaceNav.commands.ts', 'railLabels.store.ts', 'workspaceTabUi.store.ts', 'workspaceRail.css',
+  'RailChrome.tsx', 'Dock.modes.tsx', 'useWorkspaceMenus.ts', 'App.menu.ts', 'workspaceOrder.save.ts',
 ]
 const css = src('workspaceRail.css')
 const MAX_FILE_LINES = 300

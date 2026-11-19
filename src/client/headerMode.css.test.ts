@@ -54,7 +54,7 @@ describe('Hidden overlay', () => {
     expect(css).not.toContain('position: fixed')
     // the only generated box along the edge is that one hairline
     const generated = css.split('\n').filter((l) => /::(?:before|after)/.test(l)).map((l) => l.replace(/\s*[{,].*$/, ''))
-    expect(generated).toEqual(['.app-shell--header-hidden::before', '.app-menu-button .vscode-menu-bar__item::before', 'body.clean-view .app-shell--header-hidden::before'])
+    expect(generated).toEqual(['.app-shell--header-hidden::before', 'body.clean-view .app-shell--header-hidden::before'])
   })
 
   it('reduced motion turns the slide off', () => {

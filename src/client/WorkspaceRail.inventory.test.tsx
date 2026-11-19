@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import WorkspaceBar from './WorkspaceBar'
 import { WorkspaceRail } from './WorkspaceRail'
+import { RailLayout, RailMenu } from './RailChrome'
 import { HeaderModeField, RAIL_LABELS_FIELD } from './SettingsHeaderMode'
 import { RAIL_LABELS_ATTR, RAIL_LABELS_KEY, getRailLabels, reloadRailLabelsFromStorage, setRailLabels, toggleRailLabels, useRailLabelsAttribute } from './railLabels.store'
 import { RAIL_LABELS_ID, WORKSPACE_NEXT_ID, WORKSPACE_PREV_ID, workspaceNavCommands } from './workspaceNav.commands'
@@ -27,6 +28,11 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); document.documentElement.removeAttribute(RAIL_LABELS_ATTR) })
 
+const railChrome = (p: { workspaces: Workspace[]; activeId: string }, mode: HeaderMode) => ({
+  workspaces: p.workspaces, activeId: p.activeId, liveActiveNodes: [], statuses: {}, onNewWorkspace: vi.fn(), onDeleteWorkspace: vi.fn(), onToggleLayout: vi.fn(),
+  showLogout: true, onOpenAccount: vi.fn(), onLogout: vi.fn(), layoutInRail: mode === 'hidden',
+})
+
 function mount(mode: HeaderMode) {
   const props = { workspaces: WS, activeId: 'w1', liveActiveNodes: [], statuses: {}, onSelect: vi.fn(), onRenameWorkspace: vi.fn(async () => undefined) }
   return render(
@@ -34,6 +40,9 @@ function mount(mode: HeaderMode) {
       <WorkspaceBar {...props} headerMode={mode} onNewWorkspace={vi.fn()} onDeleteWorkspace={vi.fn()} onSetWorkspaceColor={vi.fn()}
         onOpenPalette={vi.fn()} onToggleLayout={vi.fn()} showLogout onOpenAccount={vi.fn()} onLogout={vi.fn()} />
       {mode !== 'full' && <WorkspaceRail {...props} />}
+      {/* Compact/Hidden: the menu (and Hidden's layout switch) are rail buttons; see headerRail.inventory.test.tsx for the full contract. */}
+      {mode !== 'full' && <RailMenu {...railChrome(props, mode)} />}
+      {mode !== 'full' && <RailLayout {...railChrome(props, mode)} />}
     </>,
   )
 }
@@ -58,7 +67,7 @@ describe.each(MODES)('workspace controls in %s', (mode) => {
 
   it('File > Rename Workspace… edits the active workspace on whichever surface is drawn', () => {
     mount(mode)
-    const open = mode === 'compact' ? () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Menu' })); fireEvent.click(screen.getByRole('menuitem', { name: 'File' })) } : () => fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    const open = mode !== 'full' ? () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Menu' })); fireEvent.click(screen.getByRole('menuitem', { name: 'File' })) } : () => fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
     open()
     fireEvent.click(screen.getByRole('menuitem', { name: /Rename Workspace/ }))
     expect(screen.getByRole('textbox')).toBeTruthy()

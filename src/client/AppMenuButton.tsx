@@ -1,5 +1,5 @@
-// The compact menu: one button that opens File / View / Help as submenus (VS Code's "compact menu"
-// pattern), used where the full menu bar is not drawn. Same menu model as the bar: this only wraps
+// The compact menu: one button at the top of the rail that opens File / View / Help as submenus (VS Code's
+// "compact menu" pattern), used where the full menu bar is not drawn. Same menu model as the bar: this only wraps
 // the model's menus as submenus of a single top-level entry, so no menu logic is duplicated.
 import { useMemo } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
@@ -22,7 +22,7 @@ export function AppMenuButton({ menus, openId, onOpenChange }: AppMenuButtonProp
     [menus],
   )
   return (
-    <IconTooltip label="Menu: File, View and Help">
+    <IconTooltip label="Menu: File, View and Help" side="right">
       <span className="app-menu-button">
         <VscodeMenuBar menus={compact} openId={openId} onOpenChange={onOpenChange} />
       </span>

@@ -30,6 +30,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/filesToolbarPolicy.test.tsx',
     'src/client/iconTooltipPolicy.test.ts',
     'src/client/independentSource.policy.test.ts',
+    'src/client/nativeBranch.policy.test.ts',
     'src/client/nodeHeaderIconPolicy.test.tsx',
     'src/client/nodeResizePolicy.test.ts',
     'src/client/paletteColorPolicy.test.ts',

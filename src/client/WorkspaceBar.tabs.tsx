@@ -3,7 +3,6 @@
 // next to the active workspace's name in the title bar (the tab label slot is a plain string).
 import type { ReactNode } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
-import { AccountMenu } from './AccountMenu'
 import { VscodeEditorTabBar } from '@/components/vscode/vscodeEditorTabBar'
 import type { VscodeEditorTab } from '@/components/vscode/vscodeEditorTabBar'
 import type { SessionGroup } from './sessionList'
@@ -68,25 +67,5 @@ export function WorkspaceTabStrip({ groups, workspaces, worktrees, activeId, edi
         </IconTooltip>
       }
     />
-  )
-}
-
-// Compact header mode: the title bar row is gone, so the title-bar actions (secondary side bar toggle)
-// and the account menu join the single row, after the command pill. Same handlers as the Full title bar.
-export interface CompactTailProps {
-  titleActions?: ReactNode
-  showLogout?: boolean
-  onOpenAccount?: () => void
-  onOpenSettings?: () => void
-  onOpenHelp?: () => void
-}
-
-/** Right end of the Compact row. */
-export function CompactTail({ titleActions, showLogout, onOpenAccount, onOpenSettings, onOpenHelp }: CompactTailProps) {
-  return (
-    <div className="app-tabs__actions app-titlebar__actions app-tabs__tail">
-      {titleActions}
-      {showLogout && <AccountMenu onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} />}
-    </div>
   )
 }
