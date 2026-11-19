@@ -52,3 +52,5 @@
 @media (prefers-reduced-motion: reduce) { .bdl-bar:not([data-indeterminate]) .bdl-fill { transition: none; } }
 .bdl-ask { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 6px; }
 .bdl-actions { flex: none; display: flex; gap: var(--bui-gap); align-items: center; }
+/* Brief "finished" mark on the button while the list is closed (DONE_MARK_MS). */
+.bdl-done { position: absolute; top: 0; right: 0; width: 12px; height: 12px; padding: 1px; border-radius: 50%; box-sizing: border-box; pointer-events: none; color: var(--vscode-badge-foreground, var(--text)); background: var(--vscode-testing-iconPassed, var(--vscode-badge-background, var(--accent))); }

@@ -5,6 +5,7 @@ export const DL_TEXT = {
   button: 'Downloads',
   buttonActive: (n: number) => `Downloads, ${n} in progress`,
   buttonPending: (n: number) => `Downloads, ${n} waiting for your choice`,
+  buttonDone: 'Downloads, finished',
   tip: 'Downloads (saved in the webterm folder, not your Downloads folder)',
   title: 'Downloads',
   empty: 'No downloads yet',

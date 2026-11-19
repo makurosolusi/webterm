@@ -22,6 +22,10 @@ export interface BrowserDownloadsPopoverProps {
   /** The toolbar button (or its collapsed wrapper when hidden): placement anchor, excluded from "press outside", and where focus returns. */
   anchor: HTMLElement
   id: string
+  /** false = opened by itself on a new download: focus stays where it was (page, omnibox). */
+  autoFocus?: boolean
+  /** Pointer or focus is inside (true) or left (false): the auto-close timer waits meanwhile. */
+  onEngagedChange?: (engaged: boolean) => void
   onClose: () => void
 }
 
@@ -31,14 +35,14 @@ function place(anchor: HTMLElement): { top: number; left: number; width: number 
   return { top: r.bottom + GAP, left: Math.max(MARGIN, Math.min(r.right - width, window.innerWidth - width - MARGIN)), width }
 }
 
-export function BrowserDownloadsPopover({ nodeId, items, speeds, anchor, id, onClose }: BrowserDownloadsPopoverProps) {
+export function BrowserDownloadsPopover({ nodeId, items, speeds, anchor, id, autoFocus = true, onEngagedChange, onClose }: BrowserDownloadsPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState(() => place(anchor))
   const rows = downloadsOfNode(items, nodeId)
   const close = useRef(onClose)
   close.current = onClose
 
-  useLayoutEffect(() => { ref.current?.focus() }, [])
+  useLayoutEffect(() => { if (autoFocus) ref.current?.focus() }, [autoFocus])
   useEffect(() => {
     const dismiss = (returnFocus: boolean) => { close.current(); if (returnFocus) (anchor.querySelector<HTMLElement>('button') ?? anchor).focus() }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); dismiss(true) } }
@@ -60,6 +64,8 @@ export function BrowserDownloadsPopover({ nodeId, items, speeds, anchor, id, onC
   return createPortal(
     <div
       ref={ref} id={id} className="bdl-pop nodrag nopan nowheel" role="dialog" aria-label={DL_TEXT.title} tabIndex={-1}
+      onPointerEnter={() => onEngagedChange?.(true)} onPointerLeave={() => onEngagedChange?.(ref.current?.contains(document.activeElement) ?? false)}
+      onFocus={() => onEngagedChange?.(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) onEngagedChange?.(false) }}
       style={{ top: pos.top, left: pos.left, width: pos.width }} data-browser-downloads-popover
     >
       <div className="bdl-head">{DL_TEXT.title}</div>
