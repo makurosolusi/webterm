@@ -35,7 +35,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/ws"
           chmod 777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/ws"
-          docker run -d --name webterm-ci --init \
+          docker run -d --name webterm-ci --init --restart unless-stopped \
             --cap-drop ALL --security-opt no-new-privileges:true \
             --security-opt seccomp=docker/chrome.seccomp.json \
             --shm-size 1g \
@@ -66,6 +66,14 @@ jobs:
             case "$path" in /data/custom-bin:/opt/custom/bin:*:/home/webterm/.local/bin:*|/data/custom-bin:/opt/custom/bin:/home/webterm/.local/bin:*) ;; *) echo "bash $flags PATH is $path" >&2; exit 1 ;; esac
           done
           docker exec webterm-ci test -d /data/custom-bin
+
+      - name: Server really started (no restarts, no boot errors)
+        run: |
+          [ "$(docker inspect -f '{{.RestartCount}}' webterm-ci)" = 0 ] || { echo "container restarted" >&2; docker logs webterm-ci; exit 1; }
+          [ "$(docker inspect -f '{{.State.Running}}' webterm-ci)" = true ] || { docker logs webterm-ci; exit 1; }
+          if docker logs webterm-ci 2>&1 | grep -q 'Cannot find module'; then docker logs webterm-ci; echo "missing module at boot" >&2; exit 1; fi
+          code="$(docker exec webterm-ci curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8700/api/health)"
+          case "$code" in 200|401|403) ;; *) echo "unexpected /api/health status $code" >&2; exit 1 ;; esac
 
       - name: Print container logs on failure
         if: failure()

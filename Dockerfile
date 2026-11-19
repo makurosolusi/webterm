@@ -91,6 +91,9 @@ ENV WEBTERM_BROWSER_BIN=/usr/local/bin/chrome
 
 COPY --from=build --chown=webterm:webterm /app/src ./src
 COPY --from=build --chown=webterm:webterm /app/dist ./dist
+# Read at runtime outside src/: cliMain.ts imports ../../../README.md as text (`webterm --readme/--docs`);
+# package.json (version, build id) is already copied above. Audit of src/server + src/shared found nothing else.
+COPY --from=build --chown=webterm:webterm /app/README.md ./README.md
 COPY --from=build --chown=webterm:webterm /app/tsconfig.json /app/vite.config.ts /app/bunfig.toml ./
 COPY docker/entrypoint.sh /usr/local/bin/webterm-entrypoint
 COPY docker/seed-home.sh /usr/local/share/webterm/seed-home.sh
