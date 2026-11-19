@@ -26,6 +26,8 @@ import {
 } from './terminalKeys'
 import { installPointerScaleFix } from './terminalScale'
 import { fitTerminal } from './terminalFit'
+import { openLinkInCanvas } from './canvasLinks'
+import { useNodeActions } from './nodeActions'
 import { loadOsc52Clipboard } from './terminalClipboard'
 import { resolveTerminalTheme } from './themes'
 import { useLiveSettings } from './useSettings'
@@ -108,6 +110,9 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
   const linkRef = useRef<string | null>(null)
+  // Read at click time: the link handler is installed once.
+  const nodeActions = useRef(useNodeActions())
+  nodeActions.current = useNodeActions()
   const shownRef = useRef<{ readonly visible: boolean } | null>(null)
   // `last` = ukuran terakhir yang dikirim (via `open` atau `resize`); dedupe SIGWINCH bertumpu padanya.
   const session = useRef<{ opened: boolean; last: TermSize | null; open: () => void }>({
@@ -196,7 +201,7 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
     // addon ini sengaja TIDAK dipakai: addon-nya tidak bisa
     // menyambung baris yang dipotong-keras tmux, jadi URL yang terlipat jadi dua link rusak.
     // webterm tidak punya tmux — output PTY tiba utuh, jadi di sini addon-nya tepat.
-    term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri), {
+    term.loadAddon(new WebLinksAddon((e, uri) => openLinkOnModifiedClick(e, uri, (u) => openLinkInCanvas(u, { openBrowserAt: nodeActions.current.openBrowserAt, anchorNodeId: p.id })), {
       hover: (_e, text) => { linkRef.current = text },
       leave: () => { linkRef.current = null },
     }))

@@ -38,7 +38,7 @@ export function canClaimFocus(active: FocusTarget | null, fromTerminal: boolean)
 export function openLinkOnModifiedClick(
   e: Pick<MouseEvent, 'metaKey' | 'ctrlKey'>,
   uri: string,
-  open: (uri: string) => void = (u) => { window.open(u, '_blank', 'noopener') },
+  open: (uri: string) => void,
 ): void {
   if (e.metaKey || e.ctrlKey) open(uri)
 }

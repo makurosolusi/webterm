@@ -316,7 +316,7 @@ describe('BrowserToolbar ⋯ menu', () => {
     pick(TOOLBAR_MENU_TEXT.copyUrl)
     await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith('https://a.com/'))
     pick(TOOLBAR_MENU_TEXT.openExternal)
-    expect(open).toHaveBeenCalledExactlyOnceWith('https://a.com/', '_blank', 'noopener')
+    expect(open).toHaveBeenCalledExactlyOnceWith('https://a.com/', '_blank', 'noopener,noreferrer')
   })
 
   it('reports a failed copy in the alert line', async () => {

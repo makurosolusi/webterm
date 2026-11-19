@@ -9,6 +9,7 @@ import { readdir, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { childEnv } from '../childEnv'
+import { assertPathArg } from '../openArgGuard'
 
 export const DATA_DIR_MESSAGE = 'This is inside the webterm data folder, which holds its database. Pick another folder.'
 
@@ -137,6 +138,7 @@ const spawnDetached = (cmd: string, args: string[]): Promise<void> => new Promis
 
 /** Show `path` in the file manager: macOS `open -R path`, elsewhere `xdg-open` on its parent. argv, no shell. */
 export function revealPath(path: string, deps: RevealDeps = {}): Promise<void> {
+  assertPathArg(path, 'revealPath')
   const mac = (deps.platform ?? process.platform) === 'darwin'
   return (deps.spawn ?? spawnDetached)(mac ? 'open' : 'xdg-open', mac ? ['-R', path] : [dirname(path)])
 }

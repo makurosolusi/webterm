@@ -42,18 +42,19 @@ describe('ChatMarkdown code blocks', () => {
 })
 
 describe('ChatMarkdown links', () => {
-  it('a web link opens a browser tab instead of navigating webterm (no browser node here)', () => {
+  it('a web link never opens a machine-browser tab by itself and never navigates webterm (no browser node here)', () => {
     const open = vi.fn(() => null)
     vi.stubGlobal('open', open)
     const { container } = render(<ChatMarkdown source={'[docs](https://example.com) [rel](src/a.ts)'} />)
     const web = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
     container.querySelector('a[href^="https"]')!.dispatchEvent(web)
     expect(web.defaultPrevented).toBe(true)
-    expect(open).toHaveBeenCalledWith('https://example.com/', '_blank', 'noopener,noreferrer')
+    // The canvas link notice offers the explicit exit; nothing opens on its own.
+    expect(open).not.toHaveBeenCalled()
     // A relative path has no folder in chat: kept off the tab, nothing opened.
     const rel = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
     container.querySelector('a[href="src/a.ts"]')!.dispatchEvent(rel)
     expect(rel.defaultPrevented).toBe(true)
-    expect(open).toHaveBeenCalledTimes(1)
+    expect(open).not.toHaveBeenCalled()
   })
 })

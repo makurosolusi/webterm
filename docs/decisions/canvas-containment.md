@@ -1,0 +1,58 @@
+# Canvas containment: nothing leaves the canvas except by an explicit, labelled act
+
+## Principle
+
+webterm's own UI runs in the user's browser. So any `window.open`, `<a target="_blank">` or `location` change in client
+code opens a tab or window in the machine's Chrome, and the server process can reach the same browser through the OS
+opener (`open`, `xdg-open`, `explorer.exe`). The owner's rule: everything started from the canvas stays on the canvas.
+A tab or window in the machine browser appears only when the user clicks an action labelled "Open in system browser"
+(or copies the link). Failure never falls back silently to the machine browser; it shows a notice that offers the
+explicit action.
+
+## Legitimate exits (the whole list)
+
+| Exit | Where | Why it is allowed |
+| --- | --- | --- |
+| "Open in system browser" | `openInSystemBrowser` in `src/client/canvasLinks.ts` (the only `window.open`) | The user's click on a labelled action is conscious consent. Reached from the browser node menu and from the notice shown when the canvas browser cannot take a link. |
+| Full-size attached image | `chat/chatMessageRow.tsx`, `agentChat/agentChatThread.tsx` (`target="_blank"`) | `data:` or same-origin server URL, never an external page. |
+| Sign-in window of webterm itself | `src/server/uiOpen.ts` | Opens webterm's own redirect file (a path) so the user can reach the UI; guarded by `assertPathArg`. |
+| Reveal in file manager | `src/server/workspaceCreate/projectsFolder.ts` | `open -R` / `xdg-open` on a folder, a path, not a page; guarded by `assertPathArg`. |
+| Chromium targets of the canvas browser | `src/server/browser/*` | The canvas browser node owns its targets; its own runtime guard lives there. |
+
+`src/shared/containment.policy.test.ts` enforces the list: outside these entries, any `window.open(`, `target="_blank"`,
+`location.assign/replace/href =`, a child process naming `open`/`xdg-open`/`explorer.exe`/`start`, `shell.openExternal`,
+`Target.createTarget` outside `src/server/browser/`, or the `open` npm package fails the build.
+
+## Everything else goes through the helpers
+
+- Client: `openLinkInCanvas(url, { openBrowserAt, anchorNodeId })` opens http(s) in a browser node. When the node is off or
+  refuses, it shows a notice with "Open in system browser" and "Copy link"; non-web schemes are refused. External
+  documentation anchors use `<ExternalLink href>` (`src/client/ExternalLink.tsx`). Terminal Cmd/Ctrl+click, rendered
+  Markdown links, MCP App `openLink` and chat links all use this path.
+- Server (terminal programs): the `open`/`xdg-open`/`webterm-open` shims capture web links into the canvas browser and
+  refuse `file:` URLs and web-like files (.html/.htm/.xhtml/.svg); see `canvas-link-capture.md`.
+- Server (own opener calls): arguments must be paths; `assertPathArg` (`src/server/openArgGuard.ts`) throws on a URL.
+
+## Adding a new exit
+
+Do not. First route the feature through the helpers above. If a real exit is unavoidable (a native integration, a new
+OS call):
+
+1. Write why the canvas cannot do it and how the user consents (a labelled click).
+2. Put the call in one small file, guard its argument, add a test that a URL or hostile input is refused.
+3. Add one entry to `ALLOW` in `src/shared/containment.policy.test.ts` with the path and the reason. Never widen an entry
+   or allow a whole folder to make a test pass.
+4. Add a row to the table above.
+
+## Checklist for a new feature
+
+- Does any link, button or anchor point at a page outside webterm? Use `openLinkInCanvas` / `ExternalLink`.
+- Does the server start a process that may open a browser (OS opener, `$BROWSER`, an OAuth helper)? Capture it or refuse it.
+- Does any failure path fall back to `window.open` or the OS opener? Replace it with a notice.
+- Did you run `src/shared/containment.policy.test.ts` (it is in the `test:impacted` policy tier)?
+
+## Limits
+
+Static scanning cannot see a URL passed through a variable to an allowlisted call, a program that calls the OS opener by
+absolute path, or a Chromium runtime flag; the runtime guard in `src/server/browser/*` and the shims cover those
+(see `canvas-link-capture.md` "What cannot be caught").

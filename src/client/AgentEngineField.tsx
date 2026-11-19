@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ActionButton, ActionResult, errorCause, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
+import { ExternalLink } from './ExternalLink'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { CENTRAL_LAUNCH_TEXT } from './claudeLauncher/CentralLaunchStatus'
 import { openLaunchProfileSettings, testClaudeLaunch, type LaunchStep, type LaunchTest } from './claudeLauncher/claudeLaunch.client'
@@ -34,7 +35,7 @@ function FixSteps({ step }: { step: LaunchStep | undefined }): React.JSX.Element
       {step?.install ? <>
         <CopyLine label={CONNECTION_TEXT.install} command={step.install.installCommand} />
         <CopyLine label={CONNECTION_TEXT.npm} command={step.install.npmCommand} />
-        <a className="underline" href={step.install.docsUrl} target="_blank" rel="noreferrer">{CONNECTION_TEXT.docs}</a>
+        <ExternalLink className="underline" href={step.install.docsUrl}>{CONNECTION_TEXT.docs}</ExternalLink>
       </> : null}
       {step?.signIn?.command ? <CopyLine label={CONNECTION_TEXT.signIn} command={step.signIn.command} /> : null}
       <Button size="xs" variant="link" className="self-start px-0" onClick={openLaunchProfileSettings}>{CENTRAL_LAUNCH_TEXT.edit}</Button>

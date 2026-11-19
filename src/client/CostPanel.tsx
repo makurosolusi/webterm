@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ExternalLink } from './ExternalLink'
 import { openSettingsAt } from './settings.link'
 import { SettingsSegmented } from './SettingsControls'
 import { controlRequest } from './ControlPanel'
@@ -216,7 +217,7 @@ export function CostDetails(): React.JSX.Element {
             <div><dt className="opacity-70">{COST_TEXT.prefixReuse}</dt><dd data-testid="cost-prefix">{COST_TEXT.prefixValue(data.prefix?.reuseRate ?? null, data.prefix?.prefixes ?? 0)}</dd></div>
           </dl>
           {s.unpriced > 0 ? <p className="opacity-70">{COST_TEXT.unpriced(s.unpriced)}</p> : null}
-          <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">{data.pricing.source}</a> ({data.pricing.checkedAt})</p>
+          <p className="text-[11px] opacity-60">{COST_TEXT.pricing} <ExternalLink href={data.pricing.source} className="underline">{data.pricing.source}</ExternalLink> ({data.pricing.checkedAt})</p>
         </>
       ) : null}
     </section>

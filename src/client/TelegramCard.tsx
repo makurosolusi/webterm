@@ -9,6 +9,7 @@ import type { PairingLink } from './telegramCardApi'
 import { qrMatrix, qrPath } from './telegramCardQr'
 import { useTelegramCard } from './useTelegramCard'
 import { TG } from './telegramCardLabels'
+import { ExternalLink } from './ExternalLink'
 
 const QR_QUIET = 4
 const QR_PX = 176
@@ -61,7 +62,7 @@ function PairingBlock({ pair }: { pair: PairingLink }): React.JSX.Element {
     <div className="flex flex-col gap-2">
       <p>{TG.pairIntro(pair.projectName)}</p>
       <PairingQr link={pair.link} />
-      <a href={pair.link} target="_blank" rel="noreferrer">{TG.pairOpen}</a>
+      <ExternalLink href={pair.link}>{TG.pairOpen}</ExternalLink>
       <div className="flex items-center gap-2">
         <Input aria-label={TG.pairLinkLabel} readOnly value={pair.link} onFocus={(e) => e.target.select()} />
         <Button variant="outline" size="sm" onClick={copy}>{copied ? TG.copied : TG.copy}</Button>

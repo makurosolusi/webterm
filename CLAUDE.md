@@ -64,6 +64,7 @@ Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodete
 
 - JANGAN push/deploy/merge tanpa perintah eksplisit di pesan yang sama.
 - Fitur baru → branch sendiri (`feature/`/`fix/`/`chore/<nama>`) + test nyata; tunggu konfirmasi sebelum merge.
+- Kurungan canvas: tak ada tab/jendela di browser mesin kecuali aksi eksplisit "Open in system browser" (`openLinkInCanvas`/`ExternalLink` di client); pintu keluar baru ditolak oleh `src/shared/containment.policy.test.ts`, aturan di `docs/decisions/canvas-containment.md`.
 - Verifikasi (typecheck + test) sebelum klaim "selesai".
 - Ambigu desain/perilaku → tiru pola yang terbukti jalan, jangan invent.
 - Aturan global berlaku dari `~/.claude/CLAUDE.md`.

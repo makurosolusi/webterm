@@ -84,6 +84,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/central/toolLabels.test.ts',
     'src/native/updatePolicy.bun.test.ts',
     'src/shared/agentCapabilities.parity.test.ts',
+    'src/shared/containment.policy.test.ts',
     'src/shared/capabilityProse.grep.test.ts',
     'src/shared/independentRewrite.policy.test.ts',
     'src/shared/productText.english.test.ts',

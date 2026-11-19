@@ -14,8 +14,13 @@ PATH of agent sessions, and plain terminals got no webterm env at all.
    first on PATH and `WEBTERM_PORT` (`src/server/linkCapture/linkCapture.env.ts`, applied in `sessions.ts`).
 2. `<dataDir>/bin` holds the catcher `webterm-open` and shims named `open`, `xdg-open`, `sensible-browser`,
    `x-www-browser`, `gnome-open` (`linkCapture.shims.ts`, written at boot, idempotent overwrite). A named shim takes over
-   ONLY when every argument is an `http(s)://` URL. Everything else (files, folders, `open -a App <url>`, `mailto:`,
-   `file:`, a session without webterm credentials) goes to the real opener, found on PATH after the shim dir, with
+   ONLY when every argument is a web URL (`http(s)://`, `ftp://`; the server refuses anything but http(s) with a visible
+   reason, so an `ftp://` link never reaches the machine browser). `file:` URLs and web-like files (`.html`, `.htm`,
+   `.xhtml`, `.svg`, any case) are REFUSED, not forwarded: they would open the machine browser. The shim prints
+   `webterm: refused to open <arg>: ...` and exits 1; explicit app flags (`-a -b -R -e -t -f`) are the user's own choice of
+   program and still pass (`open -a "Visual Studio Code" x.html`). `webterm-open` (a BROWSER handler, always a browser) has
+   no such exception. Everything else (folders, other files, `open -a App <url>`, `mailto:`, `tel:`, a session without
+   webterm credentials) goes to the real opener, found on PATH after the shim dir, with
    `WEBTERM_OPEN_BYPASS=1` set so nothing can loop back into a shim. `webterm-open` itself (the BROWSER handler) takes the
    first http(s) argument and ignores flags such as `--new-window`.
 3. The catcher calls `POST /api/link-open {url}` (`linkCapture.route.ts`). The server (`browser/browser.linkOpen.ts`):
@@ -74,8 +79,9 @@ never in env or argv (same rule as the node token).
 - Programs that call `/usr/bin/open` (or `xdg-open`) by absolute path, or LaunchServices / `NSWorkspace` / `gio` / D-Bus
   directly (many Electron and native apps, some Go and Rust CLIs).
 - `open -a <App> <url>`, `open -b`, and any call with a flag or a non-URL argument: deliberately the user's own call.
-- `mailto:`, `file:` and other schemes: not web pages, they go to the real opener (the server also answers
-  `unsupported_scheme` if one is posted).
+- `mailto:`, `tel:` and other non-web schemes: not web pages, they go to the real opener (the server also answers
+  `unsupported_scheme` if one is posted). `file:` and web-like files are refused (see Decision 2). Whole-app picture:
+  `canvas-containment.md`.
 - Fish and other non-POSIX interactive shells keep `BROWSER` only (no PATH hook); a command launch under fish does get the
   PATH prefix. A user rc that overwrites `BROWSER`, `PROMPT_COMMAND` or `precmd_functions` drops that layer.
 - Terminals started before the feature or while the switch was off (they keep their env until restarted).

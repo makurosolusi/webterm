@@ -12,6 +12,8 @@ import { randomId } from '../randomId'
 import type { Comment } from '../../shared/workspace'
 import { callAppTool, fetchAppView, type AppView } from './mcpApp.api'
 import { APP_SANDBOX, allowAttribute, createAppBridge } from './mcpApp.bridge'
+import { openLinkInCanvas } from '../canvasLinks'
+import { useNodeActions } from '../nodeActions'
 import { useNodeHost } from '../tabLayout.context'
 import TabNodeActions from '../tabLayout.nodeActions'
 
@@ -33,6 +35,9 @@ function McpAppNode({ id, data, selected, height }: NodeProps) {
   const [view, setView] = useState<AppView | null>(null)
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
+  // Read at click time: the bridge is built once per view.
+  const actions = useRef(useNodeActions())
+  actions.current = useNodeActions()
 
   useEffect(() => {
     let live = true
@@ -53,7 +58,7 @@ function McpAppNode({ id, data, selected, height }: NodeProps) {
       // is the address (a navigated-away frame is a different document and gets nothing it asked for).
       post: (msg) => win()?.postMessage(msg, '*'),
       callTool: (name, args) => callAppTool(id, name, args),
-      openLink: (url) => { window.open(url, '_blank', 'noopener,noreferrer') },
+      openLink: (url) => { openLinkInCanvas(url, { openBrowserAt: actions.current.openBrowserAt, anchorNodeId: id }) },
       theme: theme(),
       ...(view.toolInput ? { toolInput: view.toolInput } : {}),
       ...(view.toolResult ? { toolResult: view.toolResult } : {}),

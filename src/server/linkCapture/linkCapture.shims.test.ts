@@ -99,13 +99,36 @@ describe('link catcher shims', () => {
     ['a folder', ['.']],
     ['an app flag with a URL', ['-a', 'Safari', 'https://example.com']],
     ['a mailto link', ['mailto:someone@example.com']],
-    ['a file: URL', ['file:///tmp/x.html']],
+    ['an html file opened in an app of the user\'s choice', ['-a', 'Visual Studio Code', '/tmp/x.html']],
     ['a URL mixed with a path', ['https://example.com', '/tmp/x']],
   ])('open with %s goes to the real opener and the server is not asked', async (_label, args) => {
     const r = await run('open', args)
     expect(r.code).toBe(0)
     expect(seen).toHaveLength(0)
     expect(real()).toContain(`open|${args.join(' ')}`)
+  })
+
+  it.each([
+    ['open', ['file:///tmp/x.html']],
+    ['open', ['/tmp/page.HTML']],
+    ['xdg-open', ['site/index.htm']],
+    ['open', ['/tmp/logo.svg']],
+    [OPEN_COMMAND, ['file:///etc/hosts']],
+    [OPEN_COMMAND, ['--new-window', '/tmp/x.html']],
+  ])('%s %j is refused: non-zero exit, clear message, never the real opener', async (cmd, args) => {
+    const r = await run(cmd, args)
+    expect(r.code).toBe(1)
+    expect(r.stderr).toContain('refused to open')
+    expect(seen).toHaveLength(0)
+    expect(real()).toBe('')
+  })
+
+  it('an ftp link is caught like an http link (the server decides), never passed to the real opener', async () => {
+    reply = { status: 400, body: '{"error":"unsupported_scheme","message":"Only http and https links open in the canvas browser."}' }
+    const r = await run('open', ['ftp://files.example.com/a'])
+    expect(r.code).toBe(1)
+    expect(seen).toHaveLength(1)
+    expect(real()).toBe('')
   })
 
   it('the real opener runs with the bypass flag, so it cannot loop back into a shim', async () => {
