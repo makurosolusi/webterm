@@ -67,14 +67,19 @@ WORKDIR /app
 # Browser, per architecture. Chromium always runs with its sandbox: never --no-sandbox (see
 # docker/chrome.seccomp.json and docs/docker.md). Both paths end in /usr/local/bin/chrome.
 #  - amd64: Chrome for Testing, pinned + checksummed by scripts/fetch-chrome.ts (prints the binary path).
-#    Own layer before the app code so source edits do not re-download it; the script needs no src/.
+#    Own layer before the app code so source edits do not re-download it. The script imports a few files
+#    from src/ (transitively); only those are copied first, and scripts/fetchChrome.deps.bun.test.ts fails
+#    when a new import is missing from the COPY list below.
 #  - arm64: Chrome for Testing has no linux arm64 build, so use Debian bookworm's `chromium` package
 #    (156.x on 2026-11-19, security-updated; version follows Debian, NOT pinned by us).
-# NOTE: scripts/fetch-chrome.ts is added by the chrome-binary change; the amd64 build needs it merged.
 ARG TARGETARCH
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json ./
 COPY scripts ./scripts
+COPY src/server/browser/chromium.managed.ts src/server/browser/chromium.managed.zip.ts ./src/server/browser/
+COPY src/server/logs/logger.ts src/server/logs/logBus.ts src/server/logs/logConsole.ts src/server/logs/logFileSink.ts src/server/logs/logSanitize.ts ./src/server/logs/
+COPY src/server/envFlag.ts src/server/redactSecrets.ts ./src/server/
+COPY src/shared/logEntry.ts ./src/shared/
 RUN set -eu; \
     if [ "${TARGETARCH:-amd64}" != "arm64" ]; then \
       CHROME_BIN="$(bun scripts/fetch-chrome.ts --dest /opt/chrome | tail -n 1)"; \

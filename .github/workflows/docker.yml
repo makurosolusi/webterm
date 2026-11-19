@@ -3,7 +3,7 @@ name: docker
 
 on:
   pull_request:
-    paths: [Dockerfile, .dockerignore, docker-compose.yml, docker/**, scripts/fetch-chrome.ts, package.json, bun.lock, .github/workflows/docker.yml]
+    paths: [Dockerfile, .dockerignore, docker-compose.yml, docker/**, scripts/fetch-chrome.ts, src/server/browser/chromium.managed*.ts, src/server/logs/**, src/server/envFlag.ts, src/server/redactSecrets.ts, src/shared/logEntry.ts, package.json, bun.lock, .github/workflows/docker.yml]
   workflow_dispatch:
 
 permissions:

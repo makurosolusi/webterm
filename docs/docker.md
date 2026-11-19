@@ -107,5 +107,6 @@ The server listens on `0.0.0.0:$PORT` inside the container (`HOST=0.0.0.0`) and 
 
 - **Claude Code:** `npm view @anthropic-ai/claude-code version`, then set `CLAUDE_CODE_VERSION` (env, or the `ARG` default in the Dockerfile and the default in `docker-compose.yml`) and `docker compose build`. Optional CLIs: `CODEX_VERSION` (`@openai/codex`), `GEMINI_CLI_VERSION` (`@google/gemini-cli`); empty means not installed.
 - **Chrome (amd64):** the version and checksums are pinned in `scripts/fetch-chrome.ts`; bump them there, rebuild.
+- **Chrome fetch dependencies:** `scripts/fetch-chrome.ts` runs before the app source is copied, so the Dockerfile copies the few `src/` files it imports (transitively) first, keeping the Chrome download layer cached. If you add an import there, add the file to those `COPY src/...` lines; `bun test scripts/fetchChrome.deps.bun.test.ts` fails until you do.
 - **Chromium (arm64):** follows the Debian bookworm `chromium` package; rebuild with `--no-cache` (or bump the base image) to pick up Debian security updates.
 - **Bun / Node:** `BUN_VERSION` and `NODE_VERSION` args at the top of the Dockerfile (keep Bun equal to `BUN_VERSION` in `.github/workflows/test.yml`).
