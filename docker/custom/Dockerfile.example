@@ -1,0 +1,31 @@
+# Example: your own image on top of the published webterm image, with extra Linux tools baked in.
+#   docker build -f docker/custom/Dockerfile.example --build-arg WEBTERM_TAG=0.9.2 -t my-webterm .
+# then run it with compose.ghcr.yml and `image: my-webterm` (or `pull_policy: never`).
+# Only Linux binaries work here: a macOS (Mach-O) binary from your laptop cannot run in the container.
+ARG WEBTERM_TAG=latest
+FROM ghcr.io/makurosolusi/webterm:${WEBTERM_TAG}
+
+# TARGETARCH is amd64 or arm64 (set by BuildKit); use it to pick the matching release asset.
+ARG TARGETARCH
+
+USER root
+
+# 1. Debian packages
+RUN apt-get update && apt-get install -y --no-install-recommends jq ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. npm / pip tools (Node is in the image; python3-pip needs `apt-get install python3-pip` first)
+RUN npm install -g --no-fund --no-audit typescript@5
+
+# 3. A prebuilt Linux binary. Fill in YOUR tool and a URL you verified; checksum it. Example shape only:
+# ARG TOOL_VERSION=<fill in>
+# RUN curl -fsSL "<release URL for linux-${TARGETARCH} of your tool>" -o /opt/custom/bin/mytool \
+#     && echo "<sha256>  /opt/custom/bin/mytool" | sha256sum -c - \
+#     && chmod 0755 /opt/custom/bin/mytool
+
+# 4. envman (or any wrapper): fill in yourself. "envman" names several unrelated projects, and none was
+#    verified here as having an official Linux release, so no URL is given.
+
+# /opt/custom/bin is already on PATH for every shell; a bind mount on it (compose) hides what you add here,
+# so use /usr/local/bin for baked-in tools if you also mount ./custom-bin.
+USER webterm
