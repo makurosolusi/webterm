@@ -57,3 +57,10 @@ named below.
 | Gruvbox | https://github.com/morhetz/gruvbox | MIT/X11 (as stated in its README) |
 | Tokyo Night | https://github.com/folke/tokyonight.nvim | Apache License 2.0 |
 | One Dark | https://github.com/atom/atom (one-dark-syntax) | MIT, Copyright (c) 2016 GitHub Inc. |
+
+## Caveat (font)
+
+- Source: `@fontsource/caveat` 5.3.0 tarball (https://github.com/googlefonts/caveat), license metadata `OFL-1.1`
+- Copyright 2014 The Caveat Project Authors
+- License: SIL Open Font License 1.1, full text in `src/client/fonts/Caveat-OFL.txt`
+- Used in webterm: `src/client/fonts/*.woff2` (latin and latin-ext subsets, weights 400 and 700) for the Sticky note handwriting face; served locally, never from a CDN
