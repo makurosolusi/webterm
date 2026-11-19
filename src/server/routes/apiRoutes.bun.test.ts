@@ -38,6 +38,7 @@ test('full route order snapshot', () => {
     'knowledge2',
     'push', 'mobile',
     'claude-provider-test', 'claude-provider', 'claude-launch',
+    'custom-commands-write', 'custom-commands-read',
     'proxy-info',
     'bakeoff',
     'evalcases',
