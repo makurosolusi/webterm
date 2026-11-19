@@ -3,12 +3,12 @@
 import { CircleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { openSettingsSection } from '../settings.link'
+import { openSettingsAt } from '../settings.link'
 import type { CookieErrorKind } from './cookieImport.logic'
 import { CI } from './cookieImport.text'
 import type { CookieResult } from './useCookieImport'
 
-/** Settings section that holds the cookie import switch (Browser). */
+/** Settings section of the browser (profiles, cookie import switch). */
 const BROWSER_SETTINGS_SECTION = 'browser'
 
 export function CookieError({ kind }: { kind: CookieErrorKind }): React.JSX.Element {
@@ -32,7 +32,7 @@ export function CookieDisabled({ onClose }: { onClose: () => void }): React.JSX.
       </Alert>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" size="bui" onClick={onClose}>{CI.action.close}</Button>
-        <Button type="button" size="bui" onClick={() => { onClose(); openSettingsSection(BROWSER_SETTINGS_SECTION) }}>{CI.settings}</Button>
+        <Button type="button" size="bui" onClick={() => { onClose(); openSettingsAt(BROWSER_SETTINGS_SECTION, 'browser-profiles') }}>{CI.settings}</Button>
       </div>
     </div>
   )

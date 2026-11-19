@@ -192,7 +192,7 @@ describe('result and errors', () => {
     expect(await screen.findByText(CI.errors.disabled.title)).toBeTruthy()
     expect(screen.queryByTestId('cookie-file-input')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: CI.settings }))
-    expect(seen).toEqual([{ section: 'browser' }])
+    expect(seen).toEqual([{ section: 'browser', field: 'browser-profiles' }])
     expect(onClose).toHaveBeenCalled()
   })
 })
