@@ -80,14 +80,14 @@ export function SliderField({ id, label, hint, setting, range, value, unit, form
 }
 
 /** A select over fixed numbers; a current value not in the list (hand-edited) stays selectable. */
-export function NumberSelectField({ id, label, hint, setting, value, options, onChange }: Base & {
-  value: number; options: readonly { value: number; label: string }[]; onChange(v: number): void
+export function NumberSelectField({ id, label, hint, setting, value, options, onChange, lock }: Base & {
+  value: number; options: readonly { value: number; label: string }[]; onChange(v: number): void; lock?: Lock
 }): React.JSX.Element | null {
   const list = options.some((o) => o.value === value) ? options : [...options, { value, label: String(value) }]
   return (
-    <Field label={label} hint={hint} htmlFor={id} setting={setting}>
+    <Field label={label} hint={hint} htmlFor={id} setting={setting} lock={lock}>
       <SettingsSelect id={id} value={String(value)} options={list.map((o) => ({ value: String(o.value), label: o.label }))}
-        onChange={(v) => onChange(Number(v))} />
+        onChange={(v) => onChange(Number(v))} disabled={lock !== undefined} describedBy={lock ? lockReasonId(id) : undefined} />
     </Field>
   )
 }

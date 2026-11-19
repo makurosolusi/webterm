@@ -93,3 +93,7 @@ export const COST_CAP_PRESETS: readonly ComboPreset[] = [
   { value: '25', label: '$25' },
   { value: '50', label: '$50' },
 ]
+
+export const MASK_AUTO_HIDE_OPTIONS = [
+  { value: 15, label: '15 seconds' }, { value: 30, label: '30 seconds' }, { value: 60, label: '1 minute' }, { value: 0, label: 'Never' },
+]

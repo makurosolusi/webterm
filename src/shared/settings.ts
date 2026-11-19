@@ -44,6 +44,9 @@ export type { CustomAgent, CustomAgentLaunch } from './customAgent.schema'
 export const QUICK_DRAG_PRESETS = ['cmdCtrl', 'cmdShift', 'off'] as const
 export type QuickDragPreset = (typeof QUICK_DRAG_PRESETS)[number]
 
+/** Seconds a revealed secret stays visible in the file editor before re-masking; 0 = never. */
+export const MASK_AUTO_HIDE_PRESETS = [15, 30, 60, 0] as const
+
 /** Full settings shape: terminal + agent slices (own files) plus the canvas/app keys below. */
 export interface Settings extends TerminalSettings, AgentSettings {
   // --- Canvas ----------------------------------------------------------------------------------
@@ -58,6 +61,11 @@ export interface Settings extends TerminalSettings, AgentSettings {
   canvasDots: boolean
   /** Modifier held for "Quick move & resize" (drag anywhere on a node). Normalized on load. */
   quickDrag: QuickDragPreset
+  /** Hide values of API keys, tokens and passwords in the file editor until revealed. Default ON:
+   *  the safe state, since the editor is routinely shown on screen shares and in screenshots. */
+  maskSecrets: boolean
+  /** Seconds before a revealed secret is masked again (`MASK_AUTO_HIDE_PRESETS`; 0 = never). */
+  maskAutoHideSec: number
   /** Status bar at the bottom of terminal and agent nodes (session facts + anomaly badges). */
   nodeStatusBar: boolean
   /** Tampilan chrome APP (panel, header node, menu). `auto` (default, "System") mengikuti mode
@@ -164,6 +172,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultNodeHeight: 440,
   canvasDots: true,
   quickDrag: 'cmdCtrl',
+  maskSecrets: true,
+  maskAutoHideSec: 30,
   nodeStatusBar: true,
   appTheme: 'auto',
   edgeColor: 'default',
@@ -242,6 +252,8 @@ export function mergeSettings(saved: unknown, onInvalidAgents?: (errors: CustomA
   out.setup = normalizeSetup(src.setup)
   // Enum: shape matching lets any string through, so an unknown preset falls back to the default.
   out.permissionRouting = permissionRoutingOf(out.permissionRouting)
+  // Judged on the raw value: the range clamp above would turn -5 into a valid-looking 0 ("Never").
+  if (!(MASK_AUTO_HIDE_PRESETS as readonly unknown[]).includes(src.maskAutoHideSec)) out.maskAutoHideSec = DEFAULT_SETTINGS.maskAutoHideSec
   if (!QUICK_DRAG_PRESETS.includes(out.quickDrag)) out.quickDrag = DEFAULT_SETTINGS.quickDrag
   if (out.edgeColor !== 'default' && !HEX_COLOR.test(out.edgeColor)) out.edgeColor = DEFAULT_SETTINGS.edgeColor
   if (!isSkillCableColor(out.skillCableColor)) out.skillCableColor = DEFAULT_SETTINGS.skillCableColor

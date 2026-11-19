@@ -32,6 +32,8 @@ export const SETTING_RANGES = {
   scrollbackLines: { min: 1_000, max: 100_000, step: 1_000 },
   edgeWidth: { min: 1, max: 4, step: 0.5 },
   gridSize: { min: 4, max: 200, step: 1 },
+  // Auto-hide of revealed secrets: 0 = never; the UI offers presets 15/30/60 s only.
+  maskAutoHideSec: { min: 0, max: 60, step: 15 },
   centralCheckinDailyLimit: { min: 5, max: 50, step: 1 },
   // Min = ukuran minimum `NodeResizer` semua jenis node.
   defaultNodeWidth: { min: 240, max: 2400, step: 20 },
