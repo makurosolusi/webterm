@@ -59,6 +59,8 @@ export function serveTerminalSocket(ws: Socket, deps: TerminalSocketDeps): void 
     sweep = undefined
     const ids = [...lagging]
     lagging.clear()
+    // Byte counts only, never terminal content: tells "output was dropped, then replayed" from "never dropped".
+    wsLog.debug('ws.resync', 'WebSocket drained; replaying terminals whose output was dropped', { terminals: ids.length, bufferedBytes: ws.bufferedAmount })
     for (const id of ids) deps.sessions.resync(id, send)
   }
 
