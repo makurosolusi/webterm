@@ -1,11 +1,12 @@
 // Downloads control of a browser node's toolbar (right side, before the ⋮ menu, like Chrome): a Download icon with a count badge and a progress ring while files transfer;
 // it opens the list. Nothing here asks for permission: a download just starts and lands in the webterm folder.
 import { useId, useRef, useState } from 'react'
-import { Download } from 'lucide-react'
+import { Check, Download } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import type { DownloadItem } from '../../shared/browser.downloads'
 import { BrowserDownloadsPopover } from './BrowserDownloadsPopover'
 import { useBrowserDownloads } from './useBrowserDownloads'
+import { useDownloadsAutoOpen } from './downloadsAutoOpen.hook'
 import { DL_TEXT } from './browserDownloads.text'
 import './browserDownloads.css'
 
@@ -30,10 +31,12 @@ export default function BrowserDownloads({ nodeId, items, showButton = true, ope
   const box = useRef<HTMLSpanElement>(null)
   const button = useRef<HTMLButtonElement>(null)
   const popId = useId()
+  // A new download opens the list by itself (without taking focus); see downloadsAutoOpen.ts.
+  const { auto, setEngaged, doneMark } = useDownloadsAutoOpen({ nodeId, items, open, anchor: () => button.current ?? box.current, onAutoOpen: () => setOpen(true), onAutoClose: () => setOpen(false) })
   const badge = counts.active + counts.waiting
-  const label = counts.active > 0 ? DL_TEXT.buttonActive(counts.active) : counts.waiting > 0 ? DL_TEXT.buttonPending(counts.waiting) : DL_TEXT.button
+  const label = doneMark && counts.active === 0 ? DL_TEXT.buttonDone : counts.active > 0 ? DL_TEXT.buttonActive(counts.active) : counts.waiting > 0 ? DL_TEXT.buttonPending(counts.waiting) : DL_TEXT.button
   return (
-    <span ref={box} className="bdl browser-toolbar__downloads nodrag inline-flex" data-browser-downloads data-shown={showButton ? 'true' : 'false'} data-active={counts.active > 0 ? 'true' : undefined}>
+    <span ref={box} className="bdl browser-toolbar__downloads nodrag inline-flex" data-browser-downloads data-shown={showButton ? 'true' : 'false'} data-active={counts.active > 0 ? 'true' : undefined} data-done={doneMark ? 'true' : undefined}>
       {showButton && <IconButton
         ref={button} label={label} tooltip={badge > 0 ? label : DL_TEXT.tip} size="icon-bui" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? popId : undefined}
         onClick={() => setOpen(!open)}
@@ -45,9 +48,10 @@ export default function BrowserDownloads({ nodeId, items, showButton = true, ope
             <circle className="bdl-ring-arc" cx="12" cy="12" r={RING_R} strokeDasharray={RING_C} strokeDashoffset={RING_C * (1 - (counts.fraction ?? 0.25))} />
           </svg>
         )}
+        {doneMark && counts.active === 0 && badge === 0 && <Check className="bdl-done" aria-hidden="true" />}
         {badge > 0 && <span className="bdl-badge" aria-hidden="true">{badge > 9 ? '9+' : badge}</span>}
       </IconButton>}
-      {open && (button.current ?? box.current) && <BrowserDownloadsPopover nodeId={nodeId} items={items} speeds={speeds} anchor={(button.current ?? box.current)!} id={popId} onClose={() => setOpen(false)} />}
+      {open && (button.current ?? box.current) && <BrowserDownloadsPopover nodeId={nodeId} items={items} speeds={speeds} anchor={(button.current ?? box.current)!} id={popId} autoFocus={!auto} onEngagedChange={setEngaged} onClose={() => setOpen(false)} />}
     </span>
   )
 }
