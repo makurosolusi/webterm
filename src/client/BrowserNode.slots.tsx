@@ -17,7 +17,7 @@ import BrowserNoticeAction from './browser.noticeAction'
 import { setCapabilitySub } from './capabilitiesApi'
 import { resetBrowserStatusCache, useBrowserStatus } from './browser.feature'
 import { getBrowserWorkspace } from './browser.stream'
-import { COOKIE_MENU_TEXT as M } from './browser.uxText'
+import { CI } from './browserCookies/cookieImport.text'
 import type { VscodeMenuItem } from './components/vscode/vscodeMenu'
 import { useLiveSettings } from './useSettings'
 import { toSearchEngine } from '../shared/browser.omnibox'
@@ -49,15 +49,11 @@ async function enableAgent(): Promise<void> {
   resetBrowserStatusCache()
 }
 
-/** Submenu "Import Cookies ▸ From File…" + catatan Google, meniru menu ⋯ browser Orca (di sini menu ⋮ toolbar). Satu-satunya pintu ke dialog cookie. */
-function cookieMenuItems(onFromFile: () => void): VscodeMenuItem[] {
+/** One plain row in the ⋮ menu that opens the import dialog (no submenu, no note row: the Google limit is explained in the dialog). */
+function cookieMenuItems(onOpen: () => void): VscodeMenuItem[] {
   return [{
-    type: 'item', id: 'import-cookies', label: M.importCookies,
-    submenu: [
-      { type: 'item', id: 'import-cookies-file', label: M.fromFile, onSelect: onFromFile },
-      { type: 'separator' },
-      { type: 'header', label: M.googleNote },
-    ],
+    type: 'item', id: 'import-cookies', label: CI.menuItem, title: CI.menuTip,
+    icon: <span className="codicon codicon-cloud-upload" aria-hidden="true" />, onSelect: onOpen,
   }]
 }
 

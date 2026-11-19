@@ -8,7 +8,8 @@ import { BROWSER_WS_PATH, type BrowserStatusResp } from '../shared/browser.contr
 import { resetBrowserStatusCache } from './browser.feature'
 import { HARNESS_WS_ID, installCanvasDom, mountCanvas, unmountCanvas } from './canvasHarness'
 import { resetCapabilitiesCache } from './useCapabilities'
-import { COOKIE_MENU_TEXT, COOKIE_TEXT, TOOLBAR_MENU_TEXT, TOOLBAR_TEXT } from './browser.uxText'
+import { TOOLBAR_MENU_TEXT, TOOLBAR_TEXT } from './browser.uxText'
+import { CI } from './browserCookies/cookieImport.text'
 import { MENU_LABELS } from './canvasMenu.model'
 // The Layers side bar's empty state offers the same "New Terminal" / "New Agent" buttons as the
 // canvas menu; these queries mean the menu row, so the side bar is left out.
@@ -142,20 +143,19 @@ describe('flag browser menyala', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Browser' }))
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
     const node = document.querySelector('.react-flow__node-browser') as HTMLElement
-    expect(screen.queryByRole('button', { name: COOKIE_TEXT.title })).toBeNull() // tombol ghost "Cookies" sudah diganti menu
+    expect(screen.queryByRole('button', { name: 'Cookies' })).toBeNull() // tombol ghost "Cookies" sudah diganti menu
     // Header "…" = node actions only: no page rows (cookies, reload) and no dead Search.
     fireEvent.click(node.querySelector('[data-title="More Actions…"]') as HTMLElement)
     await screen.findByText(/^Comments/)
-    for (const page of [COOKIE_MENU_TEXT.importCookies, 'Refresh view', 'Search']) expect(screen.queryByText(page)).toBeNull()
+    for (const page of [CI.menuItem, 'Refresh view', 'Search']) expect(screen.queryByText(page)).toBeNull()
     expect(node.querySelector('[data-title="Search"]')).toBeNull()
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
     fireEvent.click(within(node).getByRole('button', { name: TOOLBAR_TEXT.more }))
-    fireEvent.click(await screen.findByText(COOKIE_MENU_TEXT.importCookies))
-    const fromFile = await screen.findByText(COOKIE_MENU_TEXT.fromFile)
-    expect(screen.getByText(COOKIE_MENU_TEXT.googleNote)).not.toBeNull()
+    fireEvent.click(await screen.findByText(CI.menuItem))
+    expect(screen.queryByText('From File…')).toBeNull() // no submenu with a single entry
+    expect(screen.queryByText(/Google logins can/)).toBeNull() // the Google note is in the dialog, not a menu row
     expect(screen.queryByText(/From (Google Chrome|Brave|Safari)/)).toBeNull() // webterm tak membaca store browser lain
-    fireEvent.click(fromFile)
-    expect(await screen.findByRole('dialog', { name: COOKIE_TEXT.title })).not.toBeNull()
+    expect(await screen.findByRole('dialog', { name: CI.title })).not.toBeNull()
   })
 
   it('impor cookie mati di server: menu ⋮ tanpa Import Cookies', async () => {
@@ -166,6 +166,6 @@ describe('flag browser menyala', () => {
     await waitFor(() => expect(document.querySelectorAll('.react-flow__node-browser')).toHaveLength(1))
     fireEvent.click(within(document.querySelector('.react-flow__node-browser') as HTMLElement).getByRole('button', { name: TOOLBAR_TEXT.more }))
     await screen.findByText(TOOLBAR_MENU_TEXT.copyUrl)
-    expect(screen.queryByText(COOKIE_MENU_TEXT.importCookies)).toBeNull()
+    expect(screen.queryByText(CI.menuItem)).toBeNull()
   })
 })

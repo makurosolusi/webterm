@@ -13,7 +13,7 @@ function collect(dir: string, inBrowserDir: boolean): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name)
     if (e.isDirectory()) {
-      if (dir === ROOT && !/^(browser|browserTabs|browserSplit|browserDownloads)$/.test(e.name)) continue
+      if (dir === ROOT && !/^(browser|browserTabs|browserSplit|browserDownloads|browserCookies)$/.test(e.name)) continue
       out.push(...collect(p, true))
     } else if (/\.(tsx|css)$/.test(e.name) && !SKIP_FILE.test(e.name) && (inBrowserDir || BROWSER_FILE.test(e.name))) out.push(p)
   }

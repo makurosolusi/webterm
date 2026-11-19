@@ -20,7 +20,6 @@ const PENDING: Record<string, Reason[]> = {}
 
 /** Permanent exceptions: the control already gives its own complete feedback. */
 const PERMANENT: Record<string, { reasons: Reason[]; why: string }> = {
-  'src/client/BrowserCookieDialog.tsx': { reasons: ['async-click'], why: 'copy-to-clipboard with its own "Copied" state' },
   'src/client/central/health/HealthView.tsx': { reasons: ['async-click'], why: 'Scan now: own running state, spinner and last-scan line' },
   'src/client/central/health/HealthAnalysis.tsx': { reasons: ['async-click'], why: 'deep analysis: own running, cooldown, failed and last-result states' },
   'src/client/viewers/BinaryPlaceholder.tsx': { reasons: ['async-click'], why: 'copy-to-clipboard with its own "Copied" state' },

@@ -155,15 +155,18 @@ describe('Settings › Browser profiles', () => {
   it('cookie import: preview shows sites, the Google note, then the result summary', async () => {
     render(<BrowserProfilesSection workspaceId="w1" />)
     await pick('Spare', 'Import cookies…')
-    const dialog = await screen.findByRole('dialog', { name: 'Cookies of Spare' })
+    const dialog = await screen.findByRole('dialog', { name: 'Import cookies' })
+    expect(within(dialog).getByText('Importing into Spare')).not.toBeNull()
     await within(dialog).findByText(/a\.com/) // stored domains
     const file = new File(['{}'], 'c.json', { type: 'application/json' })
-    fireEvent.change(dialog.querySelector('input[type=file]') as HTMLInputElement, { target: { files: [file] } })
-    expect(await within(dialog).findByText(/Google sign-in cookies are not importable; sign in inside the profile/)).not.toBeNull()
+    fireEvent.change(within(dialog).getByTestId('cookie-file-input'), { target: { files: [file] } })
+    // The blocked Google domain is listed inline with its reason; the importable site is ticked by default.
+    expect(await within(dialog).findByText(/Google sign-ins are tied to the device they came from/)).not.toBeNull()
     expect(server.calls).toContain('POST /api/browser/profiles/bp-free/cookies/preview')
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Import cookies for b.com' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Import selected' }))
-    expect((await within(dialog).findByText(/Imported 4 cookies from 1 site; skipped 3/)).textContent).toBeTruthy()
+    expect((within(dialog).getByRole('checkbox', { name: 'Import cookies for b.com' }) as HTMLElement).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Import 4 cookies' }))
+    expect((await within(dialog).findByText('Imported 4 cookies from 1 site.')).textContent).toBeTruthy()
+    expect(within(dialog).getByText('Skipped 3 cookies.')).not.toBeNull()
     expect(server.calls).toContain('POST /api/browser/profiles/bp-free/cookies/import')
   })
 

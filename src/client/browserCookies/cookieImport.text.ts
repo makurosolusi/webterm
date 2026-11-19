@@ -1,0 +1,106 @@
+// All copy of the cookie import dialog in one place (one source for components and tests). English only.
+import type { CookieFormat } from '../../shared/browser.contract'
+
+export const FORMAT_LABELS: Record<CookieFormat, string> = { storageState: 'JSON (Playwright or Cookie-Editor)', netscape: 'Netscape cookies.txt' }
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+export const CI = {
+  menuItem: 'Import cookies…',
+  menuTip: 'Import cookies from a file. Google sign-ins cannot be imported.',
+  title: 'Import cookies',
+  description: 'Add cookies from a file so this browser stays signed in to your sites.',
+  into: (name: string): string => `Importing into ${name}`,
+  security: {
+    title: 'Only import cookies you trust',
+    body: 'Imported cookies can sign this browser in to your accounts, and anything that drives the browser acts as you.',
+    more: 'Learn more',
+    less: 'Show less',
+    detail: 'Cookies are stored encrypted on this server and expire automatically. A cookie file is the same as login access: import only the sites you need, and delete the file afterwards.',
+    safest: 'Safest: sign in once directly in this browser. Its profile keeps the session, so no cookie file is needed.',
+  },
+  drop: {
+    label: 'Cookie file',
+    prompt: 'Drop a cookie file here',
+    or: 'or',
+    choose: 'Choose file…',
+    hint: 'JSON or Netscape cookies.txt, up to 1 MB.',
+    dropping: 'Release to read this file',
+    describedBy: 'Accepts .json, .txt and .cookies files up to 1 MB.',
+  },
+  reading: (name: string): string => `Reading ${name}…`,
+  format: {
+    label: 'Format',
+    detected: (f: CookieFormat): string => `Detected: ${FORMAT_LABELS[f]}`,
+    unknown: 'Format not recognized. Choose one to try again.',
+    override: 'Wrong format? Change it',
+  },
+  preview: {
+    heading: 'Sites in this file',
+    summary: (cookies: number, sites: number): string => `${plural(cookies, 'cookie', 'cookies')} from ${plural(sites, 'site', 'sites')}`,
+    selectAll: 'Select all',
+    selectNone: 'Select none',
+    filter: 'Filter sites',
+    noMatch: 'No site matches that filter.',
+    count: (n: number): string => plural(n, 'cookie', 'cookies'),
+    session: 'session',
+    pick: (domain: string): string => `Import cookies for ${domain}`,
+    blocked: {
+      google_source_bound: 'Google sign-ins are tied to the device they came from, so they cannot be moved. Sign in to Google directly in this browser.',
+    } as Record<string, string>,
+    nothing: 'Every site in this file is blocked. Nothing can be imported from it.',
+  },
+  action: {
+    import: (n: number): string => `Import ${plural(n, 'cookie', 'cookies')}`,
+    importing: 'Importing…',
+    cancel: 'Cancel',
+    close: 'Close',
+    pickOne: 'Select at least one site to import.',
+    chooseAnother: 'Choose another file',
+  },
+  result: {
+    title: 'Import finished',
+    imported: (cookies: number, sites: number): string => `Imported ${plural(cookies, 'cookie', 'cookies')} from ${plural(sites, 'site', 'sites')}.`,
+    skipped: (n: number): string => `Skipped ${plural(n, 'cookie', 'cookies')}.`,
+    reasons: { google_source_bound: 'Google sign-ins cannot be moved between browsers. Sign in to Google directly in this browser.' } as Record<string, string>,
+    done: 'Done',
+    another: 'Import another file',
+    nothing: 'Nothing was imported.',
+  },
+  errors: {
+    invalid: { title: 'That file could not be read', body: 'It is not a cookie file in a supported format. Export it again as JSON or Netscape cookies.txt, or change the format above.' },
+    empty: { title: 'No cookies in that file', body: 'The file is readable but holds no cookies. Export it again while signed in to the site.' },
+    too_large: { title: 'That file is too large', body: 'Cookie files can be up to 1 MB. Export only the sites you need and try again.' },
+    wrong_type: { title: 'That file type is not supported', body: 'Choose a .json, .txt or .cookies file.' },
+    unreadable: { title: 'The file could not be opened', body: 'Your browser could not read it. Check that it still exists and try again.' },
+    expired: { title: 'The preview expired', body: 'Choose the file again to continue.' },
+    network: { title: 'Could not reach the server', body: 'Check your connection and try again.' },
+    unknown: { title: 'The import failed', body: 'The server refused the request. Try again; if it keeps failing, restart webterm.' },
+    disabled: { title: 'Cookie import is turned off', body: 'An administrator disabled cookie import on this server. Turn it on in Settings to use this dialog.' },
+  },
+  settings: 'Open Settings',
+  help: {
+    summary: 'How to get a cookie file',
+    steps: [
+      { title: 'Cookie-Editor or EditThisCookie', body: 'Open the site, open the extension, choose Export, then JSON. Use a trusted extension: unknown cookie extensions have been used as malware.' },
+      { title: 'Playwright', body: 'Save a signed-in session with context.storageState({ path: "state.json" }) and choose that file.' },
+      { title: 'Netscape cookies.txt', body: 'Many export tools write this classic format. Choose the resulting cookies.txt file.' },
+    ],
+  },
+  stored: {
+    heading: 'Stored cookies',
+    loading: 'Loading…',
+    empty: 'No cookies stored for this profile yet. Import a file to stay signed in.',
+    count: (n: number): string => plural(n, 'cookie', 'cookies'),
+    expires: (when: string): string => `expires ${when}`,
+    remove: (domain: string): string => `Remove cookies for ${domain}`,
+    removed: (domain: string): string => `Removed cookies for ${domain}.`,
+    clearAll: 'Clear all',
+    confirmTitle: 'Clear all stored cookies?',
+    confirmBody: (n: number): string => `${plural(n, 'site', 'sites')} will be signed out in this profile. This cannot be undone.`,
+    confirm: 'Clear all',
+    cancel: 'Cancel',
+    cleared: 'Cleared all stored cookies.',
+    loadFail: 'Stored cookies could not be loaded.',
+  },
+} as const
