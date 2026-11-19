@@ -19,6 +19,7 @@ import type { GitChange, GitChangeStatus, GitFileDiff } from '../server/gitDiff.
 import { DIFF_NOTE_BODY_MAX, DIFF_NOTES_MAX, validDiffNotes, type AgentStatus, type Comment } from '../shared/workspace'
 import { fetchDiffList, fetchFileDiff, undoHunk } from './DiffNode.api'
 import { useDiffEditor } from './DiffNode.editor'
+import { useDiffMask } from './DiffNode.mask'
 import { enqueueNotes, sendRefusal, type DiffNote } from './DiffNode.notes'
 import { randomId } from './randomId'
 import { getStatus, subscribeStatus } from './ws'
@@ -125,7 +126,8 @@ function DiffNode({ id, data, selected, height }: NodeProps) {
   }, [agent, refresh])
 
   const host = useRef<HTMLDivElement>(null)
-  const sides = useMemo(() => (file && !file.binary && !file.sensitive && !file.truncated ? { path: file.path, original: file.original, modified: file.modified } : null), [file])
+  const rawSides = useMemo(() => (file && !file.binary && !file.sensitive && !file.truncated ? { path: file.path, original: file.original, modified: file.modified } : null), [file])
+  const { sides, bar: maskBar } = useDiffMask(rawSides)
   const notedLines = useMemo(() => notes.filter((n) => n.path === file?.path).map((n) => n.line), [notes, file])
   const editor = useDiffEditor(host, sides, notedLines)
   const storedWrap = useStore((s) => (s.nodeLookup.get(id)?.data as { wordWrap?: unknown } | undefined)?.wordWrap)
@@ -237,6 +239,7 @@ function DiffNode({ id, data, selected, height }: NodeProps) {
               <div className="diff-node__main">
                 {body()}
                 {editor.error && <span className="diff-node__notice">{editor.error}</span>}
+                {maskBar}
                 <div className="diff-node__monaco" ref={host} hidden={!sides} />
                 {hunks.length > 0 && (
                   <ul className="diff-node__hunks" aria-label="Changes in file">

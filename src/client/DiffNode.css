@@ -22,3 +22,4 @@
 .diff-node__note-loc { color: var(--muted); font-family: var(--vscode-editor-font-family, monospace); }
 .diff-node__note-del { margin-left: 6px; border: 0; background: none; color: var(--muted); cursor: pointer; }
 .diff-node__noted-line { background: rgba(var(--tint-rgb, 10, 132, 255), 0.12); }
+.diff-node__mask { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 8px; }
