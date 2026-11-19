@@ -38,6 +38,7 @@ import { COLLAPSED_H, DEFAULT_H, hideBrowserNode, hideCandidates, rememberHeight
 import { browserTabDomId } from './browserTabs/BrowserTabItem'
 import { useBrowserTabs } from './browserTabs/useBrowserTabs'
 import type { TabMsg } from './browserTabs/useBrowserTabs'
+import { useBrowserContextMenu, type ContextMenuMsg } from './browserContextMenu/useBrowserContextMenu'
 import { useBrowserTabShortcuts } from './browserTabs/useBrowserTabShortcuts'
 import { BrowserPaneTree } from './browserSplit/BrowserPaneTree'
 import { BrowserSplitMenu } from './browserSplit/BrowserSplitMenu'
@@ -104,7 +105,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   // Canvas zoom is irrelevant in a tab pane or maximized (1:1 either way); a hidden tab detaches the stream.
   const lowZoom = useStore((s) => !inTab && !maximized && s.transform[2] < ZOOM_PAUSE_BELOW)
   // Popups are tabs of this node now (server side); the tab messages feed `useBrowserTabs` below.
-  const tabMsg = useRef<(m: TabMsg) => void>(undefined)
+  const tabMsg = useRef<(m: TabMsg | ContextMenuMsg) => void>(undefined)
   const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (m) => tabMsg.current?.(m), d.profileId)
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
@@ -119,7 +120,8 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const expandedH = useRef(height ?? DEFAULT_H)
   const { state, send } = session
   const tabs = useBrowserTabs(id, state, send)
-  tabMsg.current = tabs.onMsg
+  const pageMenu = useBrowserContextMenu({ bodyRef, send, nav: (action) => send({ t: 'nav', action }), canBack: !!state?.canBack, canForward: !!state?.canForward, notify: tabs.notify })
+  tabMsg.current = (m) => { if (!pageMenu.onMsg(m)) tabs.onMsg(m as TabMsg) } // right click on the page = webterm's own menu (never Chromium's)
   useBrowserTabShortcuts({ containerRef: bodyRef, state: tabs.view, onAction: tabs.act, onNotice: tabs.notify })
   const split = useBrowserSplit(tabs, session, send, session.hostRef)
   const [dropHint, setDropHint] = useState<DropHint | null>(null)
@@ -263,6 +265,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
             {!layout && dropHint && dropHint.paneTabId === tabs.active?.tabId && <div className="bp-drop" aria-hidden="true" style={zoneBox(dropHint.zone)} data-zone={dropHint.zone} />}
             {showStart && !layout && <BrowserStartPage onGo={(url) => ctx.nav('go', url)} searchEngine={searchEngine} />}
             {renderOverlay?.(ctx)}
+            {pageMenu.menu}
             {down && <BrowserNodeDown others={hideCandidates(rf.getNodes(), id)} onHide={(other) => hideBrowserNode(rf, other)} onRetry={session.retry} answer={session.error ?? state} />}
           </div>
           {consoleDrawer.drawer}

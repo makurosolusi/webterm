@@ -6,6 +6,7 @@ import {
 import type { ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
 import { parseDeviceChoice } from './browser.devices'
 import { parseConsoleMsg } from './browser.console'
+import { webUrl } from './browser.contextmenu'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder('utf-8', { fatal: true })
@@ -169,6 +170,11 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       if (!oneOf(m.action, NAV_ACTIONS)) return null
       if (m.url === undefined) return m.action === 'go' ? null : { t: 'nav', id, action: m.action }
       return str(m.url, URL_MAX_CHARS) ? { t: 'nav', id, action: m.action, url: m.url } : null
+    }
+    case 'openLink': {
+      const url = webUrl(m.url)
+      if (!url || (m.tab !== undefined && !tabId(m.tab))) return null
+      return { t: 'openLink', id, url, ...(m.tab === undefined ? {} : { tab: m.tab as string }) }
     }
     case 'shields':
       return typeof m.on === 'boolean' ? { t: 'shields', id, on: m.on } : null

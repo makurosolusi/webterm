@@ -1,5 +1,6 @@
 // Tabel target per node + operasi target tingkat rendah (buat/attach/riwayat/setup koneksi).
 // Tidak menyimpan kebijakan; `BrowserHost` yang memutuskan kapan memanggil.
+import type { ContextInfo } from '../../shared/browser.contextmenu'
 import { INPUT_LATENCY_STALE_MS } from '../../shared/browser.contract'
 import type { BlockReason, BrowserErrorCode, BrowserState, Frame, FrameLatency, LaunchReason } from '../../shared/browser.contract'
 import { hostOnly, parseBrowserUrl } from '../../shared/browser.url'
@@ -11,6 +12,7 @@ import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { metricsParams } from './browserHost.input'
 import { markOwnTarget } from './browserHost.containment'
+import { BACKSTOP_SCRIPT } from './browserHost.contextMenu.script'
 
 /** Galat host ber-kode; gateway memetakan `code` ke `{t:'error'}` (tanpa URL, hanya hostname). */
 export class BrowserError extends Error {
@@ -37,6 +39,8 @@ export type HostEvent =
   | { k: 'error'; nodeId: string; code: BrowserErrorCode; hostname?: string }
   | { k: 'tab'; nodeId: string; event: BrowserTabEvent }
   | { k: 'tabNotice'; nodeId: string; message: string }
+  /** The user right-clicked a page: the client draws the canvas's own menu for `info` (browserHost.contextMenu.ts). */
+  | { k: 'contextMenu'; nodeId: string; tab?: string; info: ContextInfo }
   /** A download of the node changed (begun, progress, ended); `downloads` = its whole list changed (an entry was removed). */
   | { k: 'download'; nodeId: string; item: DownloadItem }
   | { k: 'downloads'; nodeId: string; items: DownloadItem[] }
@@ -171,6 +175,7 @@ export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']):
   markOwnTarget(targetId) // ours from the first instant: the containment guard must not take it for a stray
   const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
   await cdp.send(CDP.pageEnable, {}, sessionId)
+  await cdp.send(CDP.addScript, { source: BACKSTOP_SCRIPT }, sessionId) // no native context menu / stray tab from middle or Ctrl+click
   await cdp.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr), sessionId)
   // Jendela offscreen/minimized (atau headless fallback) tak pernah punya fokus OS; tanpa emulasi Chrome menganggap
   // halaman tak fokus. Tab sudah aktif di jendelanya sendiri, jadi TANPA Page.bringToFront: di macOS itu memulihkan
