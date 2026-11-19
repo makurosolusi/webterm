@@ -12,7 +12,8 @@ import { probeMcpServer } from '../mcp/mcp.health'
 const ENTRY = join(import.meta.dirname, '../index.ts')
 const RUN_TIMEOUT_MS = 20_000
 const COMPILE_TIMEOUT_MS = 60_000
-const BUN_CACHE_DIR = 'Library'
+// Bun's own runtime artifacts under HOME: macOS transpiler cache (Library), ~/.bun and ~/.cache on Linux.
+const BUN_RUNTIME_DIRS = new Set(['Library', '.bun', '.cache'])
 const dirs: string[] = []
 afterAll(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }) })
 
@@ -33,7 +34,7 @@ function run(cmd: string[], args: string[]): { code: number | null; out: string;
 
 function expectNoSideEffects(r: { home: string; dataDir: string }): void {
   expect(existsSync(r.dataDir)).toBe(false)
-  expect(readdirSync(r.home).filter((n) => n !== BUN_CACHE_DIR)).toEqual([])
+  expect(readdirSync(r.home).filter((n) => !BUN_RUNTIME_DIRS.has(n))).toEqual([])
 }
 
 const DEV = [process.execPath, '--no-env-file', ENTRY]

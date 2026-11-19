@@ -12,6 +12,8 @@ afterAll(() => reapChildren())
 const darwin = process.platform === 'darwin'
 // Fits in the tty output queue, so the child is not blocked in write: it exits with output unread.
 const PRINT_AND_EXIT = `head -c 500 /dev/zero | tr '\\0' x; exit 0`
+// cwd '/' on every spawn: the default cwd is $HOME, which an earlier file in the same bun process may have
+// pointed at a temp dir it already removed (Bun reports that as ENOENT -> exit 127).
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** Blocks the event loop ~1 s (nothing reads the PTY master meanwhile), then returns `pid`'s ps state. */
@@ -31,7 +33,7 @@ test('unguarded: a PTY leader that exits with unread output is stuck exiting unt
 test('guarded: the leader is still alive (not exiting) while the loop is blocked, and the exit lands once it runs', async () => {
   let out = ''
   let code: number | undefined
-  const pty = spawnPty({ cols: 80, rows: 24, cmd: PRINT_AND_EXIT, shell: '/bin/sh' })
+  const pty = spawnPty({ cols: 80, rows: 24, cwd: '/', cmd: PRINT_AND_EXIT, shell: '/bin/sh' })
   pty.onData((d) => { out += d })
   pty.onExit((c) => { code = c })
   await sleep(300) // the guard and its child are up
@@ -46,7 +48,7 @@ test('guarded: the leader is still alive (not exiting) while the loop is blocked
 test('the guard passes the child exit status through, including signal deaths', async () => {
   const run = async (cmd: string): Promise<number | undefined> => {
     let code: number | undefined
-    const pty = spawnPty({ cols: 80, rows: 24, cmd, shell: '/bin/sh' })
+    const pty = spawnPty({ cols: 80, rows: 24, cwd: '/', cmd, shell: '/bin/sh' })
     pty.onExit((c) => { code = c })
     const deadline = Date.now() + 5_000
     while (code === undefined && Date.now() < deadline) await sleep(25)

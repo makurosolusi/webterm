@@ -37,6 +37,10 @@ describe('katalog', () => {
     // Kendali agent atas browser default ON (alat developer); tetap `dangerous` = mematikan/menyalakan lewat konfirmasi.
     expect(CAPABILITIES.browser.subs).toEqual([
       { key: 'WEBTERM_BROWSER_AGENT', label: expect.any(String), defaultOn: true, dangerous: true },
+      // The other browser switches are plain ON-by-default toggles (no confirmation).
+      { key: 'WEBTERM_BROWSER_CAPTURE_LINKS', label: expect.any(String), defaultOn: true },
+      { key: 'WEBTERM_BROWSER_DOWNLOADS_AUTO', label: expect.any(String), defaultOn: true },
+      { key: 'WEBTERM_BROWSER_ACCOUNTS', label: expect.any(String), defaultOn: true },
     ])
   })
 
