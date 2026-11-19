@@ -232,6 +232,7 @@ describe('menu konteks canvas', () => {
     await mountCanvas({ nodes: [], dirs: { '/': [] } })
     expect(document.querySelector('.controls-cluster')).toBeNull()
     expect(screen.queryByLabelText('Command palette')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' })) // hamburger at the top of the rail
     fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'New Files Node' }))
 

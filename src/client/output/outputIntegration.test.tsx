@@ -111,25 +111,31 @@ describe('status bar items', () => {
 
 describe('View menu', () => {
   const bar = () => render(
-    <WorkspaceBar workspaces={[]} activeId={null} liveActiveNodes={null} statuses={{}} onSelect={() => {}}
+    <WorkspaceBar workspaces={[]} activeId={null} liveActiveNodes={null} statuses={{}} onSelect={() => {}} onOpenHelp={() => {}}
       onNewWorkspace={() => {}} onRenameWorkspace={() => {}} onDeleteWorkspace={() => {}} />,
   )
 
   it('Output toggles the panel and Clear Output clears the stream', async () => {
     render(<><Probe /><OutputPanelHost /><WorkspaceBar workspaces={[]} activeId={null} liveActiveNodes={null} statuses={{}}
       onSelect={() => {}} onNewWorkspace={() => {}} onRenameWorkspace={() => {}} onDeleteWorkspace={() => {}} /></>)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+    // The app menu is one hamburger; the menu closes after a row runs, so reopen it for the second action.
+    const openView = (): void => {
+      fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+    }
+    openView()
     fireEvent.click(screen.getByRole('menuitem', { name: /^Output/ }))
     expect(screen.getByTestId('open').textContent).toBe('true')
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+    openView()
     await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Clear Output' })) })
     expect(stream.value.clear).toHaveBeenCalledTimes(1)
   })
 
   it('is placed between File and Help', () => {
     bar()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     const names = screen.getAllByRole('menuitem').map((m) => m.textContent)
-    expect(names.indexOf('File')).toBeLessThan(names.indexOf('View'))
+    expect(names).toEqual(['File', 'View', 'Help'])
   })
 })
 
