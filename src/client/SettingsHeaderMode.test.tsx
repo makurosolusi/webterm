@@ -19,12 +19,11 @@ const mount = () => render(<AppearanceSection settings={DEFAULT_SETTINGS} onChan
 const option = (name: string) => screen.getByRole('radio', { name })
 
 describe('Settings > Appearance > Header', () => {
-  it('is a three-option choice (no typing) showing the current mode, Compact by default', () => {
+  it('is a two-option choice (no typing) showing the current mode, Tabs by default', () => {
     mount()
     const group = screen.getByRole('radiogroup', { name: HEADER_MODE_FIELD.label })
-    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(3)
-    expect(option('Compact').getAttribute('aria-checked')).toBe('true')
-    expect(option('Full').getAttribute('aria-checked')).toBe('false')
+    expect([...group.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['Tabs', 'Hidden'])
+    expect(option('Tabs').getAttribute('aria-checked')).toBe('true')
     expect(option('Hidden').getAttribute('aria-checked')).toBe('false')
   })
 
@@ -37,12 +36,12 @@ describe('Settings > Appearance > Header', () => {
     expect(screen.getByRole('status').textContent).toMatch(/Saved on this browser/)
   })
 
-  it('shows a mode changed elsewhere (menu, palette, chord) and resets back to Compact', () => {
+  it('shows a mode changed elsewhere (menu, palette, chord) and resets back to Tabs', () => {
     mount()
-    act(() => setHeaderMode('full'))
-    expect(option('Full').getAttribute('aria-checked')).toBe('true')
+    act(() => setHeaderMode('hidden'))
+    expect(option('Hidden').getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: /reset/i }))
-    expect(getHeaderMode()).toBe('compact')
+    expect(getHeaderMode()).toBe('tabs')
   })
 
   it('is in the Settings search index, deep-linkable, with the label that is on screen', () => {

@@ -24,8 +24,8 @@ const LINUX = { isMac: false, isWindows: false }
 
 describe('header mode commands', () => {
   it('registers one command per mode plus the toggle, all in the View category', () => {
-    expect(HEADER_MODE_COMMANDS.map((c) => c.id)).toEqual(['view.header.full', 'view.header.compact', 'view.header.hidden', TOGGLE_HEADER_ID])
-    expect(HEADER_MODE_COMMANDS.map((c) => c.label)).toEqual(['View: Header: Full', 'View: Header: Compact', 'View: Header: Hidden', 'View: Toggle Header'])
+    expect(HEADER_MODE_COMMANDS.map((c) => c.id)).toEqual(['view.header.tabs', 'view.header.hidden', TOGGLE_HEADER_ID])
+    expect(HEADER_MODE_COMMANDS.map((c) => c.label)).toEqual(['View: Header: Tabs', 'View: Header: Hidden', 'View: Toggle Header'])
     expect(HEADER_MODE_COMMANDS.filter((c) => c.defaultKey).map((c) => [c.id, c.defaultKey])).toEqual([[TOGGLE_HEADER_ID, 'Mod+Shift+H']])
   })
 
@@ -49,18 +49,16 @@ describe('header mode commands', () => {
     expect(terminalKeyAction(lin, 'app-first', LINUX, ALL, {})).toBe('bubble')
   })
 
-  it('running the commands changes the stored mode; the toggle goes Hidden and back to the last visible mode', () => {
+  it('running the commands changes the stored mode; the toggle goes Hidden and back to Tabs', () => {
     const run = (id: string): void => HEADER_MODE_COMMANDS.find((c) => c.id === id)?.run?.()
-    run('view.header.full')
-    expect(getHeaderMode()).toBe('full')
+    run('view.header.hidden')
+    expect(getHeaderMode()).toBe('hidden')
+    run('view.header.tabs')
+    expect(getHeaderMode()).toBe('tabs')
     run(TOGGLE_HEADER_ID)
     expect(getHeaderMode()).toBe('hidden')
     run(TOGGLE_HEADER_ID)
-    expect(getHeaderMode()).toBe('full')
-    run('view.header.compact')
-    run(TOGGLE_HEADER_ID)
-    run(TOGGLE_HEADER_ID)
-    expect(getHeaderMode()).toBe('compact')
-    setHeaderMode('compact')
+    expect(getHeaderMode()).toBe('tabs')
+    setHeaderMode('tabs')
   })
 })

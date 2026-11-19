@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 // DOM, jadi yang dibaca adalah source-nya — pola yang sama dengan `workspaceCommit.test.ts` dan
 // `sidebarChrome.test.ts`. Yang dijaga di sini adalah kontrak yang paling mudah diam-diam rusak:
 //
-//   1. Title bar 35px memakai `VscodeMenuBar`, editor tabs 35px memakai `VscodeEditorTabBar`.
+//   1. Tidak ada title bar: header = SATU baris tab 35px (`VscodeEditorTabBar`); menu = `AppMenuButton` di rail.
 //   2. Rename/hapus workspace tetap terjangkau (File menu + tab context menu) dan rename tetap Enter/Escape/blur.
 //   3. Status dot tetap milik workspace, bukan penanda tab aktif.
 //   4. CSS tab buatan sendiri yang sudah mati tidak kembali.
@@ -20,18 +20,20 @@ const rule = (css: string, selector: string): string => {
 
 // WorkspaceBar was split into focused modules (docs/decisions/header-rail-layout.md, W0); the contract spans all of them. Tabs first so the strip slice below still starts at the tab bar.
 const bar = ['WorkspaceBar.tabs.tsx', 'WorkspaceBar.tsx', 'WorkspaceBar.hosts.tsx', 'workspaceBar.menus.ts', 'useWorkspaceTabActions.ts'].map(src).join('\n')
+const menuButton = src('AppMenuButton.tsx')
 const css = src('styles.css')
 const dot = src('WorkspaceTabDot.tsx')
 const wsCss = src('workspaceColor.css')
 const tabBar = src('components/vscode/vscodeEditorTabBar.tsx')
 
-describe('title bar & editor tabs memakai primitif VS Code', () => {
-  it('title bar merender `VscodeMenuBar` dan tab strip `VscodeEditorTabBar`', () => {
-    expect(bar).toContain("from '@/components/vscode/vscodeMenuBar'")
+describe('satu baris tab memakai primitif VS Code; menu memakai VscodeMenu', () => {
+  it('header merender `VscodeEditorTabBar`; menu app = `VscodeMenu` lewat `AppMenuButton`, bukan menu bar', () => {
     expect(bar).toContain("from '@/components/vscode/vscodeEditorTabBar'")
-    expect(bar).toMatch(/<VscodeMenuBar[\s\S]{0,160}?menus=\{menus\}/)
     expect(bar).toMatch(/<VscodeEditorTabBar[\s\S]{0,200}?tabs=\{tabs\}/)
     expect(bar).toMatch(/<VscodeEditorTabBar[\s\S]{0,400}?onActivate=\{onSelect\}/)
+    expect(bar).not.toMatch(/VscodeMenuBar|vscodeMenuBar|<header|app-titlebar/)
+    expect(menuButton).toContain("from '@/components/vscode/vscodeMenu'")
+    expect(menuButton).toContain('<VscodeMenu')
   })
 
   it('peran/perilaku tab tidak dipasang tangan lagi', () => {
@@ -46,9 +48,10 @@ describe('title bar & editor tabs memakai primitif VS Code', () => {
     expect(bar).not.toContain('addEventListener(\'wheel\'')
   })
 
-  it('tinggi kedua baris datang dari token VS Code, bukan angka lokal', () => {
+  it('tinggi baris datang dari token VS Code, bukan angka lokal; tidak ada baris title di grid', () => {
     // `.app-shell` memakai token ini untuk baris grid; nilainya dipaku di styles.test.ts.
-    expect(rule(css, '.app-titlebar')).toContain('grid-area: title')
+    expect(css).not.toContain('.app-titlebar {')
+    expect(css).not.toContain('--title-bar-h')
     expect(rule(css, '.app-tabs')).toContain('grid-area: tabs')
     expect(rule(css, '.app-tabs')).toContain('display: flex')
     // Strip primitif dibiarkan menyusut;aksi baris tidak.
@@ -97,7 +100,7 @@ describe('rename & hapus workspace tetap terjangkau', () => {
   })
 
   it('`+` workspace baru duduk di dalam strip, setelah tab terakhir (trailing)', () => {
-    const strip = bar.slice(bar.indexOf('<VscodeEditorTabBar'), bar.indexOf('{onToggleLayout && activeGroup && ('))
+    const strip = bar.slice(bar.indexOf('<VscodeEditorTabBar'), bar.indexOf('export default function WorkspaceBar'))
     expect(strip).toContain('trailing={')
     expect(strip).toContain('aria-label="New workspace"')
     expect(rule(css, '.app-tabs__action')).toContain('width: 35px')

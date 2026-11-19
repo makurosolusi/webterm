@@ -42,7 +42,7 @@ describe('one UI for web and native', () => {
   })
 
   it('the rail chrome and menu files, specifically, never reference the platform', () => {
-    for (const f of ['RailChrome.tsx', 'AppMenuButton.tsx', 'useWorkspaceMenus.ts', 'App.menu.ts', 'Dock.modes.tsx', 'workspaceRail.css', 'headerMode.css']) {
+    for (const f of ['RailChrome.tsx', 'AppMenuButton.tsx', 'useWorkspaceMenus.ts', 'App.menu.ts', 'Dock.modes.tsx', 'dock.rail.css', 'headerMode.css', 'WorkspaceBar.tsx', 'components/vscode/vscodeMenu.place.ts']) {
       const text = readFileSync(path.join(srcRoot, 'client', f), 'utf8')
       expect(text, f).not.toMatch(/navigator\.(userAgent|platform)|isMacPlatform|process\.platform/)
     }

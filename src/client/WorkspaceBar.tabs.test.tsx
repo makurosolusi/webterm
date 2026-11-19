@@ -138,6 +138,7 @@ describe('inline rename', () => {
 
   it('File > Rename Workspace… edits the active tab inline', () => {
     mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Rename Workspace…' }))
     expect((screen.getByRole('textbox', { name: 'Workspace name' }) as HTMLInputElement).value).toBe('laya-api')

@@ -48,11 +48,11 @@ describe('saveWorkspaceOrder', () => {
 })
 
 describe('wiring', () => {
-  test('App hands the rail onReorder from useWorkspaceOrderSave (it was once left unwired)', async () => {
+  test('App hands the tab row onReorder from useWorkspaceOrderSave (it was once left unwired)', async () => {
     const { readFileSync } = await import('node:fs')
     const src = readFileSync('src/client/App.tsx', 'utf8')
     expect(src).toMatch(/const onReorder = useWorkspaceOrderSave\(setWorkspaces\)/)
-    expect(src).toMatch(/workspaceRail: [^\n]*onRenameWorkspace, onReorder \}/)
+    expect(src).toMatch(/<AppWorkspaceBar \{\.\.\.\{[^\n]*onRenameWorkspace, onSetWorkspaceColor, onReorder,/)
   })
 })
 

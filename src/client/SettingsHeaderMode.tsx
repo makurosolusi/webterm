@@ -1,4 +1,4 @@
-// Settings › Appearance › Header: Full / Compact / Hidden as a segmented control (no typing). The mode is
+// Settings › Appearance › Header: Tabs / Hidden as a segmented control (no typing). The mode is
 // a per-device preference kept in this browser (`headerMode.store`), so the row says "Saved on this browser".
 import { SettingsCheckbox, SettingsGroup, SettingsSegmented, type SegmentedOption } from './SettingsControls'
 import { Field } from './SettingsFieldRow'
@@ -8,16 +8,16 @@ import { DEFAULT_HEADER_MODE, setHeaderMode, useHeaderMode, type HeaderMode } fr
 
 export const HEADER_MODE_FIELD = {
   label: 'Header',
-  hint: 'Full shows the title bar and the workspace tabs, Compact keeps one row, Hidden shows the header when you push the pointer to the top edge. Saved on this device.',
+  hint: 'Tabs shows the row of workspace tabs above the board. Hidden removes it and shows it when you push the pointer to the top edge. The menu and search are always in the left rail. Saved on this device.',
 } as const
 
 export const RAIL_LABELS_FIELD = {
   label: 'Show rail labels',
-  hint: 'Pins the left rail open at 220px with a name beside every icon and workspace tile. Saved on this device.',
+  hint: 'Pins the left rail open at 220px with a name beside every icon. Saved on this device.',
 } as const
 
 const HEADER_OPTIONS: readonly SegmentedOption<HeaderMode>[] = [
-  { value: 'full', label: 'Full' }, { value: 'compact', label: 'Compact' }, { value: 'hidden', label: 'Hidden' },
+  { value: 'tabs', label: 'Tabs' }, { value: 'hidden', label: 'Hidden' },
 ]
 
 export function HeaderModeField(): React.JSX.Element {

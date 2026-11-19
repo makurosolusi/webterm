@@ -1,4 +1,4 @@
-// Title-bar account button: a menu anchored to it, like VS Code's Accounts menu (GitHub, Slack and
+// Account button (rail, or the tab row before a rail exists): a menu anchored to it, like VS Code's Accounts menu (GitHub, Slack and
 // Google do the same): who is signed in, Account settings, Settings, Keyboard Shortcuts, then Sign out.
 // Without an account (`onOpenAccount` absent) the header and Account settings are left out.
 import { DropdownMenu } from 'radix-ui'
@@ -29,7 +29,7 @@ export interface AccountMenuProps {
   onOpenHelp?: () => void
   /** After a successful Sign out; tests replace it. Default reloads to the sign-in page. */
   reload?: () => void
-  /** `rail`: an activity-bar button whose menu opens to the right (Compact/Hidden); default: the title bar's button. */
+  /** `rail`: an activity-bar button whose menu opens to the right; default: the tab row's button. */
   variant?: 'titlebar' | 'rail'
 }
 

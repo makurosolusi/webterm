@@ -52,14 +52,13 @@
   --float-gap: 22px;
   /* Geometri VS Code: title/menu 35px, editor tabs 35px, activity bar 48px, status bar 22px.
      Angka-angka ini juga hidup di `components/vscode/vscode-shell.css` sebagai tinggi
-     primitifnya; di sini ia menjadi kontrak grid `.app-shell`. */
-  --title-bar-h: 35px;
+     primitifnya; di sini ia menjadi kontrak grid `.app-shell`. Tidak ada title bar: header adalah SATU baris tab. */
   --editor-tabs-h: 35px;
   --activity-bar-w: 48px;
   --status-bar-h: 22px;
-  /* Alias warisan untuk sheet yang belum ikut migrasi (`canvas-ui.css`, `Kanban.tsx`):
-     tinggi chrome di atas canvas = title bar + editor tabs. */
-  --tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h));
+  /* Tinggi chrome di atas canvas (dibaca panel mengapung, `Kanban.tsx`, `canvas-ui.css`) = baris tab. `headerMode.css`
+     menolkannya saat header Hidden. */
+  --tabbar-h: var(--editor-tabs-h);
   /* Ukuran chrome workbench, satu sumber untuk semua sheet chrome (nilai = default VS Code):
      teks 13px (workbench/browser/media/style.css), kecil 12px (window title, status bar,
      breadcrumbs), label 11px (judul panel/seksi uppercase), ikon 16px, ikon activity bar 24px
@@ -144,7 +143,7 @@ body {
 }
 
 /* ---- Rangka app: grid VS Code ----
-   title bar 35px · editor tabs 35px · [activity bar 48px | canvas] · status bar 22px.
+   editor tabs 35px · [activity bar 48px | canvas] · status bar 22px (tanpa title bar).
    Tinggi cell definit lewat `minmax(0, 1fr)`, jadi React Flow (height: 100%) dan `Welcome`
    (inset: 0) mendapat tinggi nyata tanpa satu pun angka layout di JS. */
 .app-shell {
@@ -152,9 +151,8 @@ body {
   --aux-w: 0px;
   display: grid;
   grid-template-columns: var(--activity-bar-w) 0 minmax(0, 1fr) var(--aux-w);
-  grid-template-rows: var(--title-bar-h) var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
+  grid-template-rows: var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
   grid-template-areas:
-    'title title title title'
     'tabs tabs tabs aux'
     'activity sidebar main aux'
     'status status status status';
@@ -189,93 +187,7 @@ body {
   overflow: hidden;
 }
 
-/* ---- Title bar: brand, menu bar VS Code, identitas workspace, aksi kanan ---- */
-.app-titlebar {
-  grid-area: title;
-  position: relative;
-  /* Di atas canvas dan di atas backdrop menu, supaya menu bisa dibuka. */
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  padding: 0 8px 0 0;
-  background: var(--vscode-titleBar-activeBackground);
-  border-bottom: 1px solid var(--vscode-titleBar-border);
-  color: var(--vscode-titleBar-activeForeground);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  /* Slot ikon app selebar title bar (35px) seperti VS Code; nama di sebelahnya. */
-  padding: 0 4px 0 10px;
-  white-space: nowrap;
-}
-.brand__mark {
-  font-size: var(--ui-icon-size);
-  color: var(--accent);
-}
-.brand__name {
-  font-size: var(--ui-font-size);
-  color: var(--vscode-titleBar-activeForeground);
-}
-
-/* Tengah title bar = command center VS Code. Di sini ia memuat identitas workspace aktif, dan
-   berubah menjadi input rename saat menu Workspace memintanya — satu tempat yang sudah terlihat,
-   tanpa input yang menggantikan tab di dalam strip yang menggulung. */
-.app-titlebar__center {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  padding: 0 8px;
-}
-/* Pil command center: 24px, radius 5px, latar & border dari token commandCenter. */
-.app-titlebar__name {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: min(600px, 100%);
-  height: 24px;
-  padding: 0 8px;
-  overflow: hidden;
-  background: var(--vscode-commandCenter-background);
-  border: 1px solid var(--vscode-commandCenter-border);
-  border-radius: 5px;
-  color: var(--vscode-commandCenter-foreground);
-  font-size: var(--ui-font-size-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* As a button (command center opens the omnibox): inherit the bar's font, space icon/name/chord. */
-button.app-titlebar__name {
-  gap: 6px;
-  font: inherit;
-  font-size: var(--ui-font-size-small);
-  cursor: pointer;
-}
-.app-titlebar__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.app-titlebar__name:empty { display: none; }
-.app-titlebar__name:hover {
-  background: var(--vscode-commandCenter-activeBackground);
-  border-color: var(--vscode-commandCenter-activeBorder);
-}
-.app-titlebar__actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 2px;
-}
+/* ---- Tombol ikon di baris tab / header sisi kanan (akun, toggle side bar kanan) ---- */
 .titlebar__action {
   display: inline-flex;
   align-items: center;
@@ -323,6 +235,11 @@ button.app-titlebar__name {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Also drawn by shadcn IconButton (menu, All workspaces, layout): unlayered CSS beats its `size-6` / radius, so the
+     cell is always as tall as the row. */
+  align-self: stretch;
+  height: auto;
+  border-radius: 0;
   width: 35px;
   padding: 0;
   background: transparent;
@@ -336,6 +253,21 @@ button.app-titlebar__name {
   color: var(--vscode-tab-activeForeground);
 }
 .app-tabs__action:disabled { opacity: 0.4; }
+
+/* Lead (menu button, only while no rail exists) and tail (All workspaces, worktree badge, layout, side bar toggle,
+   account): in-flow flex cells at the row's ends, never over the tabs. */
+.app-tabs__lead { border-left: 0; border-right: 1px solid var(--vscode-tab-border); }
+.app-tabs__tail { align-items: center; gap: 2px; padding: 0 4px; }
+.app-tabs__tail > .app-tabs__action { align-self: stretch; }
+
+/* Reordering workspace tabs: the dragged tab dims and a 2px line marks where it will land. */
+.vscode-editor-tab[data-dragging='true'] { opacity: 0.5; }
+.vscode-editor-tab[data-drop] { position: relative; }
+.vscode-editor-tab[data-drop]::before {
+  content: ''; position: absolute; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: var(--vscode-focusBorder);
+}
+.vscode-editor-tab[data-drop='before']::before { left: 0; }
+.vscode-editor-tab[data-drop='after']::before { right: 0; }
 
 /* Inline rename inside a workspace tab (WorkspaceTabRename): same 35px slot, VS Code input colours. */
 .app-tab-rename {
@@ -377,7 +309,6 @@ button.app-titlebar__name {
    `display: none` pada chrome + baris/kolom grid dinolkan. Tanpa penolakan baris grid, tinggi
    35px/22px tetap dicadangkan walau isinya disembunyikan. `.dock` sudah
    ditangani `cleanView.css`; yang di sini adalah chrome baru. */
-body.clean-view .app-titlebar,
 body.clean-view .app-tabs,
 body.clean-view .app-statusbar {
   display: none;
@@ -387,7 +318,7 @@ body.clean-view .app-statusbar {
    `.app-shell--sidebar` (0,1,0), jadi sidebar terbuka pun tetap 0. */
 body.clean-view .app-shell {
   grid-template-columns: 0 0 minmax(0, 1fr) 0;
-  grid-template-rows: 0 0 minmax(0, 1fr) 0;
+  grid-template-rows: 0 minmax(0, 1fr) 0;
 }
 
 /* Context-link bridge handles on node edges (React Flow handle override). Hidden until they are

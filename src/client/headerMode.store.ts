@@ -1,41 +1,45 @@
-// Header mode: how much of the app header is on screen. `full` is the two-row header (title bar +
-// workspace tabs), `compact` one 35px row, `hidden` no row (a pointer push at the top edge reveals
-// it, `useHeaderReveal`). One per-device preference in `localStorage` (the same server serves a laptop,
-// native and a phone, and the wanted chrome differs); it renders correctly without storage.
+// Header mode: how much of the workspace tab row is on screen. `tabs` is the one 35px row of workspace tabs
+// (the only header there is: no title bar), `hidden` removes the row (a pointer push at the top edge reveals it,
+// `useHeaderReveal`). One per-device preference in `localStorage` (the same server serves a laptop, native and a
+// phone, and the wanted chrome differs); it renders correctly without storage.
 // Design: docs/decisions/header-rail-layout.md.
 import { useSyncExternalStore } from 'react'
 
-export type HeaderMode = 'full' | 'compact' | 'hidden'
+export type HeaderMode = 'tabs' | 'hidden'
 
-export const HEADER_MODES: readonly HeaderMode[] = ['full', 'compact', 'hidden']
-/** Compact for everyone: the space gain is the point (generous defaults). */
-export const DEFAULT_HEADER_MODE: HeaderMode = 'compact'
+export const HEADER_MODES: readonly HeaderMode[] = ['tabs', 'hidden']
+/** Tabs for everyone: workspaces stay one click away; Hidden is the choice of whoever wants every pixel. */
+export const DEFAULT_HEADER_MODE: HeaderMode = 'tabs'
 export const HEADER_MODE_KEY = 'webterm.headerMode'
-/** Set once the "header is now compact" notice was shown (or the user chose a mode themselves). */
-export const HEADER_NOTICE_KEY = 'webterm.headerMode.noticed'
+/** Set once the "header changed" notice was shown (a stored Full / Compact value was carried over). */
+export const HEADER_NOTICE_KEY = 'webterm.headerMode.reworkNoticed'
+/**
+ * Values written by the Full / Compact header (before the rework). They carry over as `tabs`: both showed the
+ * workspaces and the search in the header, and the tab row is the closest thing that still exists.
+ * legacy: remove after 0.11.0 (every stored value has been rewritten by then).
+ */
+const LEGACY_MODES: readonly string[] = ['full', 'compact']
 
 const isHeaderMode = (v: unknown): v is HeaderMode => HEADER_MODES.includes(v as HeaderMode)
+const isLegacyMode = (v: unknown): boolean => typeof v === 'string' && LEGACY_MODES.includes(v)
 
 interface Stored {
   mode: HeaderMode
-  /** A valid value is in storage: the user (or the notice's action) picked it. */
-  chosen: boolean
-  noticed: boolean
+  /** A value of the old Full / Compact header is in storage and the user has not been told yet. */
+  migrated: boolean
 }
 
 function readStored(): Stored {
   try {
     const raw = localStorage.getItem(HEADER_MODE_KEY)
-    return { mode: isHeaderMode(raw) ? raw : DEFAULT_HEADER_MODE, chosen: isHeaderMode(raw), noticed: localStorage.getItem(HEADER_NOTICE_KEY) === '1' }
+    return { mode: isHeaderMode(raw) ? raw : DEFAULT_HEADER_MODE, migrated: isLegacyMode(raw) && localStorage.getItem(HEADER_NOTICE_KEY) !== '1' }
   } catch {
     // Storage unavailable (private mode, blocked site data): the default, for this tab only.
-    return { mode: DEFAULT_HEADER_MODE, chosen: false, noticed: false }
+    return { mode: DEFAULT_HEADER_MODE, migrated: false }
   }
 }
 
 let state: Stored = readStored()
-/** The mode to go back to when the chord leaves Hidden; memory only (a reload starts at the stored one). */
-let lastVisible: HeaderMode = state.mode === 'hidden' ? DEFAULT_HEADER_MODE : state.mode
 const listeners = new Set<() => void>()
 const emit = (): void => listeners.forEach((l) => l())
 
@@ -53,24 +57,24 @@ export const getHeaderMode = (): HeaderMode => state.mode
 /** Choose a mode. An explicit choice also retires the one-time notice. */
 export function setHeaderMode(mode: HeaderMode): void {
   if (!isHeaderMode(mode)) return
-  if (mode !== 'hidden') lastVisible = mode
-  state = { mode, chosen: true, noticed: true }
+  state = { mode, migrated: false }
   persist(HEADER_MODE_KEY, mode)
   persist(HEADER_NOTICE_KEY, '1')
   emit()
 }
 
-/** `Mod+Shift+H`: Hidden <-> the last visible mode. */
+/** `Mod+Shift+H`: Hidden <-> Tabs. */
 export function toggleHeaderHidden(): void {
-  setHeaderMode(state.mode === 'hidden' ? lastVisible : 'hidden')
+  setHeaderMode(state.mode === 'hidden' ? 'tabs' : 'hidden')
 }
 
-/** The one-time notice is due: nothing was ever chosen and it was not shown yet. */
-export const headerNoticeDue = (): boolean => !state.chosen && !state.noticed
+/** The one-time notice is due: a stored Full / Compact value was carried over to Tabs and nobody said so yet. */
+export const headerNoticeDue = (): boolean => state.migrated
 
-/** The notice was shown; it never returns. */
+/** The notice was shown; the stored value is rewritten to the new name and the notice never returns. */
 export function markHeaderNoticed(): void {
-  state = { ...state, noticed: true }
+  state = { ...state, migrated: false }
+  persist(HEADER_MODE_KEY, state.mode)
   persist(HEADER_NOTICE_KEY, '1')
   emit()
 }
@@ -78,7 +82,6 @@ export function markHeaderNoticed(): void {
 /** Test seam: reload from storage. */
 export function reloadHeaderModeFromStorage(): void {
   state = readStored()
-  lastVisible = state.mode === 'hidden' ? DEFAULT_HEADER_MODE : state.mode
   emit()
 }
 
@@ -108,12 +111,12 @@ export interface EffectiveInput {
 }
 
 /**
- * The mode actually drawn (derived, never persisted). Full while booting or with no workspace (the
- * header's `+` is the only door then); Hidden falls back to Compact without a pointer.
+ * The mode actually drawn (derived, never persisted). Tabs while booting or with no workspace (the row's `+`
+ * and menu button are the only doors then); Hidden falls back to Tabs without a pointer.
  */
 export function effectiveHeaderMode({ stored, hydrated, workspaceCount, touch }: EffectiveInput): HeaderMode {
-  if (!hydrated || workspaceCount === 0) return 'full'
-  if (stored === 'hidden' && touch) return 'compact'
+  if (!hydrated || workspaceCount === 0) return 'tabs'
+  if (stored === 'hidden' && touch) return 'tabs'
   return stored
 }
 

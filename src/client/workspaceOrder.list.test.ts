@@ -1,9 +1,8 @@
-// Pure logic behind the rail tiles: display order, moves, pending order, keys, overflow, drag slot.
+// Pure logic behind the workspace tab order: display order, moves, pending order, drag slot and indicator.
 import { describe, expect, it } from 'vitest'
-import { applyPendingOrder, applyServerOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceRail.order'
-import { focusIndex, tileKeyIntent } from './workspaceRail.keys'
-import { tilesOverflow } from './workspaceRail.overflow'
-import { slotAtY } from './workspaceRail.drag'
+import { applyPendingOrder, applyServerOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceOrder.list'
+import { dropSide } from './workspaceTabs.drag'
+import { slotAt } from './browserTabs/browserTabs.drag'
 import { neighborWorkspaceId } from './workspaceNav.commands'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
 
@@ -51,46 +50,20 @@ describe('moveId / sameOrder / applyPendingOrder', () => {
   })
 })
 
-describe('tileKeyIntent', () => {
-  const k = (key: string, mods: Partial<Record<'altKey' | 'shiftKey' | 'ctrlKey' | 'metaKey', boolean>> = {}) =>
-    tileKeyIntent({ key, altKey: false, shiftKey: false, ctrlKey: false, metaKey: false, ...mods })
-  it('maps the vertical tablist keys', () => {
-    expect(k('ArrowDown')).toEqual({ kind: 'focus', to: 'next' })
-    expect(k('ArrowUp')).toEqual({ kind: 'focus', to: 'prev' })
-    expect(k('Home')).toEqual({ kind: 'focus', to: 'first' })
-    expect(k('End')).toEqual({ kind: 'focus', to: 'last' })
-    expect(k('Enter')).toEqual({ kind: 'activate' })
-    expect(k(' ')).toEqual({ kind: 'activate' })
-    expect(k('F2')).toEqual({ kind: 'rename' })
-    expect(k('ContextMenu')).toEqual({ kind: 'menu' })
-    expect(k('F10', { shiftKey: true })).toEqual({ kind: 'menu' })
+describe('tab drag geometry', () => {
+  it('slotAt counts tabs whose midpoint is left of the pointer (the browser strip\'s own rule)', () => {
+    const rects = [{ left: 0, right: 100 }, { left: 100, right: 200 }, { left: 200, right: 300 }]
+    expect(slotAt(rects, 10)).toBe(0)
+    expect(slotAt(rects, 120)).toBe(1)
+    expect(slotAt(rects, 900)).toBe(3)
   })
-  it('Alt+Shift+Up/Down reorder; horizontal arrows and other chords are not tile keys', () => {
-    expect(k('ArrowUp', { altKey: true, shiftKey: true })).toEqual({ kind: 'move', dir: -1 })
-    expect(k('ArrowDown', { altKey: true, shiftKey: true })).toEqual({ kind: 'move', dir: 1 })
-    expect(k('ArrowRight')).toBeNull()
-    expect(k('ArrowDown', { metaKey: true })).toBeNull()
-    expect(k('ArrowDown', { shiftKey: true })).toBeNull()
-  })
-  it('focusIndex wraps at both ends', () => {
-    expect(focusIndex('next', 2, 3)).toBe(0)
-    expect(focusIndex('prev', 0, 3)).toBe(2)
-    expect(focusIndex('first', 2, 3)).toBe(0)
-    expect(focusIndex('last', 0, 3)).toBe(2)
-  })
-})
-
-describe('overflow and drag geometry', () => {
-  it('tilesOverflow ignores a sub-pixel difference and flags a real one', () => {
-    expect(tilesOverflow(100, 100)).toBe(false)
-    expect(tilesOverflow(100.5, 100)).toBe(false)
-    expect(tilesOverflow(140, 100)).toBe(true)
-  })
-  it('slotAtY counts tiles whose midpoint is above the pointer', () => {
-    const rects = [{ top: 0, bottom: 36 }, { top: 36, bottom: 72 }, { top: 72, bottom: 108 }]
-    expect(slotAtY(rects, 5)).toBe(0)
-    expect(slotAtY(rects, 40)).toBe(1)
-    expect(slotAtY(rects, 200)).toBe(3)
+  it('dropSide draws the insertion line before the target tab, or after the last one, and nothing without a slot', () => {
+    expect(dropSide({ id: 'a', slot: null }, 0, 3)).toBeUndefined()
+    expect(dropSide(null, 0, 3)).toBeUndefined()
+    expect(dropSide({ id: 'a', slot: 1 }, 1, 3)).toBe('before')
+    expect(dropSide({ id: 'a', slot: 1 }, 0, 3)).toBeUndefined()
+    expect(dropSide({ id: 'a', slot: 3 }, 2, 3)).toBe('after')
+    expect(dropSide({ id: 'a', slot: 3 }, 1, 3)).toBeUndefined()
   })
 })
 

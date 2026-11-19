@@ -1,7 +1,7 @@
 // Shared UI state of the workspace tab surfaces: tab context menu, `+` menu, inline rename, color picker.
-// One module store (not component state) because two surfaces drive the same hosts: the header's tab
-// strip (Full) and the rail tiles (Compact/Hidden) both open the menu that `WorkspaceBarHosts` renders,
-// and File > Rename edits whichever surface is on screen. There is one app instance per page.
+// One module store (not component state) because several doors drive the same hosts: the tab strip, the
+// "All workspaces" picker and File > Rename all open the menus that `WorkspaceBarHosts` renders. There is
+// one app instance per page.
 import { useSyncExternalStore } from 'react'
 
 export interface PointAt {

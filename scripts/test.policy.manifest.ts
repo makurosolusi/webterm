@@ -40,7 +40,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/settings.link.policy.test.ts',
     'src/client/settings.search.policy.test.ts',
     'src/client/shadcnPolicy.test.ts',
-    'src/client/workspaceRail.policy.test.ts',
+    'src/client/dock.rail.policy.test.ts',
     'src/client/wrapperNeutral.policy.test.ts',
   ],
   server: [

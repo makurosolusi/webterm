@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-// Source contract of the header modes (node env, no DOM): the three header heights, the Hidden overlay
+// Source contract of the header modes (node env, no DOM): Tabs = one 35px row, Hidden = no row, the Hidden overlay
 // that must never take a click, reduced motion, and one source for web and native.
 const src = (f: string): string => readFileSync(fileURLToPath(new URL(`./${f}`, import.meta.url)), 'utf8')
 const css = src('headerMode.css')
@@ -13,39 +13,33 @@ const block = (sheet: string, selector: string): string => {
   return at === -1 ? '' : sheet.slice(at, sheet.indexOf('}', at))
 }
 
-describe('--tabbar-h per mode: 70 / 35 / 0', () => {
-  const title = px(base, '--title-bar-h')
-  const tabs = px(base, '--editor-tabs-h')
-
-  it('Full keeps the sum of both rows from styles.css', () => {
-    expect([title, tabs]).toEqual([35, 35])
-    expect(base).toContain('--tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h))')
-    expect(title + tabs).toBe(70)
-  })
-
-  it('Compact is one tab row; the title row is 0', () => {
-    const rule = block(css, '.app-shell.app-shell--header-compact')
-    expect(rule).toContain('--tabbar-h: var(--editor-tabs-h)')
-    expect(rule).toContain('grid-template-rows: 0 var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h)')
+describe('--tabbar-h per mode: 35 / 0 (there is no 70px header any more)', () => {
+  it('Tabs is the base grid: one row, `--tabbar-h` is that row', () => {
+    expect(px(base, '--editor-tabs-h')).toBe(35)
+    expect(base).toContain('--tabbar-h: var(--editor-tabs-h)')
+    expect(base).not.toContain('--title-bar-h')
+    expect(block(base, '.app-shell')).toContain('grid-template-rows: var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h)')
+    expect(css).not.toContain('app-shell--header-tabs') // the default needs no override
+    expect(css).not.toContain('app-shell--header-compact')
+    expect(css).not.toContain('app-shell--header-full')
   })
 
   it('Hidden has no rows at all', () => {
     const rule = block(css, '.app-shell.app-shell--header-hidden')
     expect(rule).toContain('--tabbar-h: 0px')
-    expect(rule).toContain('grid-template-rows: 0 0 minmax(0, 1fr) var(--status-bar-h)')
+    expect(rule).toContain('grid-template-rows: 0 minmax(0, 1fr) var(--status-bar-h)')
   })
 
   it('does not touch the row tokens the primitives read, so the revealed header keeps its height', () => {
-    expect(css).not.toMatch(/--title-bar-h\s*:/)
     expect(css).not.toMatch(/--editor-tabs-h\s*:/)
   })
 })
 
 describe('Hidden overlay', () => {
-  it('unrevealed rows are visibility:hidden (no click, no focus) and revealed ones show without moving layout', () => {
-    const rows = block(css, '.app-shell--header-hidden > .app-titlebar')
-    expect(rows).toContain('visibility: hidden')
-    expect(rows).toContain('position: absolute')
+  it('the unrevealed tab row is visibility:hidden (no click, no focus) and a revealed one shows without moving layout', () => {
+    const row = block(css, '.app-shell--header-hidden > .app-tabs')
+    expect(row).toContain('visibility: hidden')
+    expect(row).toContain('position: absolute')
     expect(block(css, ".app-shell--header-hidden > [data-revealed='true']")).toContain('visibility: visible')
   })
 
@@ -74,7 +68,7 @@ describe('tokens and one source', () => {
   })
 
   it('no header-mode file branches on native or reads a native flag (web and native share one UI)', () => {
-    for (const f of ['headerMode.store.ts', 'headerMode.commands.ts', 'headerMode.notice.ts', 'headerMode.css', 'useHeaderReveal.ts', 'AppMenuButton.tsx', 'SettingsHeaderMode.tsx']) {
+    for (const f of ['headerMode.store.ts', 'headerMode.commands.ts', 'headerMode.notice.ts', 'headerMode.css', 'useHeaderReveal.ts', 'AppMenuButton.tsx', 'SettingsHeaderMode.tsx', 'WorkspaceBar.tsx', 'WorkspaceBar.tabs.tsx']) {
       expect(src(f), f).not.toMatch(/electrobun|isNative|nativeApp|-webkit-app-region/i)
     }
   })

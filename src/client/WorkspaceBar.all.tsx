@@ -1,5 +1,6 @@
 // "All workspaces": quick pick of every workspace (color chip, name, worktree line, type-to-filter) with
-// "New workspace…" last. It is the keyboard path to any workspace and the door to the ones scrolled out of the rail.
+// "New workspace…" last. It is the keyboard path to any workspace and the door to the ones scrolled out of the tab row
+// (Chrome's "search tabs" pattern).
 import { useMemo, type CSSProperties } from 'react'
 import { VscodeQuickPick, type VscodeQuickPickItem } from '@/components/vscode/vscodeQuickPick'
 import { worktreeSummary } from './WorkspaceWorktreeBadge'
@@ -9,7 +10,7 @@ import type { Workspace } from '../shared/workspace'
 
 export const ALL_WORKSPACES_LABEL = 'All workspaces'
 export const NEW_WORKSPACE_ROW_ID = '\0new-workspace'
-export const ALL_TRIGGER_SELECTOR = '[data-slot="workspace-rail-all"]'
+export const ALL_TRIGGER_SELECTOR = '[data-slot="workspace-all"]'
 
 export interface AllWorkspacesProps {
   open: boolean

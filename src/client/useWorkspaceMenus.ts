@@ -1,5 +1,5 @@
-// The File / View / Help model as a hook: the ONE place both doors (the Full menu bar in the header and the
-// rail's menu button in Compact/Hidden) get their menus from, so the two can never list different rows.
+// The File / View / Help model as a hook: the ONE place every door (the rail's menu button, and the tab row's own
+// before a rail exists) gets its menus from, so two doors can never list different rows.
 import { useMemo } from 'react'
 import { useCommandShortcut } from '@/components/ui/icon-button'
 import type { VscodeMenu } from '@/components/vscode/vscodeMenu.model'

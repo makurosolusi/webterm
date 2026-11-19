@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { errorCause } from '@/components/ui/action'
 import { ACTION_NOTICE_KEY, closeNotice, showNotice } from './workspaceSave.notice'
-import { applyPendingOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceRail.order'
+import { applyPendingOrder, moveId, orderedWorkspaces, sameOrder } from './workspaceOrder.list'
 import type { Workspace } from '../shared/workspace'
 
 export const REORDER_FAILED_TITLE = 'Could not reorder workspaces'

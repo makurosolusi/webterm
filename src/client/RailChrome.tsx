@@ -1,27 +1,24 @@
-// What the header hands to the rail in Compact and Hidden (docs/decisions/header-rail-layout.md, T3): the
-// menu button at the top, Account in the bottom group, and (Hidden only) the layout switch. They reuse the
-// header's own parts (`useWorkspaceMenus`, `AccountMenu`, `LayoutToggle`), so a control has one implementation
-// and one door per mode. Nothing here reads whether the app runs in a browser or natively.
-import { useState } from 'react'
+// What the header hands to the rail (docs/decisions/header-rail-layout.md): the menu button at the top, Account in
+// the bottom group, and (Hidden only) the layout switch. They reuse the header's own parts (`useWorkspaceMenus`,
+// `AccountMenu`, `LayoutToggle`), so a control has one implementation. Nothing here reads whether the app runs in a
+// browser or natively.
 import { AccountMenu } from './AccountMenu'
 import { AppMenuButton } from './AppMenuButton'
 import { LayoutToggle } from './WorkspaceBar'
 import { useWorkspaceMenus, type WorkspaceMenuProps } from './useWorkspaceMenus'
 
 export interface RailChromeProps extends WorkspaceMenuProps {
-  /** Hidden has no tab row, so the layout switch is a rail button there (Compact keeps it in its header row). */
+  /** Hidden has no tab row, so the layout switch is a rail button there (Tabs keeps it in the row). */
   layoutInRail: boolean
   layoutMode?: 'canvas' | 'tabs'
 }
 
-/** Top of the rail: one button, the same File / View / Help model as the Full menu bar. Lone Alt focuses it. */
+/** Top of the rail: one hamburger, the same File / View / Help model as everywhere. Lone Alt focuses it. */
 export function RailMenu(p: RailChromeProps) {
-  const menus = useWorkspaceMenus(p)
-  const [openId, setOpenId] = useState<string | null>(null)
-  return <AppMenuButton menus={menus} openId={openId} onOpenChange={setOpenId} />
+  return <AppMenuButton menus={useWorkspaceMenus(p)} variant="rail" />
 }
 
-/** Bottom group, above Settings: only with an account to show (same condition as the Full title bar). */
+/** Bottom group, above Settings: only with an account to show (same condition as the tab row's account button). */
 export function RailAccount({ showLogout, onOpenAccount, onOpenSettings, onOpenHelp }: RailChromeProps) {
   return showLogout ? <AccountMenu variant="rail" onOpenAccount={onOpenAccount} onOpenSettings={onOpenSettings} onOpenHelp={onOpenHelp} /> : null
 }
