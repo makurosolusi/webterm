@@ -1,6 +1,6 @@
 # Header to rail layout
 
-Status: implemented (W0, T1, T2a, T2b, T3; see "Implementation status"). Designed 2026-11-19 from a read-only audit of `main` at `35a0ff8`.
+Status: **superseded by "Rework 2026-11-19" (end of this file)** in everything about workspace tiles, the Full/Compact/Hidden modes and the menu bar. The sections above are kept as the history of the first attempt; where they disagree with the rework, the rework wins. Designed 2026-11-19 from a read-only audit of `main` at `35a0ff8`.
 
 ## Problem
 
@@ -287,3 +287,37 @@ Owner decisions (2026-11-19): all five recommendations approved (`Mod+Shift+H` k
   - Deviation: F10 as a second key for the menu (row 2 lists Alt only; F10 was never added in T1). Not done.
 - **Status**: W0, T1, T2a, T2b and T3 are done. Not done: a native frameless window (decided against for now), hover-peek on the rail (decided against), status badges for inactive workspaces (separate feature). The panel of the rail menu is lifted above the side bar with `:has(...)` while open.
 - **Not observed**: no real browser was used for any of it. Verified only by tests and source scans: the reveal timings and the 2px edge, the compact row at narrow widths, the hairline, tile legibility at the real token colors, the sticky active tile at 800px height, the pinned 220px rail, the rail menu panel position and its stacking over the side bar, and `Mod+Shift+H` in Safari/Firefox.
+
+
+## Rework 2026-11-19
+
+The owner rejected the result above: the screen showed two submenus open on top of each other, rail icons colliding, a tile "L" under the hamburger, and a header that was still there. The order was plain: **remove the header (the title bar row), move the menu to the side rail, keep the workspace tabs.**
+
+### Why the tile / Compact design is replaced
+
+- It answered "slim the header" with a second surface: workspaces became colored tiles in the rail while a Compact row (search pill, layout, side bar toggle) stayed on top. The owner asked for no title row; the pill and account icon were exactly that row.
+- Tiles were a new, unfamiliar element. The standard answer in VS Code, Chrome, Arc and Linear is a row of text tabs for open workspaces plus a rail for tools. The tab row already existed and already had the menu, rename, color and drag-order behavior, so the tiles were a fork of it.
+- Three modes (Full/Compact/Hidden) were three header layouts to keep correct. Two modes are enough: the row is there, or it is not.
+
+### Final design
+
+- **No title bar in any mode.** The header is one 35px row of workspace tabs (`.app-tabs`): tab per workspace (name, colored dot, status, worktree dirty dot), `+` right after the last tab, drag or Alt+Shift+Left/Right to reorder (saved with `putWorkspaceOrder` through `useWorkspaceOrderSave`, optimistic with rollback and Retry), the same `WorkspaceTabMenu`, inline rename, and at the right end: All workspaces (Chrome's "search tabs", shown from two workspaces), the active worktree's branch, the board layout switch, the side bar toggle.
+- **Header modes: `tabs` (default) and `hidden`.** Hidden removes the row from the grid (`--tabbar-h: 0`) and shows it as an overlay at the top edge (`useHeaderReveal`, unchanged). Workspaces stay reachable while it is away: Mod+K, `Workspace: Next/Previous` (Mod+Alt+Down/Up, the arrow names are from the vertical rail and were left alone) and the rail menu. `Mod+Shift+H`, View > Header and Settings > Appearance > Header switch between the two. A stored `full` or `compact` is read as `tabs`; when that happens, one informative notice appears once and the stored value is rewritten (`headerMode.store.ts`, `headerMode.notice.ts`). Tabs is forced while booting and with no workspace.
+- **Menu: one hamburger at the top of the rail** (`AppMenuButton`), opening File / View / Help as a cascade drawn by `VscodeMenu`. Before a rail exists (booting, no workspace) the same button is the first control of the tab row, and Account is at its end, so nothing is unreachable on the Welcome screen.
+- **Rail, top to bottom:** Menu, Search (opens Go to Anything; the pill is gone), Layers, Sessions, Agent History, Skills, Central, Board, Add node, then the bottom group: Account, Settings, (Hidden only: Toggle tab layout), Lock view, Clean view. No workspace group, no tile, no "All workspaces" in the rail. The pinned rail (220px, labels) is unchanged.
+
+### Root cause of the two defects (Rule 11)
+
+1. **Submenus on top of each other.** Symptom: View and Help open at once, drawn over each other. Cause: `VscodeMenuBar` kept `submenuOpen` as state of each `MenuRow`, so rows of the same panel could not know about each other; opening one never closed another. Each submenu was also placed with CSS (`position: absolute; left: 100%` inside its own row), so there was no collision test and the place depended on whichever rows were open. Fix at the cause: the app menu now uses `VscodeMenu`, which owns ONE `submenuIndex` per panel (opening another closes the first, by construction) and places each submenu with the pure `placeSubmenu` (right of the parent panel, flip left when it does not fit, shift up at the bottom, margin 8px); keyboard (WAI-ARIA menu, roving, type-ahead, Right/Left/Escape) and focus return are the primitive's, and `AppMenuButton` returns focus to its button on any close. `VscodeMenuBar` and its CSS were deleted (no second implementation to drift).
+2. **Rail items colliding.** Symptom: the outline icon on top of the `+` of the tile group. Cause: `.vscode-activity-bar` has `height: 100%` and the rail gave it `flex: 1 1 auto`, so its flex basis was the whole rail; with the menu, search, tile group and bottom group around it, the free space went negative and it SHRANK, while its items (`flex: none`) kept their height and overflowed it, unclipped, into the next group. Fix at the cause: the tools group is `flex: 1 0 auto` with `height: auto` (never smaller than its content), the top group and the bottom group are `flex: none`, and `.dock` scrolls (`overflow-y: auto`) instead of overflowing; the bottom group is `position: sticky; bottom: 0` with an opaque background so it stays in view. Every item has the one `--rail-item-h` height and groups use the one `--rail-gap`; nothing in the rail is absolutely positioned. `dock.rail.policy.test.ts` pins all of this.
+
+### What changed in code
+
+- New: `vscodeMenu.place.ts` (pure placement), `vscodeMenu.model.ts` (menu model types and `menusAsRows`), `workspaceTabs.drag.ts` (tab drag), `workspaceCanvas.id.ts`.
+- Renamed: `workspaceRail.css` -> `dock.rail.css`, `workspaceRail.order.ts` -> `workspaceOrder.list.ts`, `workspaceRail.reorder.ts` -> `workspaceTabs.reorder.ts`, `WorkspaceRail.all.tsx` -> `WorkspaceBar.all.tsx`, `workspaceRail.policy.test.ts` -> `dock.rail.policy.test.ts`.
+- Deleted: `VscodeMenuBar`, `WorkspaceRail*` (tile group, tile, rename popover, keys, overflow), `workspaceTiles.ts` (monogram and tile ink), the title bar, brand, command pill, `CompactTail`, the Full/Compact modes and their CSS.
+- API kept: `putWorkspaceOrder`, `useWorkspaceOrderSave`, `useWorkspaceReorder` (now driving the tab row), `WorkspaceTabMenu`, `workspaceTabUi.store`.
+
+### Not observed
+
+No real browser was used. What is verified is structure (DOM order, absence of title bar and tiles, one header region), the pure placement rules, the cascade behavior in jsdom, the stylesheet invariants (one height token, no absolute positioning in the rail, scroll and sticky rules) and the drag/keyboard reorder against a stubbed layout. **Not seen on screen:** the actual look of the cascade next to the rail (jsdom has no layout, so rect-based placement was tested with stubbed rectangles), the rail at short window heights (scroll and the sticky bottom group), the tab row with many tabs and the added controls at narrow widths, `.app-tabs__action` sizing for the shadcn `IconButton` against its `size-6` default (an unlayered override was added; not observed), the Hidden overlay and the edge reveal timing, light and dark themes, and the native window. These need a visual check by the owner.
