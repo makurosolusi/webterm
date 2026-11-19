@@ -90,6 +90,15 @@ jobs:
           code="$(docker exec webterm-smoke curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8700/api/health)"
           case "$code" in 200|401|403) ;; *) echo "unexpected /api/health status $code" >&2; exit 1 ;; esac
 
+      - name: Chrome sandbox works (about:blank only, same hardening as compose, no --no-sandbox)
+        run: |
+          out="$(docker run --rm --init --cap-drop ALL --security-opt no-new-privileges:true \
+            --security-opt seccomp=docker/chrome.seccomp.json --shm-size 1g -e TMPDIR=/tmp \
+            --tmpfs /tmp:size=1g,mode=1777 --entrypoint sh webterm:smoke \
+            -c 'chrome --headless=new --disable-gpu --user-data-dir=/tmp/smoke --dump-dom about:blank')"
+          echo "$out"
+          case "$out" in *"<html>"*) ;; *) echo "Chrome sandbox smoke failed" >&2; exit 1 ;; esac
+
       - name: Print container logs on failure
         if: failure()
         run: docker logs webterm-smoke || true
