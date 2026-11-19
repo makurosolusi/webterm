@@ -17,6 +17,7 @@ import { ChatConversationList } from './chat/chatConversationList'
 import { NeedsYouStrip } from './chat/needsYouStrip'
 import type { ChatClient } from './chat/chatTypes'
 import { SKILL_AUTHOR_MODE, conversationLabel } from './chat/chatTypes'
+import { latestSteward, resolveSelection } from './chat/chatSelection'
 import { chatApi, chatErrorMessage, openChatStream } from './chatApi'
 import { InboxPanelSurface } from './inboxPanelSurface'
 import './chat/chat.css'
@@ -77,14 +78,21 @@ export default function ChatPanel(props: ChatPanelProps) {
   // Set when the remembered conversation vanished and the panel moved to another one: told once, not silently.
   const [moved, setMoved] = useState<string | null>(null)
 
-  const select = (id: string): void => { setSelected(id); setMoved(null) }
+  // True once the human picked the conversation this session (History, banner, New chat, Skills tab). A remembered id
+  // from an earlier session is not explicit: a skill-author chat is never restored by itself (see chat/chatSelection.ts).
+  const explicit = useRef(false)
+  const select = (id: string): void => { explicit.current = true; setSelected(id); setMoved(null) }
 
-  // The remembered id is gone (first load only: later polls merge, never drop): fall back, and say so.
+  // The remembered id is gone, or is a skill-author chat nobody opened this session: show the newest steward chat (or
+  // the empty state). Later polls merge, never drop, so this only moves on first load or a real vanish.
   useEffect(() => {
-    if (conversations === null || (selected !== null && conversations.some((row) => row.id === selected))) return
-    const fallback = conversations[0] ?? null
-    setSelected(fallback?.id ?? null)
-    setMoved(fallback && selected !== null ? `That conversation is no longer available. Showing ${conversationLabel(fallback)}.` : null)
+    if (conversations === null) return
+    const next = resolveSelection(conversations, selected, explicit.current)
+    if (next === selected) return
+    const vanished = selected !== null && !conversations.some((row) => row.id === selected)
+    const target = conversations.find((row) => row.id === next)
+    setSelected(next)
+    setMoved(vanished && target ? `That conversation is no longer available. Showing ${conversationLabel(target)}.` : null)
   }, [conversations, selected])
 
   // An OS banner click asked for a conversation.
@@ -120,7 +128,7 @@ export default function ChatPanel(props: ChatPanelProps) {
       (row) => {
         setCreating(false)
         upsertConversation(row)
-        setSelected(row.id)
+        select(row.id)
         setFresh(row.id)
         setHistory(false)
       },
@@ -140,6 +148,11 @@ export default function ChatPanel(props: ChatPanelProps) {
     </IconTooltip>
   )
   const current = conversations?.find((row) => row.id === selected) ?? null
+  // The way out of a skill-author chat: the newest steward chat, or a fresh one when there is none.
+  const backToCentral = (): void => {
+    const steward = latestSteward(conversations ?? [])
+    if (steward) { select(steward.id); setHistory(false) } else newChat()
+  }
   const compact = compactMode
   const repliedRows = feed.replied.flatMap((id) => conversations?.find((row) => row.id === id) ?? [])
   const historyLabel = history ? 'Back to the conversation' : `Show conversations${current ? ` (current: ${conversationLabel(current)})` : ''}`
@@ -217,13 +230,14 @@ export default function ChatPanel(props: ChatPanelProps) {
               client={clientRef.current}
               streamFactory={streamRef.current}
               focusComposer={current.id === fresh}
+              onBackToCentral={backToCentral}
               // A skill-author chat has none of the steward's commands (/status, /halt, skills): only the model and new-chat ones.
               commands={{ centralEnabled: props.centralEnabled === true && current.mode !== SKILL_AUTHOR_MODE, newChat, showHistory: () => setHistory(true) }}
             />
           ) : (
             conversations !== null && (
               <p className="chat-empty">
-                {conversations.length === 0 ? 'No conversations yet.' : 'Select a conversation to start.'}
+                {conversations.length === 0 ? 'No conversations yet.' : 'No Central chat yet. Use New chat to start one.'}
               </p>
             )
           )}

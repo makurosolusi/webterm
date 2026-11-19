@@ -15,7 +15,7 @@ type Notice = NonNullable<SkillNote['message']>
 export interface TurnNotes { text: string | null; messages: Notice[] }
 
 /** Registry profile of a conversation plus the abilities switched off right now; undefined = nothing to compare this turn. */
-function profileOf(c: Pick<Conversation, 'mode'>): { profile: ProfileId; off: Set<CapabilityId> } | undefined {
+export function profileOf(c: Pick<Conversation, 'mode'>): { profile: ProfileId; off: Set<CapabilityId> } | undefined {
   if (c.mode !== null) return { profile: 'central.skill-author', off: new Set() }
   const tools = currentTools()
   // No catalog (Central not armed or the read failed) is not "everything off": skip rather than announce a false change.
