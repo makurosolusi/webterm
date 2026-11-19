@@ -10,6 +10,7 @@ import { DEFAULT_VIEWPORT, DENIED_PERMISSIONS, windowPlacement } from './chromiu
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import { metricsParams } from './browserHost.input'
+import { markOwnTarget } from './browserHost.containment'
 
 /** Galat host ber-kode; gateway memetakan `code` ke `{t:'error'}` (tanpa URL, hanya hostname). */
 export class BrowserError extends Error {
@@ -167,6 +168,7 @@ export async function setupConnection(cdp: CdpClient, downloadPath?: string): Pr
 /** Buat jendela kosong di latar (windowPlacement), attach (flatten), aktifkan Page, pasang viewport awal. */
 export async function createPageTarget(cdp: CdpClient, vp: NodeRec['viewport']): Promise<{ targetId: string; sessionId: string }> {
   const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: 'about:blank', ...windowPlacement() })
+  markOwnTarget(targetId) // ours from the first instant: the containment guard must not take it for a stray
   const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
   await cdp.send(CDP.pageEnable, {}, sessionId)
   await cdp.send(CDP.setDeviceMetrics, metricsParams(vp.w, vp.h, vp.dpr), sessionId)

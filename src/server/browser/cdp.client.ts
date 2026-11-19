@@ -22,7 +22,7 @@ export const CDP = {
   setUserAgent: 'Emulation.setUserAgentOverride', setEmitTouch: 'Emulation.setEmitTouchEventsForMouse',
   mouse: 'Input.dispatchMouseEvent', key: 'Input.dispatchKeyEvent', insertText: 'Input.insertText',
   ime: 'Input.imeSetComposition', touch: 'Input.dispatchTouchEvent',
-  getVersion: 'Browser.getVersion', setDownloadBehavior: 'Browser.setDownloadBehavior', cancelDownload: 'Browser.cancelDownload', setPermission: 'Browser.setPermission',
+  getVersion: 'Browser.getVersion', getWindowForTarget: 'Browser.getWindowForTarget', setDownloadBehavior: 'Browser.setDownloadBehavior', cancelDownload: 'Browser.cancelDownload', setPermission: 'Browser.setPermission',
   evaluate: 'Runtime.evaluate', runIfWaiting: 'Runtime.runIfWaitingForDebugger',
   // Shields: intersep request (tahap Request) di halaman + iframe OOPIF yang di-auto-attach.
   setAutoAttach: 'Target.setAutoAttach', fetchEnable: 'Fetch.enable', continueRequest: 'Fetch.continueRequest',

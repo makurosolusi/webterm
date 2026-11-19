@@ -2,6 +2,7 @@
 // domain, through the same SSRF proxy as every page): list the cookie DOMAINS (values are never read), and load one provider
 // page in a throw-away background tab to read the signed-in identity from it. No separate HTTP client ever sees a cookie.
 import { CDP } from './cdp.client'
+import { markOwnTarget } from './browserHost.containment'
 import type { CdpClient } from './cdp.client'
 import { cookieDomainMatches } from '../../shared/browser.accounts'
 import type { AccountProvider } from '../../shared/browser.accounts'
@@ -42,6 +43,7 @@ export function hasSession(cookies: readonly CookieRef[], p: AccountProvider): b
 export async function probeProvider(cdp: CdpClient, p: AccountProvider, d: ProbeDeps): Promise<ParsedAccount> {
   if (!d.guard(p.probeUrl).ok) return unknownBecause('probe_blocked')
   const { targetId } = await cdp.send<{ targetId: string }>(CDP.createTarget, { url: BLANK, background: true })
+  markOwnTarget(targetId) // a probe page is ours, not a stray
   try {
     const { sessionId } = await cdp.send<{ sessionId: string }>(CDP.attachToTarget, { targetId, flatten: true })
     const nav = await cdp.send<{ errorText?: string; isDownload?: boolean }>(CDP.navigate, { url: p.probeUrl }, sessionId)
