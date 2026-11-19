@@ -8,6 +8,16 @@ const key = (o: Partial<KeyInput>): KeyInput => ({ t: 'key', type: 'down', key: 
 const mouse = (o: Partial<MouseInput>): MouseInput => ({ t: 'mouse', type: 'down', x: 10, y: 20, button: 'left', buttons: 1, clickCount: 1, mods: 0, dx: 0, dy: 0, ...o })
 
 describe('toCdpCommands', () => {
+  it('move with a held button carries that button to CDP (drag selection); idle move stays none', () => {
+    const btn = (o: Partial<MouseInput>) => toCdpCommands(mouse({ type: 'move', ...o }))[0].params.button
+    expect(btn({ button: 'none', buttons: 1 })).toBe('left')
+    expect(btn({ button: 'none', buttons: 4 })).toBe('middle')
+    expect(btn({ button: 'none', buttons: 0 })).toBe('none')
+    expect(btn({ button: 'none', buttons: 2 })).toBe('none')
+    const seq = (['down', 'move', 'move', 'up'] as const).map((type) => toCdpCommands(mouse({ type, button: type === 'move' ? 'none' : 'left', buttons: type === 'up' ? 0 : 1 }))[0].params)
+    expect(seq.map((p) => [p.type, p.button])).toEqual([['mousePressed', 'left'], ['mouseMoved', 'left'], ['mouseMoved', 'left'], ['mouseReleased', 'left']])
+  })
+
   it('maps mouse down/up/move/wheel to CDP types and carries coordinates', () => {
     const types = (['down', 'up', 'move', 'wheel'] as const).map((type) => toCdpCommands(mouse({ type }))[0].params.type)
     expect(types).toEqual(['mousePressed', 'mouseReleased', 'mouseMoved', 'mouseWheel'])

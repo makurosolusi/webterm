@@ -33,9 +33,20 @@ describe('browser.input', () => {
   it('mouseMsg: rect nol -> null; move memakai button none dan clickCount 0; tombol kanan', () => {
     expect(mouseMsg('move', ptr(), { left: 0, top: 0, width: 0, height: 0 }, VP)).toBeNull()
     const rect = { left: 0, top: 0, width: 800, height: 600 }
-    expect(mouseMsg('move', ptr(), rect, VP, 3)).toMatchObject({ button: 'none', clickCount: 0 })
+    expect(mouseMsg('move', ptr({ buttons: 0 }), rect, VP, 3)).toMatchObject({ button: 'none', clickCount: 0 })
     expect(mouseMsg('up', ptr({ button: 2 }), rect, VP, 1)?.button).toBe('right')
     expect(mouseMsg('up', ptr({ button: 9 }), rect, VP, 1)?.button).toBe('none')
+  })
+
+  it('mouseMsg: move names the held button (drag selection); none when nothing/right-only held', () => {
+    const rect = { left: 0, top: 0, width: 800, height: 600 }
+    expect(mouseMsg('move', ptr({ buttons: 1 }), rect, VP)?.button).toBe('left')
+    expect(mouseMsg('move', ptr({ buttons: 3 }), rect, VP)?.button).toBe('left')
+    expect(mouseMsg('move', ptr({ buttons: 4 }), rect, VP)?.button).toBe('middle')
+    expect(mouseMsg('move', ptr({ buttons: 0 }), rect, VP)?.button).toBe('none')
+    expect(mouseMsg('move', ptr({ buttons: 2 }), rect, VP)?.button).toBe('none')
+    const seq = (['down', 'move', 'move', 'up'] as const).map((t) => mouseMsg(t, ptr({ buttons: t === 'up' ? 0 : 1 }), rect, VP, 1)!)
+    expect(seq.map((m) => [m.type, m.button])).toEqual([['down', 'left'], ['move', 'left'], ['move', 'left'], ['up', 'left']])
   })
 
   it('wheelMsg: Ctrl+wheel tidak diteruskan; deltaMode baris/halaman diskalakan', () => {

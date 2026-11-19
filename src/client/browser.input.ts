@@ -37,6 +37,12 @@ export function makeClickCounter(now: () => number = Date.now): (x: number, y: n
   }
 }
 
+/**
+ * Button for a `move`: Chromium only runs drag selection when mouseMoved names the held button (as Puppeteer does).
+ * Left wins over middle; right-only stays 'none' because the right button is never forwarded (host intercept).
+ */
+export const heldButton = (buttons: number): 'left' | 'middle' | 'none' => (buttons & 1 ? 'left' : buttons & 4 ? 'middle' : 'none')
+
 /** Pointer mouse -> `mouse`; null bila rect/viewport tak valid (event dibuang). */
 export function mouseMsg(
   type: 'down' | 'up' | 'move', e: PointerLike, rect: Rect, vp: Viewport, clickCount = 0,
@@ -45,7 +51,7 @@ export function mouseMsg(
   if (!p) return null
   return {
     t: 'mouse', type, x: p.x, y: p.y,
-    button: type === 'move' ? 'none' : (BUTTON_BY_INDEX[e.button] ?? 'none'),
+    button: type === 'move' ? heldButton(e.buttons) : (BUTTON_BY_INDEX[e.button] ?? 'none'),
     buttons: e.buttons, clickCount: type === 'move' ? 0 : clickCount, mods: modsOf(e), dx: 0, dy: 0,
   }
 }
