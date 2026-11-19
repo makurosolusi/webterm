@@ -1,8 +1,8 @@
-// Pure builders of the File / View / Help menu model for the title bar (and the rail menu).
+// Pure builders of the File / View / Help menu model behind the rail's menu button (and the tab row's own, before a rail exists).
 // File: New → Rename/Delete (workspace aktif) → Settings → Logout, seperti File di VS Code
 // (aksi dokumen, lalu Preferences, lalu keluar). Delete tidak diberi warna bahaya: VS Code tak
 // mewarnai item menu, dan konfirmasi `window.confirm` sudah menjaga aksinya.
-import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenuBar'
+import type { VscodeMenu, VscodeMenuEntry } from '@/components/vscode/vscodeMenu.model'
 import { clearOutput, toggleOutput } from './output/outputCommands'
 import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import { openSetup } from './setup/setup.open'

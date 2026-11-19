@@ -1,28 +1,21 @@
-// One-time notice after the default header became Compact: one line, one action, never repeated.
-// Shown only when it is true and useful: nobody chose a mode on this device, the board is up and the
-// header is actually drawn Compact. Any explicit choice (including the action) retires it.
+// One-time notice after a stored Full / Compact header value was carried over to Tabs: one line, no action
+// that undoes anything (the old header no longer exists), never repeated. Any explicit choice retires it.
 import { useEffect } from 'react'
-import { closeNotice, showNotice } from './workspaceSave.notice'
-import { headerNoticeDue, markHeaderNoticed, setHeaderMode, type HeaderMode } from './headerMode.store'
+import { showNotice } from './workspaceSave.notice'
+import { headerNoticeDue, markHeaderNoticed } from './headerMode.store'
 
 export const HEADER_NOTICE_CHANNEL = 'webterm-header-mode'
 
 export const HEADER_NOTICE_TEXT = {
-  title: 'Header is now compact',
-  message: 'Workspaces and the menu stay in the header row. Change it any time in View > Header.',
-  restore: 'Restore full header',
+  title: 'The header is now the workspace tab row',
+  message: 'The menu and search moved to the left rail. Hide the tab row any time in View > Header.',
 } as const
 
-/** Shows the notice the first time the effective mode is Compact and nothing was ever chosen. */
-export function useHeaderModeNotice(effective: HeaderMode): void {
+/** Shows the notice once, the first time the board is up after the stored value was carried over. */
+export function useHeaderModeNotice(hydrated: boolean): void {
   useEffect(() => {
-    if (effective !== 'compact' || !headerNoticeDue()) return
+    if (!hydrated || !headerNoticeDue()) return
     markHeaderNoticed()
-    showNotice(HEADER_NOTICE_CHANNEL, {
-      severity: 'info',
-      title: HEADER_NOTICE_TEXT.title,
-      message: HEADER_NOTICE_TEXT.message,
-      actions: [{ label: HEADER_NOTICE_TEXT.restore, onClick: () => { setHeaderMode('full'); closeNotice(HEADER_NOTICE_CHANNEL) } }],
-    })
-  }, [effective])
+    showNotice(HEADER_NOTICE_CHANNEL, { severity: 'info', title: HEADER_NOTICE_TEXT.title, message: HEADER_NOTICE_TEXT.message })
+  }, [hydrated])
 }

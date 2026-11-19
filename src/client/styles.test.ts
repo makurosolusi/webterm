@@ -26,13 +26,12 @@ describe('styles.css — token sheet', () => {
       '--state-attention: #ff453a',
       '--float-gap: 22px',
       // Geometri chrome VS Code. Dipaku: grid `.app-shell` memakai keempatnya, dan primitif
-      // `components/vscode/vscode-shell.css` menggambar tinggi yang sama.
-      '--title-bar-h: 35px',
+      // `components/vscode/vscode-shell.css` menggambar tinggi yang sama (tanpa `--title-bar-h`: title bar sudah tidak ada).
       '--editor-tabs-h: 35px',
       '--activity-bar-w: 48px',
       '--status-bar-h: 22px',
-      // Alias warisan untuk sheet yang belum ikut migrasi: tinggi chrome di atas canvas.
-      '--tabbar-h: calc(var(--title-bar-h) + var(--editor-tabs-h))',
+      // Tinggi chrome di atas canvas = SATU baris tab (tidak ada title bar); header Hidden menolkannya.
+      '--tabbar-h: var(--editor-tabs-h)',
       // Ukuran chrome = default workbench VS Code; satu sumber yang dibaca semua sheet chrome.
       '--ui-font-size: var(--vscode-font-size)',
       '--ui-font-size-small: 12px',
@@ -112,12 +111,8 @@ describe('styles.css — token sheet', () => {
     expect(tokens).toMatch(/::-webkit-scrollbar-thumb \{[^}]*border-radius: 4px/)
   })
 
-  it('command center: 24px, radius 5px, border token commandCenter', () => {
-    const pill = tokens.slice(tokens.indexOf('.app-titlebar__name {'))
-    const body = pill.slice(0, pill.indexOf('}'))
-    expect(body).toContain('height: 24px')
-    expect(body).toContain('border-radius: 5px')
-    expect(body).toContain('border: 1px solid var(--vscode-commandCenter-border)')
+  it('has no title bar, brand or command-center pill left (menu, search and account live in the rail)', () => {
+    for (const gone of ['.app-titlebar', '.brand', '--title-bar-h']) expect(tokens).not.toContain(gone)
   })
 
   it('keeps shared layout and canvas furniture', () => {
@@ -131,12 +126,11 @@ describe('styles.css — token sheet', () => {
     }
   })
 
-  it('lays the app out as a VS Code shell grid: title / tabs / rail+canvas / status', () => {
+  it('lays the app out as a VS Code shell grid: tabs / rail+canvas / status (no title row)', () => {
     const shell = tokens.slice(tokens.indexOf('.app-shell {'), tokens.indexOf('.app-shell--auth {'))
     expect(shell).toContain('display: grid')
-    expect(shell).toContain(
-      'grid-template-rows: var(--title-bar-h) var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h)',
-    )
+    expect(shell).toContain('grid-template-rows: var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h)')
+    expect(shell).not.toContain("'title")
     // Kolom sidebar selebar 0 saat tertutup; `--sidebar` (di App) membukanya menjadi 300px tanpa
     // menggeser rail. Canvas tetap `minmax(0, 1fr)` supaya ia yang menyerap sisa lebar.
     // Kolom ke-4 `aux` = secondary side bar (Chat/Central), 0 sampai ia ter-dock (secondarySideBar.css).
@@ -148,14 +142,13 @@ describe('styles.css — token sheet', () => {
 
     // Welcome memposisikan diri dengan `inset: 0` — containing block-nya harus .app-main, dan
     // min-width/height: 0 menahan isi canvas agar tidak mendorong grid melewati viewport.
-    const main = tokens.slice(tokens.indexOf('.app-main {'), tokens.indexOf('/* ---- Title bar'))
+    const main = tokens.slice(tokens.indexOf('.app-main {'), tokens.indexOf('/* ---- Tombol ikon di baris tab'))
     expect(main).toContain('grid-area: main')
     expect(main).toContain('position: relative')
     expect(main).toContain('min-height: 0')
     expect(main).toContain('min-width: 0')
 
     for (const [selector, area] of [
-      ['.app-titlebar {', 'title'],
       ['.app-tabs {', 'tabs'],
       ['.app-statusbar {', 'status'],
     ]) {
@@ -166,9 +159,9 @@ describe('styles.css — token sheet', () => {
 
   it('collapses every chrome row in clean view, not just hides the elements', () => {
     const clean = tokens.slice(tokens.indexOf('body.clean-view .app-shell {'))
-    expect(clean).toContain('grid-template-rows: 0 0 minmax(0, 1fr) 0')
+    expect(clean).toContain('grid-template-rows: 0 minmax(0, 1fr) 0')
     expect(clean).toContain('grid-template-columns: 0 0 minmax(0, 1fr)')
-    for (const selector of ['.app-titlebar', '.app-tabs', '.app-statusbar']) {
+    for (const selector of ['.app-tabs', '.app-statusbar']) {
       expect(tokens).toContain(`body.clean-view ${selector}`)
     }
   })

@@ -184,8 +184,8 @@ describe('tidak dipersist, dan tidak meng-unmount apa pun', () => {
     expect(document.querySelector('.react-flow__node-terminal')).not.toBeNull()
     expect(document.querySelector('.react-flow__node-terminal .node-header')).not.toBeNull()
     expect(document.querySelector('.dock')).not.toBeNull()
-    // The header draws `.app-titlebar` in Full and the compact menu button in the default Compact mode (headerMode.app.test.tsx).
-    expect(document.querySelector('.app-titlebar, .app-menu-button')).not.toBeNull()
+    // The rail's menu button is part of the hidden chrome too (headerMode.app.test.tsx).
+    expect(document.querySelector('.dock button[aria-label="Menu"]')).not.toBeNull()
     expect(document.querySelector('.app-tabs')).not.toBeNull()
     expect(document.querySelector('.app-statusbar')).not.toBeNull()
   })

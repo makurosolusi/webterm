@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { IconTooltip } from '@/components/ui/icon-button'
 import './vscode-shell.css'
 
@@ -16,6 +16,9 @@ export interface VscodeEditorTab {
   ariaLabel?: string
   /** Replaces the tab button while set (inline rename); the tab keeps its slot in the strip. */
   editor?: ReactNode
+  /** Reorder drag in progress: the tab being dragged (dimmed) or where the insertion line is drawn. */
+  dragging?: boolean
+  drop?: 'before' | 'after'
 }
 
 export interface VscodeEditorTabBarProps {
@@ -30,6 +33,10 @@ export interface VscodeEditorTabBarProps {
   onContextMenu?: (id: string, at: { x: number; y: number }) => void
   /** Rendered right after the last tab (VS Code / browser "+"); sticks to the right edge on overflow. */
   trailing?: ReactNode
+  /** Reordering (all optional; absent = tabs are fixed): press on a tab (the caller runs the drag), the click that ends a drag, and Alt+Shift+Left/Right. */
+  onTabPointerDown?: (event: PointerEvent<HTMLButtonElement>, id: string) => void
+  swallowClick?: () => boolean
+  onMoveTab?: (id: string, dir: -1 | 1) => void
   className?: string
   ariaLabel?: string
 }
@@ -51,6 +58,9 @@ export function VscodeEditorTabBar({
   onDoubleClick,
   onContextMenu,
   trailing,
+  onTabPointerDown,
+  swallowClick,
+  onMoveTab,
   className,
   ariaLabel = 'Editor tabs',
 }: VscodeEditorTabBarProps) {
@@ -125,6 +135,12 @@ export function VscodeEditorTabBar({
       openMenu(tab.id, event.currentTarget)
       return
     }
+    // Keyboard alternative to dragging (WCAG 2.5.7): the tab moves one place, focus stays on it.
+    if (onMoveTab && event.altKey && event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.preventDefault()
+      onMoveTab(tab.id, event.key === 'ArrowRight' ? 1 : -1)
+      return
+    }
     switch (event.key) {
       case 'ArrowRight':
         event.preventDefault()
@@ -183,6 +199,8 @@ export function VscodeEditorTabBar({
             data-slot="vscode-editor-tab"
             data-active={active ? 'true' : 'false'}
             data-dirty={tab.dirty ? 'true' : 'false'}
+            data-dragging={tab.dragging ? 'true' : undefined}
+            data-drop={tab.drop}
             className="vscode-editor-tab"
           >
             {tab.editor ?? <IconTooltip label={tab.tooltip ?? tab.label}>
@@ -194,14 +212,17 @@ export function VscodeEditorTabBar({
                 type="button"
                 role="tab"
                 data-slot="vscode-editor-tab-button"
+                data-tab-id={tab.id}
                 className="vscode-editor-tab__button"
                 aria-selected={active}
                 aria-label={tab.ariaLabel}
                 tabIndex={focusable ? 0 : -1}
                 onClick={() => {
+                  if (swallowClick?.()) return
                   setFocusedId(tab.id)
                   onActivate(tab.id)
                 }}
+                onPointerDown={onTabPointerDown ? (event) => onTabPointerDown(event, tab.id) : undefined}
                 onDoubleClick={() => onDoubleClick?.(tab.id)}
                 onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
                   if (!onContextMenu) return

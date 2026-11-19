@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import { useRegisterCommands, type Command } from './commandRegistry'
 import { toggleRailLabels } from './railLabels.store'
-import { orderedWorkspaces } from './workspaceRail.order'
+import { orderedWorkspaces } from './workspaceOrder.list'
 import type { Workspace } from '../shared/workspace'
 
 export const WORKSPACE_NEXT_ID = 'workspace.next'

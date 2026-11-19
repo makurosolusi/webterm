@@ -1,44 +1,38 @@
-/* Header modes (docs/decisions/header-rail-layout.md). `.app-shell--header-compact|hidden` is the ONLY
-   place the header height changes: floating UI reads `--tabbar-h`, so overriding it here (full = 70px
-   from styles.css, compact = 35px, hidden = 0px) moves every panel without editing any of them.
-   Compound selectors (0,2,0) beat `.app-shell` regardless of sheet order; `body.clean-view .app-shell`
-   (0,2,1) still wins, so clean view hides everything in every mode. */
+/* Header modes (docs/decisions/header-rail-layout.md). Tabs (default) is the plain grid of styles.css: one
+   `--editor-tabs-h` row of workspace tabs, `--tabbar-h` = that row. `.app-shell--header-hidden` is the ONLY place
+   the header height changes: floating UI reads `--tabbar-h`, so overriding it here (0px) moves every panel without
+   editing any of them. Compound selectors (0,2,0) beat `.app-shell` regardless of sheet order;
+   `body.clean-view .app-shell` (0,2,1) still wins, so clean view hides everything in every mode. */
 
-/* Compact: the title bar row is gone; the one remaining row carries the command pill, the layout switch and
-   the side bar toggle. Workspaces are rail tiles, the menu and account are rail buttons. */
-.app-shell.app-shell--header-compact {
-  --tabbar-h: var(--editor-tabs-h);
-  grid-template-rows: 0 var(--editor-tabs-h) minmax(0, 1fr) var(--status-bar-h);
-}
-
-/* Hidden: no header rows. The title bar becomes an overlay that slides over the canvas while revealed
-   (`data-revealed`), without changing `--tabbar-h`, so pan, zoom and node positions never jump.
-   There is no tab row in Hidden: workspaces are rail tiles (WorkspaceRail), the layout switch rides in
-   the title bar. While hidden the overlay is `visibility: hidden`: not focusable and never takes a click. */
+/* Hidden: no header row. The tab row becomes an overlay that slides over the canvas while revealed
+   (`data-revealed`), without changing the canvas's own box, so pan, zoom and node positions never jump.
+   Workspaces stay reachable while it is away: Mod+K, `Workspace: Next/Previous` and the rail menu. While hidden the
+   overlay is `visibility: hidden`: not focusable and never takes a click. */
 .app-shell.app-shell--header-hidden {
   --tabbar-h: 0px;
   position: relative;
-  grid-template-rows: 0 0 minmax(0, 1fr) var(--status-bar-h);
+  grid-template-rows: 0 minmax(0, 1fr) var(--status-bar-h);
 }
-.app-shell--header-hidden > .app-titlebar {
+.app-shell--header-hidden > .app-tabs {
   grid-area: auto;
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
+  height: var(--editor-tabs-h);
   z-index: 30;
   visibility: hidden;
   transform: translateY(-100%);
   transition: transform 120ms ease, visibility 0s linear 120ms;
   box-shadow: var(--wt-shadow-floating);
 }
-.app-shell--header-hidden > .app-titlebar { top: 0; height: var(--title-bar-h); }
 .app-shell--header-hidden > [data-revealed='true'] {
   visibility: visible;
   transform: none;
   transition: transform 120ms ease, visibility 0s;
 }
 @media (prefers-reduced-motion: reduce) {
-  .app-shell--header-hidden > .app-titlebar,
+  .app-shell--header-hidden > .app-tabs,
   .app-shell--header-hidden > [data-revealed='true'] { transition: none; }
 }
 
@@ -56,8 +50,4 @@
   opacity: 0.35;
   pointer-events: none;
 }
-
-/* Right end of the compact row: the side bar toggle (the account button lives in the rail). */
-.app-tabs__actions.app-tabs__tail { align-items: center; gap: 2px; padding: 0 4px; }
-.app-tabs__actions.app-tabs__tail > .app-tabs__action { align-self: stretch; }
 body.clean-view .app-shell--header-hidden::before { display: none; }

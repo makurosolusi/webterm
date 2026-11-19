@@ -1,5 +1,5 @@
-// App's inputs to the File / View / Help model, built once and handed to BOTH doors (the header's menu bar
-// in Full, the rail's menu button in Compact/Hidden), so the two cannot be wired differently.
+// App's inputs to the File / View / Help model, built once and handed to every door (the rail's menu button,
+// the tab row's before a rail exists), so two doors cannot be wired differently.
 import type { AgentStatus, Workspace, WsNode } from '../shared/workspace'
 import { toggleLayoutMode } from './tabLayout.commands'
 import type { WorkspaceMenuProps } from './useWorkspaceMenus'

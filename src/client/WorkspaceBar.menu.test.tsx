@@ -1,12 +1,10 @@
 /** @vitest-environment jsdom */
-// WorkspaceBar title bar: File > New Files Node and the command center (opens the omnibox,
-// shows its Mod+K chord). These replaced the floating canvas toolbar.
+// WorkspaceBar menu rows and the tab row's own controls. Without a rail on screen (these tests mount the bar alone) the
+// row carries the menu button; the same menu is the rail's hamburger in the app (headerRail.inventory.test.tsx).
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import './vscode/test-setup'
 import WorkspaceBar, { type WorkspaceBarProps } from './WorkspaceBar'
-import { registerCommands } from './commandRegistry'
-import { isMacPlatform } from './terminalKeys'
 import { openSetup } from './setup/setup.open'
 import { DEFAULT_VIEWPORT, type Workspace } from '../shared/workspace'
 
@@ -14,12 +12,16 @@ vi.mock('./setup/setup.open', () => ({ openSetup: vi.fn() }))
 
 const ws: Workspace = { id: 'w1', name: 'Proj', cwd: '/proj', viewport: DEFAULT_VIEWPORT, nodes: [], bridges: [], updatedAt: 0 } // test-only
 
-let unregister: () => void
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ managed: false }))))
-  unregister = registerCommands([{ id: 'workbench.omnibox', label: 'Go to Anything', defaultKey: 'Mod+K', run: () => {}, hidden: true }])
 })
-afterEach(() => { cleanup(); unregister(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+/** Opens the app menu, then a top-level menu of it (File / View / Help). */
+const openTop = (name: string): void => {
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }))
+  fireEvent.click(screen.getByRole('menuitem', { name }))
+}
 
 function mount(over: Partial<WorkspaceBarProps> = {}) {
   render(
@@ -35,20 +37,20 @@ describe('File > New Files Node', () => {
   it('is in the File menu and runs onNewFiles', () => {
     const onNewFiles = vi.fn()
     mount({ onNewFiles })
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    openTop('File')
     fireEvent.click(screen.getByRole('menuitem', { name: 'New Files Node' }))
     expect(onNewFiles).toHaveBeenCalledTimes(1)
   })
 
   it('is absent without an open workspace', () => {
     mount({ onNewFiles: vi.fn(), workspaces: [], activeId: null, liveActiveNodes: null })
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    openTop('File')
     expect(screen.queryByRole('menuitem', { name: 'New Files Node' })).toBeNull()
   })
 })
 
 describe('Account and Sign out', () => {
-  it('the title-bar Account button opens the account menu (not Settings); File has Account… and Sign out', () => {
+  it('the row\'s Account button opens the account menu (not Settings); File has Account… and Sign out', () => {
     const onOpenAccount = vi.fn()
     const onLogout = vi.fn()
     mount({ showLogout: true, onOpenAccount, onLogout })
@@ -56,10 +58,10 @@ describe('Account and Sign out', () => {
     expect(onOpenAccount).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Account settings' }))
     expect(onOpenAccount).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    openTop('File')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
     expect(onLogout).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'File' }))
+    openTop('File')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Account…' }))
     expect(onOpenAccount).toHaveBeenCalledTimes(2)
   })
@@ -74,22 +76,10 @@ describe('View menu', () => {
   // Policy: the node tab strip moved into the Layers side bar, so its toggle is gone for good.
   it('has no Show Node Tabs item', () => {
     mount()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'View' }))
+    openTop('View')
     expect(screen.getByRole('menuitem', { name: 'Clear Output' })).toBeTruthy()
     expect(screen.queryByRole('menuitemcheckbox', { name: 'Show Node Tabs' })).toBeNull()
     expect(screen.queryByText('Show Node Tabs')).toBeNull()
-  })
-})
-
-describe('title bar command center', () => {
-  it('shows the Mod+K chord and opens the palette on click', () => {
-    const onOpenPalette = vi.fn()
-    mount({ onOpenPalette })
-    const search = screen.getByRole('button', { name: 'Search' })
-    expect(search.textContent).toContain('Proj')
-    expect(search.querySelector('.kbd')?.textContent).toBe(isMacPlatform() ? '⌘K' : 'Ctrl+K')
-    fireEvent.click(search)
-    expect(onOpenPalette).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -97,17 +87,17 @@ describe('Help > Set up webterm…', () => {
   it('opens the setup wizard', () => {
     vi.mocked(openSetup).mockClear()
     mount({ onOpenHelp: vi.fn() })
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Help' }))
+    openTop('Help')
     fireEvent.click(screen.getByRole('menuitem', { name: 'Set up webterm…' }))
     expect(openSetup).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('tab-row actions without a workspace', () => {
-  it('hides the layout toggle (not disabled); keeps +, search and Account', () => {
-    mount({ workspaces: [], activeId: null, liveActiveNodes: null, onToggleLayout: vi.fn(), onOpenPalette: vi.fn(), showLogout: true, onOpenAccount: vi.fn() })
+  it('hides the layout toggle (not disabled); keeps +, the menu and Account', () => {
+    mount({ workspaces: [], activeId: null, liveActiveNodes: null, onToggleLayout: vi.fn(), showLogout: true, onOpenAccount: vi.fn() })
     expect(screen.queryByRole('button', { name: 'Toggle tab layout' })).toBeNull()
-    for (const name of ['New workspace', 'Search', 'Account']) expect(screen.getByRole('button', { name })).toBeTruthy()
+    for (const name of ['New workspace', 'Menu', 'Account']) expect(screen.getByRole('button', { name })).toBeTruthy()
   })
 
   it('shows the layout toggle, enabled, with a workspace open', () => {

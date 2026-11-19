@@ -11,7 +11,7 @@ import type { CanvasMsg } from '../shared/protocol'
 import type { Workspace } from '../shared/workspace'
 import { fetchWorkspaces } from './api'
 import { reported } from './workspaceActionError'
-import { applyServerOrder } from './workspaceRail.order'
+import { applyServerOrder } from './workspaceOrder.list'
 import { subscribeCanvas, subscribeWorkspaces } from './ws'
 
 export interface ListTarget {

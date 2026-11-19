@@ -9,7 +9,7 @@ import { errorCause } from '@/components/ui/action'
 import { fetchWorkspaces } from './api'
 import { putWorkspaceOrder } from './workspaceOrder.api'
 import { addNewWorkspaces } from './workspaceList.push'
-import { applyServerOrder } from './workspaceRail.order'
+import { applyServerOrder } from './workspaceOrder.list'
 
 const MISSING_REFUSAL = `${WORKSPACE_ORDER_ERROR} (missing)`
 

@@ -77,7 +77,7 @@ const CARDS = CARD_IDS.map((id) => e('capabilities', `capability.${id}`, CAPABIL
 const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   // Appearance (SettingsAppearanceSection.tsx, CanvasBackgroundSection.tsx)
   e('appearance', 'appTheme', 'Theme', 'System follows your computer’s light or dark mode.', 'dark light mode system appearance'),
-  e('appearance', 'header-mode', HEADER_MODE_FIELD.label, HEADER_MODE_FIELD.hint, 'title bar tabs compact hidden full menu rail layout toolbar'),
+  e('appearance', 'header-mode', HEADER_MODE_FIELD.label, HEADER_MODE_FIELD.hint, 'header tabs hidden menu rail layout toolbar workspace row'),
   e('appearance', 'rail-labels', RAIL_LABELS_FIELD.label, RAIL_LABELS_FIELD.hint, 'rail activity bar sidebar names labels expand wide pin workspace tiles'),
   e('appearance', 'canvasBackground', 'Canvas background', 'Color, gradient, image or looping video behind the nodes, for all workspaces or just this one.', 'wallpaper image gradient color photo video background video mp4 webm gif animated webp playback motion'),
   // Terminal › Look, Behavior, Advanced (SettingsTerminalSections.tsx); ids kept from when the look sat on Appearance

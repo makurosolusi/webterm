@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Omnibox from './Omnibox'
 import { VscodeBreadcrumbs } from './components/vscode/vscodeBreadcrumbs'
-import { VscodeMenuBar } from './components/vscode/vscodeMenuBar'
+import { VscodeMenu } from './components/vscode/vscodeMenu'
 import { VscodeQuickPick } from './components/vscode/vscodeQuickPick'
 
 afterEach(cleanup)
@@ -38,11 +38,13 @@ describe('click outside through the canvas pane', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('closes an open menu bar menu', () => {
-    const onOpenChange = vi.fn()
-    render(<VscodeMenuBar menus={[{ id: 'file', label: 'File', items: [{ id: 'new', label: 'New' }] }]} openId="file" onOpenChange={onOpenChange} />)
-    fireEvent.mouseDown(pane())
-    expect(onOpenChange).toHaveBeenCalledWith(null)
+  it('closes an open menu (the app menu is a VscodeMenu: it listens to pointerdown, which d3-zoom does not stop)', () => {
+    const onClose = vi.fn()
+    render(<VscodeMenu open anchor={{ x: 0, y: 0 }} items={[{ type: 'item', id: 'new', label: 'New' }]} onClose={onClose} />)
+    const el = pane()
+    fireEvent.pointerDown(el) // a real press fires pointerdown first, then the mousedown the pane swallows
+    fireEvent.mouseDown(el)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('closes the breadcrumbs overflow menu', () => {

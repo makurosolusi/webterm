@@ -20,7 +20,7 @@ import { useCapabilityOffer } from './Dock.capabilityOffer'
 import { WorkspaceDialog } from './Dock.workspaceDialog'
 import { DockModes } from './Dock.modes'
 import { useRailLabelsAttribute } from './railLabels.store'
-import './workspaceRail.css'
+import './dock.rail.css'
 
 import type { DockProps } from './Dock.types'
 import { useTabLayout } from './tabLayout.store'
@@ -204,16 +204,17 @@ export default function Dock(props: DockProps) {
   return (
     <>
       <div className="dock">
-        {/* Compact/Hidden header: the app menu is the first control of the rail (Full keeps the menu bar). */}
-        {props.railMenu}
-        {/* Hidden header: search sits above the workspace group (Mod+K still works in every mode). */}
-        {props.onOpenPalette && (
-          <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Search" tooltip="Go to anything: nodes, files, URLs, agents, commands"
-            commandId="workbench.omnibox" side="right" onClick={props.onOpenPalette}>
-            <span className="vscode-activity-bar__icon" aria-hidden>{codicon('search')}</span>
-          </IconButton>
-        )}
-        {props.workspaceGroup}
+        {/* Top group, fixed: the app menu and Search. Order of the rail, top to bottom: menu, Search, tools, then the
+            bottom group (Account, Settings, layout in Hidden, Lock, Clean view) which stays in view. */}
+        <div className="dock__top" data-slot="dock-top">
+          {props.railMenu}
+          {props.onOpenPalette && (
+            <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Search" tooltip="Go to anything: nodes, files, URLs, agents, commands"
+              commandId="workbench.omnibox" side="right" onClick={props.onOpenPalette}>
+              <span className="vscode-activity-bar__icon" aria-hidden>{codicon('search')}</span>
+            </IconButton>
+          )}
+        </div>
         <VscodeActivityBar
           items={items}
           activeIds={activeActivityIds(props)}

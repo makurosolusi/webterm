@@ -1,6 +1,6 @@
 // Pinned rail ("Show labels"): the rail is 220px wide with a name beside every item. A per-device
 // preference in `localStorage` (try/catch: storage can be blocked), applied as `data-rail-labels` on
-// <html> so `workspaceRail.css` can move the one width token that the grid and every floating panel read.
+// <html> so `dock.rail.css` can move the one width token that the grid and every floating panel read.
 import { useEffect, useSyncExternalStore } from 'react'
 
 export const RAIL_LABELS_KEY = 'webterm.railLabels'
