@@ -5,6 +5,7 @@ import { hostOnly } from '../../shared/browser.url'
 import { createLogger } from '../logs'
 import { CDP } from './cdp.client'
 import type { CdpClient } from './cdp.client'
+import { recovering } from './browserHost.recover'
 import { isAbortedNav, readHistory } from './browserHost.targets'
 import type { NavGuard, NodeRec } from './browserHost.targets'
 
@@ -29,10 +30,17 @@ export async function gotoPage(io: PageIo, guard: NavGuard, patch: (rec: NodeRec
 }
 
 /** reload / stop / back / forward of a live node. */
-export async function stepPage(io: PageIo, rec: NodeRec, action: Exclude<(typeof NAV_ACTIONS)[number], 'go'>): Promise<void> {
+export async function stepPage(io: PageIo, rec: NodeRec, action: Exclude<(typeof NAV_ACTIONS)[number], 'go'>, patch: (rec: NodeRec, p: Partial<BrowserState>) => void): Promise<void> {
   if (action === 'reload') { await io.send(rec, CDP.reload); return }
-  if (action === 'stop') { await io.send(rec, CDP.stopLoading); return }
-  const h = await readHistory(await io.cdpOf(rec), rec.sessionId as string)
+  if (action === 'stop') {
+    // Stop must always end the spinner: if Chromium cannot stop the page (gone, not active) the node's own flag is cleared anyway.
+    try { await io.send(rec, CDP.stopLoading) } catch (err) {
+      log.warn('browser.nav', 'stop loading failed; clearing the loading flag', { ids: { nodeId: rec.nodeId }, error: err instanceof Error ? err.message : String(err) })
+    }
+    patch(rec, { loading: false })
+    return
+  }
+  const h = await readHistory(recovering(await io.cdpOf(rec), rec.targetId), rec.sessionId as string)
   const entryId = action === 'back' ? h.entryIds.prev : h.entryIds.next
   if (entryId !== undefined) await io.send(rec, CDP.navigateToHistoryEntry, { entryId })
 }
