@@ -26,6 +26,22 @@ describe.each(files)('%s', (f) => {
   })
 })
 
+describe.each(files)('%s healthcheck', (f) => {
+  const test = /test: \[.*\]/.exec(code(f))?.[0] ?? ''
+  it('probes GET / with -f, never the token-gated /api (each probe would log an auth rejection)', () => {
+    expect(test).toMatch(/curl -f\S* .*:\$\$\{PORT:-8700\}\/"/)
+    expect(test).not.toContain('/api')
+  })
+})
+
+describe('auth gate leaves the static UI alone', () => {
+  it('only /api paths reach the gate that logs a rejection', () => {
+    const src = readFileSync(join(root, 'src/server/server.main.ts'), 'utf8')
+    expect(src).toContain('url.pathname.startsWith(API_PREFIX) && !allowed(req, url)')
+    expect(src).not.toMatch(/resolveAsset[^\n]*allowed\(/)
+  })
+})
+
 describe('compose-portainer.yml', () => {
   const c = code('compose-portainer.yml')
 
