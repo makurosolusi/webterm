@@ -10,6 +10,7 @@ import { createCentralMcpLink } from './claudeMcp'
 import { createClaudePreflight, type RunFn } from './claudePreflight'
 import { resolveProfileLaunch } from '../../../shared/claudeLaunch/claudeLaunch.profiles'
 import { logBus } from '../../logs/logBus'
+import { setProxyEndpointSource } from '../../credentialProxy/credentialProxy.env'
 
 // test-only: a wrapped launch profile, so the probe has a wrapper stage
 const WRAPPED = () => resolveProfileLaunch({ claudeLaunchProfiles: [{ id: 'p1', name: 'Wrapped', command: 'wrap -- claude' }], defaultClaudeProfileId: 'p1', centralClaudeProfileId: '' })
@@ -18,8 +19,10 @@ let dir = ''
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'claude-safety-'))
+  setProxyEndpointSource(() => ({ url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' })) // test-only
 })
 afterEach(() => {
+  setProxyEndpointSource(() => null)
   rmSync(dir, { recursive: true, force: true })
 })
 

@@ -59,11 +59,11 @@ describe('recordDotenvBoot + ptyEnv', () => {
   })
 
   it('kunci asal .env dibuang, nilai beda dipertahankan, provider/OS dipertahankan', () => {
-    const strip = new Set(['APP_SECRET', 'ANTHROPIC_API_KEY', 'PATH', 'LC_ALL'])
-    const input = { APP_SECRET: MARK, SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }
+    const strip = new Set(['APP_SECRET', 'ANTHROPIC_MODEL', 'PATH', 'LC_ALL'])
+    const input = { APP_SECRET: MARK, SAMA: 'dari-shell', ANTHROPIC_MODEL: 'k', PATH: '/x', LC_ALL: 'C', LAIN: 'v' }
     const env = ptyEnv(input, { interactive: false, strip })
     expect('APP_SECRET' in env).toBe(false)
-    expect(env).toMatchObject({ SAMA: 'dari-shell', ANTHROPIC_API_KEY: 'k', LC_ALL: 'C', LAIN: 'v' })
+    expect(env).toMatchObject({ SAMA: 'dari-shell', ANTHROPIC_MODEL: 'k', LC_ALL: 'C', LAIN: 'v' })
     // ptyEnv puts the managed custom-bin dir first; the inherited PATH must survive right behind it.
     expect(env.PATH).toBe(withCustomBin('/x', customBinPath(input)))
     expect(env.PATH!.endsWith('/x')).toBe(true)
@@ -75,7 +75,7 @@ describe('recordDotenvBoot + ptyEnv', () => {
   })
 
   it('PTY_KEEP_FROM_DOTENV: provider, OS, LC_*; bukan kunci aplikasi', () => {
-    for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'PATH', 'HOME', 'SSH_AUTH_SOCK', 'LC_TIME']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(true)
-    for (const k of ['DATABASE_URL', 'STRIPE_KEY', 'LCX', 'OPENAI_API_KEY']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(false)
+    for (const k of ['ANTHROPIC_MODEL', 'ANTHROPIC_BASE_URL', 'PATH', 'HOME', 'SSH_AUTH_SOCK', 'LC_TIME']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(true)
+    for (const k of ['DATABASE_URL', 'STRIPE_KEY', 'LCX', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS']) expect(PTY_KEEP_FROM_DOTENV(k), k).toBe(false)
   })
 })

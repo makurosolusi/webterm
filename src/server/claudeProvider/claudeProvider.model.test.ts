@@ -3,40 +3,43 @@ import { applyProviderEnv, CLOUD_FLAGS, normalizeBaseUrl, parseUpdate, providerE
 
 const KEY = 'sk-test-only-0123456789' // test-only
 
+const PROXY = { url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' } // test-only
+
 describe('providerEnv (resolver)', () => {
   it('login mode injects and clears nothing', () => {
-    expect(providerEnv({ mode: 'login' }, KEY)).toEqual({ set: {}, unset: [] })
+    expect(providerEnv({ mode: 'login' }, PROXY)).toEqual({ set: {}, unset: [] })
   })
 
   it('a key mode without a secret is a no-op (never an empty credential)', () => {
-    expect(providerEnv({ mode: 'apiKey' }, null)).toEqual({ set: {}, unset: [] })
-    expect(providerEnv({ mode: 'custom', credential: 'authToken' }, KEY)).toEqual({ set: {}, unset: [] }) // no base URL
+    expect(providerEnv({ mode: 'apiKey' }, PROXY, false)).toEqual({ set: {}, unset: [] })
+    expect(providerEnv({ mode: 'custom', credential: 'authToken' }, PROXY)).toEqual({ set: {}, unset: [] }) // no base URL
   })
 
-  it('apiKey mode: ANTHROPIC_API_KEY only, clears the bearer token, base URL and cloud flags that would outrank it', () => {
-    const pe = providerEnv({ mode: 'apiKey', model: 'claude-sonnet-4-6' }, KEY)
-    expect(pe.set).toEqual({ ANTHROPIC_API_KEY: KEY, ANTHROPIC_MODEL: 'claude-sonnet-4-6', [SCRUB_VAR]: '1' })
-    expect(pe.unset).toEqual(expect.arrayContaining(['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', ...CLOUD_FLAGS]))
+  it('a key mode without a running proxy fails closed', () => {
+    expect(() => providerEnv({ mode: 'apiKey' }, null)).toThrow('credential_proxy_unavailable')
+  })
+
+  it('apiKey mode: placeholder + proxy URL only, never the scrub, clears every other provider var and cloud flag', () => {
+    const pe = providerEnv({ mode: 'apiKey', model: 'claude-sonnet-4-6' }, PROXY)
+    expect(pe.set).toEqual({ ANTHROPIC_API_KEY: PROXY.token, ANTHROPIC_BASE_URL: PROXY.url, ANTHROPIC_MODEL: 'claude-sonnet-4-6' })
+    expect(pe.unset).toEqual(expect.arrayContaining(['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', SCRUB_VAR, ...CLOUD_FLAGS]))
     expect(pe.unset).not.toContain('ANTHROPIC_API_KEY')
+    expect(pe.unset).not.toContain('ANTHROPIC_BASE_URL')
   })
 
-  it('custom + authToken: Bearer variable + base URL, clears ANTHROPIC_API_KEY', () => {
-    const pe = providerEnv({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken' }, KEY)
-    expect(pe.set).toEqual({ ANTHROPIC_AUTH_TOKEN: KEY, ANTHROPIC_BASE_URL: 'https://gw.example.test', [SCRUB_VAR]: '1' })
-    expect(pe.unset).toContain('ANTHROPIC_API_KEY')
-  })
-
-  it('custom + apiKey: x-api-key variable + base URL, clears ANTHROPIC_AUTH_TOKEN (it would win by precedence)', () => {
-    const pe = providerEnv({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'apiKey' }, KEY)
-    expect(pe.set.ANTHROPIC_API_KEY).toBe(KEY)
-    expect(pe.unset).toContain('ANTHROPIC_AUTH_TOKEN')
+  it('custom mode (either credential kind) gets the same placeholder: the card URL and secret live in the proxy', () => {
+    for (const credential of ['authToken', 'apiKey'] as const) {
+      const pe = providerEnv({ mode: 'custom', baseUrl: 'https://gw.example.test', credential }, PROXY)
+      expect(pe.set).toEqual({ ANTHROPIC_API_KEY: PROXY.token, ANTHROPIC_BASE_URL: PROXY.url })
+      expect(pe.unset).toContain('ANTHROPIC_AUTH_TOKEN')
+    }
   })
 
   it('applyProviderEnv removes inherited outranking vars and sets the chosen ones', () => {
-    const base = { PATH: '/bin', ANTHROPIC_AUTH_TOKEN: 'inherited', CLAUDE_CODE_USE_BEDROCK: '1', X: undefined }
-    const out = applyProviderEnv(base, providerEnv({ mode: 'apiKey' }, KEY))
-    expect(out).toEqual({ PATH: '/bin', ANTHROPIC_API_KEY: KEY, [SCRUB_VAR]: '1' })
-    expect(applyProviderEnv(base, providerEnv({ mode: 'login' }, KEY))).toEqual({ PATH: '/bin', ANTHROPIC_AUTH_TOKEN: 'inherited', CLAUDE_CODE_USE_BEDROCK: '1' })
+    const base = { PATH: '/bin', ANTHROPIC_AUTH_TOKEN: 'inherited', CLAUDE_CODE_USE_BEDROCK: '1', [SCRUB_VAR]: '1', X: undefined }
+    const out = applyProviderEnv(base, providerEnv({ mode: 'apiKey' }, PROXY))
+    expect(out).toEqual({ PATH: '/bin', ANTHROPIC_API_KEY: PROXY.token, ANTHROPIC_BASE_URL: PROXY.url })
+    expect(applyProviderEnv(base, providerEnv({ mode: 'login' }, PROXY))).toEqual({ PATH: '/bin', ANTHROPIC_AUTH_TOKEN: 'inherited', CLAUDE_CODE_USE_BEDROCK: '1', [SCRUB_VAR]: '1' })
   })
 })
 

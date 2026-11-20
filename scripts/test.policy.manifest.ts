@@ -60,6 +60,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/server/childEnv.bun.test.ts',
     'src/server/claudeLaunchPolicy.test.ts',
     'src/server/claudeProviderEnv.policy.bun.test.ts',
+    'src/server/credentialProxy/credentialProxy.env.policy.bun.test.ts',
     'src/server/db.preserveNodes.bun.test.ts',
     'src/server/envModuleRead.test.ts',
     'src/server/envRegistry.invariants.test.ts',

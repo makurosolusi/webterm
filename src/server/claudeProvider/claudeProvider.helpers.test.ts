@@ -6,10 +6,12 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { saveProvider } from './claudeProvider.store'
+import { setProxyEndpointSource } from '../credentialProxy/credentialProxy.env'
 import { writeFakeClaude, recorder, turnInput } from '../central/runtime/claude.fakeBin'
 import { fakeQuery } from '../central/runtime/claude.fakeQuery'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
+const PROXY = { url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' } // test-only
 let dir = ''
 let prev: string | undefined
 
@@ -20,12 +22,14 @@ vi.mock('../spawn/agentSpawn', async (orig) => ({
 }))
 
 beforeEach(() => {
+  setProxyEndpointSource(() => PROXY)
   dir = mkdtempSync(join(tmpdir(), 'cp-helpers-'))
   prev = process.env.WEBTERM_DATA_DIR
   process.env.WEBTERM_DATA_DIR = join(dir, 'data')
   saveProvider({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken' }, KEY)
 })
 afterEach(() => {
+  setProxyEndpointSource(() => null)
   process.env.WEBTERM_DATA_DIR = prev
   rmSync(dir, { recursive: true, force: true })
 })
@@ -33,15 +37,16 @@ afterEach(() => {
 /** Fake claude writing what it saw to `out`, then failing (callers only need to have spawned it). */
 function reporter(out: string): string {
   return writeFakeClaude(dir, `fs.writeFileSync(${JSON.stringify(out)}, JSON.stringify({
-    tokenLen: (process.env.ANTHROPIC_AUTH_TOKEN || '').length, baseUrl: process.env.ANTHROPIC_BASE_URL ?? null,
-    apiKey: 'ANTHROPIC_API_KEY' in process.env, scrub: process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null,
+    apiKey: process.env.ANTHROPIC_API_KEY ?? null, authToken: 'ANTHROPIC_AUTH_TOKEN' in process.env, baseUrl: process.env.ANTHROPIC_BASE_URL ?? null,
+    scrub: process.env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null,
     keyInArgv: process.argv.join(' ').includes(${JSON.stringify(KEY)}),
   }))
 try { readStdin() } catch {}
 process.exit(1)`)
 }
 const seen = (out: string) => JSON.parse(readFileSync(out, 'utf8'))
-const EXPECTED = { tokenLen: KEY.length, baseUrl: 'https://gw.example.test', apiKey: false, scrub: '1', keyInArgv: false }
+// The child holds the proxy placeholder + URL, never the card secret and never the scrub.
+const EXPECTED = { apiKey: PROXY.token, authToken: false, baseUrl: PROXY.url, scrub: null, keyInArgv: false }
 
 describe('claudeEnv() reaches every Claude process', () => {
   it('Central runtime', async () => {
@@ -58,7 +63,7 @@ describe('claudeEnv() reaches every Claude process', () => {
     const env = options.env ?? {}
     const { env: _env, ...rest } = options
     expect({
-      tokenLen: (env.ANTHROPIC_AUTH_TOKEN || '').length, baseUrl: env.ANTHROPIC_BASE_URL ?? null, apiKey: 'ANTHROPIC_API_KEY' in env,
+      apiKey: env.ANTHROPIC_API_KEY ?? null, authToken: 'ANTHROPIC_AUTH_TOKEN' in env, baseUrl: env.ANTHROPIC_BASE_URL ?? null,
       scrub: env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB ?? null, keyInArgv: JSON.stringify(rest).includes(KEY),
     }).toEqual(EXPECTED)
   })
@@ -77,8 +82,8 @@ describe('claudeEnv() reaches every Claude process', () => {
   it('name generation env', async () => {
     const { cleanEnv } = await import('../nameGen')
     const env = cleanEnv()
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(KEY)
-    expect(env.ANTHROPIC_BASE_URL).toBe('https://gw.example.test')
+    expect(env.ANTHROPIC_API_KEY).toBe(PROXY.token)
+    expect(env.ANTHROPIC_BASE_URL).toBe(PROXY.url)
     expect(env.TERM).toBe('xterm-256color')
   })
 
@@ -103,8 +108,9 @@ describe('claudeEnv() reaches every Claude process', () => {
     expect(spawns[1]!.cmd).toBe('ls') // plain terminals are never touched
     const launchDir = join(dir, 'data', 'claude-provider', 'launch')
     const script = readFileSync(join(launchDir, readdirSync(launchDir)[0]!), 'utf8')
-    expect(script).toContain('export ANTHROPIC_AUTH_TOKEN=')
-    expect(script).toContain('unset ANTHROPIC_API_KEY')
+    expect(script).toContain('export ANTHROPIC_API_KEY=')
+    expect(script).not.toContain(KEY)
+    expect(script).toContain('unset ANTHROPIC_AUTH_TOKEN')
     expect(s.claudeSessionsStartedBefore(Date.now() + 1)).toBe(1)
     s.close('agent-cp'); s.close('shell-cp')
   })

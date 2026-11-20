@@ -4,10 +4,10 @@ import type { ProviderEnv } from '../claudeProvider/claudeProvider.model'
 import { createAgentSpawner } from './agentSpawn'
 
 // test-only: a fake provider value and a fake exec that captures the spec; nothing is spawned.
-const KEY = 'sk-test-0000000000'
+const KEY = 'wtp_placeholder-test-only' // the credential-proxy placeholder: the only key a child ever holds
 const KEY_MODE: ProviderEnv = {
-  set: { ANTHROPIC_API_KEY: KEY, CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' },
-  unset: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK'],
+  set: { ANTHROPIC_API_KEY: KEY, ANTHROPIC_BASE_URL: 'http://127.0.0.1:41999' },
+  unset: ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'],
 }
 
 function rig(pe: ProviderEnv) {
@@ -31,9 +31,9 @@ describe('headless Claude spawns use the Claude provider setting', () => {
     expect(res.ok).toBe(true)
     const child = scrubExecEnv(r.specs[0]?.env, r.specs[0]?.overrides)
     expect(child.ANTHROPIC_API_KEY === KEY).toBe(true)
-    expect(child.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).toBe('1')
+    expect(child.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB).toBeUndefined()
     expect(child.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
-    expect(child.ANTHROPIC_BASE_URL).toBeUndefined()
+    expect(child.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:41999')
     expect(child.CLAUDE_CODE_USE_BEDROCK).toBeUndefined()
     expect(child.PATH).toBe('/usr/bin')
   })

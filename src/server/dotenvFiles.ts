@@ -4,7 +4,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseEnv } from 'node:util'
-import { PROVIDER_ENV_ALLOWLIST } from './agentEnv'
+import { CREDENTIAL_VARS, PROVIDER_ENV_ALLOWLIST } from './agentEnv'
 
 /** Berkas lebih besar dari ini dilewati (bukan dotenv wajar; jangan muatkan ke memori). */
 export const DOTENV_MAX_BYTES = 256 * 1024
@@ -57,8 +57,8 @@ export function getDotenvBoot(): DotenvBoot {
 }
 
 const OS_KEEP = new Set(['PATH', 'HOME', 'SHELL', 'USER', 'LOGNAME', 'LANG', 'TERM', 'TMPDIR', 'SSH_AUTH_SOCK'])
-const PROVIDER_KEEP = new Set(PROVIDER_ENV_ALLOWLIST)
+const PROVIDER_KEEP = new Set(PROVIDER_ENV_ALLOWLIST.filter((k) => !CREDENTIAL_VARS.includes(k)))
 
-/** Kunci yang tetap diteruskan ke PTY walau asalnya `.env`: kunci provider (dipakai CLI agent) + kunci OS. */
+/** Kunci yang tetap diteruskan ke PTY walau asalnya `.env`: kunci provider non-kredensial (kredensial dipegang proxy) + kunci OS. */
 export const PTY_KEEP_FROM_DOTENV = (key: string): boolean =>
   OS_KEEP.has(key) || key.startsWith('LC_') || PROVIDER_KEEP.has(key)

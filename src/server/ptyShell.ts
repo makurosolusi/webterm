@@ -94,8 +94,10 @@ export function resolveCwd(
  *  eksplisit oleh pemanggil sesudah filter ini (lihat env `open` di `sessions.ts`): token node untuk
  *  agent, `WEBTERM_NODE_ID`/`WEBTERM_PORT` untuk sesi context-capable.
  *
- *  `TELEGRAM_BOT_TOKEN` disapu tanpa syarat: bot token tak punya konsumen di shell/agent. */
-const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*|TELEGRAM_BOT_TOKEN)$/
+ *  `TELEGRAM_BOT_TOKEN` disapu tanpa syarat: bot token tak punya konsumen di shell/agent.
+ *  Kredensial provider (`ANTHROPIC_API_KEY`/`AUTH_TOKEN`/`CUSTOM_HEADERS`) dan SCRUB juga disapu: hanya credential
+ *  proxy memegang kunci; anak Claude diberi placeholder oleh launch file. Ini menutup bocor lewat server tmux. */
+const LEAKED_ENV = /^(NODE_ENV|PORT|HOST|VITE_.*|BUN_(?!INSTALL$).*|WEBTERM_.*|NODETERM_.*|TELEGRAM_BOT_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_CUSTOM_HEADERS|CLAUDE_CODE_SUBPROCESS_ENV_SCRUB)$/
 
 /** Env anak. `TERM` LOAD-BEARING: bentuk inline `terminal` tidak menerima `name`, jadi env inilah
  *  satu-satunya yang memberi tahu program di dalam PTY tipe terminalnya (tanpa itu `dumb`).

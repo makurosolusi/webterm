@@ -7,6 +7,8 @@ import { dataDir } from '../config'
 import { createFileSecretStore, type SecretStore } from '../envSecrets.store'
 import { commandProfileExists, commandViewExtras } from './claudeProvider.command'
 import { createLogger } from '../logs'
+import { proxyEndpoint, serverEnvProviderEnv } from '../credentialProxy/credentialProxy.env'
+import type { Upstream } from '../credentialProxy/credentialProxy.types'
 import { applyProviderEnv, DEFAULT_CONFIG, isReady, MODES, providerEnv, type ProviderConfig, type ProviderEnv, type ProviderView } from './claudeProvider.model'
 
 export const PROVIDER_SUBDIR = 'claude-provider'
@@ -80,12 +82,39 @@ export const commandProfileOverride = (store: SecretStore = defaultStore()): str
   return c.mode === 'command' && c.profileId ? c.profileId : undefined
 }
 
-/** Env change for the next Claude process (login mode: none). */
-export function activeProviderEnv(store: SecretStore = defaultStore()): ProviderEnv {
-  return providerEnv(loadConfig(store), loadSecret(store))
+/** Env change for the next Claude process: the proxy placeholder for a key card (or a login card with a server-env key), else none. */
+export function activeProviderEnv(store: SecretStore = defaultStore(), serverEnv: NodeJS.ProcessEnv = process.env): ProviderEnv {
+  const c = loadConfig(store)
+  if (c.mode === 'login') return serverEnvProviderEnv(serverEnv)
+  return providerEnv(c, proxyEndpoint(), loadSecret(store) !== null)
 }
 
 /** The one helper every Claude spawn uses: `base` env with the active provider applied. */
 export function claudeEnv(base: Record<string, string | undefined>, store?: SecretStore): Record<string, string> {
   return applyProviderEnv(base, activeProviderEnv(store))
+}
+
+/** Official API endpoint of an `apiKey` card. */
+export const ANTHROPIC_API_URL = 'https://api.anthropic.com'
+
+/** `Name: value` lines of ANTHROPIC_CUSTOM_HEADERS. */
+function parseHeaderLines(raw: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const line of (raw ?? '').split('\n')) {
+    const i = line.indexOf(':')
+    if (i > 0 && line.slice(0, i).trim()) out[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+  }
+  return out
+}
+
+/** Where the proxy forwards to (the real credential): the card, or the server env while the card is `login`; null = nothing to forward. Only the proxy and the connectivity ping use it. */
+export function claudeUpstream(store: SecretStore = defaultStore(), env: NodeJS.ProcessEnv = process.env): Upstream | null {
+  const c = loadConfig(store)
+  const secret = loadSecret(store)
+  if (c.mode === 'apiKey' && secret) return { baseUrl: ANTHROPIC_API_URL, kind: 'xApiKey', secret, headers: {} }
+  if (c.mode === 'custom' && secret && c.baseUrl) return { baseUrl: c.baseUrl, kind: c.credential === 'authToken' ? 'bearer' : 'xApiKey', secret, headers: {} }
+  if (c.mode !== 'login') return null
+  const key = env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN
+  if (!key) return null
+  return { baseUrl: env.ANTHROPIC_BASE_URL?.trim() || ANTHROPIC_API_URL, kind: env.ANTHROPIC_API_KEY ? 'xApiKey' : 'bearer', secret: key, headers: parseHeaderLines(env.ANTHROPIC_CUSTOM_HEADERS) }
 }
