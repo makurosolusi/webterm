@@ -45,6 +45,16 @@ describe('useAction + ActionButton + ActionResult', () => {
     expect(screen.getByRole('status').textContent).toMatch(/10[:.]42[:.]08/)
   })
 
+  it('a run that finishes after unmount does not touch React (no setState once the DOM is gone)', async () => {
+    const { unmount } = render(<Harness fn={async () => 'Claude'} />)
+    fireEvent.click(button('Check'))
+    await flush()
+    unmount()
+    const win = globalThis.window
+    vi.stubGlobal('window', undefined) // what vitest teardown does to jsdom
+    try { await vi.advanceTimersByTimeAsync(400) } finally { vi.stubGlobal('window', win) }
+  })
+
   it('ignores clicks while running', async () => {
     const fn = vi.fn(async () => 'x')
     render(<Harness fn={fn} />)
