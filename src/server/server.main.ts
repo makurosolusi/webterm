@@ -36,7 +36,6 @@ import { RUN_SUBDIR, autoOpenAtBoot, createUiOpener } from './uiOpen'
 import { embedHost } from './embedHost'
 import { uiSessions } from './uiSession'
 import { uiUsers } from './uiUser'
-import { ensureSetupCode } from './setupCode'
 import { loadAssetManifest, noEmbeddedAssets, resolveAsset, serveAsset } from './staticAssets'
 import { requestOrigin } from './staticAssets.origin'
 import { installShutdown } from './shutdown'
@@ -174,8 +173,7 @@ startDeviceLoops(log) // port scanner + Web Push, without the UI open (bootLoops
 // In-process host: its window loads the sign-in file, never the OS browser.
 const RUN_DIR = join(dataDir(), RUN_SUBDIR)
 const uiOpener = createUiOpener({ runDir: RUN_DIR, bindHost: HOST, port: PORT, ...(host ? { openFile: host.openFile } : {}) })
-const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, users: uiUsers, opener: uiOpener, token: () => getTokenState().token, dataDir })
-announceSetup(() => ensureSetupCode(dataDir())) // no account yet: one line naming the setup-code file
+const uiAuthRoute = createUiAuthRoute({ sessions: uiSessions, users: uiUsers, opener: uiOpener, token: () => getTokenState().token })
 const onTokenInstalled = revokeOtherSessions(uiSessions) // token enable/rotate signs every other tab out
 
 /** Every non-asset route, shared by dev and prod; true = the request is answered. */
@@ -289,6 +287,7 @@ export const openUi = (): Promise<void> => uiOpener.open()
 server.on('error', onListenError(HOST, PORT))
 server.listen(PORT, HOST, () => {
   markReady({ host: HOST, port: PORT })
+  announceSetup(() => uiUsers().count(), `http://${HOST}:${PORT}`)
   announceListening({ host: HOST, port: PORT, dev, runDir: RUN_DIR, autoOpen: () => {
     // An in-process host opens its own window (openUi), so no auto-open there.
     void autoOpenAtBoot({ sessionCount: () => uiSessions().count(), opener: uiOpener, interactive: !host && process.stderr.isTTY === true })

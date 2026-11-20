@@ -11,7 +11,6 @@ import { tmpdir } from 'node:os'
 import { delimiter, join, resolve } from 'node:path'
 import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
-import { setupLine } from '../src/server/bootWiring'
 import { ROOT_ARG, ROOT_PREFIX, deleteClaudeKeychain, killTmuxServer, removeFreshRoot, sweepStale, writeOwner, type SweepResult } from './devFresh.sweep'
 
 export { ROOT_PREFIX, assertFreshRoot, removeFreshRoot } from './devFresh.sweep'
@@ -37,9 +36,6 @@ const EMPTY_HOME_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_', 'XDG_']
 const EMPTY_HOME_KEYS = ['ZDOTDIR', 'CLAUDE_CONFIG_DIR']
 /** Every scenario flag, for the banner: nothing to remember. */
 export const SCENARIO_FLAGS = '--empty-home (brand-new OS user: temp HOME + Claude config, no .env), --no-claude (claude not installed), --keep, --port <n>, --clean'
-
-/** setupCode.ts `setupCodePath` (not imported: its module chain opens webterm.db at import time). */
-export const freshSetupCodePath = (p: FreshPaths): string => join(p.data, 'secrets', 'SETUP_CODE')
 
 export interface FreshOptions { port?: number; keep: boolean; noClaude: boolean; emptyHome: boolean; clean: boolean }
 export interface FreshPaths { root: string; data: string; home: string; claude: string; vite: string }
@@ -212,7 +208,7 @@ async function main(): Promise<void> {
     o.emptyHome ? '  Brand-new OS user: own data dir, HOME, Claude config, ports and tmux socket; no .env.'
       : '  First webterm run on this machine: own data dir, ports, tmux socket. Your HOME, tools, Claude login and .env are real.',
     `  Temp root:  ${fresh.paths.root}`,
-    `  ${setupLine(freshSetupCodePath(fresh.paths))}`,
+    '  No account yet: open the URL above to create one.',
     `  Active: ${o.noClaude ? 'no-claude' + claudeNote : 'claude on PATH'}, ${o.emptyHome ? 'empty HOME' : 'real HOME'}`,
     `  Scenario flags: ${SCENARIO_FLAGS}`,
     o.keep ? '  Ctrl+C to stop (temp root is KEPT).' : '  Ctrl+C to stop and delete.',

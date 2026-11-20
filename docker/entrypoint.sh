@@ -34,9 +34,9 @@ mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 # One-time hint (marker lives in the data volume). The server creates the token file on first boot.
 if [ ! -e "$data/.docker-hint-shown" ]; then
   {
-    echo "webterm: first start. The access token and the first-account setup code are files, not log lines."
-    echo "webterm: read them with: docker exec -it <container> sh -c 'cat $data/secrets/WEBTERM_TOKEN; echo; cat $data/secrets/SETUP_CODE'"
-    echo "webterm: then open http://127.0.0.1:${PORT:-8700} on the Docker host."
+    echo "webterm: first start. The access token is a file, not a log line."
+    echo "webterm: read it with: docker exec -it <container> sh -c 'cat $data/secrets/WEBTERM_TOKEN'"
+    echo "webterm: then open http://127.0.0.1:${PORT:-8700} on the Docker host and create the first account."
   } >&2
   touch "$data/.docker-hint-shown" || true
 fi

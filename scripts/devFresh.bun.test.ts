@@ -6,7 +6,7 @@ import { supervisorSocket } from '../src/server/ptySupervisor'
 import { findOnPath } from '../src/server/binaryOnPath'
 import { fakeSecurity } from './devFresh.testutil'
 import {
-  RESERVED_PORTS, SKIP_HOME_INSTALLS_ENV, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, freshSetupCodePath, makeFreshRoot, parseFreshArgs,
+  RESERVED_PORTS, SKIP_HOME_INSTALLS_ENV, assertFreshRoot, buildFreshEnv, findFreePort, freshPaths, makeFreshRoot, parseFreshArgs,
   pathWithout, removeFreshRoot, startFresh, waitForHttp, withDotenv,
 } from './devFresh'
 import { SKIP_HOME_INSTALLS_ENV as SERVER_SKIP_ENV } from '../src/server/cli/cli.launcher'
@@ -119,7 +119,6 @@ test('smoke (' + smoke + '): boots an isolated server, /api/health needs a token
   expect((await fetch(`${fresh.url}/api/health`)).status).toBe(403)
   expect(existsSync(join(fresh.paths.data, 'webterm.db'))).toBe(true)
   expect(existsSync(join(fresh.paths.data, 'secrets', 'WEBTERM_TOKEN'))).toBe(true)
-  expect(existsSync(freshSetupCodePath(fresh.paths))).toBe(true) // the banner names this file: a fresh install has no account
   await fresh.stop()
   expect(existsSync(fresh.paths.root)).toBe(false)
   // deleteClaudeKeychain is macOS-only by design (no `security` elsewhere): off darwin it must not call it at all.

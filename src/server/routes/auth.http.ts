@@ -79,8 +79,6 @@ export interface UiAuthDeps {
   opener: UiOpener
   /** Root token in force (every boot mints one; undefined only before boot, when token sign-in refuses). */
   token: () => string | undefined
-  /** Data dir holding `secrets/SETUP_CODE`. */
-  dataDir: () => string
   throttle?: LoginThrottle
   now?: () => number
 }

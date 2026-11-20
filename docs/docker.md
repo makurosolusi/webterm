@@ -9,10 +9,10 @@ export ANTHROPIC_API_KEY=sk-ant-...        # optional: see "Claude authenticatio
 export WEBTERM_PROJECTS=$HOME/code         # optional: host folder shown as /workspace (default ./workspace)
 docker compose up -d --build
 docker compose logs webterm | head         # first start prints how to read the access token
-docker exec -it webterm sh -c 'cat /data/secrets/WEBTERM_TOKEN; echo; cat /data/secrets/SETUP_CODE'
+docker exec -it webterm sh -c 'cat /data/secrets/WEBTERM_TOKEN'
 ```
 
-Open `http://127.0.0.1:8700` on the Docker host and create the first account with the setup code. The port is published on loopback only. To reach it remotely, use an SSH tunnel or a reverse proxy with TLS; do not publish it on `0.0.0.0`.
+Open `http://127.0.0.1:8700` on the Docker host and create the first account right away: with no proof required, the first visitor claims a fresh install. The port is published on loopback only, which is what protects it. To reach it remotely, use an SSH tunnel or a reverse proxy with TLS; do not publish it on `0.0.0.0`.
 
 ## Published image (no build)
 

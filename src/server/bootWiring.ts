@@ -24,17 +24,9 @@ function announceToken(state: TokenState, secretsDir: string): void {
   log.info('auth.token_created', 'Access token created', { path: tokenFilePath(secretsDir), len: state.token.length })
 }
 
-/** Setup hint printed once at boot while no account exists. Exported for tests. */
-export const setupLine = (path: string): string =>
-  `No account yet — open webterm in a browser on this machine to create one, or use the setup code in ${path}`
-
-/**
- * While no account exists, make sure a setup code exists and print ONE line naming its file (never the
- * value). `ensure` is setupCode.ts `ensureSetupCode` bound to the data dir (injected: it opens webterm.db).
- */
-export function announceSetup(ensure: () => string | null): void {
-  const path = ensure()
-  if (path !== null) process.stderr.write(`webterm: ${setupLine(path)}\n`)
+/** While no account exists, log ONE info line telling the operator where to create it. */
+export function announceSetup(accountCount: () => number, url: string): void {
+  if (accountCount() === 0) log.info('auth.setup_required', `No account yet: open ${url} to create it`)
 }
 
 /**
