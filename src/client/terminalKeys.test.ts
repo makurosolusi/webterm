@@ -5,6 +5,7 @@ import {
   TERMINAL_FONT_SIZE_MIN,
   isCleanViewChord,
   isCopyShortcut,
+  isLeaveChord,
   isPasteShortcut,
   nextTerminalFontSize,
   optionArrowSeq,
@@ -317,5 +318,19 @@ describe('mouse', () => {
       .toBe(true)
     expect(xtermOwnsMouseDown({ ...plain, altKey: true }, 'any', { isMac: false, optionForces: false }))
       .toBe(false)
+  })
+})
+
+describe('isLeaveChord', () => {
+  it('matches only Ctrl+Alt+Esc keydown', () => {
+    expect(isLeaveChord(key({ key: 'Escape', ctrlKey: true, altKey: true }))).toBe(true)
+    expect(isLeaveChord(key({ key: 'Escape', ctrlKey: true, altKey: true, type: 'keyup' }))).toBe(false)
+    expect(isLeaveChord(key({ key: 'Escape', ctrlKey: true, altKey: true, shiftKey: true }))).toBe(false)
+  })
+
+  it('leaves Esc, Tab, Ctrl+M, Ctrl+[ and Ctrl+C alone', () => {
+    for (const k of [{ key: 'Escape' }, { key: 'Tab' }, { key: 'Tab', shiftKey: true }, { key: 'm', ctrlKey: true }, { key: '[', ctrlKey: true }, { key: 'c', ctrlKey: true }, { key: 'Escape', ctrlKey: true }]) {
+      expect(isLeaveChord(key(k))).toBe(false)
+    }
   })
 })

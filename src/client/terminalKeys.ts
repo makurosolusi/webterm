@@ -31,6 +31,23 @@ export interface TerminalKeyEvent {
   shiftKey: boolean
 }
 
+/** Label shown in the UI for {@link isLeaveChord}; one place so the hint and the check cannot drift. */
+export const LEAVE_CHORD_LABEL = 'Ctrl+Alt+Esc'
+
+/**
+ * Focus exit for terminals that opt in (WCAG 2.1.2 No Keyboard Trap): xterm forwards Tab, Esc and
+ * every Ctrl combo to the PTY, so a keyboard or screen-reader user could never Tab out.
+ * Decision: a dedicated chord that is never sent to the PTY. Rejected: Esc (vim, Claude TUI), Tab
+ * (completion), Ctrl+M (= CR), Ctrl+[ (= Esc), Ctrl+Shift+Esc (Windows Task Manager), and VS Code's
+ * Ctrl+M "Tab moves focus" toggle (same CR clash; VS Code documents it as a toggle,
+ * https://code.visualstudio.com/docs/editor/accessibility). Ctrl+Alt+Esc has no default binding in
+ * Windows/macOS/Chrome/Firefox that we know of; Linux desktops are unverified. No source names a
+ * standard chord for web terminals, so this is a reasoned pick, not an industry convention.
+ */
+export function isLeaveChord(e: Pick<TerminalKeyEvent, 'type' | 'key' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey'>): boolean {
+  return e.type === 'keydown' && e.key === 'Escape' && e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey
+}
+
 /**
  * Shift+Enter → newline, bukan submit. Keymap default xterm mengirim `\r` polos untuk Shift+Enter,
  * yang dibaca CLI agent (Claude Code, Codex) sebagai "submit". Kita petakan ke ESC+CR (`\x1b\r`):

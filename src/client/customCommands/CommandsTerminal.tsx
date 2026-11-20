@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import type { CustomCommandDetected } from '../../shared/customCommands'
 import { SETUP_TERMINAL_ID } from '../../shared/setupTerminal'
 import { send } from '../ws'
+import { LEAVE_CHORD_LABEL } from '../terminalKeys'
 import type { TerminalHandle } from '../TerminalCore'
 import { COMMANDS_TEXT } from './commands.labels'
 import { COMMAND_RECIPES, visibleRecipes } from './commands.recipes'
@@ -27,6 +28,7 @@ export function CommandsTerminal({ detected, onActivity }: { detected: readonly 
   const [phase, setPhase] = useState<Phase>('opening')
   const [attempt, setAttempt] = useState(0) // a new key remounts TerminalCore = a fresh `open` on retry
   const handle = useRef<TerminalHandle>(null)
+  const closeBtn = useRef<HTMLButtonElement>(null)
   const armed = useRef(false) // a quick command was used: rescan on idle from now until the terminal closes
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const lastScan = useRef(0)
@@ -63,7 +65,7 @@ export function CommandsTerminal({ detected, onActivity }: { detected: readonly 
     <section className="flex flex-col gap-2" aria-label={T.title} data-commands-terminal>
       <div className="flex items-center gap-2">
         <h4 className="m-0 flex-1 text-xs font-semibold">{T.title}</h4>
-        <Button size="sm" variant={open ? 'outline' : 'default'} className="max-sm:min-h-11" aria-expanded={open} aria-controls="commands-terminal-body" onClick={open ? close : start}>
+        <Button ref={closeBtn} size="sm" variant={open ? 'outline' : 'default'} className="max-sm:min-h-11" aria-expanded={open} aria-controls="commands-terminal-body" onClick={open ? close : start}>
           {open ? T.close : T.open}
         </Button>
       </div>
@@ -96,12 +98,15 @@ export function CommandsTerminal({ detected, onActivity }: { detected: readonly 
                 <Button size="sm" variant="outline" className="max-sm:min-h-11" onClick={start}>{T.retry}</Button>
               </div>
             ) : (
-              <div className={BOX} role="region" aria-label={T.region}>
+              <>
+              <div className={BOX} role="region" aria-label={T.regionLabel(LEAVE_CHORD_LABEL)} aria-describedby="commands-terminal-leave">
                 <Suspense fallback={<p className="m-2 text-xs" role="status">{T.opening}</p>}>
-                  <TerminalCore key={attempt} ref={handle} id={SETUP_TERMINAL_ID} cwd="~" onOutput={onOutput}
+                  <TerminalCore key={attempt} ref={handle} id={SETUP_TERMINAL_ID} cwd="~" onOutput={onOutput} escapeChord onLeave={() => closeBtn.current?.focus()}
                     onExit={(_code, reason) => { clearTimeout(timer.current); setPhase(reason === 'failed' ? 'failed' : 'ended') }} />
                 </Suspense>
               </div>
+              <p id="commands-terminal-leave" className="m-0 text-xs text-(--vscode-descriptionForeground)">{T.leaveBefore}<kbd className="font-mono">{LEAVE_CHORD_LABEL}</kbd>{T.leaveAfter}</p>
+              </>
             )}
             <p className="sr-only" role="status">{phase === 'connected' ? T.connected : phase === 'opening' ? T.opening : ''}</p>
           </>

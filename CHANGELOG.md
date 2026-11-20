@@ -13,6 +13,7 @@
 - The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
 
 ### Fixed
+- The setup Terminal box no longer traps keyboard focus: Ctrl+Alt+Esc leaves it (never sent to the shell) and moves focus to the Close terminal button, and a line under the box says so.
 - The setup Commands step no longer shows raw Markdown backticks, an eight-row list of tools that are not installed, or a blue box around the step title. It lists only tools it found (the rest sit in one closed list), says one short intro sentence, and the Add folder form has plain wording with a hint and inline errors. Footer buttons are at least 44px tall on phones.
 - A browser built into the Docker image is no longer shown as a custom, unverified choice: the setup Browser step preselects it with a neutral note, and Settings says "built into this install".
 - Claude with an API key or gateway failed to start in the hardened Docker container (and on Linux without bubblewrap) with "bubblewrap is required for subprocess env scrubbing". It now runs in the default container with no bubblewrap, socat, extra capabilities or seccomp changes.

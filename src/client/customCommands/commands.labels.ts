@@ -64,6 +64,9 @@ export const COMMANDS_TEXT = {
     failed: 'Could not start the terminal.',
     retry: 'Try again',
     region: 'Setup terminal',
+    leaveBefore: 'Press ',
+    leaveAfter: ' to leave the terminal.',
+    regionLabel: (key: string): string => `Setup terminal. Press ${key} to leave the terminal.`,
   },
   compat: { wrong_platform: 'Wrong platform', wrong_arch: 'Wrong architecture' },
 }
