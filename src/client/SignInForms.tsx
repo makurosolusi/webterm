@@ -1,5 +1,5 @@
 // The forms of SignInScreen (and the /m sign-in): username + password sign-in and the "open a
-// window on this computer" button; first-run setup lives in signIn/SetupForm.tsx. Each owns its
+// signed-in window on this computer" button; first-run setup lives in signIn/SetupForm.tsx. Each owns its
 // pending/error/429 state and calls `onDone` once the server set the session cookie. Sentences: signInLabels.ts.
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -41,7 +41,7 @@ export function OpenWindowButton({ label, variant = 'default', now }: OpenWindow
   }
   return (
     <div className="flex w-full flex-col items-stretch gap-2">
-      <Button type="button" className="h-8 w-full" variant={variant} disabled={pending || left > 0} onClick={open}>
+      <Button type="button" className="h-11 w-full text-base" variant={variant} disabled={pending || left > 0} onClick={open}>
         {pending ? <span className="codicon codicon-loading codicon-modifier-spin" aria-hidden="true" /> : null}{label}
       </Button>
       {state === 'opening' ? <p role="status" className={MUTED}>{SIGN_IN_TEXT.opening}</p> : null}
@@ -49,7 +49,7 @@ export function OpenWindowButton({ label, variant = 'default', now }: OpenWindow
       {typeof state === 'object' && 'error' in state ? (
         <div className="flex flex-col items-stretch gap-2">
           <FormAlert text={state.error} />
-          <Button type="button" variant="outline" className="h-8" onClick={open}>{SIGN_IN_TEXT.retry}</Button>
+          <Button type="button" variant="outline" className="h-11 text-base" onClick={open}>{SIGN_IN_TEXT.retry}</Button>
         </div>
       ) : null}
     </div>
@@ -82,7 +82,7 @@ export function LoginForm({ onDone, now = Date.now, idPrefix = 'signin' }: Login
     s.setPending(true)
     loginWithPassword(username.trim(), password).then(
       (r) => (r.ok ? onDone() : s.setFailure({ status: r.status, error: r.error, retryAfterS: r.retryAfterS })),
-      (err: unknown) => s.setFailure({ message: SIGN_IN_TEXT.failed('Signing in', causeOf(err)) }),
+      () => s.setFailure({ message: SIGN_IN_TEXT.unreachable }),
     ).finally(() => s.setPending(false))
   }
   return (

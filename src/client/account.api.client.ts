@@ -56,9 +56,9 @@ export const replyUser = (r: AuthReply): AuthUser | null => {
 export const loginWithPassword = (username: string, password: string): Promise<AuthReply> =>
   call(AUTH_LOGIN_PATH, 'POST', { username, password })
 
-/** POST /auth/setup: 201 account created and signed in; 403 setup_proof_required, 409 already_setup, 400 invalid_username|weak_password. */
-export const setupAccount = (username: string, password: string, setupCode?: string): Promise<AuthReply> =>
-  call(AUTH_SETUP_PATH, 'POST', setupCode ? { username, password, setupCode } : { username, password })
+/** POST /auth/setup: 201 account created and signed in; 409 already_setup, 400 invalid_username|weak_password. */
+export const setupAccount = (username: string, password: string): Promise<AuthReply> =>
+  call(AUTH_SETUP_PATH, 'POST', { username, password })
 
 /** GET /auth/sessions: the caller's own sessions. Throws (naming the call) when refused or malformed. */
 export async function fetchSessions(): Promise<AuthSession[]> {
