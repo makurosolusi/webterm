@@ -1,0 +1,76 @@
+# webterm for Portainer: Stack > Repository (NOT the Web editor). Runs the published image, no build.
+# Why not the Web editor: Docker Compose reads `seccomp=<value>` as a FILE PATH on the Compose client side
+# (inside the Portainer container), and JSON pasted into the value is not accepted. The Chrome sandbox stays on
+# through docker/chrome.seccomp.json (no --no-sandbox, no cap_add, no unconfined), so that file must be in the
+# checkout. Portainer steps:
+#   1. Stacks > Add stack > Repository. Repository URL https://github.com/makurosolusi/webterm
+#      and a reference matching the image (refs/tags/v0.9.3 with WEBTERM_IMAGE_TAG=0.9.3).
+#   2. Compose path: compose-portainer.yml
+#   3. Environment variables (all optional except the Claude credential you use):
+#        WEBTERM_IMAGE_TAG   image tag, default latest (pin x.y.z, same as the reference)
+#        WEBTERM_BIND        host bind address, default 127.0.0.1
+#        PORT                default 8700
+#        WEBTERM_PROJECTS    workspace: volume name (default webterm-workspace) or an ABSOLUTE host path (bind)
+#        WEBTERM_BROWSER     on|off, default on
+#        WEBTERM_MEM_LIMIT   default 5g;  WEBTERM_CPUS default 4
+#        WEBTERM_SECCOMP     seccomp profile path in the checkout, default ./docker/chrome.seccomp.json
+#        ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN   or run `claude login` in the container
+# WARNING: webterm gives shell access. Keep WEBTERM_BIND on 127.0.0.1 (reach it through an SSH tunnel or a
+# TLS reverse proxy); do not publish it to a public network.
+services:
+  webterm:
+    image: ghcr.io/makurosolusi/webterm:${WEBTERM_IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: webterm
+    restart: unless-stopped
+    init: true # reaps zombie shells/Chrome children; the image also ships tini for plain `docker run`
+
+    # Host side is loopback by default (WEBTERM_BIND): the container itself binds 0.0.0.0, the published port does not.
+    ports:
+      - "${WEBTERM_BIND:-127.0.0.1}:${PORT:-8700}:${PORT:-8700}"
+    environment:
+      PORT: ${PORT:-8700}
+      HOST: 0.0.0.0
+      WEBTERM_DATA_DIR: /data
+      WEBTERM_CUSTOM_BIN: /data/custom-bin
+      WEBTERM_BROWSER: ${WEBTERM_BROWSER:-on}
+      # Claude auth, default mode: pass-through from the host env (no value stored here).
+      # Alternative: `docker exec -it webterm claude login` (state lives in the webterm-home volume).
+      ANTHROPIC_API_KEY:
+      ANTHROPIC_BASE_URL:
+      ANTHROPIC_AUTH_TOKEN:
+
+    volumes:
+      - webterm-data:/data
+      # Named volume by default; an absolute path in WEBTERM_PROJECTS bind-mounts that host directory instead.
+      - ${WEBTERM_PROJECTS:-webterm-workspace}:/workspace
+      - webterm-home:/home/webterm # whole home: ~/.claude, ~/.local, ~/.cargo, rc files, git config
+
+    # Chrome keeps its own sandbox: user namespaces are allowed by the seccomp profile, not by privileges.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=${WEBTERM_SECCOMP:-./docker/chrome.seccomp.json}
+    shm_size: 1gb
+    mem_limit: ${WEBTERM_MEM_LIMIT:-5g} # leaves headroom on an 8 GB machine
+    cpus: ${WEBTERM_CPUS:-4}
+    pids_limit: 2048
+
+    # Any HTTP answer proves the server is up (/api/health itself needs credentials, so curl runs without -f).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null --max-time 3 http://127.0.0.1:$${PORT:-8700}/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    # Not read-only by default: agents install packages, write ~/.gitconfig, ~/.cache and ~/.npm. To try it,
+    # uncomment and expect to add tmpfs mounts for every home path your tools write (untested here).
+    # read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+
+volumes:
+  webterm-data:
+  webterm-home:
+  webterm-workspace:

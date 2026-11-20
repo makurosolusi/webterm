@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes and the Chrome seccomp profile from the checkout.
+
 ## [0.9.3] - 2026-11-19
 
 ### Fixed
