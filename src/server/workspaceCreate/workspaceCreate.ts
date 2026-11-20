@@ -168,26 +168,39 @@ export async function cloneRepo(input: CloneInput, onProgress: (p: CloneProgress
 }
 
 export interface ProjectInput { parent: string; name: string; gitInit?: boolean }
+export interface ProjectResult {
+  path: string
+  /** The first commit was authored as BOOTSTRAP_IDENTITY because git had no identity to use. */
+  bootstrapIdentity: boolean
+}
 
-/** mkdir parent/name, optionally `git init -b main` + empty initial commit; resolves the path. */
-export async function createProject(input: ProjectInput, deps: CreateDeps = {}): Promise<string> {
+/** Author of the initial commit only when git cannot determine one (fresh container, empty HOME). */
+export const BOOTSTRAP_IDENTITY = { name: 'webterm', email: 'webterm@localhost' }
+const BOOTSTRAP_ENV = {
+  GIT_AUTHOR_NAME: BOOTSTRAP_IDENTITY.name, GIT_AUTHOR_EMAIL: BOOTSTRAP_IDENTITY.email,
+  GIT_COMMITTER_NAME: BOOTSTRAP_IDENTITY.name, GIT_COMMITTER_EMAIL: BOOTSTRAP_IDENTITY.email,
+}
+
+/** mkdir parent/name, optionally `git init -b main` + empty initial commit; resolves the result. */
+export async function createProject(input: ProjectInput, deps: CreateDeps = {}): Promise<ProjectResult> {
   const target = resolveTarget(input.parent, (input.name ?? '').trim())
   await refuseDataDir(target, deps)
   const created = await claimTarget(input.parent, target)
-  if (input.gitInit === false) return target
-  const git = (args: string[]) => { const g = userGit(args, deps); return run(g.file, g.args, { cwd: target, env: g.env, timeout: 30_000 }) }
-  let step: 'init' | 'commit' = 'init'
+  if (input.gitInit === false) return { path: target, bootstrapIdentity: false }
+  const git = (args: string[], env: Record<string, string> = {}) => { const g = userGit(args, deps); return run(g.file, g.args, { cwd: target, env: { ...g.env, ...env }, timeout: 30_000 }) }
+  let step: 'init' | 'identity' | 'commit' = 'init'
   try {
     await git(['init', '-b', 'main'])
+    step = 'identity'
+    // The user's own identity (config, env) always wins; the fallback reaches this one commit
+    // through env and never touches ~/.gitconfig.
+    const bootstrapIdentity = await Promise.all([git(['var', 'GIT_AUTHOR_IDENT']), git(['var', 'GIT_COMMITTER_IDENT'])]).then(() => false, () => true)
     step = 'commit'
-    await git(['commit', '--allow-empty', '-m', 'Initial commit'])
-    return target
+    await git(['commit', '--allow-empty', '-m', 'Initial commit'], bootstrapIdentity ? BOOTSTRAP_ENV : {})
+    return { path: target, bootstrapIdentity }
   } catch (e) {
     await rm(created ? target : join(target, '.git'), { recursive: true, force: true })
     const msg = String((e as { stderr?: string }).stderr || (e as Error).message).trim()
-    if (step === 'commit' && /please tell me who you are|user\.name|user\.email/i.test(msg)) {
-      throw new CreateError('git_failed', 'Git author identity is not configured. Run `git config --global user.name "Your Name"` and `git config --global user.email "you@example.com"`, then try again, or untick "Initialize git".')
-    }
-    throw new CreateError('git_failed', `${step === 'init' ? 'Failed to initialize git repository' : 'Failed to create initial commit'}: ${msg}`)
+    throw new CreateError('git_failed', `Could not ${step === 'init' ? 'initialize the git repository' : 'create the initial commit'} in ${target}: ${msg}`)
   }
 }

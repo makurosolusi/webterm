@@ -16,6 +16,8 @@ let finish: () => void
 let check: (b: { parent: string; name: string; url?: string }) => Partial<Preflight>
 /** Folders the fake server treats as existing directories. test-only */
 let dirs: Set<string>
+/** Releases the held /project call of the "slow" name. test-only */
+let releaseProject: () => void = () => {}
 
 function cloneStream(): Response {
   const enc = new TextEncoder()
@@ -55,9 +57,11 @@ beforeEach(() => {
     if (sub === '/reveal') return Response.json({ ok: true })
     if (sub === '/project') {
       const b = body as { name: string; parent: string }
+      if (b.name === 'slow') await new Promise<void>((r) => { releaseProject = r }) // test-only: hold the create open
+      if (b.name === 'ticks') return Response.json({ error: 'git_failed', message: 'Could not create the initial commit: run `git config --global user.name` first.' }, { status: 500 })
       return b.name === 'race'
         ? Response.json({ error: 'exists', message: `"${b.parent}/race" already exists and is not empty.` }, { status: 409 })
-        : Response.json({ path: `${b.parent}/${b.name}` }, { status: 201 })
+        : Response.json({ path: `${b.parent}/${b.name}`, bootstrapIdentity: b.name === 'nogit' }, { status: 201 })
     }
     return new Response('{}', { status: 404 })
   }))
@@ -244,6 +248,111 @@ describe('New project dialog', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('already exists and is not empty')
     expect(posted('/project')[0].body).toEqual({ parent: DEFAULT, name: 'race', gitInit: false })
     expect(onCreated).not.toHaveBeenCalled()
+  })
+})
+
+describe('New project dialog states', () => {
+  const open = async () => {
+    const m = mountHost()
+    act(() => openWorkspaceCreate('project'))
+    await waitFor(() => expect(parentValue()).toBe(DEFAULT))
+    return m
+  }
+  const create = () => screen.getByRole('button', { name: /Create project|Creating…/ }) as HTMLButtonElement
+
+  it('focuses Project name on open; Create stays disabled until the name is valid', async () => {
+    await open()
+    expect(document.activeElement).toBe(screen.getByLabelText('Project name'))
+    expect(create().disabled).toBe(true)
+    type('Project name', 'ok')
+    expect(create().disabled).toBe(false)
+  })
+
+  it('names the problem inline after blur, using the server rule', async () => {
+    await open()
+    const input = screen.getByLabelText('Project name')
+    expect(screen.queryByTestId('name-error')).toBeNull()
+    fireEvent.blur(input)
+    expect(screen.getByTestId('name-error').textContent).toBe('Enter a project name.')
+    type('Project name', 'a/b')
+    expect(screen.getByTestId('name-error').textContent).toBe('A name cannot contain slashes.')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(create().disabled).toBe(true)
+    type('Project name', '..')
+    expect(screen.getByTestId('name-error').textContent).toBe('A name cannot be "." or "..".')
+    type('Project name', ' fine ')
+    expect(screen.queryByTestId('name-error')).toBeNull()
+    expect(create().disabled).toBe(false)
+  })
+
+  it('shows Creating…, locks the inputs and posts once even on a double submit', async () => {
+    await open()
+    type('Project name', 'slow')
+    const form = screen.getByLabelText('Project name').closest('form')!
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() => expect(create().textContent).toBe('Creating…'))
+    expect((screen.getByLabelText('Project name') as HTMLInputElement).disabled).toBe(true)
+    expect(create().disabled).toBe(true)
+    await waitFor(() => expect(posted('/project')).toHaveLength(1))
+    expect(posted('/check')).toHaveLength(1)
+    await act(async () => releaseProject())
+    await screen.findByTestId('created-panel')
+    expect(posted('/project')).toHaveLength(1)
+  })
+
+  it('a server error is one structured alert: no backticks, code spans rendered as <code>', async () => {
+    await open()
+    type('Project name', 'ticks')
+    fireEvent.click(create())
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).not.toContain('`')
+    expect(alert.querySelector('code')?.textContent).toBe('git config --global user.name')
+    expect(create().disabled).toBe(false) // can retry
+  })
+
+  it('tells the owner when the first commit used the fallback author, and only then', async () => {
+    await open()
+    type('Project name', 'nogit')
+    fireEvent.click(create())
+    expect((await screen.findByTestId('bootstrap-identity-note')).textContent).toBe('First commit is authored as webterm. Set your git name and email in a terminal to use your own.')
+    cleanup()
+    await open()
+    type('Project name', 'withgit')
+    fireEvent.click(create())
+    await screen.findByTestId('created-panel')
+    expect(screen.queryByTestId('bootstrap-identity-note')).toBeNull()
+  })
+
+  it('shortens a long path in the middle but keeps the whole path in title and for screen readers', async () => {
+    await open()
+    const deep = `/home/user/${'very-long-folder/'.repeat(5)}projects`
+    type('Parent folder', deep)
+    type('Project name', 'demo')
+    const code = screen.getByTestId('target-path').querySelector('code')!
+    expect(code.textContent).toContain('…')
+    expect(code.textContent!.endsWith('/projects/demo')).toBe(true)
+    expect(code.getAttribute('title')).toBe(`${deep}/demo`)
+    expect(screen.getByTestId('target-path').textContent).toContain(`${deep}/demo`)
+  })
+
+  it('Esc closes and focus returns to what opened it', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    await open()
+    fireEvent.keyDown(screen.getByTestId('new-project-dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('new-project-dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+    opener.remove()
+  })
+
+  it('the git option is one labelled row with a description and a 44px touch target', async () => {
+    await open()
+    const box = screen.getByRole('checkbox', { name: 'Initialize git repository' })
+    expect(box.getAttribute('aria-describedby')).toBe('new-project-git-desc')
+    expect(document.getElementById('new-project-git-desc')!.textContent).toBe('Adds an initial commit so worktrees work.')
+    expect(screen.getByTestId('git-init-option').className).toContain('min-h-11')
   })
 })
 

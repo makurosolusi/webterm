@@ -1,5 +1,7 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Welcome from './Welcome'
 import { openSetup } from './setup/setup.open'
@@ -21,6 +23,30 @@ describe('Welcome', () => {
     }
     expect(screen.queryByText('Connect over SSH…')).toBeNull()
     expect(screen.getByRole('button', { name: 'Create empty' })).toBeTruthy()
+  })
+
+  it('has one h1, a wrapping tagline, 44px Start actions and a labelled empty-workspace form', () => {
+    const css = readFileSync(join(__dirname, 'welcome.css'), 'utf8')
+    const rule = (sel: string) => css.slice(css.indexOf(`${sel} {`), css.indexOf('}', css.indexOf(`${sel} {`)))
+    render(<Welcome onNewProject={noop} onCreateEmpty={noop} />)
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(rule('.welcome__subtitle')).not.toMatch(/nowrap|ellipsis|overflow: hidden/)
+    expect(rule('.welcome__link--action')).toContain('min-height: 44px')
+    expect(screen.getByLabelText('Or create an empty workspace').tagName).toBe('INPUT')
+  })
+
+  it('validates the empty-workspace name inline and submits with Enter', () => {
+    const onCreateEmpty = vi.fn()
+    render(<Welcome onNewProject={noop} onCreateEmpty={onCreateEmpty} />)
+    const input = screen.getByLabelText('Or create an empty workspace')
+    fireEvent.click(screen.getByRole('button', { name: 'Create empty' }))
+    expect(screen.getByTestId('welcome-name-error').textContent).toBe('Enter a workspace name.')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(onCreateEmpty).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: ' scratch ' } })
+    fireEvent.submit(input.closest('form')!)
+    expect(onCreateEmpty).toHaveBeenCalledWith('scratch')
+    expect(screen.queryByTestId('welcome-name-error')).toBeNull()
   })
 
   it('klik "Open folder…" memanggil onNewProject (pemilih folder)', () => {

@@ -2,7 +2,7 @@
 // "already cloned", "name taken" or a wrong-place warning until the user picks, then run the create
 // call and keep the dialog open on a success state (Reveal / Copy path). The server still refuses a
 // non-empty target and the data dir on its own; this only explains it before it happens.
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { preflight, type Preflight } from './workspaceCreate.api'
 
 export type Notice =
@@ -51,7 +51,11 @@ export function useCreateFlow(input: { parent: string; name: string; url?: strin
     setError('')
   }, [])
 
+  // A ref, not `busy`: two submits in the same tick (Enter + click) both see busy=false.
+  const inFlight = useRef(false)
   const submit = async (more: Ack = {}): Promise<void> => {
+    if (inFlight.current) return
+    inFlight.current = true
     const nextAck = { ...ack, ...more }
     setAck(nextAck)
     setBusy(true)
@@ -67,6 +71,7 @@ export function useCreateFlow(input: { parent: string; name: string; url?: strin
     } catch (e) {
       if (!quiet(e)) setError(errText(e))
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }

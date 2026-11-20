@@ -7,7 +7,12 @@
 - Credential proxy: Claude Code with an API key or gateway now talks to a loopback proxy inside the webterm server, which holds the only copy of the key. The `claude` child gets just `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`. The proxy port and token are kept in the data dir, so running sessions survive a server restart. The Provider card says the key stays in the webterm server.
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
+### Fixed
+- New project no longer fails in a fresh container with "Git author identity is not configured". When git has no name or email, the first commit is authored as webterm (your git config is never touched), and the dialog says so.
+- Dialogs no longer show a blue box around the whole window when they open.
+
 ### Changed
+- New project dialog and the Start screen are tidied: inline name checks, a structured error alert without raw backticks, a spinner while creating, a one-line git option with a larger tap target, a muted path hint that shortens long paths, a tagline that wraps instead of clipping, 44px Start actions and a labelled "empty workspace" form.
 - `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is no longer set on `claude` processes, because they hold no real credential to scrub. Settings > Provider "Test connection" now runs through the credential proxy ("via local credential proxy").
 - Docker seccomp now defaults to `unconfined` (`WEBTERM_SECCOMP`) in `compose-portainer.yml`, `compose.ghcr.yml` and `docker-compose.yml`, so the Portainer Web editor works by pasting the YAML with no file on the host. Docker's default syscall filter is lifted for the whole container; Chrome's own sandbox stays on, as do dropped capabilities, `no-new-privileges` and the non-root user. Set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json` for the strict profile.
 - The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
