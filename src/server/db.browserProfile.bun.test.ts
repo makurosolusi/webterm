@@ -5,7 +5,7 @@ import { Database } from 'bun:sqlite'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createBrowserProfileStore, ensureBrowserProfileTable } from './db.browserProfile'
+import { createBrowserProfileStore, createMemoryProfileStore, ensureBrowserProfileTable } from './db.browserProfile'
 import { Db, openDb } from './db'
 import { createCookieVault } from './browser/cookieVault.store'
 import { createProfilesService } from './browser/browser.profiles.service'
@@ -55,4 +55,12 @@ test('boot migration: every stored board gets a Default profile with the board i
   expect(list.find((p) => p.id === a.id)).toMatchObject({ name: 'Default (Alpha)', isDefaultOf: a.id, workspaceId: a.id, cookieDomains: 1 })
   expect(vault.load(a.id).map((c) => c.domain)).toEqual(['legacy.com'])
   expect(db.browserProfiles().list()).toHaveLength(2) // second run inserted nothing
+})
+
+test('profiles sharing a createdAt list in creation order, not random-id order (both stores)', () => {
+  for (const store of [createBrowserProfileStore(new Database(':memory:')), createMemoryProfileStore()]) {
+    // ids descend while creation order ascends, so an id tie-break would reverse the list
+    for (let i = 0; i < 12; i++) store.insert(row(`bp-${99 - i}`, `acct-${i}`))
+    expect(store.list().map((r) => r.name)).toEqual(Array.from({ length: 12 }, (_, i) => `acct-${i}`))
+  }
 })

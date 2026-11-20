@@ -8,6 +8,7 @@
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
 ### Fixed
+- The browser profile list in agent prompts keeps a stable order (creation order) when profiles share a timestamp, so the same profiles are named each time and the prompt cache holds.
 - New project no longer fails in a fresh container with "Git author identity is not configured". When git has no name or email, the first commit is authored as webterm (your git config is never touched), and the dialog says so.
 - Dialogs no longer show a blue box around the whole window when they open.
 

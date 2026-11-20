@@ -139,7 +139,8 @@ describe('browser profiles in a plain chat', () => {
     expect(text).toContain('PROFILES')
     expect(text).toContain('`webterm browser open --profile <name> [<url>]`')
     const line = text.split('\n').find((l) => l.startsWith('Browser profiles:')) ?? ''
-    expect(line).toContain('"acct-0"')
+    expect(line).toContain(`${Array.from({ length: 10 }, (_, i) => `"acct-${i}"`).join(', ')} +3 more`) // creation order, exact
+    for (let i = 0; i < 20; i++) expect(append().split('\n').find((l) => l.startsWith('Browser profiles:'))).toBe(line)
     expect(line).not.toContain('Default (W)') // the Default only fills spare room
     expect(line).toContain('+3 more') // 13 profiles, 10 shown
   })
