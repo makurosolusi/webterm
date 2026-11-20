@@ -141,6 +141,22 @@ describe('advancedView', () => {
   })
 })
 
+describe('advancedView chromium source', () => {
+  const BIN = process.execPath // exists on disk
+  const key = 'WEBTERM_BROWSER_BIN'
+  it('a path given by the environment/image is bundled: listed as a candidate, not an override', () => {
+    expect(advancedView({ [key]: BIN }, '/d', undefined, 'linux', true).chromiumPath)
+      .toEqual({ value: '', detected: true, active: BIN, source: 'bundled', overrideInvalid: false, candidates: [BIN] })
+  })
+  it('a saved user path stays an override', () => {
+    expect(advancedView({ [key]: BIN }, '/d').chromiumPath).toMatchObject({ value: BIN, source: 'override', candidates: [] })
+  })
+  it('an environment path to a missing file is not found', () => {
+    expect(advancedView({ [key]: '/nope/chrome' }, '/d', undefined, 'linux', true).chromiumPath)
+      .toMatchObject({ detected: false, active: null, source: null, overrideInvalid: true, candidates: [] })
+  })
+})
+
 describe('PUT /advanced', () => {
   it('200 menulis mesin agen dan lokasi Chrome; GET mencerminkannya', async () => {
     const h = harness()

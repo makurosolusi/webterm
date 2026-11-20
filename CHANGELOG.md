@@ -12,6 +12,7 @@
 - The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
 
 ### Fixed
+- A browser built into the Docker image is no longer shown as a custom, unverified choice: the setup Browser step preselects it with a neutral note, and Settings says "built into this install".
 - Claude with an API key or gateway failed to start in the hardened Docker container (and on Linux without bubblewrap) with "bubblewrap is required for subprocess env scrubbing". It now runs in the default container with no bubblewrap, socat, extra capabilities or seccomp changes.
 - `ANTHROPIC_*` variables from the server environment no longer leak into tmux panes.
 - The Docker healthcheck no longer makes the server log an auth rejection every 15 seconds (about 5,760 a day), which buried real rejected-token attempts. It now probes the static UI at `/` with `curl -f`, which needs no token and still fails when the server is down. `/api/health` auth is unchanged.

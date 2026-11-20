@@ -245,6 +245,16 @@ describe('Browser step', () => {
     expect(screen.getByText(SETUP_TEXT.browser.customActive('/opt/my-chrome'))).toBeTruthy()
   })
 
+  it('a browser built into the image is the default installed choice, with no warning and a neutral note', async () => {
+    const bin = '/usr/local/bin/chrome'
+    await step({ extras: { chromiumPath: { value: '', detected: true, active: bin, source: 'bundled', overrideInvalid: false, candidates: [bin] } } as never })
+    expect(pressed(SETUP_TEXT.browser.installed)).toBe('true')
+    expect(screen.getByText(SETUP_TEXT.browser.bundledNote(bin))).toBeTruthy()
+    expect(screen.queryByText(SETUP_TEXT.browser.noneFound)).toBeNull()
+    expect(screen.queryByText(SETUP_TEXT.browser.customActive(bin))).toBeNull()
+    expect(screen.queryByText(SETUP_TEXT.browser.getChrome)).toBeNull()
+  })
+
   it('Download Chromium: Cancel returns to the start button; a failure shows the reason and Retry starts again', async () => {
     const s = await step({ extras: { chromiumDownload: { supported: true, state: 'downloading', percent: 5 } }, download: { ...DL_IDLE, state: 'downloading', percent: 5 } })
     expect(pressed(SETUP_TEXT.browser.download)).toBe('true') // a running download is the default choice

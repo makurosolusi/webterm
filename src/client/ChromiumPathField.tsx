@@ -7,6 +7,7 @@ import { ADVANCED_TEXT } from './advancedLabels'
 import { SettingsCombobox } from './SettingsCombobox'
 
 const INPUT_ID = 'capabilities-chromium'
+const USING = { override: ADVANCED_TEXT.chromiumUsingOverride, bundled: ADVANCED_TEXT.chromiumUsingBundled, auto: ADVANCED_TEXT.chromiumUsingAuto } as const
 
 export interface ChromiumPathFieldProps {
   chromium: CapabilitiesResponse['advanced']['chromiumPath']
@@ -31,7 +32,7 @@ export function ChromiumPathField({ chromium, save, redetect }: ChromiumPathFiel
         {chromium.overrideInvalid ? <p className="m-0 text-destructive">{ADVANCED_TEXT.chromiumOverrideInvalid}</p>
           : chromium.active ? (
             <p className="m-0 opacity-80">
-              {chromium.source === 'override' ? ADVANCED_TEXT.chromiumUsingOverride : ADVANCED_TEXT.chromiumUsingAuto}{' '}
+              {USING[chromium.source ?? 'auto']}{' '}
               <code className="break-all">{chromium.active}</code>
             </p>
           ) : <p className="m-0 opacity-80">{ADVANCED_TEXT.chromiumMissing}</p>}

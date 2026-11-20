@@ -4,6 +4,7 @@ import { CAPABILITIES, CAPABILITY_IDS, LINKED_SETTINGS, closure, dependents, der
 import type { CapabilitiesResponse, CapabilityId, CapabilityView } from '../shared/featureCapabilities'
 import type { TelegramSenderFetch } from './channels/telegramSend'
 import { connectTelegram, type ConnectFailure } from './channels/telegram.connect'
+import { ENV_BROWSER } from '../shared/browser.contract'
 import { flagOr } from './envFlag'
 import type { SecretStore } from './envSecrets.store'
 import type { EnvSettings } from './envSettings.service'
@@ -78,10 +79,16 @@ export function viewOf(id: CapabilityId, env: NodeJS.ProcessEnv, detect: Detect)
 }
 
 /** Respons penuh: semua kemampuan urut katalog + bagian lanjutan. */
-export function buildResponse(env: NodeJS.ProcessEnv, detect: Detect, dataDir: string, download: DownloadStatus = sharedDownloadStatus()): CapabilitiesResponse {
-  return { capabilities: CAPABILITY_IDS.map((id) => viewOf(id, env, detect)), advanced: advancedView(env, dataDir, download) }
+export function buildResponse(
+  env: NodeJS.ProcessEnv, detect: Detect, dataDir: string, download: DownloadStatus = sharedDownloadStatus(), bundledBin = false,
+): CapabilitiesResponse {
+  return { capabilities: CAPABILITY_IDS.map((id) => viewOf(id, env, detect)), advanced: advancedView(env, dataDir, download, process.platform, bundledBin) }
 }
-const snap = async (c: CapCtx): Promise<CapabilitiesResponse> => buildResponse(c.env, await c.detect(), c.dataDir)
+/** True when the browser path comes from the environment/image (no saved user override). */
+export const bundledBinOf = (settings: EnvSettings): boolean =>
+  settings.state(OWNER).entries.some((e) => e.key === ENV_BROWSER.bin && e.source === 'env')
+
+const snap = async (c: CapCtx): Promise<CapabilitiesResponse> => buildResponse(c.env, await c.detect(), c.dataDir, sharedDownloadStatus(), bundledBinOf(c.settings))
 
 // Antrean modul: dua POST bersamaan tak boleh menyisipkan reconcile satu sama lain (poller/browser ganda).
 let chain: Promise<unknown> = Promise.resolve()
