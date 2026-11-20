@@ -7,17 +7,21 @@ import { activeProviderEnv, BACKUP_KEY, claudeEnv, loadConfig, providerDir, prov
 import { logBus } from '../logs'
 import { STALE_LAUNCH_MS, wrapClaudeLaunch } from './claudeProvider.launch'
 import { providerEnv } from './claudeProvider.model'
+import { setProxyEndpointSource } from '../credentialProxy/credentialProxy.env'
 
 const KEY = 'sk-test-only-0123456789abcdef' // test-only
+const PROXY = { url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' } // test-only
 let dir = ''
 let prevDataDir: string | undefined
 
 beforeEach(() => {
+  setProxyEndpointSource(() => PROXY)
   dir = mkdtempSync(join(tmpdir(), 'cp-store-'))
   prevDataDir = process.env.WEBTERM_DATA_DIR
   process.env.WEBTERM_DATA_DIR = join(dir, 'data') // own data dir: parallel test files never see this provider
 })
 afterEach(() => {
+  setProxyEndpointSource(() => null)
   process.env.WEBTERM_DATA_DIR = prevDataDir
   rmSync(dir, { recursive: true, force: true })
 })
@@ -38,7 +42,7 @@ describe('provider store', () => {
     const view = providerView()
     expect(view).toEqual({ mode: 'apiKey', updatedAt: 42, secretSet: true, ready: true })
     expect(JSON.stringify(view)).not.toContain(KEY)
-    expect(claudeEnv({ ANTHROPIC_AUTH_TOKEN: 'inherited' }).ANTHROPIC_API_KEY).toBe(KEY)
+    expect(claudeEnv({ ANTHROPIC_AUTH_TOKEN: 'inherited' })).toEqual({ ANTHROPIC_API_KEY: PROXY.token, ANTHROPIC_BASE_URL: PROXY.url })
   })
 
   it('secret undefined keeps it, null removes it (mode stays, not ready)', () => {
@@ -89,7 +93,7 @@ describe('provider store', () => {
 })
 
 describe('wrapClaudeLaunch (agent PTY)', () => {
-  const pe = () => providerEnv({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken' }, KEY)
+  const pe = () => providerEnv({ mode: 'custom', baseUrl: 'https://gw.example.test', credential: 'authToken' }, PROXY)
 
   it('login mode leaves the command untouched and writes no file', () => {
     const launchDir = join(dir, 'launch')
@@ -101,6 +105,7 @@ describe('wrapClaudeLaunch (agent PTY)', () => {
     const launchDir = join(dir, 'launch')
     const cmd = wrapClaudeLaunch('claude --x', pe(), '/bin/sh', launchDir)
     expect(cmd).not.toContain(KEY)
+    expect(cmd).not.toContain(PROXY.token)
     expect(cmd).toMatch(/^\/bin\/sh '.+\.sh'$/)
     const [file] = readdirSync(launchDir)
     expect(statSync(join(launchDir, file!)).mode & 0o777).toBe(0o600)
@@ -108,10 +113,10 @@ describe('wrapClaudeLaunch (agent PTY)', () => {
 
   it('really runs: the command sees the provider env, an inherited API key is gone, the file deletes itself', () => {
     const launchDir = join(dir, 'launch')
-    const probe = 'printf "%s|%s|%s|%s" "${#ANTHROPIC_AUTH_TOKEN}" "$ANTHROPIC_BASE_URL" "${ANTHROPIC_API_KEY-unset}" "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"'
+    const probe = 'printf "%s|%s|%s|%s" "${ANTHROPIC_AUTH_TOKEN-unset}" "$ANTHROPIC_BASE_URL" "$ANTHROPIC_API_KEY" "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"'
     const cmd = wrapClaudeLaunch(probe, pe(), '/bin/sh', launchDir)
-    const out = execFileSync('/bin/sh', ['-c', cmd], { env: { PATH: '/usr/bin:/bin', ANTHROPIC_API_KEY: 'inherited-test-only' }, encoding: 'utf8' })
-    expect(out).toBe(`${KEY.length}|https://gw.example.test|unset|1`)
+    const out = execFileSync('/bin/sh', ['-c', cmd], { env: { PATH: '/usr/bin:/bin', ANTHROPIC_AUTH_TOKEN: 'inherited-test-only', CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '1' }, encoding: 'utf8' })
+    expect(out).toBe(`unset|${PROXY.url}|${PROXY.token}|`)
     expect(readdirSync(launchDir)).toEqual([])
   })
 

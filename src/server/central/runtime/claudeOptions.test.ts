@@ -1,9 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setProxyEndpointSource } from '../../credentialProxy/credentialProxy.env'
 import { logBus } from '../../logs'
 import { CENTRAL_STEWARD_PROMPT, centralQueryOptions, claudeChildEnv, claudeModelArg } from './claudeOptions'
 
+const PROXY = { url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' } // test-only
+afterEach(() => setProxyEndpointSource(() => null))
+
 describe('claudeChildEnv', () => {
+  it('fails closed when a credential is present and no proxy runs', () => {
+    expect(() => claudeChildEnv({ PATH: '/bin', ANTHROPIC_API_KEY: 'k' })).toThrow('credential_proxy_unavailable') // test-only
+  })
+
   it('keeps only allowlisted variables and named provider vars; drops root tokens, other provider keys and capability tokens', () => {
+    setProxyEndpointSource(() => PROXY)
     const env = claudeChildEnv({
       PATH: '/usr/bin', HOME: '/home/u', LANG: 'en_US.UTF-8', LC_ALL: 'C', https_proxy: 'http://p:1',
       CLAUDE_CONFIG_DIR: '/cfg', SSL_CERT_FILE: '/ca.pem',
@@ -11,8 +20,9 @@ describe('claudeChildEnv', () => {
       CLAUDE_CODE_OAUTH_TOKEN: 't', SECRET_THING: 'x', WCAP_HOLDER: 'wcap_abc123', SHELL: '/bin/zsh',
     })
     expect(Object.keys(env).sort()).toEqual(
-      ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB', 'CLAUDE_CONFIG_DIR', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SSL_CERT_FILE', 'https_proxy']
+      ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_CONFIG_DIR', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'SSL_CERT_FILE', 'https_proxy']
     )
+    expect([env.ANTHROPIC_API_KEY, env.ANTHROPIC_BASE_URL]).toEqual([PROXY.token, PROXY.url]) // the real 'k' never arrives
   })
 
   it('drops an allowlisted name whose value is a capability token', () => {

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeFakeClaude } from '../runtime/claude.fakeBin'
 import { resetProviderConfig, saveProvider } from '../../claudeProvider/claudeProvider.store'
+import { setProxyEndpointSource } from '../../credentialProxy/credentialProxy.env'
 import { createClaudeClassifier } from '../../policy/policy.classifier.claude'
 import type { HelperKind, HelperUsage } from '../../cost/costCapture'
 import { HELPER_EFFORT, createClaudeStructured, createStructuredRunner, parseStructuredAnswer, structuredArgv } from './claudeStructured'
@@ -13,7 +14,9 @@ import { HELPER_EFFORT, createClaudeStructured, createStructuredRunner, parseStr
 const dir = mkdtempSync(join(tmpdir(), 'structured-'))
 const prevData = process.env.WEBTERM_DATA_DIR
 process.env.WEBTERM_DATA_DIR = join(dir, 'data') // provider store lookups stay inside the test dir
+setProxyEndpointSource(() => ({ url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' })) // test-only
 afterAll(() => {
+  setProxyEndpointSource(() => null)
   if (prevData === undefined) delete process.env.WEBTERM_DATA_DIR
   else process.env.WEBTERM_DATA_DIR = prevData
   rmSync(dir, { recursive: true, force: true })

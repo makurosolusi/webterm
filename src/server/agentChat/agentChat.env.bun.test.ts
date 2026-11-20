@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { FakePty } from '../fakePty.testutil'
 import { claudeHeadersPath } from '../hooksPaths'
 import { NODE_HEADERS_ENV } from '../hooksTokens'
+import { setProxyEndpointSource } from '../credentialProxy/credentialProxy.env'
 import { ptyEnv } from '../ptyShell'
 import { Sessions } from '../sessions'
 import { AGENT_CHAT_DROPPED_ENV, agentChatEnv } from './agentChat.env'
@@ -9,15 +10,16 @@ import { AGENT_CHAT_DROPPED_ENV, agentChatEnv } from './agentChat.env'
 const NO_PROVIDER = { set: {}, unset: [] }
 // test-only values; assertions compare them, nothing prints them.
 const AUTH = { ANTHROPIC_API_KEY: 'sk-test-only-key', ANTHROPIC_BASE_URL: 'https://gw.example.test', ANTHROPIC_AUTH_TOKEN: 'test-only-token', ANTHROPIC_MODEL: 'claude-test', CLAUDE_CODE_USE_BEDROCK: '1' }
+const CREDENTIALS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']
 const parentEnv = {
   PATH: '/usr/bin:/bin', HOME: '/home/test', CLAUDE_CONFIG_DIR: '/tmp/cfg-test', ...AUTH,
   CLAUDECODE: '1', TMUX: '/tmp/tmux-1/default,1,0', WEBTERM_TOKEN: 'root-test-only', WEBTERM_NODE_ID: 'parent-node', CAP: 'wcap_test-only',
 }
 
 describe('agentChatEnv', () => {
-  test('exported auth and model vars reach the child unchanged', () => {
+  test('exported model vars reach the child unchanged; credentials never do (the proxy placeholder arrives via the provider env)', () => {
     const env = agentChatEnv({ nodeId: 'n', port: 1, parentEnv, provider: NO_PROVIDER })
-    for (const [k, v] of Object.entries(AUTH)) expect(env[k] === v).toBe(true)
+    for (const [k, v] of Object.entries(AUTH)) expect(env[k] === v).toBe(!CREDENTIALS.includes(k))
     expect(env.CLAUDE_CONFIG_DIR).toBe('/tmp/cfg-test')
   })
 
@@ -45,6 +47,7 @@ describe('agentChatEnv', () => {
   test('parity: same key set as a terminal claude agent for the same parent env, minus the documented drops', () => {
     const saved = Object.fromEntries(Object.keys(parentEnv).map((k) => [k, process.env[k]]))
     Object.assign(process.env, parentEnv)
+    setProxyEndpointSource(() => ({ url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' })) // test-only
     try {
       const spawns: { env?: Record<string, string> }[] = []
       const s = new Sessions({ spawn: (o) => { spawns.push(o); return new FakePty(1) } }, null)
@@ -57,6 +60,7 @@ describe('agentChatEnv', () => {
       expect(Object.keys(chat).sort()).toEqual(Object.keys(terminal).filter((k) => !dropped.has(k)).sort())
       for (const k of [NODE_HEADERS_ENV, 'WEBTERM_NODE_ID', 'WEBTERM_PORT', 'PATH', ...Object.keys(AUTH)]) expect(chat[k] === terminal[k]).toBe(true)
     } finally {
+      setProxyEndpointSource(() => null)
       for (const [k, v] of Object.entries(saved)) {
         if (v === undefined) delete process.env[k]
         else process.env[k] = v

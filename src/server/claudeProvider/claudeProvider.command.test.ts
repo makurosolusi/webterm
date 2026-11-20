@@ -51,7 +51,7 @@ describe('command mode model', () => {
   it('isReady needs the profile to exist; providerEnv injects and clears nothing', () => {
     expect(isReady({ mode: 'command', profileId: 'm' }, false, true)).toBe(true)
     expect(isReady({ mode: 'command', profileId: 'm' }, true, false)).toBe(false)
-    expect(providerEnv({ mode: 'command', profileId: 'm' }, KEY)).toEqual({ set: {}, unset: [] })
+    expect(providerEnv({ mode: 'command', profileId: 'm' }, { url: 'http://127.0.0.1:1', token: 't' })).toEqual({ set: {}, unset: [] })
   })
 })
 

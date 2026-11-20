@@ -1,5 +1,6 @@
-// Allowlisted environment for headless agent children: base OS keys plus provider
-// credentials, never `WEBTERM_*` (or legacy `NODETERM_*`) values. Pure, no I/O.
+// Allowlisted environment for headless agent children: base OS keys plus provider vars (a real
+// credential is replaced by the credential-proxy placeholder), never `WEBTERM_*` (or legacy `NODETERM_*`) values.
+import { envHasCredential, proxyChildVars, requireProxy } from './credentialProxy/credentialProxy.env'
 
 /** Exact strings kept in the child environment; everything else is dropped. */
 export const BASE_ENV_ALLOWLIST: readonly string[] = [
@@ -16,8 +17,9 @@ export const PROVIDER_ENV_ALLOWLIST: readonly string[] = [
   'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
   'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL',
 ]
-const CREDENTIAL_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS']
-/** Strips credentials from Bash/hook/MCP subprocesses of the claude process (docs: env-vars, "What the subprocess environment scrub removes"). */
+/** Credential vars: forbidden in any child env except as the proxy placeholder. */
+export const CREDENTIAL_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS']
+/** Claude's subprocess scrub (needs bwrap on Linux). webterm never sets it: the proxy leaves nothing to scrub; it is only ever unset. */
 export const SCRUB_VAR = 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB'
 
 /** Claude Code CLI retry watchdog (docs env-vars, v2.1.295+): 429/529 retried without bound, other transient errors up to ~3h. */
@@ -41,15 +43,15 @@ export function resumeTurnPrefix(maxAgeMs: number): string {
   return `${RESUME_TURN_VAR}=1 ${RESUME_TURN_MAX_AGE_VAR}=${Math.max(1, Math.floor(maxAgeMs))}`
 }
 
-/** Provider vars present in `env`; a forwarded credential turns on the subprocess scrub, as the Provider card does. */
+/** Provider vars of `env` for a child: model/endpoint vars as is, a credential replaced by the proxy placeholder + URL (throws `credential_proxy_unavailable` without a proxy). */
 export function providerEnvFrom(env: NodeJS.ProcessEnv): Record<string, string> {
+  const hasCred = envHasCredential(env)
   const out: Record<string, string> = {}
   for (const name of PROVIDER_ENV_ALLOWLIST) {
     const value = env[name]
-    if (value !== undefined) out[name] = value
+    if (value !== undefined && !CREDENTIAL_VARS.includes(name) && !(hasCred && name === 'ANTHROPIC_BASE_URL')) out[name] = value
   }
-  if (CREDENTIAL_VARS.some((name) => name in out)) out[SCRUB_VAR] = '1'
-  return out
+  return hasCred ? { ...out, ...proxyChildVars(requireProxy()) } : out
 }
 
 /** Endpoint plus credential in `env`: a proxy is configured, no Claude Code login is needed. */

@@ -6,6 +6,7 @@
 // Command mode touches no credential at all: the user's own launch command (a launch profile) injects it.
 import { CLAUDE_PROFILE_LIMITS } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import { PROVIDER_ENV_ALLOWLIST, SCRUB_VAR } from '../agentEnv'
+import type { ProxyEndpoint } from '../credentialProxy/credentialProxy.types'
 
 
 export type ProviderMode = 'login' | 'apiKey' | 'custom' | 'command'
@@ -69,17 +70,16 @@ export const isReady = (c: ProviderConfig, secretSet: boolean, profileExists = f
 
 /**
  * Env for one Claude process. Login and command mode change nothing (Claude Code uses its own login). Key modes
- * set exactly one credential variable, clear the others and the cloud flags, and turn on the
- * subprocess scrub so the agent's own tools do not inherit the key.
+ * hand the child only the proxy placeholder + URL (the real key stays in the proxy) and clear every other provider
+ * var plus the subprocess scrub. A key mode without a running proxy throws: never a fallback to the real key.
  */
-export function providerEnv(c: ProviderConfig, secret: string | null): ProviderEnv {
-  if (c.mode === 'login' || c.mode === 'command' || !secret || !isReady(c, true)) return { set: {}, unset: [] }
-  const credVar = c.mode === 'custom' && c.credential === 'authToken' ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY'
-  const set: Record<string, string> = { [credVar]: secret, [SCRUB_VAR]: '1' }
-  if (c.mode === 'custom' && c.baseUrl) set.ANTHROPIC_BASE_URL = c.baseUrl
+export function providerEnv(c: ProviderConfig, proxy: ProxyEndpoint | null, secretSet = true): ProviderEnv {
+  if (c.mode === 'login' || c.mode === 'command' || !secretSet || !isReady(c, true)) return { set: {}, unset: [] }
+  if (!proxy) throw new Error('credential_proxy_unavailable')
+  const set: Record<string, string> = { ANTHROPIC_API_KEY: proxy.token, ANTHROPIC_BASE_URL: proxy.url }
   if (c.model) set.ANTHROPIC_MODEL = c.model
   // A key mode owns every provider var (agentEnv list): server-env ones it does not set are cleared, so the card wins.
-  const unset = [...PROVIDER_ENV_ALLOWLIST, ...CLOUD_FLAGS].filter((k) => !(k in set))
+  const unset = [...PROVIDER_ENV_ALLOWLIST, ...CLOUD_FLAGS, SCRUB_VAR].filter((k) => !(k in set))
   return { set, unset }
 }
 

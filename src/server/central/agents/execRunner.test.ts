@@ -1,6 +1,7 @@
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { setProxyEndpointSource } from '../../credentialProxy/credentialProxy.env'
 import { scrubExecEnv, startExec } from './execRunner'
 
 const cwd = realpathSync(mkdtempSync(`${tmpdir()}/execrunner-`))
@@ -14,8 +15,11 @@ describe('scrubExecEnv', () => {
   })
 })
 
+afterEach(() => setProxyEndpointSource(() => null))
+
 describe('startExec', () => {
   it('runs with a scrubbed env: no WEBTERM_/NODETERM_/wcap values reach the child', async () => {
+    setProxyEndpointSource(() => ({ url: 'http://127.0.0.1:41999', token: 'wtp_placeholder-test-only' })) // test-only
     const source = { PATH: process.env.PATH, WEBTERM_ROOT_TOKEN: 'secret-root', NODETERM_NODE_ID: 'n1', MY_TOKEN: 'wcap_abc', ANTHROPIC_API_KEY: 'sk-test-provider' }
     const out = await node('console.log(JSON.stringify(process.env))', { env: source }).done
     const env = JSON.parse(out.tail.trim()) as Record<string, string>
@@ -23,7 +27,8 @@ describe('startExec', () => {
     expect(out.tail).not.toContain('secret-root')
     expect(out.tail).not.toContain('wcap_')
     expect(env.MY_TOKEN).toBeUndefined()
-    expect(env.ANTHROPIC_API_KEY).toBe('sk-test-provider')
+    expect(env.ANTHROPIC_API_KEY).toBe('wtp_placeholder-test-only') // the real key becomes the proxy placeholder
+    expect(out.tail).not.toContain('sk-test-provider')
   })
   it('passes argv as an array: shell metacharacters stay literal data', async () => {
     const hostile = '$(echo pwned); `id` && echo pwned2'
