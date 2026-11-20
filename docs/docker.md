@@ -16,22 +16,24 @@ Open `http://127.0.0.1:8700` on the Docker host and create the first account wit
 
 ## Published image (no build)
 
-`compose.ghcr.yml` runs the image from `ghcr.io/makurosolusi/webterm` without a repo checkout. The seccomp profile is a local file, so fetch the one from the SAME tag as the image:
+`compose.ghcr.yml` runs the image from `ghcr.io/makurosolusi/webterm` without a repo checkout. Seccomp defaults to `unconfined` (see Security model), so the compose file alone is enough. For the strict profile, fetch it from the SAME tag as the image and set `WEBTERM_SECCOMP`:
 
 ```sh
 TAG=0.9.3
 curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v$TAG/docker/chrome.seccomp.json
 curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v$TAG/compose.ghcr.yml
-WEBTERM_IMAGE_TAG=$TAG docker compose -f compose.ghcr.yml up -d
+WEBTERM_IMAGE_TAG=$TAG WEBTERM_SECCOMP=./chrome.seccomp.json docker compose -f compose.ghcr.yml up -d
 ```
 
-- **Tags:** `x.y.z`, `x.y`, `latest` (stable releases only) and `sha-<short>`. Pin `WEBTERM_IMAGE_TAG` to `x.y.z` for reproducible deployments; `pull_policy: always` re-checks the tag on every `up`. Point `WEBTERM_SECCOMP` elsewhere if the profile is not next to the compose file.
+- **Tags:** `x.y.z`, `x.y`, `latest` (stable releases only) and `sha-<short>`. Pin `WEBTERM_IMAGE_TAG` to `x.y.z` for reproducible deployments; `pull_policy: always` re-checks the tag on every `up`. `WEBTERM_SECCOMP` takes `unconfined` (default) or a profile path.
 - **Visibility:** a new GHCR package is private by default. Change it under GitHub > Packages > the package > Package settings. For a private image run `docker login ghcr.io` first with a token that has `read:packages`.
 - **Releasing:** update `CHANGELOG.md`, then push tag `v0.9.3` (matching `package.json`). `.github/workflows/docker-publish.yml` builds, runs the smoke test (healthcheck, `claude --version`, Chrome `--version`, custom-command PATH; no real page), and only then pushes `linux/amd64` + `linux/arm64` with provenance and SBOM. The workflow can also be started manually.
 
 ## Portainer
 
-Use Stacks > Add stack > **Repository**, not the Web editor. Docker Compose reads the `seccomp=` value as a file path on the client side (inside the Portainer container), so the profile cannot be pasted inline and the Chrome sandbox needs `docker/chrome.seccomp.json` from a checkout.
+**Web editor:** Stacks > Add stack > Web editor, paste `compose-portainer.yml`, set `WEBTERM_IMAGE_TAG` and your Claude credential, deploy. No file or extra variable is needed. **Repository** works too and is the way to use the strict profile: Docker Compose reads `seccomp=<value>` as a file path on the client side (inside the Portainer container), so a profile can only come from a checkout, e.g. set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json`.
+
+Repository steps:
 
 1. Repository URL `https://github.com/makurosolusi/webterm`, reference `refs/tags/v0.9.3`, compose path `compose-portainer.yml`.
 2. Set `WEBTERM_IMAGE_TAG=0.9.3` (same as the reference) and your Claude credential (`ANTHROPIC_API_KEY`, or `claude login` in the container).
@@ -94,7 +96,7 @@ No Electrobun desktop shell and no macOS Keychain: the container serves the web 
 
 ## Security model
 
-The container is the safety boundary for agents running with bypass permissions. The compose file drops all capabilities, sets `no-new-privileges`, caps memory (`WEBTERM_MEM_LIMIT`, default 5g for an 8 GB machine), CPUs (`WEBTERM_CPUS`, default 4) and pids, and never uses `privileged` or `SYS_ADMIN`. Chrome runs with its own sandbox (never `--no-sandbox`); `docker/chrome.seccomp.json` allows the user-namespace syscalls it needs. Anything you mount (workspace, `~/.ssh`, the API key in env) is reachable by agents.
+The container is the safety boundary for agents running with bypass permissions. The compose file drops all capabilities, sets `no-new-privileges`, caps memory (`WEBTERM_MEM_LIMIT`, default 5g for an 8 GB machine), CPUs (`WEBTERM_CPUS`, default 4) and pids, and never uses `privileged` or `SYS_ADMIN`. Chrome runs with its own sandbox (never `--no-sandbox`). Seccomp defaults to `unconfined` (decision 2026-11-20): the compose files need no profile file, so the Portainer Web editor works. Trade-off: Docker's default syscall filter is lifted for the whole container, not only Chrome; Chrome's sandbox is verified still active (renderer `Seccomp:2`, separate user and net namespaces) and the other guards stay. For a tighter container set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json` (needs the file on the Compose client side, so Repository/CLI, not the Web editor); it allows the user-namespace syscalls Chrome needs. Anything you mount (workspace, `~/.ssh`, the API key in env) is reachable by agents.
 
 The seccomp profile is Docker's current default (`default.json` from `moby/profiles`, fetched 2026-11-19) with `clone`, `clone3`, `unshare` and `setns` allowed without `CAP_SYS_ADMIN`, and the default's `clone3 -> ENOSYS` and `clone` flag-mask rules removed. Chrome's sandbox then creates user namespaces. `chroot` is also allowed without `CAP_SYS_CHROOT` (the default only allows it with that capability, and `cap_drop: [ALL]` removes it): Chrome's namespace sandbox calls `chroot("/proc/self/fdinfo/")` inside its own user namespace, and without this entry seccomp kills it first (`sys_chroot("/proc/self/fdinfo/") == 0` check failure, zygote dies). The kernel still requires `CAP_SYS_CHROOT` in the namespace being chrooted, so this grants no new right in the container's own namespace. Found by a real test on arm64 (Colima, Docker 29); the other syscalls in Chrome's sandbox path were audited: `mount`, `umount2`, `sethostname` and friends stay gated by `CAP_SYS_ADMIN` and `pivot_root` is not allowed at all, because nothing showed Chrome needs them. An older community profile (jessfraz/dotfiles `chrome.json`, 2016) was rejected: it predates syscalls modern glibc uses. To refresh, rerun that derivation against the newest default profile.
 
@@ -109,7 +111,7 @@ The server listens on `0.0.0.0:$PORT` inside the container (`HOST=0.0.0.0`) and 
 - **tmux/agent socket `EINVAL` or "path too long":** a socket path exceeded 104 bytes. The entrypoint sets `TMPDIR=/tmp/st`; do not override it with a long path.
 - **Chrome crashes or tabs go blank:** `/dev/shm` too small. Compose sets `shm_size: 1gb`; with plain `docker run` pass `--shm-size=1g`.
 - **`Check failed: sys_chroot("/proc/self/fdinfo/") == 0`, then the zygote dies:** an old copy of the seccomp profile (before `chroot` was allowed). Re-fetch `docker/chrome.seccomp.json` from the same tag as the image.
-- **"No usable sandbox" / `clone: Operation not permitted`:** the seccomp profile is not applied (plain `docker run` needs `--security-opt seccomp=docker/chrome.seccomp.json`), the host has `kernel.unprivileged_userns_clone=0` or `user.max_user_namespaces=0`, or an AppArmor policy blocks user namespaces (Ubuntu 23.10+: `kernel.apparmor_restrict_unprivileged_userns=0`). Do not work around it with `--no-sandbox`.
+- **"No usable sandbox" / `clone: Operation not permitted`:** the strict seccomp profile is in use but outdated or missing (plain `docker run` needs `--security-opt seccomp=docker/chrome.seccomp.json`, or `unconfined`), the host has `kernel.unprivileged_userns_clone=0` or `user.max_user_namespaces=0`, or an AppArmor policy blocks user namespaces (Ubuntu 23.10+: `kernel.apparmor_restrict_unprivileged_userns=0`). Do not work around it with `--no-sandbox`.
 - **`/workspace is not writable`:** fix host ownership, see above.
 - **Unhealthy container:** `docker compose logs webterm`; the healthcheck accepts any HTTP answer from `/api/health`.
 

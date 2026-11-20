@@ -3,9 +3,10 @@
 ## [Unreleased]
 
 ### Added
-- `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes and the Chrome seccomp profile from the checkout.
+- `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
 ### Changed
+- Docker seccomp now defaults to `unconfined` (`WEBTERM_SECCOMP`) in `compose-portainer.yml`, `compose.ghcr.yml` and `docker-compose.yml`, so the Portainer Web editor works by pasting the YAML with no file on the host. Docker's default syscall filter is lifted for the whole container; Chrome's own sandbox stays on, as do dropped capabilities, `no-new-privileges` and the non-root user. Set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json` for the strict profile.
 - The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
 
 ### Fixed
