@@ -1,8 +1,11 @@
-# webterm for Portainer: Stack > Repository (NOT the Web editor). Runs the published image, no build.
-# Why not the Web editor: Docker Compose reads `seccomp=<value>` as a FILE PATH on the Compose client side
-# (inside the Portainer container), and JSON pasted into the value is not accepted. The Chrome sandbox stays on
-# through docker/chrome.seccomp.json (no --no-sandbox, no cap_add, no unconfined), so that file must be in the
-# checkout. Portainer steps:
+# webterm for Portainer: paste into Stacks > Add stack > Web editor (no file or extra variable needed), or use
+# Repository with compose path compose-portainer.yml. Runs the published image, no build.
+# Security trade-off: seccomp defaults to `unconfined`, because Docker Compose reads `seccomp=<value>` as a FILE
+# PATH on the client side (inside the Portainer container) and cannot take the profile inline. That drops Docker's
+# default syscall filter for the whole container. Chrome's own sandbox stays ON (no --no-sandbox; renderers run
+# under seccomp and separate user/net namespaces), and cap_drop ALL, no-new-privileges and the non-root user remain.
+# Strict profile (Repository/CLI only, needs the checkout): set WEBTERM_SECCOMP=./docker/chrome.seccomp.json
+# Repository steps:
 #   1. Stacks > Add stack > Repository. Repository URL https://github.com/makurosolusi/webterm
 #      and a reference matching the image (refs/tags/v0.9.3 with WEBTERM_IMAGE_TAG=0.9.3).
 #   2. Compose path: compose-portainer.yml
@@ -13,7 +16,7 @@
 #        WEBTERM_PROJECTS    workspace: volume name (default webterm-workspace) or an ABSOLUTE host path (bind)
 #        WEBTERM_BROWSER     on|off, default on
 #        WEBTERM_MEM_LIMIT   default 5g;  WEBTERM_CPUS default 4
-#        WEBTERM_SECCOMP     seccomp profile path in the checkout, default ./docker/chrome.seccomp.json
+#        WEBTERM_SECCOMP     `unconfined` (default) or a profile path, e.g. ./docker/chrome.seccomp.json
 #        ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN   or run `claude login` in the container
 # WARNING: webterm gives shell access. Keep WEBTERM_BIND on 127.0.0.1 (reach it through an SSH tunnel or a
 # TLS reverse proxy); do not publish it to a public network.
@@ -46,11 +49,11 @@ services:
       - ${WEBTERM_PROJECTS:-webterm-workspace}:/workspace
       - webterm-home:/home/webterm # whole home: ~/.claude, ~/.local, ~/.cargo, rc files, git config
 
-    # Chrome keeps its own sandbox: user namespaces are allowed by the seccomp profile, not by privileges.
+    # Chrome keeps its own sandbox: the default seccomp is unconfined (see header); set WEBTERM_SECCOMP to the strict profile to restrict syscalls.
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-      - seccomp=${WEBTERM_SECCOMP:-./docker/chrome.seccomp.json}
+      - seccomp=${WEBTERM_SECCOMP:-unconfined}
     shm_size: 1gb
     mem_limit: ${WEBTERM_MEM_LIMIT:-5g} # leaves headroom on an 8 GB machine
     cpus: ${WEBTERM_CPUS:-4}

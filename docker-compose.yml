@@ -40,11 +40,11 @@ services:
       # Static custom commands (Linux binaries/scripts), read-only, after the managed /data/custom-bin on PATH.
       - ${WEBTERM_CUSTOM_BIN_HOST:-./custom-bin}:/opt/custom/bin:ro
 
-    # Chrome keeps its own sandbox: user namespaces are allowed by the seccomp profile, not by privileges.
+    # Chrome keeps its own sandbox: default seccomp is unconfined; WEBTERM_SECCOMP=./docker/chrome.seccomp.json selects the strict profile.
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-      - seccomp=./docker/chrome.seccomp.json
+      - seccomp=${WEBTERM_SECCOMP:-unconfined}
     shm_size: 1gb
     mem_limit: ${WEBTERM_MEM_LIMIT:-5g} # leaves headroom on an 8 GB machine
     cpus: ${WEBTERM_CPUS:-4}

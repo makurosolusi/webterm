@@ -1,8 +1,9 @@
 # webterm from the published image, no build and no repo checkout. Same runtime settings as docker-compose.yml
-# (keep the two in step). Needs chrome.seccomp.json next to this file at the SAME tag, see docs/docker.md:
-#   curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v0.9.2/docker/chrome.seccomp.json
+# (keep the two in step). Seccomp defaults to unconfined; for the strict profile fetch it at the SAME tag, see docs/docker.md:
+#   curl -fsSLO https://raw.githubusercontent.com/makurosolusi/webterm/v0.9.3/docker/chrome.seccomp.json
+#   export WEBTERM_SECCOMP=./chrome.seccomp.json
 #   export ANTHROPIC_API_KEY=...        # or run `claude login` inside the container instead
-#   WEBTERM_IMAGE_TAG=0.9.2 docker compose -f compose.ghcr.yml up -d
+#   WEBTERM_IMAGE_TAG=0.9.3 docker compose -f compose.ghcr.yml up -d
 services:
   webterm:
     image: ghcr.io/makurosolusi/webterm:${WEBTERM_IMAGE_TAG:-latest}
@@ -37,11 +38,11 @@ services:
       # Static custom commands (Linux binaries/scripts), read-only, after the managed /data/custom-bin on PATH.
       - ${WEBTERM_CUSTOM_BIN_HOST:-./custom-bin}:/opt/custom/bin:ro
 
-    # Chrome keeps its own sandbox: user namespaces are allowed by the seccomp profile, not by privileges.
+    # Chrome keeps its own sandbox: default seccomp is unconfined; WEBTERM_SECCOMP=./chrome.seccomp.json selects the strict profile.
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-      - seccomp=${WEBTERM_SECCOMP:-./chrome.seccomp.json}
+      - seccomp=${WEBTERM_SECCOMP:-unconfined}
     shm_size: 1gb
     mem_limit: ${WEBTERM_MEM_LIMIT:-5g} # leaves headroom on an 8 GB machine
     cpus: ${WEBTERM_CPUS:-4}
