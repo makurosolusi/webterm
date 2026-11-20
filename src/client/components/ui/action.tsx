@@ -1,7 +1,7 @@
 // Feedback for async buttons: busy while running (at least `minBusyMs`, so it never just flickers),
 // then an inline result with the time, and on failure a toast with Retry. Every result bumps `seq`,
 // so pressing again with the same answer still visibly re-renders (new time, re-announced).
-import { useCallback, useRef, useState, type ComponentProps, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { IconTooltip } from '@/components/ui/icon-button'
 import { DisabledReason, type Lock } from '@/components/ui/disabled-reason'
@@ -51,6 +51,10 @@ export function useAction<T>(fn: () => Promise<T>, opts: ActionOptions<T> = {}):
   const [result, setResult] = useState<ActionOutcome | null>(null)
   const running = useRef(false)
   const seq = useRef(0)
+  // A run outlives its component (minBusyMs wait, slow fn): setState after unmount touches React/window
+  // for nothing, and throws once the DOM environment is torn down (seen as an unhandled error in tests).
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const latest = useRef({ fn, opts })
   latest.current = { fn, opts }
   const label = opts.label ?? 'Action'
@@ -71,10 +75,11 @@ export function useAction<T>(fn: () => Promise<T>, opts: ActionOptions<T> = {}):
     }
     const wait = (o.minBusyMs ?? DEFAULT_MIN_BUSY_MS) - (Date.now() - started)
     if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+    running.current = false
+    if (!mounted.current) return value
     seq.current += 1
     setResult({ ...outcome, quiet: runOpts?.quiet, seq: seq.current, at: Date.now() })
     setBusy(false)
-    running.current = false
     return value
   }, [])
 
