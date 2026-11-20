@@ -29,6 +29,16 @@ WEBTERM_IMAGE_TAG=$TAG docker compose -f compose.ghcr.yml up -d
 - **Visibility:** a new GHCR package is private by default. Change it under GitHub > Packages > the package > Package settings. For a private image run `docker login ghcr.io` first with a token that has `read:packages`.
 - **Releasing:** update `CHANGELOG.md`, then push tag `v0.9.3` (matching `package.json`). `.github/workflows/docker-publish.yml` builds, runs the smoke test (healthcheck, `claude --version`, Chrome `--version`, custom-command PATH; no real page), and only then pushes `linux/amd64` + `linux/arm64` with provenance and SBOM. The workflow can also be started manually.
 
+## Portainer
+
+Use Stacks > Add stack > **Repository**, not the Web editor. Docker Compose reads the `seccomp=` value as a file path on the client side (inside the Portainer container), so the profile cannot be pasted inline and the Chrome sandbox needs `docker/chrome.seccomp.json` from a checkout.
+
+1. Repository URL `https://github.com/makurosolusi/webterm`, reference `refs/tags/v0.9.3`, compose path `compose-portainer.yml`.
+2. Set `WEBTERM_IMAGE_TAG=0.9.3` (same as the reference) and your Claude credential (`ANTHROPIC_API_KEY`, or `claude login` in the container).
+3. Optional: `WEBTERM_BIND` (default `127.0.0.1`), `PORT`, `WEBTERM_PROJECTS` (volume name, or an absolute host path for a bind mount), `WEBTERM_BROWSER`, `WEBTERM_MEM_LIMIT`, `WEBTERM_CPUS`, `WEBTERM_SECCOMP`.
+
+webterm gives shell access: keep `WEBTERM_BIND` on loopback and use an SSH tunnel or a TLS reverse proxy. Custom commands live in `/data/custom-bin` (no host mount in this file).
+
 ## Browser per architecture
 
 | Architecture | Browser | Source | Version |
