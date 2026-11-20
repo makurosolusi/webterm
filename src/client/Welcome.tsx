@@ -10,6 +10,7 @@ import { openWorkspaceCreate } from './workspaceCreate/WorkspaceCreateHost'
 import { SetupChecklist } from './Welcome.setup'
 import { openSetup } from './setup/setup.open'
 import type { SetupState } from '../shared/settings'
+import { WELCOME_TEXT } from './workspaceCreate/workspaceCreate.labels'
 import './welcome.css'
 
 interface Props {
@@ -24,7 +25,7 @@ interface Props {
 function StartLink({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
     <li>
-      <Button type="button" variant="link" className="welcome__link" onClick={onClick}>
+      <Button type="button" variant="link" className="welcome__link welcome__link--action" onClick={onClick}>
         <span className={`codicon codicon-${icon}`} aria-hidden />
         <span>{label}</span>
       </Button>
@@ -35,50 +36,58 @@ function StartLink({ icon, label, onClick }: { icon: string; label: string; onCl
 /** Layar Welcome tanpa workspace: daftar Start (link biru) dan Recently closed, seperti editor Welcome VS Code. */
 export default function Welcome({ onNewProject, onCreateEmpty, closedSessions, onReopen, setup }: Props) {
   const [name, setName] = useState('')
+  const [touched, setTouched] = useState(false)
   const closed = closedSessions ?? []
+  const nameError = touched && !name.trim() ? WELCOME_TEXT.empty.needName : ''
 
-  const createEmpty = () => {
+  const createEmpty = (e: React.FormEvent) => {
+    e.preventDefault()
+    setTouched(true)
     if (!name.trim()) return
     onCreateEmpty(name.trim())
     setName('')
+    setTouched(false)
   }
 
   return (
     <div className="welcome">
       <div className="welcome__inner">
-        <h1 className="welcome__title">webterm</h1>
-        <div className="welcome__subtitle">A canvas of terminals. Start a project to begin.</div>
+        <h1 className="welcome__title">{WELCOME_TEXT.title}</h1>
+        <p className="welcome__subtitle">{WELCOME_TEXT.tagline}</p>
 
         {setup && <SetupChecklist setup={setup} onOpen={openSetup} />}
 
         <div className="welcome__columns">
           <section className="welcome__section" aria-labelledby="welcome-start">
-            <h2 id="welcome-start" className="welcome__heading">Start</h2>
+            <h2 id="welcome-start" className="welcome__heading">{WELCOME_TEXT.start}</h2>
             <ul className="welcome__list">
-              <StartLink icon="new-folder" label="New project" onClick={() => openWorkspaceCreate('project')} />
-              <StartLink icon="folder-opened" label="Open folder…" onClick={() => onNewProject()} />
-              <StartLink icon="repo-clone" label="Clone repo…" onClick={() => openWorkspaceCreate('clone')} />
+              <StartLink icon="new-folder" label={WELCOME_TEXT.newProject} onClick={() => openWorkspaceCreate('project')} />
+              <StartLink icon="folder-opened" label={WELCOME_TEXT.openFolder} onClick={() => onNewProject()} />
+              <StartLink icon="repo-clone" label={WELCOME_TEXT.cloneRepo} onClick={() => openWorkspaceCreate('clone')} />
             </ul>
-            {/* Satu-satunya jalur buat-tanpa-folder webterm; dibiarkan sebagai baris sekunder tipis. */}
-            <div className="welcome__empty">
-              <Label htmlFor="welcome-workspace-name" className="text-xs font-normal">
-                or create an empty workspace
-              </Label>
-              <Input
-                id="welcome-workspace-name"
-                className="h-auto focus-visible:ring-0"
-                placeholder="workspace name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && createEmpty()}
-              />
-              <Button type="button" variant="ghost" className="h-auto" onClick={createEmpty}>Create empty</Button>
-            </div>
+            {/* Satu-satunya jalur buat-tanpa-folder webterm: satu form berlabel, bukan placeholder-only. */}
+            <form className="welcome__empty" noValidate onSubmit={createEmpty}>
+              <Label htmlFor="welcome-workspace-name" className="welcome__empty-label">{WELCOME_TEXT.empty.label}</Label>
+              <div className="welcome__empty-row">
+                <Input
+                  id="welcome-workspace-name"
+                  placeholder={WELCOME_TEXT.empty.placeholder}
+                  value={name}
+                  autoComplete="off"
+                  aria-invalid={nameError ? true : undefined}
+                  aria-describedby={nameError ? 'welcome-workspace-error' : undefined}
+                  onBlur={() => setTouched(true)}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <Button type="submit" variant="outline" className="welcome__empty-submit">{WELCOME_TEXT.empty.submit}</Button>
+              </div>
+              {nameError && <p id="welcome-workspace-error" className="welcome__empty-error" data-testid="welcome-name-error">{nameError}</p>}
+            </form>
           </section>
 
           {closed.length > 0 && (
             <section className="welcome__section" aria-labelledby="welcome-recent">
-              <h2 id="welcome-recent" className="welcome__heading">Recently closed</h2>
+              <h2 id="welcome-recent" className="welcome__heading">{WELCOME_TEXT.recent}</h2>
               <ul className="welcome__list">
                 {closed.map((e) => (
                   <li key={e.node.id}>

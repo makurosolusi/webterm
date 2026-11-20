@@ -59,7 +59,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           // Same surface as VscodeDialog: 480px, 8px radius, 8px padding, modal shadow, no animation.
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-(--vscode-cornerRadius-large) border border-(--vscode-dialog-border) bg-popover p-2 text-popover-foreground shadow-(--wt-shadow-modal) outline-none sm:max-w-[480px]",
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-3 rounded-(--vscode-cornerRadius-large) border border-(--vscode-dialog-border) bg-popover p-2 text-popover-foreground shadow-(--wt-shadow-modal) outline-none! sm:max-w-[480px]",
           className
         )}
         {...props}

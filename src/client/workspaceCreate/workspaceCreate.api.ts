@@ -94,6 +94,9 @@ export async function cancelClone(): Promise<void> {
   await post('/clone/cancel', {})
 }
 
-export async function createProject(body: { parent: string; name: string; gitInit: boolean }): Promise<string> {
-  return (await postJson<{ path: string }>('/project', body)).path
+export interface CreatedProject { path: string; bootstrapIdentity: boolean }
+
+/** `bootstrapIdentity`: git had no author identity, so the first commit was authored as webterm. */
+export async function createProject(body: { parent: string; name: string; gitInit: boolean }): Promise<CreatedProject> {
+  return postJson<CreatedProject>('/project', body)
 }

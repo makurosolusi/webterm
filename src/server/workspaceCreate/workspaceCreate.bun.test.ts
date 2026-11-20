@@ -130,11 +130,11 @@ test('traversal, relative parents and unsafe URLs are refused before anything ru
 })
 
 test('new project makes the folder with .git and an initial commit; gitInit false skips git', async () => {
-  const path = await createProject({ parent: tmp, name: 'fresh' })
+  const { path } = await createProject({ parent: tmp, name: 'fresh' })
   expect(existsSync(join(path, '.git', 'HEAD'))).toBe(true)
   const log = execFileSync('git', ['-C', path, 'log', '--format=%s'], { encoding: 'utf8' }).trim()
   expect(log).toBe('Initial commit')
-  const plain = await createProject({ parent: tmp, name: 'plain', gitInit: false })
+  const { path: plain } = await createProject({ parent: tmp, name: 'plain', gitInit: false })
   expect(existsSync(plain)).toBe(true)
   expect(existsSync(join(plain, '.git'))).toBe(false)
 }, TEST_TIMEOUT_MS)
@@ -195,7 +195,7 @@ test('route: clone streams NDJSON ending in done; project answers 201; errors ke
 
   const proj = await call(uiReq('POST'), '/api/workspace-create/project', { parent: tmp, name: 'np', gitInit: false })
   expect(proj.statusCode).toBe(201)
-  expect(JSON.parse(proj.chunks.join(''))).toEqual({ path: join(tmp, 'np') })
+  expect(JSON.parse(proj.chunks.join(''))).toEqual({ path: join(tmp, 'np'), bootstrapIdentity: false })
 
   const bad = await call(uiReq('POST'), '/api/workspace-create/clone', { url: 'file:///etc', parent: tmp })
   expect(bad.statusCode).toBe(400)

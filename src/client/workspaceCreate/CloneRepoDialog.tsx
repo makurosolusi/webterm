@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import FolderPicker from '../FolderPicker'
 import { deriveRepoDirName, expandCloneUrl, isValidCloneUrl, type CloneProgress } from '../../server/workspaceCreate/cloneUrl'
 import { CreatedPanel, CreateNotice, TargetPath } from './CreateNotices'
+import { InlineAlert } from './InlineAlert'
 import { useCreateFlow } from './useCreateFlow'
 import { cancelClone, cloneRepo, initialParent, PARENT_KEY, rememberParent } from './workspaceCreate.api'
 import { ParentField } from './ParentField'
@@ -69,18 +70,18 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
       <DialogContent className="sm:max-w-lg" data-testid="clone-repo-dialog">
         <DialogHeader>
           <DialogTitle>Clone repository</DialogTitle>
-          <DialogDescription>Private repositories use your git credentials (`gh auth login` or an SSH key).</DialogDescription>
+          <DialogDescription>Private repositories use your git credentials (<code>gh auth login</code> or an SSH key).</DialogDescription>
         </DialogHeader>
-        {flow.created ? <CreatedPanel path={flow.created} onDone={onClose} /> : (
-          <form className="flex flex-col gap-3 text-xs" onSubmit={(e) => { e.preventDefault(); if (canClone) void flow.submit() }}>
-            <div className="flex flex-col gap-1">
+        {flow.created ? <div className="px-3 pb-2"><CreatedPanel path={flow.created} onDone={onClose} /></div> : (
+          <form className="flex flex-col gap-4 px-3 pb-2 text-xs" onSubmit={(e) => { e.preventDefault(); if (canClone) void flow.submit() }}>
+            <div className="flex flex-col gap-2">
               <Label htmlFor="clone-url">Repository URL</Label>
               <Input id="clone-url" autoFocus value={url} spellCheck={false} disabled={flow.busy}
                 placeholder="https://github.com/user/repo.git — or user/repo" onChange={(e) => edit(setUrl, false)(e.target.value)} />
-              {url.trim() !== '' && expanded !== url.trim() && <span className="opacity-70">→ {expanded}</span>}
+              {url.trim() !== '' && expanded !== url.trim() && <span className="text-(--vscode-descriptionForeground)">→ {expanded}</span>}
               {url.trim() !== '' && !valid && <span className="text-(--vscode-errorForeground)">Use an https:// or git@host:owner/repo URL, or owner/repo for GitHub.</span>}
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="clone-name">Folder name</Label>
               <Input id="clone-name" value={folder} spellCheck={false} disabled={flow.busy} onChange={(e) => edit(setName)(e.target.value)} />
             </div>
@@ -91,7 +92,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
                 onOpenExisting={() => { const ex = flow.notice?.pre.existing; if (ex) { onOpenExisting(ex.path, ex.workspaceId); onClose() } }}
                 onUseName={(n) => edit(setName)(n)} onProceed={(ack) => void flow.submit(ack)} />
             )}
-            {(flow.error || loadError) && <p className="text-(--vscode-errorForeground)" role="alert">{flow.error || loadError}</p>}
+            {(flow.error || loadError) && <InlineAlert message={flow.error || loadError} />}
             {cloning && (
               <div className="flex flex-col gap-1" data-testid="clone-progress">
                 <span>{progress ? `${progress.phase}… ${progress.percent}%` : 'Starting clone…'}</span>
@@ -100,7 +101,7 @@ export function CloneRepoDialog({ onClose, onCreated, onOpenExisting }: {
                 </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="px-0 pb-0 pt-0">
               <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
               <IconTooltip label="Clone" disabled={!canClone} disabledReason={cloneLock}>
                 <Button type="submit" disabled={!canClone}>{cloning ? 'Cloning…' : 'Clone'}</Button>

@@ -8,8 +8,10 @@
 }
 .welcome__inner { max-width: 1200px; margin: 0 auto; padding-top: 12vh; }
 .welcome__title { margin: 0; padding: 5px 0 0; border: 0; font-size: 2.7em; font-weight: normal; line-height: normal; }
+/* Tagline: fluid size, always wraps (never clipped or ellipsised), balanced lines. */
 .welcome__subtitle {
-  margin: 0.6em 0 2em; font-size: 2em; color: var(--vscode-descriptionForeground); line-height: normal;
+  margin: 8px 0 24px; max-width: 40ch; font-size: clamp(1.125rem, 4.5vw, 1.75rem);
+  color: var(--vscode-descriptionForeground); line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere;
 }
 .welcome__columns { display: flex; flex-wrap: wrap; gap: 24px 96px; }
 .welcome__section { min-width: 240px; }
@@ -25,13 +27,19 @@
 .welcome__link:disabled { opacity: 0.4; }
 .welcome__link > .codicon { font-size: 16px; }
 .welcome__path { margin-left: 1em; color: var(--vscode-descriptionForeground); }
-.welcome__empty {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px;
-  color: var(--vscode-descriptionForeground);
-}
-/* Label dan tombol satu baris (tidak menyusut/membungkus); hanya input yang boleh melebar. */
-.welcome__empty > label, .welcome__empty > button { flex: none; white-space: nowrap; }
-.welcome__empty > input { flex: 1 1 160px; min-width: 0; }
+/* Start actions: 44px targets, label in the foreground colour (contrast is the theme's own),
+   icon in the link colour so it still reads as an action. */
+.welcome__link--action { display: flex; width: 100%; min-height: 44px; gap: 12px; padding: 0 8px; margin: 0 -8px; color: var(--vscode-foreground); }
+.welcome__link--action > .codicon { flex: none; width: 20px; text-align: center; color: var(--vscode-textLink-foreground); }
+.welcome__link--action:hover:not(:disabled) { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); text-decoration: none; }
+/* Empty-workspace form: visible label, input and button on one row (wraps on 320px), error below. */
+.welcome__empty { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.welcome__empty-label { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.welcome__empty-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.welcome__empty-row > input { flex: 1 1 160px; min-width: 0; min-height: 32px; }
+.welcome__empty-row > button { flex: none; white-space: nowrap; min-height: 32px; }
+.welcome__empty-error { margin: 0; color: var(--vscode-errorForeground); }
+@media (pointer: coarse) { .welcome__empty-row > input, .welcome__empty-row > button { min-height: 44px; } }
 /* "Finish setup" card above the columns: a bordered block so it reads as the next thing to do. */
 .welcome__setup {
   margin-bottom: 24px; padding: 12px 16px; max-width: 420px;

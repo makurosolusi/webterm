@@ -50,7 +50,7 @@ describe('Welcome & HelpOverlay', () => {
   it('label Welcome tak membungkus', () => {
     const w = css('welcome.css')
     expect(w).toContain('white-space: nowrap')
-    expect(rule(w, '.welcome__empty')).toContain('flex-wrap: wrap')
+    expect(rule(w, '.welcome__empty-row')).toContain('flex-wrap: wrap')
   })
   it('kolom keybinding HelpOverlay menyusut ke isi, tanpa hyphenation', () => {
     const h = css('helpOverlay.css')

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CREATE_TEXT } from './workspaceCreate.labels'
 
 export function ParentField({ id, value, busy, onChange, onBrowse }: {
   id: string
@@ -13,11 +14,11 @@ export function ParentField({ id, value, busy, onChange, onBrowse }: {
   onBrowse: () => void
 }): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-1">
-      <Label htmlFor={id}>Parent folder</Label>
-      <div className="flex gap-1">
-        <Input id={id} value={value} placeholder="/path/to/projects" spellCheck={false} disabled={busy} onChange={(e) => onChange(e.target.value)} />
-        <Button type="button" variant="outline" disabled={busy} onClick={onBrowse}>Browse…</Button>
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>{CREATE_TEXT.parent.label}</Label>
+      <div className="flex gap-2">
+        <Input id={id} value={value} placeholder={CREATE_TEXT.parent.placeholder} spellCheck={false} disabled={busy} onChange={(e) => onChange(e.target.value)} />
+        <Button type="button" variant="outline" disabled={busy} onClick={onBrowse}>{CREATE_TEXT.parent.browse}</Button>
       </div>
     </div>
   )

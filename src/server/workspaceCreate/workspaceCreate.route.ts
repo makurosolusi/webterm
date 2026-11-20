@@ -9,7 +9,7 @@
 //   POST /api/workspace-create/clone   {url, parent, name?}   NDJSON stream: {type:'progress',phase,percent}*
 //                                                             then {type:'done',path} | {type:'error',error,message}
 //   POST /api/workspace-create/clone/cancel                   abort the in-flight clone
-//   POST /api/workspace-create/project {parent, name, gitInit?}  201 {path}
+//   POST /api/workspace-create/project {parent, name, gitInit?}  201 {path, bootstrapIdentity}
 //   POST /api/workspace-create/reveal  {path}                 show it in Finder / the file manager
 import { stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -107,7 +107,7 @@ export async function workspaceCreateRoute(
     return true
   }
   if (sub === '/project') {
-    try { json(res, 201, { path: await createProject({ parent: str('parent'), name: str('name'), gitInit: b.gitInit !== false }, await createDeps()) }) } catch (e) { fail(e) }
+    try { json(res, 201, await createProject({ parent: str('parent'), name: str('name'), gitInit: b.gitInit !== false }, await createDeps())) } catch (e) { fail(e) }
     return true
   }
 
