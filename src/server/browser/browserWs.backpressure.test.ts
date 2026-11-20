@@ -105,3 +105,23 @@ describe('viewer hub frame memory', () => {
     expect(seen).toEqual(['n1:true', 'n1:false'])
   })
 })
+
+describe('frame window vs round trip (fake clock)', () => {
+  /** Frames a client behind `rttMs` receives in 1 s from a source at `fps`; the gate admits, the ack returns after one RTT. */
+  function delivered(fps: number, rttMs: number, maxInFlight: number): number {
+    const g = createFrameGate(maxInFlight)
+    let acks: Array<{ at: number; seq: number }> = []
+    let sent = 0
+    for (let i = 0, t = 0; t < 1000; i++, t = (i * 1000) / fps) {
+      for (const a of acks.filter((x) => x.at <= t)) g.ack(a.seq)
+      acks = acks.filter((x) => x.at > t)
+      if (g.admit(i + 1, 0) === 'send') { sent++; acks.push({ at: t + rttMs, seq: i + 1 }) }
+    }
+    return sent
+  }
+  it('the old window of 2 capped a 100 ms link near 20 fps', () => { expect(delivered(60, 100, 2)).toBeLessThanOrEqual(21) })
+  it('MAX_FRAMES_IN_FLIGHT sustains 60 fps up to the 100 ms round-trip budget and 30 fps at 150 ms', () => {
+    expect(delivered(60, 100, MAX_FRAMES_IN_FLIGHT)).toBeGreaterThanOrEqual(55) // one frame of boundary slack: an ack lands on the tick it frees
+    expect(delivered(30, 150, MAX_FRAMES_IN_FLIGHT)).toBeGreaterThanOrEqual(29)
+  })
+})

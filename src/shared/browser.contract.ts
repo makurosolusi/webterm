@@ -16,11 +16,19 @@ export const BROWSER_KIND = 'browser'
 export const BROWSER_WS_PATH = '/ws/browser'
 export const BROWSER_REST_PREFIX = '/api/browser'
 export const BROWSER_CONTROL_PREFIX = '/api/control/browser'
+/** Highest frame rate the window is sized for (page animation / 60 Hz video). */
+export const SCREENCAST_FPS_TARGET = 60
+/**
+ * Client round trip (server send -> client ack) the window must cover at full rate. Throughput per client is
+ * window / RTT, so the old window of 2 capped a 50 ms link at 40 fps and a 100 ms link at 20 fps (measured,
+ * docs/decisions/browser-video-smoothness.md). FRAME_MAX_BUFFERED_BYTES still bounds what a slow link can queue.
+ */
+export const FRAME_RTT_BUDGET_MS = 100
 /**
  * Frame terkirim ke SATU klien yang belum di-ack klien itu. Hanya mengatur laju kirim ke klien tersebut: host
  * meng-ack Chromium saat frame diterima, dan frame berikutnya menunggu sebagai satu frame tertunda (terbaru menang).
  */
-export const MAX_FRAMES_IN_FLIGHT = 2
+export const MAX_FRAMES_IN_FLIGHT = Math.ceil(SCREENCAST_FPS_TARGET * FRAME_RTT_BUDGET_MS / 1000)
 /** Kualitas JPEG screencast (DevTools ScreencastView.ts memakai 80). */
 export const JPEG_QUALITY_DEFAULT = 80
 /** Batas sisi frame screencast dalam piksel perangkat (DevTools ScreencastView.ts:560 `maxImageDimension`). */

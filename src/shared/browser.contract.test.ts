@@ -6,7 +6,7 @@ import {
 
 describe('browser.contract', () => {
   it('nilai §4.1 yang dipakai lintas WS tidak bergeser diam-diam', () => {
-    expect(MAX_FRAMES_IN_FLIGHT).toBe(2)
+    expect(MAX_FRAMES_IN_FLIGHT).toBe(6) // 60 fps x 100 ms RTT budget (browser-video-smoothness.md)
     expect(DSF_MAX).toBe(2)
     expect(ID_MAX_BYTES).toBe(255)
     expect(MOD).toEqual({ Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 })

@@ -61,26 +61,26 @@ describe('viewers and screencast', () => {
     rig = await makeRig()
     const c = await attached()
     for (let s = 1; s <= MAX_FRAMES_IN_FLIGHT + 3; s++) rig.host.emitFrame('n1', s)
-    expect(rig.host.acks.map(([, s]) => s)).toEqual([1, 2, 3, 4, 5]) // tiap frame di-ack saat diterima
-    await wait(() => c.bin.length === MAX_FRAMES_IN_FLIGHT, 'two frames')
+    expect(rig.host.acks.map(([, s]) => s)).toEqual(Array.from({ length: MAX_FRAMES_IN_FLIGHT + 3 }, (_, i) => i + 1)) // tiap frame di-ack saat diterima
+    await wait(() => c.bin.length === MAX_FRAMES_IN_FLIGHT, 'window full')
     await settle()
     expect(c.bin).toHaveLength(MAX_FRAMES_IN_FLIGHT)
     c.send({ t: 'ack', id: 'n1', seq: 1 })
-    await wait(() => c.bin.length === 3, 'pending frame after client ack')
-    expect(decodeFrameHeader(c.bin[2])?.seq).toBe(5) // frame 3 & 4 ditimpa frame terbaru
+    await wait(() => c.bin.length === MAX_FRAMES_IN_FLIGHT + 1, 'pending frame after client ack')
+    expect(decodeFrameHeader(c.bin[MAX_FRAMES_IN_FLIGHT])?.seq).toBe(MAX_FRAMES_IN_FLIGHT + 3) // frames in between are overwritten by the newest
     c.send({ t: 'ack', id: 'n1', seq: 2 })
     await settle()
-    expect(c.bin).toHaveLength(3) // tidak ada frame basi yang menyusul
+    expect(c.bin).toHaveLength(MAX_FRAMES_IN_FLIGHT + 1) // tidak ada frame basi yang menyusul
   })
 
   it('a slow viewer does not hold back a fast one', async () => {
     rig = await makeRig()
     const a = await attached(), b = await attached()
-    for (let s = 1; s <= 3; s++) rig.host.emitFrame('n1', s)
-    await wait(() => a.bin.length === 2 && b.bin.length === 2, 'both got two')
+    for (let s = 1; s <= MAX_FRAMES_IN_FLIGHT + 1; s++) rig.host.emitFrame('n1', s)
+    await wait(() => a.bin.length === MAX_FRAMES_IN_FLIGHT && b.bin.length === MAX_FRAMES_IN_FLIGHT, 'both got a full window')
     a.send({ t: 'ack', id: 'n1', seq: 1 })
-    await wait(() => a.bin.length === 3, 'fast viewer got the pending frame')
-    expect(b.bin).toHaveLength(2)
+    await wait(() => a.bin.length === MAX_FRAMES_IN_FLIGHT + 1, 'fast viewer got the pending frame')
+    expect(b.bin).toHaveLength(MAX_FRAMES_IN_FLIGHT)
   })
 
   it('ignores an ack for an unknown seq', async () => {
