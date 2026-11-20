@@ -23,11 +23,16 @@ export const DOWNLOAD_TIMEOUT_MS = 10 * 60_000
 export type CftPlatform = 'mac-arm64' | 'mac-x64' | 'linux64' | 'win64'
 
 /**
- * Pinned SHA-256 of each platform archive for `CHROME_FOR_TESTING_VERSION`. EMPTY on purpose: Chrome for Testing
- * publishes no checksum, and a value must come from a verified source, never from memory. Fill with
- * `bun scripts/fetch-chrome.ts --print-sha256`; until then the archive is accepted over HTTPS alone (a warning is logged).
+ * Pinned SHA-256 of each platform archive for `CHROME_FOR_TESTING_VERSION` (Chrome for Testing publishes no checksum).
+ * Computed 2026-11-20 by `bun scripts/fetch-chrome.ts --print-sha256` and confirmed by an independent curl + `shasum -a 256`
+ * of the same storage.googleapis.com URLs. A bump must clear and regenerate these the same way (two downloads must agree).
  */
-export const CHROME_SHA256: Partial<Record<CftPlatform, string>> = {}
+export const CHROME_SHA256: Partial<Record<CftPlatform, string>> = {
+  'mac-arm64': 'b86d3b393def1f87d369b022abff0a51acb015d6fcb79ddfd1c379c9d72fbbe2',
+  'mac-x64': '1390e9b1386a1fd8ec2c4940b9ff59cbbda71b896b85182d7efbd73c58213802',
+  linux64: 'dba9cc838e1ce269c33ea68170881127bd15d078fc3ca5891c90802819a4d7c7',
+  win64: '6a8ad290952cc612c7777ffb3eb62f345539a2a1a8d440cfac190c6d36b34d2c',
+}
 
 const BIN_IN_ARCHIVE: Record<CftPlatform, string> = {
   'mac-arm64': 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',

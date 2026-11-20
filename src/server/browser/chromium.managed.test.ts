@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deflateRawSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { archiveUrl, cftPlatform, CHROME_FOR_TESTING_VERSION, installManaged, managedBinaryPath } from './chromium.managed'
+import { archiveUrl, cftPlatform, CHROME_FOR_TESTING_VERSION, CHROME_SHA256, installManaged, managedBinaryPath } from './chromium.managed'
 import { extractZip, safeJoin } from './chromium.managed.zip'
 
 let dir: string
@@ -89,7 +89,7 @@ describe('installManaged', () => {
 
   it('downloads from the official url, extracts atomically and is idempotent', async () => {
     const urls: string[] = []
-    const bin = await installManaged(dir, { platform: 'linux64', version: '9.9', fetch: fakeFetch(zip, 200, urls) })
+    const bin = await installManaged(dir, { platform: 'linux64', version: '9.9', fetch: fakeFetch(zip, 200, urls), sha256: {} })
     expect(bin).toBe(join(dir, '9.9', 'chrome-linux64', 'chrome'))
     expect(readFileSync(bin, 'utf8')).toBe('#!/bin/sh')
     expect(urls).toEqual([archiveUrl('linux64', '9.9')])
@@ -102,14 +102,19 @@ describe('installManaged', () => {
     expect(existsSync(join(dir, '1'))).toBe(false)
     await expect(installManaged(dir, { platform: 'linux64', version: '1', fetch: fakeFetch(zip), sha256: { linux64: good } })).resolves.toContain('chrome')
   })
+  it('ships a pin for every platform and rejects an archive that does not match the default pin', async () => {
+    for (const p of ['mac-arm64', 'mac-x64', 'linux64', 'win64'] as const) expect(CHROME_SHA256[p]).toMatch(/^[0-9a-f]{64}$/)
+    await expect(installManaged(dir, { platform: 'linux64', version: '4', fetch: fakeFetch(zip) })).rejects.toThrow(/SHA-256 mismatch/)
+    expect(existsSync(join(dir, '4'))).toBe(false)
+  })
   it('fails with context on HTTP errors, a bad archive, and an unsupported platform', async () => {
     await expect(installManaged(dir, { platform: 'linux64', version: '2', fetch: fakeFetch(null, 404) })).rejects.toThrow(/answered 404/)
-    await expect(installManaged(dir, { platform: 'linux64', version: '2', fetch: fakeFetch(makeZip([{ name: 'other', data: 'x' }])) })).rejects.toThrow(/installing 2/)
+    await expect(installManaged(dir, { platform: 'linux64', version: '2', fetch: fakeFetch(makeZip([{ name: 'other', data: 'x' }])), sha256: {} })).rejects.toThrow(/installing 2/)
     expect(existsSync(join(dir, '2'))).toBe(false)
     await expect(installManaged(dir, { platform: null })).rejects.toThrow(/no Chrome for Testing build/)
   })
   it('rejects a response over the size cap by content-length', async () => {
     const big = (async () => new Response('x', { headers: { 'content-length': String(10 ** 10) } })) as unknown as typeof fetch
-    await expect(installManaged(dir, { platform: 'linux64', version: '3', fetch: big })).rejects.toThrow(/larger than/)
+    await expect(installManaged(dir, { platform: 'linux64', version: '3', fetch: big, sha256: {} })).rejects.toThrow(/larger than/)
   })
 })
