@@ -5,6 +5,9 @@
 ### Added
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes and the Chrome seccomp profile from the checkout.
 
+### Removed
+- The "Download Chromium" button in Settings > Features > Advanced. It saved a browser override that beat the pinned managed Chrome; the setup Browser step is unchanged.
+
 ## [0.9.3] - 2026-11-19
 
 ### Fixed

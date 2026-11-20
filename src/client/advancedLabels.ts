@@ -30,7 +30,7 @@ export const ADVANCED_TEXT = {
   changeFailed: 'The change did not go through. Try again in a moment.',
 } as const
 
-/** "Download Chromium" (wizard Browser step and Settings › Capabilities › Advanced). */
+/** "Download Chromium" (wizard Browser step). */
 export const DOWNLOAD_TEXT = {
   start: 'Download Chromium (~200 MB)',
   hint: 'Chrome for Testing from Google, saved in the webterm data folder. Nothing else on this computer changes.',
