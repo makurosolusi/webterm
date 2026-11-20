@@ -66,7 +66,7 @@ jobs:
             --security-opt seccomp=docker/chrome.seccomp.json --shm-size 1g \
             -e WEBTERM_BROWSER=on \
             -v "$RUNNER_TEMP/data:/data" -v "$RUNNER_TEMP/ws:/workspace" \
-            --health-cmd 'curl -s -o /dev/null --max-time 3 http://127.0.0.1:8700/api/health' \
+            --health-cmd 'curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:8700/' \
             --health-interval 5s --health-retries 12 --health-start-period 10s \
             webterm:smoke
           ok=0
@@ -87,8 +87,8 @@ jobs:
           [ "$(docker inspect -f '{{.RestartCount}}' webterm-smoke)" = 0 ] || { echo "container restarted" >&2; docker logs webterm-smoke; exit 1; }
           [ "$(docker inspect -f '{{.State.Running}}' webterm-smoke)" = true ] || { docker logs webterm-smoke; exit 1; }
           if docker logs webterm-smoke 2>&1 | grep -q 'Cannot find module'; then docker logs webterm-smoke; echo "missing module at boot" >&2; exit 1; fi
-          code="$(docker exec webterm-smoke curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8700/api/health)"
-          case "$code" in 200|401|403) ;; *) echo "unexpected /api/health status $code" >&2; exit 1 ;; esac
+          code="$(docker exec webterm-smoke curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8700/)"
+          case "$code" in 200) ;; *) echo "unexpected / status $code" >&2; exit 1 ;; esac
 
       - name: Chrome sandbox works (about:blank only, same hardening as compose, no --no-sandbox)
         run: |

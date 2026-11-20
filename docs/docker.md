@@ -113,7 +113,7 @@ The server listens on `0.0.0.0:$PORT` inside the container (`HOST=0.0.0.0`) and 
 - **`Check failed: sys_chroot("/proc/self/fdinfo/") == 0`, then the zygote dies:** an old copy of the seccomp profile (before `chroot` was allowed). Re-fetch `docker/chrome.seccomp.json` from the same tag as the image.
 - **"No usable sandbox" / `clone: Operation not permitted`:** the strict seccomp profile is in use but outdated or missing (plain `docker run` needs `--security-opt seccomp=docker/chrome.seccomp.json`, or `unconfined`), the host has `kernel.unprivileged_userns_clone=0` or `user.max_user_namespaces=0`, or an AppArmor policy blocks user namespaces (Ubuntu 23.10+: `kernel.apparmor_restrict_unprivileged_userns=0`). Do not work around it with `--no-sandbox`.
 - **`/workspace is not writable`:** fix host ownership, see above.
-- **Unhealthy container:** `docker compose logs webterm`; the healthcheck accepts any HTTP answer from `/api/health`.
+- **Unhealthy container:** `docker compose logs webterm`; the healthcheck is `curl -f` on `GET /` (the static UI, no token), so it fails on any non-2xx or no answer and never logs an auth rejection. It deliberately avoids `/api/*`, which needs a token.
 
 ## Updating pinned versions
 

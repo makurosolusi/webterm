@@ -50,9 +50,10 @@ services:
     cpus: ${WEBTERM_CPUS:-4}
     pids_limit: 2048
 
-    # Any HTTP answer proves the server is up (/api/health itself needs credentials, so curl runs without -f).
+    # GET / (the static UI) needs no token, so a probe every 15s writes no auth.reject warning; -f fails on non-2xx, so a dead or
+    # not-yet-serving server is unhealthy. Do not probe /api/*: it needs a token and each probe would log a rejection.
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null --max-time 3 http://127.0.0.1:$${PORT:-8700}/api/health"]
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null --max-time 3 http://127.0.0.1:$${PORT:-8700}/"]
       interval: 15s
       timeout: 5s
       retries: 5
