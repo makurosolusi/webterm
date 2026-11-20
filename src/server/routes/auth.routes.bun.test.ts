@@ -28,7 +28,7 @@ let users = createUserStore(mem, now)
 let opened: string[] = []
 let token: string | undefined = ROOT_TOKEN
 const opener = createUiOpener({ runDir, bindHost: '127.0.0.1', port: 1, now, openFile: async (p) => { opened.push(p) } })
-const deps = () => ({ sessions: () => store, users: () => users, opener, token: () => token, dataDir: () => dataDir, throttle: createLoginThrottle(now), now })
+const deps = () => ({ sessions: () => store, users: () => users, opener, token: () => token, throttle: createLoginThrottle(now), now })
 let route = createUiAuthRoute(deps())
 
 const server = http.createServer((req, res) => {

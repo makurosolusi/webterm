@@ -79,6 +79,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/server/routes/route.core.body.bun.test.ts',
     'src/server/routes/route.uiOnly.policy.bun.test.ts',
     'src/server/settings.defaults.policy.test.ts',
+    'src/server/setupCode.removed.policy.test.ts',
   ],
   shared: [],
   docs: [],

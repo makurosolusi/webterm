@@ -17,7 +17,6 @@ const { createUiOpener } = await import('../uiOpen')
 const { createUiSessionStore } = await import('../uiSession')
 const { createUserStore } = await import('../uiUser')
 const { BACKOFF_AFTER, createLoginThrottle } = await import('../loginThrottle')
-const { ensureSetupCode, setupCodePath } = await import('../setupCode')
 const { UI_SESSION_COOKIE } = await import('../auth')
 
 const ROOT_TOKEN = 'root-token-test-only-0123456789abcdef' // test-only
@@ -28,7 +27,7 @@ let store = createUiSessionStore(mem)
 let users = createUserStore(mem)
 let opened: string[] = []
 const opener = createUiOpener({ runDir: join(dataDir, 'run'), bindHost: '127.0.0.1', port: 1, openFile: async (p) => { opened.push(p) } })
-const build = () => createUiAuthRoute({ sessions: () => store, users: () => users, opener, token: () => ROOT_TOKEN, dataDir: () => dataDir, throttle: createLoginThrottle() })
+const build = () => createUiAuthRoute({ sessions: () => store, users: () => users, opener, token: () => ROOT_TOKEN, throttle: createLoginThrottle() })
 let route = build()
 
 const server = http.createServer((req, res) => {
@@ -45,7 +44,6 @@ beforeEach(() => {
   store = createUiSessionStore(mem)
   users = createUserStore(mem)
   opened = []
-  rmSync(setupCodePath(dataDir), { force: true })
   route = build()
 })
 
@@ -66,42 +64,42 @@ const cookieOf = (r: Reply): string => {
   return raw.slice(`${UI_SESSION_COOKIE}=`.length, raw.indexOf(';'))
 }
 const as = (raw: string, h: Record<string, string> = SAME) => ({ ...h, cookie: `${UI_SESSION_COOKIE}=${raw}` })
-const setupCode = (): string => readFileSync(ensureSetupCode(dataDir, users)!, 'utf8').trim()
-/** Owner `alice` via the setup code; returns the session cookie. */
+/** Owner `alice` via setup; returns the session cookie. */
 async function owner(): Promise<string> {
-  const r = await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW, setupCode: setupCode() })
+  const r = await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW })
   expect(r.status).toBe(201)
   return cookieOf(r)
 }
 
 describe('POST /auth/setup', () => {
-  test('proof required: no cookie and no code 403, a wrong code 403, the code 201 + cookie for the user; code cleared', async () => {
-    const code = setupCode()
-    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW })).json).toEqual({ error: 'setup_proof_required' })
-    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW, setupCode: 'f'.repeat(32) })).status).toBe(403)
-    const r = await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW, setupCode: code })
+  test('no proof needed: 201 + cookie for the user; a later setup is 409 already_setup', async () => {
+    const r = await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW })
     expect(r.status).toBe(201)
     expect(r.json).toEqual({ user: { id: expect.any(Number), username: 'alice' } })
     expect(store.userOf(cookieOf(r))).toBe((r.json.user as { id: number }).id)
     expect(store.list()[0]!.ua).toBe('TestBrowser/1.0')
-    expect(existsSync(setupCodePath(dataDir))).toBe(false)
-    expect((await call('POST', '/auth/setup', SAME, { username: 'bob', password: PW, setupCode: code })).json).toEqual({ error: 'already_setup' })
+    expect((await call('POST', '/auth/setup', SAME, { username: 'bob', password: PW })).json).toEqual({ error: 'already_setup' })
   })
 
-  test('a token-era session is proof; it is revoked and a fresh cookie is set', async () => {
-    const proof = store.create()
-    const r = await call('POST', '/auth/setup', as(proof), { username: 'alice', password: PW })
+  test('a legacy setupCode in the body is ignored; no SETUP_CODE file is written', async () => {
+    const r = await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW, setupCode: 'f'.repeat(32) })
     expect(r.status).toBe(201)
-    expect(cookieOf(r)).not.toBe(proof)
-    expect(store.verify(proof)).toBe(false)
+    expect(existsSync(join(dataDir, 'secrets', 'SETUP_CODE'))).toBe(false)
+  })
+
+  test('an existing token-era session is revoked and a fresh cookie is set', async () => {
+    const old = store.create()
+    const r = await call('POST', '/auth/setup', as(old), { username: 'alice', password: PW })
+    expect(r.status).toBe(201)
+    expect(cookieOf(r)).not.toBe(old)
+    expect(store.verify(old)).toBe(false)
     expect(store.count()).toBe(1)
   })
 
-  test('400 invalid_username / weak_password, and validation does not burn the code', async () => {
-    const code = setupCode()
-    expect((await call('POST', '/auth/setup', SAME, { username: 'a', password: PW, setupCode: code })).json).toEqual({ error: 'invalid_username' })
-    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: 'short', setupCode: code })).json).toEqual({ error: 'weak_password' })
-    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW, setupCode: code })).status).toBe(201)
+  test('400 invalid_username / weak_password, then the corrected setup succeeds', async () => {
+    expect((await call('POST', '/auth/setup', SAME, { username: 'a', password: PW })).json).toEqual({ error: 'invalid_username' })
+    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: 'short' })).json).toEqual({ error: 'weak_password' })
+    expect((await call('POST', '/auth/setup', SAME, { username: 'alice', password: PW })).status).toBe(201)
   })
 
   test('two concurrent setups: exactly one 201, one 409', async () => {

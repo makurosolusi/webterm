@@ -49,16 +49,19 @@ own actions or enabled a token it then knew (sec-208-1). Tokens in URLs also end
 
 ## Accounts (2026-11-11)
 
-Code: `src/server/uiUser.ts`, `src/server/setupCode.ts`, `src/server/loginThrottle.ts`,
+Code: `src/server/uiUser.ts`, `src/server/loginThrottle.ts`,
 `src/server/routes/auth.routes.ts`, `src/server/routes/auth.account.routes.ts`, `src/server/bootWiring.ts`.
 
 Humans now sign in with a username and password; the root token stays for machines.
 
-1. **First account.** `POST /auth/setup` creates the only account and needs proof that the caller is
-   on this machine: a live `wt_ui` session (token era, or a window the server opened) OR the setup code
-   in `<data dir>/secrets/SETUP_CODE` (0600). Boot prints one line naming that file, never the value. A
-   local process that can only reach the port cannot claim a fresh install. Setup calls are serialised,
-   so two at once give one 201 and one 409. Success clears the code and revokes every earlier session.
+1. **First account (2026-11-20: no proof).** `POST /auth/setup { username, password }` creates the only
+   account and asks for nothing else: whoever reaches a fresh server first claims it (Portainer, Gitea,
+   Jellyfin do the same). The earlier setup code (`secrets/SETUP_CODE`) was removed: one owner, and the
+   extra ceremony blocked headless and remote installs. Trade-off: the compose default binds
+   `127.0.0.1`, which protects a fresh install; if you expose the port to a network, the first visitor
+   can claim it, so create the account right after start. Boot logs one line while no account exists
+   ("No account yet: open <url> to create it"). Setup calls are serialised, so two at once give one 201
+   and one 409; success revokes every earlier session.
 2. **Fresh session on every sign-in.** Login, setup and token sign-in revoke the cookie the caller sent
    and set a new one (no session fixation). Sessions store the User-Agent (200 chars) for the list.
 3. **Throttle.** Failed logins and failed password checks back off per account and per socket peer
@@ -97,8 +100,6 @@ Locks: `src/server/routes/auth.account.routes.bun.test.ts`, `src/server/routes/a
   enforced. Every boot now enforces one, so it could never switch on; it was removed (2026-11-06). DNS
   rebinding stays closed by the credential: a rebinding page has no root token header and no `wt_ui`
   cookie for this origin, so it gets 403.
-- There is no `webterm open` operator command. A headless setup creates the account with the setup code
-  from the file the boot line names (before accounts: pasted the token); neither value is ever printed.
 
 Locks: `src/server/boot.zeroenv.bun.test.ts` (every `/api` path and `/ws` refuses no credential and
 `?token=`, and the token is never logged), `src/server/routes/route.uiOnly.policy.bun.test.ts` (forged

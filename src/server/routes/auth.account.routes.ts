@@ -1,7 +1,7 @@
 // Account half of `/auth/*` (auth.routes.ts dispatches here): first-account setup, the caller's
 // sessions, and password / username changes. Pattern: code-server / GitHub "sessions" page: a user sees
 // and revokes only their own sessions, a password change signs every other device out (OWASP ASVS 3.3).
-//   POST /auth/setup                      { username, password, setupCode? } -> 201 { user } + fresh cookie
+//   POST /auth/setup                      { username, password } -> 201 { user } + fresh cookie
 //   GET  /auth/sessions                   { items: [{ id, createdAt, lastSeen, ua, current }] }
 //   POST /auth/sessions/revoke-others     { revoked }
 //   POST /auth/sessions/:id/revoke        204 (12-hex id, the caller's own sessions only)
@@ -11,7 +11,6 @@ import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createLogger } from '../logs'
 import { throttleKeys, type LoginThrottle } from '../loginThrottle'
-import { clearSetupCode, consumeSetupCode } from '../setupCode'
 import { AuthError, USERNAME_RE, checkPassword, type UiUser } from '../uiUser'
 import { callerSession, readJsonBody, reply, sessionCookie, str, userAgentOf, type UiAuthDeps } from './auth.http'
 
@@ -51,13 +50,9 @@ export async function setupAccount(d: UiAuthDeps, req: IncomingMessage, res: Ser
     if (e instanceof AuthError) return reply(res, 400, { error: e.code })
     throw new Error('setup: password check failed', { cause: e })
   }
-  // Validated BEFORE the code is spent, so a typo does not burn it.
-  const raw = callerSession(req)
-  const proof = (raw !== undefined && d.sessions().verify(raw)) || consumeSetupCode(d.dataDir(), str(read.body, 'setupCode'))
-  if (!proof) return reply(res, 403, { error: 'setup_proof_required' })
+  // No proof of ownership: whoever reaches a fresh server first claims it (docs/decisions/ui-session-cookie.md).
   const user = await d.users().createOwner({ username, password })
-  clearSetupCode(d.dataDir())
-  d.sessions().revokeAllExcept() // the proof session and every token-era tab: they sign in to the new account
+  d.sessions().revokeAllExcept() // every token-era tab: they sign in to the new account
   signIn(d, req, res, 201, user)
   log.info('auth.setup_done', 'First account created', { userId: user.id })
 }

@@ -18,6 +18,7 @@
 - A failed Chromium download now retries network failures automatically with growing pauses (and can be cancelled), starts over cleanly without leaving partial files, names the cause (network, disk, checksum mismatch, other) in plain words and offers "Try again". A checksum mismatch is refused and never retried.
 
 ### Removed
+- The first-account setup code (`secrets/SETUP_CODE`). Creating the first account now asks only for a username and password; the first visitor to a fresh server claims it, so create it right after start (the default bind is loopback only). Boot logs "No account yet: open <url> to create it" instead of naming a file.
 - The "Download Chromium" button in Settings > Features > Advanced. It saved a browser override that beat the pinned managed Chrome; the setup Browser step is unchanged.
 
 ## [0.9.3] - 2026-11-19

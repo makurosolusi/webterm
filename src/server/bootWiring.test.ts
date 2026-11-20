@@ -1,11 +1,11 @@
 // Kabel boot in-process: env palsu + WEBTERM_DATA_DIR tmp; process.env/token state dipulihkan tiap tes.
 import type { ServerResponse } from 'node:http'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeTokenToEnv } from './auth'
-import { announceSetup, bootWiring, onListenError, refuseRequest, setupLine } from './bootWiring'
+import { announceSetup, bootWiring, onListenError, refuseRequest } from './bootWiring'
 import { getTokenState, setTokenState } from './tokenBootstrap'
 
 // Logger dipalsukan: sink konsol/file tak terjamin aktif di vitest, yang diuji adalah apa yang DIKIRIM ke logger.
@@ -60,13 +60,14 @@ describe('bootWiring', () => {
     Object.defineProperty(process.stderr, 'isTTY', { value: undefined, configurable: true })
   })
 
-  it('announceSetup: one line naming the setup-code file while no account exists, nothing after', () => {
-    announceSetup(() => '/data/secrets/SETUP_CODE')
-    expect(written).toBe(`webterm: ${setupLine('/data/secrets/SETUP_CODE')}\n`)
-    expect(written).toContain('No account yet')
-    written = ''
-    announceSetup(() => null)
-    expect(written).toBe('')
+  it('announceSetup: one info line while no account exists, nothing after; boot writes no setup-code file', () => {
+    bootWiring({ PORT: '9000' }, dir)
+    expect(existsSync(join(dir, 'data', 'secrets', 'SETUP_CODE'))).toBe(false)
+    announceSetup(() => 0, 'http://127.0.0.1:9000')
+    expect(JSON.stringify(logged)).toContain('No account yet: open http://127.0.0.1:9000 to create it')
+    logged.length = 0
+    announceSetup(() => 1, 'http://127.0.0.1:9000')
+    expect(logged).toEqual([])
   })
 
   it('non-loopback non-TTY: token dibuat, log memuat path+panjang tapi bukan nilai token', () => {
