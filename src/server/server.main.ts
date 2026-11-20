@@ -58,6 +58,7 @@ import { activeAgentChatPool } from './agentChat/agentChat.pool'
 import { guardWorkspaceRepos } from './repoHygiene'
 import { refuseProxyOnMain, startDevProxy } from './routes/proxy.routes'
 import { viteCacheDir } from './serverConfig'
+import { bootCredentialProxy, shutdownCredentialProxy } from './credentialProxy/credentialProxy.boot'
 import { registerWorkspaceLookup } from './central/chat/turnPersistence'
 
 const LOG_DIR = 'logs'
@@ -78,6 +79,9 @@ const ledgerRuntime = startLedgerRuntime()
 // Workspaces live in webterm.db, never the ledger file: project chats, node.list, browser tools and
 // project.discover resolve them through this store.
 registerWorkspaceLookup((id) => db.get(id), () => db.list())
+// Credential proxy before anything can spawn Claude (and before tmux adoption is relied on): stable port + token,
+// so live panes keep a valid ANTHROPIC_BASE_URL. A failed start is logged and spawns fail closed (credentialProxy.boot.ts).
+bootCredentialProxy({ dataDir: dataDir(), runningSessions: () => sessions.claudeSessionsStartedBefore(Date.now()), notice: { db: ledgerRuntime?.db ?? null } })
 migrateStoredSettings(log) // first-run backfill + default Claude profile, once (bootSettings.ts)
 if (ledgerRuntime) startLedgerLoops(ledgerRuntime, log) // reaper + the startup changes notice (bootLoops.ts)
 
@@ -292,7 +296,8 @@ server.listen(PORT, HOST, () => {
 })
 
 /** In-process stop (src/native, tests); also installs the exit/signal hooks that close the stores (shutdown.ts). */
-export const stopServer = installShutdown({
+const stopMain = installShutdown({
   log, runDir: RUN_DIR, server, devProxy, sockets: () => [...wss.clients, ...browserWss.clients],
   stores: [['webterm.db', () => db.close()], ...(ledgerRuntime ? [['ledger.db', () => ledgerRuntime.close()] as const] : [])],
 })
+export const stopServer = async (): Promise<void> => { await stopMain(); await shutdownCredentialProxy() }

@@ -1,8 +1,7 @@
-// Process-wide handle + boot of the detector. The base URL is resolved through `claudeEnv` (the helper every
-// Claude spawn uses), so the probe targets exactly what Claude Code would talk to; the secret in that env
-// is never read here, only `ANTHROPIC_BASE_URL`.
+// Process-wide handle + boot of the detector. The base URL is the REAL upstream (`claudeUpstream`, else the
+// public API), never the local credential proxy address a child sees; the secret of the upstream is not read here.
 import type { ServerMsg } from '../../shared/protocol'
-import { claudeEnv } from '../claudeProvider/claudeProvider.store'
+import { ANTHROPIC_API_URL, claudeUpstream } from '../claudeProvider/claudeProvider.store'
 import { recordEvent } from '../events/producers'
 import type { LedgerRuntime } from '../ledger/ledgerRuntime'
 import { createLogger } from '../logs'
@@ -25,7 +24,7 @@ export function startConnectivity(deps: { runtime: Pick<LedgerRuntime, 'db'> | n
   const svc = createConnectivityService({
     fetch: (url, init) => fetch(url, init),
     now: Date.now,
-    baseUrl: () => claudeEnv(process.env).ANTHROPIC_BASE_URL,
+    baseUrl: () => claudeUpstream()?.baseUrl ?? ANTHROPIC_API_URL,
     store: createEpisodeStore(deps.runtime.db, Date.now),
     log,
     onChange: (change) => { recordEvent(changeEvent(change)); deps.broadcast(netFrame(change)) },

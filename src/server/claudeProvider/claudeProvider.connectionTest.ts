@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { bookInLedger, parseUsage, structuredArgv, SUMMARY_MODEL, type BookUsage } from '../central/context/claudeStructured'
 import { mainModel } from '../central/runtime/claudeResult'
 import { defaultOnPath, spawnRun, type ClaudeInstall, type LaunchFailure, type RunFn, type RunResult, type StageResult, type WrapperSignIn, probeClaudeLaunch } from '../claudeLauncher/claudeLaunch.probe'
+import { proxyEndpoint } from '../credentialProxy/credentialProxy.env'
 import { createLogger } from '../logs'
 import { modelRequest } from '../models/modelRequest'
 import { redactSecrets } from '../redactSecrets'
@@ -55,11 +56,21 @@ export const CONN_TEXT = {
     timeout: [`No answer within ${CONNECTION_TEST_TIMEOUT_MS / 1000} s.`, 'The endpoint may be slow or unreachable. Check the URL and the network.'],
     request_failed: ['Claude Code started but the request did not succeed.', 'Run the same command in a terminal on the server to see the full error.'],
   } satisfies Record<RequestFailure, [string, string]>,
+  /** Failures the local credential proxy reports about itself (`webterm credential proxy: <code>`). */
+  proxy: {
+    bad_proxy_token: ['The local credential proxy refused this session\'s token.', 'Restart the Claude session.'],
+    no_upstream: ['The local credential proxy has no key to forward to.', 'Save a provider key in Settings.'],
+  } as Record<string, [string, string]>,
+  viaProxy: 'via local credential proxy',
 }
 
 // Matched in order against the CLI's error text (redacted first). The CLI prints the HTTP status in
 // its "API Error: <status> ..." lines; network failures carry Node's error codes.
+// The proxy's own codes come first: its message also holds a status number and the word "proxy".
 const FAILURE_TABLE: [RequestFailure, RegExp][] = [
+  ['request_failed', /credential proxy: (?:bad_proxy_token|no_upstream)/i],
+  ['timeout', /credential proxy: upstream_timeout/i],
+  ['network', /credential proxy: upstream_unreachable/i],
   ['auth_rejected', /\b40[13]\b|authentication_error|permission_error|invalid (?:x-)?api[ -]key|unauthori[sz]ed|forbidden|oauth token (?:has )?expired|please run \/login/i],
   ['model_not_found', /\b404\b|not_found_error|model[^\n]{0,80}(?:not (?:found|exist|available|supported)|does not exist)|invalid model|selected model/i],
   ['rate_limited', /\b429\b|rate[_ ]limit|too many requests|usage limit/i],
@@ -71,6 +82,12 @@ const FAILURE_TABLE: [RequestFailure, RegExp][] = [
 export function classifyRequestFailure(text: string, timedOut: boolean): RequestFailure {
   if (timedOut) return 'timeout'
   return FAILURE_TABLE.find(([, re]) => re.test(text))?.[0] ?? 'request_failed'
+}
+
+/** The proxy's own code in a failure text, when it has a dedicated message; else null. */
+export function proxyFailureCode(text: string): string | null {
+  const code = /credential proxy: (\w+)/i.exec(text)?.[1]?.toLowerCase()
+  return code && code in CONN_TEXT.proxy ? code : null
 }
 
 /** The `-p` request: launch argv + the helpers' isolation flags + the cheapest tier honouring the provider's model vars. */
@@ -91,6 +108,9 @@ export interface ConnDeps {
   /** false = stop before the request (opening the wizard must not spend tokens); default true. */
   sendRequest?: boolean
 }
+
+/** The child env points at the running local credential proxy. */
+const usesProxy = (env: NodeJS.ProcessEnv): boolean => { const p = proxyEndpoint(); return !!p && env.ANTHROPIC_BASE_URL === p.url }
 
 const PROBE_STAGE: Record<StageResult['stage'], ConnStage> = { wrapper: 'wrapper', claude: 'cli', auth: 'auth' }
 type Parsed = { isError: boolean; text: string; raw: Parameters<typeof parseUsage>[0] & { modelUsage?: unknown } }
@@ -139,7 +159,8 @@ export async function runConnectionTest(launch: ResolvedClaudeLaunch, d: ConnDep
     env: d.env, run, onPath: d.onPath ?? defaultOnPath(d.env), provider: d.provider, version: true, ...(d.signal ? { signal: d.signal } : {}),
     onStep: (s) => {
       const stage = PROBE_STAGE[s.stage]
-      settle({ stage, state: s.ok ? 'ok' : 'failed', detail: s.message, ...(s.hint ? { hint: s.hint } : {}), ...(s.install ? { install: s.install } : {}), ...(s.signIn ? { signIn: s.signIn } : {}) })
+      const proxied = s.ok && stage === 'auth' && usesProxy(d.env)
+      settle({ stage, state: s.ok ? 'ok' : 'failed', detail: proxied ? `${s.message} ${CONN_TEXT.viaProxy}` : s.message, ...(s.hint ? { hint: s.hint } : {}), ...(s.install ? { install: s.install } : {}), ...(s.signIn ? { signIn: s.signIn } : {}) })
       const next = order[order.indexOf(stage) + 1] as ConnStage
       if (s.ok && (next !== 'request' || d.sendRequest !== false)) begin(next)
     },
@@ -175,7 +196,8 @@ export async function runConnectionTest(launch: ResolvedClaudeLaunch, d: ConnDep
   }
   const text = redactSecrets(`${parsed ? parsed.text : (r?.stdout ?? '')}\n${r?.stderr ?? ''}`.slice(0, STDOUT_MAX_MATCHED))
   const failed = r ? classifyRequestFailure(text, r.timedOut) : 'request_failed'
-  const [detail, hint] = CONN_TEXT.request[failed]
+  const proxyCode = proxyFailureCode(text)
+  const [detail, hint] = (proxyCode && CONN_TEXT.proxy[proxyCode]) || CONN_TEXT.request[failed]
   settle({ stage: 'request', state: 'failed', detail, hint })
   return finish({ result: 'failed', stage: 'request', failed, summary: CONN_TEXT.failedAt('request', detail) })
 }

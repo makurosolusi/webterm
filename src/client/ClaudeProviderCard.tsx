@@ -56,6 +56,7 @@ export const PROVIDER_TEXT = {
   keySet: 'Saved. Type a new one to replace it.',
   keyUnset: 'Not set',
   keySetHint: 'A key is saved. It is never shown again.',
+  proxyNote: 'The key stays in the webterm server. Claude gets a local proxy address instead.',
   keyUnsetHint: 'Stored on this server only, never shown again.',
   removeKey: 'Remove key',
   retry: 'Retry',
@@ -227,6 +228,7 @@ export function ClaudeProviderCard({ connection, commitRef, onSaved }: { connect
                   <Input id={keyId} className="st-input st-input-wide" aria-label={PROVIDER_TEXT.key} type="password" autoComplete="off" value={secret}
                     placeholder={p?.secretSet ? PROVIDER_TEXT.keySet : PROVIDER_TEXT.keyUnset} onChange={(e) => setSecret(e.target.value)} />
                 </Field>
+                <p className="st-hint" data-testid="provider-proxy-note">{PROVIDER_TEXT.proxyNote}</p>
                 <Field label={PROVIDER_TEXT.model} hint={PROVIDER_TEXT.modelHint} htmlFor="st-claude-model">
                   <SettingsCombobox id="st-claude-model" ariaLabel={PROVIDER_TEXT.model} fieldId="claude.providerModel" presets={MODEL_PRESETS}
                     value={model} onDraft={setModel} onCommit={setModel} />
