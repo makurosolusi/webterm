@@ -35,7 +35,8 @@ export function createBrowserProfileStore(d: Database): BrowserProfileStore {
     return r ? toRow(r) : null
   }
   return {
-    list: () => (d.query('SELECT * FROM browser_profile ORDER BY created_at, id').all() as Raw[]).map(toRow),
+    // rowid = creation order; random ids must not break createdAt ties (the agent prompt shows only the first 10).
+    list: () => (d.query('SELECT * FROM browser_profile ORDER BY created_at, rowid').all() as Raw[]).map(toRow),
     get,
     insert(row) {
       const r = d.query('INSERT OR IGNORE INTO browser_profile (id, name, color, color_shade, created_at, workspace_id) VALUES (?, ?, ?, ?, ?, ?)')
@@ -58,7 +59,8 @@ export function createMemoryProfileStore(): BrowserProfileStore {
   const rows = new Map<string, ProfileRow>()
   const taken = (name: string, except?: string): boolean => [...rows.values()].some((r) => r.id !== except && r.name.toLowerCase() === name.toLowerCase())
   return {
-    list: () => [...rows.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
+    // Map iterates in insertion order and sort is stable: equal createdAt keeps creation order (ids are random).
+    list: () => [...rows.values()].sort((a, b) => a.createdAt - b.createdAt),
     get: (id) => rows.get(id) ?? null,
     insert(row) {
       if (rows.has(row.id) || taken(row.name)) return false
