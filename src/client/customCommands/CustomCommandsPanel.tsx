@@ -7,6 +7,8 @@ import { COMMANDS_TEXT } from './commands.labels'
 import { CodeText } from './commands.code'
 import { CommandsFolders } from './CommandsFolders'
 import { CommandsFound } from './CommandsFound'
+import { CommandsTerminal } from './CommandsTerminal'
+import { rescanCommands } from './commands.api'
 import { useCommandsData } from './useCommandsData'
 
 const T = COMMANDS_TEXT
@@ -27,6 +29,7 @@ export function CustomCommandsPanel(): React.JSX.Element {
       {data.status === 'ready' ? (
         <>
           <CommandsFound detected={data.detected} reload={reload} />
+          <CommandsTerminal detected={data.detected} onActivity={async () => { await rescanCommands(); await reload() }} />
           <CommandsFolders paths={data.paths} reload={reload} />
         </>
       ) : null}

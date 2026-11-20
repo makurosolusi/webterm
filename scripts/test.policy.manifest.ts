@@ -23,6 +23,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/centralAct.policy.test.ts',
     'src/client/clientAuth.policy.test.ts',
     'src/client/commandRegistry.labels.policy.test.ts',
+    'src/client/customCommands/commands.recipes.policy.test.ts',
     'src/client/components/ui/icon-button.policy.test.ts',
     'src/client/cssTranslateResetPolicy.test.ts',
     'src/client/eventSource.policy.test.ts',

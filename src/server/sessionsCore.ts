@@ -8,6 +8,7 @@ import type { AgentStatus } from '../shared/workspace'
 import { DEFAULT_SETTINGS } from '../shared/settings'
 import { clampSetting } from '../shared/settings.ranges'
 import { STALE_SWEEP_MS } from '../shared/agentStale'
+import { SETUP_TERMINAL_ID } from '../shared/setupTerminal'
 import { NodeRegistry, tailOutputBytes, type NodeExit, type NodeStatusEntry, type StaleSweepEntry } from './nodeRegistry'
 import { OutputLog } from './outputLog'
 import type { Session, SessionInfo, SessionsOptions } from './sessionsTypes'
@@ -166,9 +167,9 @@ export class SessionsCore {
   /** The agent a LIVE session was launched as (undefined = plain shell or no session). */
   agentIdOf(id: string): string | undefined { return this.map.get(id)?.agentId }
 
-  /** Sesi yang masih hidup, urut sesuai waktu spawn. */
+  /** Sesi yang masih hidup, urut sesuai waktu spawn. Terminal setup bukan node board, jadi tak ikut. */
   list(): SessionInfo[] {
-    return [...this.map.values()].map((s) => ({
+    return [...this.map.values()].filter((s) => s.id !== SETUP_TERMINAL_ID).map((s) => ({
       id: s.id,
       pid: s.pty.pid,
       status: this.registry.getStatus(s.id)?.status,
