@@ -16,6 +16,7 @@ import { canClaimFocus, exitMessage, openLinkOnModifiedClick } from './terminalS
 import { applyLiveOptions, xtermOptionsFromSettings } from './terminalConfig'
 import {
   SHIFT_ENTER_SEQ,
+  isLeaveChord,
   attachCopyOnSelect,
   guardMiddleClickPaste,
   isLinuxPlatform,
@@ -67,6 +68,11 @@ export interface TerminalCoreProps {
   onOutput?: () => void
   /** The PTY ended or failed to open (setup terminal: shows Try again). */
   onExit?: (code: number, reason?: ExitReason) => void
+  /** Opt-in focus exit (WCAG 2.1.2): the leave chord is swallowed (never sent to the PTY), the terminal
+   *  blurs and `onLeave` moves focus to a logical next element. Off by default: canvas and agent
+   *  terminals keep forwarding every key. */
+  escapeChord?: boolean
+  onLeave?: () => void
 }
 
 /** Copy gagal bukan fatal, tapi tidak boleh ditelan: tanpa jejak, copy yang tak terjadi tak
@@ -231,6 +237,12 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
 
     term.attachCustomKeyEventHandler((e) => {
       const s = live.current.settings
+      if (live.current.escapeChord && isLeaveChord(e)) {
+        e.preventDefault()
+        term.blur()
+        live.current.onLeave?.()
+        return false
+      }
       if (s.terminalFontZoomKeys) {
         const zoom = terminalZoomAction(e)
         if (zoom) {

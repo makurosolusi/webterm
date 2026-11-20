@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TOOL } from './commands.fakeServer'
 import { COMMANDS_TEXT } from './commands.labels'
 import { COMMAND_RECIPES } from './commands.recipes'
+import { LEAVE_CHORD_LABEL } from '../terminalKeys'
 import { CommandsTerminal, RESCAN_IDLE_MS, RESCAN_MIN_GAP_MS } from './CommandsTerminal'
 
 const T = COMMANDS_TEXT.terminal
@@ -17,11 +18,11 @@ vi.mock('../TerminalCore', () => ({
   default: forwardRef(function FakeCore(props: Record<string, unknown>, ref) {
     h.props.push(props)
     useImperativeHandle(ref, () => ({ sendKeys: h.sendKeys, focus: vi.fn() }))
-    return <div data-fake-terminal />
+    return <div data-fake-terminal tabIndex={0} />
   }),
 }))
 
-type FakeProps = { id: string; cwd: string; onOutput(): void; onExit(code: number, reason?: string): void }
+type FakeProps = { escapeChord?: boolean; onLeave(): void; id: string; cwd: string; onOutput(): void; onExit(code: number, reason?: string): void }
 const last = (): FakeProps => h.props[h.props.length - 1] as unknown as FakeProps
 const found = (name: string) => TOOL({ name })
 const mount = (detected: ReturnType<typeof found>[] = []) => {
@@ -50,6 +51,21 @@ describe('CommandsTerminal', () => {
     expect(last().id).toBe('setup-terminal')
     expect(last().cwd).toBe('~')
     expect(screen.getByRole('button', { name: T.close }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('opts into the leave chord, shows the hint only while open, and leaving focuses Close', async () => {
+    mount()
+    expect(document.querySelector('#commands-terminal-leave')).toBeNull()
+    await openIt()
+    expect(last().escapeChord).toBe(true)
+    const hint = document.querySelector('#commands-terminal-leave') as HTMLElement
+    expect(hint.textContent).toBe(`${T.leaveBefore}${LEAVE_CHORD_LABEL}${T.leaveAfter}`)
+    expect(hint.querySelector('kbd')?.textContent).toBe(LEAVE_CHORD_LABEL)
+    const region = screen.getByRole('region', { name: T.regionLabel(LEAVE_CHORD_LABEL) })
+    expect(region.getAttribute('aria-describedby')).toBe('commands-terminal-leave')
+    ;(document.querySelector('[data-fake-terminal]') as HTMLElement).focus()
+    act(() => { last().onLeave() })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: T.close }))
   })
 
   it('a quick command is typed without a newline', async () => {
