@@ -103,10 +103,7 @@ export async function capabilitiesRoute(
   if (seg === 'reset') return send(res, await reset(c))
   if (seg === DOWNLOAD_SEG) {
     if (sub === 'cancel') return send(res, { status: 200, body: downloader.cancel() })
-    const status = downloader.start(async (chromiumPath) => {
-      const r = await setAdvanced(c, { chromiumPath })
-      if (r.status !== 200) throw new Error(`chromium download: saving the browser location answered ${r.status}`)
-    })
+    const status = downloader.start()
     if (!status) return fail(res, 409, 'unsupported_platform')
     note({ capability: 'browser', action: 'download' })
     return send(res, { status: 202, body: status })

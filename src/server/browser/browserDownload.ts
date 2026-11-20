@@ -1,142 +1,93 @@
-// "Download Chromium" for a machine with no browser: Chrome for Testing (stable) from Google's
-// official bucket, through @puppeteer/browsers, into `<data dir>/browsers` (dev:fresh gets its own,
-// its root is swept). One download at a time; progress, cancel, and nothing half-written on failure.
-// The package is imported only when a download starts, never at boot or in the client bundle.
-import { createWriteStream, existsSync, readdirSync, statSync } from 'node:fs'
-import { mkdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
-import { Readable, Transform } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
-import type { ReadableStream as WebReadableStream } from 'node:stream/web'
-import type { ChromiumDownloadStatus } from '../../shared/featureCapabilities'
+// "Download Chromium" button: triggers the SAME managed install a first Browser launch does (locked
+// version, pinned SHA-256, `<data dir>/browser/chrome-for-testing/<version>/`) and never saves
+// `WEBTERM_BROWSER_BIN`. One download at a time, progress, cancel, automatic retry with growing pauses
+// for network failures (restarting clean: the archive lives only in memory, so no partial file exists),
+// and a failure kind the UI can word. A checksum mismatch is refused, never retried.
+import type { ChromiumDownloadErrorKind, ChromiumDownloadStatus } from '../../shared/featureCapabilities'
 import { createLogger } from '../logs'
-import { BROWSERS_SUBDIR } from './chromium.launch'
+import { cftPlatform, ensureManaged, failureKind, managedRoot, type ManagedDeps } from './chromium.managed'
 
 const log = createLogger('browser.download')
 
-/** `percent` 0-100 (0 while the size is unknown); `error` = plain sentence for the user when `failed`. */
 export type DownloadStatus = ChromiumDownloadStatus
-const IDLE_STATUS: DownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null }
+const IDLE_STATUS: DownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null, errorKind: null, retry: null }
 
-export interface InstallJob { cacheDir: string; signal: AbortSignal; onProgress(bytes: number, total: number): void }
-/** Downloads and unpacks one build under `cacheDir`; resolves to its executable. */
-export type Installer = (job: InstallJob) => Promise<string>
+/** Pauses before each automatic retry; its length is the retry cap (so 1 + 3 attempts). */
+export const RETRY_DELAYS_MS: readonly number[] = [2_000, 8_000, 30_000]
 
-/** Platforms `detectBrowserPlatform()` of @puppeteer/browsers maps to a build (detectPlatform.ts), mirrored so a GET never loads the package. */
-const SUPPORTED_PLATFORMS: readonly NodeJS.Platform[] = ['darwin', 'linux', 'win32']
-export const downloadSupported = (platform: NodeJS.Platform = process.platform): boolean => SUPPORTED_PLATFORMS.includes(platform)
+export const downloadSupported = (platform: NodeJS.Platform = process.platform, arch: string = process.arch): boolean => cftPlatform(platform, arch) !== null
 
-export const MESSAGES = {
-  noSpace: 'Not enough free disk space to download Chromium (about 600 MB is needed).',
-  noPermission: 'webterm cannot write to its data folder, so Chromium cannot be saved. Check the folder permissions.',
+export const MESSAGES: Record<ChromiumDownloadErrorKind, string> = {
   network: 'Chromium could not be downloaded. Check the internet connection and try again.',
-  saveFailed: 'Chromium was downloaded, but webterm could not save it as the browser to use.',
-} as const
-
-/** Error -> one plain sentence (disk space and permission named; the rest is a download failure). */
-export function plainError(e: unknown): string {
-  const code = (e as NodeJS.ErrnoException | null)?.code
-  if (code === 'ENOSPC' || code === 'EDQUOT') return MESSAGES.noSpace
-  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return MESSAGES.noPermission
-  return MESSAGES.network
+  disk: 'Chromium could not be saved: the disk is full or webterm cannot write to its data folder.',
+  checksum: 'The downloaded file did not match the expected checksum, so it was discarded. Try again; if it keeps failing, the network may be altering the download.',
+  other: 'Chromium could not be installed. Try again.',
 }
 
-/** Paths up to two levels below `dir` (`chrome`, `chrome/<build>`, `chrome/<archive>`): what a failed job may have added. */
-function entries(dir: string): Set<string> {
-  const out = new Set<string>()
-  if (!existsSync(dir)) return out
-  for (const a of readdirSync(dir)) {
-    out.add(a)
-    const sub = join(dir, a)
-    if (statSync(sub).isDirectory()) for (const b of readdirSync(sub)) out.add(join(a, b))
-  }
-  return out
-}
-
-/** The real installer: resolve the stable build, stream the archive ourselves (abortable), then let install() unpack it. */
-export const puppeteerInstaller: Installer = async ({ cacheDir, signal, onProgress }) => {
-  const b = await import('@puppeteer/browsers')
-  const platform = b.detectBrowserPlatform()
-  if (!platform) throw new Error('chromium download: this platform has no Chrome for Testing build')
-  const buildId = await b.resolveBuildId(b.Browser.CHROME, platform, b.BrowserTag.STABLE)
-  const url = b.getDownloadUrl(b.Browser.CHROME, platform, buildId)
-  const root = new b.Cache(cacheDir).browserRoot(b.Browser.CHROME)
-  await mkdir(root, { recursive: true })
-  // Same name install() looks for (install.ts installUrl `${buildId}-${fileName}`): it unpacks this file instead of downloading again, then deletes it.
-  const archive = join(root, `${buildId}-${decodeURIComponent(url.pathname).split('/').pop()}`)
-  const res = await fetch(url, { signal })
-  if (!res.ok || !res.body) throw new Error(`chromium download: server answered ${res.status}`)
-  const total = Number(res.headers.get('content-length')) || 0
-  let bytes = 0
-  const count = new Transform({ transform(chunk: Buffer, _enc, cb) { bytes += chunk.length; onProgress(bytes, total); cb(null, chunk) } })
-  await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), count, createWriteStream(archive), { signal })
-  signal.throwIfAborted()
-  return (await b.install({ browser: b.Browser.CHROME, buildId, platform, cacheDir })).executablePath
-}
+/** Runs one managed install attempt; the seam tests replace (never the network). */
+export type Installer = (root: string, deps: ManagedDeps) => Promise<string>
 
 export interface ChromiumDownloader {
   status(): DownloadStatus
-  /** Start (or join) the download; `setOverride` saves the binary as the browser to use once installed. null = platform unsupported. */
-  start(setOverride: (path: string) => Promise<void>): DownloadStatus | null
+  /** Start (or join) the download. null = platform unsupported. */
+  start(): DownloadStatus | null
   cancel(): DownloadStatus
 }
 
-/** Single-flight downloader; `install` and `platform` are seams for tests (they never touch the network). */
-export function createChromiumDownloader(o: { dataDir: () => string; install?: Installer; platform?: NodeJS.Platform }): ChromiumDownloader {
-  const install = o.install ?? puppeteerInstaller
+const sleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((resolve) => {
+  const t = setTimeout(resolve, ms)
+  signal.addEventListener('abort', () => { clearTimeout(t); resolve() }, { once: true })
+})
+
+/** Single-flight downloader; `install`, `delays`, `platform` and `arch` are test seams. */
+export function createChromiumDownloader(o: {
+  dataDir: () => string; install?: Installer; delays?: readonly number[]; platform?: NodeJS.Platform; arch?: string
+}): ChromiumDownloader {
+  const install = o.install ?? ensureManaged
+  const delays = o.delays ?? RETRY_DELAYS_MS
   let s: DownloadStatus = { ...IDLE_STATUS }
   let abort: AbortController | null = null
   const status = (): DownloadStatus => ({ ...s })
 
-  async function run(ac: AbortController, setOverride: (path: string) => Promise<void>): Promise<void> {
-    const cacheDir = join(o.dataDir(), BROWSERS_SUBDIR)
-    const existed = existsSync(cacheDir)
-    const before = entries(cacheDir)
-    let path: string
+  async function run(ac: AbortController): Promise<void> {
+    const root = managedRoot(o.dataDir())
+    const onProgress = (bytes: number, total: number): void => { s = { ...s, bytes, total, percent: total > 0 ? Math.min(100, Math.floor((bytes / total) * 100)) : 0 } }
     try {
-      path = await install({
-        cacheDir, signal: ac.signal,
-        onProgress: (bytes, total) => { s = { ...s, bytes, total, percent: total > 0 ? Math.min(100, Math.floor((bytes / total) * 100)) : 0 } },
-      })
-      if (ac.signal.aborted) throw ac.signal.reason
-    } catch (e) {
-      // Nothing half-written survives: drop what this job added (or the whole dir it created).
-      try {
-        if (!existed) await rm(cacheDir, { recursive: true, force: true })
-        else for (const p of [...entries(cacheDir)].filter((p) => !before.has(p))) await rm(join(cacheDir, p), { recursive: true, force: true })
-      } catch (err) {
-        log.warn('download.cleanup_failed', 'Cannot remove a partial Chromium download', { cause: (err as NodeJS.ErrnoException).code ?? 'error' })
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const path = await install(root, { signal: ac.signal, onProgress })
+          if (ac.signal.aborted) break
+          s = { ...s, state: 'done', percent: 100, retry: null, executablePath: path }
+          log.info('download.done', 'Managed Chromium downloaded', { attempt })
+          return
+        } catch (e) {
+          if (ac.signal.aborted) break
+          const kind = failureKind(e)
+          const pause = delays[attempt - 1]
+          log.warn('download.failed', 'Chromium download failed', { kind, attempt, willRetry: kind === 'network' && pause !== undefined, cause: e instanceof Error ? e.name : 'error' })
+          if (kind !== 'network' || pause === undefined) { s = { ...s, state: 'failed', error: MESSAGES[kind], errorKind: kind, retry: null }; return }
+          s = { ...s, state: 'retrying', percent: 0, bytes: 0, total: 0, retry: { attempt: attempt + 1, max: delays.length + 1 } }
+          await sleep(pause, ac.signal)
+          if (ac.signal.aborted) break
+          s = { ...s, state: 'downloading' }
+        }
       }
-      if (ac.signal.aborted) {
-        log.info('download.cancelled', 'Chromium download cancelled')
-        s = { ...IDLE_STATUS }
-      } else {
-        log.warn('download.failed', 'Chromium download failed', { cause: (e as NodeJS.ErrnoException)?.code ?? (e instanceof Error ? e.name : 'error') })
-        s = { ...s, state: 'failed', error: plainError(e) }
-      }
-      return
+      log.info('download.cancelled', 'Chromium download cancelled')
+      s = { ...IDLE_STATUS }
     } finally {
       abort = null
-    }
-    try {
-      await setOverride(path)
-      s = { ...s, state: 'done', percent: 100, executablePath: path }
-      log.info('download.done', 'Chromium downloaded and selected')
-    } catch (e) {
-      log.warn('download.save_failed', 'Cannot save the downloaded Chromium as the browser', { cause: e instanceof Error ? e.name : 'error' })
-      s = { ...s, state: 'failed', error: MESSAGES.saveFailed, executablePath: path }
     }
   }
 
   return {
     status,
-    start(setOverride) {
-      if (!downloadSupported(o.platform)) return null
-      if (s.state === 'downloading') return status()
+    start() {
+      if (!downloadSupported(o.platform, o.arch)) return null
+      if (s.state === 'downloading' || s.state === 'retrying') return status()
       const ac = new AbortController()
       abort = ac
       s = { ...IDLE_STATUS, state: 'downloading' }
-      void run(ac, setOverride)
+      void run(ac)
       return status()
     },
     cancel() {
@@ -149,7 +100,7 @@ export function createChromiumDownloader(o: { dataDir: () => string; install?: I
 let shared: ChromiumDownloader | undefined
 /** Status of the process-wide downloader; idle before the first download. */
 export const sharedDownloadStatus = (): DownloadStatus => shared?.status() ?? { ...IDLE_STATUS }
-/** The process-wide downloader (state is per server process; a restart finds the build through discovery). */
+/** The process-wide downloader (state is per server process; a restart finds the build on disk). */
 export function chromiumDownloader(dataDir: () => string): ChromiumDownloader {
   return (shared ??= createChromiumDownloader({ dataDir }))
 }

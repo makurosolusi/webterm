@@ -1,6 +1,7 @@
 // "Download Chromium" control used by the wizard Browser step:
-// start, progress (polled while the server downloads), cancel, failed + Retry, done. The server saves
-// the downloaded binary as the browser to use; `onDone` reloads the capabilities so the UI follows.
+// start, progress (polled while the server downloads), automatic retry notice, cancel, failed + Try again,
+// done. The server installs webterm's managed Chrome (locked version, checksum-verified); nothing is saved as
+// an override. `onDone` reloads the capabilities so the UI follows.
 import { useEffect, useRef, useState } from 'react'
 import { ActionButton, useAction } from '@/components/ui/action'
 import type { ChromiumDownloadStatus } from '../shared/featureCapabilities'
@@ -26,7 +27,7 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
   const prev = useRef<ChromiumDownloadStatus['state'] | null>(null)
 
   const show = (s: ChromiumDownloadStatus): void => {
-    if (prev.current === 'downloading' && s.state === 'done') void cb.current.onDone()
+    if ((prev.current === 'downloading' || prev.current === 'retrying') && s.state === 'done') void cb.current.onDone()
     prev.current = s.state
     setStatus(s)
     setUnreachable(false)
@@ -49,14 +50,14 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
 
   useEffect(() => { void call('status') }, []) // eslint-disable-line react-hooks/exhaustive-deps -- first read only
   useEffect(() => {
-    if (status?.state !== 'downloading' || unreachable) return
+    if ((status?.state !== 'downloading' && status?.state !== 'retrying') || unreachable) return
     const t = setTimeout(() => void call('status'), DOWNLOAD_POLL_MS)
     return () => clearTimeout(t)
   }, [status, unreachable]) // eslint-disable-line react-hooks/exhaustive-deps -- `call` is stable in effect
 
   const error = unreachable ? T.unreachable : status?.state === 'failed' ? status.error : null
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 py-2 text-xs" data-chromium-download={status?.state ?? 'loading'}>
+    <div className="flex min-w-0 flex-col gap-1.5 py-2 text-xs" data-chromium-download={status?.state ?? 'loading'} data-error-kind={status?.errorKind ?? undefined}>
       {status === null && !unreachable ? <p role="status" className="m-0 opacity-70">{T.checking}</p> : null}
       {status?.state === 'downloading' ? (
         <>
@@ -65,6 +66,12 @@ export function ChromiumDownload({ onDone, onStatus }: ChromiumDownloadProps): R
             className="h-1.5 w-full overflow-hidden rounded bg-muted">
             <div className="h-full bg-primary transition-[width]" style={{ width: `${status.percent}%` }} />
           </div>
+          <ActionButton size="sm" variant="outline" className="self-start" disabled={busy} action={cancel} busyLabel={T.cancelling}>{T.cancel}</ActionButton>
+        </>
+      ) : null}
+      {status?.state === 'retrying' && status.retry ? (
+        <>
+          <p role="status" className="m-0">{T.autoRetry(status.retry.attempt, status.retry.max)}</p>
           <ActionButton size="sm" variant="outline" className="self-start" disabled={busy} action={cancel} busyLabel={T.cancelling}>{T.cancel}</ActionButton>
         </>
       ) : null}

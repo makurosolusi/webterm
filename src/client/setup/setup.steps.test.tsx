@@ -213,15 +213,36 @@ describe('Browser step', () => {
     s.download = { ...DL_IDLE, state: 'downloading', percent: 42 }
     await waitFor(() => expect(screen.getByRole('progressbar', { name: DOWNLOAD_TEXT.progressLabel }).getAttribute('aria-valuenow')).toBe('42'), { timeout: 2000 })
     expect(screen.getByText(DOWNLOAD_TEXT.progress(42))).toBeTruthy()
-    s.chromiumValue = '/data/browsers/chrome/linux-1/chrome-linux64/chrome'
-    s.download = { ...DL_IDLE, state: 'done', percent: 100, executablePath: s.chromiumValue }
-    expect(await screen.findByText(s.chromiumValue, {}, { timeout: 2000 })).toBeTruthy()
+    const managed = '/data/browser/chrome-for-testing/1/chrome-linux64/chrome'
+    s.candidates = [managed]
+    s.download = { ...DL_IDLE, state: 'done', percent: 100, executablePath: managed }
+    expect(await screen.findByText(managed, {}, { timeout: 2000 })).toBeTruthy()
     await waitFor(() => expect(s.calls.filter((c) => c.url === '/api/capabilities' && c.method === 'GET').length).toBeGreaterThan(1)) // reloaded after done
     expect(pressed(SETUP_TEXT.browser.download)).toBe('true')
     click(SETUP_TEXT.next)
     await waitFor(() => expect(nav.next).toHaveBeenCalled())
     expect(capabilityWrites(s)).toEqual(['browser=on'])
-    expect(s.calls.some((c) => c.url === '/api/capabilities/advanced')).toBe(false) // the server already saved the path
+    expect(s.calls.some((c) => c.url === '/api/capabilities/advanced')).toBe(false) // managed Chrome needs no saved path
+    expect(s.chromiumValue).toBe('') // no WEBTERM_BROWSER_BIN override
+  })
+
+  it('Download Chromium: an automatic retry is shown with Cancel; each failure kind has its message and Try again', async () => {
+    const s = await step({ extras: { chromiumDownload: { supported: true, state: 'downloading', percent: 5 } }, download: { ...DL_IDLE, state: 'retrying', retry: { attempt: 2, max: 4 } } })
+    expect(await screen.findByText(DOWNLOAD_TEXT.autoRetry(2, 4))).toBeTruthy()
+    expect(screen.getByRole('button', { name: DOWNLOAD_TEXT.cancel })).toBeTruthy()
+    for (const kind of ['network', 'disk', 'checksum', 'other'] as const) {
+      s.download = { ...DL_IDLE, state: 'failed', errorKind: kind, error: `message for ${kind}` }
+      cleanup()
+      render(<BrowserStep nav={nav} />)
+      expect(await screen.findByText(`message for ${kind}`)).toBeTruthy()
+      expect(document.querySelector(`[data-error-kind="${kind}"]`)).toBeTruthy()
+      expect(screen.getByRole('button', { name: DOWNLOAD_TEXT.retry })).toBeTruthy()
+    }
+  })
+
+  it('a saved WEBTERM_BROWSER_BIN override is called out as a custom, unverified browser', async () => {
+    await step({ candidates: [], chromiumValue: '/opt/my-chrome' })
+    expect(screen.getByText(SETUP_TEXT.browser.customActive('/opt/my-chrome'))).toBeTruthy()
   })
 
   it('Download Chromium: Cancel returns to the start button; a failure shows the reason and Retry starts again', async () => {

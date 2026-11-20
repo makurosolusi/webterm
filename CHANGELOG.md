@@ -5,6 +5,12 @@
 ### Added
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes and the Chrome seccomp profile from the checkout.
 
+### Changed
+- The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
+
+### Fixed
+- A failed Chromium download now retries network failures automatically with growing pauses (and can be cancelled), starts over cleanly without leaving partial files, names the cause (network, disk, checksum mismatch, other) in plain words and offers "Try again". A checksum mismatch is refused and never retried.
+
 ### Removed
 - The "Download Chromium" button in Settings > Features > Advanced. It saved a browser override that beat the pinned managed Chrome; the setup Browser step is unchanged.
 

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deflateRawSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { archiveUrl, cftPlatform, CHROME_FOR_TESTING_VERSION, CHROME_SHA256, installManaged, managedBinaryPath } from './chromium.managed'
+import { archiveUrl, cftPlatform, CHROME_FOR_TESTING_VERSION, CHROME_SHA256, failureKind, installManaged, managedBinaryPath } from './chromium.managed'
 import { extractZip, safeJoin } from './chromium.managed.zip'
 
 let dir: string
@@ -116,5 +116,33 @@ describe('installManaged', () => {
   it('rejects a response over the size cap by content-length', async () => {
     const big = (async () => new Response('x', { headers: { 'content-length': String(10 ** 10) } })) as unknown as typeof fetch
     await expect(installManaged(dir, { platform: 'linux64', version: '3', fetch: big, sha256: {} })).rejects.toThrow(/larger than/)
+  })
+})
+
+describe('failure kinds and progress', () => {
+  const zip = makeZip([{ name: 'chrome-linux64/chrome', data: '#!/bin/sh', mode: 0o100755 }])
+  const ok = (): typeof fetch => (async () => new Response(new Uint8Array(zip), { headers: { 'content-length': String(zip.length) } })) as unknown as typeof fetch
+  const kindOf = (p: Promise<unknown>): Promise<string> => p.then(() => 'none', failureKind)
+
+  it('classifies network, checksum and other failures', async () => {
+    const down = (async () => { throw new TypeError('fetch failed') }) as unknown as typeof fetch
+    expect(await kindOf(installManaged(dir, { platform: 'linux64', version: '1', fetch: down }))).toBe('network')
+    expect(await kindOf(installManaged(dir, { platform: 'linux64', version: '1', fetch: ok(), sha256: { linux64: 'a'.repeat(64) } }))).toBe('checksum')
+    expect(await kindOf(installManaged(dir, { platform: 'linux64', version: '1', fetch: ok(), sha256: { linux64: createHash('sha256').update(zip).digest('hex') } }))).toBe('none')
+    const bad = makeZip([{ name: 'other', data: 'x' }])
+    const badFetch = (async () => new Response(new Uint8Array(bad))) as unknown as typeof fetch
+    expect(await kindOf(installManaged(dir, { platform: 'linux64', version: '2', fetch: badFetch, sha256: {} }))).toBe('other')
+  })
+  it('reports a disk failure from an errno cause', () => {
+    expect(failureKind(new Error('x', { cause: Object.assign(new Error('e'), { code: 'ENOSPC' }) }))).toBe('disk')
+  })
+  it('reports progress and honours an abort signal', async () => {
+    const seen: number[] = []
+    await installManaged(dir, { platform: 'linux64', version: '5', fetch: ok(), sha256: {}, onProgress: (b, t) => { seen.push(b); expect(t).toBe(zip.length) } })
+    expect(seen.at(-1)).toBe(zip.length)
+    const ac = new AbortController()
+    ac.abort()
+    const honours = (async (_u: unknown, init?: RequestInit) => { init?.signal?.throwIfAborted(); return new Response(null) }) as unknown as typeof fetch
+    await expect(installManaged(dir, { platform: 'linux64', version: '6', fetch: honours, signal: ac.signal })).rejects.toThrow()
   })
 })

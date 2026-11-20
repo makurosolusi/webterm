@@ -29,7 +29,7 @@ export interface FakeServer {
   providerSaveFail: boolean
 }
 
-export const DL_IDLE: ChromiumDownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null }
+export const DL_IDLE: ChromiumDownloadStatus = { state: 'idle', percent: 0, bytes: 0, total: 0, error: null, executablePath: null, errorKind: null, retry: null }
 
 export const READY: LaunchTest = {
   ok: true, profile: { id: 'default', name: 'Default' }, warnings: [],
