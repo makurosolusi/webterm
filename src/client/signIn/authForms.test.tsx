@@ -29,10 +29,16 @@ const flush = () => act(async () => { await Promise.resolve() })
 const describedText = (id: string) => (field(id).getAttribute('aria-describedby') ?? '').split(' ').map((d) => document.getElementById(d)?.textContent ?? '').join(' | ')
 const met = (label: string) => screen.getByText(label).closest('li')!.dataset.met
 
-function setup(withCode = false) {
+function setup() {
   const onDone = vi.fn()
-  render(<SetupForm withCode={withCode} autoFocus onDone={onDone} onAlreadySetup={vi.fn()} />)
-  return onDone
+  const onAlreadySetup = vi.fn()
+  render(<SetupForm onDone={onDone} onAlreadySetup={onAlreadySetup} />)
+  return Object.assign(onDone, { onAlreadySetup })
+}
+const fillValid = () => {
+  type('setup-username', 'ada')
+  type('setup-password', 'long enough passphrase')
+  type('setup-confirm', 'long enough passphrase')
 }
 
 describe('SetupForm', () => {
@@ -42,21 +48,34 @@ describe('SetupForm', () => {
     expect(field('setup-username').autocomplete).toBe('username')
     expect(field('setup-password').autocomplete).toBe('new-password')
     expect(field('setup-confirm').autocomplete).toBe('new-password')
+    expect(field('setup-username').getAttribute('autocapitalize')).toBe('off')
+    expect(field('setup-username').getAttribute('spellcheck')).toBe('false')
+    expect(field('setup-username').getAttribute('autocorrect')).toBe('off')
+    expect(screen.queryByLabelText(/setup code/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /setup window/i })).toBeNull()
   })
 
-  it('the show/hide toggle is an icon button inside each password input, with aria-pressed', () => {
+  it('one show/hide toggle drives both password fields, with aria-pressed', () => {
     setup()
-    const toggles = screen.getAllByRole('button', { name: SIGN_IN_TEXT.show('password') })
-    expect(toggles).toHaveLength(1) // Password; Confirm has its own name
-    const toggle = toggles[0]!
+    const toggle = screen.getByRole('button', { name: SIGN_IN_TEXT.show('password') })
+    expect(screen.getAllByRole('button', { name: /^(show|hide) /i })).toHaveLength(1)
     expect(toggle.closest('.relative')?.contains(field('setup-password'))).toBe(true)
-    expect(toggle.textContent).toBe('') // glyph only, the name is the aria-label (tooltip per policy)
+    expect(toggle.textContent).toBe('') // glyph only, the name is the aria-label
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(toggle)
     expect(field('setup-password').type).toBe('text')
-    expect(field('setup-confirm').type).toBe('password')
+    expect(field('setup-confirm').type).toBe('text')
     expect(screen.getByRole('button', { name: SIGN_IN_TEXT.hide('password') }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: SIGN_IN_TEXT.show('confirm password') })).toBeDefined()
+  })
+
+  it('warns about Caps Lock on a password field only', () => {
+    setup()
+    fireEvent.keyUp(field('setup-password'), { key: 'a', modifierCapsLock: true })
+    expect(screen.getByText(SIGN_IN_TEXT.capsLock)).toBeDefined()
+    fireEvent.blur(field('setup-password'))
+    expect(screen.queryByText(SIGN_IN_TEXT.capsLock)).toBeNull()
+    fireEvent.keyUp(field('setup-username'), { key: 'a', modifierCapsLock: true })
+    expect(screen.queryByText(SIGN_IN_TEXT.capsLock)).toBeNull()
   })
 
   it('the checklist ticks each requirement live and Confirm shows the match check', () => {
@@ -71,6 +90,7 @@ describe('SetupForm', () => {
     expect(met(SIGN_IN_TEXT.checkMatch)).toBe('true')
     expect(screen.getByRole('img', { name: SIGN_IN_TEXT.matches })).toBeDefined()
     expect(describedText('setup-password')).toContain(SIGN_IN_TEXT.checkLength)
+    expect(screen.getByRole('list', { name: SIGN_IN_TEXT.requirements }).getAttribute('aria-live')).toBe('polite')
     type('setup-confirm', '12345678901x')
     expect(met(SIGN_IN_TEXT.checkMatch)).toBe('false')
   })
@@ -87,32 +107,22 @@ describe('SetupForm', () => {
     expect(field('setup-username').getAttribute('aria-invalid')).toBeNull()
   })
 
-  it('an empty submit shows every error inline, focuses the first invalid field and sends nothing', async () => {
-    setup(true)
+  it('Create is disabled until the form is valid, and an invalid submit sends nothing', async () => {
+    setup()
     const create = screen.getByRole('button', { name: SIGN_IN_TEXT.create }) as HTMLButtonElement
-    expect(create.disabled).toBe(false) // enabled: the submit is what explains what is missing
-    fireEvent.click(create)
+    expect(create.disabled).toBe(true)
+    fireEvent.submit(field('setup-username').form!)
     await flush()
-    expect(document.activeElement).toBe(field('setup-remote-code'))
-    expect(describedText('setup-remote-code')).toContain(SIGN_IN_TEXT.needCode)
-    expect(describedText('setup-remote-username')).toContain(SIGN_IN_TEXT.needUsername)
-    expect(describedText('setup-remote-password')).toContain(SIGN_IN_TEXT.weakPassword)
-    expect(describedText('setup-remote-confirm')).toContain(SIGN_IN_TEXT.needConfirm)
-    for (const id of ['code', 'username', 'password', 'confirm']) expect(field(`setup-remote-${id}`).getAttribute('aria-invalid')).toBe('true')
     expect(posts).toEqual([])
-    type('setup-remote-code', 'ABCD')
-    fireEvent.click(create)
-    await flush()
-    expect(document.activeElement).toBe(field('setup-remote-username'))
+    fillValid()
+    expect(create.disabled).toBe(false)
   })
 
   it('while creating: spinner + "Creating account…", fields frozen, a second submit sends nothing', async () => {
     let finish: (r: Response) => void = () => undefined
     answer = () => new Promise((r) => { finish = r })
     const onDone = setup()
-    type('setup-username', 'ada')
-    type('setup-password', 'long enough passphrase')
-    type('setup-confirm', 'long enough passphrase')
+    fillValid()
     fireEvent.submit(field('setup-username').form!) // Enter in a field submits the form
     await flush()
     const busy = screen.getByRole('button', { name: SIGN_IN_TEXT.creating })
@@ -129,15 +139,40 @@ describe('SetupForm', () => {
   it('a server refusal lands in the alert above the button, with the retry time for 429', async () => {
     answer = async () => new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'Retry-After': '7' } })
     setup()
-    type('setup-username', 'ada')
-    type('setup-password', 'long enough passphrase')
-    type('setup-confirm', 'long enough passphrase')
+    fillValid()
     fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
     await flush()
     await flush()
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toBe(SIGN_IN_TEXT.tooMany(7))
     expect(alert.nextElementSibling).toBe(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+  })
+
+  it('5xx and a network failure both say the server could not be reached, never a raw code', async () => {
+    answer = async () => new Response('boom', { status: 502 })
+    setup()
+    fillValid()
+    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    await flush()
+    await flush()
+    expect(screen.getByRole('alert').textContent).toBe(SIGN_IN_TEXT.unreachable)
+    answer = async () => { throw new TypeError('Failed to fetch') }
+    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    await flush()
+    await flush()
+    expect(screen.getByRole('alert').textContent).toBe(SIGN_IN_TEXT.unreachable)
+  })
+
+  it('409 already_setup shows the message and a Sign in button that calls onAlreadySetup', async () => {
+    answer = async () => new Response(JSON.stringify({ error: 'already_setup' }), { status: 409 })
+    const done = setup()
+    fillValid()
+    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    await flush()
+    await flush()
+    expect(screen.getByRole('alert').textContent).toBe(SIGN_IN_TEXT.accountExists)
+    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.signIn }))
+    expect(done.onAlreadySetup).toHaveBeenCalledTimes(1)
   })
 })
 

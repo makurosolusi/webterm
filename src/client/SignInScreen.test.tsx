@@ -240,90 +240,65 @@ describe('SignInScreen', () => {
 })
 
 describe('SignInScreen: first-run setup', () => {
-  it('with proof (a signed-in setup window): the form, live checklist, inline client-side checks, 400s, then 201 enters', async () => {
-    setupRequired = true; me = true
-    const reload = await mount()
+  it('renders one card: no setup code, no open-window button, no disclosure; the privacy note sits below', async () => {
+    setupRequired = true
+    await mount()
     expect(screen.getByRole('heading').textContent).toBe(SIGN_IN_TEXT.setupTitle)
+    expect(screen.getByText(SIGN_IN_TEXT.setupIntro)).toBeDefined()
     expect(screen.getByText(SIGN_IN_TEXT.localNote)).toBeDefined()
-    expect(screen.queryByLabelText(SIGN_IN_TEXT.setupCodeLabel)).toBeNull()
-    expect((document.getElementById('setup-password') as HTMLInputElement).autocomplete).toBe('new-password')
+    expect(screen.queryByLabelText(/setup code/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /setup window/i })).toBeNull()
+    expect(document.querySelector('details')).toBeNull()
+    expect(document.querySelector('main')).not.toBeNull()
     expect(document.activeElement?.id).toBe('setup-username')
-    const lengthItem = () => screen.getByText(SIGN_IN_TEXT.checkLength).closest('li')!
+  })
+
+  it('create stays disabled until valid; the 400s land in the alert and focus the field; 201 enters', async () => {
+    setupRequired = true
+    const reload = await mount()
+    const create = () => screen.getByRole('button', { name: SIGN_IN_TEXT.create }) as HTMLButtonElement
+    expect(create().disabled).toBe(true)
     type('setup-username', 'ada')
     type('setup-password', 'short')
-    expect(lengthItem().dataset.met).toBe('false')
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
-    await flush()
-    expect(screen.getByText(SIGN_IN_TEXT.weakPassword)).toBeDefined() // inline under the field, not the alert
-    expect(document.activeElement?.id).toBe('setup-password')
-    expect(screen.queryByRole('alert')).toBeNull()
+    type('setup-confirm', 'short')
+    expect(create().disabled).toBe(true)
     type('setup-password', 'long enough passphrase')
-    expect(lengthItem().dataset.met).toBe('true')
-    type('setup-confirm', 'something else entirely')
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
-    await flush()
+    expect(create().disabled).toBe(true)
+    fireEvent.blur(document.getElementById('setup-confirm')!)
     expect(screen.getByText(SIGN_IN_TEXT.mismatch)).toBeDefined()
-    expect(document.activeElement?.id).toBe('setup-confirm')
-    expect(bodiesOf(AUTH_SETUP_PATH)).toEqual([]) // nothing sent for a client-side refusal
     type('setup-confirm', 'long enough passphrase')
+    expect(create().disabled).toBe(false)
     setupReply = { status: 400, body: { error: 'weak_password' } }
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    fireEvent.click(create())
     await flush()
     expect(alertText()).toBe(SIGN_IN_TEXT.weakPassword)
+    expect(document.activeElement?.id).toBe('setup-password')
     setupReply = { status: 400, body: { error: 'invalid_username' } }
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    fireEvent.click(create())
     await flush()
     expect(alertText()).toBe(SIGN_IN_TEXT.invalidUsername)
+    expect(document.activeElement?.id).toBe('setup-username')
     setupReply = { status: 201, body: { user: { id: 1, username: 'ada' } } }
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
+    fireEvent.click(create())
     await flush()
     expect(reload).toHaveBeenCalledTimes(1)
     expect(bodiesOf(AUTH_SETUP_PATH).at(-1)).toEqual({ username: 'ada', password: 'long enough passphrase' })
   })
 
-  it('without proof: "Open setup window" plus the setup-code disclosure; 403 explains; the code is sent', async () => {
+  it('409 already_setup: says so with a Sign in button that switches to the sign-in screen', async () => {
     setupRequired = true
-    const reload = await mount()
-    expect(screen.getByRole('button', { name: SIGN_IN_TEXT.openSetup })).toBeDefined()
-    expect(screen.getByText(SIGN_IN_TEXT.otherDevice).tagName).toBe('SUMMARY')
-    expect(screen.getByText(SIGN_IN_TEXT.setupCodeHint)).toBeDefined()
-    type('setup-remote-code', ' ABCD-1234 ')
-    type('setup-remote-username', 'ada')
-    type('setup-remote-password', 'long enough passphrase')
-    type('setup-remote-confirm', 'long enough passphrase')
-    setupReply = { status: 403, body: { error: 'setup_proof_required' } }
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
-    await flush()
-    expect(alertText()).toBe(SIGN_IN_TEXT.proofRequired)
-    expect(bodiesOf(AUTH_SETUP_PATH)).toEqual([{ username: 'ada', password: 'long enough passphrase', setupCode: 'ABCD-1234' }])
-    expect(reload).not.toHaveBeenCalled()
-  })
-
-  it('without proof: once the setup window signs this browser in, the form appears here (no reload)', async () => {
-    setupRequired = true
-    const reload = await mount()
-    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.openSetup }))
-    await flush()
-    expect(screen.getByText(SIGN_IN_TEXT.opening)).toBeDefined()
-    me = true
-    await advance(SIGN_IN_POLL_MS)
-    expect(screen.getByText(SIGN_IN_TEXT.setupIntroProof)).toBeDefined()
-    expect(document.getElementById('setup-username')).not.toBeNull()
-    expect(reload).not.toHaveBeenCalled()
-  })
-
-  it('409 already_setup: switches to sign-in and says an account exists', async () => {
-    setupRequired = true; me = true
     await mount()
     type('setup-username', 'ada')
     type('setup-password', 'long enough passphrase')
     type('setup-confirm', 'long enough passphrase')
     setupReply = { status: 409, body: { error: 'already_setup' } }
-    setupRequired = false; me = false
     fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.create }))
     await flush()
+    expect(alertText()).toBe(SIGN_IN_TEXT.accountExists)
+    setupRequired = false
+    fireEvent.click(screen.getByRole('button', { name: SIGN_IN_TEXT.signIn }))
     await flush()
-    expect(screen.getByText(SIGN_IN_TEXT.alreadySetup)).toBeDefined()
-    expect(screen.getByRole('button', { name: SIGN_IN_TEXT.signIn })).toBeDefined()
+    expect((screen.getByLabelText(SIGN_IN_TEXT.passwordLabel) as HTMLInputElement).autocomplete).toBe('current-password')
+    expect(screen.getByRole('button', { name: SIGN_IN_TEXT.open })).toBeDefined()
   })
 })

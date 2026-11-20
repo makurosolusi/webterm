@@ -12,19 +12,17 @@ export const charCount = (s: string): number => [...s].length
 export const SIGN_IN_TEXT = {
   loading: 'Checking sign-in…',
   title: 'Sign in to webterm',
-  setupTitle: 'Create your webterm account',
+  setupTitle: 'Create your account',
+  setupIntro: 'This account protects your webterm. You only do this once.',
+  capsLock: 'Caps Lock is on.',
+  unreachable: "Couldn't reach the server. Check your connection and try again.",
+  accountExists: 'An account already exists. Sign in instead.',
   intro: 'Sign in with your webterm account.',
-  setupIntroProof: 'Create the account you will sign in with.',
-  setupIntroNoProof: 'Create it from the computer running webterm, so nobody else can claim this install.',
-  localNote: 'This account lives only on the computer running webterm.',
+  localNote: 'Your account stays on this server. Nothing is sent anywhere else.',
   or: 'or',
   open: 'Open signed-in window',
-  openSetup: 'Open setup window on this computer',
   opening: 'A signed-in webterm window is opening on the computer running webterm. This tab follows by itself once you are signed in.',
   rateLimited: (s: number) => `A window was just opened. You can ask again in ${s} s.`,
-  otherDevice: 'Setting up from another device?',
-  setupCodeLabel: 'Setup code',
-  setupCodeHint: 'Find it in secrets/SETUP_CODE inside the webterm data directory (~/.webterm-server unless WEBTERM_DATA_DIR is set) on the computer running webterm.',
   usernameLabel: 'Username',
   passwordLabel: 'Password',
   confirmLabel: 'Confirm password',
@@ -38,7 +36,6 @@ export const SIGN_IN_TEXT = {
   checkPending: '(not yet)',
   needUsername: 'Enter a username.',
   needPassword: 'Enter your password.',
-  needCode: 'Enter the setup code.',
   needConfirm: 'Type the password again.',
   matches: 'Passwords match',
   lengthHint: (n: number) => (n >= PASSWORD_MIN ? `${n} characters. Long enough.` : `At least ${PASSWORD_MIN} characters (${n} so far).`),
@@ -52,8 +49,6 @@ export const SIGN_IN_TEXT = {
   mismatch: 'The passwords do not match.',
   weakPassword: `Use at least ${PASSWORD_MIN} characters.`,
   invalidUsername: 'Usernames are 3 to 32 characters: letters, digits, dot, dash or underscore.',
-  proofRequired: 'This browser could not prove it is on the computer running webterm. Use "Open setup window on this computer" there, or enter the setup code from that computer.',
-  alreadySetup: 'An account already exists on this webterm. Sign in with it.',
   signedIn: 'Signed in. Loading webterm…',
   offline: 'Cannot reach the server. Still checking every 2 s.',
   stillRefused: 'This browser is signed in, but the server still refused to load the workspaces. Reload to try again.',
@@ -69,8 +64,9 @@ export function authErrorText(status: number, error: string | null, retryS: numb
     case 'invalid_credentials': return SIGN_IN_TEXT.wrongCredentials
     case 'weak_password': return SIGN_IN_TEXT.weakPassword
     case 'invalid_username': return SIGN_IN_TEXT.invalidUsername
-    case 'setup_proof_required': return SIGN_IN_TEXT.proofRequired
-    case 'already_setup': return SIGN_IN_TEXT.alreadySetup
-    default: return status === 401 ? SIGN_IN_TEXT.wrongCredentials : SIGN_IN_TEXT.failed('Signing in', `HTTP ${status}`)
+    case 'already_setup': return SIGN_IN_TEXT.accountExists
+    default:
+      if (status === 401) return SIGN_IN_TEXT.wrongCredentials
+      return status >= 500 ? SIGN_IN_TEXT.unreachable : SIGN_IN_TEXT.failed('Signing in', `HTTP ${status}`)
   }
 }

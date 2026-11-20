@@ -1,10 +1,8 @@
 // What the desktop shows when this browser may not load the board: GET /auth/me picks the mode.
-//   setupRequired + signed in (a window the server opened, or a token-era session) -> the account form
-//   setupRequired, no proof -> "Open setup window on this computer", or the setup code from another device
+//   setupRequired -> the create-account form (no proof of any kind; the server takes username + password)
 //   account exists, signed out -> username + password, or "Open signed-in window" (local, passwordless)
 // Pattern: code-server (password -> session cookie) plus Jupyter's redirect file for the local window.
-// While visible the tab polls /auth/me: a window elsewhere that signs this browser in reloads it, and a
-// setup window that signs it in shows the form here too. A reload keeps the path the user asked for.
+// While visible the tab polls /auth/me: a window elsewhere that signs this browser in reloads it. A reload keeps the path the user asked for.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -37,7 +35,7 @@ const SHELL = 'absolute inset-0 flex flex-col items-center justify-center gap-4 
 /** The ~400px card every signed-out state sits in: logo, title, one-line subtitle, then the body. */
 function AuthCard({ title, subtitle, children }: { title: string; subtitle?: React.ReactNode; children: React.ReactNode }): React.JSX.Element {
   return (
-    <Card className="w-full max-w-[400px] gap-6 px-6 py-8 shadow-sm">
+    <Card className="w-full max-w-[400px] gap-6 px-4 py-8 shadow-sm sm:px-8">
       <header className="flex flex-col items-center gap-2">
         <div className="sign-in-brand mb-2"><Brand gradientId="signin-brand" /></div>
         <h1 className="text-center text-[18px] leading-6 font-semibold">{title}</h1>
@@ -52,7 +50,6 @@ function AuthCard({ title, subtitle, children }: { title: string; subtitle?: Rea
 export default function SignInScreen({ reload = reloadPage, now = Date.now }: SignInScreenProps) {
   const [me, setMe] = useState<AuthMe | null>(null)
   const [fatal, setFatal] = useState<{ message: string; retry: () => void } | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
   const [offline, setOffline] = useState(false)
   const [done, setDone] = useState(false)
   const reloaded = useRef(false)
@@ -89,8 +86,6 @@ export default function SignInScreen({ reload = reloadPage, now = Date.now }: Si
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', poll) }
   }, [polling, signedIn])
 
-  const alreadySetup = useCallback(() => { setNotice(SIGN_IN_TEXT.alreadySetup); check() }, [check])
-
   if (done || (me === null && fatal === null)) {
     return (
       <div role="status" className={`${SHELL} flex-row text-[13px] text-[var(--vscode-descriptionForeground)]`}>
@@ -99,33 +94,17 @@ export default function SignInScreen({ reload = reloadPage, now = Date.now }: Si
     )
   }
   const setup = !fatal && me?.setupRequired === true
-  const proof = setup && me?.signedIn === true
-  const subtitle = fatal ? null
-    : setup ? <p className={MUTED}>{proof ? SIGN_IN_TEXT.setupIntroProof : SIGN_IN_TEXT.setupIntroNoProof}</p>
-      : notice ? <p role="status" className={MUTED}>{notice}</p> : <p className={MUTED}>{SIGN_IN_TEXT.intro}</p>
+  const subtitle = fatal ? null : <p className={MUTED}>{setup ? SIGN_IN_TEXT.setupIntro : SIGN_IN_TEXT.intro}</p>
   return (
-    <div className={SHELL}>
+    <main className={SHELL}>
       <AuthCard title={setup ? SIGN_IN_TEXT.setupTitle : SIGN_IN_TEXT.title} subtitle={subtitle}>
         {fatal ? (
           <div className="flex flex-col gap-4">
             <FormAlert text={fatal.message} />
-            <Button type="button" variant="outline" className="h-8 w-full" onClick={fatal.retry}>{SIGN_IN_TEXT.retry}</Button>
+            <Button type="button" variant="outline" className="h-11 w-full text-base" onClick={fatal.retry}>{SIGN_IN_TEXT.retry}</Button>
           </div>
         ) : setup ? (
-          <>
-            {proof ? <SetupForm withCode={false} autoFocus onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /> : (
-              <>
-                <OpenWindowButton label={SIGN_IN_TEXT.openSetup} now={now} />
-                <details className="flex w-full flex-col text-[13px]">
-                  <summary className="cursor-pointer text-center text-xs text-[var(--vscode-textLink-foreground)]">{SIGN_IN_TEXT.otherDevice}</summary>
-                  <div className="mt-4"><SetupForm withCode onDone={signedIn} onAlreadySetup={alreadySetup} now={now} /></div>
-                </details>
-              </>
-            )}
-            <p className="flex items-center justify-center gap-1.5 border-t border-(--vscode-editorWidget-border) pt-4 text-center text-xs text-[var(--vscode-descriptionForeground)]">
-              <span className="codicon codicon-lock shrink-0" aria-hidden="true" />{SIGN_IN_TEXT.localNote}
-            </p>
-          </>
+          <SetupForm onDone={signedIn} onAlreadySetup={check} now={now} />
         ) : (
           <>
             <LoginForm onDone={signedIn} now={now} />
@@ -136,7 +115,12 @@ export default function SignInScreen({ reload = reloadPage, now = Date.now }: Si
           </>
         )}
       </AuthCard>
+      {setup && !fatal ? (
+        <p className={`${MUTED} flex max-w-[400px] items-center justify-center gap-1.5`}>
+          <span className="codicon codicon-lock shrink-0" aria-hidden="true" />{SIGN_IN_TEXT.localNote}
+        </p>
+      ) : null}
       {offline ? <p role="status" className="text-xs text-[var(--vscode-errorForeground)]">{SIGN_IN_TEXT.offline}</p> : null}
-    </div>
+    </main>
   )
 }
