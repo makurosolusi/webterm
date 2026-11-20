@@ -11,7 +11,6 @@ import { ActionResult, useAction } from '@/components/ui/action'
 import { Button } from '@/components/ui/button'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { callCapabilities } from './capabilitiesApi'
-import { ChromiumDownload } from './ChromiumDownload'
 import { ChromiumPathField } from './ChromiumPathField'
 import { capabilityErrorMessage } from './useCapabilities'
 
@@ -64,7 +63,6 @@ export function AdvancedSection({ advanced, onChanged, open, onOpenChange }: Adv
           <ChromiumPathField chromium={advanced.chromiumPath}
             save={(chromiumPath) => run('/advanced', 'PUT', { chromiumPath })} redetect={onChanged} />
         </div>
-        {advanced.chromiumDownload?.supported ? <div className="st-form"><ChromiumDownload onDone={onChanged} /></div> : null}
         <div className="st-field">
           <div className="st-field-text">
             <span className="st-label">{ADVANCED_TEXT.reset}</span>

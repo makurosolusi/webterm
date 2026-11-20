@@ -1,4 +1,4 @@
-// "Download Chromium" control shared by the wizard Browser step and Settings › Capabilities › Advanced:
+// "Download Chromium" control used by the wizard Browser step:
 // start, progress (polled while the server downloads), cancel, failed + Retry, done. The server saves
 // the downloaded binary as the browser to use; `onDone` reloads the capabilities so the UI follows.
 import { useEffect, useRef, useState } from 'react'
