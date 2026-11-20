@@ -4,6 +4,7 @@
 import { ActionButton, useAction } from '@/components/ui/action'
 import { SettingsMessage } from '../SettingsMessage'
 import { COMMANDS_TEXT } from './commands.labels'
+import { CodeText } from './commands.code'
 import { CommandsFolders } from './CommandsFolders'
 import { CommandsFound } from './CommandsFound'
 import { useCommandsData } from './useCommandsData'
@@ -15,7 +16,7 @@ export function CustomCommandsPanel(): React.JSX.Element {
   const retry = useAction(reload, { label: T.retry, toast: 'never' })
   return (
     <div className="flex flex-col gap-4" data-custom-commands-panel>
-      <p className="m-0 text-xs text-(--vscode-descriptionForeground)">{T.hint}</p>
+      <p className="m-0 text-xs text-(--vscode-descriptionForeground)"><CodeText text={T.tip} /></p>
       {data.status === 'loading' ? <SettingsMessage kind="loading">{T.loading}</SettingsMessage> : null}
       {data.status === 'error' ? (
         <>

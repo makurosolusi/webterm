@@ -1,6 +1,7 @@
 // Every string the first-run wizard shows (English, product language). Kept apart from the
 // components so tests and later copy edits touch one file.
 import type { SetupStep } from '../../shared/settings.setup'
+import { COMMANDS_TEXT } from '../customCommands/commands.labels'
 
 export const SETUP_TEXT = {
   title: 'Set up webterm',
@@ -13,7 +14,7 @@ export const SETUP_TEXT = {
   description: {
     claude: 'Choose how webterm signs in to Claude. Every Claude agent and Central use it.',
     browser: 'Browser nodes show live web pages on the canvas. Choose the browser they use.',
-    commands: 'Tools you install, such as a sign-in helper, are found by webterm on their own. Optional: add the folder they live in.',
+    commands: COMMANDS_TEXT.intro,
     central: 'Central is an assistant that sees all your projects and nodes.',
     basics: 'Theme, projects folder and notifications. Each one applies as you choose it.',
   } as Record<SetupStep, string>,

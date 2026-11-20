@@ -38,16 +38,17 @@ function AddFolder({ common, reload }: { common: readonly string[]; reload: Relo
     label: T.add.button, success: T.add.done, failure: (e) => `${T.add.failed}: ${errorCause(e)}`, toast: 'never',
   })
   return (
-    <div className="flex flex-col gap-1.5" data-commands-add>
-      <Label className="text-xs" htmlFor="commands-add-folder">{T.add.label}</Label>
+    <div role="group" aria-labelledby="commands-add-label" className="flex flex-col gap-1.5 rounded-md border border-(--vscode-widget-border,var(--vscode-panel-border)) p-3" data-commands-add>
+      <Label id="commands-add-label" className="text-xs font-semibold" htmlFor="commands-add-folder">{T.add.label}</Label>
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-48 flex-1">
           <SettingsCombobox id="commands-add-folder" fieldId={COMMAND_FOLDER_HISTORY} mono value={dir} placeholder={T.add.placeholder}
             presets={common.map((value) => ({ value }))} onCommit={setDir} onDraft={setDir}
             validate={(v) => (v === '' || v.startsWith('/') ? null : T.add.notAbsolute)} />
         </div>
-        <ActionButton size="sm" variant="outline" action={add} busyLabel={T.add.busy} lock={dir.trim() ? undefined : { reason: T.add.needDir }}>{T.add.button}</ActionButton>
+        <ActionButton size="sm" variant="outline" className="max-sm:min-h-11" action={add} busyLabel={T.add.busy} lock={dir.trim() ? undefined : { reason: T.add.needDir }}>{T.add.button}</ActionButton>
       </div>
+      <p className="m-0 text-xs text-(--vscode-descriptionForeground)">{T.add.hint}</p>
       <ActionResult action={add} />
     </div>
   )

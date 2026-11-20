@@ -88,7 +88,7 @@ export function CanvasSection({ settings: s, onChange }: P): React.JSX.Element {
         <ProjectsFolderSetting value={s.defaultProjectsFolder} onChange={(v) => onChange({ defaultProjectsFolder: v })} />
       </SettingsGroup>
       <SettingsGroup title="Commands">
-        <Field label={COMMANDS_TEXT.title} field="custom-commands" block>
+        <Field label={COMMANDS_TEXT.title} hint={COMMANDS_TEXT.intro} field="custom-commands" block>
           <CustomCommandsPanel />
         </Field>
       </SettingsGroup>

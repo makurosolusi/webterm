@@ -20,10 +20,30 @@ describe('CustomCommandsPanel', () => {
     expect(screen.getByText(T.loading)).toBeTruthy()
     await ready()
     const row = document.querySelector('[data-command="tool-a"]') as HTMLElement
-    expect(row.textContent).toContain(`${T.found.ok} · ${T.found.source.extra}`)
+    expect(row.textContent).toContain(T.found.source.extra)
     expect(row.textContent).toContain('~/.local/bin/tool-a')
-    expect((document.querySelector('[data-command="known"]') as HTMLElement).textContent).toContain(`${T.found.missing} · ${T.found.source.candidate}`)
-    expect(screen.getByText(T.hint)).toBeTruthy()
+    expect(document.querySelector('[data-command="known"]')).toBeNull()
+  })
+
+  it('lists only detected tools; the rest are names in one closed disclosure', async () => {
+    const miss = (name: string) => TOOL({ name, path: null, found: false, source: 'candidate' })
+    fakeCommands({ detected: [miss('envman'), miss('op')] })
+    render(<CustomCommandsPanel />)
+    await ready()
+    expect(document.querySelectorAll('[data-command]')).toHaveLength(0)
+    expect(screen.getByText(T.found.empty)).toBeTruthy()
+    const d = document.querySelector('[data-commands-known]') as HTMLDetailsElement
+    expect(d.open).toBe(false)
+    expect(d.querySelector('summary')?.textContent).toBe(T.found.known(2))
+    expect(d.textContent).toContain('envman, op')
+  })
+
+  it('the tip renders commands as <code> with no raw backticks', async () => {
+    fakeCommands()
+    const { container } = render(<CustomCommandsPanel />)
+    await ready()
+    expect(container.textContent).not.toContain('`')
+    expect([...container.querySelectorAll('code')].map((c) => c.textContent)).toEqual(['webterm command detect', 'webterm command path add <folder>'])
   })
 
   it('empty states for no tools and no folders', async () => {
@@ -31,6 +51,7 @@ describe('CustomCommandsPanel', () => {
     render(<CustomCommandsPanel />)
     await ready()
     expect(screen.getByText(T.found.empty)).toBeTruthy()
+    expect(document.querySelector('[data-commands-known]')).toBeNull()
     expect(screen.getByText(T.folders.empty)).toBeTruthy()
     expect(document.querySelector('[data-commands-session]')).toBeNull()
   })
