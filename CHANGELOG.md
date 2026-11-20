@@ -3,13 +3,17 @@
 ## [Unreleased]
 
 ### Added
+- Credential proxy: Claude Code with an API key or gateway now talks to a loopback proxy inside the webterm server, which holds the only copy of the key. The `claude` child gets just `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`. The proxy port and token are kept in the data dir, so running sessions survive a server restart. The Provider card says the key stays in the webterm server.
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
 ### Changed
+- `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is no longer set on `claude` processes, because they hold no real credential to scrub. Settings > Provider "Test connection" now runs through the credential proxy ("via local credential proxy").
 - Docker seccomp now defaults to `unconfined` (`WEBTERM_SECCOMP`) in `compose-portainer.yml`, `compose.ghcr.yml` and `docker-compose.yml`, so the Portainer Web editor works by pasting the YAML with no file on the host. Docker's default syscall filter is lifted for the whole container; Chrome's own sandbox stays on, as do dropped capabilities, `no-new-privileges` and the non-root user. Set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json` for the strict profile.
 - The setup Browser step's "Download Chromium" now installs webterm's own locked Chrome for Testing with its SHA-256 check, in `<data dir>/browser/chrome-for-testing/<version>/`, instead of the latest stable build saved as a `WEBTERM_BROWSER_BIN` override that skipped verification. A browser path you already saved keeps working and is now shown as "a custom browser, not verified by webterm".
 
 ### Fixed
+- Claude with an API key or gateway failed to start in the hardened Docker container (and on Linux without bubblewrap) with "bubblewrap is required for subprocess env scrubbing". It now runs in the default container with no bubblewrap, socat, extra capabilities or seccomp changes.
+- `ANTHROPIC_*` variables from the server environment no longer leak into tmux panes.
 - The Docker healthcheck no longer makes the server log an auth rejection every 15 seconds (about 5,760 a day), which buried real rejected-token attempts. It now probes the static UI at `/` with `curl -f`, which needs no token and still fails when the server is down. `/api/health` auth is unchanged.
 - A failed Chromium download now retries network failures automatically with growing pauses (and can be cancelled), starts over cleanly without leaving partial files, names the cause (network, disk, checksum mismatch, other) in plain words and offers "Try again". A checksum mismatch is refused and never retried.
 

@@ -55,6 +55,13 @@ Chrome for Testing publishes no linux arm64 build, so arm64 images use Debian's 
 - **Default: API key or proxy.** Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`) in the host shell or in an untracked `.env` next to `docker-compose.yml`. Compose passes them through; the compose file holds no values. Docker secrets also work: mount a secret named `anthropic_api_key` (and/or `anthropic_auth_token`) and the entrypoint exports it when the env var is unset.
 - **Alternative: `claude login` in the container.** `docker exec -it webterm claude login`. State lives in the `webterm-home` volume (`CLAUDE_CONFIG_DIR=/home/webterm/.claude`), so it survives rebuilds. `docker compose down -v` deletes it.
 
+## Claude with an API key or gateway
+
+Claude with an API key or gateway works in the default hardened container: no `bubblewrap`, `socat`, extra capabilities or seccomp changes are needed. The webterm server runs a loopback credential proxy that holds the key; each `claude` process only gets `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`, and `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is not set.
+
+- The proxy port and token are stored in `<dataDir>/credential-proxy/`, so they survive a server restart and running sessions keep working. If the data volume is lost, a new token is issued and sessions must be restarted.
+- Limits: the proxy keeps the key out of process environments, not out of files. The real key is still in `<dataDir>/claude-provider/SECRET` (mode `600`), readable by the same user. Any process holding the placeholder can still make API calls through the proxy. Login (OAuth) mode and a `command` launch profile are not proxied.
+
 ## Project files: bind mount vs isolated volume
 
 - **Default (bind mount):** `${WEBTERM_PROJECTS:-./workspace}` on the host is `/workspace`. Agents edit your real files. On Linux the folder must be writable by uid 1000 (`chown -R 1000 <dir>`) or set `user: "<your uid>:<your gid>"` in a compose override; the entrypoint stops with a message if it is not writable.
