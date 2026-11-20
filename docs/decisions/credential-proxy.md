@@ -1,6 +1,14 @@
 # Credential proxy: Claude children never hold the real key
 
-Status: design (breaking changes allowed: the project is in DEV, no compatibility, data migration or old-session support).
+Status: implemented (waves 1-2, verified in the office container 2026-11-20). Breaking changes were allowed: the project is in DEV, no compatibility, data migration or old-session support.
+
+Verified in the office container (image built from main, cap_drop ALL, no-new-privileges, no bubblewrap/socat): Settings test connection passes ("via local credential proxy"); the Bash tool runs; the agent env holds only the placeholder and the proxy URL; `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is absent. Restart test: the proxy was down for 12 s in the middle of a request; `claude` waited and finished on the same port and token (this answers the retry-watchdog question in section 3 for that case).
+
+Not yet verified:
+- `NO_PROXY=127.0.0.1` is not implemented (section 2); behaviour behind a container-level `HTTP(S)_PROXY` is unknown.
+- Interactive TUI start and the "approve this API key" prompt (done criterion 6).
+- Real PTY sessions through tmux (the proof used the paths above, not a tmux pane).
+- Linux amd64: the proof ran only on Linux arm64 (Colima aarch64, Docker 29); amd64 has not been tested.
 
 ## Problem
 
