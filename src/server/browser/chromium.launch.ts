@@ -9,7 +9,7 @@ import { buildChromiumArgs, CDP_LOOPBACK, headlessReason, profileDirFor } from '
 import { createLogger } from '../logs'
 import { childEnv } from '../childEnv'
 import { ensureManaged, managedBinaryPath, managedRoot } from './chromium.managed'
-import { lockHolder, reclaimProfile } from './chromium.profileLock'
+import { clearForeignLock, lockHolder, reclaimProfile } from './chromium.profileLock'
 import type { ProfileLockDeps } from './chromium.profileLock'
 
 const log = createLogger('browser.launch')
@@ -196,6 +196,7 @@ export function createChromiumPool(cfg: {
           const headless = headlessReason(cfg.env, cfg.platform)
           if (headless) log.warn('browser.headless', 'Chromium runs headless; sites detect it as a bot more easily', { reason: headless, ids: { profileId } })
           const profileDir = profileDirFor(cfg.dataRoot, profileId)
+          if (clearForeignLock(profileDir, cfg.deps)) log.info('browser.profile_lock_cleared', 'cleared a profile lock left by another host', { ids: { profileId }, reason: 'foreign_host' })
           // Not in `live` = no Chromium of this pool owns the profile; a holder is a leftover of an earlier run.
           const reclaimed = await reclaimProfile(profileDir, KILL_GRACE_MS, cfg.deps?.sleep ?? defaultSleep, cfg.deps)
           if (reclaimed !== null) log.warn('browser.profile_reclaimed', 'reclaimed the profile from a stale Chromium', { ids: { profileId }, pid: reclaimed })
