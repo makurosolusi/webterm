@@ -114,4 +114,4 @@ order in `chromium.launch.ts`:
 3. Otherwise downloaded once (HTTPS, size and time capped, zip-slip safe extraction) into 2, then used.
 
 `bun scripts/fetch-chrome.ts --dest <dir>` does the same by hand. `CHROME_SHA256` pins each platform archive; Chrome for
-Testing publishes no checksums, so fill it with `--print-sha256` after verifying the values.
+Testing publishes no checksums, so a bump regenerates them with `--print-sha256` and confirms against an independent download.
