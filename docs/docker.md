@@ -127,6 +127,7 @@ The server listens on `0.0.0.0:$PORT` inside the container (`HOST=0.0.0.0`) and 
 - **Chrome crashes or tabs go blank:** `/dev/shm` too small. Compose sets `shm_size: 1gb`; with plain `docker run` pass `--shm-size=1g`.
 - **`Check failed: sys_chroot("/proc/self/fdinfo/") == 0`, then the zygote dies:** an old copy of the seccomp profile (before `chroot` was allowed). Re-fetch `docker/chrome.seccomp.json` from the same tag as the image.
 - **"No usable sandbox" / `clone: Operation not permitted`:** the strict seccomp profile is in use but outdated or missing (plain `docker run` needs `--security-opt seccomp=docker/chrome.seccomp.json`, or `unconfined`), the host has `kernel.unprivileged_userns_clone=0` or `user.max_user_namespaces=0`, or an AppArmor policy blocks user namespaces (Ubuntu 23.10+: `kernel.apparmor_restrict_unprivileged_userns=0`). Do not work around it with `--no-sandbox`.
+- **Browser nodes fail with `crashed_on_start` after recreating the container:** no action needed; webterm clears the profile lock the old container left behind (its hostname differs) before each browser launch.
 - **`/workspace is not writable`:** fix host ownership, see above.
 - **Unhealthy container:** `docker compose logs webterm`; the healthcheck is `curl -f` on `GET /` (the static UI, no token), so it fails on any non-2xx or no answer and never logs an auth rejection. It deliberately avoids `/api/*`, which needs a token.
 

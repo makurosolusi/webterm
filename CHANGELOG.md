@@ -8,6 +8,7 @@
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
 ### Fixed
+- Browser nodes work again after the container is recreated (an update in Portainer or `compose up`): the profile lock left by the old container no longer makes Chromium exit with "crashed_on_start".
 - Browser node video and animation no longer fall to about 20-40 fps for a viewer on a slower link: the server now keeps up to 6 frames in flight per viewer instead of 2, so a 100 ms round trip still carries 60 fps (measured 20 fps and 39 fps before at 100 ms and 50 ms).
 - The browser profile list in agent prompts keeps a stable order (creation order) when profiles share a timestamp, so the same profiles are named each time and the prompt cache holds.
 - New project no longer fails in a fresh container with "Git author identity is not configured". When git has no name or email, the first commit is authored as webterm (your git config is never touched), and the dialog says so.
