@@ -7,7 +7,7 @@ import { setupAccount } from '../account.api.client'
 import { authErrorText, charCount, PASSWORD_MIN, SIGN_IN_TEXT, USERNAME_PATTERN } from '../signInLabels'
 import { useAuthSubmit } from '../useAuthSubmit'
 import { AuthField } from './AuthField'
-import { FormAlert, PasswordChecklist, SubmitButton } from './authFormParts'
+import { FormAlert, PasswordChecklist, SubmitButton, useAlertGrab } from './authFormParts'
 import { useFieldChecks } from './useFieldChecks'
 
 export interface SetupFormProps {
@@ -19,6 +19,8 @@ export interface SetupFormProps {
 
 const ORDER = ['username', 'password', 'confirm'] as const
 const PREFIX = 'setup'
+const HTTP_TOO_MANY = 429
+const HTTP_SERVER_ERROR = 500
 
 /** The create-account form; sends exactly what the server contract (POST /auth/setup) takes. */
 export function SetupForm({ onDone, onAlreadySetup, now = Date.now }: SetupFormProps): React.JSX.Element {
@@ -28,6 +30,7 @@ export function SetupForm({ onDone, onAlreadySetup, now = Date.now }: SetupFormP
   const [shown, setShown] = useState(false)
   const [exists, setExists] = useState(false)
   const s = useAuthSubmit(now, authErrorText)
+  const [grab, grabAlert] = useAlertGrab()
   const name = username.trim()
   const longEnough = charCount(password) >= PASSWORD_MIN
   const matches = confirm !== '' && confirm === password
@@ -54,13 +57,14 @@ export function SetupForm({ onDone, onAlreadySetup, now = Date.now }: SetupFormP
         // Back to the field the answer is about (focus is not lost by readOnly, so no wait is needed).
         if (r.error === 'invalid_username') focus('username')
         else if (r.error === 'weak_password') focus('password')
+        else if (r.status === HTTP_TOO_MANY || r.status >= HTTP_SERVER_ERROR) grabAlert()
       },
-      () => s.setFailure({ message: SIGN_IN_TEXT.unreachable }),
+      () => { s.setFailure({ message: SIGN_IN_TEXT.unreachable }); grabAlert() },
     ).finally(() => s.setPending(false))
   }
   const checklistId = `${PREFIX}-requirements`
   return (
-    <form onSubmit={submit} noValidate className="flex w-full flex-col gap-4" aria-label={SIGN_IN_TEXT.setupTitle}>
+    <form onSubmit={submit} noValidate className="flex w-full min-w-0 max-w-full flex-col gap-4" aria-label={SIGN_IN_TEXT.setupTitle}>
       <AuthField
         id={`${PREFIX}-username`} label={SIGN_IN_TEXT.usernameLabel} autoComplete="username" value={username} onChange={setUsername} readOnly={s.pending}
         autoFocus hint={SIGN_IN_TEXT.usernameHint} error={f.shown('username')} onBlur={f.blur('username', username)} inputRef={f.ref('username')}
@@ -76,8 +80,8 @@ export function SetupForm({ onDone, onAlreadySetup, now = Date.now }: SetupFormP
         status={matches ? <span className="sign-in-check codicon codicon-check px-0.5" data-met="true" role="img" aria-label={SIGN_IN_TEXT.matches} /> : null}
       />
       <PasswordChecklist id={checklistId} items={[{ label: SIGN_IN_TEXT.checkLength, met: longEnough }, { label: SIGN_IN_TEXT.checkMatch, met: matches }]} />
-      <FormAlert text={s.text} />
-      {exists ? <Button type="button" variant="link" className="h-auto self-start p-0" onClick={onAlreadySetup}>{SIGN_IN_TEXT.signIn}</Button> : null}
+      <FormAlert text={s.text} grab={grab} />
+      {exists ? <Button type="button" variant="link" className="h-auto self-start p-0" autoFocus onClick={onAlreadySetup}>{SIGN_IN_TEXT.signIn}</Button> : null}
       <SubmitButton label={SIGN_IN_TEXT.create} pendingLabel={SIGN_IN_TEXT.creating} pending={s.pending} blocked={s.blocked} disabled={!valid} />
     </form>
   )

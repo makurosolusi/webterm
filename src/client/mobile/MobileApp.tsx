@@ -1,8 +1,8 @@
 // /m shell: four tabs (Brief, Inbox, Agents, Timeline) chosen by the URL hash, so a notification
 // tap (`/m/#inbox`) lands on the right screen. A server answering 401/403 shows the account sign-in
 // (username + password, POST /auth/login -> the `wt_ui` session cookie an installed PWA keeps across
-// launches); before the first account exists it says to create it on the computer first.
-import { useEffect, useState } from 'react'
+// launches); before the first account exists it shows the same create-account form as the desktop.
+import { useCallback, useEffect, useState } from 'react'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
 import { InboxApiError } from '../inboxTypes'
 import { request } from '../inboxTransport'
@@ -11,6 +11,7 @@ import { MobileBrief, MobileTimeline } from './MobileFeeds'
 import { MobileInbox } from './MobileInbox'
 import { MobilePushCard } from './MobilePushCard'
 import { LoginForm } from '../SignInForms'
+import { SetupForm } from '../signIn/SetupForm'
 import { SIGN_IN_TEXT } from '../signInLabels'
 import { fetchMe, logout } from '../transportToken'
 
@@ -26,21 +27,22 @@ export const tabFromHash = (hash: string): TabId => TABS.find((t) => `#${t.id}` 
 
 type Auth = 'checking' | 'ok' | 'needed'
 
-/** Sign-in for /m: the desktop's LoginForm, or the "create it on the computer" handoff before setup. */
+/** Sign-in for /m: the desktop's LoginForm, or its SetupForm before the first account exists. */
 function SignIn({ reload }: { reload: () => void }): React.JSX.Element {
   const [setup, setSetup] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
+  const check = useCallback(() => {
     fetchMe().then((m) => setSetup(m.setupRequired), (err: unknown) => {
       setError(`Could not reach the server: ${err instanceof Error ? err.message : String(err)}`)
       setSetup(false) // still offer the form: it reports its own failure if the server stays away
     })
   }, [])
+  useEffect(check, [check])
   return (
     <main className="m-signin">
       <h1>webterm</h1>
       {setup === null ? <p role="status">{SIGN_IN_TEXT.loading}</p>
-        : setup ? <p>{SIGN_IN_TEXT.mobileSetup}</p>
+        : setup ? <><p>{SIGN_IN_TEXT.setupIntro}</p><SetupForm onDone={reload} onAlreadySetup={check} /></>
           : <><p>{SIGN_IN_TEXT.intro}</p><LoginForm idPrefix="m-signin" onDone={reload} /></>}
       {error && <p className="m-error" role="alert">{error}</p>}
     </main>

@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { loginWithPassword } from './account.api.client'
 import { AuthField } from './signIn/AuthField'
-import { causeOf, FormAlert, SubmitButton } from './signIn/authFormParts'
+import { causeOf, FormAlert, SubmitButton, useAlertGrab } from './signIn/authFormParts'
 import { useFieldChecks } from './signIn/useFieldChecks'
 import { authErrorText, SIGN_IN_TEXT } from './signInLabels'
 import { requestOpen } from './transportToken'
@@ -14,7 +14,8 @@ import { useCountdown } from './useCountdown'
 
 const HTTP_ACCEPTED = 202
 const HTTP_TOO_MANY = 429
-const MUTED = 'text-center text-xs text-[var(--vscode-descriptionForeground)] text-balance'
+const HTTP_SERVER_ERROR = 500
+const MUTED = 'text-center text-xs break-words text-[var(--vscode-descriptionForeground)] text-balance'
 
 export interface OpenWindowButtonProps {
   label: string
@@ -70,6 +71,7 @@ export function LoginForm({ onDone, now = Date.now, idPrefix = 'signin' }: Login
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const s = useAuthSubmit(now, authErrorText)
+  const [grab, grabAlert] = useAlertGrab()
   const f = useFieldChecks({
     username: username.trim() === '' ? SIGN_IN_TEXT.needUsername : null,
     password: password === '' ? SIGN_IN_TEXT.needPassword : null,
@@ -81,12 +83,16 @@ export function LoginForm({ onDone, now = Date.now, idPrefix = 'signin' }: Login
     if (!f.validate()) return
     s.setPending(true)
     loginWithPassword(username.trim(), password).then(
-      (r) => (r.ok ? onDone() : s.setFailure({ status: r.status, error: r.error, retryAfterS: r.retryAfterS })),
-      () => s.setFailure({ message: SIGN_IN_TEXT.unreachable }),
+      (r) => {
+        if (r.ok) return onDone()
+        s.setFailure({ status: r.status, error: r.error, retryAfterS: r.retryAfterS })
+        if (r.status === HTTP_TOO_MANY || r.status >= HTTP_SERVER_ERROR) grabAlert()
+      },
+      () => { s.setFailure({ message: SIGN_IN_TEXT.unreachable }); grabAlert() },
     ).finally(() => s.setPending(false))
   }
   return (
-    <form onSubmit={submit} noValidate className="flex w-full flex-col gap-4" aria-label={SIGN_IN_TEXT.title}>
+    <form onSubmit={submit} noValidate className="flex w-full min-w-0 max-w-full flex-col gap-4" aria-label={SIGN_IN_TEXT.title}>
       <AuthField
         id={`${idPrefix}-username`} label={SIGN_IN_TEXT.usernameLabel} autoComplete="username" value={username} onChange={setUsername}
         readOnly={s.pending} autoFocus error={f.shown('username')} onBlur={f.blur('username', username)} inputRef={f.ref('username')}
@@ -95,7 +101,7 @@ export function LoginForm({ onDone, now = Date.now, idPrefix = 'signin' }: Login
         id={`${idPrefix}-password`} label={SIGN_IN_TEXT.passwordLabel} autoComplete="current-password" value={password} onChange={setPassword}
         readOnly={s.pending} error={f.shown('password')} onBlur={f.blur('password', password)} inputRef={f.ref('password')}
       />
-      <FormAlert text={s.text} />
+      <FormAlert text={s.text} grab={grab} />
       <SubmitButton label={SIGN_IN_TEXT.signIn} pendingLabel={SIGN_IN_TEXT.signingIn} pending={s.pending} blocked={s.blocked} />
     </form>
   )

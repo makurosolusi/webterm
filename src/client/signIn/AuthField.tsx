@@ -45,9 +45,9 @@ export function AuthField({ id, label, value, onChange, autoComplete, readOnly, 
   const described = [hintId, capsId, errorId, describedBy].filter(Boolean).join(' ') || undefined
   const name = label.toLowerCase()
   return (
-    <div className="flex w-full flex-col gap-1.5">
+    <div className="flex w-full max-w-full min-w-0 flex-col gap-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
+      <div className="relative min-w-0 max-w-full">
         <Input
           id={id} ref={inputRef} value={value} readOnly={readOnly} autoFocus={autoFocus} autoComplete={autoComplete}
           aria-describedby={described} aria-invalid={error ? true : undefined}
@@ -71,10 +71,10 @@ export function AuthField({ id, label, value, onChange, autoComplete, readOnly, 
           </div>
         ) : null}
       </div>
-      {hint ? <p id={hintId} className="text-[13px] leading-4 text-[var(--vscode-descriptionForeground)]">{hint}</p> : null}
-      {caps ? <p id={capsId} className="flex items-center gap-1 text-[13px] leading-4 text-[var(--vscode-descriptionForeground)]"><span className="codicon codicon-warning shrink-0" aria-hidden="true" />{SIGN_IN_TEXT.capsLock}</p> : null}
+      {hint ? <p id={hintId} className="text-[13px] leading-4 break-words text-[var(--vscode-descriptionForeground)]">{hint}</p> : null}
+      {caps ? <p id={capsId} className="flex items-center gap-1 text-[13px] leading-4 break-words text-[var(--vscode-descriptionForeground)]"><span className="codicon codicon-warning shrink-0" aria-hidden="true" />{SIGN_IN_TEXT.capsLock}</p> : null}
       {error ? (
-        <p id={errorId} className="flex items-start gap-1 text-[13px] leading-4 text-[var(--vscode-errorForeground)]">
+        <p id={errorId} className="flex items-start gap-1 text-[13px] leading-4 break-words text-[var(--vscode-errorForeground)]">
           <span className="codicon codicon-error mt-px shrink-0" aria-hidden="true" />{error}
         </p>
       ) : null}

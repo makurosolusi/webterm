@@ -9,5 +9,13 @@
 .m-signin .sign-in-field__input { margin-top: 0; height: auto; }
 .m-signin .sign-in-field__input.pr-8 { padding-right: 36px; }
 
+/* Contrast on both themes: descriptionForeground is 6.9:1 (dark) / 10:1 (light). The met colour is the
+   git "added" token (dark #81b88b 7:1, light #587c0c 4.9:1); the former hardcoded fallback was 1.9:1 on light. */
 .sign-in-check { color: var(--vscode-descriptionForeground); }
-.sign-in-check[data-met='true'] { color: var(--vscode-charts-green, #89d185); }
+.sign-in-check[data-met='true'] { color: var(--vscode-gitDecoration-addedResourceForeground); }
+
+/* Reduced motion: the loading glyph stays as a static mark; the "Signing in…" / "Creating account…" text carries the state. */
+@media (prefers-reduced-motion: reduce) {
+  .codicon-modifier-spin { animation: none; }
+  .sign-in-field__input { transition: none; }
+}

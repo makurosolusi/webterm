@@ -29,13 +29,13 @@ export interface SignInScreenProps {
   now?: () => number
 }
 
-const MUTED = 'text-center text-xs text-[var(--vscode-descriptionForeground)] text-balance'
+const MUTED = 'text-center text-xs break-words text-[var(--vscode-descriptionForeground)] text-balance'
 const SHELL = 'absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-auto bg-[var(--vscode-editor-background)] p-4 text-foreground'
 
 /** The ~400px card every signed-out state sits in: logo, title, one-line subtitle, then the body. */
 function AuthCard({ title, subtitle, children }: { title: string; subtitle?: React.ReactNode; children: React.ReactNode }): React.JSX.Element {
   return (
-    <Card className="w-full max-w-[400px] gap-6 px-4 py-8 shadow-sm sm:px-8">
+    <Card className="w-full max-w-[400px] min-w-0 gap-6 px-4 py-8 shadow-sm sm:px-8">
       <header className="flex flex-col items-center gap-2">
         <div className="sign-in-brand mb-2"><Brand gradientId="signin-brand" /></div>
         <h1 className="text-center text-[18px] leading-6 font-semibold">{title}</h1>
