@@ -87,6 +87,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
           <ActionResult action={check} stamp="checked" />
         </div>
       ) : null}
+      {chromium.source === 'bundled' && chromium.active ? <p role="note" className="m-0 text-xs [overflow-wrap:anywhere]" data-browser-bundled>{T.bundledNote(chromium.active)}</p> : null}
       {chromium.source === 'override' && chromium.active ? <p role="note" className="m-0 text-xs [overflow-wrap:anywhere]" data-browser-custom>{T.customActive(chromium.active)}</p> : null}
       {choice === 'installed' && candidates.length > 1 ? (
         <Tiles label={T.pick} options={candidates} names={Object.fromEntries(candidates.map((c) => [c, c]))} value={picked ?? candidates[0]} onChange={setPicked} />

@@ -10,7 +10,7 @@ import type { EnvSettingsApiDeps } from './envSettings.api'
 import { CONTROL_DOCTOR_PATH, CONTROL_EFFECTIVE_PATH, controlEffectiveRoute } from './envSettings.control'
 import { peerOf } from './featureCapabilities.guard'
 import type { DetectOptions } from './featureCapabilities.detect'
-import { buildResponse, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
+import { buildResponse, bundledBinOf, connect, defaultDetect, reset, setAdvanced, setSub, toggle, type CapCtx, type Detect, type Reply } from './featureCapabilities.service'
 import { createLogger } from './logs'
 import { chromiumDownloader, type ChromiumDownloader } from './browser/browserDownload'
 
@@ -82,7 +82,7 @@ export async function capabilitiesRoute(
   if (method === 'GET' && seg === DOWNLOAD_SEG) return send(res, { status: 200, body: downloader.status() })
   if (method === 'GET') {
     const fresh = new URL(req.url ?? '/', 'http://x').searchParams.get('refresh') === '1'
-    return send(res, { status: 200, body: buildResponse(env, await x.detect({ fresh }), x.dataDir, downloader.status()) })
+    return send(res, { status: 200, body: buildResponse(env, await x.detect({ fresh }), x.dataDir, downloader.status(), bundledBinOf(deps.service)) })
   }
 
   const verdict = deps.guard(req)

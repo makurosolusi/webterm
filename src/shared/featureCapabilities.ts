@@ -30,10 +30,10 @@ export interface CapabilitiesResponse {
   capabilities: CapabilityView[] // urut CAPABILITY_IDS
   advanced: {
     agentEngine: { value: 'auto' | 'claude' | 'mock'; detected: string }
-    /** `value` = override tersimpan ('' = otomatis); `active` = biner yang akan dipakai (null = tidak ada);
+    /** `value` = override tersimpan ('' = otomatis); `source` 'bundled' = path diberikan environment/image tanpa override; `active` = biner yang akan dipakai (null = tidak ada);
      *  `overrideInvalid` = override ada tapi berkasnya hilang (TIDAK jatuh ke otomatis); `candidates` = yang ada di disk. */
     chromiumPath: {
-      value: string; detected: boolean; active: string | null; source: 'override' | 'auto' | null
+      value: string; detected: boolean; active: string | null; source: 'override' | 'bundled' | 'auto' | null
       overrideInvalid: boolean; candidates: string[]
     }
     dataDir: string // read-only

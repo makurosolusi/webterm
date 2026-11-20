@@ -49,6 +49,7 @@ export const SETUP_TEXT = {
     download: 'Download Chromium',
     pick: 'Browser to use',
     customActive: (path: string): string => `A custom browser is in use (${path}). It is not verified by webterm.`,
+    bundledNote: (path: string): string => `Chromium is built into this install (${path}).`,
     noneFound: 'No Chrome or Chromium was found on the server.',
     getChrome: 'Install Google Chrome',
     chromeUrl: 'https://www.google.com/chrome/',

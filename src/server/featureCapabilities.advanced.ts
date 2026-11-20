@@ -23,6 +23,8 @@ const IDLE: Pick<DownloadStatus, 'state' | 'percent'> = { state: 'idle', percent
 export function advancedView(
   env: NodeJS.ProcessEnv, dataDir: string,
   download: Pick<DownloadStatus, 'state' | 'percent'> = IDLE, platform: NodeJS.Platform = process.platform,
+  /** The browser path comes from the environment/image (settings source `env`), not from a saved user choice. */
+  bundledBin = false,
 ): CapabilitiesResponse['advanced'] {
   const chosen = (env[CENTRAL_RUNTIME_FLAG] ?? '').trim().toLowerCase()
   return {
@@ -30,7 +32,7 @@ export function advancedView(
       value: SHOWN.find((e) => e === chosen) ?? AUTO,
       detected: detectAgentEngine({ ...env, [CENTRAL_RUNTIME_FLAG]: undefined }),
     },
-    chromiumPath: chromiumView(env),
+    chromiumPath: chromiumView(env, bundledBin),
     dataDir,
     chromiumDownload: { supported: downloadSupported(platform), state: download.state, percent: download.percent },
     // The display check alone (an explicit headless setting is the user's choice, not a lock).
@@ -38,13 +40,16 @@ export function advancedView(
   }
 }
 
-/** Lokasi Chromium: override tersimpan, biner aktif + sumbernya, dan kandidat otomatis yang ada di disk. */
-function chromiumView(env: NodeJS.ProcessEnv): CapabilitiesResponse['advanced']['chromiumPath'] {
-  const value = env[ENV_BROWSER.bin] ?? ''
+/** Lokasi Chromium: override tersimpan (`value`), biner aktif + sumbernya ('bundled' = diberikan environment/image), dan kandidat di disk. */
+function chromiumView(env: NodeJS.ProcessEnv, bundledBin: boolean): CapabilitiesResponse['advanced']['chromiumPath'] {
+  const bin = env[ENV_BROWSER.bin] ?? ''
   const found = detectChromium(env)
+  const bundled = bundledBin && found !== null ? found : null
   return {
-    value, detected: found !== null, active: found?.path ?? null, source: found?.source ?? null,
-    overrideInvalid: value.trim() !== '' && found === null, candidates: chromiumCandidates(env),
+    value: bundledBin ? '' : bin, detected: found !== null, active: found?.path ?? null,
+    source: found === null ? null : bundled ? 'bundled' : found.source,
+    overrideInvalid: bin.trim() !== '' && found === null,
+    candidates: bundled ? [bundled.path] : chromiumCandidates(env),
   }
 }
 

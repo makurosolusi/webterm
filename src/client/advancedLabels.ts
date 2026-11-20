@@ -15,6 +15,7 @@ export const ADVANCED_TEXT = {
   chromiumPlaceholder: 'Path to the Chromium app',
   chromiumAuto: (path: string): string => `Automatic: ${path}`,
   chromiumUsingAuto: 'In use (automatic):',
+  chromiumUsingBundled: 'In use (built into this install):',
   chromiumUsingOverride: 'In use (your choice):',
   chromiumOverrideInvalid: 'The location you chose was not found, so the browser can’t run. Fix it or use automatic.',
   chromiumMissing: 'Chromium was not found. Enter its location here.',
