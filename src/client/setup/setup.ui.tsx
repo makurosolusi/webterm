@@ -32,7 +32,7 @@ export interface StepSetting { where: string; section: string; field: SettingsFi
 export function StepHeading({ children }: { children: React.ReactNode }): React.JSX.Element {
   const ref = useRef<HTMLHeadingElement>(null)
   useEffect(() => { ref.current?.focus({ preventScroll: true }) }, [])
-  return <h3 ref={ref} tabIndex={-1} data-setup-heading className="m-0 text-[15px] font-semibold leading-5 outline-none">{children}</h3>
+  return <h3 ref={ref} tabIndex={-1} data-setup-heading className="setup-heading m-0 text-[15px] font-semibold leading-5">{children}</h3>
 }
 
 /** One step screen: heading and description, then the body (scrolls), then the sticky footer. */
@@ -52,7 +52,7 @@ export function StepPage({ step, setting, footer, children }: {
         {children}
         <p className="m-0 mt-auto flex flex-wrap items-center gap-x-1 pt-2 text-xs text-(--vscode-descriptionForeground)">
           <span>{SETUP_TEXT.changeLater(setting.where)}</span>
-          <Button size="xs" variant="link" className="h-auto min-h-0 px-0" onClick={() => openSettingsAt(setting.section, setting.field)}>{SETUP_TEXT.openSettings}</Button>
+          <Button size="xs" variant="link" className="h-auto min-h-0 px-0 max-sm:min-h-11" onClick={() => openSettingsAt(setting.section, setting.field)}>{SETUP_TEXT.openSettings}</Button>
         </p>
       </div>
       {footer}
@@ -73,7 +73,7 @@ export function Tiles<T extends string>(p: {
     <div role="group" aria-label={p.label} className="flex flex-col gap-1.5">
       {p.options.map((o) => (
         <Button key={o} variant="outline" aria-pressed={p.value === o} data-tile
-          className="setup-tile h-auto min-h-9 justify-start gap-2 whitespace-normal px-3 py-1.5 text-left" onClick={() => p.onChange(o)}>
+          className="setup-tile h-auto min-h-9 max-sm:min-h-11 justify-start gap-2 whitespace-normal px-3 py-1.5 text-left" onClick={() => p.onChange(o)}>
           <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
             <span className="[overflow-wrap:anywhere]">{p.names[o]}</span>
             {p.help?.[o] ? <span className="text-xs text-(--vscode-descriptionForeground)">{p.help[o]}</span> : null}
@@ -115,13 +115,13 @@ export function StepFooter({ nav, commit, locked, notice }: {
       {error ? <ActionResult action={cont} /> : null}
       <div className="flex items-center gap-2">
         {nav.index > 0 ? (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={nav.back}>
+          <Button size="sm" variant="ghost" className="max-sm:min-h-11" disabled={busy} onClick={nav.back}>
             <span className="codicon codicon-arrow-left" aria-hidden="true" />{SETUP_TEXT.back}
           </Button>
         ) : null}
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" disabled={busy} onClick={nav.skip}>{SETUP_TEXT.skip}</Button>
-        <ActionButton size="sm" className="min-w-20" action={cont} busyLabel={SETUP_TEXT.saving} lock={locked ? { reason: locked } : undefined}>
+        <Button size="sm" variant="ghost" className="max-sm:min-h-11" disabled={busy} onClick={nav.skip}>{SETUP_TEXT.skip}</Button>
+        <ActionButton size="sm" className="min-w-20 max-sm:min-h-11" action={cont} busyLabel={SETUP_TEXT.saving} lock={locked ? { reason: locked } : undefined}>
           {error ? SETUP_TEXT.retry : last ? SETUP_TEXT.finish : SETUP_TEXT.next}
         </ActionButton>
       </div>

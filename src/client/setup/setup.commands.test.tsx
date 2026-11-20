@@ -37,6 +37,19 @@ describe('Commands step', () => {
     expect(s.calls.every((c) => c.method === 'GET')).toBe(true)
   })
 
+  it('shows no raw backticks, one intro sentence, and a heading that draws no focus ring', async () => {
+    fakeCommands()
+    const { container } = render(<CommandsStep nav={nav()} />)
+    await screen.findByText(COMMANDS_TEXT.found.title)
+    expect(container.textContent).not.toContain('`')
+    expect(container.textContent?.split(COMMANDS_TEXT.intro)).toHaveLength(2)
+    const h = screen.getByRole('heading', { name: SETUP_TEXT.steps.commands })
+    expect(h.getAttribute('tabindex')).toBe('-1')
+    expect(h.classList.contains('setup-heading')).toBe(true)
+    expect(document.activeElement).toBe(h)
+    expect(container.querySelectorAll('.overflow-y-auto')).toHaveLength(1)
+  })
+
   it('Continue works even when the load failed (the step is optional)', async () => {
     fakeCommands({ loadFail: 1 })
     const n = nav()

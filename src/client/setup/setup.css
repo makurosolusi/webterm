@@ -12,6 +12,13 @@
 .setup-marker[data-kind='done'] { border-color: var(--vscode-button-background); background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
 .setup-marker[data-kind='skipped'] { border-style: dashed; }
 
+/* The step heading takes focus programmatically (screen readers announce the new step). It is not
+   interactive, so it never draws a ring; the unlayered global `[tabindex]:focus-visible` rule would
+   otherwise beat Tailwind's layered `outline-none` and box the heading after Continue. */
+.setup-heading:focus, .setup-heading:focus-visible { outline: none; }
+
+@media (prefers-reduced-motion: reduce) { .setup-step .codicon-modifier-spin { animation: none; } }
+
 /* Narrow-width progress bar (the list is hidden below `sm`). */
 .setup-progress__seg { flex: 1; height: 3px; border-radius: 2px; background: var(--vscode-widget-border, var(--vscode-panel-border)); }
 .setup-progress__seg[data-kind='done'], .setup-progress__seg[data-kind='current'] { background: var(--vscode-progressBar-background, var(--vscode-focusBorder)); }
