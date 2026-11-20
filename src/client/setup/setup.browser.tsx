@@ -1,6 +1,6 @@
 // Wizard step 2, Browser: which Chrome/Chromium the browser nodes use (a found one, another path
 // through the existing ChromiumPathField, one downloaded here, or none), and whether it runs hidden.
-// Continue writes the path (the server saves a download itself), then the `browser` capability (on
+// Continue writes the path (a download is webterm's own managed Chrome, found by discovery), then the `browser` capability (on
 // when a browser is chosen, off for "Don't use").
 import { useEffect, useState } from 'react'
 import { ActionButton, ActionResult, useAction } from '@/components/ui/action'
@@ -68,7 +68,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
   const headlessKey = ENV_BROWSER.headless
   const locked = data.advanced.headlessForced === 'no_display'
   const headlessOn = locked || env.value(headlessKey) === 'on'
-  // A finished download is already saved as the browser to use; Continue only turns the capability on.
+  // A finished download is the managed Chrome, which is used without any saved path; Continue only turns the capability on.
   const continueLock = choice === 'installed' && !picked ? T.needPick : choice === 'other' && !chromium.active ? T.needPath : choice === 'download' && !downloaded ? T.needDownload : undefined
   const headlessLock = locked ? T.headlessLocked : env.load.status !== 'ready' ? T.headlessLoading : undefined
   // Feedback for the switch is the env save state below it (saving disables it, a failure says so).
@@ -87,6 +87,7 @@ export function BrowserStep({ nav }: StepProps): React.JSX.Element {
           <ActionResult action={check} stamp="checked" />
         </div>
       ) : null}
+      {chromium.source === 'override' && chromium.active ? <p role="note" className="m-0 text-xs [overflow-wrap:anywhere]" data-browser-custom>{T.customActive(chromium.active)}</p> : null}
       {choice === 'installed' && candidates.length > 1 ? (
         <Tiles label={T.pick} options={candidates} names={Object.fromEntries(candidates.map((c) => [c, c]))} value={picked ?? candidates[0]} onChange={setPicked} />
       ) : null}

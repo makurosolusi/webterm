@@ -58,7 +58,28 @@ export function managedBinaryPath(root: string, p: CftPlatform | null = cftPlatf
   return p ? join(root, version, BIN_IN_ARCHIVE[p]) : null
 }
 
+/** Why a managed download failed: `network` is transient (retried), `checksum` means the bytes are not the pinned build, `disk` = cannot write. */
+export type ChromeFailureKind = 'network' | 'disk' | 'checksum' | 'other'
+export class ChromeDownloadError extends Error {
+  constructor(readonly kind: ChromeFailureKind, message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause })
+    this.name = 'ChromeDownloadError'
+  }
+}
+const DISK_CODES = new Set(['ENOSPC', 'EDQUOT', 'EACCES', 'EPERM', 'EROFS', 'ENOENT', 'EMFILE'])
+/** Failure kind of anything `installManaged` threw (walks the cause chain for errno codes). */
+export function failureKind(e: unknown): ChromeFailureKind {
+  for (let c: unknown = e, i = 0; c && i < 5; c = (c as { cause?: unknown }).cause, i++) {
+    if (c instanceof ChromeDownloadError && c.kind !== 'other') return c.kind
+    if (DISK_CODES.has((c as NodeJS.ErrnoException).code ?? '')) return 'disk'
+  }
+  return 'other'
+}
+
 export interface ManagedDeps {
+  /** Cancels the download (and nothing is left behind: the archive is only ever in memory). */
+  signal?: AbortSignal
+  onProgress?: (bytes: number, total: number) => void
   fetch?: typeof fetch
   platform?: CftPlatform | null
   version?: string
@@ -67,26 +88,28 @@ export interface ManagedDeps {
 }
 
 /** Download the archive into memory with a size cap and timeout; the caller verifies and extracts it. */
-async function download(url: string, fetchFn: typeof fetch): Promise<Buffer> {
+async function download(url: string, fetchFn: typeof fetch, signal?: AbortSignal, onProgress?: ManagedDeps['onProgress']): Promise<Buffer> {
   if (!url.startsWith('https://')) throw new Error(`chrome download: refusing non-HTTPS url ${url}`)
   let res: Response
   try {
-    res = await fetchFn(url, { redirect: 'error', signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+    res = await fetchFn(url, { redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)]) : AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
   } catch (e) {
-    throw new Error(`chrome download: request to ${url} failed`, { cause: e })
+    throw new ChromeDownloadError('network', `chrome download: request to ${url} failed`, e)
   }
-  if (!res.ok || !res.body) throw new Error(`chrome download: ${url} answered ${res.status}`)
-  if (Number(res.headers.get('content-length')) > MAX_ARCHIVE_BYTES) throw new Error(`chrome download: ${url} is larger than ${MAX_ARCHIVE_BYTES} bytes`)
+  if (!res.ok || !res.body) throw new ChromeDownloadError('network', `chrome download: ${url} answered ${res.status}`)
+  if (Number(res.headers.get('content-length')) > MAX_ARCHIVE_BYTES) throw new ChromeDownloadError('other', `chrome download: ${url} is larger than ${MAX_ARCHIVE_BYTES} bytes`)
   const chunks: Buffer[] = []
+  const total = Number(res.headers.get('content-length')) || 0
   let size = 0
   try {
     for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) {
       size += c.length
-      if (size > MAX_ARCHIVE_BYTES) throw new Error(`chrome download: ${url} exceeded ${MAX_ARCHIVE_BYTES} bytes`)
+      if (size > MAX_ARCHIVE_BYTES) throw new ChromeDownloadError('other', `chrome download: ${url} exceeded ${MAX_ARCHIVE_BYTES} bytes`)
       chunks.push(Buffer.from(c))
+      onProgress?.(size, total)
     }
   } catch (e) {
-    throw new Error(`chrome download: reading ${url} failed`, { cause: e })
+    throw new ChromeDownloadError(e instanceof ChromeDownloadError ? 'other' : 'network', `chrome download: reading ${url} failed`, e)
   }
   return Buffer.concat(chunks)
 }
@@ -107,11 +130,11 @@ export async function installManaged(root: string, deps: ManagedDeps = {}): Prom
   const bin = managedBinaryPath(root, p, version) as string
   if ((deps.exists ?? existsSync)(bin)) return bin
   log.info('managed.download', 'Downloading webterm\'s own Chrome for Testing (one time)', { version, platform: p })
-  const zip = await download(archiveUrl(p, version), deps.fetch ?? fetch)
+  const zip = await download(archiveUrl(p, version), deps.fetch ?? fetch, deps.signal, deps.onProgress)
   const pin = (deps.sha256 ?? CHROME_SHA256)[p]
   if (pin) {
     const got = createHash('sha256').update(zip).digest('hex')
-    if (got !== pin.toLowerCase()) throw new Error(`chrome download: SHA-256 mismatch for ${p} ${version} (expected ${pin}, got ${got})`)
+    if (got !== pin.toLowerCase()) throw new ChromeDownloadError('checksum', `chrome download: SHA-256 mismatch for ${p} ${version} (expected ${pin}, got ${got})`)
   } else {
     log.warn('managed.unpinned', 'No SHA-256 pin for this Chrome archive; trusting the HTTPS download', { version, platform: p })
   }

@@ -45,11 +45,17 @@ export interface CapabilitiesResponse {
   }
 }
 
-export type ChromiumDownloadState = 'idle' | 'downloading' | 'done' | 'failed'
+export type ChromiumDownloadState = 'idle' | 'downloading' | 'retrying' | 'done' | 'failed'
+/** Why a download failed: `network` (retried automatically first), `disk`, `checksum` (never retried), `other`. */
+export type ChromiumDownloadErrorKind = 'network' | 'disk' | 'checksum' | 'other'
 /** `GET /api/capabilities/chromium-download` (and the POST replies). */
 export interface ChromiumDownloadStatus {
   state: ChromiumDownloadState; percent: number; bytes: number; total: number
   error: string | null; executablePath: string | null
+  /** Set while `failed`; the UI words each kind differently. */
+  errorKind: ChromiumDownloadErrorKind | null
+  /** Set while `retrying`: the attempt about to run (2 = first retry) of `max`. */
+  retry: { attempt: number; max: number } | null
 }
 
 /** Katalog kemampuan; urutan = CAPABILITY_IDS dan sekaligus urutan topologis (prasyarat lebih dulu). */

@@ -33,16 +33,17 @@ export const ADVANCED_TEXT = {
 /** "Download Chromium" (wizard Browser step). */
 export const DOWNLOAD_TEXT = {
   start: 'Download Chromium (~200 MB)',
-  hint: 'Chrome for Testing from Google, saved in the webterm data folder. Nothing else on this computer changes.',
+  hint: 'A fixed Chrome for Testing build from Google, checked against a known checksum and saved in the webterm data folder. Nothing else on this computer changes.',
   checking: 'Checking the download…',
   progress: (percent: number): string => (percent > 0 ? `Downloading Chromium… ${percent}%` : 'Downloading Chromium…'),
   progressLabel: 'Chromium download',
   cancel: 'Cancel',
   cancelling: 'Cancelling…',
-  retry: 'Retry',
-  retrying: 'Retrying…',
+  retry: 'Try again',
+  retrying: 'Starting again…',
+  autoRetry: (attempt: number, max: number): string => `Connection problem. Trying again automatically (attempt ${attempt} of ${max})…`,
   starting: 'Starting…',
-  done: 'Chromium is downloaded and in use:',
+  done: 'Chromium is downloaded, verified and in use:',
   unreachable: 'Could not reach the webterm server. Try again.',
 } as const
 

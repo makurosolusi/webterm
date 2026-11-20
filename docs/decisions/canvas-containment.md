@@ -113,5 +113,8 @@ order in `chromium.launch.ts`:
 2. `<data dir>/browser/chrome-for-testing/<version>/...` when present.
 3. Otherwise downloaded once (HTTPS, size and time capped, zip-slip safe extraction) into 2, then used.
 
+The setup wizard's "Download Chromium" calls the same install (`browserDownload.ts` wraps `ensureManaged`): one path, locked
+version, pinned SHA-256, and it never writes `WEBTERM_BROWSER_BIN`. Network failures retry automatically (bounded, growing
+pauses) and restart clean (the archive is held in memory, nothing partial on disk); a checksum mismatch is refused, not retried.
 `bun scripts/fetch-chrome.ts --dest <dir>` does the same by hand. `CHROME_SHA256` pins each platform archive; Chrome for
 Testing publishes no checksums, so a bump regenerates them with `--print-sha256` and confirms against an independent download.

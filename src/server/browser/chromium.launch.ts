@@ -20,9 +20,6 @@ const STDERR_TAIL_CHARS = 4_096
 const PROFILE_DIR_MODE = 0o700
 const ACTIVE_PORT_FILE = 'DevToolsActivePort'
 
-/** `<data dir>/browsers`: where "Download Chromium" installs (browserDownload.ts); only reachable through the `WEBTERM_BROWSER_BIN` it saves. */
-export const BROWSERS_SUBDIR = 'browsers'
-
 /** Data dir as config.ts `dataDir()` derives it, from an env snapshot (pure: tests pass their own); null without either var. */
 export const dataDirOf = (env: Record<string, string | undefined>): string | null =>
   env.WEBTERM_DATA_DIR || (env.HOME ? join(env.HOME, '.webterm-server') : null)

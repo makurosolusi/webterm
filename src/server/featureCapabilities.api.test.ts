@@ -202,35 +202,34 @@ describe('POST /reset', () => {
 })
 
 describe('chromium-download', () => {
-  // test-only: the injected installer writes a real file so the saved override resolves on disk.
-  const withDownloader = (platform: NodeJS.Platform = 'linux') => {
+  // test-only: the injected managed install writes a real file and reports its path.
+  const withDownloader = (platform: NodeJS.Platform = 'linux', arch = 'x64') => {
     const dir = mkdtempSync(join(tmpdir(), 'wt-capdl-'))
-    const install = async (job: { cacheDir: string }) => {
-      mkdirSync(job.cacheDir, { recursive: true })
-      writeFileSync(join(job.cacheDir, 'chrome'), '')
-      return join(job.cacheDir, 'chrome')
+    const install = async (root: string) => {
+      mkdirSync(root, { recursive: true })
+      writeFileSync(join(root, 'chrome'), '')
+      return join(root, 'chrome')
     }
-    const downloader = createChromiumDownloader({ dataDir: () => dir, install, platform })
+    const downloader = createChromiumDownloader({ dataDir: () => dir, install, platform, arch })
     return { dir, h: harness(undefined, { downloader, dataDir: dir }) }
   }
 
-  it('POST starts (202), GET reports done, and the download becomes the browser in use', async () => {
+  it('POST starts (202), GET reports done with the managed binary, and WEBTERM_BROWSER_BIN is NOT written', async () => {
     const { dir, h } = withDownloader()
     const start = await h.call('POST', '/api/capabilities/chromium-download', {})
     expect(start.status).toBe(202)
     expect(start.json?.state).toBe('downloading')
     await vi.waitFor(async () => expect((await h.call('GET', '/api/capabilities/chromium-download', undefined, { origin: null })).json?.state).toBe('done'))
-    const bin = join(dir, 'browsers', 'chrome')
-    expect(h.target.WEBTERM_BROWSER_BIN).toBe(bin)
+    expect(h.target.WEBTERM_BROWSER_BIN).toBeUndefined()
+    expect((await h.call('GET', '/api/capabilities/chromium-download', undefined, { origin: null })).json?.executablePath).toBe(join(dir, 'browser', 'chrome-for-testing', 'chrome'))
     const caps = await h.call('GET', '/api/capabilities', undefined, { origin: null })
-    expect(caps.json?.advanced.chromiumPath).toMatchObject({ active: bin, source: 'override' })
     expect(caps.json?.advanced.chromiumDownload).toEqual({ supported: true, state: 'done', percent: 100 })
-    expect(h.audits.map((a) => `${a.capability}:${a.action}`)).toEqual(['browser:download', 'advanced:advanced'])
+    expect(h.audits.map((a) => `${a.capability}:${a.action}`)).toEqual(['browser:download'])
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('start and cancel are writes: 403 without the page cookie or Origin; unsupported platform 409', async () => {
-    const { dir, h } = withDownloader('aix')
+    const { dir, h } = withDownloader('aix', 'x64')
     expect((await h.call('POST', '/api/capabilities/chromium-download', {}, { cookie: false })).status).toBe(403)
     expect((await h.call('POST', '/api/capabilities/chromium-download/cancel', {}, { origin: null })).status).toBe(403)
     expect((await h.call('DELETE', '/api/capabilities/chromium-download')).status).toBe(405)
