@@ -97,6 +97,14 @@ Run the same one-liner you use on your Mac (`curl -fsSL https://.../install | sh
 - Warning: `curl | sh` runs with the container user's rights, not your host's, but it can still read everything mounted (workspace, keys, API key in env). Only run scripts from sources you trust.
 - First start seeds `/etc/skel` into an empty home without overwriting existing files. `docker compose down -v` deletes the home volume.
 
+## Install tools from the setup wizard
+
+The Commands step of the setup wizard (and Settings > Custom commands) has a closed **Terminal** box. Open it to get a real shell in the container's home folder, with quick commands that only type the command for you (press Enter to run it): Bun, Node.js LTS (via fnm), Python (via uv), and sign-in for GitHub CLI and Claude. A tool you already have hides its chip, and "Found on this machine" refreshes by itself shortly after the output goes quiet. Closing the box, or leaving the step, ends the shell.
+
+- Only user-space installers work: there is no `sudo` or `apt` in the container. Tools land in `$HOME` (`~/.bun`, `~/.local`, `~/.local/share/fnm`) and stay in the `webterm-home` volume.
+- Installers download and run scripts from their official sites (all over https), with the container user's rights.
+- There is no GitHub CLI install chip: `gh` is not in the image, and a verified per-architecture download is not wired yet. `gh auth login` appears once `gh` is on PATH.
+
 ## Limits
 
 No Electrobun desktop shell and no macOS Keychain: the container serves the web UI only, and Claude login uses the file store in `webterm-home`. Dev servers and agent ports stay inside the container; webterm proxies them through its own port.

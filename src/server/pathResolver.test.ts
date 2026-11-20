@@ -201,3 +201,16 @@ describe('home probe for installer-style dirs', () => {
     expect(withCustomBin('/usr/bin', '/cb')).toBe('/cb:/usr/bin')
   })
 })
+
+describe('tools installed by the setup terminal (Bun, fnm) reach the Found list after a rescan', () => {
+  it('rescan adds ~/.bun/bin and the fnm default dir; detect then lists bun and node as found', async () => {
+    const home = join(root, 'home'); const cb = join(root, 'cb')
+    put(join(home, '.bun/bin/bun'), '#!/bin/sh\n')
+    put(join(home, '.local/share/fnm/aliases/default/bin/node'), '#!/bin/sh\n')
+    const env: NodeJS.ProcessEnv = { PATH: '/usr/bin', HOME: home, WEBTERM_CUSTOM_BIN: cb }
+    const ctx: CustomCommandsCtx = { binDir: cb, registryFile: join(root, 'cc.json'), pathEnv: () => env.PATH ?? '', now: () => 1 }
+    expect((await rescan(env)).added).toBeGreaterThanOrEqual(2)
+    const found = detectCommands(ctx).filter((d) => d.found).map((d) => d.name)
+    expect(found).toEqual(expect.arrayContaining(['bun', 'node']))
+  })
+})

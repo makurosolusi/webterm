@@ -2,6 +2,7 @@
 // exit/close bisa dijalankan deterministik di node-env (vitest). Jalur PTY sungguhan tetap di
 // `*.bun.test.ts`; file ini menjaga kontrak subscriber, replay, dan tombstone exit.
 
+import { SETUP_TERMINAL_ID } from '../shared/setupTerminal'
 import { describe, expect, test } from 'vitest'
 import type { ServerMsg } from '../shared/protocol'
 import { delimiter, dirname } from 'node:path'
@@ -284,6 +285,16 @@ describe('close', () => {
     expect(sessions.list()).toEqual([])
     expect(sessions.getExit('n1')?.output).toBe('first line\nbye\n')
     expect(sessions.getTerminal('n1')).toBe('first line\nbye\n')
+  })
+})
+
+describe('setup terminal session', () => {
+  test('is a live session but never appears in list() (no board node owns it)', () => {
+    const { sessions } = harness()
+    sessions.open(open(SETUP_TERMINAL_ID), recorder().send)
+    sessions.open(open('n1'), recorder().send)
+    expect(sessions.isLive(SETUP_TERMINAL_ID)).toBe(true)
+    expect(sessions.list().map((s) => s.id)).toEqual(['n1'])
   })
 })
 

@@ -14,6 +14,7 @@ export const REFRESH_INTERVAL_MS = 15_000
 /** Directories where people usually install CLIs, scanned on a miss (only the ones that exist and are safe). */
 export const commonToolDirs = (home: string = process.env.HOME || homedir()): string[] => [
   join(home, '.local/bin'), join(home, 'bin'), join(home, 'go/bin'), join(home, '.cargo/bin'), join(home, '.bun/bin'), join(home, '.deno/bin'),
+  join(home, '.local/share/fnm'), join(home, '.local/share/fnm/aliases/default/bin'), // fnm installer + the default Node it links
   '/usr/local/bin', '/opt/homebrew/bin', '/opt/local/bin', '/opt/custom/bin',
 ]
 

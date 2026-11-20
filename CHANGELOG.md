@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Setup wizard Commands step (and Settings): a closed Terminal box to install tools (Bun, Node.js LTS, Python via uv) and sign in (GitHub CLI, Claude) without a shell on the machine. Quick commands only type the command, the shell ends when you close the box, and new tools show up in "Found" on their own.
 - Credential proxy: Claude Code with an API key or gateway now talks to a loopback proxy inside the webterm server, which holds the only copy of the key. The `claude` child gets just `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`. The proxy port and token are kept in the data dir, so running sessions survive a server restart. The Provider card says the key stays in the webterm server.
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 

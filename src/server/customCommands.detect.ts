@@ -9,8 +9,8 @@ import { findOnPath } from './binaryOnPath'
 import { loadRegistry, unmanaged, type CustomCommandsCtx } from './customCommands.store'
 import { isExecutableFile, isSafeToolDir } from './pathResolver'
 
-/** Common env/secret wrappers always listed (found or not). */
-export const DETECT_CANDIDATES: readonly string[] = ['envman', 'op', 'doppler', 'direnv', 'dotenvx', 'infisical', 'sops', 'aws-vault', 'chamber']
+/** Common env/secret wrappers and the tools the setup terminal's recipes install, always listed (found or not). */
+export const DETECT_CANDIDATES: readonly string[] = ['envman', 'op', 'doppler', 'direnv', 'dotenvx', 'infisical', 'sops', 'aws-vault', 'chamber', 'bun', 'node', 'fnm', 'uv', 'gh', 'claude']
 /** Per-directory cap: a directory of thousands of files must not make the list slow. */
 const DIR_SCAN_MAX = 500
 

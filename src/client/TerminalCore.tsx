@@ -6,7 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import './terminal-surface.css'
-import { send, subscribe } from './ws'
+import { send, subscribe, type ExitReason } from './ws'
 import { writeClipboard } from './clipboard'
 import { TerminalOffline } from './TerminalCore.offline'
 import { lineEditSeq } from './terminalLineEdit'
@@ -63,6 +63,10 @@ export interface TerminalCoreProps {
   claudeProfileId?: string
   /** Judul yang dilaporkan terminal (OSC 0/2) — nama proses foreground di shell biasa. */
   onTitle?: (title: string) => void
+  /** Output chunk arrived from the PTY (setup terminal: idle detection for the auto-rescan). */
+  onOutput?: () => void
+  /** The PTY ended or failed to open (setup terminal: shows Try again). */
+  onExit?: (code: number, reason?: ExitReason) => void
 }
 
 /** Copy gagal bukan fatal, tapi tidak boleh ditelan: tanpa jejak, copy yang tak terjadi tak
@@ -275,8 +279,8 @@ const TerminalCore = forwardRef<TerminalHandle, TerminalCoreProps>(function Term
 
     const unsub = subscribe(
       id,
-      (d) => term.write(d),
-      (code, reason) => term.write(exitMessage(code, reason)),
+      (d) => { term.write(d); live.current.onOutput?.() },
+      (code, reason) => { term.write(exitMessage(code, reason)); live.current.onExit?.(code, reason) },
       () => term.reset(),
     )
     term.onData((d) => send({ t: 'input', id, data: d }))
