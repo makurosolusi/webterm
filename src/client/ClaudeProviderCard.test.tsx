@@ -50,6 +50,7 @@ describe('ClaudeProviderCard', () => {
     render(<ClaudeProviderCard />)
     expect(await screen.findByText(PROVIDER_TEXT.modeHelp.login)).toBeTruthy()
     expect(screen.queryByLabelText(PROVIDER_TEXT.key)).toBeNull()
+    expect(screen.queryByText(PROVIDER_TEXT.proxyNote)).toBeNull()
   })
 
   it('a saved key shows only "saved", never a value', async () => {
@@ -59,6 +60,7 @@ describe('ClaudeProviderCard', () => {
     expect(input.value).toBe('')
     expect(input.type).toBe('password')
     expect(input.placeholder).toBe(PROVIDER_TEXT.keySet)
+    expect(screen.getByText('The key stays in the webterm server. Claude gets a local proxy address instead.')).toBeTruthy()
   })
 
   // agent-211-A6: a damaged config is a sticky alert with a fix action, never a silent login default.

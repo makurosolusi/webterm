@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveProfileLaunch } from '../../shared/claudeLaunch/claudeLaunch.profiles'
 import type { RunFn, RunResult } from '../claudeLauncher/claudeLaunch.probe'
+import { setProxyEndpointSource } from '../credentialProxy/credentialProxy.env'
 import { classifyRequestFailure, CONN_TEXT, CONNECTION_TEST_PROMPT, requestArgv, runConnectionTest, type ConnEvent, type RequestFailure } from './claudeProvider.connectionTest'
 
 await vi.hoisted(async () => {
@@ -128,6 +129,26 @@ describe('runConnectionTest', () => {
     expect(classifyRequestFailure('connect ECONNREFUSED 127.0.0.1:4000', false)).toBe('network')
     expect(classifyRequestFailure('anything', true)).toBe('timeout')
     expect(classifyRequestFailure('', false)).toBe('request_failed')
+  })
+
+  it('the credential proxy codes are classified before the generic status rows', () => {
+    const msg = (code: string, status: number) => `API Error: ${status} {"type":"error","error":{"type":"api_error","message":"webterm credential proxy: ${code}"}}`
+    expect(classifyRequestFailure(msg('bad_proxy_token', 401), false)).toBe('request_failed')
+    expect(classifyRequestFailure(msg('no_upstream', 503), false)).toBe('request_failed')
+    expect(classifyRequestFailure(msg('upstream_unreachable', 502), false)).toBe('network')
+    expect(classifyRequestFailure(msg('upstream_timeout', 504), false)).toBe('timeout')
+  })
+
+  it('a proxy token / no-upstream failure shows its own hint; the auth stage says it went via the proxy', async () => {
+    setProxyEndpointSource(() => ({ url: 'http://127.0.0.1:5555', token: 'placeholder' }))
+    try {
+      const env = { PATH: '/bin', ANTHROPIC_BASE_URL: 'http://127.0.0.1:5555' }
+      const bad = await test('claude', runner(apiError('API Error: 401 webterm credential proxy: bad_proxy_token')), { mode: 'apiKey', env })
+      expect(bad.events.find((e) => 'state' in e && e.state === 'failed')).toMatchObject({ stage: 'request', hint: 'Restart the Claude session.' })
+      const none = await test('claude', runner(apiError('API Error: 503 webterm credential proxy: no_upstream')), { mode: 'apiKey', env })
+      expect(none.events.find((e) => 'state' in e && e.state === 'failed')).toMatchObject({ hint: 'Save a provider key in Settings.' })
+      expect(bad.events.find((e) => 'stage' in e && e.stage === 'auth' && 'state' in e && e.state === 'ok')).toMatchObject({ detail: expect.stringContaining(CONN_TEXT.viaProxy) })
+    } finally { setProxyEndpointSource(() => null) }
   })
 
   it('a booking failure never fails the test', async () => {
