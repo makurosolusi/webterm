@@ -54,7 +54,6 @@ export const SIGN_IN_TEXT = {
   stillRefused: 'This browser is signed in, but the server still refused to load the workspaces. Reload to try again.',
   retry: 'Retry',
   failed: (what: string, cause: string) => `${what} failed: ${cause}`,
-  mobileSetup: 'No account exists yet. Create the account on the computer running webterm first, then sign in here.',
 } as const
 
 /** Sentence for a sign-in or setup answer that is not a success; `retryS` is the 429 countdown. */

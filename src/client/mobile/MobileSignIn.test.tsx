@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 // /m signed out: username + password (the desktop's LoginForm, same /auth/login), no token field;
-// before the first account exists it hands off to the computer instead of offering a form.
+// before the first account exists it shows the desktop's create-account form.
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SIGN_IN_TEXT } from '../signInLabels'
@@ -40,10 +40,11 @@ describe('MobileApp sign-in', () => {
     expect(posts[0]!.body).toEqual({ username: 'ada', password: 'nope' })
   })
 
-  it('no account yet: says to create it on the computer first, no form', async () => {
+  it('no account yet: shows the same create-account form as the desktop', async () => {
     serve(true, { status: 409 })
     render(<MobileApp reload={vi.fn()} />)
-    expect(await screen.findByText(SIGN_IN_TEXT.mobileSetup)).toBeTruthy()
-    expect(screen.queryByLabelText(SIGN_IN_TEXT.passwordLabel)).toBeNull()
+    expect(await screen.findByLabelText(SIGN_IN_TEXT.confirmLabel)).toBeTruthy()
+    expect(screen.getByRole('button', { name: SIGN_IN_TEXT.create })).toBeTruthy()
+    expect(screen.queryByText(/on the computer/)).toBeNull()
   })
 })
