@@ -11,6 +11,8 @@ import type { DownloadItem } from './browser.downloads'
 import type { DownloadsBody, DownloadsReply } from './browser.contract.downloads'
 import type { LayoutData, TabsData } from './browser.contract.layout'
 
+export * from './browser.contract.audio'
+
 // ---- §4.1 Konstanta bernama ----
 export const BROWSER_KIND = 'browser'
 export const BROWSER_WS_PATH = '/ws/browser'
@@ -77,6 +79,8 @@ export const ENV_BROWSER = {
   captureLinks: 'WEBTERM_BROWSER_CAPTURE_LINKS',
   downloadsAuto: 'WEBTERM_BROWSER_DOWNLOADS_AUTO',
   accounts: 'WEBTERM_BROWSER_ACCOUNTS',
+  /** Audio capture of browser nodes; default on, `off` = kill switch. */
+  audio: 'WEBTERM_BROWSER_AUDIO',
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'
@@ -107,6 +111,8 @@ export interface BrowserState {
   netError?: string
   /** The page is an "are you human?" check (Google /sorry, captcha, Cloudflare): agents are paused until the user continues. */
   challenge?: BrowserChallenge
+  /** A page of the node's focused tab has an audio stream (a bus exists); the client may offer the speaker. Cleared on navigation / discard. */
+  audioActive?: boolean
 }
 
 /**
@@ -173,6 +179,8 @@ export type ClientMsg =
   /** "I'm done": the user finished the human check; the node stops showing it and agents may continue. */
   | { t: 'challengeDone'; id: string }
   | { t: 'shields'; id: string; on: boolean }
+  /** This client wants (on) or no longer wants (off) the node's audio frames; capture runs only while some client listens. */
+  | { t: 'audio'; id: string; on: boolean }
   | { t: 'device'; id: string; device: DeviceChoice | null } // device mode (browser.devices.ts); null = Responsive
   | ConsoleClientMsg
 
@@ -230,6 +238,8 @@ export interface BrowserHostApi {
 export interface BrowserStatusResp {
   enabled: boolean; binFound: boolean; version?: string; live: number; maxLive: number
   agentEnabled: boolean; cookieImportEnabled: boolean
+  /** Capability: the server can capture and stream page audio (`WEBTERM_BROWSER_AUDIO` not off). */
+  audio?: boolean
 }
 export type * from './browser.contract.cookies'
 

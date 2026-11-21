@@ -79,6 +79,7 @@ export function buildChromiumArgs(i: FlagInput): string[] {
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-extensions',
+    '--mute-audio', // sound reaches the client through the in-page capture (browser-audio.md), never the server's speakers; no autoplay flag: a forwarded click is a real gesture
     // macOS menjepit jendela "offscreen" kembali ke layar dan jendela awal mencuri fokus (diukur, Chrome 156):
     // tanpa jendela awal; tiap node membuka jendelanya sendiri di latar (windowPlacement). OS lain tetap memakai
     // tab awal: tanpa jendela, Chrome di Linux/Windows bisa keluar saat jendela node terakhir ditutup.

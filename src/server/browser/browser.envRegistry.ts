@@ -90,9 +90,9 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
   flag(ENV_BROWSER.accounts, GROUP, { ...B, requires: [BROWSER_ON], label: 'Show signed-in accounts for browser profiles',
     description: 'On: each profile shows who is signed in to Google and GitHub (name, masked email), checked inside that profile only when it opens, after a login, or on Refresh. Off: nothing is checked or shown. Cookies and full emails are never stored or shown.',
   }, 'on'),
+  flag(ENV_BROWSER.audio, GROUP, { ...B, requires: [BROWSER_ON], label: 'Browser audio', description: 'Streams browser node sound to the canvas, captured inside the page and only while a client listens; the server stays silent. Off = no audio capture.' }, 'on'),
   flag(ENV_BROWSER.headless, GROUP, {
-    ...B,
-    requires: [BROWSER_ON],
+    ...B, requires: [BROWSER_ON],
     label: 'Headless mode',
     description: 'Force headless Chromium. Off by default: a real off-screen window, so sites don’t flag it as a bot. Linux without a display is headless automatically.',
   }),

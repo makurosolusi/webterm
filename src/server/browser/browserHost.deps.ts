@@ -13,6 +13,8 @@ export interface HostDeps {
   connect?: (wsUrl: string) => Promise<CdpClient>
   /** Shields (blokir iklan/pelacak + sakelar per situs); tanpa ini hanya batas popup yang berlaku. */
   shields?: ShieldPolicy
+  /** Audio capture on? Read per page setup (kill switch `WEBTERM_BROWSER_AUDIO`); absent = off. */
+  audio?: () => boolean
   profileOf?: (nodeId: string, workspaceId: string) => string // profile of a node: its own `profileId` or the workspace's Default (browser.profile.ts)
   initialDevice?: (nodeId: string) => unknown // device saved on the board (`WsNode.device`): seeds a node seen first time
   now?: () => number

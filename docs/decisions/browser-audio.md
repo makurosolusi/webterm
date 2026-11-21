@@ -1,6 +1,6 @@
 # Browser node audio: in-page capture (spike result)
 
-Status: spike, measured 2026-11-20 (Chrome for Testing 158.0.8127.36, macOS arm64, 8 cores, machine shared with other workers). No product code changed.
+Status: GO. Wave 1 (server side, steps 1-5, 9-server, 10) implemented 2026-11-21, see "Wave 1 implementation" and "Client contract" at the end. Wave 2 (client player, speaker button, steps 6-8) is open. Spike measured 2026-11-20 (Chrome for Testing 158.0.8127.36, macOS arm64, 8 cores, machine shared with other workers)..
 Evidence: `RND/browser-audio-spike/` (`bun RND/browser-audio-spike/run.ts`; raw numbers in `results.json`).
 
 ## Context
@@ -131,3 +131,31 @@ Order of work (each step ships with tests; branch `feature/browser-audio`):
 11. **Docs** this file updated with measured Linux/real-site numbers; README/protocol docs for the new frame type; CHANGELOG entry.
 
 Estimated size: about 10 new files (inject, host audio, ws audio, player, speaker button, tests) and 6 touched (contract, flags, cdp table, shield attach, browserWs, node chrome), roughly 900-1200 lines including tests.
+
+## Wave 1 implementation (server)
+
+Files: `src/shared/browser.contract.audio.ts` (all constants, re-exported by `browser.contract.ts`), `browser.wire.ts` (frame + `audio` message), `src/server/browser/browser.audio.inject.ts` (+test),
+`browserHost.audio.ts` (capture, merged into the iframe auto-attach of `browserHost.shield.ts`), `browserWs.audio.ts` (per-listener lane), hub/gateway (`browserWs.viewers.ts`, `browserWs.gateway.ts`),
+`chromium.flags.ts` (`--mute-audio`), env registry `WEBTERM_BROWSER_AUDIO` (default on, kill switch), `browserAudio.policy.test.ts` (registered in `scripts/test.policy.manifest.ts`),
+`browserHost.audio.test.ts` (fake CDP) and `browserHost.audio.real.bun.test.ts` (real Chromium, 127.0.0.1 only, ~5 s: 440 Hz tone reaches the hub as WebM chunks of one stream key, zero frames before `audio on`).
+
+Deviations from the design above:
+
+1. **Recorder per listening run, not always on.** Capture is off until a client listens. The page keeps the bus (lazy) but the MediaRecorder starts on `__wtAudioResume()` and stops on `__wtAudioPause()`; each run gets a new stream key and its first chunk (seq 0) holds the WebM header. A second listener that joins mid-stream gets the cached seq 0 chunk first, so its decoder can start.
+2. **Frame toggle reaches same-site iframes by `postMessage` relay.** `Runtime.evaluate` runs only in the main frame of a session, so the toggle is relayed down the frame tree (children ask the parent on start); OOPIF children are also driven by their own session. The relay message is visible to page scripts (they could pause or resume their own page's capture only).
+3. **`Runtime.enable` is LAZY** (owner decision): binding-called events need it (real test), but it is detectable by anti-bot scripts, so it is sent only for the pages of a node when its first listener sends `audio on` (and for pages of a listened node created later). It is not undone when the last listener leaves (no `Runtime.disable`: the signal was already given). Mechanics (verified on real Chromium): the binding exists in a document only if Runtime was on when it began, so on the first `audio on` the host enables Runtime, calls `addBinding` again and re-runs the script in the loaded documents (the script also hooks `<audio>`/`<video>` already playing). A WebAudio graph the page connected BEFORE that moment is not tee'd (not captured until the page reloads or reconnects); media elements already playing are. Consequence: `audioActive` fills only after someone listens (a bus announced earlier is learned from its first chunk), so the client cannot show "audio detected" before the user turns sound on; the speaker button must always be available.
+4. **Message name**: client message is `{t:'audio', id, on}` (the wire uses `t` + `id` everywhere), not `audio:set {nodeId,on}`.
+5. **Focus rule** uses the node's view session (the active tab). Background tab recorders run while someone listens but their chunks are dropped server-side; `audioActive` follows the view session and is recomputed on bus creation, main-frame navigation, detach and discard, not on a tab switch (stale until the next such event).
+6. **Capability** is `audio?: boolean` on `BrowserStatusResp` (REST `/api/browser/status`); there is no WS handshake message in this protocol. A client that sees it missing or false must not offer the speaker.
+7. **Not done**: step 6-8 (client), per-pane audio in split view (only the focused tab streams), DRM, Linux/Docker and real-site measurement.
+
+Unverified: real YouTube or any real site, the client player (MSE decoding of mid-stream chunks), Safari/Firefox, Docker/Linux, long sessions, many nodes at once, hidden-tab behaviour.
+
+## Client contract (wave 2)
+
+- **Capability**: `GET /api/browser/status` has `audio: true` when `WEBTERM_BROWSER_AUDIO` is not `off`.
+- **Start/stop listening**: after `attach` of a node, send `{t:'audio', id:<nodeId>, on:true|false}`. Needs a user gesture on the client to start its `AudioContext`. A socket close or `detach` stops listening by itself. Not allowed before `attach` (answers `not_found`).
+- **State**: `{t:'state', ..., audioActive?: true}` on the node state; true = the focused tab has a page with an audio stream, but ONLY known after the client sent `audio on` (Runtime is enabled lazily). Do not rely on it to reveal the speaker: the button must be always available; use it only to show activity once listening.
+- **Binary frame** (WS binary, `type` byte 3, big endian): `[3][idLen u8][nodeId utf8][keyLen u8][streamKey utf8 /^[a-z0-9]{1,16}$/][seq u32][t f64 server ms][payload]`. Payload = one `audio/webm;codecs=opus` chunk (64 kbps, about 100 ms, ~8 per second). `seq` 0 of a stream is the header chunk: append it first. A new `streamKey` means "reset the decoder" (navigation, listener restart, another tab). Mid-stream joiners get the header chunk replayed first. Video types 1 and 2 are untouched; old clients ignore type 3. Decode with `decodeAudioFrame` in `src/shared/browser.wire.ts`.
+- **Backpressure**: the server keeps at most 10 chunks (~1 s) per listener and drops the oldest; the client should play at the live edge and drop to it when more than ~500 ms behind. No ack for audio frames.
+- **Timing**: `t` is the server receive time; audio runs about 40-260 ms behind the video frame of the same event (spike table).
