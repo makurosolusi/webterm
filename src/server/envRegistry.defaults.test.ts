@@ -3,7 +3,7 @@
 // wajib masuk salah satu tabel di bawah, jadi default baru tak bisa menyimpang diam-diam.
 import { describe, expect, it } from 'vitest'
 import { lifecycleConfig } from './browser/browserLifecycle.service'
-import { agentControlOn, cookieImportOn } from './browser/browser.runtime.parts'
+import { agentControlOn, audioOn, cookieImportOn } from './browser/browser.runtime.parts'
 import { captureLinksOn } from './linkCapture/linkCapture.config'
 import { downloadModeOf } from './browser/browser.runtime.downloads'
 import { accountsOn } from './browser/browser.runtime.accounts'
@@ -59,7 +59,9 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   // Default 'on' sejak impor cookie ikut menyala bersama browser (dulu FLAGON_READERS = off).
   ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],
   // Default 'on': webterm alat developer; agent yang tersambung kabel langsung bisa mengemudikan browser.
-  ['WEBTERM_BROWSER_AGENT', () => onOff(agentControlOn(E)), 'browser/browser.runtime.parts.ts:agentControlOn'],
+  // Default 'on': browser node sound streams to the canvas; only an explicit off kills it.
+  ['WEBTERM_BROWSER_AUDIO', () => onOff(audioOn(E)), 'browser/browser.runtime.parts.ts:audioOn'],
+  ['WEBTERM_BROWSER_AGENT',() => onOff(agentControlOn(E)), 'browser/browser.runtime.parts.ts:agentControlOn'],
   // Default 'on': a link a terminal opens belongs to the canvas, so it lands in the canvas browser (docs/decisions/canvas-link-capture.md).
   // Default 'on': a finished download is kept in the webterm folder; off = Keep / Discard first (docs/decisions/browser-downloads.md).
   ['WEBTERM_BROWSER_DOWNLOADS_AUTO', () => onOff(downloadModeOf(E) === 'save'), 'browser/browser.runtime.downloads.ts:downloadModeOf'],
