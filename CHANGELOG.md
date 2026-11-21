@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Screenshot with annotations: "Canvas: Take Screenshot" (camera button in the Dock, the command palette, or Ctrl/Cmd+Shift+S) freezes the page, lets you drag out an area (move it, resize it with eight handles, size shown as 1056x330), draw on it with pen, line, arrow, rectangle, marker and text in preset colors and sizes, then copy it to the clipboard or save it as a PNG. Everything stays in your browser: there is no upload or share. Esc cancels; if copying is blocked you are offered Save.
 - Settings > Browser > Sound: "Play sound in new browser nodes" sets whether browser nodes start with sound on (default) or muted. A node you muted or unmuted with its speaker button keeps your choice; the others follow the setting at once.
 - Hear a browser node's audio: the speaker button on its header shows whether sound is on and mutes or unmutes it.
 - Browser nodes can now stream page sound (server side): Chromium runs muted, the page's audio is captured in-page and sent as opus chunks only to clients that ask for it, and capture runs only while someone listens (`WEBTERM_BROWSER_AUDIO=off` disables it).

@@ -6,7 +6,9 @@ import { describe, expect, test } from 'vitest'
 // The annotator never leaves the browser: no network, no new tab/window, no navigation (see canvas-containment.md).
 const FORBIDDEN = [/\bfetch\(/, /XMLHttpRequest/, /WebSocket/, /sendBeacon/, /window\.open/, /target="_blank"/, /\blocation\./]
 const dir = dirname(fileURLToPath(import.meta.url))
-const sources = readdirSync(dir).filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+// The UI folder is scanned too: the overlay is where a stray upload or window.open would creep in.
+const sources = [dir, join(dir, 'ui')]
+  .flatMap((d) => readdirSync(d).filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f)).map((f) => join(d === dir ? '' : 'ui', f)))
 
 describe('screenshot sources stay local', () => {
   test('there are sources to scan', () => expect(sources.length).toBeGreaterThan(5))

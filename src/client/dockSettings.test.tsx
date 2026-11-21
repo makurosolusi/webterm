@@ -35,11 +35,11 @@ describe('pintasan Settings di activity bar', () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1)
   })
 
-  it('urutan grup bawah: settings, lock, clean view', () => {
+  it('urutan grup bawah: settings, lock, screenshot, clean view', () => {
     render(<Dock {...baseProps} onOpenSettings={noop} />)
     const group = document.querySelector('[data-slot="dock-modes"]')!
     expect(Array.from(group.children).map((b) => b.getAttribute('aria-label')))
-      .toEqual(['Settings', 'Lock view', 'Clean view'])
+      .toEqual(['Settings', 'Lock view', 'Take screenshot', 'Clean view'])
   })
 
   it('Settings bukan toggle; lock dan clean view tetap ber-aria-pressed', () => {
@@ -52,7 +52,7 @@ describe('pintasan Settings di activity bar', () => {
   it('tidak dirender bila handler tak diberikan', () => {
     render(<Dock {...baseProps} />)
     expect(screen.queryByLabelText('Settings')).toBeNull()
-    expect(document.querySelector('[data-slot="dock-modes"]')!.children).toHaveLength(2)
+    expect(document.querySelector('[data-slot="dock-modes"]')!.children).toHaveLength(3)
   })
 
   it('tidak pernah ditandai aktif, bahkan saat panel lain terbuka', () => {
