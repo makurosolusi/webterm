@@ -6,6 +6,8 @@ import { FIXED_COMMANDS, appCommands } from './commandRegistry.defaults'
 import { openSetup } from './setup/setup.open'
 
 vi.mock('./setup/setup.open', () => ({ openSetup: vi.fn() }))
+const startScreenshot = vi.hoisted(() => vi.fn())
+vi.mock('./screenshot/ui/screenshot.start', () => ({ startScreenshot }))
 
 const key = (k: Partial<KeyboardEvent>) => ({ key: '', code: '', metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...k })
 
@@ -134,5 +136,27 @@ describe('diff command', () => {
     const newDiff = vi.fn()
     appCommands({ ...base, newDiff }).find((c) => c.id === 'diff.new')?.run?.()
     expect(newDiff).toHaveBeenCalledOnce()
+  })
+})
+
+describe('screenshot command', () => {
+  const base = {
+    openOmnibox: vi.fn(), openQuickOpen: vi.fn(), openFindInFiles: vi.fn(), openShortcuts: vi.fn(), openSettings: vi.fn(),
+    newTerminal: vi.fn(), newFiles: vi.fn(), fitView: vi.fn(), toggleMaximizeNode: vi.fn(), toggleSessions: vi.fn(), toggleChat: vi.fn(), toggleSecondarySideBar: vi.fn(), toggleBoard: vi.fn(),
+  }
+
+  it('"Canvas: Take Screenshot" is a global, bound command that starts the annotator', () => {
+    const cmd = appCommands(base).find((c) => c.id === 'canvas.screenshot')
+    expect(cmd).toMatchObject({ label: 'Canvas: Take Screenshot', defaultKey: 'Mod+Shift+S' })
+    expect(cmd?.scope).toBeUndefined() // global
+    cmd?.run?.()
+    expect(startScreenshot).toHaveBeenCalledOnce()
+  })
+
+  it('its chord is free in every scope (global clashes with all of them) and dispatches to it', () => {
+    const all = [...appCommands(base), ...FIXED_COMMANDS, ...listCommands()]
+    const holders = all.filter((c) => c.id !== 'canvas.screenshot' && effectiveKey(c, {}) === 'Mod+Shift+S')
+    expect(holders.map((c) => c.id)).toEqual([])
+    expect(commandForChord('Mod+Shift+S', appCommands(base), {})?.id).toBe('canvas.screenshot')
   })
 })

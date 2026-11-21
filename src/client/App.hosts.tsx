@@ -7,6 +7,7 @@ import { NodeCloseConfirmHost } from './nodeCloseConfirm'
 import { ReopenConfirmHost } from './reopenConfirm'
 import BakeoffHost from './bakeoff/BakeoffHost'
 import ReplayHost from './replay/ReplayHost'
+import { ScreenshotHost } from './screenshot/ui/ScreenshotHost'
 import TemplatesHost, { type TemplatesHostProps } from './templates/TemplatesHost'
 import type { Workspace } from '../shared/workspace'
 
@@ -29,6 +30,7 @@ export default function AppHosts({ activeWs, onCreated, onPlace }: AppHostsProps
       <BrowserProfileSpawnDialog />
       <BakeoffHost repo={activeWs?.cwd} workspaceId={activeId} />
       <ReplayHost workspaceId={activeId} nodes={(activeWs?.nodes ?? []).filter((n) => n.agentId)} />
+      <ScreenshotHost />
       <TemplatesHost activeWs={activeWs} onCreated={onCreated} onPlace={onPlace} />
     </>
   )

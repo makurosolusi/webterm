@@ -4,6 +4,8 @@
 import type { ReactNode } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
 import { codicon } from './dockCodicon'
+import { startScreenshot } from './screenshot/ui/screenshot.start'
+import { SCREENSHOT_COMMAND_ID } from './screenshot/ui/shot.ui.text'
 
 export interface DockModesProps {
   /** The Account button, above Settings. */
@@ -43,6 +45,11 @@ export function DockModes(p: DockModesProps) {
           <span className="vscode-activity-bar__icon" aria-hidden>{codicon(p.locked ? 'lock' : 'unlock')}</span>
         </IconButton>
       )}
+
+      <IconButton className="vscode-activity-bar__item dock-btn rounded-none" label="Take screenshot" commandId={SCREENSHOT_COMMAND_ID}
+        side="right" onClick={startScreenshot}>
+        <span className="vscode-activity-bar__icon" aria-hidden>{codicon('device-camera')}</span>
+      </IconButton>
 
       <IconButton
         className="vscode-activity-bar__item dock-btn rounded-none"

@@ -9,6 +9,8 @@ import { PROFILE_TEXT } from './browserProfile.text'
 import { useMemo, useRef } from 'react'
 import { registerCommands, useRegisterCommands, type Command } from './commandRegistry'
 import { openSetup } from './setup/setup.open'
+import { startScreenshot } from './screenshot/ui/screenshot.start'
+import { SCREENSHOT_COMMAND_ID, SCREENSHOT_COMMAND_LABEL } from './screenshot/ui/shot.ui.text'
 import { STICKY_NEW_KEY, STICKY_TEXT } from './sticky.labels'
 import { isMacPlatform } from './terminalKeys.platform'
 
@@ -97,6 +99,8 @@ export function appCommands(d: AppCommandDeps): Command[] {
     ] : []),
     ...(d.newDiff ? [{ id: 'diff.new', label: 'Diff: New Diff Node (working changes)', run: d.newDiff }] : []),
     ...(d.newSticky ? [{ id: 'sticky.new', label: STICKY_TEXT.commandNew, defaultKey: STICKY_NEW_KEY, run: d.newSticky }] : []),
+    // Mod+Shift+S: Save-As's chord family, free of every other binding and not a browser/OS capture key (those are ⌘⇧3/4/5 and Win+⇧S); the overlay itself uses Mod+S/Mod+C.
+    { id: SCREENSHOT_COMMAND_ID, label: SCREENSHOT_COMMAND_LABEL, defaultKey: 'Mod+Shift+S', run: startScreenshot },
     { id: 'view.fit', label: 'View: Fit Canvas', run: d.fitView },
     { id: 'view.toggleMaximizeNode', label: 'View: Toggle Maximize Node', run: d.toggleMaximizeNode },
     { id: 'view.sessions', label: 'View: Toggle Side Bar', defaultKey: SIDE_BAR_KEY, run: d.toggleSessions },

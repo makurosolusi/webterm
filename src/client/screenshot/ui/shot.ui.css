@@ -1,0 +1,67 @@
+/* Screenshot annotator. Theme tokens only (the vscode-* set); the one literal color is the dim layer in ShotPreview. */
+.shot-overlay, .shot-busy { position: fixed; inset: 0; z-index: 1200; outline: none; user-select: none; -webkit-user-select: none; }
+.shot-busy { display: flex; align-items: flex-start; justify-content: center; padding-top: 24px; cursor: progress; }
+.shot-busy__pill, .shot-hint {
+  padding: 4px 12px; border-radius: var(--vscode-cornerRadius-large); font-size: var(--ui-font-size);
+  background: var(--vscode-editorWidget-background); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-editorWidget-border, var(--border)); box-shadow: var(--wt-shadow-floating);
+}
+.shot-hint { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); margin: 0; pointer-events: none; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+.shot-preview, .shot-surface { position: absolute; left: 0; top: 0; }
+.shot-preview { pointer-events: none; }
+.shot-surface { width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.shot-overlay[aria-busy='true'] .shot-surface { cursor: progress; }
+
+.shot-selection {
+  position: absolute; box-sizing: border-box; pointer-events: none;
+  border: 1px dashed var(--vscode-focusBorder);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-editor-background) 60%, transparent);
+}
+.shot-selection:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.shot-selection__label {
+  position: absolute; left: 0; bottom: calc(100% + 4px); padding: 1px 6px; font-size: var(--ui-font-size-small); white-space: nowrap;
+  background: var(--vscode-editorWidget-background); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-editorWidget-border, var(--border)); border-radius: var(--vscode-cornerRadius-small);
+}
+.shot-selection__label--inside { bottom: auto; top: 4px; left: 4px; }
+.shot-handle {
+  position: absolute; width: 8px; height: 8px; box-sizing: border-box; margin: -4px 0 0 -4px;
+  background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder);
+}
+.shot-handle--nw, .shot-handle--w, .shot-handle--sw { left: 0; }
+.shot-handle--n, .shot-handle--s { left: 50%; }
+.shot-handle--ne, .shot-handle--e, .shot-handle--se { left: 100%; }
+.shot-handle--nw, .shot-handle--n, .shot-handle--ne { top: 0; }
+.shot-handle--w, .shot-handle--e { top: 50%; }
+.shot-handle--sw, .shot-handle--s, .shot-handle--se { top: 100%; }
+
+.shot-bar {
+  position: absolute; display: flex; gap: 2px; padding: 4px; box-sizing: border-box;
+  background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  border-radius: var(--vscode-cornerRadius-large); box-shadow: var(--wt-shadow-floating);
+}
+.shot-bar--rail { flex-direction: column; }
+.shot-bar .shot-btn { width: 32px; height: 32px; padding: 0; }
+.shot-btn[aria-pressed='true'] { background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground)); outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.shot-btn svg { width: 18px; height: 18px; }
+.shot-swatch { display: block; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box; border: 1px solid var(--vscode-foreground); }
+.shot-stroke { display: block; width: 18px; border-radius: 2px; background: var(--vscode-foreground); }
+.shot-size { font-family: var(--font-ui); font-weight: 600; line-height: 1; }
+
+.shot-popover {
+  position: absolute; top: 0; display: flex; flex-direction: column; gap: 2px; padding: 4px; width: 156px; box-sizing: border-box;
+  background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-editorWidget-border, var(--border));
+  border-radius: var(--vscode-cornerRadius-large); box-shadow: var(--wt-shadow-floating);
+}
+.shot-popover--left { right: calc(100% + 6px); }
+.shot-popover--right { left: calc(100% + 6px); }
+.shot-popover__row { display: flex; flex-wrap: wrap; gap: 2px; }
+.shot-popover .shot-btn { width: 32px; height: 32px; padding: 0; }
+
+.shot-text {
+  /* Overrides the shared Textarea's input look: the text sits on the picture, so it has no field chrome. */
+  position: absolute; display: block; width: auto; min-height: 0; margin: 0; padding: 0; min-width: 4ch; max-width: 80vw; resize: none; overflow: hidden;
+  box-sizing: content-box; border-radius: 0; background: transparent; border: 1px dashed var(--vscode-focusBorder); outline: none; white-space: pre;
+}
+.shot-text:focus-visible { outline: none; border-color: var(--vscode-focusBorder); }
+.shot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

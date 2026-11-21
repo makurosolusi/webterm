@@ -36,6 +36,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/client/nodeResizePolicy.test.ts',
     'src/client/paletteColorPolicy.test.ts',
     'src/client/policyPresets.test.ts',
+    'src/client/screenshot/screenshot.policy.test.ts',
     'src/client/sessionsGroupSwitch.policy.test.tsx',
     'src/client/sessionsStacked.policy.test.tsx',
     'src/client/settings.link.policy.test.ts',
