@@ -45,11 +45,32 @@ Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodete
 - **Tier harian = `typecheck` + `TMPDIR=/tmp/st npm run test:impacted`** (tes vitest terkait, tes bun yang
   mengimpor file berubah, dan tier policy: tes pemindai `src/` dari `scripts/test.policy.manifest.ts`).
   `test:related`/`test:changed` tetap ada tetapi vitest-saja; jangan andalkan keduanya.
-- **Suite penuh HANYA atas perintah eksplisit pemilik** (`npm run test:all` / `npm run test:bun:all`). `npm test`,
-  `npm run test:bun`, `vitest run` tanpa filter, dan `bun test` tanpa path menolak jalan (exit 2). Agent dilarang
-  menjalankan suite penuh dan dilarang menyetel `WEBTERM_FULL_TESTS=1` (hanya pemilik/CI). Suite penuh dijalankan
-  CI jarak jauh (`.github/workflows/test.yml`). Detail: `docs/testing.md`.
-- **Hanya satu gate (`test:impacted`) berjalan sekaligus di mesin** (kunci `/tmp/webterm-test-gate.lock`; gate lain keluar kode 3, atau antri dengan `--wait <menit>`). Plan >120 berkas ditolak (exit 2, mendekati suite penuh): pecah kerja dan pakai `--files <tes-terkait>`; `--budget <menit>` membatasi waktu. Agent dilarang menyetel `WEBTERM_ALLOW_WIDE_GATE=1` (hanya pemilik/orkestrator). Detail: `docs/testing.md`.
+- **Suite penuh = perintah khusus dan jelas dari pemilik, per eksekusi.** `npm test`, `npm run test:bun`,
+  `vitest run` tanpa filter, dan `bun test` tanpa path menolak jalan (exit 2).
+  1. Satu-satunya pemicu sah: pemilik menulis di pesannya sendiri `jalankan full test` (atau `jalankan suite penuh`),
+     ATAU menyebut nama perintahnya (`npm run test:all` / `npm run test:bun:all`). Kata lain TIDAK cukup: "cek
+     semuanya", "pastikan lulus", "tes", "verifikasi", "selesaikan", "lanjut", "ya", "gate", "test:impacted",
+     persetujuan atas usulan agent, atau izin lebar/umum (mis. "semua izin diberikan").
+  2. Berlaku untuk SATU eksekusi di pesan itu saja; tidak menurun ke pesan berikutnya, worker, atau sesi lain.
+  3. Agent boleh MENGUSULKAN ("Mau saya jalankan full test?"), dilarang menjalankannya sebelum frasa itu datang;
+     sebelum menjalankan, agent mengutip frasa pemilik yang memicunya.
+  4. Dilarang bagi agent/worker/orkestrator: menyetel `WEBTERM_FULL_TESTS=1` (hanya pemilik/CI), memanggil `vitest run`/
+     `bun test` tanpa filter, atau menyiasatinya (merangkai `--files` ratusan berkas, `WEBTERM_ALLOW_WIDE_GATE=1`
+     untuk mensimulasikan suite penuh, loop yang menjalankan semua berkas). Gate harian yang melebar bukan jalan
+     pintas suite penuh.
+  5. Bukti suite penuh harian = CI (`.github/workflows/test.yml`) setelah push; agent membaca hasilnya (`gh run`),
+     bukan menjalankannya lokal.
+  6. Worker: dilarang mutlak; spec worker memuat larangan ini dan jalur terfokus (`--files`).
+
+  | Situasi | Yang dijalankan |
+  |---|---|
+  | Perubahan kecil | `typecheck` + `test:impacted` |
+  | Perubahan hub lebar (mis. envRegistry) | orkestrator saja, satu gate lebar sekali |
+  | Pemilik menulis frasa persis di atas | suite penuh (sekali) |
+  | Setelah push | baca hasil CI (`gh run`) |
+
+  Detail: `docs/testing.md`.
+- **Hanya satu gate (`test:impacted`) berjalan sekaligus di mesin** (kunci `/tmp/webterm-test-gate.lock`; gate lain keluar kode 3, atau antri dengan `--wait <menit>`). Plan >120 berkas ditolak (exit 2, mendekati suite penuh): pecah kerja dan pakai `--files <tes-terkait>`; `--budget <menit>` membatasi waktu. `WEBTERM_ALLOW_WIDE_GATE=1` hanya untuk orkestrator pada gate yang memang berdampak lebar (hub), bukan untuk 'mengetes semuanya'; agent/worker dilarang menyetelnya. Detail: `docs/testing.md`.
 - Tes pemindai baru wajib didaftarkan di `scripts/test.policy.manifest.ts` (tes manifes gagal bila tidak).
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas
   `sun_path`) → `EINVAL`. Jalankan dengan `TMPDIR=/tmp/st`.
