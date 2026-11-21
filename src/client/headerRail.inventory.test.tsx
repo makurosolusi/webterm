@@ -31,6 +31,7 @@ const CONTROLS: ReadonlyArray<{ role: string; name: string; home: Record<HeaderM
   { role: 'button', name: 'Settings', home: { tabs: ['rail'], hidden: ['rail'] } },
   { role: 'button', name: 'Clean view', home: { tabs: ['rail'], hidden: ['rail'] } },
   { role: 'button', name: 'Lock view', home: { tabs: ['rail'], hidden: ['rail'] } },
+  { role: 'button', name: 'Take screenshot', home: { tabs: ['rail'], hidden: ['rail'] } }, // Dock.modes.tsx, between Lock and Clean view
   { role: 'button', name: 'Toggle tab layout', home: { tabs: ['header'], hidden: ['rail'] } },
   { role: 'button', name: 'Toggle Secondary Side Bar', home: { tabs: ['header'], hidden: ['header'] } },
   { role: 'button', name: 'New workspace', home: { tabs: ['header'], hidden: ['header'] } },
@@ -158,8 +159,8 @@ describe('rail order: menu, Search, tools, then the bottom group', () => {
     expect(tools).toEqual(['Layers', 'Sessions', 'Agent History', 'Skills', 'Central', 'Board', 'Add node'])
     const bottom = [...(dock.querySelector('.dock__modes') as HTMLElement).querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))
     expect(bottom).toEqual(mode === 'hidden'
-      ? ['Account', 'Settings', 'Toggle tab layout', 'Lock view', 'Clean view']
-      : ['Account', 'Settings', 'Lock view', 'Clean view'])
+      ? ['Account', 'Settings', 'Toggle tab layout', 'Lock view', 'Take screenshot', 'Clean view']
+      : ['Account', 'Settings', 'Lock view', 'Take screenshot', 'Clean view'])
   })
 
   it('the layout switch in the rail (Hidden) runs the same toggle', () => {
