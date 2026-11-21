@@ -107,7 +107,7 @@ describe('BrowserAudioButton', () => {
     render(<Harness stream={stream} />)
     const b = screen.getByRole('button') as HTMLButtonElement
     expect(b.disabled).toBe(true)
-    expect(b.title).toBe('Not supported here.')
+    expect(b.getAttribute('aria-label')).toBe('Browser audio unavailable')
     expect(document.getElementById(b.getAttribute('aria-describedby')!)?.textContent).toBe('Not supported here.')
     fireEvent.click(b)
     expect(stream.setAudio).not.toHaveBeenCalled()

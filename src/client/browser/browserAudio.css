@@ -8,4 +8,4 @@
 .browser-audio-btn__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @keyframes browser-audio-pulse { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .browser-audio-btn__dot { animation: none; } }
-@media (pointer: coarse) { .browser-audio-btn { min-width: 44px; height: 44px; } }
+@media (pointer: coarse) { .browser-audio-btn { min-width: 44px !important; height: 44px !important; } }
