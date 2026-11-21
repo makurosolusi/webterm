@@ -77,7 +77,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY package.json ./
 COPY scripts ./scripts
 COPY src/server/browser/chromium.managed.ts src/server/browser/chromium.managed.zip.ts ./src/server/browser/
-COPY src/server/logs/logger.ts src/server/logs/logBus.ts src/server/logs/logConsole.ts src/server/logs/logFileSink.ts src/server/logs/logSanitize.ts ./src/server/logs/
+COPY src/server/logs/logger.ts src/server/logs/logBus.ts src/server/logs/logConsole.ts src/server/logs/logFileSink.ts src/server/logs/logRetention.ts src/server/logs/logSanitize.ts ./src/server/logs/
 COPY src/server/envFlag.ts src/server/redactSecrets.ts ./src/server/
 COPY src/shared/logEntry.ts ./src/shared/
 RUN set -eu; \
