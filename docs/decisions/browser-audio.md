@@ -1,6 +1,6 @@
 # Browser node audio: in-page capture (spike result)
 
-Status: GO. Wave 1 (server side, steps 1-5, 9-server, 10) implemented 2026-11-21, see "Wave 1 implementation" and "Client contract" at the end. Wave 2 (client player, speaker button, steps 6-8) is open. Spike measured 2026-11-20 (Chrome for Testing 158.0.8127.36, macOS arm64, 8 cores, machine shared with other workers)..
+Status: GO. Wave 1 (server side, steps 1-5, 9-server, 10) implemented 2026-11-21, see "Wave 1 implementation" and "Client contract" at the end. Wave 2 (client player, speaker button, steps 6-8) implemented 2026-11-21, see "Wave 2 implementation (client)" at the end. Spike measured 2026-11-20 (Chrome for Testing 158.0.8127.36, macOS arm64, 8 cores, machine shared with other workers)..
 Evidence: `RND/browser-audio-spike/` (`bun RND/browser-audio-spike/run.ts`; raw numbers in `results.json`).
 
 ## Context
@@ -159,3 +159,21 @@ Unverified: real YouTube or any real site, the client player (MSE decoding of mi
 - **Binary frame** (WS binary, `type` byte 3, big endian): `[3][idLen u8][nodeId utf8][keyLen u8][streamKey utf8 /^[a-z0-9]{1,16}$/][seq u32][t f64 server ms][payload]`. Payload = one `audio/webm;codecs=opus` chunk (64 kbps, about 100 ms, ~8 per second). `seq` 0 of a stream is the header chunk: append it first. A new `streamKey` means "reset the decoder" (navigation, listener restart, another tab). Mid-stream joiners get the header chunk replayed first. Video types 1 and 2 are untouched; old clients ignore type 3. Decode with `decodeAudioFrame` in `src/shared/browser.wire.ts`.
 - **Backpressure**: the server keeps at most 10 chunks (~1 s) per listener and drops the oldest; the client should play at the live edge and drop to it when more than ~500 ms behind. No ack for audio frames.
 - **Timing**: `t` is the server receive time; audio runs about 40-260 ms behind the video frame of the same event (spike table).
+
+## Wave 2 implementation (client)
+
+Files: `src/client/browser/browserAudio.player.ts` (MSE player), `browserAudio.use.ts` (hook), `BrowserAudioButton.tsx` + `browserAudio.css` (speaker), `browser.stream.ts` (`setAudio`, `onAudio`), `browser.useSession.ts` (`audioSink`),
+`BrowserNode.tsx` (button in `extraHeader`, so web header and tab actions share one surface), layout field `audio` in `workspace.shape.ts` / `store.ts`.
+
+Design and why:
+
+1. **MediaSource + SourceBuffer(`audio/webm;codecs=opus`) -> hidden `<audio>` -> `createMediaElementSource` -> GainNode -> destination.** MediaRecorder chunks are fragments of one WebM stream (only seq 0 decodes alone), so `decodeAudioData` per chunk cannot work; MSE is the streaming demuxer. The element goes through an `AudioContext` that is created/resumed only by the speaker click (the autoplay gesture) and whose gain gives a click-free start/reset (gain 0 while the pipeline is rebuilt, 30 ms ramp up).
+2. **New `streamKey` = full reset** (new MediaSource, old one ended and its URL revoked): a new stream restarts its timestamps at 0, so reusing the buffer would overlap. A first chunk that is not seq 0 is ignored until the header arrives.
+3. **Jitter and live edge**: playback starts when 150 ms is buffered; if the playhead is more than 500 ms behind the newest buffered audio it jumps to `end - 150 ms`; played audio older than 5 s is removed. One append/remove at a time (`updating` queue); `QuotaExceededError` removes played audio and retries the same chunk (3 tries, then an error state, never a silent loop).
+4. **States**: muted (default), connecting, playing, unsupported (`MediaSource.isTypeSupported` false: disabled button, reason in `title` and `aria-describedby`), error (click = try again). Quiet pulsing dot while muted when `audioActive` (honours `prefers-reduced-motion`); the button is always available because `audioActive` only fills after someone listens.
+5. **Intent lives in the stream client** (`setAudio`): `audio on` is sent after every `attach`, so a reconnect, a resize re-attach or a hidden node coming back restores listening with no new gesture. A hidden/collapsed/zoomed-out node detaches (the server stops sending) and the player stops until the node is back. Unmount, close or workspace switch sends `audio off` and disposes the player and AudioContext.
+6. **Saved mute**: the layout stores `audio: true` while sound is on. Browsers refuse to start sound without a click, so a reload never auto-plays; the saved flag only changes the button's hint ("it was on before"). Hidden entirely when `status.audio === false` (capability / `WEBTERM_BROWSER_AUDIO=off`).
+
+Verified (jsdom, fake MediaSource/SourceBuffer/AudioContext/audio element): ordered appends while `updating`, mid-stream header wait, jitter start, live-edge jump, trim, stream reset, quota trim and retry, unsupported, unmount/hide/reconnect lifecycle, button states and aria, layout round trip.
+
+NOT verified: real playback in any browser (whether Chrome actually decodes mid-stream MediaRecorder WebM through MSE without glitches), Safari and Firefox support for WebM/Opus in MSE and for `createMediaElementSource` on an MSE element (Safari is the likeliest to land in the "unsupported" state), human-perceived A/V sync (expected 40-260 ms server side plus 150 ms buffer; the video is not delayed), long sessions, many nodes at once, the `playing`-event timing of the real element.

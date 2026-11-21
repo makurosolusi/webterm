@@ -22,7 +22,7 @@ export function toFlow(n: WsNode): Node {
     // A collapsed skill is always the round token: boards saved when it was a 260x44 card load as a token (position kept).
     width: isSkillToken(n) ? SKILL_NODE_SIZE.width : n.width ?? defaultWidth(n.kind),
     height: isSkillToken(n) ? SKILL_NODE_SIZE.height : n.height ?? defaultHeight(n.kind),
-    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, profileId: n.profileId, device: n.device, zoom: n.zoom, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion, stickyText: n.stickyText, stickyTag: n.stickyTag, stickyColor: n.stickyColor },
+    data: { id: n.id, kind: n.kind, cmd: n.cmd, cwd: n.cwd, agentId: n.agentId, color: n.color, name: n.name, title: n.title, sessionId: n.sessionId, claudeProfileId: n.claudeProfileId, collapsed: n.collapsed, hideLinks: n.hideLinks, comments: n.comments, dirPath: n.dirPath, filePath: n.filePath, wordWrap: n.wordWrap, viewAs: n.viewAs, viewOpts: n.viewOpts, expanded: n.expanded, panes: n.panes, url: n.url, agentControl: n.agentControl, profileId: n.profileId, device: n.device, zoom: n.zoom, audio: n.audio, diffNotes: n.diffNotes, plan: n.plan, chatSessionId: n.chatSessionId, permissionMode: n.permissionMode, chatConfig: n.chatConfig, preset: isAgentChatPreset(n.preset) ? n.preset : undefined, presetTarget: typeof n.presetTarget === 'string' ? n.presetTarget : undefined, skill: n.skill, seenVersion: n.seenVersion, stickyText: n.stickyText, stickyTag: n.stickyTag, stickyColor: n.stickyColor },
   }
 }
 
@@ -58,6 +58,7 @@ export function toWsNode(n: Node): WsNode {
     profileId: isBrowserProfileId(d.profileId) ? d.profileId : undefined,
     device: d.device,
     zoom: typeof d.zoom === 'number' && d.zoom >= ZOOM_MIN && d.zoom <= ZOOM_MAX ? d.zoom : undefined,
+    audio: d.audio === true ? true : undefined,
     chatSessionId: d.chatSessionId,
     permissionMode: isPermissionMode(d.permissionMode) ? d.permissionMode : undefined,
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),

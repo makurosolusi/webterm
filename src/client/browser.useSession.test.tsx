@@ -20,7 +20,7 @@ const stream: BrowserStream = {
   resize: () => undefined,
   detach: () => undefined,
   send: (m) => { sent.push(m) },
-  reset: () => undefined,
+  reset: () => undefined, setAudio: () => undefined,
 }
 
 // createImageBitmap palsu: selesai saat test memanggil `finish(i)`; ukuran bitmap dari byte jpeg [w/10, h/10, seq].

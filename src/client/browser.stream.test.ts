@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodeFrame } from '../shared/browser.wire'
+import { encodeAudioFrame, encodeFrame } from '../shared/browser.wire'
 import { createBrowserStream } from './browser.stream'
 import type { BrowserListener } from './browser.stream'
 import { setConnection } from './ws.connection'
@@ -163,5 +163,58 @@ describe('browser.stream', () => {
     } finally {
       vi.restoreAllMocks()
     }
+  })
+
+  describe('audio', () => {
+    const opened = () => {
+      const s = make()
+      const l = listener() as ReturnType<typeof listener> & { chunks: unknown[] }
+      l.chunks = []
+      l.onAudio = (c) => { l.chunks.push(c) }
+      s.subscribe('a', l)
+      s.attach('a', VP)
+      const ws = FakeWs.all[0]
+      ws.open()
+      return { s, l, ws }
+    }
+
+    it('audio on goes after attach; off stops; frames type 3 reach onAudio, not onFrame', () => {
+      const { s, l, ws } = opened()
+      s.setAudio('a', true)
+      expect(ws.msgs().map((m) => m.t)).toEqual(['attach', 'audio'])
+      expect(ws.msgs()[1]).toEqual({ t: 'audio', id: 'a', on: true })
+      const frame = encodeAudioFrame({ nodeId: 'a', streamKey: 'k1', seq: 0, t: 5, payload: new Uint8Array([1, 2]) })
+      ws.onmessage?.({ data: frame.buffer.slice(frame.byteOffset, frame.byteOffset + frame.byteLength) })
+      expect(l.chunks).toHaveLength(1)
+      expect(l.frames).toHaveLength(0)
+      s.setAudio('a', false)
+      expect(ws.msgs().at(-1)).toEqual({ t: 'audio', id: 'a', on: false })
+    })
+
+    it('reconnect restores the listening intent after the re-attach, not before; off is not restored', () => {
+      const { s, ws } = opened()
+      s.setAudio('a', true)
+      ws.close()
+      vi.advanceTimersByTime(60_000)
+      const ws2 = FakeWs.all[1]
+      ws2.open()
+      expect(ws2.msgs().map((m) => m.t)).toEqual(['attach', 'audio'])
+      s.setAudio('a', false)
+      ws2.close()
+      vi.advanceTimersByTime(60_000)
+      const ws3 = FakeWs.all[2]
+      ws3.open()
+      expect(ws3.msgs().map((m) => m.t)).toEqual(['attach'])
+    })
+
+    it('intent set before the socket is open is sent after attach', () => {
+      const s = make()
+      s.subscribe('a', listener())
+      s.setAudio('a', true)
+      s.attach('a', VP)
+      const ws = FakeWs.all[0]
+      ws.open()
+      expect(ws.msgs().map((m) => m.t)).toEqual(['attach', 'audio'])
+    })
   })
 })

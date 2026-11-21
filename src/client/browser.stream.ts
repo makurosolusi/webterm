@@ -5,8 +5,8 @@
 // tahu lewat `onConnection(false)`. Reconnect: backoff full-jitter `reconnectDelay`, berhenti selama
 // socket bersama `offline`/`auth` (server tak terjangkau / sesi UI habis), lanjut saat `connected`.
 import { BROWSER_WS_PATH } from '../shared/browser.contract'
-import type { ClientMsg, FrameLatency, ServerMsg, ViewportMsg } from '../shared/browser.contract'
-import { decodeFrameHeader } from '../shared/browser.wire'
+import type { AudioChunk, ClientMsg, FrameLatency, ServerMsg, ViewportMsg } from '../shared/browser.contract'
+import { decodeAudioFrame, decodeFrameHeader } from '../shared/browser.wire'
 import { getConnection, reconnectDelay, subscribeConnection, type ConnectionPhase } from './ws.connection'
 
 const WS_OPEN = 1 // WebSocket.readyState OPEN (protokol)
@@ -15,6 +15,8 @@ export interface BrowserListener {
   /** `lat` hanya pada frame pertama sesudah input bercap waktu (I1-d). */
   onFrame: (seq: number, jpeg: Uint8Array, lat?: FrameLatency, tabId?: string) => void
   onMsg: (msg: ServerMsg) => void
+  /** One audio chunk of this node (frame type 3); only arrives after `setAudio(id, true)`. */
+  onAudio?: (chunk: AudioChunk) => void
   onConnection: (up: boolean) => void
 }
 
@@ -25,6 +27,8 @@ export interface BrowserStream {
   attach: (id: string, vp: ViewportMsg, profileId?: string) => void
   resize: (id: string, vp: ViewportMsg) => void
   detach: (id: string) => void
+  /** Listen (on) or stop listening to the node's audio. The intent survives detach/reconnect: it is re-sent after every attach until set off. */
+  setAudio: (id: string, on: boolean) => void
   send: (msg: ClientMsg) => void
   /** Putus socket dan lupakan attach lama (ganti workspace); node berikutnya menyambung ulang. */
   reset: () => void
@@ -39,6 +43,7 @@ const isServerMsg = (v: unknown): v is ServerMsg =>
 /** Bangun klien di atas pembuat socket (diinjeksi supaya test tak butuh server). */
 export function createBrowserStream(open: () => WebSocket): BrowserStream {
   const listeners = new Map<string, BrowserListener>()
+  const listening = new Set<string>() // nodes whose audio the user wants; replayed after each attach (the server forgets on socket close/detach)
   const attached = new Map<string, ViewportMsg & { profileId?: string }>()
   let ws: WebSocket | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -46,6 +51,11 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
 
   const send = (m: ClientMsg) => {
     if (ws && ws.readyState === WS_OPEN) ws.send(JSON.stringify(m))
+  }
+  /** Attach, then the audio intent (the server answers `not_found` to `audio` before `attach`). */
+  const sendAttach = (id: string, vp: ViewportMsg) => {
+    send({ t: 'attach', id, ...vp })
+    if (listening.has(id)) send({ t: 'audio', id, on: true })
   }
 
   const route = (data: unknown) => {
@@ -59,6 +69,8 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
       if (isServerMsg(msg)) listeners.get(msg.id)?.onMsg(msg)
     } else if (data instanceof ArrayBuffer) {
       const bytes = new Uint8Array(data)
+      const a = decodeAudioFrame(bytes)
+      if (a) { listeners.get(a.nodeId)?.onAudio?.(a); return }
       const h = decodeFrameHeader(bytes)
       if (h) listeners.get(h.nodeId)?.onFrame(h.seq, bytes.subarray(h.offset), h.lat, h.tabId)
     }
@@ -71,7 +83,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
     sock.onopen = () => {
       attempt = 0
       for (const l of listeners.values()) l.onConnection(true)
-      for (const [id, vp] of attached) send({ t: 'attach', id, ...vp })
+      for (const [id, vp] of attached) sendAttach(id, vp)
     }
     sock.onmessage = (ev) => route(ev.data)
     sock.onclose = () => {
@@ -113,7 +125,7 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
       const msg = { ...vp, ...(profileId ? { profileId } : {}) }
       attached.set(id, msg)
       if (!ws) connect() // bila masih CONNECTING, onopen yang mengirim attach
-      else send({ t: 'attach', id, ...msg })
+      else sendAttach(id, msg)
     },
     resize(id, vp) {
       const prev = attached.get(id)
@@ -122,6 +134,10 @@ export function createBrowserStream(open: () => WebSocket): BrowserStream {
       send({ t: 'resize', id, ...vp })
     },
     detach,
+    setAudio(id, on) {
+      if (on) listening.add(id); else listening.delete(id)
+      if (attached.has(id)) send({ t: 'audio', id, on })
+    },
     send,
     reset() {
       attached.clear()

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { DSF_MAX, RESIZE_DEBOUNCE_MS } from '../shared/browser.contract'
-import type { BrowserState, ClientMsg, FrameLatency, ServerMsg } from '../shared/browser.contract'
+import type { AudioChunk, BrowserState, ClientMsg, FrameLatency, ServerMsg } from '../shared/browser.contract'
 import { clientNow, createLatencyWindow, recordFrame, wantsStamp } from './browser/latency/inputLatency.window'
 import type { LatencyWindow } from './browser/latency/inputLatency.window'
 import { writeClipboard } from './browser.clipboard'
@@ -56,6 +56,8 @@ export interface BrowserSession {
   sync: SyncView
   /** Downloads of this node (server list on attach, then one message per change); see browserDownloads/. */
   downloads: DownloadItem[]
+  /** Set by the audio player (browser/browserAudio.use.ts) to receive this node's audio chunks. */
+  audioSink: RefObject<((c: AudioChunk) => void) | null>
 }
 
 /** Draws a decoded frame; the session closes the bitmap afterwards. */
@@ -93,6 +95,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
       return () => { if (paneSinks.current.get(tabId) === sink) paneSinks.current.delete(tabId) }
     },
   }), [])
+  const audioSink = useRef<((c: AudioChunk) => void) | null>(null)
   const tabMsgRef = useRef(onTabMsg)
   tabMsgRef.current = onTabMsg
   const profileRef = useRef(profileId)
@@ -162,6 +165,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     }
     const unsub = stream.subscribe(id, {
       onFrame: (seq, jpeg, lat, tabId) => { void (tabId ? paintPane(seq, jpeg, tabId) : paint(seq, jpeg, lat)) },
+      onAudio: (c) => audioSink.current?.(c),
       onConnection: setConnected,
       onMsg: (m) => {
         if (m.t === 'state') { setState(m); setError(undefined) }
@@ -235,7 +239,7 @@ export function useBrowserSession(id: string, paused: boolean, stream: BrowserSt
     return true
   }, [id, stream])
   return {
-    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes, sync, downloads,
+    hostRef, canvasRef, viewport, state, error, localNotice, dialog, cursor, connected, send, retry, latency, console: consoleView, panes, sync, downloads, audioSink,
     closeDialog: useCallback(() => setDialog(undefined), []),
   }
 }

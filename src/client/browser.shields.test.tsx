@@ -19,7 +19,7 @@ describe('useBrowserSession popup', () => {
     let listener: BrowserListener | null = null
     const stream: BrowserStream = {
       subscribe: (_id, l) => { listener = l; return () => undefined },
-      attach: () => undefined, resize: () => undefined, detach: () => undefined, send: () => undefined, reset: () => undefined,
+      attach: () => undefined, resize: () => undefined, detach: () => undefined, send: () => undefined, reset: () => undefined, setAudio: () => undefined,
     }
     const onTabMsg = vi.fn()
     function Probe() { useBrowserSession('b1', true, stream, onTabMsg); return null }
