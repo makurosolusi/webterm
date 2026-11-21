@@ -9,8 +9,9 @@ export const AGENT_CHAT_KIND = 'agentChat'
 export interface AgentChatNodeConfig { model?: string; effort?: string; thinking?: boolean }
 
 /** Presets a chat node can be born with; absent or unknown = a plain chat. */
-export type AgentChatPreset = 'skill-author'
-export const isAgentChatPreset = (v: unknown): v is AgentChatPreset => v === 'skill-author'
+/** `skill-author` is tool-locked; `maintainer` is a plain chat that also gets the read-only diagnosis capabilities (docs/decisions/maintainer-agent.md). */
+export type AgentChatPreset = 'skill-author' | 'maintainer'
+export const isAgentChatPreset = (v: unknown): v is AgentChatPreset => v === 'skill-author' || v === 'maintainer'
 
 /** Fields an agentChat node persists on top of the common WsNode ones. */
 export interface AgentChatData {

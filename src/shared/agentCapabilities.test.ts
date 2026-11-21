@@ -6,7 +6,7 @@ const AUTHORS: ProfileId[] = ['central.skill-author', 'chat.skill-author']
 describe('capability registry renderers', () => {
   it.each(AUTHORS)('%s: web.read granted, web.drive and the steward abilities denied', (id) => {
     const by = Object.fromEntries(capabilitiesOf(id).map((c) => [c.id, c.level]))
-    expect(by).toEqual({ 'skills.author': 'granted', 'web.read': 'granted', 'web.drive': 'denied', 'web.profiles': 'denied', 'web.tabs': 'denied', 'web.layout': 'denied', 'web.links': 'denied', 'web.downloads': 'denied', canvas: 'denied', agents: 'denied', memory: 'denied', channels: 'denied' })
+    expect(by).toEqual({ 'skills.author': 'granted', 'web.read': 'granted', 'web.drive': 'denied', 'web.profiles': 'denied', 'web.tabs': 'denied', 'web.layout': 'denied', 'web.links': 'denied', 'web.downloads': 'denied', canvas: 'denied', agents: 'denied', memory: 'denied', channels: 'denied', 'ops.diagnose': 'denied' })
   })
 
   it('the briefing has both sections, the exact call form and the web rules', () => {

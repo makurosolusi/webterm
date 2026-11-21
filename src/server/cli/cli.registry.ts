@@ -9,6 +9,8 @@ import { CONTROL_CAPABILITIES } from '../capability/control.capabilities'
 import { CUSTOM_COMMAND_CAPABILITIES } from '../capability/customCommands.capabilities'
 import { GIT_CAPABILITIES } from '../capability/git.capabilities'
 import { LOGS_CAPABILITIES } from '../capability/logs.capabilities'
+import { MAINTAINER_CAPABILITIES } from '../capability/maintainer.capabilities'
+import { MAINTAINER_RULE } from '../../shared/agentCapabilities.data'
 import { REPORT_CAPABILITIES } from '../capability/report.capabilities'
 import type { Effect } from '../policy/policy.model'
 import { SKILL_CAPABILITIES } from '../capability/skill.capabilities'
@@ -18,7 +20,7 @@ import { SECRET_CAPABILITIES } from '../secrets/secret.capabilities'
 export const AGENT_CONTEXT_SCHEMA_VERSION = 1
 
 /** Capabilities reachable through `/api/tools/:name`; Central-only tools have no route and stay out. */
-export const TOOL_INDEX = createCapabilityIndex([...CONTROL_CAPABILITIES, ...GIT_CAPABILITIES, ...CUSTOM_COMMAND_CAPABILITIES, ...SECRET_CAPABILITIES, ...REPORT_CAPABILITIES, ...SKILL_CAPABILITIES, ...LOGS_CAPABILITIES].filter((c) => c.route))
+export const TOOL_INDEX = createCapabilityIndex([...CONTROL_CAPABILITIES, ...GIT_CAPABILITIES, ...CUSTOM_COMMAND_CAPABILITIES, ...SECRET_CAPABILITIES, ...REPORT_CAPABILITIES, ...SKILL_CAPABILITIES, ...LOGS_CAPABILITIES, ...MAINTAINER_CAPABILITIES].filter((c) => c.route))
 
 /** What `whats-new` compares: the parts of a capability an agent depends on. */
 export interface RegistryEntry { name: string; summary: string; tier: Tier; scope: string; input: JsonSchema; destructive: boolean }
@@ -73,10 +75,12 @@ export interface AgentContext {
   principal: string
   capabilityCount: number
   capabilities: AgentContextEntry[]
+  /** Present for a maintainer caller only: the registry's one briefing rule (agentCapabilities.data.ts). */
+  rule?: string
 }
 
 /** Discovery for one caller; `judge` is the policy answer for that caller (injected: no I/O here). */
-export function buildAgentContext(principal: string, judge: (cap: CapabilitySpec) => Effect, caps: readonly CapabilitySpec[] = TOOL_INDEX.list()): AgentContext {
+export function buildAgentContext(principal: string, judge: (cap: CapabilitySpec) => Effect, caps: readonly CapabilitySpec[] = TOOL_INDEX.list(), maintainer = false): AgentContext {
   const snap = snapshotOf(caps)
   const byName = new Map(caps.map((c) => [c.name, c]))
   const capabilities = snap.capabilities.map((e) => {
@@ -84,7 +88,7 @@ export function buildAgentContext(principal: string, judge: (cap: CapabilitySpec
     const decision = judge(cap)
     return { ...e, idempotent: cap.idempotent === true, allowed: decision === 'allow', decision }
   })
-  return { schemaVersion: AGENT_CONTEXT_SCHEMA_VERSION, registryVersion: snap.version, principal, capabilityCount: capabilities.length, capabilities }
+  return { schemaVersion: AGENT_CONTEXT_SCHEMA_VERSION, registryVersion: snap.version, principal, capabilityCount: capabilities.length, capabilities, ...(maintainer ? { rule: MAINTAINER_RULE } : {}) }
 }
 
 /** Plain-text discovery (`webterm agent-context` without `--json`), Orca `formatAgentContextSummary`. */
@@ -93,6 +97,7 @@ export function formatAgentContext(ctx: AgentContext): string {
   return [
     `${ctx.capabilityCount} capabilities (registry ${ctx.registryVersion}, schema v${ctx.schemaVersion}) for ${ctx.principal}.`,
     ...rows,
+    ...(ctx.rule ? [ctx.rule] : []),
     'Run `webterm agent-context --json` for input schemas; call one with `webterm <name> --json \'{...}\'`.',
   ].join('\n')
 }

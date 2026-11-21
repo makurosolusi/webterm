@@ -25,6 +25,8 @@ import { activePolicy } from '../policy/policy.runtime'
 import { LOGS_CAPABILITY_NAMES, LOGS_SUMMARY_CAPABILITY, logsByDefault } from '../capability/logs.capabilities'
 import { agentLogQuery, type AgentLogParams, type AgentLogScope } from '../logs/logAgentQuery'
 import { logBus } from '../logs/logBus'
+import { CONFIG_READ_CAPABILITY, DOCTOR_RUN_CAPABILITY, isMaintainerNode, MAINTAINER_CAPABILITY_NAMES, maintainerByDefault } from '../capability/maintainer.capabilities'
+import { liveConfigRead, liveDoctorRun, liveInstanceInfo } from '../capability/maintainer.facts'
 import { summarizeLogs } from '../logs/logSummary'
 import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from '../capability/skill.capabilities'
 import { isSecretCapability } from '../secrets/secret.capabilities'
@@ -132,6 +134,7 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   if (isSecretCapability(cap.name)) return runSecretCapability(deps, cap.name, input, principal) // secret broker decides per secret (secret.broker.ts)
   if (cap.name === AGENT_REPORT_CAPABILITY) return runReport(deps, cap, input, principal)
   if (LOGS_CAPABILITY_NAMES.includes(cap.name)) return runLogs(deps, cap, input, principal)
+  if (MAINTAINER_CAPABILITY_NAMES.includes(cap.name)) return runMaintainer(deps, cap, input, principal)
   if (SKILL_CAPABILITY_NAMES.includes(cap.name)) return runSkill(deps, cap, input, principal)
   const route = cap.route as NonNullable<CapabilitySpec['route']>
   const browser = route.path.startsWith(BROWSER_CONTROL_PREFIX)
@@ -229,5 +232,19 @@ async function runLogs(deps: ToolsDeps, cap: CapabilitySpec, input: Args, princi
   const data = cap.name === LOGS_SUMMARY_CAPABILITY
     ? summarizeLogs(logBus.snapshot(), input as { node?: string; since?: string }, scope, Date.now())
     : agentLogQuery(logBus.snapshot(), input as AgentLogParams, scope, Date.now())
+  return { receipt: receipt('ok', 'ok', { status: 200 }), data }
+}
+
+/** `doctor.run` / `config.read` / `instance.info`: read-only; a node must have been born with the maintainer preset, the human (CLI/UI) always may. */
+async function runMaintainer(deps: ToolsDeps, cap: CapabilitySpec, input: Args, principal: Principal): Promise<{ receipt: Receipt; data?: unknown }> {
+  const self = nodeOf(principal)
+  const board = await boardOf(deps)
+  if (self && !isMaintainerNode(board, self)) return { receipt: receipt('denied', 'not_maintainer', {}, 'Only a chat node with the maintainer preset uses this; ask your user to start one.') }
+  const d = judge(deps, principal, cap, undefined, maintainerByDefault(principal))
+  if (d.effect !== 'allow') return { receipt: receipt('denied', d.effect === 'ask' ? 'approval_required' : 'policy_denied', { reason: d.reason }, DENY_NEXT) }
+  const data = cap.name === DOCTOR_RUN_CAPABILITY ? await liveDoctorRun(input as { id?: string })
+    : cap.name === CONFIG_READ_CAPABILITY ? await liveConfigRead(input as { q?: string; limit?: number })
+      : await liveInstanceInfo(board)
+  if (typeof data.error === 'string') return { receipt: receipt('error', data.error, { status: 400 }), data }
   return { receipt: receipt('ok', 'ok', { status: 200 }), data }
 }

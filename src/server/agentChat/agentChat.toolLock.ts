@@ -70,8 +70,8 @@ export const skillAuthorPreToolUse: HookCallback = async (input) => {
 
 /** Preset -> forced option fields; `undefined` = not locked. Pure, derived from the node's preset only. */
 export function agentChatLockFor(preset: unknown): Partial<Options> | undefined {
-  if (!isAgentChatPreset(preset)) return undefined
-  const locks: Record<AgentChatPreset, Partial<Options>> = {
+  if (!isAgentChatPreset(preset) || preset === 'maintainer') return undefined // a maintainer chat is a plain chat: no lock
+  const locks: Record<'skill-author', Partial<Options>> = {
     'skill-author': {
       tools: ['Bash'],
       allowedTools: AUTHOR_FAMILIES.map((f) => `Bash(webterm ${f} *)`),

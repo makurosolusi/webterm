@@ -18,6 +18,7 @@ import { isSecretCapability } from '../secrets/secret.capabilities'
 import { SECRET_SUBJECT_PREFIX } from '../secrets/secret.store'
 import { callFingerprint, createMemoryReceiptLog, runOnce, type Receipt } from './capability.receipt'
 import { LOGS_CAPABILITY_NAMES, logsByDefault } from './logs.capabilities'
+import { isMaintainerNode, MAINTAINER_CAPABILITY_NAMES, maintainerByDefault } from './maintainer.capabilities'
 import { AGENT_REPORT_CAPABILITY, reportByDefault } from './report.capabilities'
 import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from './skill.capabilities'
 
@@ -50,6 +51,7 @@ const secretDefaults = (principal: Principal, capName: string) => capName === 's
 function agentContext(deps: ToolsDeps, principal: Principal, board: readonly Workspace[]) {
   const nodeId = nodeOf(principal)
   const cable = nodeId ? cableGrants(board, nodeId) : undefined
+  const maintainer = nodeId !== null && isMaintainerNode(board, nodeId)
   // Discovery evaluates without recording: no policy.decision event per capability per call.
   const ctx = buildAgentContext(principal, (cap) => {
     if (isSecretCapability(cap.name)) {
@@ -58,10 +60,11 @@ function agentContext(deps: ToolsDeps, principal: Principal, board: readonly Wor
     }
     if (cap.name === AGENT_REPORT_CAPABILITY) return judge(deps, principal, cap, undefined, reportByDefault(principal), false).effect
     if (LOGS_CAPABILITY_NAMES.includes(cap.name)) return judge(deps, principal, cap, undefined, logsByDefault(principal), false).effect
+    if (MAINTAINER_CAPABILITY_NAMES.includes(cap.name)) return nodeId && !maintainer ? 'deny' : judge(deps, principal, cap, undefined, maintainerByDefault(principal), false).effect
     if (SKILL_CAPABILITY_NAMES.includes(cap.name)) return judge(deps, principal, cap, undefined, skillsByDefault(principal), false).effect
     const cabled = cable?.find((g) => wildcardMatch(g.capability, cap.name))?.scope
     return judge(deps, principal, cap, cabled, cable, false).effect
-  })
+  }, undefined, maintainer)
   const seen = seenOf(deps)
   seen.saveSnapshot(snapshotOf())
   seen.markSeen(principal, ctx.registryVersion)
