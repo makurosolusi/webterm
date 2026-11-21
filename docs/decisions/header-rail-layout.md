@@ -119,7 +119,7 @@ Twins to merge on purpose (same action, two doors today): Settings (rows 9, 18, 
 2. **Search** (Hidden only): `Mod+K`.
 3. **Workspace group** (divider above and below): active tile pinned first among visible rows, then tiles in order, then `+` (menu from row 23), then **All workspaces** when not every tile fits.
 4. Existing tools group, unchanged and in the same order: Layers, Sessions, Agent History, Skills, Central, Board, Add node.
-5. Bottom group: Account (new), Settings, Lock view (canvas mode only), Clean view, and, in Hidden only, the layout toggle (row 22; `aria-pressed`; in Compact it stays in the header row).
+5. Bottom group: Account (new), Settings, Lock view (canvas mode only), Take screenshot (`canvas.screenshot`, see `screenshot-annotate.md`), Clean view (kept last: it is the way back out of a chrome-less screen), and, in Hidden only, the layout toggle (row 22; `aria-pressed`; in Compact it stays in the header row).
 
 ### Workspace tile
 
