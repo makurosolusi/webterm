@@ -1,7 +1,7 @@
 // Step builder and runner for `test:impacted`: turns a Plan into commands, runs them one at a time
 // (the dev machine is weak: no parallel suites) and reports per-section results.
 import { spawn } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Plan } from './test.impacted.plan'
@@ -78,6 +78,8 @@ export function runStep(step: Step, cwd: string, hasNice: boolean): Promise<Step
     const done = (ok: boolean): void => {
       closeSync(fd)
       const log = readFileSync(logPath, 'utf8') + spawnError
+      // The log is in memory now; the dir (log + temp HOME) must not outlive the step (they piled up in /tmp).
+      rmSync(dir, { recursive: true, force: true })
       resolve({ step, ok, seconds: (Date.now() - start) / 1000, log, failed: ok ? [] : failedFiles(log) })
     }
     child.on('error', (e) => { spawnError = `could not start ${cmd}: ${e.message}\n`; done(false) })

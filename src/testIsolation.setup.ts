@@ -23,7 +23,7 @@ const TEST_ROOT_ENV = 'WEBTERM_TEST_ROOT'
 const STALE_ROOT_MS = 2 * 3600_000
 const sysTmp = tmpdir()
 for (const name of readdirSync(sysTmp)) {
-  if (!name.startsWith('webterm-test-')) continue
+  if (!name.startsWith('webterm-test-') && !name.startsWith('webterm-impacted-')) continue
   try { if (Date.now() - statSync(join(sysTmp, name)).mtimeMs > STALE_ROOT_MS) rmSync(join(sysTmp, name), { recursive: true, force: true }) } catch { /* raced with another run's cleanup */ }
 }
 
