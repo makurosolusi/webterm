@@ -148,7 +148,7 @@ describe('steps and logs', () => {
   })
 
   test('options: --files collects paths until the next flag', () => {
-    expect(parseOptions(['--dry', '--files', 'a.ts', 'b.ts', '--no-policy', '--base', 'main'])).toEqual({ dry: true, policy: false, typecheck: false, base: 'main', files: ['a.ts', 'b.ts'] })
+    expect(parseOptions(['--dry', '--files', 'a.ts', 'b.ts', '--no-policy', '--base', 'main'])).toEqual({ dry: true, policy: false, typecheck: false, base: 'main', files: ['a.ts', 'b.ts'], wait: 0, budget: null })
     let message = ''
     try { parseOptions(['--nope']) } catch (e) { message = (e as Error).message }
     expect(message).toContain('unknown option')
