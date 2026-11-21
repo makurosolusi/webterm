@@ -20,7 +20,7 @@ const h = vi.hoisted(() => {
     state, api, showNotice: vi.fn(),
     stream: {
       subscribe: (_id: string, l: BrowserListener) => { state.listener = l; return () => undefined },
-      attach: () => undefined, resize: () => undefined, detach: () => undefined, reset: () => undefined,
+      attach: () => undefined, resize: () => undefined, setAudio: () => undefined, detach: () => undefined, reset: () => undefined,
       send: (m: ClientMsg) => { state.sent.push(m) },
     },
   }

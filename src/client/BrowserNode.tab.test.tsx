@@ -15,7 +15,7 @@ vi.mock('./browser.stream', () => ({
     subscribe: () => () => undefined,
     attach: () => { fake.calls.push('attach') },
     resize: () => undefined,
-    detach: () => { fake.calls.push('detach') },
+    setAudio: () => undefined, detach: () => { fake.calls.push('detach') },
     send: () => undefined,
   },
 }))

@@ -26,7 +26,7 @@ const h = vi.hoisted(() => {
     stream: {
       subscribe: (_id: string, l: BrowserListener) => { state.listener = l; return () => undefined },
       attach: (id: string, vp: { w: number; h: number; dpr: number }, profileId?: string) => { state.attaches.push({ id, vp, profileId }) },
-      resize: () => undefined, detach: () => undefined, reset: () => undefined,
+      resize: () => undefined, setAudio: () => undefined, detach: () => undefined, reset: () => undefined,
       send: (m: ClientMsg) => { state.sent.push(m) },
     },
   }
