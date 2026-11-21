@@ -5,6 +5,7 @@ import { isLogLevel, LOG_LEVELS, type LogEntry, type LogLevel } from '../../shar
 import { parseFlag } from '../envFlag'
 import { logBus, parseCapacity } from './logBus'
 import { mirrorToConsole } from './logConsole'
+import { retentionFromEnv, startLogRetention, type RetentionPolicy } from './logRetention'
 import { createFileSink, type FileSink } from './logFileSink'
 import { MAX_EVENT_CHARS, MAX_MESSAGE_CHARS, safeText, sanitizeData, sanitizeIds } from './logSanitize'
 
@@ -24,7 +25,7 @@ export interface Logger {
 
 export const DEFAULT_LOG_LEVEL: LogLevel = 'info'
 
-interface State { level: LogLevel; console: boolean; sink: FileSink | null }
+interface State { level: LogLevel; console: boolean; sink: FileSink | null; stopRetention: (() => void) | null; retention: RetentionPolicy }
 
 /** Parse WEBTERM_LOG_LEVEL; unknown values yield undefined so the caller keeps its current level. */
 function parseLevel(raw: string | undefined): LogLevel | undefined {
@@ -32,9 +33,12 @@ function parseLevel(raw: string | undefined): LogLevel | undefined {
   return isLogLevel(level) ? level : undefined
 }
 
-const state: State = { level: parseLevel(process.env.WEBTERM_LOG_LEVEL) ?? DEFAULT_LOG_LEVEL, console: true, sink: null }
+const state: State = { level: parseLevel(process.env.WEBTERM_LOG_LEVEL) ?? DEFAULT_LOG_LEVEL, console: true, sink: null, stopRetention: null, retention: retentionFromEnv({}) }
 
 export const getLogLevel = (): LogLevel => state.level
+/** Directory of the active file sink, or null when file logging is off. */
+export const getLogDir = (): string | null => state.sink?.dir ?? null
+export const getRetention = (): RetentionPolicy => state.retention
 export const setLogLevel = (level: LogLevel): void => { state.level = level }
 
 const enabled = (level: LogLevel): boolean => LOG_LEVELS.indexOf(level) >= LOG_LEVELS.indexOf(state.level)
@@ -111,7 +115,15 @@ export function configureLogging(config: LoggingConfig = {}): void {
     const sink = createFileSink({ dir: config.dir })
     for (const entry of logBus.snapshot()) sink.write(entry)
     state.sink = sink
+    state.stopRetention?.()
+    state.retention = retentionFromEnv(env)
+    state.stopRetention = startLogRetention(config.dir, state.retention, (r, p) => recordEntry({
+      level: 'info', source: 'server', channel: 'logs', event: 'logs.purged', message: `Removed ${r.removedFiles} old log file(s), freed ${r.freedBytes} bytes`,
+      data: { removedFiles: r.removedFiles, freedBytes: r.freedBytes, remainingBytes: r.remainingBytes, maxAgeDays: p.maxAgeDays, maxBytes: p.maxBytes },
+    }))
   } else if (!fileOn || !config.dir) {
+    state.stopRetention?.()
+    state.stopRetention = null
     state.sink = null
   }
 }

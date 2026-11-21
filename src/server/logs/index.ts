@@ -1,5 +1,5 @@
 // Public surface of the log system. Import from here, not from the individual files.
-export { createLogger, configureLogging, flushLogs, flushLogsSync, getLogLevel, setLogLevel, recordEntry, DEFAULT_LOG_LEVEL } from './logger'
+export { createLogger, configureLogging, flushLogs, flushLogsSync, getLogLevel, setLogLevel, recordEntry, getLogDir, getRetention, DEFAULT_LOG_LEVEL } from './logger'
 export type { Logger, LogFields, LoggingConfig } from './logger'
 export { logBus, createLogBus, parseCapacity, matchesQuery, DEFAULT_LOG_BUFFER } from './logBus'
 export type { LogBus, LogQuery } from './logBus'
@@ -7,4 +7,4 @@ export { logsRoute, LOGS_PATH } from './logApi'
 export { startRequestLog, pathTemplate } from './httpLog'
 export { createFileSink, dayStamp } from './logFileSink'
 export { formatConsoleLine } from './logConsole'
-export { safeText, sanitizeData } from './logSanitize'
+export { safeText, sanitizeData, scrubText, scrubDeep, stripUrlQuery } from './logSanitize'

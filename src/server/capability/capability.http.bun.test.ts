@@ -121,11 +121,11 @@ test('agent-context: allowed flags per principal (human, cabled node, uncabled n
 
   const a1 = (await call(deps, 'GET', '/api/tools', { token: nodeToken('a1') })).body as Ctx
   expect(a1.principal).toBe('node:a1')
-  expect(allowedOf(a1)).toEqual(['agent.report', 'browser.act', 'browser.read', 'secret.list', 'skills.list', 'skills.propose']) // the cable is a live browser.* grant
-  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['agent.report', 'secret.list', 'skills.list', 'skills.propose'])
+  expect(allowedOf(a1)).toEqual(['agent.report', 'browser.act', 'browser.read', 'logs.query', 'logs.summary', 'secret.list', 'skills.list', 'skills.propose']) // the cable is a live browser.* grant
+  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['agent.report', 'logs.query', 'logs.summary', 'secret.list', 'skills.list', 'skills.propose'])
 
   activePolicy()!.createGrant('human-ui', { subject: 'node:a2', capability: 'git.diff', effect: 'allow' })
-  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['agent.report', 'git.diff', 'secret.list', 'skills.list', 'skills.propose'])
+  expect(allowedOf((await call(deps, 'GET', '/api/tools', { token: nodeToken('a2') })).body as Ctx)).toEqual(['agent.report', 'git.diff', 'logs.query', 'logs.summary', 'secret.list', 'skills.list', 'skills.propose'])
   const text = await call(deps, 'GET', '/api/tools', { token: nodeToken('a2'), accept: 'text/plain' })
   expect(text.text).toMatch(/^\d+ capabilities \(registry [0-9a-f]{12}, schema v1\) for node:a2\./)
   expect(text.text).toMatch(/git\.diff\s+R0\s+allow/)
@@ -274,7 +274,7 @@ test('end to end: the real CLI, curl and the node header file against a real ser
   try {
     const ctx = await cli('agent-context', '--json')
     expect(ctx.code).toBe(0)
-    expect(allowedOf(JSON.parse(ctx.out))).toEqual(['agent.report', 'browser.act', 'browser.read', 'git.diff', 'secret.list', 'skills.list', 'skills.propose'])
+    expect(allowedOf(JSON.parse(ctx.out))).toEqual(['agent.report', 'browser.act', 'browser.read', 'git.diff', 'logs.query', 'logs.summary', 'secret.list', 'skills.list', 'skills.propose'])
     const ok = await cli('git.diff', '--json', JSON.stringify({ root: repo }))
     expect(ok.code).toBe(0)
     expect(JSON.parse(ok.out).receipt.outcome).toBe('ok')

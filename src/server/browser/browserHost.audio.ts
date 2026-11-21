@@ -57,6 +57,20 @@ export function createAudioHost(ops: AudioOps): AudioHost {
   const inits = new Map<string, Map<string, AudioChunk>>() // node -> stream key -> seq 0 chunk
   const cbs = new Set<(c: AudioChunk) => void>()
   const hooked = new WeakSet<CdpClient>()
+  // Runtime.enable is detectable by anti-bot scripts, so it is sent LAZILY: only for pages of a node some client listens to
+  // (needed for binding-called events to arrive). It is not undone when the last listener leaves (no disable: the signal was already given).
+  const rtOn = new Set<string>()
+  const runtimeFor = async (sid: string): Promise<void> => {
+    const c = cdps.get(sid)
+    if (!c || rtOn.has(sid)) return
+    rtOn.add(sid)
+    try {
+      await c.send(CDP.runtimeEnable, {}, sid)
+      // The binding exists only in contexts created with Runtime on, so the script of the current document bailed out: run it again now.
+      await c.send(CDP.addBinding, { name: AUDIO_BINDING }, sid) // contexts are tracked now: this installs the binding in the loaded documents
+      await c.send(CDP.addScript, { source, runImmediately: true }, sid)
+    } catch (err) { rtOn.delete(sid); log.warn('browser.audio.runtime', 'enabling the page runtime for audio failed', { sessionId: sid, error: errMsg(err) }) }
+  }
 
   const ownerOf = (rootSid: string): { rec: NodeRec; view: boolean } | undefined => {
     const v = table.session(rootSid)
@@ -65,9 +79,14 @@ export function createAudioHost(ops: AudioOps): AudioHost {
     return b ? { rec: b.rec, view: false } : undefined
   }
   const toggle = (sid: string, on: boolean) => {
+    if (on) { void runtimeFor(sid).then(() => send(sid, on)); return }
+    send(sid, on)
+  }
+  const send = (sid: string, on: boolean) => {
     const fn = on ? AUDIO_RESUME_FN : AUDIO_PAUSE_FN
     cdps.get(sid)?.send(CDP.evaluate, { expression: `typeof ${fn}==='function'&&${fn}()` }, sid).catch(ignoreClosed(CDP.evaluate, { sessionId: sid }))
   }
+  const wanted = (sid: string): boolean => { const r = root.get(sid); const o = r ? ownerOf(r) : undefined; return o ? listening.has(o.rec.nodeId) : listening.size > 0 }
   const sessionsOf = (nodeId: string): string[] => [...root].filter(([, r]) => ownerOf(r)?.rec.nodeId === nodeId).map(([sid]) => sid)
 
   const recompute = (rec: NodeRec) => {
@@ -78,7 +97,7 @@ export function createAudioHost(ops: AudioOps): AudioHost {
 
   const drop = (sid: string) => {
     const r = root.get(sid)
-    root.delete(sid); cdps.delete(sid); buses.delete(sid)
+    root.delete(sid); cdps.delete(sid); buses.delete(sid); rtOn.delete(sid)
     const owner = r ? ownerOf(r) : undefined
     if (owner) recompute(owner.rec)
   }
@@ -112,6 +131,9 @@ export function createAudioHost(ops: AudioOps): AudioHost {
     const key = m.f, seq = m.s, d = m.d
     if (typeof key !== 'string' || !AUDIO_STREAM_KEY.test(key) || typeof seq !== 'number' || !Number.isInteger(seq) || seq < 0 || typeof d !== 'string') return
     if (d.length > AUDIO_CHUNK_MAX_BYTES * BASE64_RATIO + 8) { log.warn('browser.audio.big', 'audio chunk over the size limit dropped', { ids: { nodeId } }); return }
+    let set = buses.get(sid) // a bus created before Runtime was enabled never announced itself: its first chunk does
+    if (!set) buses.set(sid, (set = new Set()))
+    if (!set.has(key)) { set.add(key); recompute(owner.rec) }
     const chunk: AudioChunk = { nodeId, streamKey: key, seq, t: now(), payload: Buffer.from(d, 'base64') }
     keepInit(nodeId, chunk)
     if (!owner.view) return // a background tab is muted on the server; its init segment is kept for when it gets focus
@@ -136,7 +158,6 @@ export function createAudioHost(ops: AudioOps): AudioHost {
   }
 
   async function setup(cdp: CdpClient, sid: string, immediate: boolean): Promise<void> {
-    await cdp.send(CDP.runtimeEnable, {}, sid) // the spike needed it for binding-called events to reach this session
     await cdp.send(CDP.addBinding, { name: AUDIO_BINDING }, sid)
     await cdp.send(CDP.addScript, { source, ...(immediate ? { runImmediately: true } : {}) }, sid)
   }
@@ -148,7 +169,7 @@ export function createAudioHost(ops: AudioOps): AudioHost {
       if (!ops.enabled()) return
       hook(cdp)
       root.set(sid, sid); cdps.set(sid, cdp)
-      try { await setup(cdp, sid, false) } catch (err) { log.warn('browser.audio.enable', 'audio capture could not be installed on a page', { sessionId: sid, error: errMsg(err) }) }
+      try { await setup(cdp, sid, false); if (wanted(sid)) toggle(sid, true) } catch (err) { log.warn('browser.audio.enable', 'audio capture could not be installed on a page', { sessionId: sid, error: errMsg(err) }) }
     },
 
     async child(cdp, childSid, parentSid) {
@@ -160,11 +181,12 @@ export function createAudioHost(ops: AudioOps): AudioHost {
       try {
         await cdp.send(CDP.pageEnable, {}, childSid)
         await setup(cdp, childSid, true)
+        if (wanted(childSid)) toggle(childSid, true)
       } catch (err) { log.warn('browser.audio.child', 'audio capture could not be installed in an iframe', { sessionId: childSid, error: errMsg(err) }) }
     },
 
     forget(rec) {
-      for (const sid of sessionsOf(rec.nodeId)) { root.delete(sid); cdps.delete(sid); buses.delete(sid) }
+      for (const sid of sessionsOf(rec.nodeId)) { root.delete(sid); cdps.delete(sid); buses.delete(sid); rtOn.delete(sid) }
       lastKey.delete(rec.nodeId); inits.delete(rec.nodeId)
       if (rec.state.audioActive) ops.patch(rec, { audioActive: undefined })
     },

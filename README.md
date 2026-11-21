@@ -125,7 +125,7 @@ Levels: `trace`, `debug`, `info` (default), `warn`, `error`. Entries below the a
 
 - `WEBTERM_LOG_LEVEL` — starting level. The panel can change it at runtime without a restart.
 - `WEBTERM_LOG_BUFFER` — entries kept in memory (100 to 100000, default `5000`).
-- `WEBTERM_LOG_FILE` — `on` (default) or `off`. When on, entries are appended as JSON lines to `<WEBTERM_DATA_DIR>/logs/webterm-YYYY-MM-DD.log`, rotated by day and at 5 MiB, keeping at most 7 files.
+- `WEBTERM_LOG_FILE` — `on` (default) or `off`. When on, entries are appended as JSON lines to `<WEBTERM_DATA_DIR>/logs/webterm-YYYY-MM-DD.log`, rotated by day and at 5 MiB, pruned at boot and daily to `WEBTERM_LOG_RETENTION_DAYS` (default 14) and `WEBTERM_LOG_MAX_MB` (default 200); see `docs/logging.md`.
 
 Endpoints, all behind the `/api` gate (the signed-in page or the root token, like `/api/settings`; per-node agent tokens are refused):
 

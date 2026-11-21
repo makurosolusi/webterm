@@ -185,6 +185,9 @@ ${cli} <command> [args]
    propose: a human approves it in webterm, and only then does it become active. A title is required (3-80 chars, one line, no markdown). Bodies are plain instructions (max 4000 chars) with the sections
    ## Purpose, ## When to use, ## Steps (numbered, at least 2), ## Do not, ## Done when (optional ## Notes); no URLs, shell commands or
    secrets. Lint rejects a thin skill and names only the issue code (\`structure:missing ## Steps\`).
+7. Errors: NEVER ask the user for a screenshot or a copy of an error. Run \`${cli} logs.summary --json '{"since":"10m"}'\` first (add \`"node":"<id>"\`
+   for one browser node): it groups page/network failures with a plain-language hint and the server events behind them. Then
+   \`${cli} logs.query --json '{"channel":"browser.page","since":"10m"}'\` for the raw rows. Details: docs/logging.md.
 
 Capabilities in this version:
 ${rows.join('\n')}

@@ -54,6 +54,22 @@ describe('page setup', () => {
   })
 })
 
+describe('lazy Runtime.enable (anti-bot signal)', () => {
+  it('is not sent before audio on, and sent once for the page after it', async () => {
+    await open()
+    expect(callsOf(CDP.runtimeEnable)).toHaveLength(0)
+    const hub = hubOf(); const a = viewer(); const b = viewer(); hub.join('n1', a.v); hub.join('n1', b.v)
+    await settle()
+    expect(callsOf(CDP.runtimeEnable)).toHaveLength(0)
+    hub.setAudio('n1', a.v, true)
+    await waitFor(() => evals('__wtAudioResume').length === 1, 'resume sent')
+    expect(callsOf(CDP.runtimeEnable).filter((c) => c.sessionId === SID)).toHaveLength(1)
+    hub.setAudio('n1', a.v, false); hub.setAudio('n1', b.v, true)
+    await waitFor(() => evals('__wtAudioResume').length === 2, 'second resume')
+    expect(callsOf(CDP.runtimeEnable).filter((c) => c.sessionId === SID)).toHaveLength(1)
+  })
+})
+
 describe('listening gate', () => {
   it('no frame reaches a client that never said audio on; capture is resumed only while someone listens', async () => {
     await open()
@@ -79,6 +95,7 @@ describe('listening gate', () => {
     const a = viewer(), b = viewer()
     hub.join('n1', a.v); hub.join('n1', b.v)
     hub.setAudio('n1', a.v, true)
+    await waitFor(() => evals('__wtAudioResume').length === 1, 'first resume')
     await chunk('k1', 0, 'HEAD'); await chunk('k1', 1, 'body')
     hub.setAudio('n1', b.v, true)
     expect(evals('__wtAudioResume')).toHaveLength(1) // second listener does not restart capture
@@ -98,8 +115,9 @@ describe('listening gate', () => {
 })
 
 describe('state and lifecycle', () => {
-  it('audioActive is true once a page created a bus, cleared by main-frame navigation', async () => {
+  it('audioActive is true once a listened page created a bus, cleared by main-frame navigation', async () => {
     await open()
+    const hub = hubOf(); const a = viewer(); hub.join('n1', a.v); hub.setAudio('n1', a.v, true)
     expect(rig.host.state('n1')?.audioActive).toBeUndefined()
     await bus('f1')
     await waitFor(() => rig.host.state('n1')?.audioActive === true, 'active')

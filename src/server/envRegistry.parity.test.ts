@@ -12,6 +12,7 @@ import { CA2_ENV_SPECS } from './envRegistry.ca2'
 import { ENV_REGISTRY, specFor } from './envRegistry'
 import { filesListMax } from './envRegistry.files'
 import { parseCapacity } from './logs/logBus'
+import { retentionFromEnv } from './logs/logRetention'
 import { idleDoneMs } from './orchestrator/workerSignal'
 
 const SERVER_DIR = new URL('.', import.meta.url).pathname
@@ -61,6 +62,8 @@ const PARITY: Readonly<Record<string, () => number>> = {
   WEBTERM_CENTRAL_MAX_INFLIGHT: () => maxInflightFromEnv(''),
   WEBTERM_FILES_LIST_MAX: () => filesListMax(EMPTY),
   WEBTERM_LOG_BUFFER: () => parseCapacity(undefined),
+  WEBTERM_LOG_RETENTION_DAYS: () => retentionFromEnv({}).maxAgeDays,
+  WEBTERM_LOG_MAX_MB: () => retentionFromEnv({}).maxBytes / 1024 / 1024,
 }
 
 /** Kunci angka tanpa resolver publik yang bisa dipanggil di sini (alasan wajib). */

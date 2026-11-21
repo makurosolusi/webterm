@@ -11,11 +11,12 @@ export const AUDIO_RESUME_FN = '__wtAudioResume'
 /** Source text of the capture script. Pure: same output every call. */
 export function audioInjectSource(): string {
   return `(() => {
-  if (window.__wtAudioInstalled) return; window.__wtAudioInstalled = true
+  if (window.__wtAudioInstalled) return
   const O = ${JSON.stringify({ timeslice: AUDIO_TIMESLICE_MS, bitrate: AUDIO_BITS_PER_SECOND, mime: AUDIO_MIME })}
   const NativeAC = window.AudioContext || window.webkitAudioContext
   const send = window.${AUDIO_BINDING}
-  if (!NativeAC || typeof MediaRecorder === 'undefined' || typeof send !== 'function') return
+  if (!NativeAC || typeof MediaRecorder === 'undefined' || typeof send !== 'function') return // no binding yet (Runtime not enabled when this document began): installed later by the host
+  window.__wtAudioInstalled = true
   // Natives are captured BEFORE page code runs: a page that later freezes or overwrites prototypes cannot unhook us.
   const nConnect = AudioNode.prototype.connect, nDisconnect = AudioNode.prototype.disconnect, nPlay = HTMLMediaElement.prototype.play
   const post = (m) => { try { send(JSON.stringify(m)) } catch (e) {} }
@@ -98,5 +99,7 @@ export function audioInjectSource(): string {
     if (dest instanceof AudioDestinationNode || arguments.length === 0) { const t = tees.get(this.context); if (t) { try { nDisconnect.call(this, t) } catch (e) {} } }
     return nDisconnect.apply(this, arguments)
   }
+  // Installed late (first listener): media that is already playing never calls play() again, so pick it up now.
+  try { for (const el of document.querySelectorAll('audio,video')) if (!el.paused) hookMedia(el) } catch (e) {}
 })()`
 }

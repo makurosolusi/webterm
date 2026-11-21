@@ -17,6 +17,7 @@ import { askByDefault, listByDefault } from '../secrets/secret.broker'
 import { isSecretCapability } from '../secrets/secret.capabilities'
 import { SECRET_SUBJECT_PREFIX } from '../secrets/secret.store'
 import { callFingerprint, createMemoryReceiptLog, runOnce, type Receipt } from './capability.receipt'
+import { LOGS_CAPABILITY_NAMES, logsByDefault } from './logs.capabilities'
 import { AGENT_REPORT_CAPABILITY, reportByDefault } from './report.capabilities'
 import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from './skill.capabilities'
 
@@ -56,6 +57,7 @@ function agentContext(deps: ToolsDeps, principal: Principal, board: readonly Wor
       return judge(deps, principal, cap, s.resource, s.cable, false).effect
     }
     if (cap.name === AGENT_REPORT_CAPABILITY) return judge(deps, principal, cap, undefined, reportByDefault(principal), false).effect
+    if (LOGS_CAPABILITY_NAMES.includes(cap.name)) return judge(deps, principal, cap, undefined, logsByDefault(principal), false).effect
     if (SKILL_CAPABILITY_NAMES.includes(cap.name)) return judge(deps, principal, cap, undefined, skillsByDefault(principal), false).effect
     const cabled = cable?.find((g) => wildcardMatch(g.capability, cap.name))?.scope
     return judge(deps, principal, cap, cabled, cable, false).effect

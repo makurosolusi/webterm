@@ -61,13 +61,12 @@ describe('Chrome nyata: audio halaman sampai ke klien yang mendengarkan', () => 
 
     await sleep(1500) // page loaded; the viewer has not asked for audio yet
     const click = (type: 'down' | 'up') => host.input('n1', { t: 'mouse', type, x: 100, y: 100, button: 'left', buttons: type === 'down' ? 1 : 0, clickCount: 1, mods: 0, dx: 0, dy: 0 })
-    await click('down'); await click('up') // a forwarded click is a real user gesture: the page may start its AudioContext
-    await sleep(1500)
     expect(frames).toHaveLength(0) // nobody listens: nothing leaves the host
-    await waitUntil(() => host.state('n1')?.audioActive === true)
-
-    hub.setAudio('n1', viewer, true)
+    hub.setAudio('n1', viewer, true) // Runtime is enabled lazily, on this first audio on; the capture script is installed in the loaded page then
+    await sleep(1000)
+    await click('down'); await click('up') // a forwarded click is a real user gesture: the page starts its AudioContext (now captured)
     await waitUntil(() => frames.reduce((n, f) => n + f.payload.length, 0) > 2000)
+    await waitUntil(() => host.state('n1')?.audioActive === true)
     const first = frames.find((f) => f.seq === 0)
     expect(first?.streamKey).toMatch(/^[a-z0-9]+$/)
     expect([...(first?.payload.subarray(0, 4) ?? [])]).toEqual(EBML_MAGIC) // WebM header of the stream
