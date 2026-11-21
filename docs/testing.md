@@ -98,6 +98,12 @@ Still allowed: `vitest run <file>`, `vitest related --run <files>`, `vitest --ch
 `WEBTERM_FULL_TESTS=1` opens every guard. It is for the owner and CI only. **Agents must never set it**,
 and must never run the full suites in any other way.
 
+**What counts as the owner's command.** Only the owner's own message with `jalankan full test` / `jalankan suite penuh`,
+or naming `npm run test:all` / `npm run test:bun:all`, for that one run. Vague words ("check everything", "make sure it
+passes", "continue", "yes"), approval of an agent's proposal, or blanket permission do not count; it does not carry
+to later messages, workers or sessions. Agents may propose, then quote the trigger phrase before running. Daily
+full-suite evidence is CI after a push (read with `gh run`). Workers: never. Full rule and situation table: `CLAUDE.md`.
+
 ## Tier 3: CI, `.github/workflows/test.yml`
 
 GitHub Actions on `makurosolusi/webterm`: push to `main`, pull requests, manual dispatch; older runs on
