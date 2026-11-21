@@ -58,7 +58,7 @@ export function toWsNode(n: Node): WsNode {
     profileId: isBrowserProfileId(d.profileId) ? d.profileId : undefined,
     device: d.device,
     zoom: typeof d.zoom === 'number' && d.zoom >= ZOOM_MIN && d.zoom <= ZOOM_MAX ? d.zoom : undefined,
-    audio: d.audio === true ? true : undefined,
+    audio: typeof d.audio === 'boolean' ? d.audio : undefined, // absent = follow the Settings default; true/false = the user's explicit choice
     chatSessionId: d.chatSessionId,
     permissionMode: isPermissionMode(d.permissionMode) ? d.permissionMode : undefined,
     chatConfig: d.chatConfig === undefined ? undefined : validChatConfig(d.chatConfig),

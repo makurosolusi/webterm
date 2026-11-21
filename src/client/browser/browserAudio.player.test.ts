@@ -58,6 +58,8 @@ const ctxs: FakeCtx[] = []
 class FakeCtx {
   currentTime = 0
   destination = {}
+  state: 'running' | 'suspended' = 'running'
+  onstatechange: (() => void) | null = null
   resume = vi.fn(() => Promise.resolve())
   close = vi.fn(() => Promise.resolve())
   constructor() { ctxs.push(this) }
@@ -205,5 +207,58 @@ describe('browserAudio.player', () => {
     p.stop()
     p.push(chunk('a', 0))
     expect(sb.appended).toHaveLength(0)
+  })
+
+  describe('autoplay policy (no user gesture yet)', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+    class SuspendedCtx extends FakeCtx {
+      state = 'suspended' as const
+      resume = vi.fn(() => new Promise<void>(() => {})) // outside a gesture the real resume() stays pending
+    }
+
+    it('a context that stays suspended reports blocked with a human message, and keeps the stream', () => {
+      vi.stubGlobal('AudioContext', SuspendedCtx)
+      const { p, views, sb } = started()
+      expect(views.at(-1)?.state).toBe('connecting')
+      vi.advanceTimersByTime(400)
+      expect(views.at(-1)).toEqual({ state: 'blocked', message: TEXT.blocked })
+      p.push(chunk('a', 0)) // buffering continues while blocked
+      expect(sb.appended).toHaveLength(1)
+    })
+
+    it('blocked does not call play(); once the context runs it unblocks and plays', () => {
+      vi.stubGlobal('AudioContext', SuspendedCtx)
+      const { p, views, sb, el } = started()
+      vi.advanceTimersByTime(400)
+      p.push(chunk('a', 0)); sb.done([0, JITTER_S * 2])
+      expect(el.paused).toBe(true)
+      const c = ctxs.at(-1)!
+      ;(c as { state: string }).state = 'running'
+      c.onstatechange?.()
+      expect(views.some((v) => v.state === 'connecting')).toBe(true)
+      expect(el.paused).toBe(false)
+    })
+
+    it('play() rejected with NotAllowedError = blocked (not an error); a later start() retries it', async () => {
+      const { p, views, sb, el } = started()
+      const e = new Error('no gesture'); e.name = 'NotAllowedError'
+      el.play = vi.fn(() => { el.paused = true; return Promise.reject(e) })
+      p.push(chunk('a', 0)); sb.done([0, JITTER_S * 2])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(views.at(-1)?.state).toBe('blocked')
+      el.play = vi.fn(() => { el.paused = false; return Promise.resolve() })
+      p.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(el.play).toHaveBeenCalledTimes(1)
+    })
+
+    it('stop cancels the pending blocked check', () => {
+      vi.stubGlobal('AudioContext', SuspendedCtx)
+      const { p, views } = started()
+      p.stop()
+      vi.advanceTimersByTime(400)
+      expect(views.at(-1)?.state).toBe('idle')
+    })
   })
 })

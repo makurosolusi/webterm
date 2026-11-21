@@ -143,7 +143,7 @@ export interface WsNode {
   profileId?: string      // node 'browser': browser profile (browser.profile.ts); absent = the workspace's Default profile
   device?: DeviceChoice   // node 'browser': device mode (browser.devices.ts); absent = Responsive
   zoom?: number           // node 'browser': page zoom (1 = 100%, browser.zoom.ts); absent = 100%
-  audio?: boolean         // node 'browser': the user had its sound on (never auto-resumes: playback needs a click); absent = muted
+  audio?: boolean         // node 'browser': true = user turned sound on, false = muted (both kept across reloads); absent = follow the Settings default
   tabs?: PersistedTabs    // node 'browser': tab list (urls/titles/order/cursors) restored after a restart; absent = one tab (browser.tabs.ts)
   chatSessionId?: string  // node 'agentChat': Claude session id from system/init (agentChat.shape.ts)
   permissionMode?: AgentPermissionMode // node 'agentChat': per-node mode; absent = settings default

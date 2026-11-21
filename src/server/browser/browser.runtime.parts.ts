@@ -57,5 +57,8 @@ export const cookieImportOn = (env: Record<string, string | undefined>): boolean
 /** Audio capture of browser nodes: default ON, only an explicit `off` (WEBTERM_BROWSER_AUDIO) kills it. */
 export const audioOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.audio], true)
 
+/** Default sound of a node with no saved choice (WEBTERM_BROWSER_AUDIO_DEFAULT): ON unless explicitly `off`; the client applies it. */
+export const audioDefaultOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.audioDefault], true)
+
 /** Kendali agent atas node browser default ON (webterm alat developer); hanya `off` eksplisit yang mematikan. */
 export const agentControlOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.agent], true)

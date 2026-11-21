@@ -194,3 +194,24 @@ Still unverified: iframes whose activation does not propagate (cross-origin fram
 own `Runtime.evaluate` with the gesture), the client player in a real browser tab (MSE/gesture on the client side was not exercised, only the server stream was decoded),
 other YouTube variants (ads, DRM/music content, Shorts), and only one video (`jNQXAC9IVRw`) was tried. YouTube without any page click often stays paused
 (autoplay blocked, `video.paused=true`), which is page behaviour, not capture: the user's click on the canvas starts it.
+
+## Default on, three saved states (2026-11-21)
+
+Decision (owner): a node's sound is ON by default. A muted default made a YouTube node look broken (nothing audible, no hint), so the earlier "default muted until the user clicks the speaker" condition is superseded.
+
+1. **Saved state, `audio` in the layout**: absent = never chosen = ON; `false` = the user muted it (kept across reload and restart); legacy `true` (the old "sound was on" flag) is normalized to absent on load. `true` is never written. The server stores the field untouched (unknown-field passthrough in `workspace.schema.ts`), so no server change.
+2. **Auto-listen** (`browserAudio.use.ts`): while the node is shown (not paused: hidden, collapsed or zoomed out), the server offers audio (`status.audio !== false`) and the node is not muted, the hook starts the player and sends `audio on`. Hiding the node stops the player and re-showing restarts it with no new gesture; neither changes the saved state. The server still captures only while a client listens, and `WEBTERM_BROWSER_AUDIO=off` still removes the speaker and starts nothing.
+3. **Autoplay policy**: a tab refuses sound until the user interacts with it, so a fresh load cannot play by itself. The player reports `blocked` when its AudioContext stays suspended (300 ms after `resume()`) or `play()` is rejected with `NotAllowedError`. It keeps buffering. While blocked, the hook listens once for `pointerdown`/`keydown` on `document` (capture) and calls `start()` inside that gesture; the AudioContext `statechange` also releases playback. The listener is removed on unblock, mute, hide and unmount. The button shows a pulsing warning-coloured speaker labelled "Click anywhere to start sound"; clicking it also unblocks.
+4. **Button**: icon = what you hear now (speaker = on, slashed speaker = muted); label = the click's action ("Mute browser audio" / "Unmute browser audio"); `aria-pressed` = sound on. Other states: connecting, blocked, unsupported (disabled, reason described), error (click retries), hidden when the server disables audio. The dot for "the page is making sound" shows only while muted.
+
+Not verified: real playback in a real browser tab after a click (jsdom fakes only), whether Safari reports a suspended context the same way (the 300 ms timer is the fallback), the behaviour of the first chunk when the player starts mid-stream after unblocking (it waits for the next stream key or header), real YouTube.
+
+## Settings default and three saved states (2026-11-21)
+
+Decision (owner): the user, not code, decides whether a node that never chose starts with sound. **Settings > Browser > Sound > "Play sound in new browser nodes"** (switch, env `WEBTERM_BROWSER_AUDIO_DEFAULT`, default **on**, hot, registry audience `advanced` like the other browser keys; needs the browser on. The row is a custom field, and it is also disabled with the reason when `WEBTERM_BROWSER_AUDIO` is off).
+
+1. **One source of truth**: the default `on` lives only in the registry entry (`browser.envRegistry.ts`); the server reader `audioDefaultOn` mirrors it (covered by `envRegistry.defaults.test.ts`) and publishes it as `audioDefault` in `GET /api/browser/status` next to the `audio` capability. The client hardcodes nothing: status absent field (older server) = on, status not loaded yet = not on (so a muted default never blips sound before the answer).
+2. **Saved `audio` per node is three-valued**: absent = never chosen = follow the setting; `true` = the user turned sound on; `false` = the user muted it. The speaker button always saves an explicit value (a click is a deliberate choice, so it is kept even if it equals today's default and survives a later change of the setting). The legacy `true` of the old muted-default era is no longer normalized away; it now means an explicit "on".
+3. **Hot**: after the switch is saved the shared status is re-read, so open nodes without a saved choice start or stop at once; nodes with a saved choice do not change. The layout is never rewritten by changing the setting.
+
+Not verified: the setting change in a live browser with several real nodes (jsdom fakes only).

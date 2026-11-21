@@ -56,6 +56,6 @@ describe('toolbar Downloads button', () => {
   it('is not wired into the node header any more', () => {
     const src = readFileSync(`${import.meta.dirname}/BrowserNode.tsx`, 'utf8')
     expect(src).not.toMatch(/BrowserDownloads\b/)
-    expect(src).toMatch(/extraHeader=\{<BrowserProfileChip/)
+    expect(src).toMatch(/extraHeader=\{<>(\{showAudio && <BrowserAudioButton .*?\/>\})?<BrowserProfileChip/) // the header holds the audio button and the profile chip, nothing download-related
   })
 })

@@ -7,7 +7,8 @@
 import { AUDIO_MIME } from '../../shared/browser.contract'
 import type { AudioChunk } from '../../shared/browser.contract'
 
-export type AudioPlayerState = 'idle' | 'connecting' | 'playing' | 'unsupported' | 'error'
+/** `blocked` = running but the browser refuses sound until the user interacts with this tab (autoplay policy). */
+export type AudioPlayerState = 'idle' | 'connecting' | 'blocked' | 'playing' | 'unsupported' | 'error'
 export interface AudioPlayerView { state: AudioPlayerState; message: string }
 
 /** Playback delay kept before (re)starting, in seconds: enough to ride out network jitter between ~100 ms chunks. */
@@ -18,17 +19,19 @@ export const LIVE_JUMP_S = 0.5
 const KEEP_BEHIND_S = 5
 const MAX_QUOTA_RETRIES = 3
 const FADE_S = 0.03
+/** How long a still-suspended AudioContext may take to resume before the player reports `blocked`, in ms. */
+const BLOCKED_AFTER_MS = 300
 export const TEXT = {
   unsupported: 'This browser cannot play the browser node\'s audio (no WebM/Opus streaming support).',
   failed: 'Audio playback failed.',
-  blocked: 'Audio was blocked by the browser. Click the speaker to try again.',
+  blocked: 'Click anywhere to start sound (the browser needs a click on this page first).',
 }
 
 /** MSE + WebM/Opus available here (checked up front by the button, again by `start`). */
 export const audioSupported = (): boolean => typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(AUDIO_MIME)
 
 export interface AudioPlayer {
-  /** Must run inside the click handler: creates/resumes the AudioContext and opens the stream. */
+  /** Opens the stream and creates/resumes the AudioContext. Idempotent; run it inside a user gesture to get sound without `blocked`. */
   start(): void
   push(chunk: AudioChunk): void
   /** Stops playback and drops the stream; the AudioContext stays for the next start. */
@@ -51,6 +54,7 @@ export function createAudioPlayer(onChange: (v: AudioPlayerView) => void): Audio
   let queue: Uint8Array[] = []
   let quotaRetries = 0
   let running = false
+  let blockTimer: ReturnType<typeof setTimeout> | undefined
 
   const set = (state: AudioPlayerState, message = ''): void => {
     if (view.state === state && view.message === message) return
@@ -61,6 +65,7 @@ export function createAudioPlayer(onChange: (v: AudioPlayerView) => void): Audio
   const errText = (e: unknown): string => e instanceof Error ? e.message : String(e)
 
   function teardown(): void {
+    clearTimeout(blockTimer)
     running = false
     queue = []
     sb = null
@@ -77,7 +82,7 @@ export function createAudioPlayer(onChange: (v: AudioPlayerView) => void): Audio
     if (!ctx || !gain) return
     if (!el) {
       el = new Audio()
-      el.addEventListener('playing', () => { if (running) set('playing') })
+      el.addEventListener('playing', () => { if (running) set(ctx?.state === 'running' ? 'playing' : 'blocked', ctx?.state === 'running' ? '' : TEXT.blocked) })
       el.addEventListener('error', () => { if (running) fail(TEXT.failed) })
       source = ctx.createMediaElementSource(el)
       source.connect(gain)
@@ -102,15 +107,22 @@ export function createAudioPlayer(onChange: (v: AudioPlayerView) => void): Audio
     if (sb.buffered.length > 0) {
       const start = sb.buffered.start(0), end = sb.buffered.end(sb.buffered.length - 1)
       if (el.paused) {
-        if (end - start >= JITTER_S) {
+        if (end - start >= JITTER_S && view.state !== 'blocked') {
           el.currentTime = Math.max(start, end - JITTER_S)
-          void el.play().then(() => { if (ctx && gain) gain.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE_S) }, () => { if (running) fail(TEXT.blocked) })
+          void el.play().then(() => { if (ctx && gain) gain.gain.linearRampToValueAtTime(1, ctx.currentTime + FADE_S) }, (e: unknown) => { if (!running) return; if (e instanceof Error && e.name === 'NotAllowedError') set('blocked', TEXT.blocked); else fail(`${TEXT.failed} (${errText(e)})`) })
         }
       } else if (end - el.currentTime > LIVE_JUMP_S) {
         el.currentTime = end - JITTER_S // too far behind: skip to live (the skipped audio is stale anyway)
       } else if (el.currentTime < start) el.currentTime = start
     }
     pump()
+  }
+
+  /** The AudioContext (or the element) may play now: leave `blocked` and retry playback. */
+  function unblock(): void {
+    if (!running || view.state !== 'blocked' || ctx?.state !== 'running') return
+    set('connecting')
+    onUpdateEnd()
   }
 
   /** Append the next queued chunk, or trim old audio when idle. One operation at a time (`updating`). */
@@ -138,10 +150,17 @@ export function createAudioPlayer(onChange: (v: AudioPlayerView) => void): Audio
       try {
         ctx ??= new AudioContext()
         if (!gain) { gain = ctx.createGain(); gain.connect(ctx.destination) }
-        void ctx.resume()
+        ctx.onstatechange = unblock
+        const settle = (): void => {
+          if (!running || !ctx) return
+          if (ctx.state === 'running') unblock(); else set('blocked', TEXT.blocked)
+        }
+        void ctx.resume().then(settle, settle)
+        clearTimeout(blockTimer)
+        blockTimer = setTimeout(settle, BLOCKED_AFTER_MS) // a resume() outside a gesture never settles: report it instead of staying silent
       } catch (e) { fail(`${TEXT.failed} (${errText(e)})`); return }
       running = true
-      set('connecting')
+      if (view.state !== 'blocked') set('connecting')
       if (!ms) open()
     },
     push(c) {

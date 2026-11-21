@@ -4,8 +4,9 @@
 .browser-audio-btn:disabled { opacity: 0.4; cursor: default; }
 .browser-audio-btn[aria-pressed='true'] { color: var(--vscode-textLink-foreground, #3794ff); }
 .browser-audio-btn[data-state='error'] { color: var(--vscode-errorForeground, #f48771); }
+.browser-audio-btn[data-state='blocked'] { color: var(--vscode-editorWarning-foreground, currentColor); animation: browser-audio-pulse 1.6s ease-in-out infinite; }
 .browser-audio-btn__dot { position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-textLink-foreground, #3794ff); animation: browser-audio-pulse 1.6s ease-in-out infinite; }
 .browser-audio-btn__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @keyframes browser-audio-pulse { 50% { opacity: 0.3; } }
-@media (prefers-reduced-motion: reduce) { .browser-audio-btn__dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .browser-audio-btn__dot, .browser-audio-btn[data-state='blocked'] { animation: none; } }
 @media (pointer: coarse) { .browser-audio-btn { min-width: 44px !important; height: 44px !important; } }

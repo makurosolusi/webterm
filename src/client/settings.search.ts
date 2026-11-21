@@ -8,6 +8,7 @@ import { CAPABILITIES, type CapabilityId } from '../shared/featureCapabilities'
 import { ADVANCED_TEXT } from './advancedLabels'
 import { COMMANDS_TEXT } from './customCommands/commands.labels'
 import { CAPABILITY_KEYWORDS } from './capabilitiesLabels'
+import { AUDIO_DEFAULT_TEXT } from './BrowserAudioDefaultField'
 import { LIMIT_TEXT } from './BrowserLimitField'
 import { PROFILES_TEXT } from './claudeLauncher/ClaudeLaunchProfilesCard'
 import { PROVIDER_TEXT } from './ClaudeProviderCard'
@@ -131,6 +132,7 @@ const ENTRIES_BY_HAND: SettingsSearchEntry[] = [
   ...CARDS,
   e('capabilities', 'browserSearchEngine', 'Search engine', 'Used when you type words instead of an address.', 'google duckduckgo bing'),
   e('claude', undefined, TOKEN_TEXT.title, TOKEN_TEXT.why, CAPABILITY_KEYWORDS.token.join(' ')),
+  e('browser', 'browser-audio', AUDIO_DEFAULT_TEXT.label, AUDIO_DEFAULT_TEXT.hint, 'browser sound audio mute muted unmute speaker volume new nodes default'),
   e('browser', 'browser-limit', LIMIT_TEXT.label, LIMIT_TEXT.hint, 'browser limit max browsers active browsers maximum live pages memory ram more fewer increase decrease'),
   e('browser', 'browser-profiles', 'Browser profiles', 'Separate logins for each browser: create, rename, color, import cookies, duplicate, export or delete a profile.', 'profile profiles cookies login session account container import export duplicate'),
   e('capabilities', 'chromium', ADVANCED_TEXT.chromiumLabel, undefined, CAPABILITY_KEYWORDS.advanced.join(' ')),

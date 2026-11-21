@@ -17,7 +17,7 @@ const fake = vi.hoisted(() => {
       subscribe: (_id: string, l: BrowserListener) => { state.listener = l; return () => { state.calls.push('detach') } },
       attach: (_id: string, vp: unknown) => { state.calls.push('attach'); state.sent.push({ t: 'attach', ...(vp as object) }) },
       resize: (_id: string, vp: unknown) => { state.calls.push('resize'); state.sent.push({ t: 'resize', ...(vp as object) }) },
-      detach: () => { state.calls.push('detach') },
+      setAudio: () => undefined, detach: () => { state.calls.push('detach') },
       send: (m: ClientMsg) => { state.calls.push(m.t); state.sent.push(m) },
     },
   }

@@ -17,7 +17,7 @@ const fake = vi.hoisted(() => {
       subscribe: (_id: string, l: BrowserListener) => { state.listener = l; return () => undefined },
       attach: () => undefined,
       resize: () => undefined,
-      detach: () => undefined,
+      setAudio: () => undefined, detach: () => undefined,
       send: (m: ClientMsg) => { state.sent.push(m) },
     },
   }
