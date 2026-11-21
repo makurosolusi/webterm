@@ -12,15 +12,27 @@
 // Exception: `*.real.bun.test.ts` (real headful Chrome) runs in a second `bun test` with the real
 // HOME, because Chrome on macOS under a fresh HOME hangs on Page.navigate (checked: passes with the
 // real HOME, times out with a temp one). It still gets a temp data dir and its own temp profile.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /** Env var carrying the per-run temp root. Tests read it by name: importing this file mints a new root. */
 const TEST_ROOT_ENV = 'WEBTERM_TEST_ROOT'
 
-const root = mkdtempSync(join(tmpdir(), 'webterm-test-'))
+/** A run killed before `cleanup` leaves its root behind; roots older than this are certainly dead runs. */
+const STALE_ROOT_MS = 2 * 3600_000
+const sysTmp = tmpdir()
+for (const name of readdirSync(sysTmp)) {
+  if (!name.startsWith('webterm-test-')) continue
+  try { if (Date.now() - statSync(join(sysTmp, name)).mtimeMs > STALE_ROOT_MS) rmSync(join(sysTmp, name), { recursive: true, force: true }) } catch { /* raced with another run's cleanup */ }
+}
+
+const root = mkdtempSync(join(sysTmp, 'webterm-test-'))
 process.env[TEST_ROOT_ENV] = root
+// Every `mkdtemp(tmpdir())` in a test (hundreds, many never removed) lands inside the root, so one rmSync
+// frees them all. Before this, a killed run left GBs in the system temp dir.
+mkdirSync(join(root, 'tmp'), { recursive: true })
+process.env.TMPDIR = join(root, 'tmp')
 process.env.WEBTERM_DATA_DIR = join(root, 'data')
 
 /** A typical home: tests assume ~/Documents exists (controlCwd) and a global identity for commits
