@@ -4,13 +4,16 @@
 // (memory only) and is re-enabled when the target is recreated. Console API calls, uncaught exceptions and browser log entries land in a per-node ring buffer and
 // stream to viewers as batched deltas. Main-frame navigation clears it unless "Preserve log" is on (Chrome's
 // default), in which case a "Navigated to <url>" separator is inserted. Entries are page content: they may hold
-// tokens, so they are NEVER written to the server log.
+// tokens, so they never reach the server log as-is; only the scrubbed, deduplicated projection of
+// browserHost.console.log.ts does (error/warning/network/exception, URL without query).
 import { CONSOLE_BATCH_MAX, CONSOLE_BUFFER_MAX, CONSOLE_FLUSH_MS, atLeast } from '../../shared/browser.console'
 import type { ConsoleClientMsg, ConsoleDelta, ConsoleEntry, ConsoleLevel } from '../../shared/browser.console'
 import { CDP, CDP_EVENT } from './cdp.client'
 import type { CdpClient, CdpHandler } from './cdp.client'
 import { clipText, formatRemote, fromConsoleApi, fromException, fromLogEntry } from './browserHost.console.format'
 import type { EntryBody, RemoteObj } from './browserHost.console.format'
+import { createPageLogBridge } from './browserHost.console.log'
+import type { PageLogBridge } from './browserHost.console.log'
 import { BrowserError, isInternalUrl } from './browserHost.targets'
 import type { NodeRec, TargetTable } from './browserHost.targets'
 
@@ -22,6 +25,8 @@ export interface ConsoleOps {
   /** Command on the node's page session (the host's `send`). */
   send(rec: NodeRec, method: string, params?: object): Promise<Record<string, unknown>>
   now?: () => number
+  /** Server-log bridge for page failures; defaults to the real one (tests may inject a fake clock/logger). */
+  pageLog?: PageLogBridge
 }
 
 export interface ConsoleLog {
@@ -45,6 +50,7 @@ interface Buf { entries: ConsoleEntry[]; dropped: number; preserve: boolean; cap
 
 export function createConsoleLog(ops: ConsoleOps): ConsoleLog {
   const now = ops.now ?? Date.now
+  const pageLog = ops.pageLog ?? createPageLogBridge()
   const bufs = new Map<string, Buf>()
   const cbs = new Set<(d: ConsoleDelta) => void>()
   const buf = (id: string): Buf => {
@@ -140,11 +146,16 @@ export function createConsoleLog(ops: ConsoleOps): ConsoleLog {
         case CDP_EVENT.consoleApiCalled: {
           const body = fromConsoleApi(p)
           if (body === 'clear') { clear(rec.nodeId); push(rec.nodeId, { level: 'info', source: 'system', text: 'Console was cleared' }) }
-          else if (body) push(rec.nodeId, body)
+          else if (body) { push(rec.nodeId, body); pageLog.record(rec, body) }
           return
         }
-        case CDP_EVENT.exceptionThrown: return push(rec.nodeId, fromException((p.exceptionDetails ?? {}) as Parameters<typeof fromException>[0]))
-        case CDP_EVENT.logEntryAdded: { const body = fromLogEntry(p); if (body) push(rec.nodeId, body); return }
+        case CDP_EVENT.exceptionThrown: {
+          const body = fromException((p.exceptionDetails ?? {}) as Parameters<typeof fromException>[0])
+          push(rec.nodeId, body)
+          pageLog.record(rec, body)
+          return
+        }
+        case CDP_EVENT.logEntryAdded: { const body = fromLogEntry(p); if (body) { push(rec.nodeId, body); pageLog.record(rec, body) } return }
         case CDP_EVENT.frameNavigated: return onNavigated(rec, p)
       }
     },

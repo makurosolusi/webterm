@@ -24,6 +24,7 @@ import { flagOn } from './envFlag'
 import { ENV_REGISTRY, isBootstrapOnly, specFor } from './envRegistry'
 import { FILES_FLAG, filesFlagOn, filesListMax, filesUploadMaxBytes, type FilesFlag } from './envRegistry.files'
 import { parseCapacity } from './logs/logBus'
+import { retentionFromEnv } from './logs/logRetention'
 import { memoryFilesEnabled } from './memory/memoryFilePath'
 import { orchestratorRunEnabled, orchestratorRunRequireApproval } from './orchestratorRunModel'
 import { idleDoneMs } from './orchestrator/workerSignal'
@@ -52,6 +53,8 @@ const READERS: ReadonlyArray<readonly [string, () => string, string]> = [
   ['WEBTERM_TRUST_PROXY', () => onOff(trustProxyEnabled(E)), 'channels/webhookPeer.ts:22'],
   ['WEBTERM_AGENT_SANDBOX', () => onOff(agentSandboxOn(E)), 'agentSandbox.ts:agentSandboxOn'],
   ['WEBTERM_LOG_BUFFER', () => String(parseCapacity(undefined)), 'logs/logBus.ts:12'],
+  ['WEBTERM_LOG_RETENTION_DAYS', () => String(retentionFromEnv({}).maxAgeDays), 'logs/logRetention.ts:retentionFromEnv'],
+  ['WEBTERM_LOG_MAX_MB', () => String(retentionFromEnv({}).maxBytes / 1024 / 1024), 'logs/logRetention.ts:retentionFromEnv'],
   ['WEBTERM_BROWSER_MAX_LIVE', () => String(lifecycleConfig(E).maxLive), 'browser/browserLifecycle.service.ts:19'],
   // Default 'on' sejak impor cookie ikut menyala bersama browser (dulu FLAGON_READERS = off).
   ['WEBTERM_BROWSER_COOKIE_IMPORT', () => onOff(cookieImportOn(E)), 'browser/browser.runtime.parts.ts:cookieImportOn'],

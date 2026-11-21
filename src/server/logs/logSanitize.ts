@@ -75,3 +75,30 @@ export function sanitizeIds(ids: LogEntry['ids']): LogEntry['ids'] {
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
+
+const URL_IN_TEXT = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>)\]]+/gi
+
+/** `scheme://host/path` of a URL: no query, fragment or userinfo. Unparseable input falls back to the text before `?`/`#`. */
+export function stripUrlQuery(raw: string): string {
+  try {
+    const u = new URL(raw)
+    return `${u.protocol}//${u.host}${u.pathname}`
+  } catch {
+    return raw.split(/[?#]/)[0].replace(/\/\/[^/@]*@/, '//')
+  }
+}
+
+/** Free text made safe to hand to an agent: every URL loses its query/fragment, secrets are masked, length is capped. */
+export function scrubText(value: unknown, max: number): string {
+  return safeText(safeText(value, max * 4).replace(URL_IN_TEXT, (u) => stripUrlQuery(u)), max)
+}
+
+/** Deep copy of `value` with `scrubText` applied to every string and header-like keys removed. */
+export function scrubDeep(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') return scrubText(value, MAX_STRING_CHARS)
+  if (value === null || typeof value !== 'object' || depth >= MAX_DEPTH) return value
+  if (Array.isArray(value)) return value.slice(0, MAX_ITEMS).map((v) => scrubDeep(v, depth + 1))
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value).slice(0, MAX_ITEMS)) if (!/headers?$/i.test(k)) out[k] = scrubDeep(v, depth + 1)
+  return out
+}
