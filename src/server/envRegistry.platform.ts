@@ -42,6 +42,12 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
     label: 'Agent sandbox', description: 'Run Claude agent shell commands in the Claude Code sandbox (macOS) so they cannot read webterm secrets or other nodes\' tokens. Applies on next launch.',
     optionLabels: { on: 'On', off: 'Off' },
   }, 'on'),
+  num('WEBTERM_LOG_RETENTION_DAYS', 'logs', 1, 3650, 14, {
+    ...LOGS, unit: 'days', label: 'Log retention', description: 'Daily log files older than this are deleted at boot and once a day.',
+  }),
+  num('WEBTERM_LOG_MAX_MB', 'logs', 1, 100_000, 200, {
+    ...LOGS, unit: 'MB', label: 'Log size cap', description: 'Total size of the log directory; the oldest files are deleted first when it is exceeded.',
+  }),
   flag('WEBTERM_TRUST_PROXY', 'telegram', {
     ...TGC, audience: 'advanced', hot: true, dangerous: true,
     requires: [{ key: 'WEBTERM_TELEGRAM_MODE', oneOf: ['webhook', ''], note: 'Only relevant for webhook throttling.' }],
@@ -55,7 +61,7 @@ export const PLATFORM_ENV_SPECS: readonly EnvSpec[] = [
     ...LOGS, unit: 'entries', label: 'Log buffer', description: 'Number of log entries kept in memory (ring buffer) for the Output panel.',
   }),
   flag('WEBTERM_LOG_FILE', 'logs', {
-    ...LOGS, label: 'Log file', description: 'Write daily logs to <dataDir>/logs/webterm-YYYY-MM-DD.log (rotated, max 7 files).',
+    ...LOGS, label: 'Log file', description: 'Write daily logs to <dataDir>/logs/webterm-YYYY-MM-DD.log (rotated at 5 MiB; old files are purged by the retention settings below).',
     optionLabels: { on: 'On', off: 'Off' },
   }, 'on'),
   ...BROWSER_ENV_SPECS,

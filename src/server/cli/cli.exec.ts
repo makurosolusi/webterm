@@ -22,6 +22,10 @@ import { activeLedgerRuntime } from '../ledger/ledgerRuntimeState'
 import type { Policy } from '../policy/policy.decide'
 import type { Decision, Grant, Principal } from '../policy/policy.model'
 import { activePolicy } from '../policy/policy.runtime'
+import { LOGS_CAPABILITY_NAMES, LOGS_SUMMARY_CAPABILITY, logsByDefault } from '../capability/logs.capabilities'
+import { agentLogQuery, type AgentLogParams, type AgentLogScope } from '../logs/logAgentQuery'
+import { logBus } from '../logs/logBus'
+import { summarizeLogs } from '../logs/logSummary'
 import { SKILL_CAPABILITY_NAMES, SKILL_LIST_CAPABILITY, skillsByDefault } from '../capability/skill.capabilities'
 import { isSecretCapability } from '../secrets/secret.capabilities'
 import { runSecretCapability } from '../secrets/secret.broker'
@@ -127,6 +131,7 @@ export async function execute(deps: ToolsDeps, cap: CapabilitySpec, input: Args,
   if (problem) return { receipt: receipt('error', 'invalid_shape', { problem }, 'webterm agent-context --json shows the exact input schema') }
   if (isSecretCapability(cap.name)) return runSecretCapability(deps, cap.name, input, principal) // secret broker decides per secret (secret.broker.ts)
   if (cap.name === AGENT_REPORT_CAPABILITY) return runReport(deps, cap, input, principal)
+  if (LOGS_CAPABILITY_NAMES.includes(cap.name)) return runLogs(deps, cap, input, principal)
   if (SKILL_CAPABILITY_NAMES.includes(cap.name)) return runSkill(deps, cap, input, principal)
   const route = cap.route as NonNullable<CapabilitySpec['route']>
   const browser = route.path.startsWith(BROWSER_CONTROL_PREFIX)
@@ -207,4 +212,22 @@ async function runSkill(deps: ToolsDeps, cap: CapabilitySpec, input: Args, princ
   if (out.status < 400) return { receipt: receipt('ok', 'ok', { status: out.status }), data: out.body }
   const code = (out.body as { error?: unknown } | null)?.error
   return { receipt: receipt('error', typeof code === 'string' && DETAIL_RE.test(code) ? code : `http_${out.status}`, { status: out.status }), data: out.body }
+}
+
+/** `logs.query` / `logs.summary`: read-only; an agent sees warn+ everywhere and every level for its own node and the nodes wired to it. */
+async function runLogs(deps: ToolsDeps, cap: CapabilitySpec, input: Args, principal: Principal): Promise<{ receipt: Receipt; data?: unknown }> {
+  const d = judge(deps, principal, cap, undefined, logsByDefault(principal))
+  if (d.effect !== 'allow') return { receipt: receipt('denied', d.effect === 'ask' ? 'approval_required' : 'policy_denied', { reason: d.reason }, DENY_NEXT) }
+  const self = nodeOf(principal)
+  let peers = new Set<string>()
+  if (self) {
+    const { findWorkspaceFor, linkedPeerIds } = await import('../contextLinkRoute')
+    const ws = findWorkspaceFor([...(await boardOf(deps))], self)
+    if (ws) peers = new Set(linkedPeerIds(ws, self))
+  }
+  const scope: AgentLogScope = { self, peers, all: self === null }
+  const data = cap.name === LOGS_SUMMARY_CAPABILITY
+    ? summarizeLogs(logBus.snapshot(), input as { node?: string; since?: string }, scope, Date.now())
+    : agentLogQuery(logBus.snapshot(), input as AgentLogParams, scope, Date.now())
+  return { receipt: receipt('ok', 'ok', { status: 200 }), data }
 }

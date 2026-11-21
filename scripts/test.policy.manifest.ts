@@ -71,6 +71,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
     'src/server/featureCapabilities.grep.test.ts',
     'src/server/gitExec.bun.test.ts',
     'src/server/ledger/ledgerRetention.policy.bun.test.ts',
+    'src/server/logs/logEvents.policy.test.ts',
     'src/server/memory/memoryTrust.policy.bun.test.ts',
     'src/server/policy/policy.bun.test.ts',
     'src/server/policy/policy.classifier.bun.test.ts',

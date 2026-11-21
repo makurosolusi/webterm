@@ -5,6 +5,8 @@
 ### Added
 - Setup wizard Commands step (and Settings): a closed Terminal box to install tools (Bun, Node.js LTS, Python via uv) and sign in (GitHub CLI, Claude) without a shell on the machine. Quick commands only type the command, the shell ends when you close the box, and new tools show up in "Found" on their own.
 - Credential proxy: Claude Code with an API key or gateway now talks to a loopback proxy inside the webterm server, which holds the only copy of the key. The `claude` child gets just `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`. The proxy port and token are kept in the data dir, so running sessions survive a server restart. The Provider card says the key stays in the webterm server.
+- Agents can read the server log themselves: `webterm logs.summary` (grouped page and network failures with plain-language hints, plus the server events behind them) and `webterm logs.query`, so nobody has to screenshot an error. Browser pages now report their errors, failed requests and exceptions (counted, URLs without query strings) to the log channel `browser.page`.
+- Log files are kept for 14 days and 200 MB by default (`WEBTERM_LOG_RETENTION_DAYS`, `WEBTERM_LOG_MAX_MB`), pruned at boot and daily; `GET /api/logs/stats` shows size and span.
 - `compose-portainer.yml` for Portainer Stacks > Repository: runs the published image with named volumes.
 
 ### Fixed

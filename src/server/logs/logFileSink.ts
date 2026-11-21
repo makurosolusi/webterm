@@ -8,7 +8,8 @@ import type { LogEntry } from '../../shared/logEntry'
 
 export const LOG_FILE_PREFIX = 'webterm-'
 export const LOG_FILE_SUFFIX = '.log'
-export const DEFAULT_MAX_FILES = 7
+// Safety net only: age and total size are enforced by logRetention.ts (14 days / 200 MB by default).
+export const DEFAULT_MAX_FILES = 1000
 export const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024
 const MAX_QUEUE_LINES = 5000
 const FLUSH_DELAY_MS = 100
