@@ -18,6 +18,9 @@
 - The browser profile list in agent prompts keeps a stable order (creation order) when profiles share a timestamp, so the same profiles are named each time and the prompt cache holds.
 - New project no longer fails in a fresh container with "Git author identity is not configured". When git has no name or email, the first commit is authored as webterm (your git config is never touched), and the dialog says so.
 - Dialogs no longer show a blue box around the whole window when they open.
+- YouTube and other pages in a browser node were silent after you clicked the speaker button: audio capture now resumes with your click as the user gesture, so the page is heard.
+- Ad-blocker-caused request failures are logged at debug instead of error in the `browser.page` log, so they no longer look like real page errors.
+- macOS: Chromium now starts with a mock keychain, so the keychain password dialog no longer appears on every restart. Heads up: sites you were signed in to in an existing browser profile need one new login, because the old cookies were encrypted with the real keychain key.
 
 ### Changed
 - New project dialog and the Start screen are tidied: inline name checks, a structured error alert without raw backticks, a spinner while creating, a one-line git option with a larger tap target, a muted path hint that shortens long paths, a tagline that wraps instead of clipping, 44px Start actions and a labelled "empty workspace" form.
