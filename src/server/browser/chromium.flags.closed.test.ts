@@ -15,6 +15,7 @@ const KNOWN: Record<string, string> = {
   '--force-webrtc-ip-handling-policy': 'no UDP around the proxy', '--deny-permission-prompts': 'no prompt can be answered offscreen',
   '--disable-background-networking': 'no unasked calls home', '--disable-component-update': 'no unasked calls home',
   '--no-first-run': 'no first-run page', '--no-default-browser-check': 'no default-browser prompt', '--disable-extensions': 'nothing injects into pages',
+  '--mute-audio': 'the server machine stays silent; page sound is captured in-page and streamed to the client (browser-audio.md)',
   '--no-startup-window': 'macOS: no focus-stealing start window', 'about:blank': 'keep-alive start tab (not macOS)', '--headless': 'only the explicit fallback',
   // Decision pending, see docs/decisions/browser-fingerprint.md row F1: this one makes navigator.webdriver read false while CDP is attached.
   '--disable-blink-features': 'navigator.webdriver (owner decision pending)',

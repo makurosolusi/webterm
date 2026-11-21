@@ -11,6 +11,8 @@ import { startCast, stopCast } from './browserHost.cast'
 import { castViewport, resizeViewport, setDevice, type DeviceChoice, type DeviceIo } from './browserHost.device'
 import { createEventRouter } from './browserHost.events'
 import { createShieldRouter } from './browserHost.shield'
+import { createAudioHost } from './browserHost.audio'
+import type { AudioHost } from './browserHost.audio'
 import type { ShieldRouter } from './browserHost.shield'
 import type { HostDeps } from './browserHost.deps'
 import { createConsoleLog } from './browserHost.console'
@@ -47,6 +49,8 @@ export class BrowserHost implements BrowserHostApi {
 
   private readonly route: CdpHandler
   private readonly shield: ShieldRouter
+  /** Page audio capture (browserHost.audio.ts): the gateway turns listening on/off and forwards chunks to the clients that asked for them. */
+  readonly audio: AudioHost
   private readonly life: TargetLifecycle
   private readonly contain: Containment // pages Chromium opens by itself are moved into a tab of their node or closed
   private readonly tabs: TabManager
@@ -60,7 +64,8 @@ export class BrowserHost implements BrowserHostApi {
   constructor(private readonly deps: HostDeps) {
     const patch = (r: NodeRec, p: Partial<BrowserState>) => this.patch(r, p)
     const emit = (e: HostEvent) => this.emit(e)
-    this.shield = createShieldRouter({ table: this.table, policy: deps.shields, patch, emit, now: deps.now })
+    this.audio = createAudioHost({ table: this.table, enabled: () => deps.audio?.() === true, patch, now: deps.now })
+    this.shield = createShieldRouter({ table: this.table, policy: deps.shields, audio: this.audio, patch, emit, now: deps.now })
     this.tabs = createTabs({
       table: this.table, guard: deps.guard, cdpOf: (r) => this.cdpOf(r), patch, emit, io: (r) => this.io(r), shield: this.shield, console: this.console,
       refresh: (r) => this.refresh(r), gone: (r) => this.life.crash(r), initialTabs: deps.initialTabs, persist: deps.persistTabs, agentDriving: deps.agentDriving, discardMs: deps.tabDiscardMs,

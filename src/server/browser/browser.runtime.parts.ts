@@ -54,5 +54,8 @@ export function adaptGatewayHost(host: BrowserHost, lifecycle: BrowserLifecycle)
 /** Impor cookie dari berkas ikut menyala bersama browser (seperti Orca); hanya `off` eksplisit yang mematikan. */
 export const cookieImportOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.cookieImport], true)
 
+/** Audio capture of browser nodes: default ON, only an explicit `off` (WEBTERM_BROWSER_AUDIO) kills it. */
+export const audioOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.audio], true)
+
 /** Kendali agent atas node browser default ON (webterm alat developer); hanya `off` eksplisit yang mematikan. */
 export const agentControlOn = (env: Record<string, string | undefined>): boolean => flagOr(env[ENV_BROWSER.agent], true)

@@ -3,10 +3,13 @@
 // terikat round-trip klien; tiap penonton memegang SATU frame tertunda, frame terbaru menimpa yang lama, dikirim saat
 // `ws.send` sebelumnya selesai atau klien meng-ack (Steel page-screencast.ts:146-168,200-232: deliver/flush/send).
 import type { ContextMenu } from './browserHost.contextMenu'
-import { encodeFrame } from '../../shared/browser.wire'
+import { encodeAudioFrame, encodeFrame } from '../../shared/browser.wire'
 import type { BrowserHostApi, BrowserState, Frame, LeaseView, ServerMsg } from '../../shared/browser.contract'
 import { createLogger } from '../logs'
 import { createFrameGate } from './browserWs.backpressure'
+import { createAudioLane } from './browserWs.audio'
+import type { AudioLane } from './browserWs.audio'
+import type { AudioHost } from './browserHost.audio'
 import type { FrameGate } from './browserWs.backpressure'
 import type { HostEvent } from './browserHost.targets'
 import type { DeviceChoice } from '../../shared/browser.devices'
@@ -42,6 +45,8 @@ export interface GatewayHost extends BrowserHostApi {
   downloads?: { list(nodeId: string): DownloadItem[] }
   /** Console panel buffer (absent in hosts without it). */
   console?: Pick<ConsoleLog, 'snapshot' | 'command' | 'onDelta'>
+  /** Page audio capture (absent in hosts without it): listening on/off, init segment for late joiners, chunk feed. */
+  audio?: Pick<AudioHost, 'setListening' | 'replay' | 'onChunk'>
   /** Menu action "Open link in new tab" (absent in hosts without tabs). */
   ctxMenu?: Pick<ContextMenu, 'openLink'>
 }
@@ -62,6 +67,8 @@ interface Slot { gate: FrameGate; pending: Map<string, { seq: number; bytes: Uin
 
 interface NodeEntry {
   viewers: Map<Viewer, Slot>
+  /** Viewers that sent `audio on` for this node, each with its own audio lane. */
+  audio: Map<Viewer, AudioLane>
   casting: boolean
 }
 
@@ -70,6 +77,8 @@ export interface ViewerHub {
   join(nodeId: string, v: Viewer): void
   leave(nodeId: string, v: Viewer): Promise<void>
   ack(nodeId: string, v: Viewer, seq: number): void
+  /** This viewer wants (on) or stops wanting (off) the node's audio; capture runs only while at least one viewer wants it. */
+  setAudio(nodeId: string, v: Viewer, on: boolean): void
   /** Samakan screencast dengan jumlah penonton (serial per node); melempar bila host gagal. */
   sync(nodeId: string): Promise<void>
   /** Siarkan state terkini node (dipanggil juga oleh pengubah lease di luar host). */
@@ -108,6 +117,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
         else if (e.k === 'syncMiss') broadcast(e.nodeId, { t: 'syncMiss', id: e.nodeId, tab: e.tab, reason: e.reason })
         else broadcast(e.nodeId, { t: 'error', id: e.nodeId, code: e.code, hostname: e.hostname })
       }),
+      ...(host.audio ? [host.audio.onChunk((c) => { const lanes = nodes.get(c.nodeId)?.audio; if (lanes?.size) { const bytes = encodeAudioFrame(c); for (const l of lanes.values()) l.push(bytes) } })] : []),
       ...(host.console ? [host.console.onDelta((d) => broadcast(d.id, { t: 'console', ...d }))] : []),
     ]
   }
@@ -123,6 +133,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
     if (s.live === 'discarded') { // target hilang (crash/discard): screencast lama mati, ack lama tak berarti
       e.casting = false
       for (const slot of e.viewers.values()) { slot.gate.clear(); slot.pending.clear() }
+      for (const lane of e.audio.values()) lane.clear()
     } else if (s.live === 'live' && e.viewers.size > 0 && !e.casting) {
       sync(s.id).catch((err) => log.warn('browser.ws', 'restart screencast failed', { ids: { nodeId: s.id }, error: errName(err) }))
     }
@@ -149,6 +160,21 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       slot.pending.delete(key)
       if (!v.sink.sendBinary(p.bytes, () => flush(v, slot))) slot.gate.ack(p.seq) // socket tertutup: frame dibuang
     }
+  }
+
+  function setAudio(nodeId: string, v: Viewer, on: boolean) {
+    const e = nodes.get(nodeId)
+    if (!e || !e.viewers.has(v) || !host.audio || on === e.audio.has(v)) return
+    if (on) {
+      const lane = createAudioLane(v.sink)
+      e.audio.set(v, lane)
+      const init = e.audio.size > 1 ? host.audio.replay(nodeId) : undefined // later listeners join mid-stream: they need the header chunk first
+      if (init) lane.push(encodeAudioFrame(init))
+    } else {
+      e.audio.get(v)?.clear()
+      e.audio.delete(v)
+    }
+    host.audio.setListening(nodeId, e.audio.size > 0)
   }
 
   async function reconcile(nodeId: string) {
@@ -181,7 +207,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
   return {
     join(nodeId, v) {
       let e = nodes.get(nodeId)
-      if (!e) nodes.set(nodeId, (e = { viewers: new Map(), casting: false }))
+      if (!e) nodes.set(nodeId, (e = { viewers: new Map(), audio: new Map(), casting: false }))
       if (e.viewers.has(v)) return
       const first = e.viewers.size === 0
       e.viewers.set(v, { gate: createFrameGate(), pending: new Map() })
@@ -192,6 +218,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       const e = nodes.get(nodeId)
       const slot = e?.viewers.get(v)
       if (!e || !slot) return
+      setAudio(nodeId, v, false)
       slot.pending.clear() // callback `ws.send` yang masih jalan tak boleh mengirim frame node yang sudah dilepas
       e.viewers.delete(v)
       if (e.viewers.size === 0) setVisible?.(nodeId, false)
@@ -203,6 +230,7 @@ export function createViewerHub(host: GatewayHost, leases: LeaseView, setVisible
       if (slot?.gate.ack(seq)) flush(v, slot)
     },
     sync,
+    setAudio,
     refreshState(nodeId) {
       const m = stateMsg(nodeId)
       if (m) broadcast(nodeId, m)

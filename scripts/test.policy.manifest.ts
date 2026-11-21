@@ -47,6 +47,7 @@ export const POLICY_MANIFEST: Record<PolicyDomain, string[]> = {
   server: [
     'src/server/agentSubmit.policy.test.ts',
     'src/server/browser/browser.idle.policy.test.ts',
+    'src/server/browser/browserAudio.policy.test.ts',
     'src/server/browser/cookieImportPolicy.test.ts',
     'src/server/browser/windowSurfacing.policy.test.ts',
     'src/server/central/agents/agentLadder.test.ts',

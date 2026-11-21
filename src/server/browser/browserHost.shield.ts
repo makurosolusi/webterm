@@ -8,6 +8,7 @@ import { CDP, ignoreClosed } from './cdp.client'
 import type { CdpClient } from './cdp.client'
 import type { AdblockVerdict } from './adblock.engine'
 import type { ShieldPolicy } from './adblock.shields'
+import type { AudioHost } from './browserHost.audio'
 import { shieldExempt } from './adblock.exempt'
 import { BrowserError } from './browserHost.targets'
 import type { HostEvent, NodeRec, TargetTable } from './browserHost.targets'
@@ -27,6 +28,8 @@ const BASE64_SUFFIX = ';base64'
 export interface ShieldOps {
   table: TargetTable
   policy?: ShieldPolicy
+  /** Audio capture shares this router's iframe auto-attach: each OOPIF gets the capture script before it runs. */
+  audio?: AudioHost
   patch(rec: NodeRec, part: Partial<BrowserState>): void
   emit(e: HostEvent): void
   now?: () => number
@@ -91,8 +94,9 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
 
   return {
     async enable(cdp, sid) {
-      if (!policy) return
-      await cdp.send(CDP.fetchEnable, FETCH_PATTERNS, sid)
+      await ops.audio?.enable(cdp, sid)
+      if (!policy && !ops.audio?.on()) return
+      if (policy) await cdp.send(CDP.fetchEnable, FETCH_PATTERNS, sid)
       await cdp.send(CDP.setAutoAttach, AUTO_ATTACH, sid)
     },
 
@@ -115,9 +119,13 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
       if (rec && type === 'iframe' && policy) {
         frames.set(child, rec)
         send(cdp, CDP.fetchEnable, FETCH_PATTERNS, child)
-        send(cdp, CDP.setAutoAttach, AUTO_ATTACH, child) // OOPIF bersarang
       }
-      if (p.waitingForDebugger === true) send(cdp, CDP.runIfWaiting, {}, child)
+      if (rec && type === 'iframe' && (policy || ops.audio?.on())) send(cdp, CDP.setAutoAttach, AUTO_ATTACH, child) // OOPIF bersarang
+      // The child may only run once the capture script is installed in it (it is paused until `runIfWaitingForDebugger`).
+      const ready = rec && type === 'iframe' && ops.audio?.on() ? ops.audio.child(cdp, child, parentSid) : undefined
+      if (p.waitingForDebugger !== true) return
+      if (ready) void ready.finally(() => send(cdp, CDP.runIfWaiting, {}, child))
+      else send(cdp, CDP.runIfWaiting, {}, child)
     },
 
     detached(p) { if (typeof p.sessionId === 'string') frames.delete(p.sessionId) },
@@ -145,6 +153,7 @@ export function createShieldRouter(ops: ShieldOps): ShieldRouter {
     },
 
     forget(rec) {
+      ops.audio?.forget(rec)
       for (const [sid, r] of frames) if (r === rec) frames.delete(sid)
       bursts.delete(rec.nodeId)
     },

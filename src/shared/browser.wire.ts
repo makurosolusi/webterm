@@ -1,9 +1,9 @@
 // Kawat /ws/browser (§4.4): header frame biner + parser pesan klien yang ketat. Murni, tanpa side effect.
 import {
-  ID_MAX_BYTES, FRAME_TYPE, FRAME_TYPE_TIMED, KEY_TYPES, MODS_MAX, MOUSE_BUTTONS, MOUSE_TYPES,
+  AUDIO_STREAM_KEY, FRAME_TYPE_AUDIO, ID_MAX_BYTES, FRAME_TYPE, FRAME_TYPE_TIMED, KEY_TYPES, MODS_MAX, MOUSE_BUTTONS, MOUSE_TYPES,
   NAV_ACTIONS, TEXT_MAX_BYTES, TOUCH_POINTS_MAX, TOUCH_TYPES, URL_MAX_CHARS, VIEWPORT_MAX,
 } from './browser.contract'
-import type { ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
+import type { AudioChunk, ClientMsg, FrameLatency, TouchPoint } from './browser.contract'
 import { parseDeviceChoice } from './browser.devices'
 import { parseConsoleMsg } from './browser.console'
 import { webUrl } from './browser.contextmenu'
@@ -65,6 +65,43 @@ export function decodeFrameHeader(buf: Uint8Array): { nodeId: string; tabId?: st
   const at = idEnd + SEQ_BYTES
   const lat = { ls: dv.getFloat64(at, false), rxToDispatch: dv.getFloat32(at + 8, false), dispatchToSwap: dv.getFloat32(at + 12, false), swapToServer: dv.getFloat32(at + 16, false) }
   return { ...who, seq, offset, lat }
+}
+
+/** Audio frame server->klien: `[3][idLen][nodeId][keyLen][streamKey][seq u32 BE][t f64 BE][payload]`. Melempar bila id/key terlalu panjang atau bukan format. */
+export function encodeAudioFrame(c: AudioChunk): Uint8Array {
+  const id = enc.encode(c.nodeId)
+  const key = enc.encode(c.streamKey)
+  if (id.length > ID_MAX_BYTES) throw new Error(`encodeAudioFrame: nodeId ${id.length} bytes exceeds ${ID_MAX_BYTES}`)
+  if (!AUDIO_STREAM_KEY.test(c.streamKey)) throw new Error('encodeAudioFrame: streamKey has an invalid format')
+  if (!Number.isInteger(c.seq) || c.seq < 0 || c.seq > UINT32_MAX) throw new Error(`encodeAudioFrame: seq ${c.seq} is not a uint32`)
+  const at = HEADER_FIXED + id.length + 1 + key.length
+  const out = new Uint8Array(at + SEQ_BYTES + 8 + c.payload.length)
+  out[0] = FRAME_TYPE_AUDIO
+  out[1] = id.length
+  out.set(id, HEADER_FIXED)
+  out[HEADER_FIXED + id.length] = key.length
+  out.set(key, at - key.length)
+  const dv = new DataView(out.buffer)
+  dv.setUint32(at, c.seq, false)
+  dv.setFloat64(at + SEQ_BYTES, c.t, false)
+  out.set(c.payload, at + SEQ_BYTES + 8)
+  return out
+}
+
+/** Baca frame audio; null bila bukan frame audio / terpotong / teks bukan utf8. */
+export function decodeAudioFrame(buf: Uint8Array): AudioChunk | null {
+  if (buf.length < HEADER_FIXED || buf[0] !== FRAME_TYPE_AUDIO) return null
+  const idEnd = HEADER_FIXED + buf[1]
+  if (buf.length < idEnd + 1) return null
+  const keyEnd = idEnd + 1 + buf[idEnd]
+  const at = keyEnd + SEQ_BYTES + 8
+  if (buf.length < at) return null
+  try {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+    return { nodeId: dec.decode(buf.subarray(HEADER_FIXED, idEnd)), streamKey: dec.decode(buf.subarray(idEnd + 1, keyEnd)), seq: dv.getUint32(keyEnd, false), t: dv.getFloat64(keyEnd + SEQ_BYTES, false), payload: buf.subarray(at) }
+  } catch {
+    return null
+  }
 }
 
 // ---- parseClientMsg: validasi ketat, null untuk apa pun yang janggal ----
@@ -178,6 +215,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
     }
     case 'shields':
       return typeof m.on === 'boolean' ? { t: 'shields', id, on: m.on } : null
+    case 'audio':
+      return typeof m.on === 'boolean' ? { t: 'audio', id, on: m.on } : null
     case 'device': {
       const device = parseDeviceChoice(m.device)
       return device === undefined ? null : { t: 'device', id, device }

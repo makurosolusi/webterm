@@ -200,6 +200,9 @@ export function handleBrowserConnection(ws: WebSocket, deps: GatewayDeps): void 
         if (!host.console) throw new BrowserError('disabled', `console: not available for node ${id}`)
         await host.console.command(m)
         return
+      case 'audio':
+        hub.setAudio(id, viewer, m.on)
+        return
       case 'ack':
         return
       default: // mouse | key | text | ime | touch

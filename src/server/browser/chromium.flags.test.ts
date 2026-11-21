@@ -39,6 +39,7 @@ describe('buildChromiumArgs', () => {
     expect(args).toContain('--disable-blink-features=AutomationControlled')
     for (const f of ['--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling']) expect(args).toContain(f)
     expect(args.join(' ')).not.toMatch(/--user-agent=/)
+    expect(args).toContain('--mute-audio') // the server's speakers stay silent; sound reaches the client through the in-page capture
     expect(args).toContain('--deny-permission-prompts')
     expect(DENIED_PERMISSIONS).toEqual(['camera', 'microphone', 'geolocation', 'notifications'])
   })
