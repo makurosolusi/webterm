@@ -14,6 +14,9 @@ import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
 import BrowserProfileChip from './BrowserProfileChip'
+import BrowserAudioButton, { audioOffered } from './browser/BrowserAudioButton'
+import { useBrowserAudio } from './browser/browserAudio.use'
+import { useBrowserStatus } from './browser.feature'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
 import BrowserStartPage from './BrowserStartPage'
 import { addRecent } from './browser.recent'
@@ -96,7 +99,7 @@ export interface BrowserNodeProps extends NodeProps {
  * (frame terakhir tetap terlihat). Tidak didaftarkan di `nodeTypes` di sini (WS-11).
  */
 function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay }: BrowserNodeProps) {
-  const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; profileId?: string; comments?: Comment[]; device?: DeviceChoice; zoom?: number }
+  const d = data as { url?: string; color?: string; name?: string; title?: string; collapsed?: boolean; profileId?: string; comments?: Comment[]; device?: DeviceChoice; zoom?: number; audio?: boolean }
   const rf = useReactFlow()
   const collapsed = d.collapsed ?? false
   const swatch = d.color ?? '#0a84ff'
@@ -106,7 +109,10 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const lowZoom = useStore((s) => !inTab && !maximized && s.transform[2] < ZOOM_PAUSE_BELOW)
   // Popups are tabs of this node now (server side); the tab messages feed `useBrowserTabs` below.
   const tabMsg = useRef<(m: TabMsg | ContextMenuMsg) => void>(undefined)
-  const session = useBrowserSession(id, lowZoom || (collapsed && !inTab) || !visible, browserStream, (m) => tabMsg.current?.(m), d.profileId)
+  const sessionPaused = lowZoom || (collapsed && !inTab) || !visible
+  const session = useBrowserSession(id, sessionPaused, browserStream, (m) => tabMsg.current?.(m), d.profileId)
+  const audio = useBrowserAudio(id, browserStream, session.audioSink, sessionPaused, (on) => rf.updateNodeData(id, { audio: on ? true : undefined }))
+  const showAudio = audioOffered(useBrowserStatus())
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
   // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.
@@ -234,7 +240,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           // Profile chip: in the canvas header and, in tab mode, among the tab's actions (both render `extraHeader`).
-          extraHeader={<BrowserProfileChip nodeId={id} profileId={d.profileId} />}
+          extraHeader={<>{showAudio && <BrowserAudioButton audio={audio} active={state?.audioActive} wasOn={d.audio} />}<BrowserProfileChip nodeId={id} profileId={d.profileId} /></>}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;
