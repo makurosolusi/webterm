@@ -12,7 +12,7 @@ import { captureActive } from '../linkCapture/linkCapture.env'
 import { agentChatLockFor } from './agentChat.toolLock'
 
 /** Registry profile of a node: a locked preset has its own, every other node is the default chat. */
-export const chatCapabilityProfile = (preset: string | undefined): ProfileId => (agentChatLockFor(preset) ? 'chat.skill-author' : 'chat.default')
+export const chatCapabilityProfile = (preset: string | undefined): ProfileId => (agentChatLockFor(preset) ? 'chat.skill-author' : preset === 'maintainer' ? 'chat.maintainer' : 'chat.default')
 
 /** Browser abilities are off while the browser feature or agent control of it is off (the `webterm browser` verbs refuse then). */
 export function chatCapabilityOff(env: NodeJS.ProcessEnv = process.env): Set<CapabilityId> {
@@ -27,14 +27,15 @@ const liveProfiles = (off: ReadonlySet<CapabilityId>): string => (off.has('web.p
 
 /** System-prompt briefing of a plain chat node (plus the profile names as of now); undefined for a locked preset (its role text already carries one). */
 export function chatCapabilityBriefing(preset: string | undefined, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  if (chatCapabilityProfile(preset) !== 'chat.default') return undefined
+  const profile = chatCapabilityProfile(preset)
+  if (profile === 'chat.skill-author') return undefined
   const off = chatCapabilityOff(env)
-  return [renderCapabilityBriefing('chat.default', off), liveProfiles(off)].filter((p) => p !== '').join('\n')
+  return [renderCapabilityBriefing(profile, off), liveProfiles(off)].filter((p) => p !== '').join('\n')
 }
 
 /** Note for the next turn of node `nodeId` when its briefing changed since the last one it saw. */
 export function chatCapabilityNote(ctx: LedgerContext, nodeId: string, preset: string | undefined, env: NodeJS.ProcessEnv = process.env): CapabilityNote | undefined {
   const profile = chatCapabilityProfile(preset)
-  const off = profile === 'chat.default' ? chatCapabilityOff(env) : undefined
+  const off = profile !== 'chat.skill-author' ? chatCapabilityOff(env) : undefined
   return capabilityNote(ctx, `chat:${nodeId}`, profile, off, off ? liveProfiles(off) : '')
 }

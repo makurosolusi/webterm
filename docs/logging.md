@@ -43,6 +43,8 @@ event per run that removed something. `GET /api/logs/stats` returns file count, 
 
 ## Agents
 
+A chat node with the `maintainer` preset also has `doctor.run`, `config.read` and `instance.info` (docs/decisions/maintainer-agent.md).
+
 Rule: **an agent never asks the user for a screenshot or a copy of an error. Run `logs.summary` first.**
 
 ```sh

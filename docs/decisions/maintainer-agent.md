@@ -1,6 +1,6 @@
 # Maintainer agent: let an agent operate webterm instead of telling the user to
 
-Status: proposal for the owner (no code changed). Legend: **[V]** verified in code or docs (path given), **[I]** inferred.
+Status: owner decisions applied (separate profile; reversible `config.write` without a card; Codemode deferred; profile lock auto-unlocked when its owner is dead; maintainer in Central panel and chat nodes through the same registry ids). Wave 1 built (section 8); waves 2-3 not started. Legend: **[V]** verified in code or docs (path given), **[I]** inferred.
 
 ## Problem
 
@@ -161,3 +161,10 @@ the rule stops "tell the user to run X".
 Exact Central tool count (76); whether a CLI-side node restart exists; whether `isolated-vm` fails under Bun 1.4.2 when
 actually run; quickjs-emscripten licence and the 0.32.0 pin; a per-capability rate limit (not found); token estimates are
 chars/4 heuristics, not tokenizer output.
+
+## 8. Wave 1 as built (read-only diagnosis)
+
+- Registry (`src/shared/agentCapabilities.data.ts`): one ability `ops.diagnose`, profiles `chat.maintainer` (the browser verbs of `chat.default` plus `ops.diagnose`) and `central.maintainer`. The single briefing rule `MAINTAINER_RULE` is a `rules` entry of that ability, so it renders in every profile that grants it and nowhere else; `central.steward` is deliberately not granted (`STEWARD`).
+- Capabilities (`src/server/capability/maintainer.capabilities.ts`, handlers `maintainer.run.ts`, live wiring `maintainer.facts.ts`), all R0, global, idempotent, in `TOOL_INDEX`, dispatched from `cli.exec` (`runMaintainer`) like `logs.*`: `doctor.run {id?}` (reuses `runDoctor`, findings through `scrubText`), `config.read {q?, limit?}` (reuses `buildEffectiveConfig`; a secret or bootstrap key returns only `set`), `instance.info {}` (version, mode, platform, uptime, `dataDirPresent`, session and node counts, browser enabled/agent control). Answers are capped at 32 KB (`truncated` says so). `logs.query` / `logs.summary` stay as shipped (every node already has them).
+- Selection: a chat node born with `preset: "maintainer"` (`AgentChatPreset`, not tool-locked). The gate reads the STORED node (`isMaintainerNode`), and presets are fixed at birth (`lockNodePresets`), so an agent cannot claim it. A node without it gets `not_maintainer` (403) and sees the three as not allowed in `agent-context`; `agent-context` carries the rule (`rule` field, and a line in the text form) for maintainer callers only.
+- Not built yet: a Central tool or mode for `central.maintainer` (its briefing says so; Central tool defs are outside this wave's files), a client control to create a maintainer node (a node saved with `preset: "maintainer"` through the workspace API works), `image` / commit in `instance.info` (no source exists in the server), browser live-session detail, `doctor.run` against the live probes in a test (it needs `claude`/Telegram; the handler is tested with fakes).

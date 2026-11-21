@@ -2,7 +2,7 @@
 // system-prompt briefing, a one-line UI text, a stable hash, and the enforcement lists (Central tools, chat families).
 import { CAPABILITIES, PROFILES, type CapabilityDef, type CapabilityId, type ChatFamily, type ProfileId } from './agentCapabilities.data'
 
-export { CAPABILITIES, PROFILES } from './agentCapabilities.data'
+export { CAPABILITIES, MAINTAINER_RULE, PROFILES } from './agentCapabilities.data'
 export type { CapabilityDef, CapabilityId, ChatFamily, ProfileId } from './agentCapabilities.data'
 
 export interface ProfileCapability extends CapabilityDef { level: 'granted' | 'denied' }

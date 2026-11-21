@@ -57,7 +57,7 @@ export const validSkillTarget = (t: unknown): string | undefined =>
 
 /** Role text of a preset, or `undefined` for an absent/unknown preset (options unchanged). */
 export function agentChatRoleFor(preset: unknown, target?: unknown): string | undefined {
-  if (!isAgentChatPreset(preset)) return undefined
+  if (!isAgentChatPreset(preset) || preset !== 'skill-author') return undefined
   const name = validSkillTarget(target)
   if (!name) return `${SKILL_AUTHOR_ROLE}\n\nThis chat creates a NEW skill.`
   return `${SKILL_AUTHOR_ROLE}\n\nThis chat EDITS the existing skill "${name}". Before anything else run \`webterm skills get ${name}\` to read its current body, then apply the requested change at once with \`webterm skills edit ${name}\` (never propose).`
