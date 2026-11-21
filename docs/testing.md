@@ -37,7 +37,28 @@ section, the failing files with a rerun-alone command, and exit 1 on failure. Op
 | `--no-policy` | skip the policy tier |
 | `--typecheck` | run `npm run typecheck` first |
 | `--base <ref>` | diff against the merge-base with `<ref>` (default `main`, then `origin/main`) |
-| `--files a b c` | use these files instead of git |
+| `--files a b c` | use these files instead of git: the normal, focused path for workers (pass the tests that cover your change) |
+| `--wait <min>` | queue up to `<min>` minutes behind another running gate (default 0: fail fast, exit 3) |
+| `--budget <min>` | stop between batches once `<min>` minutes have passed; prints the batches NOT run (exit 4) |
+
+### Guards: one gate at a time, no wide gate
+
+- **Machine-wide lock.** Only one `test:impacted` runs per machine (lockfile `/tmp/webterm-test-gate.lock`,
+  override dir with `WEBTERM_TEST_GATE_LOCK_DIR`; holder pid, worktree, start, command). A second gate prints
+  who holds it and for how long, then exits 3 ("gate lain sedang berjalan; tunggu atau jalankan nanti")
+  unless `--wait` is given. Stale locks (dead pid, or older than 2 hours) are taken over; the lock is
+  released on success, failure, SIGINT and SIGTERM. `--dry` takes no lock.
+- **Width limit.** After planning, a plan above 120 files (vitest + bun + policy) or 40% of all test files is
+  refused with exit 2: that is close to a full suite, which is forbidden. The message lists the 5 changed
+  files that pull in the most test files (hubs such as `envRegistry.ts`) and suggests splitting the work and
+  using `--files <related tests>`. Measured with `--dry`: a changed test or a `scripts/` edit plans ~75
+  files, `App.tsx` ~85, while `envRegistry.ts` plans 281 (bun 204 of 375). `--dry` still prints the plan
+  and says a real run would be refused.
+- **`WEBTERM_ALLOW_WIDE_GATE=1`** overrides the width limit. Owner/orchestrator only; agents and workers must
+  never set it (same rule as `WEBTERM_FULL_TESTS`).
+- **Estimate.** Before running, the gate prints file counts per tier and an estimated duration (25 s per
+  40-file bun batch measured on the dev machine; vitest 40 s and typecheck 60 s are rough). Cancel if it
+  is too much; use `--budget` to make the gate stop on its own.
 
 A high load average (above the core count) prints a warning; wait for the machine instead of cancelling.
 

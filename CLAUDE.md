@@ -49,6 +49,7 @@ Tidak ada migrasi data dir: kode tidak pernah membaca `~/.nodeterm` / `~/.nodete
   `npm run test:bun`, `vitest run` tanpa filter, dan `bun test` tanpa path menolak jalan (exit 2). Agent dilarang
   menjalankan suite penuh dan dilarang menyetel `WEBTERM_FULL_TESTS=1` (hanya pemilik/CI). Suite penuh dijalankan
   CI jarak jauh (`.github/workflows/test.yml`). Detail: `docs/testing.md`.
+- **Hanya satu gate (`test:impacted`) berjalan sekaligus di mesin** (kunci `/tmp/webterm-test-gate.lock`; gate lain keluar kode 3, atau antri dengan `--wait <menit>`). Plan >120 berkas ditolak (exit 2, mendekati suite penuh): pecah kerja dan pakai `--files <tes-terkait>`; `--budget <menit>` membatasi waktu. Agent dilarang menyetel `WEBTERM_ALLOW_WIDE_GATE=1` (hanya pemilik/orkestrator). Detail: `docs/testing.md`.
 - Tes pemindai baru wajib didaftarkan di `scripts/test.policy.manifest.ts` (tes manifes gagal bila tidak).
 - **Jebakan macOS:** test bind unix socket di `$TMPDIR`; path default bisa >104 char (batas
   `sun_path`) → `EINVAL`. Jalankan dengan `TMPDIR=/tmp/st`.
