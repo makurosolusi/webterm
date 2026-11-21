@@ -34,6 +34,7 @@ Bridged from the page console by `src/server/browser/browserHost.console.log.ts`
 network failures and exceptions. URLs are `scheme://host/path` (no query, no fragment); messages are cut at 300
 characters; no stacks, no arguments. A failure group (kind, category, host, status) is logged once, then again at
 5, 25, 125... occurrences with `data.count`, `data.firstTs`, `data.lastTs`. At most 20 entries per second per node.
+Failures caused by the built-in ad/tracker blocker (`ERR_BLOCKED_BY_CLIENT`, and `ERR_FAILED` / CORS console errors for URLs the filter engine blocks) are logged at `debug` and do not count toward the 20 per second.
 
 ## Retention
 

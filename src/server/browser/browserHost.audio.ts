@@ -84,7 +84,7 @@ export function createAudioHost(ops: AudioOps): AudioHost {
   }
   const send = (sid: string, on: boolean) => {
     const fn = on ? AUDIO_RESUME_FN : AUDIO_PAUSE_FN
-    cdps.get(sid)?.send(CDP.evaluate, { expression: `typeof ${fn}==='function'&&${fn}()` }, sid).catch(ignoreClosed(CDP.evaluate, { sessionId: sid }))
+    cdps.get(sid)?.send(CDP.evaluate, { expression: `typeof ${fn}==='function'&&${fn}()`, userGesture: on }, sid).catch(ignoreClosed(CDP.evaluate, { sessionId: sid }))
   }
   const wanted = (sid: string): boolean => { const r = root.get(sid); const o = r ? ownerOf(r) : undefined; return o ? listening.has(o.rec.nodeId) : listening.size > 0 }
   const sessionsOf = (nodeId: string): string[] => [...root].filter(([, r]) => ownerOf(r)?.rec.nodeId === nodeId).map(([sid]) => sid)

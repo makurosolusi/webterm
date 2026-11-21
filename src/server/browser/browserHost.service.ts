@@ -16,6 +16,7 @@ import type { AudioHost } from './browserHost.audio'
 import type { ShieldRouter } from './browserHost.shield'
 import type { HostDeps } from './browserHost.deps'
 import { createConsoleLog } from './browserHost.console'
+import { createPageLogBridge } from './browserHost.console.log'
 import { createChallengeTracker } from './browserHost.challenge'
 import { createHostContainment, type Containment } from './browserHost.containment'
 import { createContextMenu, type ContextMenu } from './browserHost.contextMenu'
@@ -59,7 +60,7 @@ export class BrowserHost implements BrowserHostApi {
   /** Sync mode: a human action in one pane repeated in the others (browserHost.sync.ts). */
   readonly sync: NodeSync
   readonly ctxMenu: ContextMenu // right click = the canvas's own menu, never Chromium's native one: `input` drops the right button
-  readonly console = createConsoleLog({ table: this.table, send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
+  readonly console = createConsoleLog({ table: this.table, pageLog: createPageLogBridge({ isBlocked: (n, u) => this.deps.shields?.check(u, this.table.nodes.get(n)?.state.url ?? u, 'xhr').block === true }), send: (r, m, p) => this.send(r, m, p), now: () => (this.deps.now ?? Date.now)() }) // console panel + agent `console` verb
 
   constructor(private readonly deps: HostDeps) {
     const patch = (r: NodeRec, p: Partial<BrowserState>) => this.patch(r, p)

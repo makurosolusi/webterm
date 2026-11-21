@@ -39,7 +39,9 @@ export function audioInjectSource(): string {
   }
   function stopRec() { if (rec) { try { rec.stop() } catch (e) {} rec = null } }
   const relay = (cmd) => { for (let i = 0; i < window.frames.length; i++) try { window.frames[i].postMessage({ __wtAudio: cmd }, '*') } catch (e) {} }
-  const resume = () => { want = true; startRec(); relay('resume') }
+  // The host calls this through Runtime.evaluate with userGesture (the speaker click happens in the client, not in this page): resume() of a bus that
+  // Chrome's autoplay policy left suspended is allowed inside that activation, and the activation stays sticky for buses created later.
+  const resume = () => { want = true; if (bus) bus.tryResume(); startRec(); relay('resume') }
   const pause = () => { want = false; stopRec(); relay('pause') }
   window.${AUDIO_RESUME_FN} = resume
   window.${AUDIO_PAUSE_FN} = pause
