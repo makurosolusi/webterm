@@ -55,6 +55,7 @@ export interface FlagInput {
 export function buildChromiumArgs(i: FlagInput): string[] {
   if (!i.proxyServer) throw new Error('browser launch: proxyServer is required (SSRF proxy)')
   if (!i.profileDir) throw new Error('browser launch: profileDir is required')
+  const platform = i.platform ?? process.platform
   const display = i.headless
     ? ['--headless=new']
     : [`--window-position=${OFFSCREEN_POS}`, `--window-size=${DEFAULT_VIEWPORT.w},${DEFAULT_VIEWPORT.h}`]
@@ -83,7 +84,10 @@ export function buildChromiumArgs(i: FlagInput): string[] {
     // macOS menjepit jendela "offscreen" kembali ke layar dan jendela awal mencuri fokus (diukur, Chrome 156):
     // tanpa jendela awal; tiap node membuka jendelanya sendiri di latar (windowPlacement). OS lain tetap memakai
     // tab awal: tanpa jendela, Chrome di Linux/Windows bisa keluar saat jendela node terakhir ditutup.
-    (i.platform ?? process.platform) === 'darwin' ? '--no-startup-window' : 'about:blank',
+    platform === 'darwin' ? '--no-startup-window' : 'about:blank',
+    // macOS only: fixed cookie-encryption key instead of the login keychain ("Chromium Safe Storage"), which otherwise
+    // raises a password dialog on every launch. Same as Puppeteer/Playwright. Cookies stay on disk, only the key source changes.
+    ...(platform === 'darwin' ? ['--use-mock-keychain'] : []),
   ]
 }
 
