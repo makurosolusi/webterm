@@ -17,11 +17,12 @@ const KNOWN: Record<string, string> = {
   '--no-first-run': 'no first-run page', '--no-default-browser-check': 'no default-browser prompt', '--disable-extensions': 'nothing injects into pages',
   '--mute-audio': 'the server machine stays silent; page sound is captured in-page and streamed to the client (browser-audio.md)',
   '--no-startup-window': 'macOS: no focus-stealing start window', 'about:blank': 'keep-alive start tab (not macOS)', '--headless': 'only the explicit fallback',
+  '--use-mock-keychain': 'macOS only: fixed cookie key, no login-keychain password dialog on launch (browser-fingerprint.md, K1)',
   // Decision pending, see docs/decisions/browser-fingerprint.md row F1: this one makes navigator.webdriver read false while CDP is attached.
   '--disable-blink-features': 'navigator.webdriver (owner decision pending)',
 }
 const FORBIDDEN = ['--enable-automation', '--user-agent', '--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--ignore-certificate-errors',
-  '--password-store', '--use-mock-keychain', '--disable-features', '--enable-features', '--enable-blink-features', '--load-extension', '--incognito',
+  '--password-store', '--disable-features', '--enable-features', '--enable-blink-features', '--load-extension', '--incognito',
   '--lang', '--accept-lang', '--disable-gpu', '--test-type', '--disable-infobars', '--disable-popup-blocking', '--allow-running-insecure-content']
 
 const variants: Array<[string, string[]]> = [
@@ -43,4 +44,13 @@ describe.each(variants)('launch flags (%s)', (_name, args) => {
 it('headless is only ever the explicit fallback', () => {
   expect(variants[0][1].some((a) => a.startsWith('--headless'))).toBe(false)
   expect(variants[2][1]).toContain('--headless=new')
+})
+
+it('--use-mock-keychain is on the macOS launch line only, and --password-store never is', () => {
+  expect(variants[0][1]).toContain('--use-mock-keychain')
+  expect(variants[1][1]).not.toContain('--use-mock-keychain')
+  expect(variants[2][1]).not.toContain('--use-mock-keychain')
+  const darwinHeadless = buildChromiumArgs({ profileDir: '/p', proxyServer: 'http://127.0.0.1:1', headless: true, platform: 'darwin' })
+  expect(darwinHeadless).toContain('--use-mock-keychain')
+  for (const [, args] of variants) expect(args.some((a) => a.startsWith('--password-store'))).toBe(false)
 })
