@@ -1,0 +1,11 @@
+// Public surface of the screenshot annotator core (no UI). The overlay root must set `data-shot-ignore`.
+export * from './shot.types'
+export * from './shot.palette'
+export * from './shot.model'
+export * from './shot.selection'
+export { renderScene, drawShape, arrowGeometry, textBackground } from './shot.render'
+export type { ShotFrame, RenderOptions } from './shot.render'
+export { captureFrame, captureScale, SHOT_MAX_SIDE_PX, SHOT_MAX_PIXELS } from './shot.capture'
+export type { FrameResult, CaptureFailure } from './shot.capture'
+export { cropAndRender, exportPng, copyImage, saveImage, shotFileName, REVOKE_DELAY_MS } from './shot.export'
+export { SHOT_IGNORE_ATTR } from '../canvasShot'

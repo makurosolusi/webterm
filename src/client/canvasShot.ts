@@ -20,23 +20,59 @@ export const shotUrl = (reqId: string): string => `/api/canvas-shot/${encodeURIC
 const jsonError = (code: string): RequestInit =>
   ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: code }) })
 
+/** Elements carrying this attribute (and their subtrees) are never captured; the screenshot overlay sets it on its root. */
+export const SHOT_IGNORE_ATTR = 'data-shot-ignore'
+
+export interface CapturePlan {
+  root: HTMLElement
+  width: number
+  height: number
+  filter: (node: Node) => boolean
+  /** modern-screenshot options shared by the agent path and the annotate path. */
+  common: { width: number; height: number; filter: (node: Node) => boolean; timeout: number; features: { copyScrollbar: false } }
+}
+
 /** The whole page clipped to the viewport: body also holds sidebar, tabs and portaled dialogs/notices.
- *  Only on-screen elements are cloned (canvasShot.scope.ts); a page over MAX_SHOT_ELEMENTS is refused. */
-async function capture(maxWidth: number): Promise<RequestInit> {
+ *  Only on-screen elements are cloned (canvasShot.scope.ts); a page over MAX_SHOT_ELEMENTS gives null. */
+export function planCapture(): CapturePlan | null {
   const root = document.body
   const width = window.innerWidth
   const height = window.innerHeight
-  const filter = shotFilter({ width, height })
-  if (countShotElements(root, filter, MAX_SHOT_ELEMENTS) > MAX_SHOT_ELEMENTS) return jsonError('page_too_large')
+  const visible = shotFilter({ width, height })
+  const filter = (node: Node): boolean =>
+    !(node.nodeType === Node.ELEMENT_NODE && (node as Element).hasAttribute(SHOT_IGNORE_ATTR)) && visible(node)
+  if (countShotElements(root, filter, MAX_SHOT_ELEMENTS) > MAX_SHOT_ELEMENTS) return null
+  return {
+    root, width, height, filter,
+    // body is 100% of the viewport (styles.css), so width/height clip without resizing anything.
+    // Seven extra getComputedStyle calls per scrollable element, for scrollbar styling nobody needs.
+    common: { width, height, filter, timeout: CAPTURE_TIMEOUT_MS, features: { copyScrollbar: false } },
+  }
+}
+
+/** One capture at a time: a second full clone on top of the first is what freezes the tab. */
+let capturing = false
+
+/** Run `job` unless another capture is running; `busy` means it was not started. */
+export async function runExclusiveCapture<T>(job: () => Promise<T>): Promise<{ busy: true } | { busy: false; value: T }> {
+  if (capturing) return { busy: true }
+  capturing = true
+  try {
+    return { busy: false, value: await job() }
+  } finally {
+    capturing = false
+  }
+}
+
+async function capture(maxWidth: number): Promise<RequestInit> {
+  const plan = planCapture()
+  if (!plan) return jsonError('page_too_large')
+  const { root, width, common } = plan
   const scale = Math.min(1, maxWidth / Math.max(1, width))
   // Loaded on the first shot only: most sessions never take one.
   const { domToBlob } = await import('modern-screenshot')
   const blob = await domToBlob(root, {
-    type: 'image/jpeg', quality: SHOT_QUALITY, scale, timeout: CAPTURE_TIMEOUT_MS,
-    // body is 100% of the viewport (styles.css), so these clip without resizing anything.
-    width, height, filter,
-    // Seven extra getComputedStyle calls per scrollable element, for scrollbar styling nobody needs.
-    features: { copyScrollbar: false },
+    ...common, type: 'image/jpeg', quality: SHOT_QUALITY, scale,
     // JPEG has no alpha: a transparent page would come out black.
     backgroundColor: getComputedStyle(root).backgroundColor || '#000',
   })
@@ -45,24 +81,16 @@ async function capture(maxWidth: number): Promise<RequestInit> {
   return { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob }
 }
 
-/** One capture at a time: a second full clone on top of the first is what freezes the tab. */
-let capturing = false
-
 /** Answer one shot request. Never rejects: capture and upload failures are logged with the request id. */
 export async function answerShot(msg: ShotMsg): Promise<void> {
   if (document.visibilityState !== 'visible') return
   let init: RequestInit
-  if (capturing) init = jsonError('capture_busy')
-  else {
-    capturing = true
-    try {
-      init = await capture(msg.maxWidth)
-    } catch (err) {
-      console.warn(`[webterm] canvas screenshot ${msg.reqId}: capture failed`, err)
-      init = jsonError('capture_failed')
-    } finally {
-      capturing = false
-    }
+  try {
+    const r = await runExclusiveCapture(() => capture(msg.maxWidth))
+    init = r.busy ? jsonError('capture_busy') : r.value
+  } catch (err) {
+    console.warn(`[webterm] canvas screenshot ${msg.reqId}: capture failed`, err)
+    init = jsonError('capture_failed')
   }
   try {
     const res = await fetch(shotUrl(msg.reqId), init)
