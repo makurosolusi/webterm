@@ -29,7 +29,7 @@ describe('page log bridge', () => {
   it('aggregates repeats: re-emits at 5 and 25 with the running count and first/last time', () => {
     const { calls, clock, bridge } = rig()
     const first = clock.t
-    for (let i = 1; i <= 30; i++) { clock.t += 10; bridge.record(SRC, net('net::ERR_BLOCKED_BY_CLIENT', 'https://ads.test/p.js?x=1')) }
+    for (let i = 1; i <= 30; i++) { clock.t += 10; bridge.record(SRC, net('net::ERR_FAILED', 'https://cdn.test/p.js?x=1')) }
     expect(calls.map((c) => c.fields.count)).toEqual([1, 5, 25])
     expect(calls[2].fields).toMatchObject({ firstTs: first + 10, lastTs: first + 250 })
   })
@@ -59,6 +59,44 @@ describe('page log bridge', () => {
     // another node has its own budget
     bridge.record({ ...SRC, nodeId: 'n2' }, net('net::ERR_FAILED', 'https://h0.test/x'))
     expect(calls.at(-1)?.fields.ids?.nodeId).toBe('n2')
+  })
+})
+
+describe('page log bridge: blocker-caused failures', () => {
+  const ads = (_: string, u: string) => u.includes('ads.test') || u.includes('doubleclick.net')
+  const rigAds = () => {
+    const calls: Call[] = []
+    const at = (level: string) => (event: string, message: string, fields: Call['fields'] = {}) => { calls.push({ level, event, message, fields }) }
+    const logger = { error: at('error'), warn: at('warn'), info: at('info'), debug: at('debug'), trace: at('trace') } as unknown as Logger
+    return { calls, bridge: createPageLogBridge({ now: () => 1_800_000_000_000, logger, isBlocked: ads }) }
+  }
+  const cors = (at: string, from?: string) => ({ level: 'error', source: 'console', text: `Access to XMLHttpRequest at '${at}'${from ? ` (redirected from '${from}')` : ''} from origin 'https://www.youtube.com' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header` }) as EntryBody
+
+  it('demotes ERR_BLOCKED_BY_CLIENT to debug even without a filter engine', () => {
+    const { calls, bridge } = rig()
+    bridge.record(SRC, net('net::ERR_BLOCKED_BY_CLIENT', 'https://www.youtube.com/youtubei/v1/log_event?a=1'))
+    expect(calls.map((c) => c.level)).toEqual(['debug'])
+  })
+
+  it('demotes ERR_FAILED and CORS errors only for URLs the blocker would block', () => {
+    const { calls, bridge } = rigAds()
+    bridge.record(SRC, net('net::ERR_FAILED', 'https://ad.doubleclick.net/ddm/trackimp/x'))
+    bridge.record(SRC, cors('https://ad.doubleclick.net/ddm/trackimp/x'))
+    bridge.record(SRC, cors('https://googleads.g.doubleclick.net/measurement/f', 'https://www.youtube.com/measurement/f'))
+    expect(calls.map((c) => c.level)).toEqual(['debug', 'debug', 'debug'])
+    bridge.record(SRC, net('net::ERR_FAILED', 'https://api.site.test/data'))
+    bridge.record(SRC, cors('https://api.site.test/data'))
+    bridge.record(SRC, net('net::ERR_NAME_NOT_RESOLVED', 'https://ads.test/x'))
+    bridge.record(SRC, net('Failed to load resource: the server responded with a status of 503 ()', 'https://ads.test/y'))
+    expect(calls.slice(3).map((c) => c.level)).toEqual(['error', 'error', 'error', 'error'])
+  })
+
+  it('blocked noise does not spend the rate budget of real failures', () => {
+    const { calls, bridge } = rigAds()
+    for (let i = 0; i < PAGE_LOG_RATE * 2; i++) bridge.record(SRC, net('net::ERR_BLOCKED_BY_CLIENT', `https://h${i}.test/x`))
+    bridge.record(SRC, net('net::ERR_NAME_NOT_RESOLVED', 'https://real.test/x'))
+    expect(calls.at(-1)).toMatchObject({ level: 'error', fields: { host: 'real.test' } })
+    expect(calls.at(-1)?.fields.suppressed).toBeUndefined()
   })
 })
 
