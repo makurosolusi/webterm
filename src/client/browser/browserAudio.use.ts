@@ -1,5 +1,7 @@
-// Binds one browser node to its audio player: the speaker click (the gesture) starts the player and tells the server to
-// stream (`audio on`, replayed by the stream after every attach/reconnect); unmount or a hidden node stops both.
+// Binds one browser node to its audio player. Sound is ON by default: while the node is shown and the server offers audio, the
+// player starts by itself and tells the server to stream (`audio on`, replayed by the stream after every attach/reconnect).
+// Only an explicit mute is saved. Browsers refuse sound before a user gesture in THIS tab, so a player that reports `blocked`
+// is resumed by the next pointerdown/keydown anywhere; unmount, mute or a hidden node stops playback and removes the listener.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { AudioChunk } from '../../shared/browser.contract'
@@ -8,20 +10,33 @@ import { createAudioPlayer } from './browserAudio.player'
 import type { AudioPlayer, AudioPlayerView } from './browserAudio.player'
 
 export interface BrowserAudio extends AudioPlayerView {
-  /** True while the user wants sound (button pressed). */
+  /** True while sound is wanted (not muted by the user). */
   on: boolean
-  /** Click handler: off -> on (the gesture), on -> off, error -> try again. */
+  /** Click handler: mute <-> unmute (a gesture, so it also unblocks), error -> try again. */
   toggle: () => void
 }
 
-/** `paused` = the node's session is detached (hidden/collapsed/zoomed out): the server sends nothing, so playback stops until it is back. */
-export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObject<((c: AudioChunk) => void) | null>, paused: boolean, onPersist: (on: boolean) => void): BrowserAudio {
+export interface BrowserAudioOptions {
+  /** The node's session is detached (hidden/collapsed/zoomed out): the server sends nothing, so playback stops until it is back. */
+  paused: boolean
+  /** False when the server cannot capture audio (kill switch): nothing is started. */
+  offered: boolean
+  /** Initial state from the layout: the user muted this node earlier. */
+  muted: boolean
+  /** Saves the user's choice in the layout (`true` = muted). */
+  persist: (muted: boolean) => void
+}
+
+const GESTURES = ['pointerdown', 'keydown'] as const
+
+export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObject<((c: AudioChunk) => void) | null>, opts: BrowserAudioOptions): BrowserAudio {
+  const { paused, offered } = opts
   const [view, setView] = useState<AudioPlayerView>({ state: 'idle', message: '' })
-  const [on, setOn] = useState(false)
+  const [on, setOn] = useState(!opts.muted)
   const player = useRef<AudioPlayer | null>(null)
   const get = (): AudioPlayer => (player.current ??= createAudioPlayer(setView))
-  const persist = useRef(onPersist)
-  persist.current = onPersist
+  const persist = useRef(opts.persist)
+  persist.current = opts.persist
 
   useEffect(() => {
     sink.current = (c) => player.current?.push(c)
@@ -33,29 +48,38 @@ export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObje
     }
   }, [id, stream, sink])
 
-  const wasPaused = useRef(paused)
+  // Auto-listen: wanted + shown + offered. Cleanup (mute, hidden, unoffered) stops playback; the server detaches hidden nodes itself.
   useEffect(() => {
-    const was = wasPaused.current
-    wasPaused.current = paused
-    if (!on || was === paused) return
-    if (paused) player.current?.stop()
-    else player.current?.start() // the AudioContext already exists (created by the click), so no new gesture is needed
-  }, [paused, on])
+    if (!on || paused || !offered) return
+    const p = get()
+    p.start()
+    if (p.get().state !== 'unsupported') stream.setAudio(id, true)
+    return () => { player.current?.stop() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `get` only reads refs/setters
+  }, [on, paused, offered, id, stream])
+
+  // Blocked by the autoplay policy: the first real interaction anywhere in this tab starts the sound (the listener is capture + once).
+  const blocked = view.state === 'blocked' && on && !paused
+  useEffect(() => {
+    if (!blocked) return
+    const resume = (): void => player.current?.start()
+    for (const g of GESTURES) document.addEventListener(g, resume, { capture: true, once: true })
+    return () => { for (const g of GESTURES) document.removeEventListener(g, resume, { capture: true }) }
+  }, [blocked])
 
   const toggle = useCallback(() => {
-    if (on && view.state !== 'error') {
+    if (on && view.state !== 'error' && view.state !== 'blocked') {
       stream.setAudio(id, false)
       player.current?.stop()
       setOn(false)
-      persist.current(false)
+      persist.current(true)
       return
     }
     const p = get()
     p.start() // inside the click: creates/resumes the AudioContext
     if (p.get().state === 'unsupported') return
     stream.setAudio(id, true)
-    setOn(true)
-    persist.current(true)
+    if (!on) { setOn(true); persist.current(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `get` only reads refs/setters
   }, [on, view.state, id, stream])
 

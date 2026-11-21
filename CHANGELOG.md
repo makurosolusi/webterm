@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Hear a browser node's audio: click the speaker button on its header.
+- Hear a browser node's audio: the speaker button on its header shows whether sound is on and mutes or unmutes it.
 - Browser nodes can now stream page sound (server side): Chromium runs muted, the page's audio is captured in-page and sent as opus chunks only to clients that ask for it, and capture runs only while someone listens (`WEBTERM_BROWSER_AUDIO=off` disables it).
 - Setup wizard Commands step (and Settings): a closed Terminal box to install tools (Bun, Node.js LTS, Python via uv) and sign in (GitHub CLI, Claude) without a shell on the machine. Quick commands only type the command, the shell ends when you close the box, and new tools show up in "Found" on their own.
 - Credential proxy: Claude Code with an API key or gateway now talks to a loopback proxy inside the webterm server, which holds the only copy of the key. The `claude` child gets just `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and a placeholder in `ANTHROPIC_API_KEY`. The proxy port and token are kept in the data dir, so running sessions survive a server restart. The Provider card says the key stays in the webterm server.
@@ -23,6 +23,7 @@
 - macOS: Chromium now starts with a mock keychain, so the keychain password dialog no longer appears on every restart. Heads up: sites you were signed in to in an existing browser profile need one new login, because the old cookies were encrypted with the real keychain key.
 
 ### Changed
+- Browser audio is on by default: opening YouTube or any page with sound in a browser node plays it without clicking the speaker first. Mute is saved per node and survives reloads and restarts. Your browser only allows sound after you interact with the page once, so until then the speaker reads "Click anywhere to start sound" and the first click or key press anywhere starts it.
 - New project dialog and the Start screen are tidied: inline name checks, a structured error alert without raw backticks, a spinner while creating, a one-line git option with a larger tap target, a muted path hint that shortens long paths, a tagline that wraps instead of clipping, 44px Start actions and a labelled "empty workspace" form.
 - `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` is no longer set on `claude` processes, because they hold no real credential to scrub. Settings > Provider "Test connection" now runs through the credential proxy ("via local credential proxy").
 - Docker seccomp now defaults to `unconfined` (`WEBTERM_SECCOMP`) in `compose-portainer.yml`, `compose.ghcr.yml` and `docker-compose.yml`, so the Portainer Web editor works by pasting the YAML with no file on the host. Docker's default syscall filter is lifted for the whole container; Chrome's own sandbox stays on, as do dropped capabilities, `no-new-privileges` and the non-root user. Set `WEBTERM_SECCOMP=./docker/chrome.seccomp.json` for the strict profile.

@@ -111,8 +111,8 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const tabMsg = useRef<(m: TabMsg | ContextMenuMsg) => void>(undefined)
   const sessionPaused = lowZoom || (collapsed && !inTab) || !visible
   const session = useBrowserSession(id, sessionPaused, browserStream, (m) => tabMsg.current?.(m), d.profileId)
-  const audio = useBrowserAudio(id, browserStream, session.audioSink, sessionPaused, (on) => rf.updateNodeData(id, { audio: on ? true : undefined }))
   const showAudio = audioOffered(useBrowserStatus())
+  const audio = useBrowserAudio(id, browserStream, session.audioSink, { paused: sessionPaused, offered: showAudio, muted: d.audio === false, persist: (muted) => rf.updateNodeData(id, { audio: muted ? false : undefined }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
   // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.
@@ -240,7 +240,7 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
           collapsed={collapsed} onToggleCollapse={toggleCollapse}
           color={swatch} onColor={(c) => rf.updateNodeData(id, { color: c })}
           // Profile chip: in the canvas header and, in tab mode, among the tab's actions (both render `extraHeader`).
-          extraHeader={<>{showAudio && <BrowserAudioButton audio={audio} active={state?.audioActive} wasOn={d.audio} />}<BrowserProfileChip nodeId={id} profileId={d.profileId} /></>}
+          extraHeader={<>{showAudio && <BrowserAudioButton audio={audio} active={state?.audioActive} />}<BrowserProfileChip nodeId={id} profileId={d.profileId} /></>}
           comments={comments}
           onAddComment={(text) => rf.updateNodeData(id, { comments: [...comments, { id: randomId(), text, ts: Date.now() }] })}
           // Node actions only: reload lives in the toolbar and there is no find yet, so no Refresh/Search rows here;
