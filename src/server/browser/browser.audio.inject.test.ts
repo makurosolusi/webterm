@@ -8,18 +8,18 @@ interface FakeRecorder { stopped: boolean; emit(n: number): void }
 
 function world(opts: { freeze?: boolean; noBinding?: boolean } = {}) {
   const sent: Array<Record<string, unknown>> = []
-  const log = { contexts: 0, sources: 0, recorders: [] as FakeRecorder[] }
+  const log = { contexts: 0, sources: 0, resumes: 0, recorders: [] as FakeRecorder[] }
   const pageCtx = { createGain: () => new AudioNode(), createMediaStreamDestination: () => ({ stream: {} }) } // the page's own context, not ours
   class AudioNode { context: unknown = pageCtx; connect(d: unknown) { return d } disconnect() { return undefined } }
   class AudioDestinationNode extends AudioNode {}
   class AudioContext {
-    state = 'running'
+    state = 'suspended' // autoplay policy: no user activation yet
     constructor() { log.contexts++ }
     createMediaStreamDestination() { return { stream: {} } }
     createMediaElementSource() { log.sources++; return new AudioNode() }
     createMediaStreamSource() { return new AudioNode() }
     createGain() { return new AudioNode() }
-    resume() { return Promise.resolve() }
+    resume() { log.resumes++; return Promise.resolve() }
   }
   class HTMLMediaElement { play() { return Promise.resolve() } }
   class MediaRecorder {
@@ -77,6 +77,14 @@ describe('inject script', () => {
     const chunks = w.sent.filter((m) => m.k === 'c')
     expect(chunks.map((c) => c.s)).toEqual([0, 0])
     expect(chunks[0].f).not.toBe(chunks[1].f)
+  })
+
+  it('resume() also resumes a bus the autoplay policy left suspended (the host calls it inside a user activation)', async () => {
+    const w = world()
+    await w.media.play()
+    const before = w.log.resumes
+    ;(w.ctx[AUDIO_RESUME_FN] as () => void)()
+    expect(w.log.resumes).toBe(before + 1)
   })
 
   it('a WebAudio connect to the destination tees into the bus', () => {

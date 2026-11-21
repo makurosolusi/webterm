@@ -177,3 +177,20 @@ Design and why:
 Verified (jsdom, fake MediaSource/SourceBuffer/AudioContext/audio element): ordered appends while `updating`, mid-stream header wait, jitter start, live-edge jump, trim, stream reset, quota trim and retry, unsupported, unmount/hide/reconnect lifecycle, button states and aria, layout round trip.
 
 NOT verified: real playback in any browser (whether Chrome actually decodes mid-stream MediaRecorder WebM through MSE without glitches), Safari and Firefox support for WebM/Opus in MSE and for `createMediaElementSource` on an MSE element (Safari is the likeliest to land in the "unsupported" state), human-perceived A/V sync (expected 40-260 ms server side plus 150 ms buffer; the video is not delayed), long sessions, many nodes at once, the `playing`-event timing of the real element.
+
+## Bug fix: YouTube node silent (2026-11-21)
+
+Symptom: a YouTube page in a browser node showed `audioActive` after the speaker was clicked but no sound reached the client.
+Root cause (reproduced on real Chromium 145 against real youtube.com, n=4+ runs): the speaker click happens in the CLIENT, so the server page never receives a user
+activation. The capture bus (`AudioContext` created by the inject script) is created `suspended` by Chrome's autoplay policy, the MediaRecorder on a suspended bus emits
+nothing, and the inject's own click/keydown listeners never fire (nobody clicks inside the page). The earlier "a forwarded click is a real gesture" assumption only holds
+when the user also clicks inside the page, which is what the old real test did. Measured before the fix: bus announced, 0 chunks. After: 72-79 chunks (~73 KB) in 10 s,
+decoded mean volume about -19 dB (ffmpeg volumedetect), also when audio was switched on before the video started.
+Fix at the cause: the host now sends `__wtAudioResume()` via `Runtime.evaluate` with `userGesture: true` (the page gets an activation, `ctx.resume()` is allowed, and the
+activation is sticky for buses created later); the inject's `resume()` also resumes an existing bus. No Chromium flag was added.
+Tests: `browser.audio.inject.test.ts` (resume resumes a suspended bus), `browserHost.audio.test.ts` (resume carries `userGesture`), and a real-Chromium regression
+`browserHost.audio.real.bun.test.ts` "tanpa klik apa pun di halaman" (fails without the fix, passes with it; run with `WEBTERM_BROWSER_BIN` when the managed build is absent).
+Still unverified: iframes whose activation does not propagate (cross-origin frames reached only by the postMessage relay may keep a suspended bus; OOPIF children get their
+own `Runtime.evaluate` with the gesture), the client player in a real browser tab (MSE/gesture on the client side was not exercised, only the server stream was decoded),
+other YouTube variants (ads, DRM/music content, Shorts), and only one video (`jNQXAC9IVRw`) was tried. YouTube without any page click often stays paused
+(autoplay blocked, `video.paused=true`), which is page behaviour, not capture: the user's click on the canvas starts it.

@@ -29,6 +29,8 @@ const PAGE = `<body style="margin:0"><button style="width:400px;height:300px" on
 let started=false
 function go(){ if(started)return; started=true; const c=new AudioContext(); const o=c.createOscillator(); const g=c.createGain(); o.frequency.value=${TONE_HZ}; g.gain.value=0.5; o.connect(g); g.connect(c.destination); o.start() }
 </script></body>`
+// Starts its tone 2.5 s after load WITHOUT any gesture: the page's own AudioContext and our bus both begin suspended (autoplay policy).
+const PAGE_NO_GESTURE = `<body><script>setTimeout(() => { const c = new AudioContext(); const o = c.createOscillator(); const g = c.createGain(); o.frequency.value = ${TONE_HZ}; g.gain.value = 0.5; o.connect(g); g.connect(c.destination); o.start() }, 2500)</script></body>`
 const EBML_MAGIC = [0x1a, 0x45, 0xdf, 0xa3]
 
 const cleanup: Array<() => unknown> = []
@@ -38,8 +40,14 @@ const leases: LeaseView = { holder: () => 'human', noteHumanInput: () => undefin
 
 describe('Chrome nyata: audio halaman sampai ke klien yang mendengarkan', () => {
   if (!RUNNABLE) return
-  test('nada 440 Hz -> frame audio ber-streamKey dengan payload WebM non-senyap; nol frame sebelum audio on', async () => {
-    const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end(PAGE) })
+  test('nada 440 Hz -> frame audio ber-streamKey dengan payload WebM non-senyap; nol frame sebelum audio on', () => run(PAGE, true), TEST_TIMEOUT_MS)
+  // Regression (YouTube silent): the speaker click is in the client, so the page never saw a gesture; the host resumes with userGesture.
+  test('tanpa klik apa pun di halaman: audio tetap mengalir setelah audio on (aktivasi dari host)', () => run(PAGE_NO_GESTURE, false), TEST_TIMEOUT_MS)
+})
+
+async function run(page: string, clickInPage: boolean): Promise<void> {
+  {
+    const server = createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end(page) })
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
     cleanup.push(() => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()) }))
     const port = (server.address() as AddressInfo).port
@@ -64,7 +72,7 @@ describe('Chrome nyata: audio halaman sampai ke klien yang mendengarkan', () => 
     expect(frames).toHaveLength(0) // nobody listens: nothing leaves the host
     hub.setAudio('n1', viewer, true) // Runtime is enabled lazily, on this first audio on; the capture script is installed in the loaded page then
     await sleep(1000)
-    await click('down'); await click('up') // a forwarded click is a real user gesture: the page starts its AudioContext (now captured)
+    if (clickInPage) { await click('down'); await click('up') } // a forwarded click is a real user gesture: the page starts its AudioContext (now captured)
     await waitUntil(() => frames.reduce((n, f) => n + f.payload.length, 0) > 2000)
     await waitUntil(() => host.state('n1')?.audioActive === true)
     const first = frames.find((f) => f.seq === 0)
@@ -72,8 +80,8 @@ describe('Chrome nyata: audio halaman sampai ke klien yang mendengarkan', () => 
     expect([...(first?.payload.subarray(0, 4) ?? [])]).toEqual(EBML_MAGIC) // WebM header of the stream
     expect(new Set(frames.map((f) => f.streamKey)).size).toBe(1)
     hub.setAudio('n1', viewer, false)
-  }, TEST_TIMEOUT_MS)
-})
+  }
+}
 
 async function waitUntil(cond: () => boolean, ms = 15_000): Promise<void> {
   for (let i = 0; i < ms / POLL_MS && !cond(); i++) await sleep(POLL_MS)
