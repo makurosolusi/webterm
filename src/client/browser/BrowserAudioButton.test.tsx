@@ -23,16 +23,16 @@ vi.mock('./browserAudio.player', () => ({
     return p
   },
 }))
-const { default: BrowserAudioButton, audioOffered } = await import('./BrowserAudioButton')
+const { default: BrowserAudioButton, audioOffered, audioDefaultOn } = await import('./BrowserAudioButton')
 const { useBrowserAudio } = await import('./browserAudio.use')
 
 const makeStream = () => ({ setAudio: vi.fn() }) as unknown as BrowserStream & { setAudio: ReturnType<typeof vi.fn> }
 let sinkRef: { current: ((c: AudioChunk) => void) | null }
-interface HarnessProps { stream: BrowserStream; paused?: boolean; offered?: boolean; muted?: boolean; persist?: (muted: boolean) => void; active?: boolean }
-function Harness({ stream, paused = false, offered = true, muted = false, persist = () => {}, active }: HarnessProps) {
+interface HarnessProps { stream: BrowserStream; paused?: boolean; offered?: boolean; saved?: boolean; defaultOn?: boolean; persist?: (on: boolean) => void; active?: boolean }
+function Harness({ stream, paused = false, offered = true, saved, defaultOn = true, persist = () => {}, active }: HarnessProps) {
   const sink = useRef<((c: AudioChunk) => void) | null>(null)
   sinkRef = sink
-  const audio = useBrowserAudio('n', stream, sink, { paused, offered, muted, persist })
+  const audio = useBrowserAudio('n', stream, sink, { paused, offered, saved, defaultOn, persist })
   return <BrowserAudioButton audio={audio} active={active} />
 }
 
@@ -58,7 +58,7 @@ describe('BrowserAudioButton: default on', () => {
 
   it('muted by the user earlier (layout false): nothing starts, label Unmute, slashed speaker, not pressed', () => {
     const stream = makeStream()
-    render(<Harness stream={stream} muted />)
+    render(<Harness stream={stream} saved={false} />)
     const b = screen.getByRole('button', { name: 'Unmute browser audio' })
     expect(b.getAttribute('aria-pressed')).toBe('false')
     expect(b.querySelector('.codicon-mute')).toBeTruthy()
@@ -66,28 +66,28 @@ describe('BrowserAudioButton: default on', () => {
     expect(stream.setAudio).not.toHaveBeenCalledWith('n', true)
   })
 
-  it('click while on = mute: audio off, player stopped, saved as muted; click again = unmute, saved as not muted, same player', () => {
+  it('click while on = mute: audio off, player stopped, saved as false; click again = unmute, saved as true, same player', () => {
     const stream = makeStream(), persist = vi.fn()
     render(<Harness stream={stream} persist={persist} />)
     playing()
     fireEvent.click(screen.getByRole('button'))
     expect(stream.setAudio).toHaveBeenLastCalledWith('n', false)
     expect(h.players[0].stop).toHaveBeenCalled()
-    expect(persist).toHaveBeenLastCalledWith(true)
+    expect(persist).toHaveBeenLastCalledWith(false)
     expect(screen.getByRole('button', { name: 'Unmute browser audio' }).getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(screen.getByRole('button'))
-    expect(persist).toHaveBeenLastCalledWith(false)
+    expect(persist).toHaveBeenLastCalledWith(true)
     expect(stream.setAudio).toHaveBeenLastCalledWith('n', true)
     expect(h.players).toHaveLength(1)
   })
 
   it('unmute from a saved mute starts the player inside the click', () => {
     const stream = makeStream(), persist = vi.fn()
-    render(<Harness stream={stream} muted persist={persist} />)
+    render(<Harness stream={stream} saved={false} persist={persist} />)
     fireEvent.click(screen.getByRole('button'))
     expect(h.players).toHaveLength(1)
     expect(h.players[0].start).toHaveBeenCalled()
-    expect(persist).toHaveBeenCalledWith(false)
+    expect(persist).toHaveBeenCalledWith(true)
   })
 
   it('server kill switch (offered=false): nothing starts', () => {
@@ -124,9 +124,9 @@ describe('BrowserAudioButton: default on', () => {
 
   it('a muted node that is hidden and shown again stays silent', () => {
     const stream = makeStream()
-    const { rerender } = render(<Harness stream={stream} muted />)
-    rerender(<Harness stream={stream} muted paused />)
-    rerender(<Harness stream={stream} muted paused={false} />)
+    const { rerender } = render(<Harness stream={stream} saved={false} />)
+    rerender(<Harness stream={stream} saved={false} paused />)
+    rerender(<Harness stream={stream} saved={false} paused={false} />)
     expect(h.players).toHaveLength(0)
   })
 
@@ -159,7 +159,7 @@ describe('BrowserAudioButton: default on', () => {
     const { unmount } = render(<Harness stream={makeStream()} active />)
     expect(screen.queryByRole('img')).toBeNull() // on: the sound itself is the signal
     unmount()
-    render(<Harness stream={makeStream()} active muted />)
+    render(<Harness stream={makeStream()} active saved={false} />)
     expect(screen.getByRole('img', { name: 'This page is making sound' })).toBeTruthy()
   })
 
@@ -168,6 +168,58 @@ describe('BrowserAudioButton: default on', () => {
     expect(audioOffered({ audio: true })).toBe(true)
     expect(audioOffered({})).toBe(true)
     expect(audioOffered(null)).toBe(true)
+  })
+})
+
+describe('Settings default (WEBTERM_BROWSER_AUDIO_DEFAULT) with three saved states', () => {
+  it('never chosen + default on: auto-starts', () => {
+    const stream = makeStream()
+    render(<Harness stream={stream} saved={undefined} defaultOn />)
+    expect(stream.setAudio).toHaveBeenCalledWith('n', true)
+  })
+
+  it('never chosen + default off: nothing starts, the button says Unmute, and the click saves an explicit true', () => {
+    const stream = makeStream(), persist = vi.fn()
+    render(<Harness stream={stream} defaultOn={false} persist={persist} />)
+    expect(h.players).toHaveLength(0)
+    expect(stream.setAudio).not.toHaveBeenCalledWith('n', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute browser audio' }))
+    expect(h.players[0].start).toHaveBeenCalled()
+    expect(persist).toHaveBeenCalledWith(true)
+  })
+
+  it('explicit true + default off: starts', () => {
+    const stream = makeStream()
+    render(<Harness stream={stream} saved defaultOn={false} />)
+    expect(stream.setAudio).toHaveBeenCalledWith('n', true)
+  })
+
+  it('explicit false + default on: does not start', () => {
+    const stream = makeStream()
+    render(<Harness stream={stream} saved={false} defaultOn />)
+    expect(h.players).toHaveLength(0)
+  })
+
+  it('default changing while shown: a never-chosen node follows, explicit nodes do not', () => {
+    const a = makeStream(), b = makeStream(), c = makeStream()
+    const ra = render(<Harness stream={a} defaultOn />)
+    const rb = render(<Harness stream={b} saved defaultOn />)
+    const rc = render(<Harness stream={c} saved={false} defaultOn />)
+    ra.rerender(<Harness stream={a} defaultOn={false} />)
+    rb.rerender(<Harness stream={b} saved defaultOn={false} />)
+    rc.rerender(<Harness stream={c} saved={false} defaultOn={false} />)
+    expect(a.setAudio).toHaveBeenLastCalledWith('n', false) // followed: stopped
+    expect(b.setAudio).not.toHaveBeenCalledWith('n', false) // explicit on stays on
+    expect(c.setAudio).not.toHaveBeenCalledWith('n', true) // explicit mute stays muted
+    ra.rerender(<Harness stream={a} defaultOn />)
+    expect(a.setAudio).toHaveBeenLastCalledWith('n', true)
+  })
+
+  it('status to default: on unless the server says false; unknown status = not on yet', () => {
+    expect(audioDefaultOn({ audioDefault: true })).toBe(true)
+    expect(audioDefaultOn({ audioDefault: false })).toBe(false)
+    expect(audioDefaultOn({})).toBe(true) // older server
+    expect(audioDefaultOn(null)).toBe(false)
   })
 })
 

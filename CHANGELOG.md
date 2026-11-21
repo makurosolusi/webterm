@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Settings > Browser > Sound: "Play sound in new browser nodes" sets whether browser nodes start with sound on (default) or muted. A node you muted or unmuted with its speaker button keeps your choice; the others follow the setting at once.
 - Hear a browser node's audio: the speaker button on its header shows whether sound is on and mutes or unmutes it.
 - Browser nodes can now stream page sound (server side): Chromium runs muted, the page's audio is captured in-page and sent as opus chunks only to clients that ask for it, and capture runs only while someone listens (`WEBTERM_BROWSER_AUDIO=off` disables it).
 - Setup wizard Commands step (and Settings): a closed Terminal box to install tools (Bun, Node.js LTS, Python via uv) and sign in (GitHub CLI, Claude) without a shell on the machine. Quick commands only type the command, the shell ends when you close the box, and new tools show up in "Found" on their own.

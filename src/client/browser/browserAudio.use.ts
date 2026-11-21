@@ -1,6 +1,6 @@
 // Binds one browser node to its audio player. Sound is ON by default: while the node is shown and the server offers audio, the
 // player starts by itself and tells the server to stream (`audio on`, replayed by the stream after every attach/reconnect).
-// Only an explicit mute is saved. Browsers refuse sound before a user gesture in THIS tab, so a player that reports `blocked`
+// Three saved states per node: absent = follow the Settings default (`defaultOn`, from the server), true/false = the user chose. Browsers refuse sound before a user gesture in THIS tab, so a player that reports `blocked`
 // is resumed by the next pointerdown/keydown anywhere; unmount, mute or a hidden node stops playback and removes the listener.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
@@ -21,10 +21,12 @@ export interface BrowserAudioOptions {
   paused: boolean
   /** False when the server cannot capture audio (kill switch): nothing is started. */
   offered: boolean
-  /** Initial state from the layout: the user muted this node earlier. */
-  muted: boolean
-  /** Saves the user's choice in the layout (`true` = muted). */
-  persist: (muted: boolean) => void
+  /** The node's saved choice: undefined = never chosen (follows `defaultOn`), true = sound on, false = muted. */
+  saved: boolean | undefined
+  /** Settings default (WEBTERM_BROWSER_AUDIO_DEFAULT via /status) for nodes that never chose; follows live changes. */
+  defaultOn: boolean
+  /** Saves the user's explicit choice in the layout (`true` = sound on). */
+  persist: (on: boolean) => void
 }
 
 const GESTURES = ['pointerdown', 'keydown'] as const
@@ -32,7 +34,8 @@ const GESTURES = ['pointerdown', 'keydown'] as const
 export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObject<((c: AudioChunk) => void) | null>, opts: BrowserAudioOptions): BrowserAudio {
   const { paused, offered } = opts
   const [view, setView] = useState<AudioPlayerView>({ state: 'idle', message: '' })
-  const [on, setOn] = useState(!opts.muted)
+  const [choice, setChoice] = useState(opts.saved)
+  const on = choice ?? opts.defaultOn
   const player = useRef<AudioPlayer | null>(null)
   const get = (): AudioPlayer => (player.current ??= createAudioPlayer(setView))
   const persist = useRef(opts.persist)
@@ -58,6 +61,9 @@ export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObje
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `get` only reads refs/setters
   }, [on, paused, offered, id, stream])
 
+  // Not wanted (muted, or the Settings default turned off for a never-chosen node): make sure the server does not stream to this client.
+  useEffect(() => { if (!on) stream.setAudio(id, false) }, [on, id, stream])
+
   // Blocked by the autoplay policy: the first real interaction anywhere in this tab starts the sound (the listener is capture + once).
   const blocked = view.state === 'blocked' && on && !paused
   useEffect(() => {
@@ -71,15 +77,15 @@ export function useBrowserAudio(id: string, stream: BrowserStream, sink: RefObje
     if (on && view.state !== 'error' && view.state !== 'blocked') {
       stream.setAudio(id, false)
       player.current?.stop()
-      setOn(false)
-      persist.current(true)
+      setChoice(false)
+      persist.current(false)
       return
     }
     const p = get()
     p.start() // inside the click: creates/resumes the AudioContext
     if (p.get().state === 'unsupported') return
     stream.setAudio(id, true)
-    if (!on) { setOn(true); persist.current(false) }
+    if (!on) { setChoice(true); persist.current(true) }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `get` only reads refs/setters
   }, [on, view.state, id, stream])
 

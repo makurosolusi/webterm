@@ -8,8 +8,7 @@ const GROUP = 'browser'
 // Semua 'hot': runtime browser hidup-mati lewat hook kemampuan `browser` (browser.activate.ts), tanpa restart.
 const B = { owner: 'platform', section: 'Browser', audience: 'advanced', restart: 'hot' } as const
 const BROWSER_ON = { key: ENV_BROWSER.enabled }
-const DISCARD_MS_MAX = 86_400_000 // 24 jam
-const COOKIE_TTL_DAYS_MAX = 365
+const DISCARD_MS_MAX = 86_400_000, COOKIE_TTL_DAYS_MAX = 365 // 24 jam; 1 tahun
 
 export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
   flag(ENV_BROWSER.enabled, GROUP, {
@@ -91,6 +90,7 @@ export const BROWSER_ENV_SPECS: readonly EnvSpec[] = [
     description: 'On: each profile shows who is signed in to Google and GitHub (name, masked email), checked inside that profile only when it opens, after a login, or on Refresh. Off: nothing is checked or shown. Cookies and full emails are never stored or shown.',
   }, 'on'),
   flag(ENV_BROWSER.audio, GROUP, { ...B, requires: [BROWSER_ON], label: 'Browser audio', description: 'Streams browser node sound to the canvas, captured inside the page and only while a client listens; the server stays silent. Off = no audio capture.' }, 'on'),
+  flag(ENV_BROWSER.audioDefault, GROUP, { ...B, requires: [BROWSER_ON], label: 'Play sound in new browser nodes', description: 'On: nodes play page sound once you interact with the page. Off: nodes start muted; unmute each with its speaker button.' }, 'on'),
   flag(ENV_BROWSER.headless, GROUP, {
     ...B, requires: [BROWSER_ON],
     label: 'Headless mode',

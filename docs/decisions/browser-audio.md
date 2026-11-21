@@ -205,3 +205,13 @@ Decision (owner): a node's sound is ON by default. A muted default made a YouTub
 4. **Button**: icon = what you hear now (speaker = on, slashed speaker = muted); label = the click's action ("Mute browser audio" / "Unmute browser audio"); `aria-pressed` = sound on. Other states: connecting, blocked, unsupported (disabled, reason described), error (click retries), hidden when the server disables audio. The dot for "the page is making sound" shows only while muted.
 
 Not verified: real playback in a real browser tab after a click (jsdom fakes only), whether Safari reports a suspended context the same way (the 300 ms timer is the fallback), the behaviour of the first chunk when the player starts mid-stream after unblocking (it waits for the next stream key or header), real YouTube.
+
+## Settings default and three saved states (2026-11-21)
+
+Decision (owner): the user, not code, decides whether a node that never chose starts with sound. **Settings > Browser > Sound > "Play sound in new browser nodes"** (switch, env `WEBTERM_BROWSER_AUDIO_DEFAULT`, default **on**, hot, registry audience `advanced` like the other browser keys; needs the browser on. The row is a custom field, and it is also disabled with the reason when `WEBTERM_BROWSER_AUDIO` is off).
+
+1. **One source of truth**: the default `on` lives only in the registry entry (`browser.envRegistry.ts`); the server reader `audioDefaultOn` mirrors it (covered by `envRegistry.defaults.test.ts`) and publishes it as `audioDefault` in `GET /api/browser/status` next to the `audio` capability. The client hardcodes nothing: status absent field (older server) = on, status not loaded yet = not on (so a muted default never blips sound before the answer).
+2. **Saved `audio` per node is three-valued**: absent = never chosen = follow the setting; `true` = the user turned sound on; `false` = the user muted it. The speaker button always saves an explicit value (a click is a deliberate choice, so it is kept even if it equals today's default and survives a later change of the setting). The legacy `true` of the old muted-default era is no longer normalized away; it now means an explicit "on".
+3. **Hot**: after the switch is saved the shared status is re-read, so open nodes without a saved choice start or stop at once; nodes with a saved choice do not change. The layout is never rewritten by changing the setting.
+
+Not verified: the setting change in a live browser with several real nodes (jsdom fakes only).

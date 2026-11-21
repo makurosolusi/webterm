@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { toFlow, toWsNode } from './store'
 
-// Three states: absent = never chosen = sound ON (default), false = the user muted it, legacy true = same as absent.
+// Three saved states: absent = never chosen (follows the Settings default), true = the user turned sound on, false = the user muted it.
 const round = (audio?: unknown) => toWsNode(toFlow({ id: 'b', kind: 'browser', x: 0, y: 0, audio } as never)).audio
 
 describe('store browser audio', () => {
-  it('absent stays absent: a node that never chose is on by default', () => {
+  it('absent stays absent: a node that never chose follows the Settings default', () => {
     expect(round(undefined)).toBeUndefined()
   })
 
@@ -13,8 +13,8 @@ describe('store browser audio', () => {
     expect(round(false)).toBe(false)
   })
 
-  it('legacy `true` (old "sound was on" flag) normalizes to absent = on', () => {
-    expect(round(true)).toBeUndefined()
+  it('an explicit unmute persists as true (not normalized away)', () => {
+    expect(round(true)).toBe(true)
   })
 
   it('drops junk instead of persisting it', () => {

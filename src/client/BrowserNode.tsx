@@ -14,7 +14,7 @@ import BrowserSurface from './browser.surface'
 import { useBrowserSession } from './browser.useSession'
 import { browserStream } from './browser.stream'
 import BrowserProfileChip from './BrowserProfileChip'
-import BrowserAudioButton, { audioOffered } from './browser/BrowserAudioButton'
+import BrowserAudioButton, { audioDefaultOn, audioOffered } from './browser/BrowserAudioButton'
 import { useBrowserAudio } from './browser/browserAudio.use'
 import { useBrowserStatus } from './browser.feature'
 import { isBlankUrl, shouldMirrorUrl, useGoto } from './browser.useGoto'
@@ -111,8 +111,9 @@ function BrowserNode({ id, data, selected, height, renderToolbar, renderOverlay 
   const tabMsg = useRef<(m: TabMsg | ContextMenuMsg) => void>(undefined)
   const sessionPaused = lowZoom || (collapsed && !inTab) || !visible
   const session = useBrowserSession(id, sessionPaused, browserStream, (m) => tabMsg.current?.(m), d.profileId)
-  const showAudio = audioOffered(useBrowserStatus())
-  const audio = useBrowserAudio(id, browserStream, session.audioSink, { paused: sessionPaused, offered: showAudio, muted: d.audio === false, persist: (muted) => rf.updateNodeData(id, { audio: muted ? false : undefined }) })
+  const browserStatus = useBrowserStatus()
+  const showAudio = audioOffered(browserStatus)
+  const audio = useBrowserAudio(id, browserStream, session.audioSink, { paused: sessionPaused, offered: showAudio, saved: d.audio, defaultOn: audioDefaultOn(browserStatus), persist: (on) => rf.updateNodeData(id, { audio: on }) })
   const searchEngine = toSearchEngine(useLiveSettings().browserSearchEngine)
   const [zoom, setZoomState] = useState(() => typeof d.zoom === 'number' ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, d.zoom)) : ZOOM_DEFAULT)
   // Ref, not state, as the step base: a pinch fires many wheel events before React re-renders.

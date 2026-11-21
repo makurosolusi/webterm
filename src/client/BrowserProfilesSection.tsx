@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import BrowserProfileCreateDialog from './BrowserProfileCreateDialog'
+import { BrowserAudioDefaultField } from './BrowserAudioDefaultField'
 import { BrowserLimitField } from './BrowserLimitField'
 import BrowserProfileRow from './BrowserProfileRow'
 import { useBrowserStatus } from './browser.feature'
@@ -25,6 +26,7 @@ export function BrowserProfilesSection({ workspaceId = '' }: { workspaceId?: str
 
   return (
     <div className="flex flex-col">
+      <SettingsGroup title="Sound"><BrowserAudioDefaultField /></SettingsGroup>
       <SettingsGroup title="Limits"><BrowserLimitField /></SettingsGroup>
       <div className="flex flex-col" data-testid="browser-profiles-section" data-field="browser-profiles">
       <SettingsGroup title={T.groupTitle} description={`${T.sectionHint} ${T.sharedSession}`}>

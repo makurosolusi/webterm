@@ -81,6 +81,7 @@ export const ENV_BROWSER = {
   accounts: 'WEBTERM_BROWSER_ACCOUNTS',
   /** Audio capture of browser nodes; default on, `off` = kill switch. */
   audio: 'WEBTERM_BROWSER_AUDIO',
+  audioDefault: 'WEBTERM_BROWSER_AUDIO_DEFAULT',
 } as const
 /** Kunci SecretStore untuk vault cookie; dibuat acak, bukan env ketikan user. */
 export const VAULT_KEY_NAME = 'WEBTERM_BROWSER_VAULT_KEY'
@@ -240,6 +241,8 @@ export interface BrowserStatusResp {
   agentEnabled: boolean; cookieImportEnabled: boolean
   /** Capability: the server can capture and stream page audio (`WEBTERM_BROWSER_AUDIO` not off). */
   audio?: boolean
+  /** Setting `WEBTERM_BROWSER_AUDIO_DEFAULT`: a node with no saved choice starts with sound on (true) or muted (false). Absent (older server) = on. */
+  audioDefault?: boolean
 }
 export type * from './browser.contract.cookies'
 

@@ -21,6 +21,10 @@ export const AUDIO_TEXT = {
 /** Show the speaker unless the server says it cannot capture audio (`audio: false`, the kill switch); older servers omit the field. */
 export const audioOffered = (status: { audio?: boolean } | null): boolean => status?.audio !== false
 
+/** The Settings default for nodes that never chose: on unless the server says `audioDefault: false` (older servers omit it = on).
+ *  Status not known yet (null) = not on, so a muted-by-default setup never blips sound before the answer arrives. */
+export const audioDefaultOn = (status: { audioDefault?: boolean } | null): boolean => status !== null && status.audioDefault !== false
+
 export interface BrowserAudioButtonProps {
   audio: BrowserAudio
   /** The page has an audio stream (state.audioActive): a quiet dot while muted. */

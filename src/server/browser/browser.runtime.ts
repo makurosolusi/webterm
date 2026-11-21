@@ -36,7 +36,7 @@ import { handleBrowserControl } from './browserControl.handler'
 import { pauseLeaseOnChallenge } from './browserControl.challenge'
 import { handleBrowserApi } from '../browserApi'
 import { resolveLinkedBrowser } from './browser.linkedTarget'
-import { adaptGatewayHost, agentControlOn, audioOn, cookieImportOn, wakeDiscarded } from './browser.runtime.parts'
+import { adaptGatewayHost, agentControlOn, audioDefaultOn, audioOn, cookieImportOn, wakeDiscarded } from './browser.runtime.parts'
 import { createVersionProbe } from './browser.runtime.version'
 import type { BrowserRuntime } from './browser.state'
 import type { Workspace } from '../../shared/workspace'
@@ -161,7 +161,7 @@ export async function startBrowserRuntime(d: RuntimeDeps): Promise<BrowserRuntim
     accounts.onState(s, host.profileOf(s.id))
     if (now !== liveProfiles) { liveProfiles = now; profiles.liveChanged() } // the set of profiles with a running process changed
   })
-  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: lifecycleConfig(env).maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env), audio: audioOn(env) })
+  const status = () => ({ enabled: true, binFound: d.launcher !== undefined || detectChromium(env, d.exists) !== null, ...(live.size > 0 && versionProbe.get() ? { version: versionProbe.get() } : {}), live: live.size, maxLive: lifecycleConfig(env).maxLive, agentEnabled: agentEnv(), cookieImportEnabled: cookieImportOn(env), audio: audioOn(env), audioDefault: audioDefaultOn(env) })
   const apiDeps = {
     vault, preview: createCookiePreviewStore(), injector: accounts.wrapInjector(createCookieInjector({ launcher, connect: d.connect })), status,
     lease: { holder: (id: string) => leases.holder(id), takeover: (id: string) => leases.takeover(id), release: (id: string) => leases.release(id) },
