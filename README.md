@@ -4,10 +4,36 @@ A node-based terminal manager: real shells run as draggable xterm terminals ("no
 
 UI chrome is built on `@vscode-elements/react-elements` 2.4.0 with a `--vscode` theme bridge, so it follows VS Code Dark Modern and Light Modern: a 35px title/menu bar, 35px editor tabs, 48px activity bar, 22px status bar, docked 300px Sessions sidebar, VS Code-style Settings, QuickPick command palette, Problems/Activity/Output as tabs of one bottom panel, and the Central chat in a secondary side bar on the right, where a Needs-you strip (which replaces the old Inbox panel) lists approvals, reviews and broken tasks. Tailwind v4 utilities remain for layout and local styling, and the canvas, xterm, Monaco, node geometry, and React Flow interactions stay custom. The chrome is VS Code-like, not a claim of full pixel parity.
 
+## Quick start
+
+No `.env` needed. Three commands:
+
+```sh
+git clone <repo-url> webterm && cd webterm
+bun install
+bun run dev
+```
+
+1. Open http://127.0.0.1:8700 (webterm also opens it for you on first run).
+2. Create your account (username + a password of at least 12 characters).
+3. Follow the short setup (Claude, Browser, Central Agent, Basics). Each step can be skipped.
+
+That is all. Everything else (Browser, Files, Telegram, Central, tokens, models) is switched in the UI under **Settings**, and the access token is generated for you in `~/.webterm-server/secrets/`.
+
+Only set an environment variable when you need to change one of these (all optional; copy `.env.example` to `.env` to keep them):
+
+| Variable | Default | Why change it |
+|---|---|---|
+| `PORT` | `8700` | the port is already in use |
+| `HOST` | `127.0.0.1` | reach webterm from another machine (see [Signing in](#signing-in) first) |
+| `WEBTERM_DATA_DIR` | `~/.webterm-server` | keep the database and boards somewhere else |
+
+Claude agents need the `claude` CLI installed and signed in (`claude` once in a terminal, or an API key / proxy configured in Settings > Claude). The full variable list further down is reference material, not setup steps.
+
 ## Requirements
 
 - [Bun](https://bun.sh) — runs the dev server and the Bun-native PTY backend.
-- Node tooling — for the vitest suite and the TypeScript typecheck.
+- Node tooling — only for contributors (vitest suite and TypeScript typecheck), not needed to run webterm.
 - [tmux](https://github.com/tmux/tmux) (optional) — keeps terminal and agent sessions alive across a server restart. Without it, sessions end when the server restarts, and Doctor warns.
 
 Install dependencies:
